@@ -5,10 +5,9 @@ import { useEffect, useState } from "react";
 import GamedayBottomBar from "@/components/gameday/GamedayBottomBar";
 import StreamView from "@/components/gameday/StreamView";
 import ChatView from "@/components/gameday/ChatView";
-import StreamControls from "@/components/gameday/StreamControls";
 import StreamModal from "@/components/gameday/StreamModal";
 import RefreshButton from "@/components/gameday/RefreshButton";
-
+import { VideoCameraIcon } from "@heroicons/react/24/solid";
 import { useGameday } from "@/components/gameday/hooks/useGameday";
 import { useStreamController } from "@/components/gameday/hooks/useStreamController";
 
@@ -79,7 +78,7 @@ export default function GamedayWidget({ event, team }) {
             onClick={() => setModalOpen(true)}
             className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
           >
-            More Streams
+            <VideoCameraIcon className="w-6 h-6 text-white" />
           </button>
 
           <RefreshButton onRefresh={reload} />

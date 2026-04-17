@@ -41,6 +41,7 @@ export function useGameday(event, team) {
     let interval;
 
     async function fetchData() {
+      console.log("Fetching gameday data for event:", event, "team:", team);
       try {
         const url = team
           ? `/api/event/${event}/gameday?team=${team}`
