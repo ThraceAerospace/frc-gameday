@@ -70,7 +70,7 @@ export default function GamedayWidget({ event, team }) {
       </div>
 
     {/* BOTTOM BAR */}
-    <div className="w-full h-[8vh] bg-neutral-900 border-t border-neutral-700 flex flex-row items-center overflow-hidden">
+    <div className="w-full h-[8vh] min-h-fit bg-neutral-900 border-t border-neutral-700 flex flex-row items-center overflow-hidden">
 
       {/* LEFT (info) */}
       <div className="shrink-0">
@@ -79,13 +79,22 @@ export default function GamedayWidget({ event, team }) {
 
       {/* CENTER (MATCH STRIP CLIPPED ZONE) */}
       <div className="flex-1 min-w-0 overflow-hidden px-2">
-        <MatchStrip
-          matches={data.matches}
-          team={activeTeam}
-          nextMatchKey={data.nextMatch?.key ?? null}
-          teamView={data.teamView}
-          eventTimezone={data.event.timezone}
-        />
+        <div className="relative w-full overflow-hidden">
+
+          {/* 1. Your actual scroll/strip content */}
+          <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
+            <MatchStrip
+              matches={data.matches}
+              team={activeTeam}
+              nextMatchKey={data.nextMatch?.key ?? null}
+              teamView={data.teamView}
+              eventTimezone={data.event.timezone}
+            />
+          </div>
+          {/* 3. Right fade overlay */}
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-neutral-900 to-transparent" />
+
+        </div>
       </div>
 
       {/* RIGHT (CONTROLS — ALWAYS VISIBLE) */}
