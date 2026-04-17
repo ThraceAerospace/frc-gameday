@@ -20,7 +20,7 @@ export default function GamedayEventTeamInfo({ data }) {
       <div className="flex flex-col justify-center shrink-0">
         {isTeamMode && (
           <div className="text-xs text-white">
-            {team?.key ? team.key.replace("frc", "Team ") : ""}
+            {team?.key ? team.key.replace("frc", "Team ") : ""} At
           </div>
         )}
 
