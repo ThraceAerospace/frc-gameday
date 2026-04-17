@@ -23,7 +23,7 @@ export const TBA = {
     tba.get(`/event/${eventKey}`),
 
   getTeamsAtEvent: (eventKey: string) =>
-    tba.get(`/event/${eventKey}/teams`),
+    tba.get(`/event/${eventKey}/teams/simple`),
 
   // 🤖 Matches
   getEventMatches: (eventKey: string) =>
