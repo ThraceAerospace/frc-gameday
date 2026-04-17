@@ -16,11 +16,12 @@ export function formatEventTime(timestampSeconds, eventTimeZone) {
     timeZone: eventTimeZone,
     hour: "2-digit",
     minute: "2-digit",
+    timeZoneName: "short"
   });
 
-  const cleanedTime = time.replace(/\s?(AM|PM)/i, (_, p1) =>
-    p1[0].toLowerCase()
-  );
+  const cleanedTime = time//.replace(/\s?(AM|PM)/i, (_, p1) =>
+    //p1[0].toLowerCase()
+  //);
 
   if (!isDifferentDay) {
     return cleanedTime;

@@ -2,18 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-function getEventNow(timezone) {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: timezone })
-  );
+function getNow() {
+  return new Date();
 }
 
 export default function EventLocalTime({ timezone }) {
-  const [now, setNow] = useState(() => getEventNow(timezone));
+  const [now, setNow] = useState(() => getNow());
 
   useEffect(() => {
     const id = setInterval(() => {
-      setNow(getEventNow(timezone));
+      setNow(getNow());
     }, 1000);
 
     return () => clearInterval(id);
@@ -21,12 +19,13 @@ export default function EventLocalTime({ timezone }) {
 
   return (
     <div className="text-xs text-gray-300">
-      <span className="text-gray-300 mr-2">Local:</span>
       <span className="font-mono">
         {now.toLocaleTimeString("en-US", {
+          timeZone: timezone,
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
+          timeZoneName: "short",
         })}
       </span>
     </div>

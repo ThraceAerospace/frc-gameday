@@ -24,7 +24,7 @@ export default function GamedayBottomBar({ data, teamInput }) {
 
       {teamView.enabled ? <NextMatch match={nextMatch} team={team} /> : null}
 
-      <MatchStrip matches={matches} team={team} nextMatchKey={nextMatch.key ?? null} teamView={teamView} />
+      <MatchStrip matches={matches} team={team} nextMatchKey={nextMatch.key ?? null} teamView={teamView} eventTimezone={data.event.timezone} />
     </div>
   );
 }

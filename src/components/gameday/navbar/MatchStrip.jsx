@@ -1,6 +1,7 @@
 "use client";
 
 import { formatAlliance, matchCode } from "@/lib/tbaFormatters";
+import { formatEventTime } from "../../../lib/time";
 
 export default function MatchList({
   matches = [],
@@ -46,10 +47,7 @@ export default function MatchList({
               <div className="text-nowrap">
                 {m.predicted_time ? (
                   <span className="text-sm text-gray-400">
-                    {new Date(m.predicted_time * 1000).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatEventTime(m.predicted_time, eventTimezone)}
                   </span>
                 ) : (
                   <span className="text-sm text-gray-400"></span>
