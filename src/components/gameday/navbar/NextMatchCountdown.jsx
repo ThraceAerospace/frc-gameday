@@ -17,10 +17,10 @@ function formatTimeRemaining(seconds) {
   if (mins > 60) {
     const hrs = Math.floor(mins / 60);
     const remMins = mins % 60;
-    return `${hrs}h ${remMins}m`;
+    return `${hrs.toString().padStart(2, '0')}h ${remMins.toString().padStart(2, '0')}m`;
   }
 
-  return `${mins}m ${secs}s`;
+  return `${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
 }
 
 export default function NextMatchCountdown({

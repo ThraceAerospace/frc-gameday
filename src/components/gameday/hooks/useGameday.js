@@ -35,9 +35,42 @@ export function useGameday(event, team) {
   }, [event, team]);
 
   useEffect(() => {
-    console.log("EFFECT TRIGGERED with:", event);
-    load();
-  }, [load]);
+    if (!event) return;
+
+    let cancelled = false;
+    let interval;
+
+    async function fetchData() {
+      try {
+        const url = team
+          ? `/api/event/${event}/gameday?team=${team}`
+          : `/api/event/${event}/gameday`;
+
+        const res = await fetch(url);
+        const json = await res.json();
+
+        if (!cancelled) {
+          setData(json);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    // initial load
+    fetchData();
+
+    // polling
+    interval = setInterval(fetchData, 150000); // 2.5 minutes
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [event, team]);
 
   return { data, loading, error, reload: load };
 }

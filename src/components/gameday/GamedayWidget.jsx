@@ -23,11 +23,11 @@ export default function GamedayWidget({ event, team }) {
     activeStream,
     activeKey,
     setActiveKey,
-  } = useStreamController(data?.streams || []);
+  } = useStreamController(data?.streams || [], data?.event?.timezone);
 
   // Debug only (safe now)
   useEffect(() => {
-    console.log("Active stream:", activeStream);
+    //console.log("Active stream:", activeStream);
   }, [activeStream]);
 
   // Loading state

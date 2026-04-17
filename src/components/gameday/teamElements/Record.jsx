@@ -1,7 +1,7 @@
 "use client";
 
 export default function Record({ status }) {
-  console.log("Record render with status", status);
+  //console.log("Record render with status", status);
   if (!status) return <span>-W -L -T</span>;
 
   const playoffRecord = status?.playoff?.record;

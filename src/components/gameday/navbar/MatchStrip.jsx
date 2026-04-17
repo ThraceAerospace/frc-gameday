@@ -10,7 +10,7 @@ export default function MatchList({
   eventTimezone,
   teamView,
 }) {
-  console.log("MatchList render with matches:", matches, "team:", team, "nextMatchKey:", nextMatchKey, "eventTimezone:", eventTimezone, "teamView:", teamView);
+  //console.log("MatchList render with matches:", matches, "team:", team, "nextMatchKey:", nextMatchKey, "eventTimezone:", eventTimezone, "teamView:", teamView);
   if (!matches.length) return null;
 
   const now = Date.now();
@@ -57,11 +57,11 @@ export default function MatchList({
 
             <div className="flex flex-col">
               <div className="text-red-400 text-nowrap">
-                {formatAlliance(red, team)}
+                {formatAlliance(red, team.key)}
               </div>
 
               <div className="text-blue-400 text-nowrap">
-                {formatAlliance(blue, team)}
+                {formatAlliance(blue, team.key)}
               </div>
             </div>
           </div>

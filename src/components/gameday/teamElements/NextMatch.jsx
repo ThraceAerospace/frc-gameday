@@ -19,11 +19,11 @@ export default function NextMatch({ match, team }) {
 
       <div className="flex-col">
         <div className="text-red-400 text-nowrap">
-          {formatAlliance(match.alliances.red.team_keys, team)}
+          {formatAlliance(match.alliances.red.team_keys, team.key)}
         </div>
 
         <div className="text-blue-400 text-nowrap">
-          {formatAlliance(match.alliances.blue.team_keys, team)}
+          {formatAlliance(match.alliances.blue.team_keys, team.key)}
         </div>
       </div>
     </div>

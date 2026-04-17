@@ -10,7 +10,7 @@ import EventLocalTime from "@/components/gameday/navbar/EventLocalTime";
 
 export default function GamedayBottomBar({ data, teamInput }) {
   const { event, team, nextMatch, lastMatch, matches, teamView } = data;
-  console.log("GamedayBottomBar render with:", { event, team, nextMatch, lastMatch, matches});
+  //console.log("GamedayBottomBar render with:", { event, team, nextMatch, lastMatch, matches});
   return (
     <div className="flex flex-row gap-2 p-2 h-full">
       <div className="flex-1 flex-col items-center text-nowrap">
