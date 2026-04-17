@@ -44,7 +44,7 @@ export default function GamedayWidget({ event, team }) {
       </div>
 
       {/* FIXED BOTTOM NAVBAR */}
-      <div className="w-full h-[80px] md:h-[100px] bg-neutral-900 border-t border-neutral-700 flex flex-row">
+      <div className="w-full h-[8vh] min-h-fit md:h-[6vh] bg-neutral-900 border-t border-neutral-700 flex flex-row">
 
         <GamedayBottomBar data={data} team={team} />
       </div>
