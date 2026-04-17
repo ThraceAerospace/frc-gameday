@@ -8,13 +8,17 @@ import ChatView from "@/components/gameday/ChatView";
 import StreamModal from "@/components/gameday/StreamModal";
 import RefreshButton from "@/components/gameday/RefreshButton";
 import { VideoCameraIcon } from "@heroicons/react/24/solid";
+import { UserGroupIcon } from "@heroicons/react/24/solid";
 import { useGameday } from "@/components/gameday/hooks/useGameday";
 import { useStreamController } from "@/components/gameday/hooks/useStreamController";
-
+import { useActiveTeam } from "@/components/gameday/hooks/useActiveTeam";
+import TeamModal from "@/components/gameday/teamElements/TeamModal";
 export default function GamedayWidget({ event, team }) {
-  const { data, loading, error, reload } = useGameday(event, team);
+  const [activeTeam, setActiveTeam] = useState(team);
+  const { data, loading, error, reload } = useGameday(event, activeTeam);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [streamModalOpen, setModalOpen] = useState(false);
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
 
   // ALWAYS normalize streams so hook never receives null/undefined
   const {
@@ -74,6 +78,12 @@ export default function GamedayWidget({ event, team }) {
 
         {/* CONTROLS */}
         <div className="flex items-center gap-2 px-3">
+        <button
+          onClick={() => setTeamModalOpen(true)}
+          className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+        >
+         <UserGroupIcon className="w-4 h-5 text-white" />
+        </button>
           <button
             onClick={() => setModalOpen(true)}
             className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
@@ -87,11 +97,19 @@ export default function GamedayWidget({ event, team }) {
 
       {/* STREAM MODAL */}
       <StreamModal
-        open={modalOpen}
+        open={streamModalOpen}
         setOpen={setModalOpen}
         streams={streams}
         activeKey={activeKey}
         setActiveKey={setActiveKey}
+      />
+
+      <TeamModal
+        open={teamModalOpen}
+        setOpen={setTeamModalOpen}
+        teams={data.teams}
+        activeTeam={activeTeam}
+        setActiveTeam={setActiveTeam}
       />
     </div>
   );

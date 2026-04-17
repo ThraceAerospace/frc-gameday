@@ -27,6 +27,7 @@ export async function GET(
      * 1. Load event core data
      */
     const eventData = await TBA.getEvent(event);
+    const teamsAtEvent = await TBA.getTeamsAtEvent(event);
 
     if (!eventData) {
       return NextResponse.json(
@@ -145,7 +146,7 @@ const streams = await Promise.all(
      */
     const response = {
       event: eventData,
-
+      teams: teamsAtEvent,
       team: team
         ? {
             key: team,
