@@ -27,13 +27,13 @@ export default function GamedayEventTeamInfo({ data }) {
         <EventInfo event={event} />
 
         {isTeamMode && (
-          <div className="flex gap-2 text-nowrap">
+          <div className="flex gap-1 text-nowrap">
             <Rank status={team?.status} team={team} />
             <Record status={team?.status} />
           </div>
         )}
 
-        <div className="[@media(hover:none)_and_(pointer:coarse)]:hidden">
+        <div className={isTeamMode ? "[@media(hover:none)_and_(pointer:coarse)]:hidden" : ""} >
           <EventLocalTime timezone={data.event.timezone} />
         </div>
       </div>

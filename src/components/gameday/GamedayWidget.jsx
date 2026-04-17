@@ -78,11 +78,11 @@ export default function GamedayWidget({ event, team }) {
       </div>
 
       {/* CENTER (MATCH STRIP CLIPPED ZONE) */}
-      <div className="flex-1 min-w-0 overflow-hidden px-2">
+      <div className="flex-1 min-w-0 overflow-hidden px-1">
         <div className="relative w-full overflow-hidden">
 
           {/* 1. Your actual scroll/strip content */}
-          <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
+          <div className="flex gap-1 w-full pt-1 pb-1 overflow-x-auto no-scrollbar">
             <MatchStrip
               matches={data.matches}
               team={activeTeam}
