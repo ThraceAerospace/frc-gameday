@@ -26,7 +26,7 @@ export async function GET(
     /**
      * 1. Load event core data
      */
-    const eventData = await TBA.getEvent(event);
+    const eventData: any = await TBA.getEvent(event);
     const teamsAtEvent = await TBA.getTeamsAtEvent(event);
 
     if (!eventData) {
@@ -43,7 +43,7 @@ export async function GET(
 
     const now = Math.floor(Date.now() / 1000);
 
-    const matches = (matchesRaw || [])
+    const matches = ((matchesRaw as any[]) || [])
       .slice()
       .sort((a, b) => a.predicted_time - b.predicted_time)
       .map((m) => {
@@ -65,7 +65,7 @@ export async function GET(
     /**
      * 3. Team status (optional but useful for next/last match)
      */
-    let status = null;
+    let status: any = null;
     if (team) {
       status = await TBA.getTeamEventStatus(team, event);
     }
@@ -85,7 +85,7 @@ export async function GET(
 /**
  * 5. Streams normalization
  */
-const sortedWebcasts = (eventData.webcasts || [])
+const sortedWebcasts = (eventData.webcasts as Array<any> || [])
   .slice()
   .sort((a, b) => {
     const aTime = a.date ? new Date(a.date).getTime() : 0;
