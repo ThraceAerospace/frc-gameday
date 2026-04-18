@@ -30,6 +30,7 @@ export async function GET(
      */
     const eventData: any = await TBA.getEvent(event);
     const teamsAtEvent = await TBA.getTeamsAtEvent(event);
+    const playoffAlliances = await TBA.getEventPlayoffAlliances(event) || [];
 
     if (!eventData) {
       return NextResponse.json(
@@ -147,19 +148,18 @@ const streams = await Promise.all(
      */
     const response = {
       event: eventData,
-      teams: teamsAtEvent,
       team: team
         ? {
             key: team,
             status: status
           }
         : null,
-
       nextMatch,
       lastMatch,
+      teams: teamsAtEvent,
       matches,
       streams,
-
+      playoffAlliances,
       teamView: team
         ? {
             enabled: true,

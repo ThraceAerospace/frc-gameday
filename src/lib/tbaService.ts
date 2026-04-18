@@ -25,6 +25,9 @@ export const TBA = {
   getTeamsAtEvent: (eventKey: string) =>
     tba.get(`/event/${eventKey}/teams/simple`),
 
+  getEventPlayoffAlliances: (eventKey: string) =>
+    tba.get(`/event/${eventKey}/alliances`),
+
   // 🤖 Matches
   getEventMatches: (eventKey: string) =>
     tba.get(`/event/${eventKey}/matches`),

@@ -89,6 +89,8 @@ export default function GamedayWidget({ event, team }) {
               nextMatchKey={data.nextMatch?.key ?? null}
               teamView={data.teamView}
               eventTimezone={data.event.timezone}
+              playoffAlliances={data.playoffAlliances}
+              eventPlayoffType={data.event.playoff_type}
             />
           </div>
           {/* 3. Right fade overlay */}
