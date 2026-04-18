@@ -3,7 +3,6 @@
 import Record from "@/components/gameday/teamElements/Record";
 import LastMatch from "@/components/gameday/teamElements/LastMatch";
 import NextMatch from "@/components/gameday/teamElements/NextMatch";
-import MatchStrip from "@/components/gameday/navbar/MatchStrip";
 import EventInfo from "@/components/gameday/navbar/EventInfo";
 import Rank from "@/components/gameday/teamElements/Rank";
 import EventLocalTime from "@/components/gameday/navbar/EventLocalTime";
@@ -39,7 +38,7 @@ export default function GamedayEventTeamInfo({ data }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        <LastMatch 
+        {/* <LastMatch 
           match={lastMatch} 
           team={team}
           nextMatchKey={data.nextMatch?.key ?? null}
@@ -53,7 +52,7 @@ export default function GamedayEventTeamInfo({ data }) {
           playoffAlliances={data.playoffAlliances}
           eventPlayoffType={data.event.playoff_type}
           eventTimezone={data.event.timezone}
-        />
+        /> */}
 
       </div>      
     </div>

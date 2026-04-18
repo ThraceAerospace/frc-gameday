@@ -14,6 +14,8 @@ import { useGameday } from "@/components/gameday/hooks/useGameday";
 import { useStreamController } from "@/components/gameday/hooks/useStreamController";
 import { useActiveTeam } from "@/components/gameday/hooks/useActiveTeam";
 import TeamModal from "@/components/gameday/teamElements/TeamModal";
+import LastMatch from "@/components/gameday/teamElements/LastMatch";
+import NextMatch from "@/components/gameday/teamElements/NextMatch";
 export default function GamedayWidget({ event, team }) {
   const [activeTeam, setActiveTeam] = useState(team);
   const { data, loading, error, reload } = useGameday(event, activeTeam);
@@ -83,6 +85,21 @@ export default function GamedayWidget({ event, team }) {
 
           {/* 1. Your actual scroll/strip content */}
           <div className="flex gap-1 w-full pt-1 pb-1 overflow-x-auto no-scrollbar">
+            <LastMatch 
+              match={data.lastMatch} 
+              team={data.team}
+              nextMatchKey={data.nextMatch?.key ?? null}
+              eventTimezone={data.event.timezone}
+              playoffAlliances={data.playoffAlliances}
+              eventPlayoffType={data.event.playoff_type} />
+
+            <NextMatch 
+              match={data.nextMatch} 
+              team={data.team} 
+              playoffAlliances={data.playoffAlliances}
+              eventPlayoffType={data.event.playoff_type}
+              eventTimezone={data.event.timezone}
+            />
             <MatchStrip
               matches={data.matches}
               team={activeTeam}
