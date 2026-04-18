@@ -1,8 +1,6 @@
 "use client";
 
 import Record from "@/components/gameday/teamElements/Record";
-import LastMatch from "@/components/gameday/teamElements/LastMatch";
-import NextMatch from "@/components/gameday/teamElements/NextMatch";
 import EventInfo from "@/components/gameday/navbar/EventInfo";
 import Rank from "@/components/gameday/teamElements/Rank";
 import EventLocalTime from "@/components/gameday/navbar/EventLocalTime";
