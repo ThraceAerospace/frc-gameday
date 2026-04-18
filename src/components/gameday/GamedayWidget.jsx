@@ -16,6 +16,7 @@ import { useActiveTeam } from "@/components/gameday/hooks/useActiveTeam";
 import TeamModal from "@/components/gameday/teamElements/TeamModal";
 import LastMatch from "@/components/gameday/teamElements/LastMatch";
 import NextMatch from "@/components/gameday/teamElements/NextMatch";
+import ViewParentEvent from "./navbar/ViewParentEvent";
 export default function GamedayWidget({ event, team }) {
   const [activeTeam, setActiveTeam] = useState(team);
   const { data, loading, error, reload } = useGameday(event, activeTeam);
@@ -118,6 +119,7 @@ export default function GamedayWidget({ event, team }) {
 
       {/* RIGHT (CONTROLS — ALWAYS VISIBLE) */}
       <div className="flex items-center gap-2 px-3 shrink-0">
+        <ViewParentEvent event={data.event} playoffAlliances={data.playoffAlliances} />
         <button
           onClick={() => setTeamModalOpen(true)}
           className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
