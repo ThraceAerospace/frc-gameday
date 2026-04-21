@@ -92,7 +92,7 @@ export default function MultiviewClient({ isDivisional, parentEvent, children = 
         {/* CONTROL BAR */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
-            <div className="text-sm flex gap-1 items-baseline">
+            <div className="text-sm flex gap-2 items-baseline">
             {isDivisional && parentEvent ? (
                 <span className="font-bold">
                     <EventInfo event={parentEvent} />

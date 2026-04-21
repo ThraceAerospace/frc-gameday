@@ -8,15 +8,16 @@ import ChatView from "@/components/gameday/ChatView";
 import StreamModal from "@/components/gameday/StreamModal";
 import RefreshButton from "@/components/gameday/RefreshButton";
 import MatchStrip from "@/components/gameday/navbar/MatchStrip";
-import { VideoCameraIcon } from "@heroicons/react/24/solid";
-import { UserGroupIcon } from "@heroicons/react/24/solid";
+
+import { VideoCameraIcon } from "@heroicons/react/24/outline";
+import { UserGroupIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
+
 import { useGameday } from "@/components/gameday/hooks/useGameday";
 import { useStreamController } from "@/components/gameday/hooks/useStreamController";
-import { useActiveTeam } from "@/components/gameday/hooks/useActiveTeam";
 import TeamModal from "@/components/gameday/teamElements/TeamModal";
 import LastMatch from "@/components/gameday/teamElements/LastMatch";
 import NextMatch from "@/components/gameday/teamElements/NextMatch";
-import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
 
 export default function GamedayWidget({ event, team, isDivisional }) {
   const [activeTeam, setActiveTeam] = useState(team);
