@@ -78,6 +78,26 @@ export default function GamedayWidget({ event, team, isMultiview }) {
       {/* LEFT (info) */}
       <div className="shrink-0">
         <GamedayEventTeamInfo data={data} isMultiview={isMultiview} />
+        { isMultiview ? (
+          <div className="flex items-center gap-2 px-3 shrink-0">
+            {/* <ViewParentEvent event={data.event} playoffAlliances={data.playoffAlliances} /> */}
+            <button
+              onClick={() => setTeamModalOpen(true)}
+              className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+            >
+              <UserGroupIcon className="w-4 h-5 text-white" />
+            </button>
+
+            <button
+              onClick={() => setModalOpen(true)}
+              className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
+            >
+              <VideoCameraIcon className="w-4 h-5 text-white" />
+            </button>
+
+            <RefreshButton onRefresh={reload} />
+          </div>
+        ) : null }
       </div>
 
       {/* CENTER (MATCH STRIP CLIPPED ZONE) */}
@@ -118,26 +138,27 @@ export default function GamedayWidget({ event, team, isMultiview }) {
       </div>
 
       {/* RIGHT (CONTROLS — ALWAYS VISIBLE) */}
-      <div className="flex items-center gap-2 px-3 shrink-0">
-        <ViewParentEvent event={data.event} playoffAlliances={data.playoffAlliances} />
-        <button
-          onClick={() => setTeamModalOpen(true)}
-          className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
-        >
-          <UserGroupIcon className="w-4 h-5 text-white" />
-        </button>
+      { !isMultiview ? (
+        <div className="flex items-center gap-2 px-3 shrink-0">
+          {/* <ViewParentEvent event={data.event} playoffAlliances={data.playoffAlliances} /> */}
+          <button
+            onClick={() => setTeamModalOpen(true)}
+            className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+          >
+            <UserGroupIcon className="w-4 h-5 text-white" />
+          </button>
 
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
-        >
-          <VideoCameraIcon className="w-4 h-5 text-white" />
-        </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
+          >
+            <VideoCameraIcon className="w-4 h-5 text-white" />
+          </button>
 
-        <RefreshButton onRefresh={reload} />
+          <RefreshButton onRefresh={reload} />
+        </div>
+      ) : null}
       </div>
-
-    </div>
 
       {/* STREAM MODAL */}
       <StreamModal
