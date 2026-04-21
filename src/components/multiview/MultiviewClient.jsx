@@ -1,125 +1,76 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LAYOUTS, pickLayout } from "@/lib/layouts";
-import GamedayWidget from "@/components/gameday/GamedayWidget";
-import EventInfo from "@/components/gameday/navbar/EventInfo";
-import EventLocalTime from "@/components/gameday/navbar/EventLocalTime";
+import React from "react";
 
-export default function MultiviewClient({
-  parentEvent,
-  teams = [],
-  divisionKeys = [],
-    divisions = [],
-}) {
-  // ==============================
-  // DATA
-  // ==============================
-  const parentKey = parentEvent?.key;
-  const frames = parentKey
-    ? [...divisionKeys, parentKey]
-    : divisionKeys;
+export default function MultiviewClient({ children = [] }) {
+  // Normalize children into stable array
+  const childArray = useMemo(() => React.Children.toArray(children), [children]);
 
   // ==============================
-  // LAYOUT STATE
+  // LAYOUT
   // ==============================
   const [manualOverride, setManualOverride] = useState(false);
   const [selectedLayout, setSelectedLayout] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const autoLayout = pickLayout(frames.length);
+  const autoLayout = pickLayout(childArray.length || 1);
   const layoutKey = manualOverride ? selectedLayout : autoLayout;
   const layout = LAYOUTS[layoutKey];
-  const capacity = layout.slots.length;
 
   // ==============================
-  // CORE STATE (CLEAN MODEL)
+  // SLOT ORDER (stores child indices)
+  // slotOrder[slotIndex] = childIndex
   // ==============================
-
-  // ordering (source of truth)
-  const [priorityOrder, setPriorityOrder] = useState(frames);
-
-  // visibility
-  const [enabled, setEnabled] = useState(() => {
-    const map = {};
-    frames.forEach(f => (map[f] = true));
-    return map;
-  });
-
-  // ==============================
-  // DERIVED STATE
-  // ==============================
-
-  // visible + ordered + capped
-  const visibleFrames = useMemo(() => {
-    return priorityOrder
-      .filter(key => enabled[key])
-      .slice(0, capacity);
-  }, [priorityOrder, enabled, capacity]);
-
-  const onScreenSet = useMemo(
-    () => new Set(visibleFrames),
-    [visibleFrames]
+  const [slotOrder, setSlotOrder] = useState(() =>
+    layout.slots.map((_, i) => i)
   );
 
+  // Reset slot mapping when layout changes
+  useEffect(() => {
+    setSlotOrder(layout.slots.map((_, i) => i));
+  }, [layoutKey, childArray.length]);
+
   // ==============================
-  // ACTIONS
+  // HELPERS
   // ==============================
-
-  // move to spotlight (slot 0)
-  function focusDivision(key) {
-    setPriorityOrder(prev => [
-      key,
-      ...prev.filter(k => k !== key),
-    ]);
-  }
-
-  // toggle visibility
-  function toggleDivision(key) {
-    setEnabled(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  }
-
-  // reorder (sidebar)
-  function movePriority(index, direction) {
-    setPriorityOrder(prev => {
+  function swapSlots(a, b) {
+    setSlotOrder(prev => {
       const next = [...prev];
-
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return prev;
-
-      [next[index], next[target]] = [next[target], next[index]];
+      [next[a], next[b]] = [next[b], next[a]];
       return next;
     });
   }
 
-  // layout controls
-  function resetToAuto() {
-    setManualOverride(false);
-    setSelectedLayout(null);
-  }
-
-  function selectLayout(key) {
-    setSelectedLayout(key);
-    setManualOverride(true);
+  function moveToPrimary(index) {
+    setSlotOrder(prev => {
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.unshift(item);
+      return next;
+    });
   }
 
   // ==============================
-  // EMPTY STATE
+  // RENDER MAP
   // ==============================
-  if (frames.length === 0) {
-    return (
-      <div className="w-screen h-screen">
-        <GamedayWidget
-          event={parentEvent}
-          team={teams[0]}
-          isMultiview={false}
-        />
-      </div>
-    );
-  }
+  const renderMap = useMemo(() => {
+    return childArray.map((child, childIndex) => {
+      const slotIndex = slotOrder.findIndex(i => i === childIndex);
+
+      if (slotIndex === -1) return null;
+
+      const slotLayout = layout.slots[slotIndex];
+
+      return {
+        child,
+        childIndex,
+        slotIndex,
+        slotLayout,
+      };
+    });
+  }, [childArray, slotOrder, layout]);
 
   // ==============================
   // RENDER
@@ -127,55 +78,31 @@ export default function MultiviewClient({
   return (
     <div className="h-screen bg-black text-white overflow-hidden flex">
 
-      {/* ================= MAIN ================= */}
+      {/* MAIN */}
       <div className="flex-1 flex flex-col">
 
-        {/* ===== CONTROL BAR ===== */}
+        {/* CONTROL BAR */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
-          {/* LEFT */}
-          <div className="text-sm font-bold flex gap-2 items-center">
-            <EventInfo event={parentEvent} />
-            <span className="text-neutral-500">
-              ({divisionKeys.length} divisions)
-            </span>
-            <span className="text-neutral-400">
-              <EventLocalTime timezone={parentEvent.timezone} />
-            </span>
+          <div className="text-sm font-bold">
+            Multiview ({childArray.length})
           </div>
 
-          {/* CENTER: FOCUS BUTTONS */}
           <div className="flex gap-1 flex-wrap">
-            {priorityOrder.map(key => {
-              const isEnabled = enabled[key];
-              const isOnScreen = onScreenSet.has(key);
-              const isPrimary = visibleFrames[0] === key;
-
-              return (
-                <button
-                  key={key}
-                  onClick={() => focusDivision(key)}
-                  className={`
-                    px-2 py-1 text-xs rounded transition
-
-                    ${
-                      !isEnabled
-                        ? "bg-neutral-900 opacity-30"
-                        : isOnScreen
-                        ? "bg-neutral-700"
-                        : "bg-neutral-700 opacity-50"
-                    }
-
-                    ${isPrimary ? "ring-1 ring-white" : ""}
-                  `}
-                >
-                  {divisions.find(k => k.key === key)?.short_name || (key === parentKey ? parentEvent.name : key)}
-                </button>
-              );
-            })}
+            {layout.slots.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => moveToPrimary(index)}
+                className={`
+                  px-2 py-1 text-xs rounded transition bg-neutral-700
+                  ${index === 0 ? "ring-1 ring-white" : ""}
+                `}
+              >
+                Slot {index + 1}
+              </button>
+            ))}
           </div>
 
-          {/* RIGHT */}
           <button
             onClick={() => setSidebarOpen(v => !v)}
             className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
@@ -184,30 +111,25 @@ export default function MultiviewClient({
           </button>
         </div>
 
-        {/* ===== GRID ===== */}
+        {/* GRID */}
         <div className="relative flex-1">
 
-          {visibleFrames.map((frameKey, index) => {
-            const slot = layout.slots[index];
-            if (!slot) return null;
+          {renderMap.map(({ child, childIndex, slotLayout }) => {
+            if (!slotLayout) return null;
 
             return (
               <div
-                key={frameKey}
+                key={childIndex}
                 style={{
                   position: "absolute",
-                  left: `${slot.x}%`,
-                  top: `${slot.y}%`,
-                  width: `${slot.w}%`,
-                  height: `${slot.h}%`,
+                  left: `${slotLayout.x}%`,
+                  top: `${slotLayout.y}%`,
+                  width: `${slotLayout.w}%`,
+                  height: `${slotLayout.h}%`,
+                  transition: "all 300ms ease",
                 }}
-                className="transition-all duration-300 ease-in-out"
               >
-                <GamedayWidget
-                  event={frameKey}
-                  team={teams[0]}
-                  isMultiview={true}
-                />
+                {child}
               </div>
             );
           })}
@@ -215,16 +137,18 @@ export default function MultiviewClient({
         </div>
       </div>
 
-      {/* ================= SIDEBAR ================= */}
+      {/* SIDEBAR */}
       {sidebarOpen && (
-        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3 flex flex-col gap-3">
+        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
 
-          {/* Layouts */}
           <div className="font-bold">Layouts</div>
 
           <button
-            onClick={resetToAuto}
-            className="px-2 py-1 bg-green-600 rounded text-sm"
+            onClick={() => {
+              setManualOverride(false);
+              setSelectedLayout(null);
+            }}
+            className="px-2 py-1 bg-green-600 rounded text-sm mt-2"
           >
             Auto Layout ({autoLayout})
           </button>
@@ -234,9 +158,12 @@ export default function MultiviewClient({
           {Object.keys(LAYOUTS).map(key => (
             <button
               key={key}
-              onClick={() => selectLayout(key)}
+              onClick={() => {
+                setSelectedLayout(key);
+                setManualOverride(true);
+              }}
               className={`
-                text-left px-2 py-1 rounded text-sm
+                block w-full text-left px-2 py-1 rounded text-sm
                 hover:bg-neutral-800
                 ${layoutKey === key ? "bg-neutral-700" : ""}
               `}
@@ -244,37 +171,6 @@ export default function MultiviewClient({
               {key}
             </button>
           ))}
-
-          {/* Priority */}
-          <div className="h-px bg-neutral-700 my-2" />
-          <div className="font-bold text-sm">Priority Order</div>
-
-          <div className="flex flex-col gap-1 mt-2">
-            {priorityOrder.map((key, index) => (
-              <div
-                key={key}
-                className="flex items-center justify-between px-2 py-1 bg-neutral-800 rounded text-xs"
-              >
-                <span>{key}</span>
-
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => movePriority(index, -1)}
-                    className="px-1 hover:bg-neutral-700 rounded"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    onClick={() => movePriority(index, 1)}
-                    className="px-1 hover:bg-neutral-700 rounded"
-                  >
-                    ↓
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
         </div>
       )}
     </div>

@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 
 /**
- * Stable key for stream identity
+ * Build a stable unique key for a stream
  */
 function makeKey(stream) {
-  return stream.key || `${stream.type}:${stream.channel}:${stream.date}`;
+  return (
+    stream.key ||
+    `${stream.type}:${stream.channel}:${stream.date}`
+  );
 }
 
 /**
- * Returns YYYY-MM-DD in event timezone
+ * Get YYYY-MM-DD in event timezone
  */
 function getTodayInTimezone(timezone) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -22,23 +25,20 @@ function getTodayInTimezone(timezone) {
 }
 
 /**
- * Select best default stream:
- * 1. match today's date in event timezone
- * 2. fallback to first stream
+ * Pick default stream deterministically
  */
 function pickDefaultStream(streams, timezone) {
   if (!streams?.length || !timezone) return null;
 
   const today = getTodayInTimezone(timezone);
 
-  const match = streams.find((s) => s.date === today);
-
-  return match || streams[0];
+  return streams.find((s) => s.date === today) || streams[0] || null;
 }
 
 export function useStreamController(streams = [], timezone) {
   /**
-   * Normalize ONCE
+   * Normalize streams ONCE per change
+   * (no ordering assumptions outside this block)
    */
   const normalized = useMemo(() => {
     if (!Array.isArray(streams)) return [];
@@ -51,39 +51,53 @@ export function useStreamController(streams = [], timezone) {
       }));
   }, [streams]);
 
+  /**
+   * Build a stable lookup map (CRITICAL FIX)
+   */
+  const streamMap = useMemo(() => {
+    const map = new Map();
+    for (const s of normalized) {
+      map.set(s.key, s);
+    }
+    return map;
+  }, [normalized]);
+
+  /**
+   * Active stream key (source of truth)
+   */
   const [activeKey, setActiveKey] = useState(null);
 
   /**
-   * Initialize default stream
-   * (timezone REQUIRED to avoid incorrect selection)
+   * Initialize default ONLY ONCE per stream set
+   * (never re-run due to ordering changes)
    */
   useEffect(() => {
     if (!normalized.length || !timezone) return;
 
     setActiveKey((prev) => {
-      if (prev) return prev; // respect user selection
+      if (prev) return prev; // user override always wins
 
       const defaultStream = pickDefaultStream(normalized, timezone);
-
       return defaultStream?.key || null;
     });
   }, [normalized, timezone]);
 
   /**
-   * Derived active stream (always consistent)
+   * Resolve active stream strictly by key
+   * (NO ARRAY INDEX FALLBACK — THIS WAS THE BUG)
    */
   const activeStream = useMemo(() => {
-    if (!normalized.length) return null;
+    if (!activeKey) return null;
+    return streamMap.get(activeKey) || null;
+  }, [streamMap, activeKey]);
 
-    return (
-      normalized.find((s) => s.key === activeKey) ||
-      normalized[0] ||
-      null
-    );
-  }, [normalized, activeKey]);
+  /**
+   * Optional derived list (safe for UI, NOT logic)
+   */
+  const streamsList = useMemo(() => normalized, [normalized]);
 
   return {
-    streams: normalized,
+    streams: streamsList,
     activeStream,
     activeKey,
     setActiveKey,
