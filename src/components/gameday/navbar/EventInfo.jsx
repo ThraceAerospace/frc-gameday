@@ -5,7 +5,7 @@ export default function EventInfo({ event }) {
     title = `[CMP] ${event.short_name}`;
    }
   else if (event.event_type === 3) { //event_type 3 = championship division
-    title = `[CMP] ${event.name}`;
+    title = `[CMP] ${event.short_name}`;
    }
   else if (event.event_type === 2) { //event_type 2 = district championship finals
     title = `${event.name}`;
