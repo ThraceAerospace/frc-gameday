@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { LAYOUTS, pickLayout } from "@/lib/layouts";
 import React from "react";
+import EventLocalTime from "../gameday/navbar/EventLocalTime";
+import EventInfo from "../gameday/navbar/EventInfo";
 
-export default function MultiviewClient({ children = [] }) {
+export default function MultiviewClient({ isDivisional, parentEvent, children = [] }) {
   // Normalize children into stable array
   const childArray = useMemo(() => React.Children.toArray(children), [children]);
 
@@ -90,9 +92,19 @@ export default function MultiviewClient({ children = [] }) {
         {/* CONTROL BAR */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
-          <div className="text-sm font-bold">
-            Multiview ({childArray.length})
-          </div>
+            <div className="text-sm flex gap-1 items-baseline">
+            {isDivisional && parentEvent ? (
+                <span className="font-bold">
+                    <EventInfo event={parentEvent} />
+                </span>
+            ) : null}
+
+            {isDivisional && parentEvent ? (
+                <span className="text-xs text-gray-400">
+                    <EventLocalTime timezone={parentEvent.timezone} />
+                </span>
+            ) : null}
+            </div>
 
             <div className="flex gap-1 flex-wrap">
                 {childArray.map((child, childIndex) => {
@@ -157,7 +169,7 @@ export default function MultiviewClient({ children = [] }) {
 
         return (
             <div
-            key={child?.key ?? childIndex}   // 🔥 THIS is what prevents reloads
+            key={child?.key ?? childIndex}  
             style={{
                 position: "absolute",
                 left: `${slotLayout.x}%`,

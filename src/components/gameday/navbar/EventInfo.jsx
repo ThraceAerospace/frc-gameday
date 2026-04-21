@@ -19,9 +19,7 @@ export default function EventInfo({ event }) {
   }
 
   return (
-    <div className="text-nowrap text-sm">
-      <span>{title}</span>
-    </div>
+    <span className="text-nowrap text-sm">{title}</span>
   );
   
 }

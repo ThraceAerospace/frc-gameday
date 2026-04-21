@@ -18,16 +18,14 @@ export default function EventLocalTime({ timezone }) {
   }, [timezone]);
 
   return (
-    <div>
-      <span className="font-mono">
+    <span className="font-mono">
         {now.toLocaleTimeString("en-US", {
-          timeZone: timezone,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          timeZoneName: "short",
+            timeZone: timezone,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            timeZoneName: "short",
         })}
-      </span>
-    </div>
+    </span>
   );
 }

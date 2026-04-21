@@ -23,7 +23,7 @@ export default async function DivisionalEvent({ params, searchParams }) {
   }
 
   return (
-    <MultiviewClient>
+    <MultiviewClient isDivisional={true} parentEvent={parent}>
       {/* Divisions */}
       {divisions.map((division) => (
         <GamedayWidget
