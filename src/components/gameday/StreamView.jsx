@@ -10,13 +10,13 @@ export default function StreamView({ stream }) {
   }
 
   // HARD SAFETY: prevent broken embeds
-  if (!stream.url.includes("embed")) {
-    return (
-      <div className="text-red-400 p-4">
-        Invalid stream URL: {stream.url}
-      </div>
-    );
-  }
+  // if (!stream.url.includes("embed")) {
+  //   return (
+  //     <div className="text-red-400 p-4">
+  //       Invalid stream URL: {stream.url}
+  //     </div>
+  //   );
+  // }
 
   return (
     <iframe
