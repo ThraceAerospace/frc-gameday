@@ -26,11 +26,19 @@ export default function MultiviewClient({ children = [] }) {
   const [slotOrder, setSlotOrder] = useState(() =>
     layout.slots.map((_, i) => i)
   );
-
+    const [homeSlotOrder, setHomeSlotOrder] = useState(() =>
+    childArray.map((_, i) => i)
+    );
   // Reset slot mapping when layout changes
   useEffect(() => {
     setSlotOrder(layout.slots.map((_, i) => i));
   }, [layoutKey, childArray.length]);
+
+    useEffect(() => {
+    const base = childArray.map((_, i) => i);
+    setSlotOrder(base);
+    setHomeSlotOrder(base);
+    }, [layoutKey]);
 
   // ==============================
   // HELPERS
@@ -55,22 +63,20 @@ export default function MultiviewClient({ children = [] }) {
   // ==============================
   // RENDER MAP
   // ==============================
-  const renderMap = useMemo(() => {
-    return childArray.map((child, childIndex) => {
-      const slotIndex = slotOrder.findIndex(i => i === childIndex);
+    const renderMap = useMemo(() => {
+    return layout.slots.map((_, slotIndex) => {
+        const childIndex = slotOrder[slotIndex];
+        const child = childArray[childIndex];
+        const slotLayout = layout.slots[slotIndex];
 
-      if (slotIndex === -1) return null;
-
-      const slotLayout = layout.slots[slotIndex];
-
-      return {
+        return {
         child,
         childIndex,
         slotIndex,
         slotLayout,
-      };
+        };
     });
-  }, [childArray, slotOrder, layout]);
+    }, [childArray, slotOrder, layout]);
 
   // ==============================
   // RENDER
@@ -102,9 +108,17 @@ export default function MultiviewClient({ children = [] }) {
                     <button
                         key={childIndex}
                         onClick={() => {
+                        const isActive = childIndex === activeChildIndex;
+
+                        if (isActive) {
+                           
+                            setSlotOrder(homeSlotOrder);
+                            setActiveChildIndex(null);
+                            return;
+                        }
+
                         setActiveChildIndex(childIndex);
 
-                        // find where this stream currently is
                         const slotIndex = slotOrder.findIndex(i => i === childIndex);
 
                         if (slotIndex !== -1) {
@@ -133,26 +147,30 @@ export default function MultiviewClient({ children = [] }) {
         {/* GRID */}
         <div className="relative flex-1">
 
-          {renderMap.map(({ child, childIndex, slotLayout }) => {
-            if (!slotLayout) return null;
+        {childArray.map((child, childIndex) => {
+        const slotIndex = slotOrder.findIndex(i => i === childIndex);
 
-            return (
-              <div
-                key={childIndex}
-                style={{
-                  position: "absolute",
-                  left: `${slotLayout.x}%`,
-                  top: `${slotLayout.y}%`,
-                  width: `${slotLayout.w}%`,
-                  height: `${slotLayout.h}%`,
-                  transition: "all 300ms ease",
-                }}
-              >
-                {child}
-              </div>
-            );
-          })}
+        const slotLayout = layout.slots[slotIndex];
 
+        // If stream has no slot, don't render it in grid
+        if (!slotLayout) return null;
+
+        return (
+            <div
+            key={child?.key ?? childIndex}   // 🔥 THIS is what prevents reloads
+            style={{
+                position: "absolute",
+                left: `${slotLayout.x}%`,
+                top: `${slotLayout.y}%`,
+                width: `${slotLayout.w}%`,
+                height: `${slotLayout.h}%`,
+                transition: "all 300ms ease",
+            }}
+            >
+            {child}
+            </div>
+        );
+        })}
         </div>
       </div>
 
