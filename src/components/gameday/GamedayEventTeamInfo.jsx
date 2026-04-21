@@ -9,7 +9,7 @@ export default function GamedayEventTeamInfo({ data, isMultiview }) {
   const { event, team, nextMatch, lastMatch, matches, teamView } = data;
 
   const isTeamMode = teamView?.enabled && team;
-  console.log("Is Multiview:", isMultiview);
+  
   return (
     <div className="w-full h-full flex flex-row items-stretch gap-2 px-2 py-2 overflow-hidden">
 

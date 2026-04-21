@@ -14,16 +14,17 @@ export default async function DivisionalEvent({ params, searchParams }) {
   const parent = await TBA.getEvent(parentEvent);
   const divisionKeys = parent?.division_keys || [];
   var divisions = [];
-  // for (const key of divisionKeys) {
-  //   const division = await TBA.getEventSimple(key);
-  //   const divisionTeams = await TBA.getTeamsAtEvent(key);
-  //   division.teams = divisionTeams.map(t => t.key);
-  //   divisions.push(division);
-  // }
+  for (const key of divisionKeys) {
+    const division = await TBA.getEvent(key);
+    //const divisionTeams = await TBA.getTeamsAtEvent(key);
+   // division.teams = divisionTeams.map(t => t.key);
+    divisions.push(division);
+  }
 
   console.log("EVENT:", parentEvent);
   console.log("TEAMS:", teams);
   console.log("DIVISION KEYS:", divisionKeys);
+  console.log("DIVISIONS:", divisions);
 
 return (
   <MultiviewClient

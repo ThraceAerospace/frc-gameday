@@ -102,8 +102,8 @@ const streams = await Promise.all(
       return {
         type: "twitch",
         channel: wc.channel,
-        url: `https://player.twitch.tv/?autoplay=true&channel=${wc.channel}&parent=${process.env.NEXT_PUBLIC_DOMAIN}`,
-        chat: `https://www.twitch.tv/embed/${wc.channel}/chat?parent=${process.env.NEXT_PUBLIC_DOMAIN}`,
+        url: `https://player.twitch.tv/?autoplay=true&channel=${wc.channel}&parent=${process.env.NEXT_PUBLIC_DOMAIN || "localhost"}`,
+        chat: `https://www.twitch.tv/embed/${wc.channel}/chat?parent=${process.env.NEXT_PUBLIC_DOMAIN || "localhost"}`,
         date: wc.date,
         meta: null,
       };

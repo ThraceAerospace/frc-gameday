@@ -10,9 +10,13 @@ export default function MultiviewClient({
   parentEvent,
   teams = [],
   divisionKeys = [],
+    divisions = [],
 }) {
-    const parentKey = parentEvent?.key;
-    const frames = parentKey
+  // ==============================
+  // DATA
+  // ==============================
+  const parentKey = parentEvent?.key;
+  const frames = parentKey
     ? [...divisionKeys, parentKey]
     : divisionKeys;
 
@@ -29,11 +33,13 @@ export default function MultiviewClient({
   const capacity = layout.slots.length;
 
   // ==============================
-  // PRIORITY ORDER (NEW CORE MODEL)
+  // CORE STATE (CLEAN MODEL)
   // ==============================
-  const [priorityOrder, setPriorityOrder] = useState(() => frames);
 
-  // enabled map (still used for toggling)
+  // ordering (source of truth)
+  const [priorityOrder, setPriorityOrder] = useState(frames);
+
+  // visibility
   const [enabled, setEnabled] = useState(() => {
     const map = {};
     frames.forEach(f => (map[f] = true));
@@ -41,41 +47,26 @@ export default function MultiviewClient({
   });
 
   // ==============================
-  // SLOT ASSIGNMENT (DERIVED FROM PRIORITY)
+  // DERIVED STATE
   // ==============================
-  const slotAssignments = useMemo(() => {
-    const active = priorityOrder.filter(f => enabled[f]);
 
-    const next = {};
+  // visible + ordered + capped
+  const visibleFrames = useMemo(() => {
+    return priorityOrder
+      .filter(key => enabled[key])
+      .slice(0, capacity);
+  }, [priorityOrder, enabled, capacity]);
 
-    for (let i = 0; i < layout.slots.length; i++) {
-      next[i] = active[i] ?? null;
-    }
-
-    return next;
-  }, [priorityOrder, enabled, layoutKey]);
-
-  const assignedFrames = useMemo(
-    () => Object.values(slotAssignments).filter(Boolean),
-    [slotAssignments]
+  const onScreenSet = useMemo(
+    () => new Set(visibleFrames),
+    [visibleFrames]
   );
 
-  const getSlotOf = (key) =>
-    Object.entries(slotAssignments).find(([_, v]) => v === key)?.[0];
+  // ==============================
+  // ACTIONS
+  // ==============================
 
-  // ==============================
-  // TOGGLE ENABLE/DISABLE
-  // ==============================
-  function toggleDivision(key) {
-    setEnabled(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  }
-
-  // ==============================
-  // FOCUS (MOVE TO TOP)
-  // ==============================
+  // move to spotlight (slot 0)
   function focusDivision(key) {
     setPriorityOrder(prev => [
       key,
@@ -83,35 +74,28 @@ export default function MultiviewClient({
     ]);
   }
 
-  // ==============================
-  // DRAG + DROP REORDER (SIDEBAR)
-  // ==============================
-  function movePriority(fromIndex, toIndex) {
+  // toggle visibility
+  function toggleDivision(key) {
+    setEnabled(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
+
+  // reorder (sidebar)
+  function movePriority(index, direction) {
     setPriorityOrder(prev => {
       const next = [...prev];
-      const [item] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, item);
+
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+
+      [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   }
 
-  function handleDragStart(e, index) {
-    e.dataTransfer.setData("fromIndex", index);
-  }
-
-  function handleDrop(e, toIndex) {
-    const fromIndex = Number(e.dataTransfer.getData("fromIndex"));
-    if (fromIndex === toIndex) return;
-    movePriority(fromIndex, toIndex);
-  }
-
-  function allowDrop(e) {
-    e.preventDefault();
-  }
-
-  // ==============================
-  // LAYOUT CONTROL
-  // ==============================
+  // layout controls
   function resetToAuto() {
     setManualOverride(false);
     setSelectedLayout(null);
@@ -143,10 +127,10 @@ export default function MultiviewClient({
   return (
     <div className="h-screen bg-black text-white overflow-hidden flex">
 
-      {/* MAIN */}
+      {/* ================= MAIN ================= */}
       <div className="flex-1 flex flex-col">
 
-        {/* ================= CONTROL BAR ================= */}
+        {/* ===== CONTROL BAR ===== */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
           {/* LEFT */}
@@ -163,8 +147,9 @@ export default function MultiviewClient({
           {/* CENTER: FOCUS BUTTONS */}
           <div className="flex gap-1 flex-wrap">
             {priorityOrder.map(key => {
-              const isOn = enabled[key];
-              const slotIndex = getSlotOf(key);
+              const isEnabled = enabled[key];
+              const isOnScreen = onScreenSet.has(key);
+              const isPrimary = visibleFrames[0] === key;
 
               return (
                 <button
@@ -172,11 +157,19 @@ export default function MultiviewClient({
                   onClick={() => focusDivision(key)}
                   className={`
                     px-2 py-1 text-xs rounded transition
-                    ${isOn ? "bg-neutral-700" : "bg-neutral-900 opacity-30"}
-                    ${slotIndex === "0" ? "ring-1 ring-white" : ""}
+
+                    ${
+                      !isEnabled
+                        ? "bg-neutral-900 opacity-30"
+                        : isOnScreen
+                        ? "bg-neutral-700"
+                        : "bg-neutral-700 opacity-50"
+                    }
+
+                    ${isPrimary ? "ring-1 ring-white" : ""}
                   `}
                 >
-                  {key}
+                  {divisions.find(k => k.key === key)?.short_name || (key === parentKey ? parentEvent.name : key)}
                 </button>
               );
             })}
@@ -191,14 +184,11 @@ export default function MultiviewClient({
           </button>
         </div>
 
-        {/* ================= GRID ================= */}
+        {/* ===== GRID ===== */}
         <div className="relative flex-1">
 
-          {frames.map(frameKey => {
-            const slotIndex = getSlotOf(frameKey);
-            if (slotIndex === undefined) return null;
-
-            const slot = layout.slots[slotIndex];
+          {visibleFrames.map((frameKey, index) => {
+            const slot = layout.slots[index];
             if (!slot) return null;
 
             return (
@@ -211,7 +201,7 @@ export default function MultiviewClient({
                   width: `${slot.w}%`,
                   height: `${slot.h}%`,
                 }}
-                className="transition-all duration-300 ease-in-out will-change-transform"
+                className="transition-all duration-300 ease-in-out"
               >
                 <GamedayWidget
                   event={frameKey}
@@ -255,53 +245,35 @@ export default function MultiviewClient({
             </button>
           ))}
 
-          {/* ================= PRIORITY DRAG LIST ================= */}
+          {/* Priority */}
           <div className="h-px bg-neutral-700 my-2" />
-
           <div className="font-bold text-sm">Priority Order</div>
 
-            <div className="flex flex-col gap-1 mt-2">
+          <div className="flex flex-col gap-1 mt-2">
             {priorityOrder.map((key, index) => (
-                <div
+              <div
                 key={key}
                 className="flex items-center justify-between px-2 py-1 bg-neutral-800 rounded text-xs"
-                >
+              >
                 <span>{key}</span>
 
                 <div className="flex gap-1">
-                    <button
-                    onClick={() => {
-                        if (index === 0) return;
-                        setPriorityOrder(prev => {
-                        const next = [...prev];
-                        [next[index - 1], next[index]] =
-                            [next[index], next[index - 1]];
-                        return next;
-                        });
-                    }}
+                  <button
+                    onClick={() => movePriority(index, -1)}
                     className="px-1 hover:bg-neutral-700 rounded"
-                    >
+                  >
                     ↑
-                    </button>
-
-                    <button
-                    onClick={() => {
-                        if (index === priorityOrder.length - 1) return;
-                        setPriorityOrder(prev => {
-                        const next = [...prev];
-                        [next[index + 1], next[index]] =
-                            [next[index], next[index + 1]];
-                        return next;
-                        });
-                    }}
+                  </button>
+                  <button
+                    onClick={() => movePriority(index, 1)}
                     className="px-1 hover:bg-neutral-700 rounded"
-                    >
+                  >
                     ↓
-                    </button>
+                  </button>
                 </div>
-                </div>
+              </div>
             ))}
-            </div>
+          </div>
 
         </div>
       )}
