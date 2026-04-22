@@ -21,7 +21,7 @@ export default function MatchList({
 
   const filtered = matches.filter((m) => {
     const time = (m?.predicted_time || 0) * 1000;
-    const isFuture = time > now || m.winning_alliance === "";
+    const isFuture = time > now || (m.winning_alliance === "" && m.actual_time === null);
 
     const isTeamMatch =
       teamView?.enabled &&

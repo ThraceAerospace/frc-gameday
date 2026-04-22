@@ -51,3 +51,20 @@ export function getEventNow(timeZone) {
     new Date().toLocaleString("en-US", { timeZone })
   );
 }
+
+
+export function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function dumbDateString(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+
+  const months = [
+    "Jan","Feb","Mar","Apr","May","Jun",
+    "Jul","Aug","Sep","Oct","Nov","Dec"
+  ];
+
+  return `${months[month - 1]} ${day}, ${year}`;
+}

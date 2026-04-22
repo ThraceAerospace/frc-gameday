@@ -39,7 +39,7 @@ export default function MatchCard({ match, team, isNext, isLast, playoffAlliance
                 <div className="text-red-400">
                 {isPlayoff && playoffRedAlliance ? (
                 <span className="text-red-500 text-sm gap-1">
-                    {playoffRedAlliance.name.replace("Alliance ", "A").trim()}
+                    {playoffRedAlliance.name?.replace("Alliance ", "A").trim() || ""}
                 </span>
                 ) : null}
                 {formatAlliance(red, team?.key)}
@@ -47,7 +47,7 @@ export default function MatchCard({ match, team, isNext, isLast, playoffAlliance
                 <div className="text-blue-400">
                 {isPlayoff && playoffBlueAlliance ? (
                 <span className="text-blue-500 text-sm gap-1">
-                    {playoffBlueAlliance.name.replace("Alliance ", "A").trim()}
+                    {playoffBlueAlliance.name?.replace("Alliance ", "A").trim() || ""}
                 </span>
                 ) : null}
                 {formatAlliance(blue, team?.key)}
