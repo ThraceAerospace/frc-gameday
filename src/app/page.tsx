@@ -38,7 +38,7 @@ export default function HomePage() {
 
   function startGameday() {
     const params = new URLSearchParams();
-    
+
     selectedEvents.forEach(e => {
       params.append("event", e);
     });
@@ -64,28 +64,27 @@ export default function HomePage() {
 
   function EventCard({ event }: { event: any }) {
     const selected = selectedEvents.has(event.key);
-
+    const hasDivisions = event.flags.hasDivisions || false
     return (
-      <div className="gap-2 rounded"> 
-        <button
-          onClick={() => toggleEvent(event.key)}
-          className={`w-full text-left p-3 rounded-lg transition
-            ${selected ? "bg-blue-600 text-white" : "bg-zinc-900 hover:bg-zinc-800"}`}
-        >
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="font-semibold">{event.name}</div>
-              <div><span className="text-xs opacity-70">{event.event_type_string}</span></div>
-              <div><span className="text-xs">{dumbDateString(event.start_date)} - {dumbDateString(event.end_date)}</span></div>
-            </div>
-            <div className="flex ">
-              <MatchStrip matches={event.matches} team={null} teamView={false} playoffAlliances={[]} eventTimezone={event.timezone} eventPlayoffType={event.playoff_type} nextMatchKey={null}/>
-            </div>
-            <div className="text-xs px-2 py-1 rounded bg-black/30">
-              {event.state || "upcoming"}
-            </div>
+      <div className="bg-neutral-900 border-t border-neutral-700 p-3 gap-2 rounded-lg"> 
+        <div className="flex justify-between items-center">
+          <div>
+            <div className="font-semibold">{event.name}</div>
+            <div><span className="text-xs opacity-70">{event.event_type_string}</span></div>
+            <div><span className="text-xs">{dumbDateString(event.start_date)} - {dumbDateString(event.end_date)}</span></div>
           </div>
-        </button>
+          <div className="flex w-50">
+            <MatchStrip matches={event.matches} team={null} teamView={false} playoffAlliances={[]} eventTimezone={event.timezone} eventPlayoffType={event.playoff_type} nextMatchKey={null}/>
+          </div>
+
+          <div className="flex gap-1">
+            { hasDivisions ? (<button className="bg-neutral-800  hover:bg-zinc-800 rounded p-1" onClick={()=> router.push(`/gameday/divisional-event/${event.key}`)}>Watch All Divisions</button>) : null  }
+            <button onClick={() => toggleEvent(event.key)} className={`rounded p-1 ${selected ? "bg-blue-600 text-white" : "bg-neutral-800  hover:bg-zinc-800"}`}>
+              Add to Multiview
+            </button>
+          </div>
+
+        </div>
       </div>
     );
   }
@@ -101,7 +100,7 @@ export default function HomePage() {
             disabled={selectedEvents.size === 0}
             className="px-4 py-2 rounded bg-blue-600 disabled:opacity-40"
           >
-            Start ({selectedEvents.size})
+            Start Multiview ({selectedEvents.size})
           </button>
         </div>
 

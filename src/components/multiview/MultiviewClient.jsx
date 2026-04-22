@@ -138,7 +138,7 @@ export default function MultiviewClient({ isDivisional, parentEvent, children = 
                         }
                         }}
                         className={`
-                        px-2 py-1 text-xs rounded transition bg-neutral-700
+                        px-2 py-1 text-xs rounded transition bg-neutral-800 hover:bg-neutral-700
                         ${isActive ? "ring-2 ring-red-400" : ""}
                         `}
                     >

@@ -30,7 +30,7 @@ export default async function DivisionalEvent({ params, searchParams }) {
           event={event.key}
           team={teams[0]}
           eventName={event.short_name}
-          isDivisional={true}
+          isDivisional={false}
         />
       ))}
     </MultiviewClient>
