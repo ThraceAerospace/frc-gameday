@@ -62,10 +62,10 @@ export async function GET(
       });
 
     const futureMatches = matches.filter(
-      (m) => m.predicted_time > now || m.winning_alliance === "" // filter out completed matches without a winner (e.g. unplayed playoffs)
+      (m) => m.predicted_time > now || (m.actual_time === null ) // filter out completed matches without a winner (e.g. unplayed playoffs)
     );
     const pastMatches = matches.filter(
-      (m) => m.predicted_time <= now && m.winning_alliance !== "" // filter out future matches and unplayed playoffs
+      (m) => m.predicted_time <= now && m.actual_time !== null // filter out future matches and unplayed playoffs
     );
 
     /**
