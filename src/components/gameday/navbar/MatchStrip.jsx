@@ -20,8 +20,7 @@ export default function MatchList({
   
 
   const filtered = matches.filter((m) => {
-    const time = (m?.predicted_time || 0) * 1000;
-    const isFuture = time > now || (m.winning_alliance === "" && m.actual_time === null);
+    const isPlayed = m.actual_time != null;
 
     const isTeamMatch =
       teamView?.enabled &&
@@ -29,8 +28,8 @@ export default function MatchList({
       m.key !== nextMatchKey;
 
     return (
-      (isTeamMatch && isFuture) ||
-      (!teamView?.enabled && isFuture && m.key !== nextMatchKey)
+      (isTeamMatch && !isPlayed) ||
+      (!teamView?.enabled && !isPlayed && m.key !== nextMatchKey)
     );
   });
 
