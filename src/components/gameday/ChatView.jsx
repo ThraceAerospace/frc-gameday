@@ -1,7 +1,7 @@
 "use client";
 
 export default function ChatView({ stream }) {
-  console.log(stream)
+  // console.log(stream)
   if (!stream) return null;
 
   return (
