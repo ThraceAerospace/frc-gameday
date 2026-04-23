@@ -69,21 +69,21 @@ export default function HomePage() {
       <div className="bg-neutral-900 border-t border-neutral-700 p-3 gap-2 rounded-lg"> 
         <div className="flex justify-between items-center">
           <div>
-            <div className="font-semibold">{event.name}</div>
+            <div className="font-semibold">{event.name.replace("- FIRST Robotics Competition", "")}</div>
             <div><span className="text-xs opacity-70">{event.event_type_string}</span></div>
             <div><span className="text-xs">{dumbDateString(event.start_date)} - {dumbDateString(event.end_date)}</span></div>
           </div>
-          <div className="flex w-50">
+          <div className="flex max-w-50">
             <MatchStrip matches={event.matches} team={null} teamView={false} playoffAlliances={[]} eventTimezone={event.timezone} eventPlayoffType={event.playoff_type} nextMatchKey={null}/>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <button className="bg-neutral-800 w-full hover:bg-zinc-800 rounded p-2" onClick={()=> router.push(`/gameday/${event.key}`)}>Watch</button>
+          <div className="flex flex-col gap-2">
+            <button className="bg-neutral-800 w-full hover:bg-zinc-800 rounded p-2" onClick={()=> router.push(`/gameday/${event.key}`)}>Watch {hasDivisions ? "Event" : "Now"}</button>
             { hasDivisions ? 
-            (<button className="bg-neutral-800 w-full hover:bg-zinc-800 rounded p-2" onClick={()=> router.push(`/gameday/divisional-event/${event.key}`)}>View Divisions</button>) : 
+            (<button className="bg-neutral-800 w-full hover:bg-zinc-800 rounded p-2" onClick={()=> router.push(`/gameday/divisional-event/${event.key}`)}>Watch Divisions</button>) : 
             (
               <button onClick={() => toggleEvent(event.key)} className={`w-full rounded p-2 ${selected ? "bg-blue-600 text-white" : "bg-neutral-800  hover:bg-zinc-800"}`}>
-                Multiview
+                Add to Multiview
               </button>
             )}
           </div>
@@ -97,7 +97,10 @@ export default function HomePage() {
     <div className="min-h-screen bg-black text-white p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Gameday Selector</h1>
+          <div>
+            <h1 className="text-2xl font-bold">Gameday Event Selector</h1>
+            <p>Select event(s) below. </p>
+          </div>
 
           <button
             onClick={startGameday}
