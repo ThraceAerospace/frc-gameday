@@ -1,5 +1,5 @@
 import { tba } from "./tba";
-
+import {buildStreams} from "@/lib/gameday/buildStreams"
 /* -------------------------- */
 /* 🧠 Helpers                 */
 /* -------------------------- */
@@ -194,5 +194,8 @@ export const TBA = {
   /* ------------------ */
 
   getEventWebcasts: (eventKey: any) =>
-    tba.get(`/event/${eventKey}/webcasts`, 86400),
+    tba.get(`/event/${eventKey}`, 86400).then(async (e) => {
+      const normalized = await buildStreams(e.webcasts)
+      return normalized;
+    }),
 };

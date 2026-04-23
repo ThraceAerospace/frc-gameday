@@ -4,10 +4,11 @@ export default function Record({ status }) {
   //console.log("Record render with status", status);
   if (!status) return <span className="text-gray-400 text-sm">No Matches</span>;
 
+  const finalsRecord = status?.playoff?.level === "f" && status?.playoff.current_level_record
   const playoffRecord = status?.playoff?.record;
   const qualRecord = status?.qual?.ranking?.record;
 
-  const record = playoffRecord || qualRecord;
+  const record = finalsRecord || playoffRecord || qualRecord;
 
   if (!record) return <span>-W -L </span>;
 

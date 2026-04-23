@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import MatchStrip from "@/components/gameday/navbar/MatchStrip";
+import MatchList from "@/components/gameday/navbar/MatchStrip";
 import { dumbDateString } from "@/lib/time"
 
 export default function HomePage() {
@@ -74,7 +74,7 @@ export default function HomePage() {
             <div><span className="text-xs">{dumbDateString(event.start_date)} - {dumbDateString(event.end_date)}</span></div>
           </div>
           <div className="flex max-w-50">
-            <MatchStrip matches={event.matches} team={null} teamView={false} playoffAlliances={[]} eventTimezone={event.timezone} eventPlayoffType={event.playoff_type} nextMatchKey={null}/>
+            <MatchList matches={event.matches} team={null} playoffAlliances={[]} eventTimezone={event.timezone} eventPlayoffType={event.playoff_type} nextMatchKey={null} teamStatus={undefined}/>
           </div>
 
           <div className="flex flex-col gap-2">

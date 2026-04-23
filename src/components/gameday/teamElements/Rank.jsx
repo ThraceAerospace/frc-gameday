@@ -1,6 +1,6 @@
 "use client";
 
-export default function TeamRank({ status, team }) {
+export default function TeamRank({ status }) {
   if (!status) {
     return (
       <div className="text-gray-400 text-sm">
@@ -40,7 +40,7 @@ export default function TeamRank({ status, team }) {
 
         {isEliminated ? (
           <span className="text-red-400 font-semibold">
-            Eliminated
+            {round}
           </span>
         ) : (
           <span className="text-white-300 font-semibold">

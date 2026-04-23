@@ -21,8 +21,9 @@ export class TBAClient {
 
     //304  return cached JSON
     if (res.status === 304) {
+      const cached = memoryCache.get(endpoint);
       console.log(`[TBA Client] Returning Cached Response for ${endpoint}`)
-      return memoryCache.get(endpoint);
+      return cached
     }
 
     if (!res.ok) {
@@ -35,9 +36,8 @@ export class TBAClient {
     if (newEtag) {
       console.log(`[TBA Client] New ETag set for cache ${endpoint}`)
       etagCache.set(endpoint, newEtag);
+      memoryCache.set(endpoint, data);
     }
-
-    memoryCache.set(endpoint, data);
 
     return data;
   }
