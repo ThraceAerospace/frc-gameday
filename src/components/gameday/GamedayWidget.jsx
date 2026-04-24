@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 import GamedayEventTeamInfo from "@/components/gameday/GamedayEventTeamInfo";
 import StreamView from "@/components/gameday/StreamView";
@@ -14,34 +14,80 @@ import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
 
 import { useGameday } from "@/components/gameday/hooks/useGameday";
+import { buildStreams } from "@/lib/gameday/buildStreams";
 import { useStreamController } from "@/components/gameday/hooks/useStreamController";
+import { useMatches } from "@/components/gameday/hooks/useMatches"
+import { useEvent } from "@/components/gameday/hooks/useEvent"
+import {useTeams} from "@/components/gameday/hooks/useTeams"
+import { usePlayoffAlliances } from "@/components/gameday/hooks/usePlayoffAlliances"
+import { useTrackedEvent } from "@/components/gameday/hooks/useTracking"
+import { useTeamsStatuses } from "@/components/gameday/hooks/useTeamsStatuses";
+
 import TeamModal from "@/components/gameday/teamElements/TeamModal";
 import LastMatch from "@/components/gameday/teamElements/LastMatch";
 import NextMatch from "@/components/gameday/teamElements/NextMatch";
 
 export default function GamedayWidget({ event, team, isDivisional }) {
+  const {event:eventData} = useEvent(event);
+
+  const {teams: teams} = useTeams(event);
+  const {teamsStatuses: teamStatuses} = useTeamsStatuses(event);
   const [activeTeam, setActiveTeam] = useState(team);
-  const { data, loading, error, reload } = useGameday(event, activeTeam);
+  
+  const { matches } = useMatches(event, activeTeam ? [activeTeam] : []);
+
+  const {alliances: playoffAlliances} = usePlayoffAlliances(event);
+
+  const trackedTeams = useMemo(() => {
+    return activeTeam ? [activeTeam] : [];
+  }, [activeTeam]);
+
+  const {
+    trackedMatches,
+    eventNextMatch,
+    eventLastMatch,
+    trackedNextMatch,
+    trackedLastMatch,
+  } = useTrackedEvent(matches, trackedTeams);
+
+  const matchContext = activeTeam
+    ? {
+        list: trackedMatches,
+        next: trackedNextMatch,
+        last: trackedLastMatch,
+      }
+    : {
+        list: matches,
+        next: eventNextMatch,
+        last: eventLastMatch,
+      };
 
   const [streamModalOpen, setModalOpen] = useState(false);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
-  // ALWAYS normalize streams so hook never receives null/undefined
-  const {
-    streams,
-    activeStream,
-    activeKey,
-    setActiveKey,
-  } = useStreamController(data?.streams || [], data?.event?.timezone);
+  const [rawStreams, setStreams] = useState([]); 
+  useEffect(() => { 
+    let cancelled = false; 
+    async function loadStreams() { 
+      if (!eventData?.webcasts) 
+        return; const built = await buildStreams(eventData.webcasts); 
+      if (!cancelled) { 
+        setStreams(built); 
+      } 
+    } 
+    loadStreams();
+     return () => { cancelled = true; }; 
+  }, [eventData?.webcasts]);
 
+  const { streams: streams, activeStream, activeKey, setActiveKey, } = useStreamController(rawStreams || [], eventData?.timezone);
   // Debug only (safe now)
   useEffect(() => {
     //console.log("Active stream:", activeStream);
   }, [activeStream]);
 
   // Loading state
-  if (loading && !data) {
+  if (!eventData) {
     return (
       <div className="p-8 text-white">
         Loading gameday...
@@ -49,14 +95,6 @@ export default function GamedayWidget({ event, team, isDivisional }) {
     );
   }
 
-  // Error state
-  if (error || !data) {
-    return (
-      <div className="p-8 text-red-500">
-        Failed to load gameday
-      </div>
-    );
-  }
 
   return (
     <div className="w-full h-full flex flex-col bg-black text-white overflow-hidden">
@@ -84,7 +122,7 @@ export default function GamedayWidget({ event, team, isDivisional }) {
 
       {/* LEFT (info) */}
       <div className="shrink-0">
-        <GamedayEventTeamInfo data={data} isDivisional={isDivisional} />
+        <GamedayEventTeamInfo event={eventData} team={activeTeam} teamStatus={teamStatuses[activeTeam]} isDivisional={isDivisional} />
       </div>
 
       {/* CENTER (MATCH STRIP CLIPPED ZONE) */}
@@ -93,29 +131,31 @@ export default function GamedayWidget({ event, team, isDivisional }) {
 
           {/* 1. Your actual scroll/strip content */}
           <div className="flex gap-1 w-full pt-1 pb-1 overflow-x-auto no-scrollbar">
-            <LastMatch 
-              match={data.lastMatch} 
-              team={data.team}
-              nextMatchKey={data.nextMatch?.key ?? null}
-              eventTimezone={data.event.timezone}
-              playoffAlliances={data.playoffAlliances}
-              eventPlayoffType={data.event.playoff_type} />
-
-            <NextMatch 
-              match={data.nextMatch} 
-              team={data.team} 
-              playoffAlliances={data.playoffAlliances}
-              eventPlayoffType={data.event.playoff_type}
-              eventTimezone={data.event.timezone}
-            />
-            <MatchStrip
-              matches={data.matches}
+            {/* <LastMatch
+              match={matchContext.last}
               team={activeTeam}
-              nextMatchKey={data.nextMatch?.key ?? null}
-              teamView={data.teamView}
-              eventTimezone={data.event.timezone}
-              playoffAlliances={data.playoffAlliances}
-              eventPlayoffType={data.event.playoff_type}
+              eventTimezone={eventData?.timezone}
+              playoffAlliances={playoffAlliances}
+              nextMatchKey={matchContext.next?.key}
+              eventLastMatch={matchContext.last}
+            />
+
+            <NextMatch
+              match={matchContext.next}
+              team={activeTeam}
+              isNext={true}
+              eventTimezone={eventData?.timezone}
+              playoffAlliances={playoffAlliances}
+              nextMatchKey={matchContext.next?.key}
+              eventLastMatch={matchContext.last}
+            /> */}
+            <MatchStrip
+              matches={matchContext.list}
+              nextMatchKey={matchContext.next?.key}
+              lastMatchKey={matchContext.last}
+              eventPlayoffType={eventData.playoff_type}
+              playoffAlliances={playoffAlliances}
+              eventTimezone={eventData?.timezone}
             />
           </div>
           {/* 3. Right fade overlay */}
@@ -133,7 +173,7 @@ export default function GamedayWidget({ event, team, isDivisional }) {
               <UserGroupIcon className="w-4 h-5 text-white" />
             </button>
             
-            <RefreshButton onRefresh={reload} />
+            <RefreshButton onRefresh={null} />
 
             <button
               onClick={() => setModalOpen(true)}
@@ -162,8 +202,8 @@ export default function GamedayWidget({ event, team, isDivisional }) {
       <TeamModal
         open={teamModalOpen}
         setOpen={setTeamModalOpen}
-        teams={data.teams}
-        playoffAlliances={data.playoffAlliances}
+        teams={teams}
+        playoffAlliances={playoffAlliances}
         activeTeam={activeTeam}
         setActiveTeam={setActiveTeam}
       />

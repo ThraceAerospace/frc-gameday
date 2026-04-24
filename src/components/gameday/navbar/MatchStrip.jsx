@@ -1,57 +1,52 @@
 "use client";
 
-import { formatAlliance, matchCode } from "@/lib/tbaFormatters";
-import { formatEventTime } from "../../../lib/time";
-import { matchShortName } from "../../../lib/tbaFormatters";
 import MatchCard from "./MatchCard";
 
 export default function MatchList({
   matches = [],
   team,
   nextMatchKey,
+  lastMatchKey,
   eventTimezone,
-  teamView,
   playoffAlliances = [],
   eventPlayoffType,
 }) {
   if (!matches.length) return null;
-
-  const now = Date.now();
-  
-
-  const filtered = matches.filter((m) => {
-    const isPlayed = m.actual_time != null;
-
-    const isTeamMatch =
-      teamView?.enabled &&
-      m.isTeamMatch &&
-      m.key !== nextMatchKey;
-
-    return (
-      (isTeamMatch && !isPlayed) ||
-      (!teamView?.enabled && !isPlayed && m.key !== nextMatchKey)
-    );
-  });
-
-  const sorted = [...filtered].sort(
-    (a, b) => (a?.predicted_time || 0) - (b?.predicted_time || 0)
-  );
-
+  const futureMatches = matches.filter((m) => m.actual_time === null)
   return (
-  <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
-      {sorted.map((m) => {        
-        return (
-          <MatchCard 
-            key={m.key}
-            match={m}
-            team={team}
-            isNext={m.key === nextMatchKey}
-            playoffAlliances={playoffAlliances}
-            eventPlayoffType={eventPlayoffType}
-            eventTimezone={eventTimezone}
-          />
-        );
-      })}
+    <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
+      <MatchCard 
+        key={lastMatchKey} 
+        match={lastMatchKey} 
+        team={team}
+        isNext={lastMatchKey === nextMatchKey}
+        isLast={lastMatchKey === lastMatchKey}
+        playoffAlliances={playoffAlliances}
+        eventPlayoffType={eventPlayoffType}
+        eventTimezone={eventTimezone} 
+      />
+      <MatchCard 
+        key={nextMatchKey} 
+        match={nextMatchKey} 
+        team={team}
+        isNext={nextMatchKey === nextMatchKey}
+        isLast={nextMatchKey === lastMatchKey}
+        playoffAlliances={playoffAlliances}
+        eventPlayoffType={eventPlayoffType}
+        eventTimezone={eventTimezone} 
+      />
+      {futureMatches.map((m) => (
+        <MatchCard
+          key={m.key}
+          match={m}
+          team={team}
+          isNext={m.key === nextMatchKey}
+          isLast={m.key === lastMatchKey}
+          playoffAlliances={playoffAlliances}
+          eventPlayoffType={eventPlayoffType}
+          eventTimezone={eventTimezone}
+        />
+      ))}
     </div>
   );
 }

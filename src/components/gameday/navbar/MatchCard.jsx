@@ -4,17 +4,21 @@ import { formatEventTime } from "../../../lib/time";
 
 export default function MatchCard({ match, team, isNext, isLast, playoffAlliances, eventPlayoffType, eventTimezone }) {
     if (!match) return null;
+    if (!playoffAlliances) playoffAlliances = [];
+
     const red = match?.alliances?.red?.team_keys || [];
     const blue = match?.alliances?.blue?.team_keys || [];
     const isTrackedInRed = team && red.includes(team.key);
     const isTrackedInBlue = team && blue.includes(team.key);
 
     const isPlayoff = match.comp_level !== "qm";
-    const playoffRedAlliance = playoffAlliances.find(a =>
+    const hasAlliances = playoffAlliances.length > 0
+
+    const playoffRedAlliance = hasAlliances &&  playoffAlliances.find(a =>
         a.picks.some(pick => match.alliances.red.team_keys.includes(pick))
     );
 
-    const playoffBlueAlliance = playoffAlliances.find(a =>
+    const playoffBlueAlliance = hasAlliances && playoffAlliances.find(a =>
         a.picks.some(pick => match.alliances.blue.team_keys.includes(pick))
     );
     return (
