@@ -5,8 +5,8 @@ const memoryCache = new Map<string, any>();
 
 export class TBAClient {
   constructor(private authKey: string) {}
-
   async get(endpoint: string, revalidate = 30) {
+    console.log("ROUTE EXECUTED", endpoint, Date.now());
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       headers: {
         "X-TBA-Auth-Key": this.authKey,

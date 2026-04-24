@@ -1,5 +1,5 @@
 import { TBA } from "@/lib/tbaService";
-export const dynamic = "force-dynamic";
+
 export const revalidate = 36000;
 type EventState = "upcoming" | "in_progress" | "complete";
 

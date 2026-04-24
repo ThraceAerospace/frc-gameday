@@ -134,8 +134,8 @@ export const TBA = {
     return Promise.all(
       events.filter(Boolean).map(async (event: { key: any; division_keys: string | any[]; start_date: any; }) => {
         const [teams, matches] = await Promise.all([
-          TBA.getTeamsAtEvent(event.key), // 24h cache
-          TBA.getEventMatchesSimple(event.key), // 30s cache
+          TBA.getTeamsAtEvent(event.key), 
+          TBA.getEventMatchesSimple(event.key), 
         ]) as [any[], any[]];
 
         const hasDivisions = (event.division_keys?.length ?? 0) > 0;
