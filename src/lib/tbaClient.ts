@@ -12,6 +12,7 @@ export class TBAClient {
         "X-TBA-Auth-Key": this.authKey,
       },
       next: { revalidate },
+      cache: "force-cache"
     });
 
     if (!res.ok) {
