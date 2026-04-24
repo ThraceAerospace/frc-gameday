@@ -50,7 +50,7 @@ export const TBA = {
     tba.get(`/team/${teamKey}/events/${year}`, 86400),
 
   getTeamEventStatus: (teamKey: any, eventKey: any) =>
-    tba.get(`/team/${teamKey}/event/${eventKey}/status`, 300),
+    tba.get(`/team/${teamKey}/event/${eventKey}/status`, 30),
 
   getTeamMatches: (teamKey: any, eventKey: any) =>
     tba.get(`/team/${teamKey}/event/${eventKey}/matches`, 30),
