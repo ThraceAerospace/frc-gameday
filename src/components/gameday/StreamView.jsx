@@ -20,7 +20,7 @@ export default function StreamView({ stream }) {
 
   return (
     <iframe
-      src={stream.url + `?origin=${window.location.origin}`}
+      src={stream.url}
       className="w-full h-full"
       allow="autoplay; fullscreen;  encrypted-media;"
       referrerPolicy="strict-origin-when-cross-origin"
