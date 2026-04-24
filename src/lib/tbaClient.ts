@@ -7,6 +7,7 @@ export class TBAClient {
   constructor(private authKey: string) {}
 
   async get(endpoint: string, revalidate = 30) {
+    console.log("[TBA Client] FETCH", endpoint, revalidate);
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       headers: {
         "X-TBA-Auth-Key": this.authKey,
@@ -15,7 +16,7 @@ export class TBAClient {
     });
 
     if (!res.ok) {
-      throw new Error(`[TBA Error] ${endpoint} ${res.status}: ${await res.text()}`);
+      throw new Error(`[TBA Client] ERROR ${endpoint} ${res.status}: ${await res.text()}`);
     }
 
     return res.json();
