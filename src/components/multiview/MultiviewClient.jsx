@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { LAYOUTS, pickLayout } from "@/lib/layouts";
 import React from "react";
 import EventLocalTime from "../gameday/navbar/EventLocalTime";
@@ -8,6 +8,7 @@ import EventInfo from "../gameday/navbar/EventInfo";
 import { useRouter } from "next/navigation";
 import { HomeIcon } from "@heroicons/react/24/outline";
 import { Squares2X2Icon } from "@heroicons/react/24/outline";
+import { createRoot } from "react-dom/client";
 
 // ==============================
 // SIGNAL BUS (module scope)
@@ -130,6 +131,93 @@ export default function MultiviewClient({ isDivisional, parentEvent, children = 
   }, [childArray, slotOrder, layout]);
 
   // ==============================
+  // Picture In Picture Experimental Support (Document PiP)
+  // ==============================
+  const [pipWindow, setPipWindow] = useState(null);
+  const pipContainerRef = useRef(null);
+  async function openPiP() {
+    if (!("documentPictureInPicture" in window)) {
+      console.warn("Document PiP not supported");
+      return;
+    }
+
+    if (pipWindow && !pipWindow.closed) {
+      pipWindow.focus();
+      return;
+    }
+
+    const pip = await window.documentPictureInPicture.requestWindow({
+      width: 480,
+      height: 270,
+    });
+
+    // Reset base styles
+    pip.document.body.style.margin = "0";
+    pip.document.body.style.background = "black";
+
+    // ✅ Copy ALL stylesheets
+    [...document.styleSheets].forEach((styleSheet) => {
+      try {
+        if (styleSheet.href) {
+          // External stylesheet (Tailwind build, etc.)
+          const link = pip.document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = styleSheet.href;
+          pip.document.head.appendChild(link);
+        } else if (styleSheet.cssRules) {
+          // Inline styles
+          const style = pip.document.createElement("style");
+          [...styleSheet.cssRules].forEach((rule) => {
+            style.appendChild(
+              pip.document.createTextNode(rule.cssText)
+            );
+          });
+          pip.document.head.appendChild(style);
+        }
+      } catch (err) {
+        // Ignore CORS-restricted stylesheets
+        console.warn("Could not copy stylesheet:", err);
+      }
+    });
+    pip.document.documentElement.className =
+      document.documentElement.className;
+
+    const container = pip.document.createElement("div");
+    container.id = "pip-root";
+    pip.document.body.appendChild(container);
+
+    pipContainerRef.current = container;
+    setPipWindow(pip);
+
+    pip.addEventListener("pagehide", () => {
+      setPipWindow(null);
+      pipContainerRef.current = null;
+    });
+  }
+
+  useEffect(() => {
+    if (!pipWindow || !pipContainerRef.current) return;
+
+    const container = pipContainerRef.current;
+
+    // Create root once
+    if (!container._root) {
+      container._root = createRoot(container);
+    }
+
+    const activeChild =
+      activeChildIndex != null
+        ? React.cloneElement(childArray[activeChildIndex])
+        : React.cloneElement(childArray[0]);
+
+    container._root.render(
+      <div style={{ width: "100vw", height: "100vh", background: "black" }}>
+        {activeChild}
+      </div>
+    );
+  }, [pipWindow, pipContainerRef, activeChildIndex, childArray]);
+
+  // ==============================
   // RENDER
   // ==============================
   return (
@@ -208,6 +296,13 @@ export default function MultiviewClient({ isDivisional, parentEvent, children = 
           >
             <Squares2X2Icon className="w-5 h-5" />
           </button>
+          {/* TODO: Reimplement when a solution for youtube cross-origin exists */}
+          {/* <button
+            onClick={openPiP}
+            className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+          >
+            PiP
+          </button> */}
         </div>
 
         {/* GRID */}
