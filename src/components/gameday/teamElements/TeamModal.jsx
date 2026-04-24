@@ -31,11 +31,15 @@ export default function TeamModal({
         <div className="flex flex-col gap-2">
         <button
         onClick={() => {activeTeam.forEach((a) => removeTrackedTeam(a)); setOpen(false)}}
-        className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+        className={`px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-sm ${
+               activeTeam.length === 0
+                  ? "bg-white text-black"
+                  : "bg-neutral-800 text-white hover:bg-neutral-700"
+              }`}
         >
         All Teams
         </button>
-          {playoffAlliances.map((t) => (
+          {/* {playoffAlliances.map((t) => (
             <button
               key={t.key}
               onClick={() => {
@@ -50,7 +54,7 @@ export default function TeamModal({
             >
               {t.name} — {t.picks.join(" ").replace(/frc/g, "")}
             </button>
-          ))}
+          ))} */}
 
           {teams.map((t) => (
             <button
