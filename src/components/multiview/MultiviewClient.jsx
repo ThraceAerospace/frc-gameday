@@ -43,7 +43,7 @@ export default function MultiviewClient({
   );
 
   // ==============================
-  // LABEL SYSTEM
+  // LABELS
   // ==============================
   const [labels, setLabels] = useState({});
 
@@ -55,94 +55,92 @@ export default function MultiviewClient({
   }
 
   // ==============================
-  // LAYOUT STATE (SIMPLIFIED MODEL)
+  // LAYOUT
   // ==============================
+  const [manualOverride, setManualOverride] = useState(false);
   const [selectedLayout, setSelectedLayout] = useState(null);
-  const [baseLayout, setBaseLayout] = useState(null);
-  const [activeChildIndex, setActiveChildIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeChildIndex, setActiveChildIndex] = useState(null);
 
   const layoutSelectValue = childArray.length || 1;
   const autoLayout = pickLayout(layoutSelectValue);
 
-  // FINAL SINGLE SOURCE OF TRUTH
-  const layoutKey = selectedLayout ?? autoLayout;
+  const layoutKey = manualOverride ? selectedLayout : autoLayout;
   const layout = LAYOUTS[layoutKey];
 
   // ==============================
-  // HOME ORDER
+  // STREAM PRIORITY ORDER (CORE STATE)
   // ==============================
-  const [homeOrder, setHomeOrder] = useState(() =>
+  const [streamOrder, setStreamOrder] = useState(() =>
+    childArray.map((_, i) => i)
+  );
+
+  const [homeStreamOrder, setHomeStreamOrder] = useState(() =>
     childArray.map((_, i) => i)
   );
 
   useEffect(() => {
-    setHomeOrder(childArray.map((_, i) => i));
+    const base = childArray.map((_, i) => i);
+    setStreamOrder(base);
+    setHomeStreamOrder(base);
   }, [childArray.length]);
 
   // ==============================
-  // DERIVED SLOT ORDER
+  // PRIORITY CONTROLS
   // ==============================
-  const slotOrder = useMemo(() => {
-    if (activeChildIndex == null) return homeOrder;
+  function moveUp(streamIndex) {
+    setStreamOrder((prev) => {
+      const pos = prev.indexOf(streamIndex);
+      if (pos <= 0) return prev;
 
-    const next = [...homeOrder];
-    const index = next.indexOf(activeChildIndex);
+      const next = [...prev];
+      [next[pos - 1], next[pos]] = [next[pos], next[pos - 1]];
+      return next;
+    });
+  }
 
-    if (index > -1) {
-      next.splice(index, 1);
-      next.unshift(activeChildIndex);
-    }
+  function moveDown(streamIndex) {
+    setStreamOrder((prev) => {
+      const pos = prev.indexOf(streamIndex);
+      if (pos === -1 || pos === prev.length - 1) return prev;
 
-    return next;
-  }, [activeChildIndex, homeOrder]);
+      const next = [...prev];
+      [next[pos + 1], next[pos]] = [next[pos], next[pos + 1]];
+      return next;
+    });
+  }
+
+  function resetOrder() {
+    setStreamOrder(homeStreamOrder);
+  }
 
   // ==============================
   // SIGNAL LISTENER
   // ==============================
   useMultiviewSignal((signal) => {
     if (signal.type === "match_imminent") {
-      const childIndex = childArray.findIndex(
+      const streamIndex = childArray.findIndex(
         (child) => child?.props?.matchKey === signal.matchKey
       );
 
-      if (childIndex === -1) return;
+      if (streamIndex === -1) return;
 
-      setActiveChildIndex(childIndex);
+      const slotIndex = streamOrder.findIndex((i) => i === streamIndex);
 
-      setBaseLayout(selectedLayout ?? autoLayout);
-      setSelectedLayout(pickHighlightLayout(childArray.length));
+      if (slotIndex !== -1) {
+        const next = [...streamOrder];
+        const item = next.splice(slotIndex, 1)[0];
+        next.unshift(item);
+        setStreamOrder(next);
+      }
     }
   });
 
   // ==============================
-  // PiP (unchanged)
+  // PiP
   // ==============================
   const [pipWindow, setPipWindow] = useState(null);
   const pipContainerRef = useRef(null);
-
-  async function openPiP() {
-    if (!("documentPictureInPicture" in window)) return;
-
-    if (pipWindow && !pipWindow.closed) {
-      pipWindow.focus();
-      return;
-    }
-
-    const pip = await window.documentPictureInPicture.requestWindow({
-      width: 480,
-      height: 270,
-    });
-
-    pip.document.body.style.margin = "0";
-    pip.document.body.style.background = "black";
-
-    const container = pip.document.createElement("div");
-    pip.document.body.appendChild(container);
-
-    pipContainerRef.current = container;
-    setPipWindow(pip);
-  }
 
   useEffect(() => {
     if (!pipWindow || !pipContainerRef.current) return;
@@ -185,13 +183,11 @@ export default function MultiviewClient({
                 </span>
               </div>
             ) : (
-              <span className="pl-2 font-bold text-lg">
-                FRC Gameday
-              </span>
+              <span className="pl-2 font-bold text-lg">FRC Gameday</span>
             )}
           </div>
 
-          {/* STREAM BUTTONS */}
+          {/* STREAM SELECT BUTTONS */}
           <div className="flex gap-1">
             {childArray.map((_, childIndex) => {
               const isActive = childIndex === activeChildIndex;
@@ -203,34 +199,27 @@ export default function MultiviewClient({
                 <button
                   key={childIndex}
                   onClick={() => {
-                    const isSame = childIndex === activeChildIndex;
-
-                    // -------------------------
-                    // UNHIGHLIGHT
-                    // -------------------------
-                    if (isSame) {
+                    if (isActive) {
+                      setStreamOrder(homeStreamOrder);
                       setActiveChildIndex(null);
-
-                      if (baseLayout) {
-                        setSelectedLayout(baseLayout);
-                        setBaseLayout(null);
-                      } else {
-                        setSelectedLayout(null);
-                      }
-
+                      setManualOverride(false);
                       return;
                     }
 
-                    // -------------------------
-                    // ENTER HIGHLIGHT
-                    // -------------------------
-                    setActiveChildIndex(childIndex);
-
-                    setBaseLayout(selectedLayout ?? autoLayout);
-
+                    setManualOverride(true);
                     setSelectedLayout(
                       pickHighlightLayout(layout.slots.length)
                     );
+
+                    setActiveChildIndex(childIndex);
+
+                    const pos = streamOrder.indexOf(childIndex);
+                    if (pos !== -1) {
+                      const next = [...streamOrder];
+                      const item = next.splice(pos, 1)[0];
+                      next.unshift(item);
+                      setStreamOrder(next);
+                    }
                   }}
                   className={`
                     px-2 py-1 text-xs rounded transition
@@ -255,18 +244,15 @@ export default function MultiviewClient({
 
         {/* GRID */}
         <div className="relative flex-1">
-          {childArray.map((child, childIndex) => {
-            const slotIndex = slotOrder.findIndex(
-              (i) => i === childIndex
-            );
+          {layout.slots.map((slotLayout, slotIndex) => {
+            const streamIndex = streamOrder[slotIndex];
+            const child = childArray[streamIndex];
 
-            const slotLayout = layout.slots[slotIndex];
-
-            if (!slotLayout) return null;
+            if (!child) return null;
 
             return (
               <div
-                key={child?.key ?? childIndex}
+                key={child?.key ?? streamIndex}
                 style={{
                   position: "absolute",
                   left: `${slotLayout.x}%`,
@@ -278,7 +264,7 @@ export default function MultiviewClient({
               >
                 {React.cloneElement(child, {
                   registerLabel: (label) =>
-                    registerLabel(childIndex, label),
+                    registerLabel(streamIndex, label),
                 })}
               </div>
             );
@@ -289,13 +275,58 @@ export default function MultiviewClient({
       {/* SIDEBAR */}
       {sidebarOpen && (
         <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
-          <div className="font-bold">Layouts</div>
+          <div className="font-bold">Stream Priority</div>
+
+          <button
+            onClick={resetOrder}
+            className="mt-2 px-2 py-1 bg-green-600 rounded text-sm"
+          >
+            Reset Order
+          </button>
+
+          <div className="h-px bg-neutral-700 my-2" />
+
+          <div className="space-y-1">
+            {streamOrder.map((streamIndex, position) => {
+              const label =
+                labels[streamIndex] || `Stream ${streamIndex + 1}`;
+
+              return (
+                <div
+                  key={streamIndex}
+                  className="flex items-center justify-between bg-neutral-800 px-2 py-1 rounded"
+                >
+                  <span className="text-xs truncate">
+                    {label.replace("- FIRST Robotics Competition", "")}
+                  </span>
+
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => moveUp(streamIndex)}
+                      className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moveDown(streamIndex)}
+                      className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="h-px bg-neutral-700 my-2" />
+
+          <div className="font-bold text-sm">Layouts</div>
 
           <button
             onClick={() => {
+              setManualOverride(false);
               setSelectedLayout(null);
-              setBaseLayout(null);
-              setActiveChildIndex(null);
             }}
             className="px-2 py-1 bg-green-600 rounded text-sm mt-2"
           >
@@ -307,7 +338,10 @@ export default function MultiviewClient({
           {Object.entries(LAYOUTS).map(([key, value]) => (
             <button
               key={key}
-              onClick={() => setSelectedLayout(key)}
+              onClick={() => {
+                setSelectedLayout(key);
+                setManualOverride(true);
+              }}
               className={`
                 block w-full text-left px-2 py-1 rounded text-sm
                 hover:bg-neutral-800
