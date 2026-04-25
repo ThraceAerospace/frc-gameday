@@ -2,12 +2,14 @@
 
 export const LAYOUTS = {
   single: {
+    name: "Simple",
     slots: [
       { x: 0, y: 0, w: 100, h: 100 },
     ],
   },
 
   verticalSplit: {
+    name: "Vertical Split",
     slots: [
       { x: 0, y: 0, w: 50, h: 100 },
       { x: 50, y: 0, w: 50, h: 100 },
@@ -15,6 +17,7 @@ export const LAYOUTS = {
   },
 
   horizontalSplit: {
+    name: "Horizontal Split",
     slots: [
       { x: 0, y: 0, w: 100, h: 50 },
       { x: 0, y: 50, w: 100, h: 50 },
@@ -22,6 +25,7 @@ export const LAYOUTS = {
   },
 
   onePlusTwo: {
+    name: "1 + 2",
     slots: [
       { x: 0, y: 0, w: 60, h: 100 }, // main
       { x: 60, y: 0, w: 40, h: 50 },
@@ -30,6 +34,7 @@ export const LAYOUTS = {
   },
 
   quad: {
+    name: "Quad",
     slots: [
       { x: 0, y: 0, w: 50, h: 50 },
       { x: 50, y: 0, w: 50, h: 50 },
@@ -39,6 +44,7 @@ export const LAYOUTS = {
   },
 
   onePlusThree: {
+    name: "1 + 3",
     slots: [
       { x: 0, y: 0, w: 75, h: 100 }, // main
       { x: 75, y: 0, w: 25, h: 33.33 },
@@ -48,6 +54,7 @@ export const LAYOUTS = {
   },
 
   twoPlusThree: {
+    name: "2 + 3",
     slots: [
       { x: 0, y:  0, w: 50, h: 60 }, // main
       { x: 50, y: 0, w: 50, h: 60 }, // secondary
@@ -58,6 +65,7 @@ export const LAYOUTS = {
   },
 
   hex: {
+    name: "Hex",
     // 2 rows, 3 columns
     slots: [
       { x: 0, y: 0, w: 33.33, h: 50 },
@@ -71,7 +79,7 @@ export const LAYOUTS = {
   },
 
     twoPlusSix: {
-    // CMP-style layout
+    name: "2 + 6",
     slots: [
         // main (top middle)
         { x: 25, y: 0, w: 50, h: 50 },
@@ -93,6 +101,7 @@ export const LAYOUTS = {
     },
 
   octo: {
+    name: "Octo",
     // 2 rows × 4 columns
     slots: [
       { x: 0, y: 0, w: 25, h: 50 },
@@ -108,6 +117,7 @@ export const LAYOUTS = {
   },
 
   octoVertical: {
+    name: "Vertical Octo",
     // 4 rows × 2 columns (alternative view)
     slots: [
       { x: 0, y: 0, w: 50, h: 25 },
@@ -124,6 +134,7 @@ export const LAYOUTS = {
     ],
   },
   onePlusEight: {
+    name: "1 + 8",
     slots: [
         //main
         { x: 25, y:0, w:50, h:100},

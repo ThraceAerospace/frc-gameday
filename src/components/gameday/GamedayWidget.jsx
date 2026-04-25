@@ -40,8 +40,7 @@ export default function GamedayWidget({
   const { teams } = useTeams(event);
   const { teamsStatuses, reload: reloadStatuses } = useTeamsStatuses(event);
   const { matches, reload: reloadMatches } = useMatches(event);
-  const { alliances: playoffAlliances, reload: reloadAlliances } =
-    usePlayoffAlliances(event);
+  const { alliances: playoffAlliances, reload: reloadAlliances } = usePlayoffAlliances(event);
 
   // ==============================
   // REPORT LABEL TO PARENT

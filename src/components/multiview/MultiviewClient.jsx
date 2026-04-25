@@ -284,7 +284,7 @@ export default function MultiviewClient({
 
           <div className="h-px bg-neutral-700 my-2" />
 
-          {Object.keys(LAYOUTS).map((key) => (
+          {Object.entries(LAYOUTS).map(([key, value]) => (
             <button
               key={key}
               onClick={() => {
@@ -297,7 +297,7 @@ export default function MultiviewClient({
                 ${layoutKey === key ? "bg-neutral-700" : ""}
               `}
             >
-              {key}
+              {value.name}
             </button>
           ))}
         </div>
