@@ -26,7 +26,7 @@ export default function StreamModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
       {/* modal container */}
-      <div className="w-[420px] max-w-[90vw] bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl">
+      <div className="w-[420px] max-w-[90vw] bg-neutral-900 rounded-lg shadow-xl">
         
         {/* header */}
         <div className="flex justify-between items-center px-4 py-3 border-b border-neutral-700">
