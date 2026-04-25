@@ -124,6 +124,16 @@ export default function GamedayWidget({
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
+  // R to refresh
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "r") reloadDataSources();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [reloadDataSources]);
+
   // ==============================
   // LOADING STATE
   // ==============================
