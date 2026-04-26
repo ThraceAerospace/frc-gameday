@@ -27,9 +27,7 @@ function useMultiviewSignal(handler) {
 // ==============================
 // COMPONENT
 // ==============================
-export default function MultiviewClient({
-  children = [],
-}) {
+export default function MultiviewClient({ children = [] }) {
   const router = useRouter();
 
   const streams = useMemo(
@@ -37,7 +35,6 @@ export default function MultiviewClient({
     [children]
   );
 
-  // eventKey extraction (MUST exist)
   const getKey = (child, i) => child?.props?.event ?? i;
 
   const streamKeys = useMemo(
@@ -46,7 +43,19 @@ export default function MultiviewClient({
   );
 
   // ==============================
-  // PRIORITY (eventKey ordering)
+  // LABELS (RESTORED HOOK SUPPORT)
+  // ==============================
+  const [labels, setLabels] = useState({});
+
+  function registerLabel(index, label) {
+    setLabels((prev) => {
+      if (prev[index] === label) return prev;
+      return { ...prev, [index]: label };
+    });
+  }
+
+  // ==============================
+  // PRIORITY SYSTEM (UNCHANGED LOGIC)
   // ==============================
   const [priority, setPriority] = useState([]);
 
@@ -75,10 +84,12 @@ export default function MultiviewClient({
   }
 
   // ==============================
-  // LAYOUT
+  // LAYOUT STATE (FIXED UI CONTROL)
   // ==============================
   const [manualOverride, setManualOverride] = useState(false);
   const [selectedLayout, setSelectedLayout] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeKey, setActiveKey] = useState(null);
 
   const layoutKey = manualOverride
     ? selectedLayout
@@ -86,14 +97,9 @@ export default function MultiviewClient({
 
   const layout = LAYOUTS[layoutKey];
 
-  // ==============================
-  // SLOT ASSIGNMENT (PURE FUNCTION)
-  // ==============================
+  // key → slot mapping
   const slotToKey = layout.slots.map((_, i) => priority[i]);
 
-  // ==============================
-  // KEY → SLOT INDEX MAP (IMPORTANT)
-  // ==============================
   const keyToSlotIndex = useMemo(() => {
     const map = new Map();
     slotToKey.forEach((key, i) => {
@@ -103,12 +109,13 @@ export default function MultiviewClient({
   }, [slotToKey]);
 
   // ==============================
-  // SIGNALS
+  // SIGNALS (RESTORED BEHAVIOR)
   // ==============================
   useMultiviewSignal((signal) => {
     if (signal.type !== "match_imminent") return;
 
-    setSelectedLayout(pickHighlightLayout(layout.slots.length));
+    const highlightLayout = pickHighlightLayout(layout.slots.length);
+    setSelectedLayout(highlightLayout);
     setManualOverride(true);
   });
 
@@ -116,87 +123,114 @@ export default function MultiviewClient({
   // RENDER
   // ==============================
   return (
-    <div className="h-screen bg-black text-white overflow-hidden flex flex-col">
+    <div className="h-screen bg-black text-white overflow-hidden flex">
 
-      {/* TOP BAR */}
-      <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
+      {/* MAIN */}
+      <div className="flex-1 flex flex-col">
 
-        <button
-          onClick={() => router.push("/")}
-          className="px-3 py-1 bg-neutral-800 rounded"
-        >
-          <HomeIcon className="w-4 h-5" />
-        </button>
+        {/* TOP BAR (FIXED + LABEL SUPPORT RESTORED) */}
+        <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
-        {/* STREAM CONTROLS */}
-        <div className="flex gap-1">
-          {priority.map((key) => (
-            <button
-              key={key}
-              onClick={() => {
-                setSelectedLayout(null);
-                setManualOverride(false);
-              }}
-              className="px-2 py-1 text-xs bg-neutral-800 rounded"
-            >
-              {key}
-            </button>
-          ))}
+          <button
+            onClick={() => router.push("/")}
+            className="px-3 py-1 bg-neutral-800 rounded"
+          >
+            <HomeIcon className="w-4 h-5" />
+          </button>
+
+          {/* STREAM BUTTONS (NOW LABELED FROM CHILDREN) */}
+          <div className="flex gap-1 overflow-x-auto">
+            {priority.map((key) => {
+              const idx = streams.findIndex((s) => getKey(s, 0) === key);
+              const label = labels[idx] ?? key;
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    // toggle highlight OFF
+                    setManualOverride(false);
+                    setSelectedLayout(null);
+                    setActiveKey(null);
+                  }}
+                  className={`
+                    px-2 py-1 text-xs bg-neutral-800 rounded whitespace-nowrap
+                    ${activeKey === key ? "ring-2 ring-white" : ""}
+                  `}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="px-3 py-1 bg-neutral-800 rounded"
+          >
+            <Squares2X2Icon className="w-5 h-5" />
+          </button>
+
         </div>
 
-        <button className="px-3 py-1 bg-neutral-800 rounded">
-          <Squares2X2Icon className="w-5 h-5" />
-        </button>
+        {/* GRID (UNCHANGED LOGIC) */}
+        <div className="relative flex-1">
+          {streams.map((child, i) => {
+            const key = getKey(child, i);
+            const slotIndex = keyToSlotIndex.get(key);
+
+            const slot = layout.slots[slotIndex] ?? {
+              x: -1000,
+              y: -1000,
+              w: 0,
+              h: 0,
+            };
+
+            return (
+              <div
+                key={key}
+                style={{
+                  position: "absolute",
+                  left: `${slot.x}%`,
+                  top: `${slot.y}%`,
+                  width: `${slot.w}%`,
+                  height: `${slot.h}%`,
+                  transition: "transform 300ms ease, left 300ms ease, top 300ms ease",
+                }}
+              >
+                {React.cloneElement(child, {
+                  registerLabel: (label) => registerLabel(i, label),
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* GRID (IMPORTANT PART) */}
-      <div className="relative flex-1">
+      {/* SIDEBAR (RESTORED UI STATE + DEFAULT CLOSED FIX) */}
+      {sidebarOpen && (
+        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3 flex flex-col">
 
-        {/* RENDER STREAMS ONLY ONCE */}
-        {streams.map((child, i) => {
-          const key = getKey(child, i);
-          const slotIndex = keyToSlotIndex.get(key);
+          <div className="font-bold text-sm mb-2">Priority</div>
 
-          // fallback off-screen if not assigned
-          const slot = layout.slots[slotIndex] ?? {
-            x: -1000,
-            y: -1000,
-            w: 0,
-            h: 0,
-          };
+          <div className="space-y-1 overflow-y-auto">
+            {priority.map((key) => (
+              <div
+                key={key}
+                className="flex justify-between items-center bg-neutral-800 p-1 rounded"
+              >
+                <span className="text-xs truncate">{key}</span>
 
-          return (
-            <div
-              key={key}
-              style={{
-                position: "absolute",
-                left: `${slot.x}%`,
-                top: `${slot.y}%`,
-                width: `${slot.w}%`,
-                height: `${slot.h}%`,
-                transition: "transform 300ms ease, left 300ms ease, top 300ms ease",
-              }}
-            >
-              {child}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* SIDEBAR */}
-      <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
-        <div className="font-bold text-sm">Priority</div>
-
-        {priority.map((key) => (
-          <div key={key} className="flex justify-between bg-neutral-800 p-1 rounded">
-            <span>{key}</span>
-            <div className="flex gap-1">
-              <button onClick={() => moveUp(key)}>↑</button>
-              <button onClick={() => moveDown(key)}>↓</button>
-            </div>
+                <div className="flex gap-1">
+                  <button onClick={() => moveUp(key)}>↑</button>
+                  <button onClick={() => moveDown(key)}>↓</button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+
+        </div>
+      )}
 
     </div>
   );
