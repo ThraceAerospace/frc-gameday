@@ -68,28 +68,42 @@ export default function MultiviewClient({
   const layoutKey = manualOverride ? selectedLayout : autoLayout;
   const layout = LAYOUTS[layoutKey];
 
-  // ==============================
-  // STREAM PRIORITY ORDER (CORE STATE)
-  // ==============================
-  const [streamOrder, setStreamOrder] = useState(() =>
-    childArray.map((_, i) => i)
-  );
+  // track previous layout for restore
+  const previousLayoutRef = useRef(layoutKey);
 
-  const [homeStreamOrder, setHomeStreamOrder] = useState(() =>
+  useEffect(() => {
+    if (!manualOverride) {
+      previousLayoutRef.current = autoLayout;
+    }
+  }, [autoLayout, manualOverride]);
+
+  // ==============================
+  // CORE ORDER (USER TRUTH)
+  // ==============================
+  const [userStreamOrder, setUserStreamOrder] = useState(() =>
     childArray.map((_, i) => i)
   );
 
   useEffect(() => {
     const base = childArray.map((_, i) => i);
-    setStreamOrder(base);
-    setHomeStreamOrder(base);
+    setUserStreamOrder(base);
   }, [childArray.length]);
 
   // ==============================
-  // PRIORITY CONTROLS
+  // DISPLAY ORDER (ONLY THING GRID USES)
+  // ==============================
+  const displayOrder = useMemo(() => {
+    if (activeChildIndex == null) return userStreamOrder;
+
+    const base = userStreamOrder.filter((i) => i !== activeChildIndex);
+    return [activeChildIndex, ...base];
+  }, [userStreamOrder, activeChildIndex]);
+
+  // ==============================
+  // ORDER CONTROLS (USER ONLY)
   // ==============================
   function moveUp(streamIndex) {
-    setStreamOrder((prev) => {
+    setUserStreamOrder((prev) => {
       const pos = prev.indexOf(streamIndex);
       if (pos <= 0) return prev;
 
@@ -100,7 +114,7 @@ export default function MultiviewClient({
   }
 
   function moveDown(streamIndex) {
-    setStreamOrder((prev) => {
+    setUserStreamOrder((prev) => {
       const pos = prev.indexOf(streamIndex);
       if (pos === -1 || pos === prev.length - 1) return prev;
 
@@ -111,7 +125,7 @@ export default function MultiviewClient({
   }
 
   function resetOrder() {
-    setStreamOrder(homeStreamOrder);
+    setUserStreamOrder(childArray.map((_, i) => i));
   }
 
   // ==============================
@@ -125,14 +139,15 @@ export default function MultiviewClient({
 
       if (streamIndex === -1) return;
 
-      const slotIndex = streamOrder.findIndex((i) => i === streamIndex);
+      setUserStreamOrder((prev) => {
+        const pos = prev.indexOf(streamIndex);
+        if (pos === -1) return prev;
 
-      if (slotIndex !== -1) {
-        const next = [...streamOrder];
-        const item = next.splice(slotIndex, 1)[0];
+        const next = [...prev];
+        const item = next.splice(pos, 1)[0];
         next.unshift(item);
-        setStreamOrder(next);
-      }
+        return next;
+      });
     }
   });
 
@@ -163,6 +178,7 @@ export default function MultiviewClient({
   return (
     <div className="h-screen bg-black text-white overflow-hidden flex">
       <div className="flex-1 flex flex-col">
+
         {/* TOP BAR */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
           <div className="flex items-center">
@@ -187,45 +203,47 @@ export default function MultiviewClient({
             )}
           </div>
 
-          {/* STREAM SELECT BUTTONS */}
+          {/* STREAM BUTTONS */}
           <div className="flex gap-1">
-            {childArray.map((_, childIndex) => {
+            {userStreamOrder.map((childIndex) => {
               const isActive = childIndex === activeChildIndex;
 
               const label =
                 labels[childIndex] || `Stream ${childIndex + 1}`;
+
+              const visible = displayOrder
+                .slice(0, layout.slots.length)
+                .includes(childIndex);
 
               return (
                 <button
                   key={childIndex}
                   onClick={() => {
                     if (isActive) {
-                      setStreamOrder(homeStreamOrder);
+                      // UNHIGHLIGHT
                       setActiveChildIndex(null);
                       setManualOverride(false);
+
+                      // restore layout + order ONLY here
+                      setSelectedLayout(null);
                       return;
                     }
 
-                    setManualOverride(true);
-                    setSelectedLayout(
-                      pickHighlightLayout(layout.slots.length)
-                    );
-
+                    // highlight
                     setActiveChildIndex(childIndex);
 
-                    const pos = streamOrder.indexOf(childIndex);
-                    if (pos !== -1) {
-                      const next = [...streamOrder];
-                      const item = next.splice(pos, 1)[0];
-                      next.unshift(item);
-                      setStreamOrder(next);
-                    }
+                    const highlightLayout =
+                      pickHighlightLayout(layout.slots.length);
+
+                    setSelectedLayout(highlightLayout);
+                    setManualOverride(true);
                   }}
                   className={`
                     px-2 py-1 text-xs rounded transition
                     bg-neutral-800 hover:bg-neutral-700
                     truncate min-w-0 max-w-50
                     ${isActive ? "ring-2 ring-white" : ""}
+                    ${!visible ? "opacity-40" : ""}
                   `}
                 >
                   {label.replace("- FIRST Robotics Competition", "")}
@@ -245,21 +263,21 @@ export default function MultiviewClient({
         {/* GRID */}
         <div className="relative flex-1">
           {layout.slots.map((slotLayout, slotIndex) => {
-            const streamIndex = streamOrder[slotIndex];
+            const streamIndex = displayOrder[slotIndex];
             const child = childArray[streamIndex];
 
             if (!child) return null;
 
             return (
               <div
-                key={child?.key ?? streamIndex}
+                key={streamIndex}
                 style={{
                   position: "absolute",
                   left: `${slotLayout.x}%`,
                   top: `${slotLayout.y}%`,
                   width: `${slotLayout.w}%`,
                   height: `${slotLayout.h}%`,
-                  transition: "all 300ms ease",
+                  transition: "all 280ms cubic-bezier(0.2, 0.8, 0.2, 1)",
                 }}
               >
                 {React.cloneElement(child, {
@@ -272,22 +290,22 @@ export default function MultiviewClient({
         </div>
       </div>
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR (UNCHANGED) */}
       {sidebarOpen && (
         <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
-          <div className="font-bold">Stream Priority</div>
+          <div className="font-bold text-sm">Stream Priority</div>
 
-          <button
+          {/* <button
             onClick={resetOrder}
             className="mt-2 px-2 py-1 bg-green-600 rounded text-sm"
           >
             Reset Order
-          </button>
+          </button> */}
 
           <div className="h-px bg-neutral-700 my-2" />
 
           <div className="space-y-1">
-            {streamOrder.map((streamIndex, position) => {
+            {userStreamOrder.map((streamIndex) => {
               const label =
                 labels[streamIndex] || `Stream ${streamIndex + 1}`;
 
@@ -323,15 +341,16 @@ export default function MultiviewClient({
 
           <div className="font-bold text-sm">Layouts</div>
 
-          <button
+          {/* <button
             onClick={() => {
               setManualOverride(false);
               setSelectedLayout(null);
+              setActiveChildIndex(null);
             }}
             className="px-2 py-1 bg-green-600 rounded text-sm mt-2"
           >
             Auto Layout ({LAYOUTS[autoLayout].name})
-          </button>
+          </button> */}
 
           <div className="h-px bg-neutral-700 my-2" />
 
