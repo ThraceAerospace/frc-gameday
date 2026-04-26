@@ -167,8 +167,8 @@ export default function GamedayWidget({
 
         {/* CHAT */}
         <div
-          className={`w-80 border-l border-neutral-800 transition-all duration-200 ${
-            chatOpen ? "block" : "hidden"
+          className={`w-[15%] border-l border-neutral-800 transition-all duration-200 ${
+            chatOpen ? "flex" : "hidden"
           }`}
         >
           <ChatView stream={activeStream} />
