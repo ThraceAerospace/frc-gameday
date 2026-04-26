@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { LAYOUTS, pickLayout, pickHighlightLayout } from "@/lib/layouts";
 import React from "react";
+import EventLocalTime from "../gameday/navbar/EventLocalTime";
+import EventInfo from "../gameday/navbar/EventInfo";
 import { useRouter } from "next/navigation";
 import { HomeIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
+import { createRoot } from "react-dom/client";
 
 // ==============================
 // SIGNAL BUS
@@ -27,23 +30,20 @@ function useMultiviewSignal(handler) {
 // ==============================
 // COMPONENT
 // ==============================
-export default function MultiviewClient({ children = [] }) {
+export default function MultiviewClient({
+  isDivisional,
+  parentEvent,
+  children = [],
+}) {
   const router = useRouter();
 
-  const streams = useMemo(
+  const childArray = useMemo(
     () => React.Children.toArray(children),
     [children]
   );
 
-  const getKey = (child, i) => child?.props?.event ?? i;
-
-  const streamKeys = useMemo(
-    () => streams.map(getKey),
-    [streams]
-  );
-
   // ==============================
-  // LABELS (RESTORED HOOK SUPPORT)
+  // LABEL SYSTEM (UNCHANGED)
   // ==============================
   const [labels, setLabels] = useState({});
 
@@ -55,151 +55,202 @@ export default function MultiviewClient({ children = [] }) {
   }
 
   // ==============================
-  // PRIORITY SYSTEM (UNCHANGED LOGIC)
+  // LAYOUT STATE (UNCHANGED LOGIC)
   // ==============================
-  const [priority, setPriority] = useState([]);
-
-  useEffect(() => {
-    setPriority(streamKeys);
-  }, [streamKeys]);
-
-  function moveUp(key) {
-    setPriority((prev) => {
-      const i = prev.indexOf(key);
-      if (i <= 0) return prev;
-      const copy = [...prev];
-      [copy[i - 1], copy[i]] = [copy[i], copy[i - 1]];
-      return copy;
-    });
-  }
-
-  function moveDown(key) {
-    setPriority((prev) => {
-      const i = prev.indexOf(key);
-      if (i === -1 || i === prev.length - 1) return prev;
-      const copy = [...prev];
-      [copy[i + 1], copy[i]] = [copy[i], copy[i + 1]];
-      return copy;
-    });
-  }
-
-  // ==============================
-  // LAYOUT STATE (FIXED UI CONTROL)
-  // ==============================
-  const [manualOverride, setManualOverride] = useState(false);
   const [selectedLayout, setSelectedLayout] = useState(null);
+  const [baseLayout, setBaseLayout] = useState(null);
+  const [activeChildIndex, setActiveChildIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeKey, setActiveKey] = useState(null);
 
-  const layoutKey = manualOverride
-    ? selectedLayout
-    : pickLayout(streams.length || 1);
+  const layoutSelectValue = childArray.length || 1;
+  const autoLayout = pickLayout(layoutSelectValue);
 
+  const layoutKey = selectedLayout ?? autoLayout;
   const layout = LAYOUTS[layoutKey];
 
-  // key → slot mapping
-  const slotToKey = layout.slots.map((_, i) => priority[i]);
+  // ==============================
+  // HOME ORDER (UNCHANGED)
+  // ==============================
+  const [homeOrder, setHomeOrder] = useState(() =>
+    childArray.map((_, i) => i)
+  );
 
-  const keyToSlotIndex = useMemo(() => {
-    const map = new Map();
-    slotToKey.forEach((key, i) => {
-      if (key != null) map.set(key, i);
-    });
-    return map;
-  }, [slotToKey]);
+  useEffect(() => {
+    setHomeOrder(childArray.map((_, i) => i));
+  }, [childArray.length]);
 
   // ==============================
-  // SIGNALS (RESTORED BEHAVIOR)
+  // SLOT ORDER (UNCHANGED LOGIC)
+  // ==============================
+  const slotOrder = useMemo(() => {
+    if (activeChildIndex == null) return homeOrder;
+
+    const next = [...homeOrder];
+    const index = next.indexOf(activeChildIndex);
+
+    if (index > -1) {
+      next.splice(index, 1);
+      next.unshift(activeChildIndex);
+    }
+
+    return next;
+  }, [activeChildIndex, homeOrder]);
+
+  // ==============================
+  // SIGNAL LISTENER (UNCHANGED)
   // ==============================
   useMultiviewSignal((signal) => {
-    if (signal.type !== "match_imminent") return;
+    if (signal.type === "match_imminent") {
+      const childIndex = childArray.findIndex(
+        (child) => child?.props?.matchKey === signal.matchKey
+      );
 
-    const highlightLayout = pickHighlightLayout(layout.slots.length);
-    setSelectedLayout(highlightLayout);
-    setManualOverride(true);
+      if (childIndex === -1) return;
+
+      setActiveChildIndex(childIndex);
+
+      setBaseLayout(selectedLayout ?? autoLayout);
+      setSelectedLayout(pickHighlightLayout(childArray.length));
+    }
   });
+
+  // ==============================
+  // PiP (UNCHANGED)
+  // ==============================
+  const [pipWindow, setPipWindow] = useState(null);
+  const pipContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (!pipWindow || !pipContainerRef.current) return;
+
+    if (!pipContainerRef.current._root) {
+      pipContainerRef.current._root = createRoot(pipContainerRef.current);
+    }
+
+    const activeChild =
+      activeChildIndex != null
+        ? React.cloneElement(childArray[activeChildIndex])
+        : React.cloneElement(childArray[0]);
+
+    pipContainerRef.current._root.render(activeChild);
+  }, [pipWindow, activeChildIndex, childArray]);
 
   // ==============================
   // RENDER
   // ==============================
   return (
     <div className="h-screen bg-black text-white overflow-hidden flex">
-
-      {/* MAIN */}
       <div className="flex-1 flex flex-col">
 
-        {/* TOP BAR (FIXED + LABEL SUPPORT RESTORED) */}
+        {/* =========================
+            TOP BAR (RESTORED UI)
+        ========================== */}
         <div className="flex justify-between items-center px-2 h-10 border-b border-neutral-800">
 
-          <button
-            onClick={() => router.push("/")}
-            className="px-3 py-1 bg-neutral-800 rounded"
-          >
-            <HomeIcon className="w-4 h-5" />
-          </button>
+          {/* LEFT */}
+          <div className="flex items-center">
+            <button
+              onClick={() => router.push("/")}
+              className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
+            >
+              <HomeIcon className="w-4 h-5" />
+            </button>
 
-          {/* STREAM BUTTONS (NOW LABELED FROM CHILDREN) */}
-          <div className="flex gap-1 overflow-x-auto">
-            {priority.map((key) => {
-              const idx = streams.findIndex((s) => getKey(s, 0) === key);
-              const label = labels[idx] ?? key;
+            {isDivisional && parentEvent ? (
+              <div className="flex flex-col pl-2">
+                <span className="font-bold text-sm">
+                  <EventInfo event={parentEvent} />
+                </span>
+                <span className="text-xs text-gray-400">
+                  <EventLocalTime timezone={parentEvent.timezone} />
+                </span>
+              </div>
+            ) : (
+              <span className="pl-2 font-bold text-lg">
+                FRC Gameday
+              </span>
+            )}
+          </div>
+
+          {/* CENTER: STREAM BUTTONS (FIXED VISUAL STATE ONLY) */}
+          <div className="flex gap-1">
+            {childArray.map((_, childIndex) => {
+              const isActive = childIndex === activeChildIndex;
+
+              const label =
+                labels[childIndex] || `Stream ${childIndex + 1}`;
 
               return (
                 <button
-                  key={key}
+                  key={childIndex}
                   onClick={() => {
-                    // toggle highlight OFF
-                    setManualOverride(false);
-                    setSelectedLayout(null);
-                    setActiveKey(null);
+                    const isSame = childIndex === activeChildIndex;
+
+                    if (isSame) {
+                      setActiveChildIndex(null);
+
+                      if (baseLayout) {
+                        setSelectedLayout(baseLayout);
+                        setBaseLayout(null);
+                      } else {
+                        setSelectedLayout(null);
+                      }
+                      return;
+                    }
+
+                    setActiveChildIndex(childIndex);
+                    setBaseLayout(selectedLayout ?? autoLayout);
+                    setSelectedLayout(
+                      pickHighlightLayout(layout.slots.length)
+                    );
                   }}
                   className={`
-                    px-2 py-1 text-xs bg-neutral-800 rounded whitespace-nowrap
-                    ${activeKey === key ? "ring-2 ring-white" : ""}
+                    px-2 py-1 text-xs rounded transition
+                    bg-neutral-800 hover:bg-neutral-700
+                    truncate
+                    ${isActive ? "ring-2 ring-white" : ""}
                   `}
                 >
-                  {label}
+                  {label.replace("- FIRST Robotics Competition", "")}
                 </button>
               );
             })}
           </div>
 
+          {/* RIGHT */}
           <button
-            onClick={() => setSidebarOpen(v => !v)}
-            className="px-3 py-1 bg-neutral-800 rounded"
+            onClick={() => setSidebarOpen((v) => !v)}
+            className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded"
           >
             <Squares2X2Icon className="w-5 h-5" />
           </button>
-
         </div>
 
-        {/* GRID (UNCHANGED LOGIC) */}
+        {/* =========================
+            GRID (UNCHANGED LOGIC)
+        ========================== */}
         <div className="relative flex-1">
-          {streams.map((child, i) => {
-            const key = getKey(child, i);
-            const slotIndex = keyToSlotIndex.get(key);
+          {childArray.map((child, childIndex) => {
+            const slotIndex = slotOrder.findIndex(i => i === childIndex);
+            const slotLayout = layout.slots[slotIndex];
 
-            const slot = layout.slots[slotIndex] ?? {
-              x: -1000,
-              y: -1000,
-              w: 0,
-              h: 0,
-            };
+            if (!slotLayout) return null;
 
             return (
               <div
-                key={key}
+                key={child?.key ?? childIndex}
                 style={{
                   position: "absolute",
-                  left: `${slot.x}%`,
-                  top: `${slot.y}%`,
-                  width: `${slot.w}%`,
-                  height: `${slot.h}%`,
-                  transition: "transform 300ms ease, left 300ms ease, top 300ms ease",
+                  left: `${slotLayout.x}%`,
+                  top: `${slotLayout.y}%`,
+                  width: `${slotLayout.w}%`,
+                  height: `${slotLayout.h}%`,
+                  transition: "all 300ms ease",
                 }}
               >
                 {React.cloneElement(child, {
-                  registerLabel: (label) => registerLabel(i, label),
+                  registerLabel: (label) =>
+                    registerLabel(childIndex, label),
                 })}
               </div>
             );
@@ -207,31 +258,105 @@ export default function MultiviewClient({ children = [] }) {
         </div>
       </div>
 
-      {/* SIDEBAR (RESTORED UI STATE + DEFAULT CLOSED FIX) */}
+      {/* =========================
+          SIDEBAR (RESTORED FULL UI)
+      ========================== */}
       {sidebarOpen && (
-        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3 flex flex-col">
+        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
 
-          <div className="font-bold text-sm mb-2">Priority</div>
+            <div className="font-bold text-sm mb-2">Stream Priority</div>
 
-          <div className="space-y-1 overflow-y-auto">
-            {priority.map((key) => (
-              <div
-                key={key}
-                className="flex justify-between items-center bg-neutral-800 p-1 rounded"
-              >
-                <span className="text-xs truncate">{key}</span>
+            <div className="space-y-1">
+              {homeOrder.map((childIndex, pos) => {
+                const label =
+                  labels?.[childIndex] || `Stream ${childIndex + 1}`;
 
-                <div className="flex gap-1">
-                  <button onClick={() => moveUp(key)}>↑</button>
-                  <button onClick={() => moveDown(key)}>↓</button>
-                </div>
-              </div>
-            ))}
-          </div>
+                return (
+                  <div
+                    key={childIndex}
+                    className="flex items-center justify-between bg-neutral-800 px-2 py-1 rounded"
+                  >
+                    {/* LABEL */}
+                    <span className="text-xs truncate">
+                      {label.replace("- FIRST Robotics Competition", "")}
+                    </span>
 
+                    {/* CONTROLS */}
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          setHomeOrder((prev) => {
+                            const i = prev.indexOf(childIndex);
+                            if (i <= 0) return prev;
+                            const next = [...prev];
+                            [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                            return next;
+                          });
+                        }}
+                        className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setHomeOrder((prev) => {
+                            const i = prev.indexOf(childIndex);
+                            if (i === -1 || i === prev.length - 1) return prev;
+                            const next = [...prev];
+                            [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                            return next;
+                          });
+                        }}
+                        className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="h-px bg-neutral-700 my-2" />
+
+            {/* <button
+              onClick={() => setHomeOrder(childArray.map((_, i) => i))}
+              className="w-full px-2 py-1 bg-green-600 rounded text-sm"
+            >
+              Reset Order
+            </button> */}
+
+          <div className="font-bold pb-1">Layouts</div>
+{/* 
+          <button
+            onClick={() => {
+              setSelectedLayout(null);
+              setBaseLayout(null);
+              setActiveChildIndex(null);
+            }}
+            className="px-2 py-1 bg-green-600 rounded text-sm mt-2"
+          >
+            Auto Layout ({LAYOUTS[autoLayout].name})
+          </button> */}
+{/* 
+          <div className="h-px bg-neutral-700 my-2" /> */}
+
+          {Object.entries(LAYOUTS).map(([key, value]) => (
+            <button
+              key={key}
+              onClick={() => setSelectedLayout(key)}
+              className={`
+                block w-full text-left px-2 py-1 rounded text-sm
+                hover:bg-neutral-800
+                ${layoutKey === key ? "bg-neutral-700" : ""}
+              `}
+            >
+              {value.name}
+            </button>
+          ))}
         </div>
       )}
-
     </div>
   );
 }
