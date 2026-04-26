@@ -191,11 +191,11 @@ export function pickHighlightLayout(count) {
 
   if (count === 3) return "onePlusTwo";
 
-  if (count === 4) return "onePlusThree";
+  if (count === 4) return "twoPlusThree";
 
   if (count === 5) return "twoPlusThree"; 
 
-  if (count === 6) return "twoPlusThree";
+  if (count === 6) return "twoPlusSix";
 
   if (count === 7) return "twoPlusSix"; 
 
