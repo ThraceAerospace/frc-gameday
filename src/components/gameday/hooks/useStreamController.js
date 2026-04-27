@@ -29,10 +29,13 @@ function getTodayInTimezone(timezone) {
  */
 function pickDefaultStream(streams, timezone) {
   if (!streams?.length || !timezone) return null;
-
-  const today = getTodayInTimezone(timezone);
-
-  return streams.find((s) => s.date <= today) || streams[streams.length - 1] || null;
+  const sorted = [...streams].sort((a, b) => new Date(a.date) - new Date(b.date));
+  
+  const result =
+    sorted.find((s) => new Date(s.date) <= today) ||
+    sorted.find((s) => new Date(s.date) > today) ||
+    sorted[sorted.length - 1] ||
+    null;
 }
 
 export function useStreamController(streams = [], timezone) {
