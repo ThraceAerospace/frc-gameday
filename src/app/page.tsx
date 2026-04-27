@@ -115,7 +115,7 @@ export default function HomePage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold">FRC Gameday Event Selector</h1>
+            <h1 className="text-2xl font-bold">FieldView Event Selector</h1>
             <p>Select event(s) below. </p>
           </div>
 
