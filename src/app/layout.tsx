@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "FieldView",
-  description: "Watch FIRST Robotics Compeition events live, powered by The Blue Alliance",
+  description: "Watch FIRST Robotics Competition events live, powered by The Blue Alliance",
 };
 
 export default function RootLayout({
