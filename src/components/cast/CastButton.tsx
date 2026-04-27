@@ -1,23 +1,28 @@
 "use client";
 
-import { CastState } from "@/lib/cast/types";
-import { startCastSession, sendCastState } from "@/lib/cast/castClient";
+import { startCastSession } from "@/lib/cast/castClient";
 
-type Props = {
-  buildState: () => CastState;
-};
+export default function CastButton() {
+  const handleCast = async () => {
+    const chrome = (window as any).chrome;
+    try {
+      if (!chrome?.cast) {
+        alert("Cast not available in this browser (use Chrome)");
+        return;
+      }
 
-export default function CastButton({ buildState }: Props) {
-  async function handleCast() {
-    await startCastSession();
-
-    const state = buildState();
-    sendCastState(state);
-  }
+      await startCastSession();
+    } catch (err) {
+      console.error("Cast failed:", err);
+    }
+  };
 
   return (
-    <button onClick={handleCast} className="bg-blue-600 px-3 py-1 rounded">
-      Cast Multiview
+    <button
+      onClick={handleCast}
+      className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm"
+    >
+      Cast
     </button>
   );
 }

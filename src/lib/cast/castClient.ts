@@ -9,6 +9,7 @@ export async function startCastSession() {
   });
 
   session = await context.requestSession();
+
   return session;
 }
 

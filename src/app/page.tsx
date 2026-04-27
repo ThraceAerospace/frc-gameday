@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MatchStrip from "@/components/gameday/navbar/MatchStrip";
 import { dumbDateString } from "@/lib/time"
+import CastButton from "@/components/cast/CastButton";
 
 export default function HomePage() {
   const router = useRouter();
@@ -126,6 +127,7 @@ export default function HomePage() {
           >
             Start Multiview ({selectedEvents.size})
           </button>
+          <CastButton />
         </div>
 
         {loading && <div className="opacity-70">Loading events...</div>}
