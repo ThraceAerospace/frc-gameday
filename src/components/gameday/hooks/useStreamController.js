@@ -28,14 +28,18 @@ function getTodayInTimezone(timezone) {
  * Pick default stream deterministically
  */
 function pickDefaultStream(streams, timezone) {
-  if (!streams?.length || !timezone) return null;
-  const sorted = [...streams].sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (!streams?.length) return null;
+
+  const sorted = [...streams].sort((a, b) => a.date.localeCompare(b.date));
   const today = getTodayInTimezone(timezone);
+
   const result =
-    sorted.find((s) => new Date(s.date) <= today) ||
-    sorted.find((s) => new Date(s.date) > today) ||
+    [...sorted].reverse().find((s) => s.date <= today) || // closest past/today
+    sorted.find((s) => s.date > today) ||                 // next upcoming
     sorted[sorted.length - 1] ||
     null;
+
+  return result;
 }
 
 export function useStreamController(streams = [], timezone) {
