@@ -57,18 +57,21 @@ export default function StreamModal({
                 }`}
               >
                 <div>
+                  <div className="text-white text-xs">
+                    {s.date}
+                  </div>
                   <div className="text-white text-sm">
                     {s.type === "youtube" ? s.meta?.title || "YouTube Stream" : "Twitch Stream"}
                   </div>
                   <div className="text-xs text-gray-400">
-                    {s.channel}
+                    {s.type.charAt(0).toUpperCase() + s.type.slice(1)} - {s.channel} 
                   </div>
                 </div>
 
                 {/* active indicator */}
                 {isActive && (
                   <div className="text-xs text-green-400 text-nowrap">
-                    ● LIVE
+                    SELECTED
                   </div>
                 )}
               </button>
