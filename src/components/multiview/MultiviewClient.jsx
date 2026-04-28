@@ -274,88 +274,87 @@ export default function MultiviewClient({
       </div>
 
       {/* =========================
-          SIDEBAR (RESTORED FULL UI)
-      ========================== */}
-      {sidebarOpen && (
-        <div className="w-64 bg-neutral-900 border-l border-neutral-700 p-3">
+          SIDEBAR OVERLAY
+      ========================= */}
+      <>
+        {/* BACKDROP */}
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className={`
+            fixed inset-0 bg-black/50 z-40
+            transition-opacity duration-300
+            ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+          `}
+        />
 
-            <div className="font-bold text-sm mb-2">Stream Priority</div>
+        {/* SIDEBAR PANEL */}
+        <div
+          className={`
+            fixed top-0 right-0 h-full
+            w-[clamp(260px,25vw,400px)]
+            bg-neutral-900 border-l border-neutral-700 p-3
+            z-50 shadow-xl
+            transition-transform duration-300
+            ${sidebarOpen ? "translate-x-0" : "translate-x-full"}
+          `}
+        >
+          <div className="font-bold text-sm mb-2">Stream Priority</div>
 
-            <div className="space-y-1">
-              {homeOrder.map((childIndex, pos) => {
-                const label =
-                  labels?.[childIndex] || `Stream ${childIndex + 1}`;
+          <div className="space-y-1">
+            {homeOrder.map((childIndex) => {
+              const label =
+                labels?.[childIndex] || `Stream ${childIndex + 1}`;
 
-                return (
-                  <div
-                    key={childIndex}
-                    className="flex items-center justify-between bg-neutral-800 px-2 py-1 rounded"
-                  >
-                    {/* LABEL */}
-                    <span className="text-xs truncate">
-                      {label.replace("- FIRST Robotics Competition", "")}
-                    </span>
+              return (
+                <div
+                  key={childIndex}
+                  className="flex items-center justify-between bg-neutral-800 px-2 py-1 rounded"
+                >
+                  {/* LABEL */}
+                  <span className="text-xs truncate">
+                    {label.replace("- FIRST Robotics Competition", "")}
+                  </span>
 
-                    {/* CONTROLS */}
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setHomeOrder((prev) => {
-                            const i = prev.indexOf(childIndex);
-                            if (i <= 0) return prev;
-                            const next = [...prev];
-                            [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                            return next;
-                          });
-                        }}
-                        className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
-                      >
-                        ↑
-                      </button>
+                  {/* CONTROLS */}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setHomeOrder((prev) => {
+                          const i = prev.indexOf(childIndex);
+                          if (i <= 0) return prev;
+                          const next = [...prev];
+                          [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                          return next;
+                        });
+                      }}
+                      className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                    >
+                      ↑
+                    </button>
 
-                      <button
-                        onClick={() => {
-                          setHomeOrder((prev) => {
-                            const i = prev.indexOf(childIndex);
-                            if (i === -1 || i === prev.length - 1) return prev;
-                            const next = [...prev];
-                            [next[i + 1], next[i]] = [next[i], next[i + 1]];
-                            return next;
-                          });
-                        }}
-                        className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
-                      >
-                        ↓
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setHomeOrder((prev) => {
+                          const i = prev.indexOf(childIndex);
+                          if (i === -1 || i === prev.length - 1) return prev;
+                          const next = [...prev];
+                          [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                          return next;
+                        });
+                      }}
+                      className="px-2 py-0.5 bg-neutral-700 rounded text-xs"
+                    >
+                      ↓
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
+          </div>
 
-            <div className="h-px bg-neutral-700 my-2" />
-
-            {/* <button
-              onClick={() => setHomeOrder(childArray.map((_, i) => i))}
-              className="w-full px-2 py-1 bg-green-600 rounded text-sm"
-            >
-              Reset Order
-            </button> */}
+          <div className="h-px bg-neutral-700 my-2" />
 
           <div className="font-bold pb-1">Layouts</div>
-{/* 
-          <button
-            onClick={() => {
-              setSelectedLayout(null);
-              setBaseLayout(null);
-              setActiveChildIndex(null);
-            }}
-            className="px-2 py-1 bg-green-600 rounded text-sm mt-2"
-          >
-            Auto Layout ({LAYOUTS[autoLayout].name})
-          </button> */}
-{/* 
-          <div className="h-px bg-neutral-700 my-2" /> */}
 
           {Object.entries(LAYOUTS).map(([key, value]) => (
             <button
@@ -371,7 +370,7 @@ export default function MultiviewClient({
             </button>
           ))}
         </div>
-      )}
+      </>
     </div>
   );
 }
