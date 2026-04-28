@@ -73,7 +73,7 @@ export default function TeamModal({
 
           <input
             type="text"
-            placeholder="Search teams..."
+            placeholder="Search teams by number, name, or location..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full px-3 py-2 rounded bg-neutral-800 text-white placeholder-neutral-400 outline-none"
