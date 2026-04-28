@@ -44,7 +44,10 @@ export default function TeamModal({
       .filter((t) => {
         return (
           t.team_number.toString().includes(query) ||
-          t.nickname?.toLowerCase().includes(query)
+          t.nickname?.toLowerCase().includes(query) ||
+          t.city?.toLowerCase().includes(query) ||
+          t.state_prov?.toLowerCase().includes(query) ||
+          t.country?.toLowerCase().includes(query)
         );
       });
   }, [teams, search]);
@@ -113,11 +116,12 @@ export default function TeamModal({
                       : "bg-neutral-800 text-white hover:bg-neutral-700"
                   }`}
                 >
-                  {t.team_number} — {t.nickname}
+                  <div>{t.team_number} — {t.nickname}</div>
                   <div className="flex gap-2 text-xs">
                     <Rank status={teamsStatuses[t.key]} />
                     <Record status={teamsStatuses[t.key]} />
                   </div>
+                  <span className="text-xs text-gray-300">{`${t.city ? t.city + ", " : ""}${t.state_prov ? t.state_prov + ", " : ""}${t.country ? t.country : ""}` || ""}</span>
                 </button>
               ))}
             </nav>
