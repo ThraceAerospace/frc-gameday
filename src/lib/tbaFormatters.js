@@ -47,7 +47,7 @@ export function matchShortName(match, eventPlayoffType) {
       case "EF":
         return `Eights ${matchNum}`;
       case "QM":
-         return `Quals ${matchNum}`;
+         return `Qual ${matchNum}`;
       default:
         return `Match ${matchNum}`;
     }
