@@ -12,7 +12,7 @@ export default function MatchList({
   eventPlayoffType,
 }) {
   if (!matches.length) return null;
-  const futureMatches = matches.filter((m) => m.actual_time === null)
+  const futureMatches = matches.filter((m) => m.actual_time === null && m.key !== nextMatchKey.key);
   return (
     <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
       <MatchCard 
