@@ -32,6 +32,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
     >
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="google-adsense-account" content="ca-pub-7649903460658438"></meta>
         <script
           src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"
