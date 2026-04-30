@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   const eventKey = event?.event_key;
   if (!eventKey) return new Response("bad payload", { status: 400 });
 
-  if (event.type === "ping") {
+  if (event.type === "ping" || event.type === "verification") {
         console.log("Received ping from TBA", event);
     return new Response("ok");
   }
