@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 
 export function useMatches(eventKey: string) {
   const [matches, setMatches] = useState<any[]>([]);
-  const REFRESH_MS = 20 * 1000;
+  const REFRESH_MS = 10 * 1000;
 
   const load = useCallback(async () => {
     if (!eventKey) return;
