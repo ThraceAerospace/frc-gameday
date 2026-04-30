@@ -1,8 +1,9 @@
 import { TBA } from "@/lib/tbaService";
-export const revalidate = 86000;
-export async function GET(
-  req: Request,
-) {
+
+export const dynamic = "force-static";
+export const revalidate = 86400;
+
+export async function GET() {
   const year = new Date().getFullYear();
 
   const data = await TBA.getAllDistrictTeamsAdvancedToCMP(year);
