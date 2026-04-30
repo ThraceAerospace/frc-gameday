@@ -6,7 +6,7 @@ function getNextMatchTime(matches: any[]) {
 
   const future = matches
     .map(m => {
-      const t = m.actual_time ?? m.predicted_time ?? m.time ?? null;
+      const t = m.predicted_time ?? m.time ?? null;
       return t ? t * 1000 : null; // normalize to ms
     })
     .filter((t): t is number => t !== null && t > now)
