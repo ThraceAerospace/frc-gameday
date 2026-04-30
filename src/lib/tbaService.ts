@@ -1,3 +1,4 @@
+import { get } from "http";
 import { tba } from "./tba";
 import {buildStreams} from "@/lib/gameday/buildStreams"
 /* -------------------------- */
@@ -45,6 +46,9 @@ export const TBA = {
 
   getTeam: (teamKey: any) =>
     tba.get(`/team/${teamKey}`, 86400),
+
+  getTeamDistricts: (teamKey: any) =>
+    tba.get(`/team/${teamKey}/districts`, 86400),
 
   getTeamEvents: (teamKey: any, year: any) =>
     tba.get(`/team/${teamKey}/events/${year}`, 86400),
@@ -191,6 +195,42 @@ export const TBA = {
 
   getEventMatchesSimple: (eventKey: any) =>
     tba.get(`/event/${eventKey}/matches/simple`, 15),
+
+  /* ------------------ */
+  /* 🏆 Districts       */
+  /* ------------------ */
+  getDistricts: (year: any) =>
+    tba.get(`/districts/${year}`, 86400),
+
+  getDistrictTeams: (districtKey: string) =>
+    tba.get(`/district/${districtKey}/teams`, 86400),
+
+  getDistrictTeamKeys: (districtKey: string) =>
+    tba.get(`/district/${districtKey}/teams/keys`, 86400),
+
+  getDistrictEvents: (districtKey: string) =>
+    tba.get(`/district/${districtKey}/events`, 86400),
+
+  getDistrictRankings: (districtKey: string) =>
+    tba.get(`/district/${districtKey}/rankings`, 86400),
+
+  getDistrictAdvancement: (districtKey: string) =>
+    tba.get(`/district/${districtKey}/advancement`, 86400),
+
+  getDistrictTeamsAdvancedToCMP: async (districtKey: string) => {
+    const advancement = await tba.get(`/district/${districtKey}/advancement`, 86400);
+    const cmpTeams = Object.entries(advancement).filter(([key, t]: [string, any]) => t.cmp === true).map(([key, t]: [string, any]) => { return { key, ...t, district_key: districtKey, district_abbreviation: districtKey.replace(/[0-9]/g, '').toUpperCase() }; });
+    return cmpTeams;
+  },
+
+  getAllDistrictTeamsAdvancedToCMP: async (year: number) => {
+    const districts = await tba.get(`/districts/${year}`, 86400);
+    const allCMPTeams = await Promise.all(districts.map((d: { key: string; }) => tba.get(`/district/${d.key}/advancement`, 86400).then((advancement) => {
+      const cmpTeams = Object.entries(advancement).filter(([key, t]: [string, any]) => t.cmp === true).map(([key, t]: [string, any]) => { return { key, ...t, district_key: d.key, district_abbreviation: d.key.replace(/[0-9]/g, '').toUpperCase() }; });
+      return cmpTeams;
+    })));
+    return allCMPTeams.flat();
+  },
 
   /* ------------------ */
   /* 📺 Webcasts         */
