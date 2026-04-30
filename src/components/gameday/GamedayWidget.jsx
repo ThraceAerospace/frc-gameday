@@ -196,7 +196,9 @@ export default function GamedayWidget({
         </div>
 
         {/* CENTER */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-hidden px-1 h-full flex items-center">
+        <div className="flex-1 min-w-0 min-h-0 overflow-hidden px-1 h-full flex items-center relative">
+
+          {/* SCROLL AREA */}
           <div className="flex gap-1 overflow-x-auto no-scrollbar h-full items-center">
             <MatchStrip
               matches={matchContext.list}
@@ -208,9 +210,11 @@ export default function GamedayWidget({
               team={trackedTeams}
             />
           </div>
-          {/* RIGHT GRADIENT FADE OVERLAY */}
-           <div className="pointer-events-none absolute right-0 top-0 h-full w-10 bg-gradient-to-l from-neutral-900 to-transparent" />
+
+          {/* RIGHT FADE (NOW CORRECTLY CONSTRAINED TO BAR HEIGHT) */}
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-10 bg-gradient-to-l from-neutral-900 to-transparent" />
         </div>
+  
 
         {/* RIGHT CONTROLS */}
         <div
