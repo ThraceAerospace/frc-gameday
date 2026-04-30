@@ -15,7 +15,7 @@ export function useTeams(eventKey: string) {
       try {
         const res = await fetch(`/api/event/${eventKey}/teams`);
         const json = await res.json();
-        console.log(json);
+        //console.log(json);
         await Promise.all(json.map(async (t: any) => {
           const district = await fetch(`/api/team/${t.key}/district`).then(res => res.json());
           t.district = district || null;
