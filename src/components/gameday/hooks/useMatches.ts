@@ -63,7 +63,7 @@ export function useMatches(eventKey: string) {
       scheduleNext(latestMatches);
     }, delay);
 
-    console.log("Next match refresh in:", delay);
+    console.log(eventKey, "[useMatches] Next match refresh in:", delay);
   }, [load]);
 
   useEffect(() => {
