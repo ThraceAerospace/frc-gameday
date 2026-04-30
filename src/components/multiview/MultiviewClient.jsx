@@ -147,7 +147,7 @@ export default function MultiviewClient({
   // RENDER
   // ==============================
   return (
-    <div className="h-screen bg-black text-white overflow-hidden flex">
+    <div className="h-screen w-screen bg-black text-white overflow-hidden flex">
       <div className="flex-1 flex flex-col">
 
         {/* =========================

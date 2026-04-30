@@ -39,7 +39,7 @@ export default function RootLayout({
         ></script>
         <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7649903460658438" crossOrigin="anonymous"></script>
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-screen min-w-screen flex flex-col">
         {children}
         <Analytics />
         <SpeedInsights />
