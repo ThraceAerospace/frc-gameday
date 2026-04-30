@@ -79,7 +79,7 @@ export default function HomePage() {
               <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-r from-neutral-900 to-transparent" />
 
               <div className="pl-2 pr-2 flex gap-1 w-full pt-1 pb-1 overflow-x-auto no-scrollbar">
-                <MatchStrip
+                {/* <MatchStrip
                   matches={event.matches}
                   nextMatchKey={event.matches.sort((a:any, b:any)=> a.predicted_time - b.predicted_time).find((m:any)=> m.actual_time === null)}
                   lastMatchKey={event.matches.sort((a:any, b:any)=> a.predicted_time - b.predicted_time).findLast((m:any)=>m.actual_time !== null)}
@@ -87,7 +87,7 @@ export default function HomePage() {
                   playoffAlliances={[]}
                   eventTimezone={event?.timezone}
                   team={[]}
-                />
+                /> */}
               </div>
               {/* 3. Right fade overlay */}
               <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-neutral-900 to-transparent" />

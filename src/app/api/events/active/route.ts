@@ -57,6 +57,11 @@ export async function GET() {
       return {
         key: event.key,
         name: event.name,
+        short_name: event.short_name,
+        event_type_string: event.event_type_string,
+        city: event.city,
+        state_prov: event.state_prov,
+        country: event.country,
         start_date: event.start_date,
         end_date: event.end_date,
         state,
