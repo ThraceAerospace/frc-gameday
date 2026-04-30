@@ -1,4 +1,3 @@
-import { getEventData } from "@/lib/tbaEventCache";
 import { TBA } from "@/lib/tbaService";
 export const revalidate = 90;
 export async function GET(
@@ -7,9 +6,8 @@ export async function GET(
 ) {
   const { event: event } = await params;
 
-  const data = await getEventData(event, "playoffs:alliances", revalidate, () =>
-    TBA.getEventPlayoffAlliances(event)
-  );
+  const data = await TBA.getEventPlayoffAlliances(event)
+
 
   return Response.json(data);
 }

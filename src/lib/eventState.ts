@@ -10,6 +10,7 @@ function key(event: string) {
  */
 export async function buildEventState(event: string) {
   const matches = await TBA.getEventMatchesSimple(event);
+  const alliances = await TBA.getEventPlayoffAlliances(event);
 
   const sorted = matches.sort(
     (a: any, b: any) =>
@@ -28,6 +29,7 @@ export async function buildEventState(event: string) {
     matches: sorted,
     nextMatch: next,
     lastMatch: last,
+    alliances,
   };
 }
 
@@ -56,4 +58,19 @@ export async function getEventState(event: string) {
     console.error("[STATE PARSE ERROR]", e);
     return null;
   }
+}
+
+export function computeNextMatch(matches: any[]) {
+  const now = Date.now() / 1000;
+
+  return (
+    matches
+      .filter((m) => m.actual_time === null)
+      .map((m) => ({
+        ...m,
+        predicted_time: m.predicted_time ?? m.time ?? null,
+      }))
+      .filter((m) => m.predicted_time)
+      .sort((a, b) => a.predicted_time - b.predicted_time)[0] ?? null
+  );
 }

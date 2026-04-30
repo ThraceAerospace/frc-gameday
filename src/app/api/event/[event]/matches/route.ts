@@ -1,4 +1,3 @@
-import { getEventData } from "@/lib/tbaEventCache";
 import { TBA } from "@/lib/tbaService";
 
 function getNextMatchTime(matches: any[]) {
@@ -40,12 +39,8 @@ export const GET = async (
     return new Response("Missing event key", { status: 400 });
   }
 
-  const data = await getEventData(
-    event,
-    "matches",
-    30,
-    () => TBA.getEventMatches(event)
-  );
+  const data = await TBA.getEventMatches(event)
+
 
   const matches = data?.matches ?? data;
 
