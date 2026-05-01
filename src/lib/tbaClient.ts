@@ -123,6 +123,7 @@ export class TBAClient {
     /* 4. 304 → serve cache       */
     /* -------------------------- */
     if (res.status === 304) {
+      console.log(`[TBA] 304 Not Modified for ${endpoint}`);
       const cached = await redis.get(cKey);
 
       if (cached) {
