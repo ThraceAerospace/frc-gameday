@@ -85,8 +85,6 @@ export class TBAClient {
     const eKey = etagKey(endpoint);
     const tags = deriveTags(endpoint);
 
-    console.log(`[TBA] GET ${endpoint}`);
-
     /* -------------------------- */
     /* 1. Cache-first fast path   */
     /* -------------------------- */
@@ -105,7 +103,11 @@ export class TBAClient {
     };
 
     const etag = await redis.get(eKey);
+    if (!etag) {
+      console.warn(`[TBA] no ETag found for ${endpoint}, ${eKey}`);
+    }
     if (etag && !options?.forceRefresh) {
+      console.log(`[TBA] sending If-None-Match ${etag} for ${endpoint}`);
       headers["If-None-Match"] = etag;
     }
 
@@ -127,10 +129,12 @@ export class TBAClient {
       const cached = await redis.get(cKey);
 
       if (cached) {
+        console.log(`[TBA] cache hit for ${endpoint} with ETag ${etag}`);
         return JSON.parse(cached);
       }
 
       // cache desync recovery
+      console.warn(`[TBA] cache desync for ${endpoint} with ETag ${etag}, refetching...`);
       return this.fetchAndCache(endpoint, cKey, eKey, tags, revalidate);
     }
 
@@ -138,6 +142,7 @@ export class TBAClient {
     /* 5. 200 → update cache      */
     /* -------------------------- */
     if (res.ok) {
+      console.log(`[TBA] 200 OK for ${endpoint}`);
       const data = await res.json();
       const newEtag = res.headers.get("ETag");
 
