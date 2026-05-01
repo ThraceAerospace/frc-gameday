@@ -192,6 +192,11 @@ export const TBA = {
   /* 🤖 Matches          */
   /* ------------------ */
 
+  getMatch: (matchKey: string) =>
+    tba.get(`/match/${matchKey}`, 15, {
+      noStore: true,
+    }),
+
   getEventMatches: (eventKey: string) =>
     tba.get(`/event/${eventKey}/matches`, 15, {
       noStore: true,

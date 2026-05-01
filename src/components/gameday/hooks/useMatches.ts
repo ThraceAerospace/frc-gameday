@@ -1,3 +1,4 @@
+import next from "next";
 import { useEffect, useRef, useState } from "react";
 
 function getRefreshDelay(nextMatch: any) {
@@ -21,6 +22,7 @@ function getRefreshDelay(nextMatch: any) {
 export function useMatches(eventKey: string) {
   const [state, setState] = useState<any>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const allMatchesLoadedRef = useRef<NodeJS.Timeout | null>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -28,27 +30,50 @@ export function useMatches(eventKey: string) {
 
     cancelledRef.current = false;
 
-    const load = async () => {
+    const fetchAllMatches = async () => {
       const res = await fetch(`/api/event/${eventKey}/matches`, {
         cache: "no-store",
       });
-
       const json = await res.json();
 
       if (cancelledRef.current) return;
 
-      setState(json);
+      setState((prev: any) => ({
+        ...prev,
+        matches: json.matches,
+      }));
 
-      const delay = getRefreshDelay(json?.nextMatch);
-      console.log(eventKey, "[useMatches] Next match poll in", delay / 1000, "seconds");
-      timeoutRef.current = setTimeout(load, delay);
+      allMatchesLoadedRef.current = setTimeout(fetchAllMatches, 5 * 60 * 1000);
     };
 
-    load();
+    const fetchCurrentMatches = async () => {
+      const [lastres, nextres] = await Promise.all([
+        fetch(`/api/event/${eventKey}/matches/last`, { cache: "no-store" }),
+        fetch(`/api/event/${eventKey}/matches/next`, { cache: "no-store" }),
+      ]);
+
+      const lastMatch = await lastres.json();
+      const nextMatch = await nextres.json();
+
+      if (cancelledRef.current) return;
+
+      setState((prev: any) => ({
+        matches: prev?.matches ?? [],
+        nextMatch: nextMatch.nextMatch,
+        lastMatch: lastMatch.lastMatch,
+      }));
+
+      const delay = getRefreshDelay(nextMatch.nextMatch);
+      timeoutRef.current = setTimeout(fetchCurrentMatches, delay);
+    };
+
+    fetchAllMatches();
+    fetchCurrentMatches();
 
     return () => {
       cancelledRef.current = true;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (allMatchesLoadedRef.current) clearTimeout(allMatchesLoadedRef.current);
     };
   }, [eventKey]);
 
