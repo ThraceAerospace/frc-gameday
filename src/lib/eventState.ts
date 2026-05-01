@@ -74,3 +74,21 @@ export function computeNextMatch(matches: any[]) {
       .sort((a, b) => a.predicted_time - b.predicted_time)[0] ?? null
   );
 }
+
+export async function getAllEventKeys() {
+  // depends on Redis client
+  // example:
+  return await redis.keys("*");
+}
+
+export async function getKey(key: string) {
+  const cached = await redis.get(key);
+  
+  if (!cached) return null;
+    try {
+        return JSON.parse(cached);
+    } catch (e) {
+        console.error("[STATE PARSE ERROR]", e);
+        return null;
+    }
+}
