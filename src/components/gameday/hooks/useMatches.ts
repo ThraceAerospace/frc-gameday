@@ -9,7 +9,7 @@ export function useMatches(eventKey: string) {
     let cancelled = false;
 
     const load = async () => {
-      const res = await fetch(`/api/event/${eventKey}/state`, {
+      const res = await fetch(`/api/event/${eventKey}/matches`, {
         cache: "no-store",
       });
 
