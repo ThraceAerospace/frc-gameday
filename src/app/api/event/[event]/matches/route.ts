@@ -1,6 +1,9 @@
 import { TBA } from "@/lib/tbaService";
 import { redis } from "@/lib/redis";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 5;
+
 function getNextMatch(matches: any[], now = Date.now()) {
   let best: any = null;
   let bestTime = Infinity;
