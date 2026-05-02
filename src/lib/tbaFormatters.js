@@ -37,8 +37,16 @@ export function matchShortName(match, eventPlayoffType) {
       case "F":
         return `Final ${matchNum}`;
       case "SF":
-        if (eventPlayoffType === 10 || eventPlayoffType === 11 || eventPlayoffType === 5) { //https://github.com/the-blue-alliance/the-blue-alliance/blob/main/src/backend/common/consts/playoff_type.py 10 = 8 team double elim, 11 = 4 team double elim, 5 = legacy double elim from before FRC adopted double elim brackets in 2023
-          return `Playoff ${setNum}`; // In double elim formats, the "semifinals" are actually just the first round of playoffs, so we label them as such instead of "semis"
+        if (eventPlayoffType === 10 || eventPlayoffType === 11) {
+          if ([1, 2, 3, 4, 7, 8, 11].includes(setNum)) {
+            return `Playoff ${setNum} [UB]`;
+          } else if ([5, 6, 9, 10, 12, 13].includes(setNum)) {
+            return `Playoff ${setNum} [LB]`;
+          } else {
+            return `Playoff ${setNum}`;
+          }
+        } else if (eventPlayoffType === 5) {
+          return `Playoff ${setNum}`;
         } else {
           return `Semis ${setNum}-${matchNum}`;
         }
