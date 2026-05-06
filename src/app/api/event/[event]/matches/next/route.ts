@@ -1,26 +1,46 @@
-import { TBA } from "@/lib/tbaService";
 import { redis } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 2;
+export const revalidate = 0;
 
-function getNextFromList(matches: any[], now = Date.now()) {
-  let best: any = null;
-  let bestTime = Infinity;
+function sortMatches(matches: any[]) {
+  return [...(matches ?? [])].sort((a, b) => {
+    const ta = a?.predicted_time ?? Infinity;
+    const tb = b?.predicted_time ?? Infinity;
+    return ta - tb;
+  });
+}
+
+/**
+ * PURE STATE RULE:
+ * next match = first unplayed match in deterministic order
+ */
+function getNextMatch(matches: any[]) {
+  for (const m of matches) {
+    if (m?.actual_time == null) return m;
+  }
+  return null;
+}
+
+/**
+ * last match = last played match in deterministic order
+ */
+function getLastMatch(matches: any[]) {
+  let last = null;
 
   for (const m of matches) {
-    const t = m.predicted_time ?? m.time;
-    if (!t || m.actual_time != null) continue;
-
-    const ms = t * 1000;
-
-    if (ms > now && ms < bestTime) {
-      bestTime = ms;
-      best = m;
+    if (m?.actual_time != null) {
+      last = m;
     }
   }
 
-  return best;
+  return last;
+}
+
+function isSameMatch(a: any, b: any) {
+  if (!a || !b) return false;
+
+  return a.match_key === b.match_key;
 }
 
 export const GET = async (
@@ -33,76 +53,64 @@ export const GET = async (
     return new Response("Missing event key", { status: 400 });
   }
 
+  const base = `cache:event:${eventKey}`;
+
+  const keys = {
+    matches: `${base}:matches`,
+    next: `${base}:nextMatch`,
+  };
+
   try {
-    const base = `cache:event:${eventKey}`;
-
-    const keys = {
-      next: `${base}:nextMatch`,
-      matches: `${base}:matches`,
-    };
-
     /**
-     * 1. Load cached next match
+     * STEP 1 — load canonical match list
      */
-    const cachedNext = await redis.get(keys.next);
+    const raw = await redis.get(keys.matches);
 
-    if (!cachedNext) {
-      return new Response(
-        JSON.stringify({ nextMatch: null }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=2",
-          },
-        }
+    if (!raw) {
+      return Response.json(
+        { nextMatch: null },
+        { headers: { "Cache-Control": "public, max-age=2" } }
       );
     }
 
-    let nextMatch = JSON.parse(cachedNext);
+    const matches = sortMatches(JSON.parse(raw));
 
     /**
-     * 2. Refresh that match only
+     * STEP 2 — derive state
      */
-    try {
-      const fresh = await TBA.getMatch(nextMatch.key);
+    const nextMatch = getNextMatch(matches);
+    //const lastMatch = getLastMatch(matches);
 
-      if (fresh) {
-        nextMatch = { ...nextMatch, ...fresh };
+    /**
+     * STEP 3 — compare cached pointer (optional optimization)
+     */
+    const cachedRaw = await redis.get(keys.next);
+    let cachedNext = null;
+
+    if (cachedRaw) {
+      cachedNext = JSON.parse(cachedRaw);
+    }
+
+    const changed = !isSameMatch(cachedNext, nextMatch);
+
+    /**
+     * STEP 4 — update cache ONLY if needed
+     */
+    if (changed) {
+      if (nextMatch) {
+        await redis.set(keys.next, JSON.stringify(nextMatch));
+      } else {
+        await redis.del(keys.next);
       }
-    } catch (err) {
-      console.warn("[NEXT MATCH REFRESH FAILED]", err);
     }
 
     /**
-     * 3. If match is now played → advance locally
+     * STEP 5 — return deterministic result
      */
-    if (nextMatch.actual_time != null) {
-      const cachedMatches = await redis.get(keys.matches);
-
-      if (cachedMatches) {
-        const matches = JSON.parse(cachedMatches);
-
-        const newNext = getNextFromList(matches);
-
-        if (newNext) {
-          nextMatch = newNext;
-
-          await redis.set(keys.next, JSON.stringify(newNext));
-        } else {
-          await redis.del(keys.next);
-          nextMatch = null;
-        }
-      }
-    } else {
-      // persist refreshed version
-      await redis.set(keys.next, JSON.stringify(nextMatch));
-    }
-
-    /**
-     * 4. Return
-     */
-    return new Response(
-      JSON.stringify({ nextMatch }),
+    return Response.json(
+      {
+        nextMatch
+      },
       {
         headers: {
           "Content-Type": "application/json",
@@ -111,10 +119,10 @@ export const GET = async (
       }
     );
   } catch (err) {
-    console.error("[NEXT MATCH ROUTE ERROR]", err);
+    console.error("[/next ROUTE ERROR]", err);
 
-    return new Response(
-      JSON.stringify({ error: "Failed to load next match" }),
+    return Response.json(
+      { error: "Failed to compute next match" },
       { status: 500 }
     );
   }

@@ -39,7 +39,7 @@ export default function GamedayWidget({
   const { event: eventData } = useEvent(event);
   const { teams } = useTeams(event);
   const { teamsStatuses, reload: reloadStatuses } = useTeamsStatuses(event);
-  const { matches, reload: reloadMatches } = useMatches(event);
+  // const { matches, reload: reloadMatches } = useMatches(event);
   const { alliances: playoffAlliances, reload: reloadAlliances } = usePlayoffAlliances(event);
 
   // ==============================
@@ -68,12 +68,13 @@ export default function GamedayWidget({
   // MATCH CONTEXT
   // ==============================
   const {
-    trackedMatches,
+    matches,
     eventNextMatch,
     eventLastMatch,
+    trackedMatches,
     trackedNextMatch,
     trackedLastMatch,
-  } = useTrackedEvent(matches, trackedTeams);
+  } = useMatches(event, trackedTeams);
 
   const matchContext =
     trackedTeams.length > 0

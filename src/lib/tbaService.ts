@@ -193,7 +193,7 @@ export const TBA = {
   /* ------------------ */
 
   getMatch: (matchKey: string) =>
-    tba.get(`/match/${matchKey}`, 15, {
+    tba.get(`/match/${matchKey}`, 0, {
       noStore: true,
     }),
 

@@ -31,7 +31,7 @@ export default function MatchCard({ match, team, isNext, isLast, playoffAlliance
                     ? <span className="text-xs text-gray-400">{formatEventTime(match.predicted_time, eventTimezone)}</span>
                     : isNext ? <NextMatchCountdown nextMatch={match} timezone={team?.event?.timezone} /> : ""
                 }
-                { isLast ? (
+                { (match.actual_time || match.post_result_time) || isLast ? (
                     <div className="text-nowrap">
                         <span className={`text-red-500 ${isTrackedInRed ? 'font-bold' : ''}`}>{match?.alliances.red.score}</span> - <span className={`text-blue-500 ${isTrackedInBlue ? 'font-bold' : ''}`}>{match?.alliances.blue.score}</span>
                     </div>

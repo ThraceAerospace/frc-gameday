@@ -96,7 +96,7 @@ export async function POST(req: Request) {
   const eventKey =
     data?.event_key || data?.eventKey || data?.event?.key;
 
-    console.log(`[WEBHOOK] Received ${type} for ${eventKey}`);
+    console.log(`[WEBHOOK] Received ${type} for ${eventKey}`, { data });
 
   if (!eventKey) {
     return new Response("Missing event_key", { status: 400 });
