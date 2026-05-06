@@ -7,12 +7,14 @@ import StreamView from "@/components/gameday/StreamView";
 import ChatView from "@/components/gameday/ChatView";
 import StreamModal from "@/components/gameday/StreamModal";
 import MatchStrip from "@/components/gameday/navbar/MatchStrip";
+import EventStatsSideBar from "@/components/gameday/EventStatsSideBar";
 
 import {
   VideoCameraIcon,
   UserGroupIcon,
   ArrowPathIcon,
   ChatBubbleLeftRightIcon,
+  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
@@ -125,6 +127,7 @@ export default function GamedayWidget({
   const [chatOpen, setChatOpen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const controlsRef = useRef(null);
+  const [statsPanelOpen, setStatsPanelOpen] = useState(false);
 
   // R to refresh
   useEffect(() => {
@@ -166,6 +169,18 @@ export default function GamedayWidget({
         {/* STREAM */}
         <div className="flex-1 bg-black">
           <StreamView stream={activeStream} />
+        </div>
+
+        {/* Event Stats Panel */}
+        <div
+          className={`w-[290px] border-l border-neutral-800 transition-all duration-200 ${
+            statsPanelOpen ? "flex" : "hidden"
+          }`}
+        >
+          <EventStatsSideBar
+            teamStatuses={teamsStatuses}
+            playoffAlliances={playoffAlliances}
+          />
         </div>
 
         {/* CHAT */}
@@ -223,37 +238,45 @@ export default function GamedayWidget({
           className={`
             overflow-hidden shrink-0
             transition-all duration-300
-            ${controlsVisible ? "w-[180px] opacity-100 ml-2" : "w-0 opacity-0 ml-0"}
+            ${controlsVisible ? "w-[220px] opacity-100 ml-2" : "w-0 opacity-0 ml-0"}
           `}
         >
           <div className="flex gap-2 px-2">
-            <button
-              onClick={() => setTeamModalOpen(true)}
-              className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
-            >
-              <UserGroupIcon className="w-4 h-5" />
-            </button>
+            <nav className="flex gap-2 px-2 py-1 bg-neutral-800/80 rounded">
+              <button className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
+                onClick={() => setStatsPanelOpen((prev) => !prev)}
+              >
+                <ChartBarIcon className="w-4 h-5" />
+              </button>
 
-            <button
-              onClick={reloadDataSources}
-              className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
-            >
-              <ArrowPathIcon className="w-4 h-5" />
-            </button>
+              <button
+                onClick={() => setTeamModalOpen(true)}
+                className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
+              >
+                <UserGroupIcon className="w-4 h-5" />
+              </button>
 
-            <button
-              onClick={() => setStreamModalOpen(true)}
-              className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
-            >
-              <VideoCameraIcon className="w-4 h-5" />
-            </button>
+              <button
+                onClick={reloadDataSources}
+                className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
+              >
+                <ArrowPathIcon className="w-4 h-5" />
+              </button>
 
-            <button
-              onClick={() => setChatOpen((prev) => !prev)}
-              className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
-            >
-              <ChatBubbleLeftRightIcon className="w-4 h-5" />
-            </button>
+              <button
+                onClick={() => setStreamModalOpen(true)}
+                className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
+              >
+                <VideoCameraIcon className="w-4 h-5" />
+              </button>
+
+              <button
+                onClick={() => setChatOpen((prev) => !prev)}
+                className="p-2 bg-neutral-800/80 hover:bg-neutral-700 rounded"
+              >
+                <ChatBubbleLeftRightIcon className="w-4 h-5" />
+              </button>
+            </nav>
           </div>
         </div>
       </div>

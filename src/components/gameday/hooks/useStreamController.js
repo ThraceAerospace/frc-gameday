@@ -30,7 +30,7 @@ function getTodayInTimezone(timezone) {
 function pickDefaultStream(streams, timezone) {
   if (!streams?.length) return null;
 
-  const sorted = [...streams].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...streams].sort((a, b) => a.date?.localeCompare(b.date) || 0);
   const today = getTodayInTimezone(timezone);
 
   const result =

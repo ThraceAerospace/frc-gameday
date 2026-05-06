@@ -63,3 +63,20 @@ export function matchShortName(match, eventPlayoffType) {
     return "UN";
   }
 }
+
+export function compLevelShortName(compLevel) {
+  switch (compLevel.toUpperCase()) {
+    case "F":
+      return "Finals";
+    case "SF":
+      return "Semifinals";
+    case "QF":
+      return "Quarterfinals";
+    case "EF":
+      return "Eighth Finals";
+    case "QM":
+      return "Qualifications";
+    default:
+      return compLevel.toUpperCase();
+  }
+}
