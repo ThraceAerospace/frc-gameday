@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 export const POLLING_INTERVALS = {
   realtime: 1_000,
   fast: 5_000,
-  intermediate: 3 * 60_000,
+  intermediate: 5 * 60_000,
   long: 60 * 60_000,
 } as const;
 
