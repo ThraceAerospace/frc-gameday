@@ -199,8 +199,6 @@ export default function GamedayWidget({
   const showTeamTracker =
     slotPresentation.teamTracker !== "hidden";
 
-  const showMatchInfo =
-    slotPresentation.matchInfo !== "hidden";
 
   const teamPills = showTeamTracker
     ? trackedTeams.map((team) => (
@@ -549,7 +547,7 @@ export default function GamedayWidget({
             wssConnected
           }
           teamPills={teamPills}
-          showEventInfo={showMatchInfo}
+          showEventInfo={true}
           isDivisional={
             isDivisional
           }
