@@ -14,7 +14,7 @@ export function usePlayoffAlliances(eventKey: string) {
       setAlliances(Array.isArray(data) ? data : []);
     } catch (error) { console.error("usePlayoffAlliances:", error); }
   }, [eventKey]);
-  const reload = usePolling(load, "intermediate", { enabled: Boolean(eventKey), resetKey: eventKey });
+  const reload = usePolling(load, "long", { enabled: Boolean(eventKey), resetKey: eventKey });
   useEffect(() => setAlliances([]), [eventKey]);
   return { alliances, reload };
 }
