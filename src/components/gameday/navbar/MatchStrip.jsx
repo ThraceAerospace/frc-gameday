@@ -40,25 +40,24 @@ export default function MatchStrip({
   const presentation =
     multiview?.presentation ?? {};
 
+  /*
+   * `matchInfo` controls only the match-card
+   * strip. The event header remains visible
+   * independently.
+   */
   const hideMatchCards =
-    presentation.matchInfo ===
-    "hidden";
+    presentation.matchInfo === "hidden";
 
   return (
     <div className="relative border-t border-l border-white/10 bg-neutral-950/95">
-      {(showEventInfo || teamPills.length > 0) && (
+      {(showEventInfo ||
+        teamPills.length > 0) && (
         <div className="absolute bottom-full left-0 z-10 -mb-px flex max-w-[calc(100%-0.5rem)] items-end gap-1">
           {showEventInfo && (
             <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-              <div
-                className={`flex flex-col whitespace-nowrap leading-none ${
-                  hideMatchCards
-                    ? "translate-y-[-1px] py-1"
-                    : "translate-y-[5px]"
-                }`}
-              >
+              <div className="flex translate-y-[2px] flex-col whitespace-nowrap leading-none">
                 <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
-                  <span className="truncate">
+                  <span className="truncate pt-[2px]">
                     {eventName || "Event"}
                   </span>
 
