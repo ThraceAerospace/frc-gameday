@@ -60,30 +60,36 @@ export default function MatchStrip({
    * The data refreshes may cause this component to render many
    * times, so the dependency is specifically nextMatch?.key.
    */
-  useEffect(() => {
-    if (
-      hideMatchCards ||
-      !nextMatch?.key ||
-      !scrollRef.current
-    ) {
-      return;
-    }
+useEffect(() => {
+  if (
+    hideMatchCards ||
+    !nextMatch?.key ||
+    !scrollRef.current
+  ) {
+    return;
+  }
 
-    const nextElement =
-      scrollRef.current.querySelector(
-        `[data-match-key="${CSS.escape(nextMatch.key)}"]`,
-      );
+  const nextElement =
+    scrollRef.current.querySelector(
+      `[data-match-key="${CSS.escape(nextMatch.key)}"]`,
+    );
 
-    if (!nextElement) {
-      return;
-    }
+  if (!nextElement) {
+    return;
+  }
 
-    nextElement.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "start",
-    });
-  }, [nextMatch?.key, hideMatchCards]);
+  const container = scrollRef.current;
+
+  const targetLeft =
+    nextElement.offsetLeft -
+    nextElement.offsetWidth -
+    8;
+
+  container.scrollTo({
+    left: Math.max(0, targetLeft),
+    behavior: "smooth",
+  });
+}, [nextMatch?.key, hideMatchCards]);
 
   return (
     <div className="relative border-t border-l border-white/10 bg-neutral-950/95">
