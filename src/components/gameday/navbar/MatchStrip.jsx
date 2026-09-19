@@ -13,6 +13,7 @@ export default function MatchStrip({
   playoffType = null,
   eventName,
   wssConnected = false,
+  teamPills = [],
   showEventInfo = true,
   isDivisional = false,
   multiview = {},
@@ -45,47 +46,57 @@ export default function MatchStrip({
 
   return (
     <div className="relative border-t border-l border-white/10 bg-neutral-950/95">
-      {showEventInfo && (
-        <div className="absolute bottom-full left-0 z-10 -mb-px flex max-w-[min(80vw,360px)]">
-          <div className="rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-            <div
-              className={`flex flex-col whitespace-nowrap leading-none ${
-                hideMatchCards
-                  ? "translate-y-[-1px] py-1"
-                  : "translate-y-[5px]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
-                <span className="truncate">
-                  {eventName || "Event"}
+      {(showEventInfo || teamPills.length > 0) && (
+        <div className="absolute bottom-full left-0 z-10 -mb-px flex max-w-[calc(100%-0.5rem)] items-end gap-1">
+          {showEventInfo && (
+            <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
+              <div
+                className={`flex flex-col whitespace-nowrap leading-none ${
+                  hideMatchCards
+                    ? "translate-y-[-1px] py-1"
+                    : "translate-y-[5px]"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
+                  <span className="truncate">
+                    {eventName || "Event"}
+                  </span>
+
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      wssConnected
+                        ? "bg-green-500"
+                        : "bg-neutral-600"
+                    }`}
+                    title={
+                      wssConnected
+                        ? "Live updates connected"
+                        : "Live updates disconnected"
+                    }
+                  />
                 </span>
 
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    wssConnected
-                      ? "bg-green-500"
-                      : "bg-neutral-600"
-                  }`}
-                  title={
-                    wssConnected
-                      ? "Live updates connected"
-                      : "Live updates disconnected"
-                  }
-                />
-              </span>
-
-              {eventTimezone &&
-                !isDivisional && (
-                  <span className="mt-0.5 text-[9px] text-neutral-500">
-                    <EventLocalTime
-                      timezone={
-                        eventTimezone
-                      }
-                    />
-                  </span>
-                )}
+                {eventTimezone &&
+                  !isDivisional && (
+                    <span className="mt-0.5 text-[9px] text-neutral-500">
+                      <EventLocalTime
+                        timezone={
+                          eventTimezone
+                        }
+                      />
+                    </span>
+                  )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {teamPills.length > 0 && (
+            <div className="min-w-0 max-w-[calc(100vw-2rem)] overflow-x-auto overflow-y-hidden pb-0.5 no-scrollbar">
+              <div className="flex w-max gap-1">
+                {teamPills}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
