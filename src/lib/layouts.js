@@ -3,33 +3,14 @@
 const VISIBLE = "visible";
 const HIDDEN = "hidden";
 
-const SIDES = "sides";
-const BOTTOM = "bottom";
-const TOP = "top";
-
 const LARGE = {
   matchInfo: VISIBLE,
-  teamTracker: SIDES,
-};
-
-const LARGE_TOP_TRACKER = {
-  matchInfo: VISIBLE,
-  teamTracker: TOP,
-};
-
-const LARGE_BOTTOM_TRACKER = {
-  matchInfo: VISIBLE,
-  teamTracker: BOTTOM,
+  teamTracker: VISIBLE,
 };
 
 const COMPACT = {
   matchInfo: HIDDEN,
-  teamTracker: BOTTOM,
-};
-
-const COMPACT_SIDES = {
-  matchInfo: HIDDEN,
-  teamTracker: SIDES,
+  teamTracker: VISIBLE,
 };
 
 const NONE = {
@@ -52,8 +33,8 @@ export const LAYOUTS = {
     name: "Dual",
 
     slots: [
-      { x: 0, y: 0, w: 50, h: 100, presentation: LARGE_TOP_TRACKER },
-      { x: 50, y: 0, w: 50, h: 100, presentation: LARGE_TOP_TRACKER },
+      { x: 0, y: 0, w: 50, h: 100, presentation: LARGE },
+      { x: 50, y: 0, w: 50, h: 100, presentation: LARGE },
     ],
   },
 
@@ -63,8 +44,8 @@ export const LAYOUTS = {
 
     slots: [
       { x: 0, y: 0, w: 60, h: 100, presentation: LARGE },
-      { x: 60, y: 0, w: 40, h: 50, presentation: LARGE_TOP_TRACKER },
-      { x: 60, y: 50, w: 40, h: 50, presentation: LARGE_TOP_TRACKER },
+      { x: 60, y: 0, w: 40, h: 50, presentation: LARGE },
+      { x: 60, y: 50, w: 40, h: 50, presentation: LARGE },
     ],
   },
 
@@ -96,8 +77,8 @@ export const LAYOUTS = {
     name: "2 + 3",
 
     slots: [
-      { x: 0, y: 0, w: 50, h: 60, presentation: LARGE_BOTTOM_TRACKER },
-      { x: 50, y: 0, w: 50, h: 60, presentation: LARGE_BOTTOM_TRACKER },
+      { x: 0, y: 0, w: 50, h: 60, presentation: LARGE },
+      { x: 50, y: 0, w: 50, h: 60, presentation: LARGE },
 
       { x: 0, y: 60, w: 33.33, h: 40, presentation: COMPACT },
       { x: 33.33, y: 60, w: 33.33, h: 40, presentation: COMPACT },
@@ -175,8 +156,8 @@ export const LAYOUTS = {
     name: "2 + 6",
 
     slots: [
-      { x: 25, y: 0, w: 50, h: 50, presentation: LARGE_BOTTOM_TRACKER },
-      { x: 25, y: 50, w: 50, h: 50, presentation: LARGE_BOTTOM_TRACKER },
+      { x: 25, y: 0, w: 50, h: 50, presentation: LARGE },
+      { x: 25, y: 50, w: 50, h: 50, presentation: LARGE },
 
       { x: 0, y: 0, w: 25, h: 33.33, presentation: COMPACT },
       { x: 0, y: 33.33, w: 25, h: 33.33, presentation: COMPACT },
@@ -193,17 +174,17 @@ export const LAYOUTS = {
     name: "Nona",
 
     slots: [
-      { x: 0, y: 0, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 33.333, y: 0, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 66.666, y: 0, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
+      { x: 0, y: 0, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 33.333, y: 0, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 66.666, y: 0, w: 33.333, h: 33.333, presentation: COMPACT },
 
-      { x: 0, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 33.333, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 66.666, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
+      { x: 0, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 33.333, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 66.666, y: 33.333, w: 33.333, h: 33.333, presentation: COMPACT },
 
-      { x: 0, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 33.333, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
-      { x: 66.666, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT_SIDES },
+      { x: 0, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 33.333, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT },
+      { x: 66.666, y: 66.666, w: 33.333, h: 33.333, presentation: COMPACT },
     ],
   },
 
@@ -211,7 +192,7 @@ export const LAYOUTS = {
     name: "1 + 8",
 
     slots: [
-      { x: 0, y: 0, w: 70, h: 100, presentation: LARGE_TOP_TRACKER },
+      { x: 0, y: 0, w: 70, h: 100, presentation: LARGE },
 
       { x: 70, y: 0, w: 15, h: 25, presentation: NONE },
       { x: 85, y: 0, w: 15, h: 25, presentation: NONE },
