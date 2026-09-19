@@ -1,5 +1,96 @@
 import { redis } from "@/lib/redis";
 
+function isMatchResultPresent(match: {
+  actual_time?: number | null;
+  post_result_time?: number | null;
+  score_breakdown?: unknown;
+  alliances?: {
+    red?: { score?: number | null };
+    blue?: { score?: number | null };
+  };
+}) {
+  return Boolean(
+    match.actual_time != null ||
+      match.post_result_time != null ||
+      match.score_breakdown != null ||
+      (match.alliances?.red?.score != null &&
+        match.alliances.red.score >= 0) ||
+      (match.alliances?.blue?.score != null &&
+        match.alliances.blue.score >= 0),
+  );
+}
+
+function isMatchEndpoint(endpoint: string) {
+  return (
+    endpoint.startsWith("/match/") ||
+    endpoint.endsWith("/matches") ||
+    endpoint.endsWith("/matches/simple")
+  );
+}
+
+function reconcileMatch<T extends { key?: string }>(
+  incoming: T,
+  cached: T | undefined,
+): T {
+  if (!cached) return incoming;
+
+  const incomingHasResult = isMatchResultPresent(incoming);
+  const cachedHasResult = isMatchResultPresent(cached);
+
+  if (cachedHasResult && !incomingHasResult) {
+    return cached;
+  }
+
+  return incoming;
+}
+
+function reconcileMatchData<T>(
+  endpoint: string,
+  incoming: T,
+  cached: T,
+): T {
+  if (!isMatchEndpoint(endpoint)) {
+    return incoming;
+  }
+
+  if (Array.isArray(incoming) && Array.isArray(cached)) {
+    const cachedByKey = new Map<string, any>();
+
+    for (const match of cached) {
+      if (match?.key) cachedByKey.set(match.key, match);
+    }
+
+    const merged = incoming.map((match) =>
+      reconcileMatch(match, cachedByKey.get(match?.key)),
+    );
+
+    const incomingKeys = new Set(
+      incoming.map((match) => match?.key).filter(Boolean),
+    );
+
+    for (const match of cached) {
+      if (match?.key && !incomingKeys.has(match.key)) {
+        merged.push(match);
+      }
+    }
+
+    return merged as T;
+  }
+
+  if (
+    incoming &&
+    cached &&
+    typeof incoming === "object" &&
+    typeof cached === "object" &&
+    "key" in incoming &&
+    "key" in cached
+  ) {
+    return reconcileMatch(incoming, cached) as T;
+  }
+
+  return incoming;
+}
+
 const BASE_URL = "https://www.thebluealliance.com/api/v3";
 
 export type CacheEntry<T> = {
@@ -505,23 +596,29 @@ export class TBAClient {
         );
       }
 
-      const refreshed: CacheEntry<T> = {
-        ...cached,
-        expiresAt:
-          Date.now() +
-          maxAge * 1000,
-      };
+      await redis.expire(cKey, maxAge);
 
-      await redis.set(
-        cKey,
-        JSON.stringify(refreshed),
-      );
+      const latestRaw = await redis.get(cKey);
+      const latest = latestRaw
+        ? parseCached<T>(latestRaw)
+        : null;
+
+      if (!latest) {
+        throw new Error(
+          "[Client][TBA] cache entry disappeared after 304 for " +
+          endpoint,
+        );
+      }
 
       console.log(
-        `[Client][TBA] 304 Not Modified for ${endpoint}; freshness ${maxAge}s`,
+        "[Client][TBA] 304 Not Modified for " +
+          endpoint +
+          "; Redis data unchanged, TTL refreshed to " +
+          maxAge +
+          "s",
       );
 
-      return cached.data;
+      return latest.data;
     }
 
     if (!res.ok) {
@@ -532,6 +629,14 @@ export class TBAClient {
 
     const data =
       (await res.json()) as T;
+
+    const reconciledData = cached
+      ? reconcileMatchData(
+          endpoint,
+          data,
+          cached.data,
+        )
+      : data;
 
     const maxAge =
       getMaxAge(
@@ -547,7 +652,7 @@ export class TBAClient {
     }
 
     const entry: CacheEntry<T> = {
-      data,
+      data: reconciledData,
       etag: res.headers.get("ETag"),
       expiresAt:
         Date.now() +
@@ -577,6 +682,6 @@ export class TBAClient {
       `[Client][TBA] Redis cache updated for ${endpoint}; freshness ${maxAge}s`,
     );
 
-    return data;
+    return reconciledData;
   }
 }
