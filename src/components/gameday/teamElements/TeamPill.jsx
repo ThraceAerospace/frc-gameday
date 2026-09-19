@@ -8,11 +8,7 @@ export default function TeamPill({
   status,
   teamCount,
   nextMatch,
-  presentation = "visible",
 }) {
-  if (presentation === "hidden") {
-    return null;
-  }
 
   const record = status?.qual?.ranking?.record;
 
