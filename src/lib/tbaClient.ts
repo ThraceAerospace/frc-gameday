@@ -113,6 +113,110 @@ function parseCached<T>(
   }
 }
 
+/*
+ * Diagnostic cache snapshot information.
+ *
+ * We deliberately inspect the match frontier without knowing
+ * anything about the specific current match. This lets the
+ * logging work at any event.
+ */
+function summarizeData(data: unknown) {
+  if (!Array.isArray(data)) {
+    return {
+      kind: typeof data,
+      length: null,
+      firstKey: null,
+      lastKey: null,
+      playedCount: null,
+      lastPlayedKey: null,
+      firstUnplayedKey: null,
+    };
+  }
+
+  const matches = data as Array<{
+    key?: string;
+    actual_time?: number;
+    time?: number;
+    predicted_time?: number;
+    match_number?: number;
+    comp_level?: string;
+  }>;
+
+  const played = matches.filter(
+    (match) => Boolean(match.actual_time),
+  );
+
+  const unplayed = matches.filter(
+    (match) => !match.actual_time,
+  );
+
+  const lastPlayed =
+    played.length > 0
+      ? played[played.length - 1]
+      : null;
+
+  const firstUnplayed =
+    unplayed.length > 0
+      ? unplayed[0]
+      : null;
+
+  return {
+    kind: "array",
+    length: matches.length,
+
+    firstKey:
+      matches[0]?.key ?? null,
+
+    lastKey:
+      matches[matches.length - 1]?.key ??
+      null,
+
+    playedCount: played.length,
+
+    lastPlayedKey:
+      lastPlayed?.key ?? null,
+
+    lastPlayedActualTime:
+      lastPlayed?.actual_time ?? null,
+
+    firstUnplayedKey:
+      firstUnplayed?.key ?? null,
+
+    firstUnplayedTime:
+      firstUnplayed?.time ??
+      firstUnplayed?.predicted_time ??
+      null,
+  };
+}
+
+function summarizeCache<T>(
+  cached: CacheEntry<T> | null,
+) {
+  if (!cached) {
+    return null;
+  }
+
+  return {
+    etag: cached.etag,
+    expiresAt: cached.expiresAt,
+    expiresInMs:
+      cached.expiresAt - Date.now(),
+    data: summarizeData(
+      cached.data,
+    ),
+  };
+}
+
+let operationCounter = 0;
+
+function operationId(
+  type: string,
+) {
+  operationCounter += 1;
+
+  return `${type}-${operationCounter}`;
+}
+
 export class TBAClient {
   constructor(
     private readonly authKey: string,
@@ -121,31 +225,65 @@ export class TBAClient {
   /**
    * Mutate an existing Redis cache entry in place.
    *
-   * This is used by webhook handlers. It deliberately does not
-   * modify expiresAt or introduce another TTL. The existing cache
-   * freshness window remains authoritative, and normal TBA fetching
-   * reconciles the cache when that window expires.
+   * DIAGNOSTIC VERSION:
+   *
+   * Logs the Redis snapshot before mutation and the resulting
+   * snapshot after mutation so we can detect lost updates.
    */
   async mutateCached<T>(
     endpoint: string,
     mutate: (data: T) => T,
   ): Promise<boolean> {
+    const operation =
+      operationId("MUTATE");
+
     const key = cacheKey(endpoint);
+
+    const startedAt =
+      Date.now();
+
+    console.log(
+      "[Client][TBA][CACHE MUTATE START]",
+      {
+        operation,
+        endpoint,
+        key,
+        startedAt:
+          new Date(
+            startedAt,
+          ).toISOString(),
+      },
+    );
+
     const raw = await redis.get(key);
 
     if (raw === null) {
       console.log(
-        `[Client][TBA] Redis mutation miss: ${key}`,
+        "[Client][TBA][CACHE MUTATE MISS]",
+        {
+          operation,
+          endpoint,
+          key,
+          durationMs:
+            Date.now() -
+            startedAt,
+        },
       );
 
       return false;
     }
 
-    const cached = parseCached<T>(raw);
+    const cached =
+      parseCached<T>(raw);
 
     if (!cached) {
       console.warn(
-        `[Client][TBA] invalid cache entry for ${endpoint}`,
+        "[Client][TBA][CACHE MUTATE INVALID]",
+        {
+          operation,
+          endpoint,
+          key,
+        },
       );
 
       await redis.del(key);
@@ -153,26 +291,114 @@ export class TBAClient {
       return false;
     }
 
+    console.log(
+      "[Client][TBA][CACHE MUTATE READ]",
+      {
+        operation,
+        endpoint,
+        key,
+        snapshot:
+          summarizeCache(cached),
+      },
+    );
+
     try {
+      const mutatedData =
+        mutate(cached.data);
+
       const updated: CacheEntry<T> = {
         ...cached,
-        data: mutate(cached.data),
+        data: mutatedData,
       };
+
+      console.log(
+        "[Client][TBA][CACHE MUTATE BEFORE WRITE]",
+        {
+          operation,
+          endpoint,
+          key,
+
+          before:
+            summarizeData(
+              cached.data,
+            ),
+
+          after:
+            summarizeData(
+              updated.data,
+            ),
+
+          expiresAt:
+            updated.expiresAt,
+        },
+      );
 
       await redis.set(
         key,
         JSON.stringify(updated),
       );
 
+      /*
+       * Immediately read the value back.
+       *
+       * This tells us whether our own write actually became
+       * the current Redis value, or whether another concurrent
+       * operation replaced it before this read.
+       */
+      const verificationRaw =
+        await redis.get(key);
+
+      const verification =
+        verificationRaw
+          ? parseCached<T>(
+              verificationRaw,
+            )
+          : null;
+
       console.log(
-        `[Client][TBA] Redis cache mutated: ${key}`,
+        "[Client][TBA][CACHE MUTATE WRITE COMPLETE]",
+        {
+          operation,
+          endpoint,
+          key,
+
+          written:
+            summarizeCache(
+              updated,
+            ),
+
+          redisAfterWrite:
+            summarizeCache(
+              verification,
+            ),
+
+          writeMatchesVerification:
+            JSON.stringify(
+              verification?.data,
+            ) ===
+            JSON.stringify(
+              updated.data,
+            ),
+
+          durationMs:
+            Date.now() -
+            startedAt,
+        },
       );
 
       return true;
     } catch (error) {
       console.error(
-        `[Client][TBA] failed to mutate Redis cache ${key}:`,
-        error,
+        "[Client][TBA][CACHE MUTATE ERROR]",
+        {
+          operation,
+          endpoint,
+          key,
+          error,
+          durationMs:
+            Date.now() -
+            startedAt,
+        },
       );
 
       return false;
@@ -194,10 +420,6 @@ export class TBAClient {
 
   /**
    * Update event/team match caches from a full match webhook.
-   *
-   * The application currently consumes event match lists rather
-   * than individual /match/:key cache entries, so those are the
-   * caches that need to be mutated.
    */
   async mutateMatchCaches(
     match: {
@@ -207,13 +429,32 @@ export class TBAClient {
     },
   ) {
     if (!match.key || !match.event_key) {
+      console.warn(
+        "[Client][TBA][MATCH MUTATION SKIPPED]",
+        {
+          reason:
+            "missing match.key or match.event_key",
+          match,
+        },
+      );
+
       return;
     }
 
     const matchKey = match.key;
     const eventKey = match.event_key;
 
-    const updateMatches = (matches: any[]) =>
+    console.log(
+      "[Client][TBA][MATCH MUTATION]",
+      {
+        matchKey,
+        eventKey,
+      },
+    );
+
+    const updateMatches = (
+      matches: any[],
+    ) =>
       matches.map((cachedMatch) =>
         cachedMatch.key === matchKey
           ? {
@@ -247,17 +488,19 @@ export class TBAClient {
     }
 
     await Promise.all(
-      [...teamKeys].flatMap((teamKey) => [
-        this.mutateCached<any[]>(
-          `/team/${teamKey}/event/${eventKey}/matches`,
-          updateMatches,
-        ),
+      [...teamKeys].flatMap(
+        (teamKey) => [
+          this.mutateCached<any[]>(
+            `/team/${teamKey}/event/${eventKey}/matches`,
+            updateMatches,
+          ),
 
-        this.mutateCached<any[]>(
-          `/team/${teamKey}/event/${eventKey}/matches/simple`,
-          updateMatches,
-        ),
-      ]),
+          this.mutateCached<any[]>(
+            `/team/${teamKey}/event/${eventKey}/matches/simple`,
+            updateMatches,
+          ),
+        ],
+      ),
     );
   }
 
@@ -275,10 +518,26 @@ export class TBAClient {
     },
   ) {
     if (!data.match_key) {
+      console.warn(
+        "[Client][TBA][UPCOMING MUTATION SKIPPED]",
+        {
+          reason:
+            "missing match_key",
+        },
+      );
+
       return;
     }
 
     if (!data.event_key) {
+      console.warn(
+        "[Client][TBA][UPCOMING MUTATION SKIPPED]",
+        {
+          reason:
+            "missing event_key",
+        },
+      );
+
       return;
     }
 
@@ -300,6 +559,15 @@ export class TBAClient {
         ([, value]) =>
           value !== undefined,
       ),
+    );
+
+    console.log(
+      "[Client][TBA][UPCOMING MUTATION]",
+      {
+        matchKey,
+        eventKey,
+        patch: cleanPatch,
+      },
     );
 
     const updateMatches = (
@@ -328,23 +596,22 @@ export class TBAClient {
       data.team_keys ?? [];
 
     await Promise.all(
-      teamKeys.flatMap((teamKey) => [
-        this.mutateCached<any[]>(
-          `/team/${teamKey}/event/${eventKey}/matches`,
-          updateMatches,
-        ),
+      teamKeys.flatMap(
+        (teamKey) => [
+          this.mutateCached<any[]>(
+            `/team/${teamKey}/event/${eventKey}/matches`,
+            updateMatches,
+          ),
 
-        this.mutateCached<any[]>(
-          `/team/${teamKey}/event/${eventKey}/matches/simple`,
-          updateMatches,
-        ),
-      ]),
+          this.mutateCached<any[]>(
+            `/team/${teamKey}/event/${eventKey}/matches/simple`,
+            updateMatches,
+          ),
+        ],
+      ),
     );
   }
 
-  /**
-   * Invalidate every cache associated with a tag.
-   */
   async invalidateTag(tag: string) {
     const key = tagKey(tag);
     const members = await redis.smembers(key);
@@ -368,9 +635,6 @@ export class TBAClient {
     );
   }
 
-  /**
-   * Invalidate every cache associated with multiple tags.
-   */
   async invalidateTags(tags: string[]) {
     const uniqueTags = [
       ...new Set(tags),
@@ -423,8 +687,9 @@ export class TBAClient {
   /**
    * Get data from Redis when fresh, otherwise fetch it from TBA.
    *
-   * The existing expiresAt value is the only cache freshness
-   * mechanism. Webhook mutations intentionally preserve it.
+   * DIAGNOSTIC VERSION:
+   *
+   * Every cache read, TBA request, and Redis write is logged.
    */
   async get<T>(
     endpoint: string,
@@ -432,28 +697,78 @@ export class TBAClient {
       forceRefresh?: boolean;
     },
   ): Promise<T> {
-    const cKey = cacheKey(endpoint);
-    const tags = deriveTags(endpoint);
+    const operation =
+      operationId("GET");
+
+    const cKey =
+      cacheKey(endpoint);
+
+    const tags =
+      deriveTags(endpoint);
+
+    const startedAt =
+      Date.now();
+
+    console.log(
+      "[Client][TBA][GET START]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+        forceRefresh:
+          Boolean(
+            options?.forceRefresh,
+          ),
+        startedAt:
+          new Date(
+            startedAt,
+          ).toISOString(),
+      },
+    );
 
     const cachedRaw =
       await redis.get(cKey);
 
-    let cached: CacheEntry<T> | null =
-      null;
+    let cached:
+      | CacheEntry<T>
+      | null = null;
 
     if (cachedRaw) {
-      cached = parseCached<T>(
-        cachedRaw,
-      );
+      cached =
+        parseCached<T>(
+          cachedRaw,
+        );
 
       if (!cached) {
         console.warn(
-          `[Client][TBA] invalid cache entry for ${endpoint}`,
+          "[Client][TBA][GET INVALID CACHE]",
+          {
+            operation,
+            endpoint,
+            key: cKey,
+          },
         );
 
         await redis.del(cKey);
       }
     }
+
+    console.log(
+      "[Client][TBA][GET REDIS READ]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        cacheExists:
+          cached !== null,
+
+        snapshot:
+          summarizeCache(cached),
+
+        now: Date.now(),
+      },
+    );
 
     if (
       cached &&
@@ -461,7 +776,21 @@ export class TBAClient {
       Date.now() < cached.expiresAt
     ) {
       console.log(
-        `[Client][TBA] Redis cache hit for ${endpoint}`,
+        "[Client][TBA][GET CACHE HIT]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+
+          snapshot:
+            summarizeCache(
+              cached,
+            ),
+
+          durationMs:
+            Date.now() -
+            startedAt,
+        },
       );
 
       return cached.data;
@@ -471,7 +800,8 @@ export class TBAClient {
       string,
       string
     > = {
-      "X-TBA-Auth-Key": this.authKey,
+      "X-TBA-Auth-Key":
+        this.authKey,
     };
 
     if (
@@ -482,15 +812,76 @@ export class TBAClient {
         cached.etag;
 
       console.log(
-        `[Client][TBA] validating cached entry for ${endpoint}`,
+        "[Client][TBA][GET VALIDATE]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+          etag: cached.etag,
+          snapshot:
+            summarizeCache(
+              cached,
+            ),
+        },
+      );
+    } else {
+      console.log(
+        "[Client][TBA][GET FETCH]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+
+          reason: options?.forceRefresh
+            ? "forceRefresh"
+            : cached
+              ? "cache expired"
+              : "cache miss",
+
+          cachedSnapshot:
+            summarizeCache(
+              cached,
+            ),
+        },
       );
     }
+
+    const tbaStartedAt =
+      Date.now();
 
     const res = await fetch(
       `${BASE_URL}${endpoint}`,
       {
         headers,
         cache: "no-store",
+      },
+    );
+
+    const tbaCompletedAt =
+      Date.now();
+
+    console.log(
+      "[Client][TBA][GET TBA RESPONSE]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        status: res.status,
+
+        durationMs:
+          tbaCompletedAt -
+          tbaStartedAt,
+
+        etag:
+          res.headers.get(
+            "ETag",
+          ),
+
+        cacheControl:
+          res.headers.get(
+            "Cache-Control",
+          ),
       },
     );
 
@@ -514,20 +905,73 @@ export class TBAClient {
         );
       }
 
-      const refreshed: CacheEntry<T> = {
+      const refreshed:
+        CacheEntry<T> = {
         ...cached,
         expiresAt:
           Date.now() +
           maxAge * 1000,
       };
 
-      await redis.set(
-        cKey,
-        JSON.stringify(refreshed),
+      console.warn(
+        "[Client][TBA][GET 304 BEFORE WRITE]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+
+          /*
+           * This is the critical diagnostic.
+           *
+           * The Redis value may have changed while TBA
+           * was validating the old snapshot.
+           */
+          originalCached:
+            summarizeCache(
+              cached,
+            ),
+
+          refreshed:
+            summarizeCache(
+              refreshed,
+            ),
+        },
       );
 
-      console.log(
-        `[Client][TBA] 304 Not Modified for ${endpoint}; freshness ${maxAge}s`,
+      await redis.set(
+        cKey,
+        JSON.stringify(
+          refreshed,
+        ),
+      );
+
+      const verificationRaw =
+        await redis.get(cKey);
+
+      const verification =
+        verificationRaw
+          ? parseCached<T>(
+              verificationRaw,
+            )
+          : null;
+
+      console.warn(
+        "[Client][TBA][GET 304 WRITE COMPLETE]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+
+          written:
+            summarizeCache(
+              refreshed,
+            ),
+
+          redisAfterWrite:
+            summarizeCache(
+              verification,
+            ),
+        },
       );
 
       return cached.data;
@@ -542,6 +986,20 @@ export class TBAClient {
     const data =
       (await res.json()) as T;
 
+    console.log(
+      "[Client][TBA][GET TBA DATA]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        data:
+          summarizeData(
+            data,
+          ),
+      },
+    );
+
     const maxAge =
       getMaxAge(
         res.headers.get(
@@ -555,17 +1013,77 @@ export class TBAClient {
       );
     }
 
-    const entry: CacheEntry<T> = {
+    const entry:
+      CacheEntry<T> = {
       data,
-      etag: res.headers.get("ETag"),
+      etag:
+        res.headers.get(
+          "ETag",
+        ),
       expiresAt:
         Date.now() +
         maxAge * 1000,
     };
 
+    console.log(
+      "[Client][TBA][GET BEFORE REDIS WRITE]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        previousCached:
+          summarizeCache(
+            cached,
+          ),
+
+        newEntry:
+          summarizeCache(
+            entry,
+          ),
+      },
+    );
+
     await redis.set(
       cKey,
       JSON.stringify(entry),
+    );
+
+    const verificationRaw =
+      await redis.get(cKey);
+
+    const verification =
+      verificationRaw
+        ? parseCached<T>(
+            verificationRaw,
+          )
+        : null;
+
+    console.log(
+      "[Client][TBA][GET WRITE COMPLETE]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        written:
+          summarizeCache(
+            entry,
+          ),
+
+        redisAfterWrite:
+          summarizeCache(
+            verification,
+          ),
+
+        writeMatchesVerification:
+          JSON.stringify(
+            verification?.data,
+          ) ===
+          JSON.stringify(
+            entry.data,
+          ),
+      },
     );
 
     if (tags.length) {
@@ -583,7 +1101,19 @@ export class TBAClient {
     }
 
     console.log(
-      `[Client][TBA] Redis cache updated for ${endpoint}; freshness ${maxAge}s`,
+      "[Client][TBA][GET COMPLETE]",
+      {
+        operation,
+        endpoint,
+        key: cKey,
+
+        returned:
+          summarizeData(data),
+
+        durationMs:
+          Date.now() -
+          startedAt,
+      },
     );
 
     return data;
