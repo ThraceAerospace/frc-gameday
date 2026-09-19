@@ -56,7 +56,7 @@ export function useMatches(
     [eventKey],
   );
 
-  const { reload } = usePolling(
+  const reload = usePolling(
     load,
     "intermediate",
     {

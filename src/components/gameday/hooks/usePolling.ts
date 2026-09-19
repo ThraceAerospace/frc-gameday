@@ -19,7 +19,10 @@ export function usePolling(
     resetKey?: string | null;
   } = {},
 ) {
-  const { enabled = true, resetKey = null } = options;
+  const {
+    enabled = true,
+    resetKey = null,
+  } = options;
 
   const callbackRef = useRef(callback);
   const timerRef = useRef<number | null>(null);
@@ -34,66 +37,52 @@ export function usePolling(
 
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      void poll();
+
+      const generation =
+        ++generationRef.current;
+
+      Promise.resolve(
+        callbackRef.current(),
+      ).finally(() => {
+        if (
+          generation ===
+          generationRef.current
+        ) {
+          schedule();
+        }
+      });
     }, POLLING_INTERVALS[tier]);
   }, [tier]);
 
-  /*
-   * Fallback poll.
-   *
-   * A normal poll only runs when the polling timer fires.
-   * Its completion establishes the next fallback window.
-   */
-  const poll = useCallback(async () => {
-    const generation = ++generationRef.current;
-
-    try {
-      await callbackRef.current();
-    } finally {
-      /*
-       * If a WSS reload happened while this request was running,
-       * generationRef.current will have changed. In that case,
-       * this obsolete poll must not schedule another poll.
-       */
-      if (generation === generationRef.current) {
-        schedule();
-      }
-    }
-  }, [schedule]);
-
-  /*
-   * WSS-priority reload.
-   *
-   * This always starts immediately, even if a fallback poll is
-   * already running. The existing poll becomes obsolete.
-   */
   const reload = useCallback(async () => {
     /*
-     * Invalidate any currently-running fallback request.
+     * Invalidate any existing poll or reload.
      */
-    generationRef.current++;
+    const generation =
+      ++generationRef.current;
 
     /*
-     * The previous fallback timer is no longer relevant.
+     * Reset the fallback timer.
      */
     if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
+      window.clearTimeout(
+        timerRef.current,
+      );
+
       timerRef.current = null;
     }
 
-    /*
-     * This reload now owns the next polling window.
-     */
-    const generation = generationRef.current;
-
     try {
       await callbackRef.current();
     } finally {
       /*
-       * Only schedule if another WSS reload hasn't happened
-       * while this request was running.
+       * Only the newest request is allowed
+       * to establish the next fallback window.
        */
-      if (generation === generationRef.current) {
+      if (
+        generation ===
+        generationRef.current
+      ) {
         schedule();
       }
     }
@@ -102,27 +91,24 @@ export function usePolling(
   useEffect(() => {
     if (!enabled) return;
 
-    /*
-     * Initial load is treated as a fallback poll.
-     */
-    void poll();
+    void reload();
 
     return () => {
-      /*
-       * Invalidate any in-flight request so it cannot schedule
-       * another timer after the component unmounts.
-       */
       generationRef.current++;
 
       if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
+        window.clearTimeout(
+          timerRef.current,
+        );
+
         timerRef.current = null;
       }
     };
-  }, [enabled, poll, resetKey]);
-
-  return {
-    poll,
+  }, [
+    enabled,
+    resetKey,
     reload,
-  };
+  ]);
+
+  return reload;
 }
