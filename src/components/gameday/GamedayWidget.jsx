@@ -19,7 +19,7 @@ import ChatView from "./ChatView";
 import StreamModal from "./StreamModal";
 import EventStatsSideBar from "./EventStatsSideBar";
 import TeamModal from "./teamElements/TeamModal";
-import TeamTracker from "./teamElements/TeamTracker";
+import TeamPill from "./teamElements/TeamPill";
 import MatchStrip from "./navbar/MatchStrip";
 import { buildStreams } from "@/lib/gameday/buildStreams";
 import { useEvent } from "./hooks/useEvent";
@@ -35,7 +35,7 @@ import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 const EMPTY_TEAMS = [];
 
 const DEFAULT_PRESENTATION = {
-  teamTracker: "sides",
+  teamTracker: "visible",
   matchInfo: "visible",
 };
 
@@ -195,10 +195,24 @@ export default function GamedayWidget({
   const slotPresentation =
     multiview.presentation ??
     DEFAULT_PRESENTATION;
+ 
+  const showTeamTracker =
+    slotPresentation.teamTracker !== "hidden";
 
-  const trackerPosition =
-    slotPresentation.teamTracker ??
-    DEFAULT_PRESENTATION.teamTracker;
+  const showMatchInfo =
+    slotPresentation.matchInfo !== "hidden";
+
+  const teamPills = showTeamTracker
+    ? trackedTeams.map((team) => (
+        <TeamPill
+          key={team}
+          team={team}
+          status={teamsStatuses[team]}
+          teamCount={teamCount}
+          nextMatch={trackedNextMatches[team]}
+        />
+      ))
+    : [];
 
   const refreshLiveData =
     useCallback(() => {
@@ -345,22 +359,6 @@ export default function GamedayWidget({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
-      {trackedTeams.length > 0 && (
-        <TeamTracker
-          teams={trackedTeams}
-          teamsStatuses={
-            teamsStatuses
-          }
-          teamCount={teamCount}
-          nextMatches={
-            trackedNextMatches
-          }
-          position={
-            trackerPosition
-          }
-        />
-      )}
-
       <div className="absolute left-2 top-2 z-50">
         {process.env.NODE_ENV ===
           "development" &&
@@ -550,6 +548,8 @@ export default function GamedayWidget({
           wssConnected={
             wssConnected
           }
+          teamPills={teamPills}
+          showEventInfo={showMatchInfo}
           isDivisional={
             isDivisional
           }
