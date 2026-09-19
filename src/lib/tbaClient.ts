@@ -78,16 +78,7 @@ function reconcileMatchData<T>(
     return merged as T;
   }
 
-  if (
-    incoming &&
-    cached &&
-    typeof incoming === "object" &&
-    typeof cached === "object" &&
-    "key" in incoming &&
-    "key" in cached
-  ) {
-    return reconcileMatch(incoming, cached) as T;
-  }
+
 
   return incoming;
 }
@@ -1266,7 +1257,7 @@ export class TBAClient {
         key: cKey,
 
         returned:
-          summarizeData(data),
+          summarizeData(reconciledData),
 
         durationMs:
           Date.now() -
