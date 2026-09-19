@@ -885,7 +885,7 @@ export class TBAClient {
       },
     );
 
-   if (res.status === 304) {
+    if (res.status === 304) {
       if (!cached) {
         throw new Error(
           `[Client][TBA] received 304 without Redis cache for ${endpoint}`,
@@ -906,17 +906,20 @@ export class TBAClient {
       }
 
       /*
-      * A 304 means TBA confirms that the cached representation
-      * is still current.
-      *
-      * Do not write the cached object back to Redis here.
-      * The Redis value may have been mutated by a webhook while
-      * the validation request was in flight.
-      *
-      * Only refresh the Redis TTL using the max-age supplied
-      * by the 304 response.
-      */
-      await redis.expire(cKey, maxAge);
+       * A 304 means TBA confirms that the cached representation
+       * is still current.
+       *
+       * Do not write the cached object back to Redis here.
+       * The Redis value may have been mutated by a webhook while
+       * the validation request was in flight.
+       *
+       * Only refresh the Redis TTL using the max-age supplied
+       * by the 304 response.
+       */
+      await redis.expire(
+        cKey,
+        maxAge,
+      );
 
       console.log(
         "[Client][TBA][GET 304 TTL REFRESH]",
@@ -966,6 +969,91 @@ export class TBAClient {
     if (maxAge === null) {
       throw new Error(
         `[Client][TBA] response for ${endpoint} did not provide Cache-Control max-age`,
+      );
+    }
+
+    /*
+     * The TBA request may have taken long enough for a webhook
+     * to mutate Redis while the request was in flight.
+     *
+     * If Redis changed since the request started, the Redis value
+     * is newer than the snapshot we used for this TBA request.
+     *
+     * Do not overwrite that value with the TBA response.
+     */
+    const latestRaw =
+      await redis.get(cKey);
+
+    if (latestRaw !== cachedRaw) {
+      const latestCached =
+        latestRaw
+          ? parseCached<T>(
+              latestRaw,
+            )
+          : null;
+
+      console.warn(
+        "[Client][TBA][GET REDIS CHANGED DURING FETCH]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+
+          original:
+            cached
+              ? summarizeCache(
+                  cached,
+                )
+              : null,
+
+          current:
+            summarizeCache(
+              latestCached,
+            ),
+
+          tba:
+            summarizeCache({
+              data,
+              etag:
+                res.headers.get(
+                  "ETag",
+                ),
+              expiresAt:
+                Date.now() +
+                maxAge * 1000,
+            }),
+        },
+      );
+
+      if (latestCached) {
+        console.log(
+          "[Client][TBA][GET PRESERVING CURRENT REDIS]",
+          {
+            operation,
+            endpoint,
+            key: cKey,
+
+            returned:
+              summarizeData(
+                latestCached.data,
+              ),
+
+            durationMs:
+              Date.now() -
+              startedAt,
+          },
+        );
+
+        return latestCached.data;
+      }
+
+      console.warn(
+        "[Client][TBA][GET REDIS CHANGED BUT INVALID]",
+        {
+          operation,
+          endpoint,
+          key: cKey,
+        },
       );
     }
 
