@@ -936,7 +936,7 @@ export default function MultiviewClient({
 
               const slotPresentation =
                 geometry?.presentation ?? {
-                  teamTracker: "sides",
+                  teamTracker: "visible",
                   matchInfo: "visible",
                 };
 
