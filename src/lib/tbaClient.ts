@@ -1,6 +1,7 @@
 import { redis } from "@/lib/redis";
 
-const BASE_URL = "https://www.thebluealliance.com/api/v3";
+const BASE_URL =
+  "https://www.thebluealliance.com/api/v3";
 
 export type CacheEntry<T> = {
   data: T;
@@ -25,17 +26,21 @@ function deriveTags(endpoint: string): string[] {
   const tags = new Set<string>();
 
   const eventIdx = parts.indexOf("event");
+
   if (eventIdx !== -1 && parts[eventIdx + 1]) {
     const eventKey = parts[eventIdx + 1];
 
     tags.add(`event:${eventKey}`);
 
     if (parts[eventIdx + 2]) {
-      tags.add(`event:${eventKey}:${parts[eventIdx + 2]}`);
+      tags.add(
+        `event:${eventKey}:${parts[eventIdx + 2]}`,
+      );
     }
   }
 
   const teamIdx = parts.indexOf("team");
+
   if (teamIdx !== -1 && parts[teamIdx + 1]) {
     const teamKey = parts[teamIdx + 1];
 
@@ -47,7 +52,8 @@ function deriveTags(endpoint: string): string[] {
       parts[teamEventIdx] === "event" &&
       parts[teamEventIdx + 1]
     ) {
-      const eventKey = parts[teamEventIdx + 1];
+      const eventKey =
+        parts[teamEventIdx + 1];
 
       tags.add(
         `team:${teamKey}:event:${eventKey}`,
@@ -64,7 +70,9 @@ function deriveTags(endpoint: string): string[] {
   const matchIdx = parts.indexOf("match");
 
   if (matchIdx !== -1 && parts[matchIdx + 1]) {
-    tags.add(`match:${parts[matchIdx + 1]}`);
+    tags.add(
+      `match:${parts[matchIdx + 1]}`,
+    );
   }
 
   return [...tags];
@@ -73,7 +81,9 @@ function deriveTags(endpoint: string): string[] {
 function getMaxAge(
   cacheControl: string | null,
 ): number | null {
-  if (!cacheControl) return null;
+  if (!cacheControl) {
+    return null;
+  }
 
   const match = cacheControl.match(
     /(?:^|,)\s*max-age\s*=\s*"?(\d+)"?/i,
@@ -86,7 +96,18 @@ function parseCached<T>(
   raw: string,
 ): CacheEntry<T> | null {
   try {
-    return JSON.parse(raw) as CacheEntry<T>;
+    const parsed = JSON.parse(raw);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("data" in parsed) ||
+      !("expiresAt" in parsed)
+    ) {
+      return null;
+    }
+
+    return parsed as CacheEntry<T>;
   } catch {
     return null;
   }
@@ -98,12 +119,12 @@ export class TBAClient {
   ) {}
 
   /**
-   * Mutate an existing Redis cache entry.
+   * Mutate an existing Redis cache entry in place.
    *
-   * Returns false if the endpoint isn't currently cached.
-   *
-   * We intentionally do not fetch from TBA here. A webhook should
-   * be able to update Redis without causing another API request.
+   * This is used by webhook handlers. It deliberately does not
+   * modify expiresAt or introduce another TTL. The existing cache
+   * freshness window remains authoritative, and normal TBA fetching
+   * reconciles the cache when that window expires.
    */
   async mutateCached<T>(
     endpoint: string,
@@ -112,7 +133,11 @@ export class TBAClient {
     const key = cacheKey(endpoint);
     const raw = await redis.get(key);
 
-    if (!raw) {
+    if (raw === null) {
+      console.log(
+        `[Client][TBA] Redis mutation miss: ${key}`,
+      );
+
       return false;
     }
 
@@ -124,39 +149,38 @@ export class TBAClient {
       );
 
       await redis.del(key);
+
       return false;
     }
 
-    const updated: CacheEntry<T> = {
-      ...cached,
-      data: mutate(cached.data),
-      /*
-       * Webhook data is newer than the cached API response.
-       * Keep the existing freshness window rather than making
-       * the webhook response immediately stale.
-       */
-      expiresAt: Math.max(
-        cached.expiresAt,
-        Date.now(),
-      ),
-    };
+    try {
+      const updated: CacheEntry<T> = {
+        ...cached,
+        data: mutate(cached.data),
+      };
 
-    await redis.set(
-      key,
-      JSON.stringify(updated),
-    );
+      await redis.set(
+        key,
+        JSON.stringify(updated),
+      );
 
-    console.log(
-      `[Client][TBA] Redis cache mutated for ${endpoint}`,
-    );
+      console.log(
+        `[Client][TBA] Redis cache mutated: ${key}`,
+      );
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error(
+        `[Client][TBA] failed to mutate Redis cache ${key}:`,
+        error,
+      );
+
+      return false;
+    }
   }
 
   /**
-   * Replace an existing cache entry with authoritative webhook data.
-   *
-   * Does nothing if the endpoint isn't already cached.
+   * Replace the data in an existing Redis cache entry.
    */
   async replaceCached<T>(
     endpoint: string,
@@ -169,8 +193,11 @@ export class TBAClient {
   }
 
   /**
-   * Merge a webhook Match into any currently cached representation
-   * of that match.
+   * Update event/team match caches from a full match webhook.
+   *
+   * The application currently consumes event match lists rather
+   * than individual /match/:key cache entries, so those are the
+   * caches that need to be mutated.
    */
   async mutateMatchCaches(
     match: {
@@ -179,47 +206,31 @@ export class TBAClient {
       [key: string]: unknown;
     },
   ) {
-    if (!match.key) {
+    if (!match.key || !match.event_key) {
       return;
     }
 
     const matchKey = match.key;
-
-    await this.replaceCached(
-      `/match/${matchKey}`,
-      match,
-    );
-
-    if (!match.event_key) {
-      return;
-    }
-
     const eventKey = match.event_key;
+
+    const updateMatches = (matches: any[]) =>
+      matches.map((cachedMatch) =>
+        cachedMatch.key === matchKey
+          ? {
+              ...cachedMatch,
+              ...match,
+            }
+          : cachedMatch,
+      );
 
     await this.mutateCached<any[]>(
       `/event/${eventKey}/matches`,
-      (matches) =>
-        matches.map((cachedMatch) =>
-          cachedMatch.key === matchKey
-            ? {
-                ...cachedMatch,
-                ...match,
-              }
-            : cachedMatch,
-        ),
+      updateMatches,
     );
 
     await this.mutateCached<any[]>(
       `/event/${eventKey}/matches/simple`,
-      (matches) =>
-        matches.map((cachedMatch) =>
-          cachedMatch.key === matchKey
-            ? {
-                ...cachedMatch,
-                ...match,
-              }
-            : cachedMatch,
-        ),
+      updateMatches,
     );
 
     const teamKeys = new Set<string>();
@@ -239,36 +250,20 @@ export class TBAClient {
       [...teamKeys].flatMap((teamKey) => [
         this.mutateCached<any[]>(
           `/team/${teamKey}/event/${eventKey}/matches`,
-          (matches) =>
-            matches.map((cachedMatch) =>
-              cachedMatch.key === matchKey
-                ? {
-                    ...cachedMatch,
-                    ...match,
-                  }
-                : cachedMatch,
-            ),
+          updateMatches,
         ),
 
         this.mutateCached<any[]>(
           `/team/${teamKey}/event/${eventKey}/matches/simple`,
-          (matches) =>
-            matches.map((cachedMatch) =>
-              cachedMatch.key === matchKey
-                ? {
-                    ...cachedMatch,
-                    ...match,
-                  }
-                : cachedMatch,
-            ),
+          updateMatches,
         ),
       ]),
     );
   }
 
   /**
-   * Merge partial upcoming_match webhook data into an existing
-   * cached match.
+   * Update cached match schedule information from an
+   * upcoming_match webhook.
    */
   async mutateUpcomingMatch(
     data: {
@@ -283,57 +278,50 @@ export class TBAClient {
       return;
     }
 
-    const matchKey = data.match_key;
-
-    const patch = {
-      key: matchKey,
-      event_key: data.event_key,
-      team_keys: data.team_keys,
-      scheduled_time: data.scheduled_time,
-      predicted_time: data.predicted_time,
-    };
-
-    await this.mutateCached<any>(
-      `/match/${matchKey}`,
-      (match) => ({
-        ...match,
-        ...Object.fromEntries(
-          Object.entries(patch).filter(
-            ([, value]) => value !== undefined,
-          ),
-        ),
-      }),
-    );
-
     if (!data.event_key) {
       return;
     }
 
+    const matchKey = data.match_key;
     const eventKey = data.event_key;
 
-    const updateArray = (matches: any[]) =>
+    const patch = {
+      key: matchKey,
+      event_key: eventKey,
+      team_keys: data.team_keys,
+      scheduled_time:
+        data.scheduled_time,
+      predicted_time:
+        data.predicted_time,
+    };
+
+    const cleanPatch = Object.fromEntries(
+      Object.entries(patch).filter(
+        ([, value]) =>
+          value !== undefined,
+      ),
+    );
+
+    const updateMatches = (
+      matches: any[],
+    ) =>
       matches.map((match) =>
         match.key === matchKey
           ? {
               ...match,
-              ...Object.fromEntries(
-                Object.entries(patch).filter(
-                  ([, value]) =>
-                    value !== undefined,
-                ),
-              ),
+              ...cleanPatch,
             }
           : match,
       );
 
     await this.mutateCached<any[]>(
       `/event/${eventKey}/matches`,
-      updateArray,
+      updateMatches,
     );
 
     await this.mutateCached<any[]>(
       `/event/${eventKey}/matches/simple`,
-      updateArray,
+      updateMatches,
     );
 
     const teamKeys =
@@ -343,22 +331,27 @@ export class TBAClient {
       teamKeys.flatMap((teamKey) => [
         this.mutateCached<any[]>(
           `/team/${teamKey}/event/${eventKey}/matches`,
-          updateArray,
+          updateMatches,
         ),
 
         this.mutateCached<any[]>(
           `/team/${teamKey}/event/${eventKey}/matches/simple`,
-          updateArray,
+          updateMatches,
         ),
       ]),
     );
   }
 
+  /**
+   * Invalidate every cache associated with a tag.
+   */
   async invalidateTag(tag: string) {
     const key = tagKey(tag);
     const members = await redis.smembers(key);
 
-    if (!members?.length) return;
+    if (!members?.length) {
+      return;
+    }
 
     const pipeline = redis.pipeline();
 
@@ -375,10 +368,17 @@ export class TBAClient {
     );
   }
 
+  /**
+   * Invalidate every cache associated with multiple tags.
+   */
   async invalidateTags(tags: string[]) {
-    const uniqueTags = [...new Set(tags)];
+    const uniqueTags = [
+      ...new Set(tags),
+    ];
 
-    if (!uniqueTags.length) return;
+    if (!uniqueTags.length) {
+      return;
+    }
 
     const pipeline = redis.pipeline();
     const cacheKeys = new Set<string>();
@@ -386,9 +386,12 @@ export class TBAClient {
 
     for (const tag of uniqueTags) {
       const key = tagKey(tag);
-      const members = await redis.smembers(key);
+      const members =
+        await redis.smembers(key);
 
-      if (!members?.length) continue;
+      if (!members?.length) {
+        continue;
+      }
 
       existingTagKeys.push(key);
 
@@ -417,6 +420,12 @@ export class TBAClient {
     );
   }
 
+  /**
+   * Get data from Redis when fresh, otherwise fetch it from TBA.
+   *
+   * The existing expiresAt value is the only cache freshness
+   * mechanism. Webhook mutations intentionally preserve it.
+   */
   async get<T>(
     endpoint: string,
     options?: {
