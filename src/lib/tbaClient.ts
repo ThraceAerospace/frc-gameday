@@ -885,7 +885,7 @@ export class TBAClient {
       },
     );
 
-    if (res.status === 304) {
+   if (res.status === 304) {
       if (!cached) {
         throw new Error(
           `[Client][TBA] received 304 without Redis cache for ${endpoint}`,
@@ -905,72 +905,28 @@ export class TBAClient {
         );
       }
 
-      const refreshed:
-        CacheEntry<T> = {
-        ...cached,
-        expiresAt:
-          Date.now() +
-          maxAge * 1000,
-      };
+      /*
+      * A 304 means TBA confirms that the cached representation
+      * is still current.
+      *
+      * Do not write the cached object back to Redis here.
+      * The Redis value may have been mutated by a webhook while
+      * the validation request was in flight.
+      *
+      * Only refresh the Redis TTL using the max-age supplied
+      * by the 304 response.
+      */
+      await redis.expire(cKey, maxAge);
 
-      console.warn(
-        "[Client][TBA][GET 304 BEFORE WRITE]",
+      console.log(
+        "[Client][TBA][GET 304 TTL REFRESH]",
         {
           operation,
           endpoint,
           key: cKey,
-
-          /*
-           * This is the critical diagnostic.
-           *
-           * The Redis value may have changed while TBA
-           * was validating the old snapshot.
-           */
-          originalCached:
-            summarizeCache(
-              cached,
-            ),
-
-          refreshed:
-            summarizeCache(
-              refreshed,
-            ),
-        },
-      );
-
-      await redis.set(
-        cKey,
-        JSON.stringify(
-          refreshed,
-        ),
-      );
-
-      const verificationRaw =
-        await redis.get(cKey);
-
-      const verification =
-        verificationRaw
-          ? parseCached<T>(
-              verificationRaw,
-            )
-          : null;
-
-      console.warn(
-        "[Client][TBA][GET 304 WRITE COMPLETE]",
-        {
-          operation,
-          endpoint,
-          key: cKey,
-
-          written:
-            summarizeCache(
-              refreshed,
-            ),
-
-          redisAfterWrite:
-            summarizeCache(
-              verification,
-            ),
+          maxAge,
+          expiresInMs:
+            maxAge * 1000,
         },
       );
 
