@@ -28,7 +28,7 @@ function isMatchEndpoint(endpoint: string) {
   );
 }
 
-function reconcileMatch<T extends { key?: string }>(
+function reconcileMatch<T extends {\n  key?: string;\n  actual_time?: number | null;\n  post_result_time?: number | null;\n  score_breakdown?: unknown;\n  alliances?: {\n    red?: { score?: number | null };\n    blue?: { score?: number | null };\n  };\n}>(
   incoming: T,
   cached: T | undefined,
 ): T {
