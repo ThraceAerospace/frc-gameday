@@ -195,10 +195,9 @@ export default function GamedayWidget({
   const slotPresentation =
     multiview.presentation ??
     DEFAULT_PRESENTATION;
- 
+
   const showTeamTracker =
     slotPresentation.teamTracker !== "hidden";
-
 
   const teamPills = showTeamTracker
     ? trackedTeams.map((team) => (
@@ -214,7 +213,10 @@ export default function GamedayWidget({
 
   const refreshLiveData =
     useCallback(() => {
-      console.log("Refreshing all data sources...")
+      console.log(
+        "[WSS] Refreshing all data sources...",
+      );
+
       void reloadMatches();
       void reloadAlliances();
       void reloadStatuses();
@@ -251,15 +253,25 @@ export default function GamedayWidget({
         case "upcoming_match":
         case "match_score":
         case "match_video":
-        case "starting_comp_level":
-        case "schedule_updated":
-          console.log("[WSS] Reloading Matches and Team Statuses...")
+          console.log(
+            "[WSS] Reloading Matches and Team Statuses...",
+          );
           void reloadMatches();
           void reloadStatuses();
           break;
 
+        case "starting_comp_level":
+        case "schedule_updated":
+          console.log(
+            "[WSS] Full refresh triggered...",
+          );
+          refreshLiveData();
+          break;
+
         case "alliance_selection":
-          console.log("[WSS] Reloading Playoff Alliances and Team Statuses...")
+          console.log(
+            "[WSS] Reloading Playoff Alliances and Team Statuses...",
+          );
           void reloadAlliances();
           void reloadStatuses();
           break;
