@@ -6,7 +6,7 @@ export const POLLING_INTERVALS = {
   realtime: 1_000,
   fast: 5_000,
   intermediate: 5 * 60_000,
-  long: 60 * 60_000,
+  long: 15 * 60_000,
 } as const;
 
 export type PollingTier = keyof typeof POLLING_INTERVALS;
