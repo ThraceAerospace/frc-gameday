@@ -219,7 +219,6 @@ const {
         "[WSS] Refreshing all data sources...",
       );
       
-      void reloadEvent();
       void reloadAlliances();
       void reloadMatches();
       void reloadStatuses();
@@ -227,7 +226,6 @@ const {
       reloadMatches,
       reloadAlliances,
       reloadStatuses,
-      reloadEvent,
     ]);
 
   /*
@@ -278,6 +276,7 @@ const {
           );
           void reloadAlliances();
           void reloadStatuses();
+          void reloadMatches();
           break;
 
         default:
