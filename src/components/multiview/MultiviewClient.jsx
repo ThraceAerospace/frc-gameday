@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,8 @@ import {
 } from "@/lib/layouts";
 import EventLocalTime from "../gameday/navbar/EventLocalTime";
 import GamedayWidget from "../gameday/GamedayWidget";
+
+const CONTROLS_HIDE_DELAY = 3000;
 
 export default function MultiviewClient({
   events = [],
@@ -45,9 +48,7 @@ export default function MultiviewClient({
       ...new Set(
         events
           .filter(Boolean)
-          .map((event) =>
-            String(event)
-          )
+          .map((event) => String(event))
       ),
     ],
     [events]
@@ -130,6 +131,94 @@ export default function MultiviewClient({
    */
   const [labels, setLabels] =
     useState({});
+
+  /*
+   * Multiview controls idle state.
+   *
+   * The header remains part of the normal flex layout.
+   * When visible it consumes 40px of vertical space.
+   * When hidden it collapses to 0px, allowing the main
+   * video area to reclaim that space.
+   */
+  const [controlsVisible, setControlsVisible] =
+    useState(true);
+
+  const controlsTimeoutRef =
+    useRef(null);
+
+  const clearControlsTimeout =
+    useCallback(() => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(
+          controlsTimeoutRef.current
+        );
+
+        controlsTimeoutRef.current = null;
+      }
+    }, []);
+
+  const showControls =
+    useCallback(() => {
+      setControlsVisible(true);
+
+      clearControlsTimeout();
+
+      /*
+       * Dialogs keep the controls visible.
+       */
+      if (
+        sidebarOpen ||
+        eventPickerOpen
+      ) {
+        return;
+      }
+
+      controlsTimeoutRef.current =
+        setTimeout(() => {
+          setControlsVisible(false);
+          controlsTimeoutRef.current = null;
+        }, CONTROLS_HIDE_DELAY);
+    }, [
+      clearControlsTimeout,
+      sidebarOpen,
+      eventPickerOpen,
+    ]);
+
+  /*
+   * Start the idle timer on mount.
+   */
+  useEffect(() => {
+    showControls();
+
+    return () => {
+      clearControlsTimeout();
+    };
+  }, [
+    showControls,
+    clearControlsTimeout,
+  ]);
+
+  /*
+   * Keep controls visible while dialogs are open.
+   * Restart the idle timer after they close.
+   */
+  useEffect(() => {
+    if (
+      sidebarOpen ||
+      eventPickerOpen
+    ) {
+      clearControlsTimeout();
+      setControlsVisible(true);
+      return;
+    }
+
+    showControls();
+  }, [
+    sidebarOpen,
+    eventPickerOpen,
+    clearControlsTimeout,
+    showControls,
+  ]);
 
   /*
    * The normal layout is based on the number of streams.
@@ -360,11 +449,6 @@ export default function MultiviewClient({
           return;
         }
 
-        /*
-         * The number that matters here is the number of
-         * slots currently being displayed, not the number
-         * of occupied streams.
-         */
         const highlightKey =
           pickHighlightLayout(
             layout.slots.length
@@ -384,13 +468,11 @@ export default function MultiviewClient({
 
   /*
    * Manual highlighting.
-   *
-   * Clicking a stream in the top bar uses the same highlight
-   * behavior as an imminent match, but does not depend on the
-   * automatic-focus toggle.
    */
   const toggleActive = useCallback(
     (eventKey) => {
+      showControls();
+
       if (
         activeKey === eventKey
       ) {
@@ -412,12 +494,14 @@ export default function MultiviewClient({
     [
       activeKey,
       layout.slots.length,
+      showControls,
     ]
   );
 
   /*
-  * preserve eventKey from pressing ctrl+[1-9] for visual reordering without opening the side bar
-  */
+   * preserve eventKey from pressing ctrl+[1-9] for visual
+   * reordering without opening the side bar
+   */
   const [
     priorityEditKey,
     setPriorityEditKey,
@@ -430,21 +514,31 @@ export default function MultiviewClient({
       }
 
       setPriority((current) => {
-        const position = current.indexOf(priorityEditKey);
+        const position =
+          current.indexOf(
+            priorityEditKey
+          );
 
         if (position === -1) {
           return current;
         }
 
-        const target = position + direction;
+        const target =
+          position + direction;
 
-        if (target < 0 || target >= current.length) {
+        if (
+          target < 0 ||
+          target >= current.length
+        ) {
           return current;
         }
 
         const next = [...current];
 
-        [next[position], next[target]] = [
+        [
+          next[position],
+          next[target],
+        ] = [
           next[target],
           next[position],
         ];
@@ -456,123 +550,202 @@ export default function MultiviewClient({
   );
 
   /*
-  * Keyboard controls.
-  *
-  * 1-9 select the corresponding stream by stable stream order.
-  * 0 clears the active highlight.
-  *
-  * Once a stream is selected:
-  *   ArrowUp   moves it earlier in priority.
-  *   ArrowDown moves it later in priority.
-  *
-  * Priority is deliberately changed underneath the highlight.
-  * Clearing the highlight then reveals the new priority order.
-  */
+   * Keyboard controls.
+   *
+   * 1-9 select the corresponding stream by stable stream order.
+   * 0 clears the active highlight.
+   *
+   * Once a stream is selected:
+   *   ArrowUp   moves it earlier in priority.
+   *   ArrowDown moves it later in priority.
+   */
   useEffect(() => {
     const handleKeyDown = (event) => {
-      const target = event.target;
+      const target =
+        event.target;
 
       if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target instanceof HTMLButtonElement ||
+        target instanceof
+          HTMLInputElement ||
+        target instanceof
+          HTMLTextAreaElement ||
+        target instanceof
+          HTMLSelectElement ||
+        target instanceof
+          HTMLButtonElement ||
         target?.isContentEditable
       ) {
         return;
       }
 
-      if (event.key >= "1" && event.key <= "9") {
+      /*
+       * Keyboard interaction is also activity.
+       */
+      showControls();
+
+      if (
+        event.key >= "1" &&
+        event.key <= "9"
+      ) {
         event.preventDefault();
-        const index = Number(event.key) - 1;
-        const eventKey = streams[index];
-        
+
+        const index =
+          Number(event.key) - 1;
+
+        const eventKey =
+          streams[index];
+
         if (!eventKey) {
           return;
         }
 
-        if(event.ctrlKey) {
-          if (priorityEditKey === eventKey) {
-            setPriorityEditKey(null);
+        if (event.ctrlKey) {
+          if (
+            priorityEditKey ===
+            eventKey
+          ) {
+            setPriorityEditKey(
+              null
+            );
             return;
           }
-          event.preventDefault();
-          setPriorityEditKey(eventKey);
+
+          setPriorityEditKey(
+            eventKey
+          );
+
           return;
         }
 
-        toggleActive(eventKey);
+        toggleActive(
+          eventKey
+        );
+
         return;
       }
 
       if (event.key === "0") {
         setActiveKey(null);
-        setHighlightLayoutKey(null);
+        setHighlightLayoutKey(
+          null
+        );
 
         return;
       }
 
-      if (event.key === "-" || event.key === "=") {
-        const layoutKeys = Object.keys(LAYOUTS);
+      if (
+        event.key === "-" ||
+        event.key === "="
+      ) {
+        const layoutKeys =
+          Object.keys(
+            LAYOUTS
+          );
 
         const currentKey =
-          layoutKey ?? autoLayoutKey;
+          layoutKey ??
+          autoLayoutKey;
 
         const currentIndex =
-          layoutKeys.indexOf(currentKey);
+          layoutKeys.indexOf(
+            currentKey
+          );
 
         const direction =
-          event.key === "-" ? -1 : 1;
+          event.key === "-"
+            ? -1
+            : 1;
 
         const nextIndex =
-          currentIndex + direction;
+          currentIndex +
+          direction;
 
         if (
           nextIndex < 0 ||
-          nextIndex >= layoutKeys.length
+          nextIndex >=
+            layoutKeys.length
         ) {
           return;
         }
 
         const nextKey =
-          layoutKeys[nextIndex];
+          layoutKeys[
+            nextIndex
+          ];
 
         console.log(
           "Setting Layout Key to",
           nextKey
         );
 
-        setLayoutKey(nextKey);
-        setHighlightLayoutKey(null);
-        return;
-      }
-      
-      if (event.key === "ArrowUp" && priorityEditKey) {
-        console.log("Moving", priorityEditKey, "Up")
-        movePriorityEdit(-1);
+        setLayoutKey(
+          nextKey
+        );
+
+        setHighlightLayoutKey(
+          null
+        );
+
         return;
       }
 
-      if (event.key === "ArrowDown" && priorityEditKey) {
-        console.log("Moving", priorityEditKey, "Down")
-        movePriorityEdit(1);
+      if (
+        event.key ===
+          "ArrowUp" &&
+        priorityEditKey
+      ) {
+        console.log(
+          "Moving",
+          priorityEditKey,
+          "Up"
+        );
+
+        movePriorityEdit(
+          -1
+        );
+
+        return;
+      }
+
+      if (
+        event.key ===
+          "ArrowDown" &&
+        priorityEditKey
+      ) {
+        console.log(
+          "Moving",
+          priorityEditKey,
+          "Down"
+        );
+
+        movePriorityEdit(
+          1
+        );
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
     };
   }, [
     streams,
     activeKey,
     priorityEditKey,
     layoutKey,
-    layout.slots.length,
+    autoLayoutKey,
+    toggleActive,
     movePriorityEdit,
+    showControls,
   ]);
-  
+
   /*
    * Fetch active events only when the picker is opened.
    */
@@ -640,11 +813,12 @@ export default function MultiviewClient({
 
   const openEventPicker =
     useCallback(() => {
+      showControls();
       setEventSearch("");
       setEventPickerOpen(
         true
       );
-    }, []);
+    }, [showControls]);
 
   const addEvent = useCallback(
     (event) => {
@@ -680,10 +854,13 @@ export default function MultiviewClient({
       setEventPickerOpen(
         false
       );
+
+      showControls();
     },
     [
       streams,
       updateUrl,
+      showControls,
     ]
   );
 
@@ -739,11 +916,14 @@ export default function MultiviewClient({
         updateUrl(
           nextStreams
         );
+
+        showControls();
       },
       [
         streams,
         activeKey,
         updateUrl,
+        showControls,
       ]
     );
 
@@ -808,251 +988,281 @@ export default function MultiviewClient({
     );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-black text-white">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-10 shrink-0 items-center justify-between border-b border-neutral-800 px-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              onClick={() =>
-                router.push("/")
-              }
-              className="w-[30px] h-[30px] rounded hover:bg-stone-800"
-              title="Home"
-            >
-              <HomeIcon className="w-[17px] h-[17px] justify-self-center"/>
-            </button>
+    <div
+      className="flex h-screen w-screen flex-col overflow-hidden bg-black text-white"
+      onMouseEnter={showControls}
+      onMouseMove={showControls}
+    >
+      {/*
+       * IMPORTANT:
+       *
+       * This header is deliberately NOT absolute.
+       *
+       * While visible it consumes 40px of actual layout
+       * space. When hidden it collapses to 0px, causing
+       * the main area to grow into that space.
+       *
+       * This means the YouTube iframe is never underneath
+       * the header.
+       */}
+      <header
+        className={`flex shrink-0 items-center justify-between overflow-hidden border-b border-neutral-800 bg-black/90 px-2 backdrop-blur-sm transition-[height,border-color] duration-200 ease-out ${
+          controlsVisible
+            ? "h-10"
+            : "h-0 border-b-transparent"
+        }`}
+        onMouseEnter={showControls}
+        onMouseMove={showControls}
+        onFocus={showControls}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            onClick={() => {
+              showControls();
+              router.push("/");
+            }}
+            className="h-[30px] w-[30px] rounded hover:bg-stone-800"
+            title="Home"
+          >
+            <HomeIcon className="h-[17px] w-[17px] justify-self-center" />
+          </button>
 
-            {isDivisional &&
-            parentEvent ? (
-              <div className="min-w-0">
-                <div className="truncate text-sm font-bold">
-                  {parentEvent.name}
-                </div>
-
-                <div className="text-[10px] text-neutral-500">
-                  <EventLocalTime
-                    timezone={
-                      parentEvent.timezone
-                    }
-                  />
-                </div>
+          {isDivisional &&
+          parentEvent ? (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold">
+                {parentEvent.name}
               </div>
-            ) : (
-              <div>
-                <div className="text-sm font-bold">
-                  FieldView
-                </div>
 
-                <div className="text-[10px] text-neutral-500">
-                  Powered by The Blue Alliance
-                </div>
+              <div className="text-[10px] text-neutral-500">
+                <EventLocalTime
+                  timezone={
+                    parentEvent.timezone
+                  }
+                />
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-sm font-bold">
+                FieldView
+              </div>
 
-          {/*
-           * Labels belong to widgets, not slots.
-           *
-           * Keep this mapped over `streams`.
-           */
-          }
-          <div className="flex min-w-0 gap-1 overflow-hidden">
-            {streams.map(
-              (
-                eventKey,
-                index
-              ) => (
-                <button
-                  key={eventKey}
-                  onClick={() =>
-                    toggleActive(
+              <div className="text-[10px] text-neutral-500">
+                Powered by The Blue Alliance
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/*
+         * Labels belong to widgets, not slots.
+         *
+         * Keep this mapped over `streams`.
+         */}
+        <div className="flex min-w-0 gap-1 overflow-hidden">
+          {streams.map(
+            (
+              eventKey,
+              index
+            ) => (
+              <button
+                key={eventKey}
+                onClick={() =>
+                  toggleActive(
+                    eventKey
+                  )
+                }
+                className={`max-w-48 truncate rounded bg-stone-800 px-2 py-1 ${
+                  priorityEditKey ===
+                  eventKey
+                    ? "inset-ring-2 inset-ring-blue-500"
+                    : ""
+                } ${
+                  activeKey ===
+                  eventKey
+                    ? "inset-ring-2 inset-ring-white"
+                    : ""
+                }`}
+              >
+                {(
+                  labels[
+                    eventKey
+                  ] ??
+                  `Stream ${
+                    index + 1
+                  }`
+                ).replace(
+                  "- FIRST Robotics Competition",
+                  ""
+                )}
+              </button>
+            )
+          )}
+        </div>
+
+        <button
+          onClick={() => {
+            showControls();
+
+            setSidebarOpen(
+              (value) =>
+                !value
+            );
+          }}
+          className="h-[30px] w-[30px] rounded hover:bg-stone-800"
+          title="Multiview settings"
+        >
+          <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
+        </button>
+      </header>
+
+      {/*
+       * The main area is now the flex child.
+       *
+       * When the header is h-10:
+       *     main = viewport - 40px
+       *
+       * When the header is h-0:
+       *     main = viewport
+       *
+       * There is no overlay over the video at either state.
+       */}
+      <main className="relative min-h-0 flex-1">
+        {streams.map(
+          (eventKey) => {
+            const slotIndex =
+              slotOrder.indexOf(
+                eventKey
+              );
+
+            const geometry =
+              layout.slots[
+                slotIndex
+              ];
+
+            const slotPresentation =
+              geometry?.presentation ??
+              {
+                teamTracker:
+                  "sides",
+                matchInfo:
+                  "visible",
+              };
+
+            const visible =
+              Boolean(
+                geometry
+              );
+
+            return (
+              <div
+                key={eventKey}
+                className={
+                  visible
+                    ? "absolute"
+                    : "pointer-events-none absolute invisible"
+                }
+                style={
+                  visible
+                    ? {
+                        left: `${geometry.x}%`,
+                        top: `${geometry.y}%`,
+                        width: `${geometry.w}%`,
+                        height: `${geometry.h}%`,
+                        transition:
+                          "all 300ms ease",
+                      }
+                    : {
+                        left: 0,
+                        top: 0,
+                        width: 1,
+                        height: 1,
+                      }
+                }
+              >
+                <GamedayWidget
+                  event={eventKey}
+                  isDivisional={
+                    isDivisional
+                  }
+                  registerLabel={(
+                    label
+                  ) =>
+                    registerLabel(
+                      eventKey,
+                      label
+                    )
+                  }
+                  onMatchImminent={() =>
+                    handleMatchImminent(
                       eventKey
                     )
                   }
-                  className={`max-w-48 truncate rounded px-2 py-1 bg-stone-800 
-                    ${
-                      priorityEditKey ===
-                      eventKey
-                        ? "inset-ring-2 inset-ring-blue-500"
-                        : ""
-                    }
-                    ${
-                      activeKey ===
-                      eventKey
-                        ? "inset-ring-2 inset-ring-white"
-                        : ""
-                    }
-                  `}
-                >
-                  {(
-                    labels[
-                      eventKey
-                    ] ??
-                    `Stream ${
-                      index + 1
-                    }`
-                  ).replace(
-                    "- FIRST Robotics Competition",
-                    ""
-                  )}
-                </button>
-              )
-            )}
-          </div>
-
-          <button
-            onClick={() =>
-              setSidebarOpen(
-                (value) =>
-                  !value
-              )
-            }
-            className="w-[30px] h-[30px] rounded hover:bg-stone-800"
-            title="Multiview settings"
-          >
-            <Squares2X2Icon className="w-[17px] h-[17px] justify-self-center"/>
-          </button>
-        </header>
-
-        <main className="relative min-h-0 flex-1">
-          {/*
-           * Render widgets in stable `streams` order.
-           *
-           * `priority` and `activeKey` only determine
-           * where each widget is placed.
-           */
-          }
-          {streams.map(
-            (eventKey) => {
-              const slotIndex =
-                slotOrder.indexOf(
-                  eventKey
-                );
-
-              const geometry =
-                layout.slots[
-                  slotIndex
-                ];
-
-              const slotPresentation =
-                geometry?.presentation ?? {
-                  teamTracker: "sides",
-                  matchInfo: "visible",
-                };
-
-              const visible =
-                Boolean(
-                  geometry
-                );
-
-              return (
-                <div
-                  key={eventKey}
-                  className={
-                    visible
-                      ? "absolute"
-                      : "pointer-events-none absolute invisible"
-                  }
-                  style={
-                    visible
-                      ? {
-                          left: `${geometry.x}%`,
-                          top: `${geometry.y}%`,
-                          width: `${geometry.w}%`,
-                          height: `${geometry.h}%`,
-                          transition:
-                            "all 300ms ease",
-                        }
-                      : {
-                          left: 0,
-                          top: 0,
-                          width: 1,
-                          height: 1,
-                        }
-                  }
-                >
-                  <GamedayWidget
-                    event={eventKey}
-                    isDivisional={
-                      isDivisional
-                    }
-                    registerLabel={(
-                      label
-                    ) =>
-                      registerLabel(
-                        eventKey,
-                        label
-                      )
-                    }
-                    onMatchImminent={() =>
-                      handleMatchImminent(
-                        eventKey
-                      )
-                    }
-                    multiview={{
-                      layoutKey:
-                        selectedLayoutKey,
-                      presentation:
-                        slotPresentation,
-                      slotIndex,
-                      visible,
-                    }}
-                  />
-                </div>
-              );
-            }
-          )}
-
-          {Array.from({
-            length:
-              emptySlotCount,
-          }).map(
-            (_, index) => {
-              const slotIndex =
-                streams.length +
-                index;
-
-              const geometry =
-                layout.slots[
-                  slotIndex
-                ];
-
-              if (!geometry) {
-                return null;
-              }
-
-              return (
-                <button
-                  key={`empty-slot-${slotIndex}`}
-                  onClick={
-                    openEventPicker
-                  }
-                  className="absolute flex items-center justify-center border border-dashed border-neutral-700 bg-neutral-950/80 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
-                  style={{
-                    left: `${geometry.x}%`,
-                    top: `${geometry.y}%`,
-                    width: `${geometry.w}%`,
-                    height: `${geometry.h}%`,
+                  multiview={{
+                    layoutKey:
+                      selectedLayoutKey,
+                    presentation:
+                      slotPresentation,
+                    slotIndex,
+                    visible,
                   }}
-                >
-                  <div className="flex flex-col items-center gap-2 text-neutral-500">
-                    <PlusIcon className="h-8 w-8" />
+                />
+              </div>
+            );
+          }
+        )}
 
-                    <span className="text-sm font-semibold">
-                      Add Event
-                    </span>
-                  </div>
-                </button>
-              );
+        {Array.from({
+          length:
+            emptySlotCount,
+        }).map(
+          (_, index) => {
+            const slotIndex =
+              streams.length +
+              index;
+
+            const geometry =
+              layout.slots[
+                slotIndex
+              ];
+
+            if (!geometry) {
+              return null;
             }
-          )}
-        </main>
-      </div>
+
+            return (
+              <button
+                key={`empty-slot-${slotIndex}`}
+                onClick={
+                  openEventPicker
+                }
+                className="absolute flex items-center justify-center border border-dashed border-neutral-700 bg-neutral-950/80 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
+                style={{
+                  left: `${geometry.x}%`,
+                  top: `${geometry.y}%`,
+                  width: `${geometry.w}%`,
+                  height: `${geometry.h}%`,
+                }}
+              >
+                <div className="flex flex-col items-center gap-2 text-neutral-500">
+                  <PlusIcon className="h-8 w-8" />
+
+                  <span className="text-sm font-semibold">
+                    Add Event
+                  </span>
+                </div>
+              </button>
+            );
+          }
+        )}
+      </main>
 
       <div
-        onClick={() =>
-          setSidebarOpen(false)
-        }
+        onClick={() => {
+          setSidebarOpen(false);
+          showControls();
+        }}
         className={`fixed inset-0 z-40 bg-black/50 transition-opacity ${
           sidebarOpen
             ? "opacity-100"
@@ -1089,7 +1299,9 @@ export default function MultiviewClient({
                 type="checkbox"
                 checked={autoFocusMatches}
                 onChange={(event) =>
-                  setAutoFocusMatches(event.target.checked)
+                  setAutoFocusMatches(
+                    event.target.checked
+                  )
                 }
                 className="h-4 w-4 shrink-0"
               />
@@ -1097,44 +1309,80 @@ export default function MultiviewClient({
           </div>
 
           <div className="mb-4 space-y-1">
-            {priority.map((eventKey, position) => (
-              <div
-                key={eventKey}
-                className="flex items-center justify-between rounded bg-neutral-800 px-2 py-1"
-              >
-                <span className="truncate text-xs">
-                  {labels[eventKey] ?? `Stream ${position + 1}`}
-                </span>
+            {priority.map(
+              (
+                eventKey,
+                position
+              ) => (
+                <div
+                  key={eventKey}
+                  className="flex items-center justify-between rounded bg-neutral-800 px-2 py-1"
+                >
+                  <span className="truncate text-xs">
+                    {labels[
+                      eventKey
+                    ] ??
+                      `Stream ${
+                        position + 1
+                      }`}
+                  </span>
 
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => move(position, -1)}
-                    className="icon-button"
-                    title="Move up"
-                  >
-                    <ArrowUpIcon />
-                  </button>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        showControls();
+                        move(
+                          position,
+                          -1
+                        );
+                      }}
+                      className="icon-button"
+                      title="Move up"
+                    >
+                      <ArrowUpIcon />
+                    </button>
 
-                  <button
-                    onClick={() => move(position, 1)}
-                    className="icon-button"
-                    title="Move down"
-                  >
-                    <ArrowDownIcon />
-                  </button>
+                    <button
+                      onClick={() => {
+                        showControls();
+                        move(
+                          position,
+                          1
+                        );
+                      }}
+                      className="icon-button"
+                      title="Move down"
+                    >
+                      <ArrowDownIcon />
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => removeEvent(eventKey)}
-                    className="icon-button shrink-0"
-                    title={`Remove ${labels[eventKey] ?? eventKey}`}
-                    aria-label={`Remove ${labels[eventKey] ?? eventKey}`}
-                  >
-                    <XMarkIcon />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeEvent(
+                          eventKey
+                        )
+                      }
+                      className="icon-button shrink-0"
+                      title={`Remove ${
+                        labels[
+                          eventKey
+                        ] ??
+                        eventKey
+                      }`}
+                      aria-label={`Remove ${
+                        labels[
+                          eventKey
+                        ] ??
+                        eventKey
+                      }`}
+                    >
+                      <XMarkIcon />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
 
           <div className="mb-1 font-bold">
@@ -1144,7 +1392,10 @@ export default function MultiviewClient({
           <button
             onClick={() => {
               setLayoutKey(null);
-              setHighlightLayoutKey(null);
+              setHighlightLayoutKey(
+                null
+              );
+              showControls();
             }}
             className={`mt-2 block w-full rounded px-2 py-1 text-left text-sm ${
               layoutKey === null
@@ -1152,36 +1403,53 @@ export default function MultiviewClient({
                 : "hover:bg-neutral-800"
             }`}
           >
-            Auto Layout ({LAYOUTS[autoLayoutKey].name})
+            Auto Layout (
+            {
+              LAYOUTS[
+                autoLayoutKey
+              ].name
+            }
+            )
           </button>
 
-          {Object.entries(LAYOUTS).map(([key, value]) => (
-            <button
-              key={key}
-              onClick={() => {
-                setLayoutKey(key);
-                setHighlightLayoutKey(null);
-              }}
-              className={`block w-full rounded px-2 py-1 text-left text-sm ${
-                selectedLayoutKey === key
-                  ? "bg-neutral-700"
-                  : "hover:bg-neutral-800"
-              }`}
-            >
-              {value.name}
-            </button>
-          ))}
+          {Object.entries(
+            LAYOUTS
+          ).map(
+            ([key, value]) => (
+              <button
+                key={key}
+                onClick={() => {
+                  setLayoutKey(
+                    key
+                  );
+                  setHighlightLayoutKey(
+                    null
+                  );
+                  showControls();
+                }}
+                className={`block w-full rounded px-2 py-1 text-left text-sm ${
+                  selectedLayoutKey ===
+                  key
+                    ? "bg-neutral-700"
+                    : "hover:bg-neutral-800"
+                }`}
+              >
+                {value.name}
+              </button>
+            )
+          )}
         </div>
       </aside>
 
       {eventPickerOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
-          onClick={() =>
+          onClick={() => {
             setEventPickerOpen(
               false
-            )
-          }
+            );
+            showControls();
+          }}
         >
           <div
             className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 shadow-2xl"
@@ -1195,11 +1463,12 @@ export default function MultiviewClient({
               </div>
 
               <button
-                onClick={() =>
+                onClick={() => {
                   setEventPickerOpen(
                     false
-                  )
-                }
+                  );
+                  showControls();
+                }}
                 className="icon-button"
                 title="Close"
               >
