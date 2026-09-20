@@ -50,8 +50,10 @@ export default function GamedayWidget({
   
 const {
   event: eventData,
+  loading,
+  error,
   reloadEvent,
-} = useEvent(eventKey);
+} = useEvent(event);
 
   const { teams } = useTeams(event);
 

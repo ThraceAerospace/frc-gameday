@@ -24,6 +24,7 @@ export function useEvent(eventKey: string) {
 
     setLoading(true);
     setError(null);
+    setEvent(null);
 
     try {
       const res = await fetch(`/api/event/${eventKey}`, {
