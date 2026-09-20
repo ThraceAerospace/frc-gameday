@@ -39,8 +39,11 @@ export default function NextMatchCountdown({
     nowDate.toDateString() === targetDate.toDateString();
 
   const text = !sameDay
-    ? targetDate.toLocaleDateString("en-US", {
+    ? targetDate.toLocaleString("en-US", {
         weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
       })
     : seconds < 60
       ? `${seconds}s`
