@@ -47,11 +47,11 @@ export default function GamedayWidget({
   isDivisional = false,
   multiview = {},
 }) {
-  const {
-    event: eventData,
-    loading,
-    error,
-  } = useEvent(event);
+  
+const {
+  event: eventData,
+  reloadEvent,
+} = useEvent(eventKey);
 
   const { teams } = useTeams(event);
 
@@ -216,14 +216,16 @@ export default function GamedayWidget({
       console.log(
         "[WSS] Refreshing all data sources...",
       );
-
-      void reloadMatches();
+      
+      void reloadEvent();
       void reloadAlliances();
+      void reloadMatches();
       void reloadStatuses();
     }, [
       reloadMatches,
       reloadAlliances,
       reloadStatuses,
+      reloadEvent,
     ]);
 
   /*
