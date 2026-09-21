@@ -15,89 +15,6 @@ import {
 import type { TBAMatch } from "@/lib/tba/types";
 import { usePolling } from "./usePolling";
 
-function summarizeMatch(
-  match: TBAMatch | null | undefined,
-) {
-  if (!match) {
-    return null;
-  }
-
-  return {
-    key: match.key,
-    comp_level: match.comp_level,
-    set_number: match.set_number,
-    match_number: match.match_number,
-    time: match.time,
-    predicted_time: match.predicted_time,
-    actual_time: match.actual_time,
-    winning_alliance: match.winning_alliance,
-    red_score: match.alliances.red.score,
-    blue_score: match.alliances.blue.score,
-  };
-}
-
-function summarizeMatches(
-  matches: TBAMatch[],
-) {
-  const played = matches.filter(
-    (match) => Boolean(match.actual_time),
-  );
-
-  const unplayed = matches.filter(
-    (match) => !match.actual_time,
-  );
-
-  return {
-    total: matches.length,
-
-    playedCount: played.length,
-
-    unplayedCount: unplayed.length,
-
-    firstMatch:
-      matches.length > 0
-        ? summarizeMatch(matches[0])
-        : null,
-
-    lastMatchInArray:
-      matches.length > 0
-        ? summarizeMatch(
-            matches[matches.length - 1],
-          )
-        : null,
-
-    lastPlayed:
-      played.length > 0
-        ? summarizeMatch(
-            played[played.length - 1],
-          )
-        : null,
-
-    firstUnplayed:
-      unplayed.length > 0
-        ? summarizeMatch(unplayed[0])
-        : null,
-
-    boundary: matches
-      .slice(
-        Math.max(
-          0,
-          played.length - 3,
-        ),
-        played.length + 4,
-      )
-      .map(summarizeMatch),
-
-    /*
-     * Keep the complete match keys available in the log.
-     * This makes it possible to tell whether the response
-     * actually contains the current competition frontier.
-     */
-    keys: matches.map(
-      (match) => match.key,
-    ),
-  };
-}
 
 export function useMatches(
   eventKey: string,
@@ -148,13 +65,6 @@ export function useMatches(
   const load = useCallback(
     async () => {
       if (!eventKey) {
-        console.log(
-          "[useMatches] LOAD SKIPPED",
-          {
-            eventKey,
-            reason: "empty eventKey",
-          },
-        );
 
         return;
       }
@@ -165,32 +75,6 @@ export function useMatches(
       latestStartedRequestRef.current =
         requestId;
 
-      const startedAt =
-        performance.now();
-
-      const startedTimestamp =
-        new Date().toISOString();
-
-      console.log(
-        "[useMatches] REQUEST START",
-        {
-          eventKey,
-          requestId,
-          startedTimestamp,
-
-          /*
-           * Snapshot of the state that existed when this
-           * request started.
-           */
-          previousState: {
-            count: matchesRef.current.length,
-            summary:
-              summarizeMatches(
-                matchesRef.current,
-              ),
-          },
-        },
-      );
 
       try {
         const url =
@@ -203,28 +87,6 @@ export function useMatches(
           },
         );
 
-        const responseAt =
-          performance.now();
-
-        const responseTimestamp =
-          new Date().toISOString();
-
-        const responseHeaders = {
-          cacheControl:
-            res.headers.get(
-              "cache-control",
-            ),
-          etag:
-            res.headers.get("etag"),
-          age:
-            res.headers.get("age"),
-          date:
-            res.headers.get("date"),
-          contentType:
-            res.headers.get(
-              "content-type",
-            ),
-        };
 
         if (!res.ok) {
           throw new Error(
@@ -235,91 +97,12 @@ export function useMatches(
         const data =
           (await res.json()) as TBAMatch[];
 
-        const jsonParsedAt =
-          performance.now();
 
         const sorted =
           Array.isArray(data)
             ? sortMatches(data)
             : [];
 
-        const latestStartedRequest =
-          latestStartedRequestRef.current;
-
-        const latestCompletedRequest =
-          latestCompletedRequestRef.current;
-
-        const newerRequestStarted =
-          latestStartedRequest >
-          requestId;
-
-        const newerRequestCompleted =
-          latestCompletedRequest >
-          requestId;
-
-        const summary =
-          summarizeMatches(sorted);
-
-        const nextMatch =
-          getNextMatch(sorted);
-
-        const lastMatch =
-          getLastMatch(sorted);
-
-        console.log(
-          "[useMatches] RESPONSE",
-          {
-            eventKey,
-            requestId,
-
-            url,
-
-            durationMs: Math.round(
-              responseAt -
-                startedAt,
-            ),
-
-            jsonParseMs: Math.round(
-              jsonParsedAt -
-                responseAt,
-            ),
-
-            startedTimestamp,
-
-            responseTimestamp,
-
-            responseHeaders,
-
-            responseArray: {
-              isArray:
-                Array.isArray(data),
-
-              length:
-                Array.isArray(data)
-                  ? data.length
-                  : null,
-            },
-
-            requestOrdering: {
-              latestStartedRequest,
-              latestCompletedRequest,
-              newerRequestStarted,
-              newerRequestCompleted,
-            },
-
-            summary,
-
-            nextMatch:
-              summarizeMatch(
-                nextMatch,
-              ),
-
-            lastMatch:
-              summarizeMatch(
-                lastMatch,
-              ),
-          },
-        );
 
         /*
          * Update our completion frontier before committing
@@ -444,45 +227,6 @@ export function useMatches(
     matchesRef.current =
       matches;
 
-    const summary =
-      summarizeMatches(matches);
-
-    const nextMatch =
-      getNextMatch(matches);
-
-    const lastMatch =
-      getLastMatch(matches);
-
-    console.log(
-      "[useMatches] STATE COMMITTED",
-      {
-        eventKey,
-
-        stateCount:
-          matches.length,
-
-        latestCommittedRequest:
-          latestCommittedRequestRef.current,
-
-        latestStartedRequest:
-          latestStartedRequestRef.current,
-
-        latestCompletedRequest:
-          latestCompletedRequestRef.current,
-
-        summary,
-
-        nextMatch:
-          summarizeMatch(
-            nextMatch,
-          ),
-
-        lastMatch:
-          summarizeMatch(
-            lastMatch,
-          ),
-      },
-    );
   }, [
     eventKey,
     matches,
@@ -498,12 +242,6 @@ export function useMatches(
   );
 
   useEffect(() => {
-    console.log(
-      "[useMatches] EVENT KEY RESET",
-      {
-        eventKey,
-      },
-    );
 
     setMatches([]);
 
@@ -520,7 +258,6 @@ export function useMatches(
 
     requestIdRef.current = 0;
 
-    stateUpdateIdRef.current = 0;
   }, [eventKey]);
 
   const eventNextMatch = useMemo(
@@ -533,39 +270,6 @@ export function useMatches(
     [matches],
   );
 
-  /*
-   * Log the derived values separately.
-   *
-   * This tells us whether the hook itself is deriving
-   * something different from what the committed state
-   * contains.
-   */
-  useEffect(() => {
-    console.log(
-      "[useMatches] DERIVED VALUES",
-      {
-        eventKey,
-
-        matchesCount:
-          matches.length,
-
-        eventNextMatch:
-          summarizeMatch(
-            eventNextMatch,
-          ),
-
-        eventLastMatch:
-          summarizeMatch(
-            eventLastMatch,
-          ),
-      },
-    );
-  }, [
-    eventKey,
-    matches,
-    eventNextMatch,
-    eventLastMatch,
-  ]);
 
   return {
     matches,
