@@ -12,10 +12,9 @@
     "prebuild": "npm run generate:tba-types"
   },
   "dependencies": {
-    "@vercel/functions": "^3.9.3",
-    "ws": "^8.18.3",
     "@heroicons/react": "^2.2.0",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/functions": "^3.9.3",
     "@vercel/global-config": "^1.5.1",
     "@vercel/speed-insights": "^2.0.0",
     "ioredis": "^5.10.1",
@@ -23,7 +22,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "redis": "^5.12.1",
-    "vercel": "^59.17.0"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
