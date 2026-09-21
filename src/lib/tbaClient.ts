@@ -23,8 +23,7 @@ function isMatchResultPresent(match: {
 function isMatchEndpoint(endpoint: string) {
   return (
     endpoint.startsWith("/match/") ||
-    endpoint.endsWith("/matches") ||
-    endpoint.endsWith("/matches/simple")
+    endpoint.endsWith("/matches")
   );
 }
 
@@ -552,10 +551,6 @@ export class TBAClient {
       updateMatches,
     );
 
-    await this.mutateCached<any[]>(
-      `/event/${eventKey}/matches/simple`,
-      updateMatches,
-    );
 
     const teamKeys = new Set<string>();
 
@@ -675,24 +670,6 @@ export class TBAClient {
       updateMatches,
     );
 
-    const teamKeys =
-      data.team_keys ?? [];
-
-    await Promise.all(
-      teamKeys.flatMap(
-        (teamKey) => [
-          this.mutateCached<any[]>(
-            `/team/${teamKey}/event/${eventKey}/matches`,
-            updateMatches,
-          ),
-
-          this.mutateCached<any[]>(
-            `/team/${teamKey}/event/${eventKey}/matches/simple`,
-            updateMatches,
-          ),
-        ],
-      ),
-    );
   }
 
   async invalidateTag(tag: string) {
@@ -713,9 +690,6 @@ export class TBAClient {
 
     await pipeline.exec();
 
-    console.log(
-      `[Client][TBA] invalidated tag ${tag} (${members.length} entries)`,
-    );
   }
 
   async invalidateTags(tags: string[]) {
@@ -762,9 +736,6 @@ export class TBAClient {
       await pipeline.exec();
     }
 
-    console.log(
-      `[Client][TBA] invalidated tags ${uniqueTags.join(", ")} (${cacheKeys.size} cache entries)`,
-    );
   }
 
   /**
