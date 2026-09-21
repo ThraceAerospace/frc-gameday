@@ -104,12 +104,11 @@ export default function MatchCard({
   const time =
     isNext && match.predicted_time != null ? (
       <NextMatchCountdown nextMatch={match} />
+    ) : match.actual_time != null ? (
+      formatEventTime(match.actual_time, eventTimezone)
     ) : match.predicted_time != null ? (
       formatEventTime(match.predicted_time, eventTimezone)
-    ) : (
-      "TBD"
-    );
-
+    ) : null;
   return (
     <article
       className={[
