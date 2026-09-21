@@ -22,45 +22,13 @@ export function useMatches(
   const [matches, setMatches] =
     useState<TBAMatch[]>([]);
 
-  /*
-   * Monotonically increasing client-side request ID.
-   */
   const requestIdRef = useRef(0);
 
-  /*
-   * The most recently STARTED request.
-   */
-  const latestStartedRequestRef =
-    useRef(0);
+  const latestStartedRequestRef = useRef(0);
+  const latestCompletedRequestRef = useRef(0);
+  const latestCommittedRequestRef = useRef(0);
 
-  /*
-   * The most recently COMPLETED request.
-   *
-   * This is separate from latestStartedRequestRef because
-   * an older request can finish after a newer request.
-   */
-  const latestCompletedRequestRef =
-    useRef(0);
-
-  /*
-   * Track the request that most recently committed state.
-   */
-  const latestCommittedRequestRef =
-    useRef(0);
-
-  /*
-   * Keep the current React state visible to callbacks/logging.
-   */
-  const matchesRef =
-    useRef<TBAMatch[]>([]);
-
-  /*
-   * Every time the state setter is invoked we increment this.
-   * This gives us a separate state-update sequence from the
-   * network request sequence.
-   */
-  const stateUpdateIdRef =
-    useRef(0);
+  const matchesRef = useRef<TBAMatch[]>([]);
 
   const load = useCallback(
     async () => {
@@ -191,46 +159,15 @@ export function useMatches(
           },
         );
       } catch (error) {
-        console.error(
-          "[useMatches] REQUEST ERROR",
-          {
-            eventKey,
-            requestId,
-
-            durationMs: Math.round(
-              performance.now() -
-                startedAt,
-            ),
-
-            error,
-          },
-        );
+        console.error("[useMatches] request failed", error);
       }
     },
     [eventKey],
   );
 
-  /*
-   * This effect runs after React has actually committed
-   * a new `matches` value and the component has rendered
-   * with that value.
-   *
-   * This is the important distinction between:
-   *
-   *   "setMatches was called"
-   *
-   * and:
-   *
-   *   "React actually committed the new matches state."
-   */
   useEffect(() => {
-    matchesRef.current =
-      matches;
-
-  }, [
-    eventKey,
-    matches,
-  ]);
+    matchesRef.current = matches;
+  }, [matches]);
 
   const reload = usePolling(
     load,
