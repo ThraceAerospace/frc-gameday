@@ -24,6 +24,7 @@ type TBAWebhookData = {
   event_key?: string;
   event?: {
     key?: string;
+    [key: string]: unknown;
   };
   team_key?: string;
   team_keys?: string[];
@@ -39,15 +40,26 @@ type TBAWebhookPayload = {
   message_data?: TBAWebhookData;
 };
 
+type WebhookAuthResult =
+  | "missing"
+  | "invalid"
+  | "valid";
+
 function verifyWebhook(
   payload: string,
   signature: string | null,
-) {
+): WebhookAuthResult {
+  if (!signature) {
+    return "missing";
+  }
+
   const secret =
     process.env.TBA_WEBHOOK_TOKEN;
 
-  if (!secret || !signature) {
-    return false;
+  if (!secret) {
+    throw new Error(
+      "TBA_WEBHOOK_TOKEN is not configured",
+    );
   }
 
   const expected =
@@ -75,13 +87,15 @@ function verifyWebhook(
     expectedBuffer.length !==
     signatureBuffer.length
   ) {
-    return false;
+    return "invalid";
   }
 
   return crypto.timingSafeEqual(
     expectedBuffer,
     signatureBuffer,
-  );
+  )
+    ? "valid"
+    : "invalid";
 }
 
 export async function POST(
@@ -95,19 +109,59 @@ export async function POST(
       "X-TBA-HMAC",
     );
 
-  if (
-    !verifyWebhook(
-      payloadText,
-      signature,
-    )
-  ) {
-    console.warn(
-      "[WEBHOOK][TBA] Invalid HMAC",
+  /*
+   * TBA webhooks are authenticated with X-TBA-HMAC.
+   *
+   * A missing header is different from an invalid
+   * signature: the latter looks like someone attempting
+   * to send a webhook, while the former doesn't even
+   * resemble a properly formed TBA webhook request.
+   *
+   * Yes, 418 is intentional.
+   */
+  try {
+    const auth =
+      verifyWebhook(
+        payloadText,
+        signature,
+      );
+
+    if (auth === "missing") {
+      console.warn(
+        "[WEBHOOK][TBA] Missing X-TBA-HMAC — I'm a teapot",
+      );
+
+      return new Response(
+        "I'm a teapot",
+        {
+          status: 418,
+        },
+      );
+    }
+
+    if (auth === "invalid") {
+      console.warn(
+        "[WEBHOOK][TBA] Invalid HMAC",
+      );
+
+      return new Response(
+        "Unauthorized",
+        {
+          status: 401,
+        },
+      );
+    }
+  } catch (error) {
+    console.error(
+      "[WEBHOOK][TBA] Failed to verify HMAC:",
+      error,
     );
 
     return new Response(
-      "Unauthorized",
-      { status: 401 },
+      "Internal Server Error",
+      {
+        status: 500,
+      },
     );
   }
 
@@ -118,10 +172,17 @@ export async function POST(
       JSON.parse(
         payloadText,
       ) as TBAWebhookPayload;
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[WEBHOOK][TBA] Invalid JSON payload:",
+      error,
+    );
+
     return new Response(
       "Invalid JSON",
-      { status: 400 },
+      {
+        status: 400,
+      },
     );
   }
 
@@ -137,99 +198,135 @@ export async function POST(
     data?.match?.event_key;
 
   console.log(
-    `[WEBHOOK][TBA] Received ${type}`,
+    `[WEBHOOK][TBA] Received ${type ?? "unknown"}`,
   );
 
-  switch (type) {
-    /*
-     * These notifications contain a complete Match
-     * object. Push that object directly into any
-     * currently-existing Redis match caches.
-     */
-    case "match_score":
-    case "match_video": {
-      if (data?.match) {
-        await TBA.mutateMatchCaches(
-          data.match,
-        );
+  try {
+    switch (type) {
+      /*
+       * These notifications contain a complete Match
+       * object. Push that object directly into any
+       * currently-existing Redis match caches.
+       */
+      case "match_score":
+      case "match_video": {
+        if (data?.match) {
+          await TBA.mutateMatchCaches(
+            data.match,
+          );
+        }
+
+        break;
       }
 
-      break;
-    }
-
-    /*
-     * upcoming_match does not contain a complete Match.
-     *
-     * Merge its timing/team information into existing
-     * cached match representations.
-     */
-    case "upcoming_match": {
-      await TBA.mutateUpcomingMatch(
-        data ?? {},
-      );
-
-      break;
-    }
-
-    /*
-     * These notifications do not contain the changed
-     * match list itself, so there is nothing useful to
-     * write directly into the matches cache.
-     *
-     * The websocket signal causes the client to refetch.
-     */
-    case "schedule_updated":
-    case "starting_comp_level": {
-      break;
-    }
-
-    /*
-     * TBA gives us the updated Event object, but not
-     * the alliance/ranking/status endpoints that our
-     * clients consume.
-     *
-     * Keep the event cache current if it already exists,
-     * then let the WSS signal trigger the derived-data
-     * refetches.
-     */
-    case "alliance_selection": {
-      if (data?.event && eventKey) {
-        await TBA.replaceCached(
-          `/event/${eventKey}`,
-          data.event,
+      /*
+       * upcoming_match does not contain a complete Match.
+       *
+       * Merge its timing/team information into existing
+       * cached match representations.
+       */
+      case "upcoming_match": {
+        await TBA.mutateUpcomingMatch(
+          data ?? {},
         );
+
+        break;
       }
 
-      break;
+      /*
+       * These notifications do not contain the changed
+       * match list itself, so there is nothing useful to
+       * write directly into the matches cache.
+       *
+       * The websocket signal causes the client to refetch.
+       */
+      case "schedule_updated":
+      case "starting_comp_level": {
+        break;
+      }
+
+      /*
+       * TBA gives us the updated Event object, but not
+       * the alliance/ranking/status endpoints that our
+       * clients consume.
+       *
+       * Keep the event cache current if it already exists,
+       * then let the WSS signal trigger the derived-data
+       * refetches.
+       */
+      case "alliance_selection": {
+        if (data?.event && eventKey) {
+          await TBA.replaceCached(
+            `/event/${eventKey}`,
+            data.event,
+          );
+        }
+
+        break;
+      }
+
+      /*
+       * awards_posted contains the actual awards, but our
+       * current service does not expose an awards endpoint.
+       *
+       * For now this remains a refetch signal.
+       */
+      case "awards_posted": {
+        break;
+      }
+
+      /*
+       * TBA webhook verification messages contain the
+       * verification key in message_data.
+       *
+       * The HMAC has already been verified above.
+       */
+      case "verification": {
+        console.log(
+          `[WEBHOOK][TBA] Received Webhook Verification Code ${
+            data?.verification_key ?? ""
+          }`,
+        );
+
+        break;
+      }
+
+      /*
+       * No cache mutation is required for these messages.
+       */
+      case "ping":
+      case "broadcast": {
+        break;
+      }
+
+      /*
+       * Unknown webhook types are intentionally
+       * acknowledged. TBA may add new notification
+       * types that this version of Gameday does not
+       * know about yet.
+       */
+      default: {
+        console.log(
+          `[WEBHOOK][TBA] Ignoring unknown message type: ${
+            type ?? "undefined"
+          }`,
+        );
+
+        break;
+      }
     }
+  } catch (error) {
+    console.error(
+      `[WEBHOOK][TBA] Failed to process ${type ?? "unknown"}:`,
+      error,
+    );
 
-    /*
-     * awards_posted contains the actual awards, but our
-     * current service does not expose an awards endpoint.
-     *
-     * For now this remains a refetch signal.
-     */
-    case "awards_posted": {
-      break;
-    }
-
-    case "verification":
-      console.log(
-        `[WEBHOOK][TBA] Received Webhook Verification Code ${
-          data?.verification_key ?? ""
-        }`,
-      );
-      break;
-
-    case "ping":
-    case "broadcast":
-      break;
-
-    default:
-      console.log(
-        `[WEBHOOK][TBA] Ignoring unknown message type: ${type}`,
-      );
-      break;
+    return new Response(
+      "Internal Server Error",
+      {
+        status: 500,
+      },
+    );
   }
 
   /*
@@ -238,6 +335,10 @@ export async function POST(
    * Clients receiving the WSS event therefore refetch
    * against Redis and normally get the webhook-mutated
    * data without another request to TBA.
+   *
+   * A broadcast failure is intentionally non-fatal:
+   * the cache mutation has already succeeded, and the
+   * normal polling/reconciliation path remains available.
    */
   if (eventKey) {
     try {
