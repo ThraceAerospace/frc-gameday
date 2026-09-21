@@ -22,22 +22,60 @@ type ActiveEvent = Pick<
   };
 };
 
-function parseEventDate(dateString: string): Date {
+function parseEventDate(
+  dateString: string,
+  timezone: string,
+  endOfDay = false
+): Date {
   const [year, month, day] = dateString.split("-").map(Number);
 
-  return new Date(year, month - 1, day);
+  const utcGuess = Date.UTC(
+    year,
+    month - 1,
+    day,
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0
+  );
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(new Date(utcGuess))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  const localAsUTC = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+
+  const offset = localAsUTC - utcGuess;
+
+  return new Date(utcGuess - offset);
 }
 
-function getEventState(event: TBAEvent): EventState {
-  const now = new Date();
-
-  const start = parseEventDate(event.start_date);
-  const end = parseEventDate(event.end_date);
-
-  // TBA's end_date is inclusive. Keep the event in progress
-  // through the entire day listed as its end date.
-  end.setHours(23, 59, 59, 999);
-
+function getEventState(
+  start: Date,
+  end: Date,
+  now: Date
+): EventState {
   if (now > end) {
     return "complete";
   }
@@ -59,40 +97,55 @@ function getEventWeight(event: ActiveEvent): number {
 export async function GET() {
   try {
     const events = await TBA.getEvents(new Date().getFullYear());
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const filteredEvents = events.filter((event) => {
-      const start = parseEventDate(event.start_date);
-      const end = parseEventDate(event.end_date);
-
-      return (
-        start >= today ||
-        (start <= today && end >= today)
-      );
-    });
-
     const now = new Date();
 
-    const enriched: ActiveEvent[] = filteredEvents.map((event) => ({
-      key: event.key,
-      name: event.name,
-      short_name: event.short_name,
-      event_type_string: event.event_type_string,
-      city: event.city,
-      state_prov: event.state_prov,
-      country: event.country,
-      start_date: event.start_date,
-      end_date: event.end_date,
+    const enriched = events
+      .map((event) => {
+        const timezone = event.timezone ?? "UTC";
 
-      state: getEventState(event),
+        const start = parseEventDate(
+          event.start_date,
+          timezone
+        );
 
-      flags: {
-        hasDivisions: (event.division_keys?.length ?? 0) > 0,
-        isPastStart: parseEventDate(event.start_date) <= now,
-      },
-    }));
+        const end = parseEventDate(
+          event.end_date,
+          timezone,
+          true
+        );
+
+        return {
+          event,
+          start,
+          end,
+          timezone,
+        };
+      })
+      .filter(({ start, end }) => start >= now || end >= now)
+      .map(
+        ({
+          event,
+          start,
+          end,
+        }): ActiveEvent => ({
+          key: event.key,
+          name: event.name,
+          short_name: event.short_name,
+          event_type_string: event.event_type_string,
+          city: event.city,
+          state_prov: event.state_prov,
+          country: event.country,
+          start_date: event.start_date,
+          end_date: event.end_date,
+
+          state: getEventState(start, end, now),
+
+          flags: {
+            hasDivisions: (event.division_keys?.length ?? 0) > 0,
+            isPastStart: start <= now,
+          },
+        })
+      );
 
     const stateOrder: Record<EventState, number> = {
       in_progress: 0,
@@ -103,8 +156,7 @@ export async function GET() {
     enriched.sort(
       (a, b) =>
         stateOrder[a.state] - stateOrder[b.state] ||
-        parseEventDate(a.start_date).getTime() -
-          parseEventDate(b.start_date).getTime() ||
+        a.start_date.localeCompare(b.start_date) ||
         getEventWeight(b) - getEventWeight(a)
     );
 
