@@ -15,7 +15,6 @@ import {
 import type { TBAMatch } from "@/lib/tba/types";
 import { usePolling } from "./usePolling";
 
-
 export function useMatches(
   eventKey: string,
 ) {
@@ -23,26 +22,18 @@ export function useMatches(
     useState<TBAMatch[]>([]);
 
   const requestIdRef = useRef(0);
+  const currentEventKeyRef = useRef(eventKey);
 
-  const latestStartedRequestRef = useRef(0);
-  const latestCompletedRequestRef = useRef(0);
-  const latestCommittedRequestRef = useRef(0);
-
-  const matchesRef = useRef<TBAMatch[]>([]);
+  currentEventKeyRef.current = eventKey;
 
   const load = useCallback(
     async () => {
       if (!eventKey) {
-
         return;
       }
 
       const requestId =
         ++requestIdRef.current;
-
-      latestStartedRequestRef.current =
-        requestId;
-
 
       try {
         const url =
@@ -55,7 +46,6 @@ export function useMatches(
           },
         );
 
-
         if (!res.ok) {
           throw new Error(
             `HTTP ${res.status}`,
@@ -65,30 +55,25 @@ export function useMatches(
         const data =
           (await res.json()) as TBAMatch[];
 
-
         const sorted =
           Array.isArray(data)
             ? sortMatches(data)
             : [];
 
-
-        if (requestId > latestCompletedRequestRef.current) {
-          latestCompletedRequestRef.current = requestId;
+        if (
+          currentEventKeyRef.current !== eventKey ||
+          requestId !== requestIdRef.current
+        ) {
+          return;
         }
 
         setMatches(sorted);
-
-        latestCommittedRequestRef.current = requestId;
       } catch (error) {
         console.error("[useMatches] request failed", error);
       }
     },
     [eventKey],
   );
-
-  useEffect(() => {
-    matchesRef.current = matches;
-  }, [matches]);
 
   const reload = usePolling(
     load,
@@ -100,22 +85,7 @@ export function useMatches(
   );
 
   useEffect(() => {
-
     setMatches([]);
-
-    matchesRef.current = [];
-
-    latestStartedRequestRef.current =
-      0;
-
-    latestCompletedRequestRef.current =
-      0;
-
-    latestCommittedRequestRef.current =
-      0;
-
-    requestIdRef.current = 0;
-
   }, [eventKey]);
 
   const eventNextMatch = useMemo(
@@ -127,7 +97,6 @@ export function useMatches(
     () => getLastMatch(matches),
     [matches],
   );
-
 
   return {
     matches,
