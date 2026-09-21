@@ -72,92 +72,13 @@ export function useMatches(
             : [];
 
 
-        /*
-         * Update our completion frontier before committing
-         * this response.
-         */
-        if (
-          requestId >
-          latestCompletedRequestRef.current
-        ) {
-          latestCompletedRequestRef.current =
-            requestId;
+        if (requestId > latestCompletedRequestRef.current) {
+          latestCompletedRequestRef.current = requestId;
         }
 
-        /*
-         * Explicitly log whether this response is already
-         * older than a request that started after it.
-         */
-        if (newerRequestStarted) {
-          console.warn(
-            "[useMatches] STALE RESPONSE DETECTED",
-            {
-              eventKey,
-              requestId,
-              latestStartedRequest:
-                latestStartedRequestRef.current,
-              summary,
-            },
-          );
-        }
-
-        /*
-         * Record the exact state update operation.
-         */
-        const stateUpdateId =
-          ++stateUpdateIdRef.current;
-
-        console.log(
-          "[useMatches] STATE SETTER",
-          {
-            eventKey,
-            requestId,
-            stateUpdateId,
-
-            previousCommittedRequest:
-              latestCommittedRequestRef.current,
-
-            newerRequestStarted,
-
-            summary,
-
-            nextMatch:
-              summarizeMatch(
-                nextMatch,
-              ),
-
-            lastMatch:
-              summarizeMatch(
-                lastMatch,
-              ),
-          },
-        );
-
-        /*
-         * Keep this behavior unchanged for now.
-         *
-         * We deliberately are NOT rejecting stale responses
-         * yet because we want to observe exactly what happens
-         * in production.
-         */
         setMatches(sorted);
 
-        latestCommittedRequestRef.current =
-          requestId;
-
-        console.log(
-          "[useMatches] STATE SETTER COMPLETE",
-          {
-            eventKey,
-            requestId,
-            stateUpdateId,
-
-            committedRequest:
-              latestCommittedRequestRef.current,
-
-            summary,
-          },
-        );
+        latestCommittedRequestRef.current = requestId;
       } catch (error) {
         console.error("[useMatches] request failed", error);
       }
