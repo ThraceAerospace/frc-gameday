@@ -255,12 +255,12 @@ export async function POST(
        * refetches.
        */
       case "alliance_selection": {
-        if (data?.event && eventKey) {
-          await TBA.replaceCached(
-            `/event/${eventKey}`,
-            data.event,
-          );
-        }
+        // if (data?.event && eventKey) {
+        //   await TBA.replaceCached(
+        //     `/event/${eventKey}`,
+        //     data.event,
+        //   );
+        // }
 
         break;
       }
