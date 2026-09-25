@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TBA } from "@/lib/tbaService";
+import { TBA } from "@/lib/tba/service";
 
 export default async function EventPage({
   params,

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { TBA } from "@/lib/tbaService";
+import { TBA } from "@/lib/tba/service";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatAlliance } from "@/lib/tbaFormatters";
+import { formatAlliance } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 export default async function MatchPage({
