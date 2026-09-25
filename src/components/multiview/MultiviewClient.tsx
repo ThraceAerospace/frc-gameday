@@ -318,7 +318,7 @@ export default function MultiviewClient({
   useEffect(() => {
     setLabels((current) => {
       let changed = false;
-      const next = {};
+      const next: Record<string, string> = {};
 
       for (const [
         eventKey,
@@ -380,7 +380,7 @@ export default function MultiviewClient({
    * Update only the event portion of the URL.
    */
   const updateUrl = useCallback(
-    (eventKeys) => {
+    (eventKeys: string[]) => {
       const url =
         new URL(
           window.location.href
@@ -490,7 +490,7 @@ export default function MultiviewClient({
    * Manual highlighting.
    */
   const toggleActive = useCallback(
-    (eventKey) => {
+    (eventKey: string) => {
       showControls();
 
       if (
@@ -798,11 +798,7 @@ export default function MultiviewClient({
           (await response.json()) as TBAEvent[];
 
         if (!cancelled) {
-          setAvailableEvents(
-            Array.isArray(data)
-              ? data
-              : []
-          );
+          setAvailableEvents(data);
         }
       } catch (error) {
         console.error(
@@ -963,7 +959,7 @@ export default function MultiviewClient({
 
       return availableEvents
         .filter(
-          (event) =>
+          (event: TBAEvent) =>
             !activeEventKeys.has(
               String(event.key)
             )
