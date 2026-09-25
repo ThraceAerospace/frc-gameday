@@ -30,7 +30,6 @@ import GamedayWidget from "../gameday/GamedayWidget";
 const CONTROLS_HIDE_DELAY = 3000;
 
 type LayoutKey = keyof typeof LAYOUTS;
-type LayoutSlot = (typeof LAYOUTS)[LayoutKey]["slots"][number];
 type MatchImminentSignal = {
   type: "match_imminent";
   matchKey: string;
@@ -88,14 +87,14 @@ export default function MultiviewClient({
    * null means use the automatically selected layout.
    */
   const [layoutKey, setLayoutKey] =
-    useState(null);
+    useState<LayoutKey | null>(null);
 
   /*
    * When a widget is highlighted, `activeKey` is promoted
    * to slot zero.
    */
   const [activeKey, setActiveKey] =
-    useState(null);
+    useState<string | null>(null);
 
   /*
    * When a widget is highlighted, this temporarily replaces
@@ -146,7 +145,7 @@ export default function MultiviewClient({
    * They must never depend on slot order.
    */
   const [labels, setLabels] =
-    useState({});
+    useState<Record<string, string>>({});
 
   /*
    * Multiview controls idle state.
@@ -160,7 +159,7 @@ export default function MultiviewClient({
     useState(true);
 
   const controlsTimeoutRef =
-    useRef(null);
+    useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearControlsTimeout =
     useCallback(() => {
@@ -452,14 +451,19 @@ export default function MultiviewClient({
    */
   const handleMatchImminent =
     useCallback(
-      (eventKey) => {
+      (eventKey: string | MatchImminentSignal) => {
         if (!autoFocusMatches) {
           return;
         }
 
+        const key =
+          typeof eventKey === "string"
+            ? eventKey
+            : eventKey.matchKey;
+
         if (
           !streams.includes(
-            eventKey
+            key
           )
         ) {
           return;
@@ -524,7 +528,7 @@ export default function MultiviewClient({
   ] = useState(null);
 
   const movePriorityEdit = useCallback(
-    (direction) => {
+    (direction: -1 | 1) => {
       if (!priorityEditKey) {
         return;
       }
@@ -791,7 +795,7 @@ export default function MultiviewClient({
         }
 
         const data =
-          await response.json();
+          (await response.json()) as TBAEvent[];
 
         if (!cancelled) {
           setAvailableEvents(
@@ -837,7 +841,7 @@ export default function MultiviewClient({
     }, [showControls]);
 
   const addEvent = useCallback(
-    (event) => {
+    (event: TBAEvent) => {
       const eventKey =
         String(event.key);
 
@@ -882,7 +886,7 @@ export default function MultiviewClient({
 
   const removeEvent =
     useCallback(
-      (eventKey) => {
+      (eventKey: string) => {
         const nextStreams =
           streams.filter(
             (key) =>
