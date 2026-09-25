@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { TBA } from "@/lib/tba/service";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { TBAMatch, TBAWebcast } from "@/lib/tba/types";
 import { formatAlliance } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
@@ -202,7 +202,7 @@ export default async function MatchPage({
               label="The Blue Alliance"
             />
 
-            {match.videos?.map((video) => (
+            {match.videos?.map((video: any) => (
               <ExternalLink
                 key={`${video.type}-${video.key}`}
                 href={
