@@ -24,7 +24,7 @@ import {
   pickLayout,
   pickHighlightLayout,
 } from "@/lib/multiview/layouts";
-import EventLocalTime from "../gameday/navbar/EventLocalTime";
+import EventLocalTime from "@/components/gameday/match/EventLocalTime";
 import GamedayWidget from "../gameday/GamedayWidget";
 
 const CONTROLS_HIDE_DELAY = 3000;
@@ -1508,7 +1508,7 @@ export default function MultiviewClient({
               ) : (
                 <div className="space-y-1">
                   {filteredEvents.map(
-                    (event) => (
+                    (event: TBAEvent) => (
                       <button
                         key={
                           event.key
