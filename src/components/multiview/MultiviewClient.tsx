@@ -29,7 +29,19 @@ import GamedayWidget from "../gameday/GamedayWidget";
 
 const CONTROLS_HIDE_DELAY = 3000;
 
-type MultiviewClientProps = { events?: string[]; isDivisional?: boolean; parentEvent?: TBAEvent | null };
+type LayoutKey = keyof typeof LAYOUTS;
+type LayoutSlot = (typeof LAYOUTS)[LayoutKey]["slots"][number];
+type MatchImminentSignal = {
+  type: "match_imminent";
+  matchKey: string;
+  severity: "hard" | "soft";
+};
+
+type MultiviewClientProps = {
+  events?: string[];
+  isDivisional?: boolean;
+  parentEvent?: TBAEvent | null;
+};
 
 export default function MultiviewClient({
   events = [],
@@ -94,7 +106,7 @@ export default function MultiviewClient({
   const [
     highlightLayoutKey,
     setHighlightLayoutKey,
-  ] = useState(null);
+  ] = useState<LayoutKey | null>(null);
 
   const [sidebarOpen, setSidebarOpen] =
     useState(false);
@@ -282,7 +294,7 @@ export default function MultiviewClient({
    * event key.
    */
   const registerLabel = useCallback(
-    (eventKey, label) => {
+    (eventKey: string, label: string) => {
       setLabels((current) => {
         if (
           current[eventKey] === label
@@ -335,7 +347,7 @@ export default function MultiviewClient({
    * Move only the priority array.
    */
   const move = useCallback(
-    (position, direction) => {
+    (position: number, direction: -1 | 1) => {
       setPriority((current) => {
         const target =
           position + direction;
@@ -458,7 +470,7 @@ export default function MultiviewClient({
             layout.slots.length
           );
 
-        setActiveKey(eventKey);
+        setActiveKey(key);
         setHighlightLayoutKey(
           highlightKey
         );
@@ -564,7 +576,7 @@ export default function MultiviewClient({
    *   ArrowDown moves it later in priority.
    */
   useEffect(() => {
-    const handleKeyDown = (event) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       const target =
         event.target;
 
@@ -952,7 +964,7 @@ export default function MultiviewClient({
               String(event.key)
             )
         )
-        .filter((event) => {
+        .filter((event: TBAEvent) => {
           if (!query) {
             return true;
           }
