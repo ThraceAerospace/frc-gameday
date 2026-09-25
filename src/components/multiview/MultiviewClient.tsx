@@ -1,5 +1,7 @@
 "use client";
 
+import type { TBAEvent } from "@/lib/tba/types";
+
 import {
   useCallback,
   useEffect,
@@ -27,11 +29,13 @@ import GamedayWidget from "../gameday/GamedayWidget";
 
 const CONTROLS_HIDE_DELAY = 3000;
 
+type MultiviewClientProps = { events?: string[]; isDivisional?: boolean; parentEvent?: TBAEvent | null };
+
 export default function MultiviewClient({
   events = [],
   isDivisional = false,
   parentEvent = null,
-}) {
+}: MultiviewClientProps) {
   const router = useRouter();
 
   /*
