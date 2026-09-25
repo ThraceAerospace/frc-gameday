@@ -12,7 +12,6 @@ import {
 } from "react";
 import {
   ArrowPathIcon,
-  ChartBarIcon,
   ChatBubbleLeftRightIcon,
   Cog6ToothIcon,
   UserGroupIcon,
@@ -21,7 +20,6 @@ import {
 import StreamView from "./StreamView";
 import ChatView from "./ChatView";
 import StreamModal from "./StreamModal";
-import EventStatsSideBar from "./EventStatsSideBar";
 import TeamModal from "./team/TeamModal";
 import TeamPill from "./team/TeamPill";
 import MatchStrip from "./match/MatchStrip";
@@ -91,10 +89,7 @@ const {
   const [settingsOpen, setSettingsOpen] =
     useState(false);
 
-  const [statsOpen, setStatsOpen] =
-    useState(false);
-
-  const [teamsOpen, setTeamsOpen] =
+const [teamsOpen, setTeamsOpen] =
     useState(false);
 
   const [streamsOpen, setStreamsOpen] =
@@ -401,23 +396,7 @@ const {
 
         {settingsOpen && (
           <div className="absolute left-0 top-full mt-1 flex flex-col gap-1 rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
-            <button
-              className={`icon-button ${
-                statsOpen
-                  ? "active"
-                  : ""
-              }`}
-              title="Event rankings"
-              onClick={() =>
-                setStatsOpen(
-                  (value) => !value,
-                )
-              }
-            >
-              <ChartBarIcon />
-            </button>
-
-            <button
+<button
               className={`icon-button ${
                 trackedTeams.length
                   ? "active"
@@ -471,20 +450,7 @@ const {
       </div>
 
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
-        {statsOpen && (
-          <aside className="h-full w-[min(250px,92vw)] shrink-0 border-r border-white/10 bg-neutral-950 shadow-2xl">
-            <EventStatsSideBar
-              teamStatuses={
-                teamsStatuses
-              }
-              playoffAlliances={
-                alliances
-              }
-            />
-          </aside>
-        )}
-
-        <div className="relative min-w-0 min-h-0 flex-1">
+<div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
             stream={activeStream}
           />
