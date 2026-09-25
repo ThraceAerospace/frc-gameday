@@ -1,5 +1,9 @@
 "use client";
 
+import type { ReactNode } from "react";
+import type { TBAMatch } from "@/lib/tba/types";
+import type { BuiltStream } from "@/lib/gameday/buildStreams";
+
 import {
   useCallback,
   useEffect,
@@ -34,6 +38,10 @@ import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 
 const EMPTY_TEAMS = [];
 
+type MatchImminentSignal = { type: "match_imminent"; matchKey: string; severity: "hard" | "soft" };
+
+type GamedayWidgetProps = { event: string; initialTeams?: string[]; registerLabel?: (label: string) => void; onMatchImminent?: (signal: MatchImminentSignal) => void; isDivisional?: boolean; multiview?: { presentation?: { teamTracker?: "visible" | "hidden"; matchInfo?: "visible" | "hidden" } } };
+
 const DEFAULT_PRESENTATION = {
   teamTracker: "visible",
   matchInfo: "visible",
@@ -46,7 +54,7 @@ export default function GamedayWidget({
   onMatchImminent,
   isDivisional = false,
   multiview = {},
-}) {
+}: GamedayWidgetProps) {
   
 const {
   event: eventData,
@@ -78,7 +86,7 @@ const {
     useState(initialTeams);
 
   const [streamsRaw, setStreamsRaw] =
-    useState([]);
+    useState<BuiltStream[]>([]);
 
   const [settingsOpen, setSettingsOpen] =
     useState(false);

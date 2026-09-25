@@ -1,5 +1,7 @@
 "use client";
 
+import type { TBAMatch, TBATeamEventStatus } from "@/lib/tba/types";
+
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
 import NextMatchCountdown from "@/components/gameday/match/NextMatchCountdown";
 
@@ -8,7 +10,7 @@ export default function TeamPill({
   status,
   teamCount,
   nextMatch,
-}) {
+}: { team: string; status: TBATeamEventStatus | null | undefined; teamCount: number; nextMatch: TBAMatch | null | undefined }) {
 
   const record = status?.qual?.ranking?.record;
 

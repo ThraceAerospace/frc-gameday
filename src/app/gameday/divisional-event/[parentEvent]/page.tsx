@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { TBAEvent } from "@/lib/tba/types";
 import MultiviewClient from "@/components/multiview/MultiviewClient";
 
 export const dynamic = "force-dynamic";
 
-export default function DivisionalEvent({ params }) {
-  const [data, setData] = useState(null);
+export default function DivisionalEvent({ params }: { params: Promise<{ parentEvent: string }> }) {
+  const [data, setData] = useState<TBAEvent | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function DivisionalEvent({ params }) {
 
         return res.json();
       })
-      .then((parent) => {
+      .then((parent: TBAEvent) => {
         if (!cancelled) {
           setData(parent);
         }

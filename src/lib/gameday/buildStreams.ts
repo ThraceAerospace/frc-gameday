@@ -1,4 +1,8 @@
-export async function buildStreams(webcasts = []) {
+import type { TBAWebcast } from "@/lib/tba/types";
+
+export type BuiltStream = { type: "twitch" | "youtube"; channel: string; url: string; chat: string; date?: string | null; meta: { title?: string | null } | null };
+
+export async function buildStreams(webcasts: TBAWebcast[] = []): Promise<BuiltStream[]> {
   const sortedWebcasts = [...(webcasts || [])].sort((a, b) => {
     const aTime = a.date ? new Date(a.date).getTime() : 0;
     const bTime = b.date ? new Date(b.date).getTime() : 0;
@@ -25,7 +29,7 @@ export async function buildStreams(webcasts = []) {
           `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${wc.channel}&format=json`
         );
 
-        if (res.ok) meta = await res.json();
+        if (res.ok) meta = (await res.json()) as { title?: string | null };
       } catch {
         meta = null;
       }

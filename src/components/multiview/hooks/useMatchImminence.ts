@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { TBAMatch } from "@/lib/tba/types";
 
 export function useMatchImminence(
-  match: any,
-  emit: (signal: any) => void
+  match: TBAMatch | null,
+  emit: (signal: { type: "match_imminent"; matchKey: string; severity: "hard" | "soft" }) => void
 ) {
   const emitRef = useRef(emit);
   const imminentRef = useRef(false);

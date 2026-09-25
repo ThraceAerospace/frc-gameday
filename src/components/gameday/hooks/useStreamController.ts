@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { BuiltStream } from "@/lib/gameday/buildStreams";
 
-type Stream = { key?: string; type?: string; channel?: string; date?: string; [key: string]: any };
+type Stream = BuiltStream & { key?: string };
 
 function streamKey(stream: Stream) { return stream.key ?? `${stream.type}:${stream.channel}:${stream.date ?? ""}`; }
 function today(timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }

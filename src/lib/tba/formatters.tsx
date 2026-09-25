@@ -1,4 +1,7 @@
-export function formatTeamKey(teamKey, trackedTeams = []) {
+import type { ReactNode } from "react";
+import type { TBAMatch } from "@/lib/tba/types";
+
+export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
   const num = teamKey.replace("frc", "");
 
   const isTracked =
@@ -15,11 +18,11 @@ export function formatTeamKey(teamKey, trackedTeams = []) {
   );
 }
 
-export function formatAlliance(teamKeys = [], trackedTeams = []) {
+export function formatAlliance(teamKeys: string[] = [], trackedTeams: string[] = []): ReactNode[] {
   return teamKeys.map((t) => formatTeamKey(t, trackedTeams));
 }
 
-export function matchCode(matchKey) {
+export function matchCode(matchKey: string): string {
   try {
     return matchKey.split("_")[1].toUpperCase().replace(/(?<!Q)M/g, "-");
   } catch {
@@ -27,7 +30,7 @@ export function matchCode(matchKey) {
   }
 }
 
-export function matchShortName(match, eventPlayoffType) {
+export function matchShortName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
@@ -64,7 +67,7 @@ export function matchShortName(match, eventPlayoffType) {
   }
 }
 
-export function compLevelShortName(compLevel) {
+export function compLevelShortName(compLevel: string): string {
   switch (compLevel.toUpperCase()) {
     case "F":
       return "Finals";

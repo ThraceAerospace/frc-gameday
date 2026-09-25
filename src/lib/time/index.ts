@@ -1,4 +1,4 @@
-export function formatEventTime(timestampSeconds, eventTimeZone) {
+export function formatEventTime(timestampSeconds: number | null | undefined, eventTimeZone?: string | null): string {
   if (!timestampSeconds) return "Time TBD";
 
   const timeZone = eventTimeZone || "UTC";
@@ -34,7 +34,7 @@ export function formatEventTime(timestampSeconds, eventTimeZone) {
   return sameDay ? time : `${parts.weekday} ${time}`;
 }
 
-export function formatEventDate(timestampSeconds, timeZone) {
+export function formatEventDate(timestampSeconds: number, timeZone: string): string {
   const date = new Date(timestampSeconds * 1000);
 
   return new Intl.DateTimeFormat("en-US", {
@@ -45,18 +45,18 @@ export function formatEventDate(timestampSeconds, timeZone) {
   }).format(date);
 }
 
-export function getEventNow(timeZone) {
+export function getEventNow(timeZone: string): Date {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone })
   );
 }
 
-export function parseLocalDate(dateStr) {
+export function parseLocalDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
   return new Date(year, month - 1, day);
 }
 
-export function dumbDateString(dateStr) {
+export function dumbDateString(dateStr: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
 
   const months = [

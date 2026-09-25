@@ -1,4 +1,8 @@
-// src/lib/layouts.js
+type Presentation = { matchInfo: "visible" | "hidden"; teamTracker: "visible" | "hidden" };
+type LayoutSlot = { x: number; y: number; w: number; h: number; presentation: Presentation };
+export type Layout = { name: string; slots: LayoutSlot[] };
+
+
 
 const VISIBLE = "visible";
 const HIDDEN = "hidden";
@@ -19,7 +23,7 @@ const NONE = {
   teamTracker: HIDDEN,
 };
 
-export const LAYOUTS = {
+export const LAYOUTS: Record<string, Layout> = {
   // 1
   single: {
     name: "Single",
@@ -217,7 +221,7 @@ export const LAYOUTS = {
  * For slot counts without a separate equal-weight layout, the available
  * composite layout is used.
  */
-export function pickLayout(count) {
+export function pickLayout(count: number): string {
   if (count <= 1) return "single";
   if (count === 2) return "verticalSplit";
   if (count === 3) return "onePlusTwo";
@@ -238,7 +242,7 @@ export function pickLayout(count) {
  * Where a dedicated highlight layout exists, it is preferred.
  * Otherwise the normal layout for that slot count is used.
  */
-export function pickHighlightLayout(count) {
+export function pickHighlightLayout(count: number): string {
   if (count <= 1) return "single";
   if (count === 2) return "verticalSplit";
   if (count === 3) return "onePlusTwo";

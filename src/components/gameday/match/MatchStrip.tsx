@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { useEffect, useRef } from "react";
 import MatchCard from "./MatchCard";
 import EventLocalTime from "./EventLocalTime";

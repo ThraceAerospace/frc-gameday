@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function EventLocalTime({ timezone }) {
+export default function EventLocalTime({ timezone }: { timezone?: string | null }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {

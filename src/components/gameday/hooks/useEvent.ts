@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { TBAEvent } from "@/lib/tba/types";
 
 export function useEvent(eventKey: string) {
-  const [event, setEvent] = useState<any>(null);
+  const [event, setEvent] = useState<TBAEvent | null>(null);
   const [loading, setLoading] = useState(Boolean(eventKey));
   const [error, setError] = useState<Error | null>(null);
 
@@ -36,7 +37,7 @@ export function useEvent(eventKey: string) {
         throw new Error(`Event request failed: ${res.status}`);
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as TBAEvent;
 
       if (!controller.signal.aborted) {
         setEvent(data);
