@@ -1,5 +1,5 @@
-import { redis } from "./redis";
-import { TBA } from "./tbaService";
+import { redis } from "@/lib/cache/redis";
+import { TBA } from "@/lib/tba/service";
 import type { TBAEliminationAlliance, TBAMatchSimple } from "./tba/types";
 
 export type EventState = {

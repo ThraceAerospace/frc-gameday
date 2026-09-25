@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { tba as TBA } from "@/lib/tba";
-import { broadcastTBAEvent } from "@/lib/websocket";
+import { broadcastTBAEvent } from "@/lib/realtime/websocket";
 
 type TBAWebhookMatch = {
   key?: string;

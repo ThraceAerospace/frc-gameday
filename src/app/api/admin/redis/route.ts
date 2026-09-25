@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllEventKeys, getEventState } from "@/lib/eventState";
+import { getAllEventKeys, getEventState } from "@/lib/events/state";
 
 export async function GET() {
   const keys = await getAllEventKeys();

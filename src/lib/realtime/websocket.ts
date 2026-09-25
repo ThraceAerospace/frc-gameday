@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { redis } from "@/lib/redis";
+import { redis } from "@/lib/cache/redis";
 
 export const TBA_WEBSOCKET_CHANNEL =
   "gameday:tba";

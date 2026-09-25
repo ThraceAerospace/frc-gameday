@@ -1,7 +1,7 @@
 "use client";
 
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
-import NextMatchCountdown from "@/components/gameday/navbar/NextMatchCountdown";
+import NextMatchCountdown from "@/components/gameday/match/NextMatchCountdown";
 
 export default function TeamPill({
   team,

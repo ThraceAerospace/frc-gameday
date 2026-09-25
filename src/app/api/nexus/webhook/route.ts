@@ -1,4 +1,4 @@
-import { redis } from "@/lib/redis";
+import { redis } from "@/lib/cache/redis";
 
 export async function POST(req: Request) {
     const payload = await req.json();

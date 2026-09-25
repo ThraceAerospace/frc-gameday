@@ -2,7 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance } from "@/lib/tbaFormatters";
+import { formatAlliance } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 type PlayoffAlliance = {

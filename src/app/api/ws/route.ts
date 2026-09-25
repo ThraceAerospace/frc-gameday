@@ -3,7 +3,7 @@ import {
 } from "@vercel/functions";
 import {
   registerWebSocket,
-} from "@/lib/websocket";
+} from "@/lib/realtime/websocket";
 
 export const runtime = "nodejs";
 

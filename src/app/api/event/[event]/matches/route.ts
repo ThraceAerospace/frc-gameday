@@ -1,6 +1,6 @@
 // /api/event/[event]/matches/route.ts
 
-import { TBA } from "@/lib/tbaService";
+import { TBA } from "@/lib/tba/service";
 
 export async function GET(
     _req: Request,

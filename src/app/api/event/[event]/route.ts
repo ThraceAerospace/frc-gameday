@@ -1,4 +1,4 @@
-import { TBA } from "@/lib/tbaService";
+import { TBA } from "@/lib/tba/service";
 
 export const GET = async (  req: Request,
   { params }: { params: Promise<{ event: string }> }) => {

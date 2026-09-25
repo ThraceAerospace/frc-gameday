@@ -21,7 +21,7 @@ import {
   LAYOUTS,
   pickLayout,
   pickHighlightLayout,
-} from "@/lib/layouts";
+} from "@/lib/multiview/layouts";
 import EventLocalTime from "../gameday/navbar/EventLocalTime";
 import GamedayWidget from "../gameday/GamedayWidget";
 

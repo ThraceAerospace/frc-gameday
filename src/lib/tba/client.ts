@@ -1,4 +1,4 @@
-import { redis } from "@/lib/redis";
+import { redis } from "@/lib/cache/redis";
 
 function isMatchResultPresent(match: {
   actual_time?: number | null;

@@ -1,4 +1,4 @@
-import { TBA } from "@/lib/tbaService";
+import { TBA } from "@/lib/tba/service";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type EventState = "upcoming" | "in_progress" | "complete";
