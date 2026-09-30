@@ -99,6 +99,23 @@ export default function MatchCard({
       ) ?? null
     : null;
 
+  const redScore = match.alliances.red.score;
+  const blueScore = match.alliances.blue.score;
+
+  const hasResult =
+    redScore != null &&
+    blueScore != null &&
+    redScore >= 0 &&
+    blueScore >= 0;
+
+  const resultBackground = !hasResult
+    ? null
+    : redScore > blueScore
+      ? "bg-red-950/50"
+      : blueScore > redScore
+        ? "bg-blue-950/50"
+        : "bg-zinc-800/80";
+
   const matchName = compactMatchName(match, playoffType);
 
   const time =
@@ -119,10 +136,10 @@ export default function MatchCard({
         "px-2 py-1",
         "transition-colors",
         isNext
-          ? "border-zinc-500 bg-zinc-900"
+          ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
           : isLast
-            ? "border-zinc-700 bg-zinc-900/80"
-            : "border-zinc-800 bg-zinc-950",
+            ? `border-zinc-700 ${resultBackground ?? "bg-zinc-900/80"}`
+            : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
       ].join(" ")}
     >
       <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
