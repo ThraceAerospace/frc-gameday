@@ -395,6 +395,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/event/{event_key}/matches/practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Gets a list of practice matches for the given event. */
+        get: operations["getEventPracticeMatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/event/{event_key}/matches/practice/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Gets a list of practice match keys for the given event. */
+        get: operations["getEventPracticeMatchesKeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/event/{event_key}/matches/practice/simple": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Gets a short-form list of practice matches for the given event. */
+        get: operations["getEventPracticeMatchesSimple"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/event/{event_key}/matches/timeseries": {
         parameters: {
             query?: never;
@@ -1555,7 +1606,7 @@ export interface components {
          * @description The competition level the match was played at.
          * @enum {string}
          */
-        Comp_Level: "qm" | "ef" | "qf" | "sf" | "f";
+        Comp_Level: "pm" | "qm" | "ef" | "qf" | "sf" | "f";
         /**
          * AwardType
          * @description Type of award given. See https://github.com/the-blue-alliance/the-blue-alliance/blob/main/src/backend/common/consts/award_type.py for full definitions.
@@ -2380,7 +2431,7 @@ export interface components {
             year: number;
         };
         Match: {
-            /** @description TBA match key with the format `yyyy[EVENT_CODE]_[COMP_LEVEL]m[MATCH_NUMBER]`, where `yyyy` is the year, and `EVENT_CODE` is the event code of the event, `COMP_LEVEL` is (qm, ef, qf, sf, f), and `MATCH_NUMBER` is the match number in the competition level. A set number may be appended to the competition level if more than one match in required per set. */
+            /** @description TBA match key with the format `yyyy[EVENT_CODE]_[COMP_LEVEL]m[MATCH_NUMBER]`, where `yyyy` is the year, and `EVENT_CODE` is the event code of the event, `COMP_LEVEL` is (pm, qm, ef, qf, sf, f), and `MATCH_NUMBER` is the match number in the competition level. A set number may be appended to the competition level if more than one match in required per set. */
             key: string;
             comp_level: components["schemas"]["Comp_Level"];
             /** @description The set number in a series of matches where more than one match is required in the match series. */
@@ -2953,7 +3004,7 @@ export interface components {
             traversalAchieved: boolean;
         };
         Match_Simple: {
-            /** @description TBA match key with the format `yyyy[EVENT_CODE]_[COMP_LEVEL]m[MATCH_NUMBER]`, where `yyyy` is the year, and `EVENT_CODE` is the event code of the event, `COMP_LEVEL` is (qm, ef, qf, sf, f), and `MATCH_NUMBER` is the match number in the competition level. A set number may append the competition level if more than one match in required per set. */
+            /** @description TBA match key with the format `yyyy[EVENT_CODE]_[COMP_LEVEL]m[MATCH_NUMBER]`, where `yyyy` is the year, and `EVENT_CODE` is the event code of the event, `COMP_LEVEL` is (pm, qm, ef, qf, sf, f), and `MATCH_NUMBER` is the match number in the competition level. A set number may append the competition level if more than one match in required per set. */
             key: string;
             comp_level: components["schemas"]["Comp_Level"];
             /** @description The set number in a series of matches where more than one match is required in the match series. */
@@ -4624,6 +4675,105 @@ export interface operations {
         };
     };
     getEventMatchesSimple: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Value of the `ETag` header in the most recently cached response by the client. */
+                "If-None-Match"?: components["parameters"]["If-None-Match"];
+            };
+            path: {
+                /** @description TBA Event Key, eg `2016nytr` */
+                event_key: components["parameters"]["event_key"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    /** @description The `Cache-Control` header, in particular the `max-age` value, contains the number of seconds the result should be considered valid for. During this time subsequent calls should return from the local cache directly. */
+                    "Cache-Control"?: string;
+                    /** @description Specifies the version of the most recent response. Used by clients in the `If-None-Match` request header. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Match_Simple"][];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEventPracticeMatches: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Value of the `ETag` header in the most recently cached response by the client. */
+                "If-None-Match"?: components["parameters"]["If-None-Match"];
+            };
+            path: {
+                /** @description TBA Event Key, eg `2016nytr` */
+                event_key: components["parameters"]["event_key"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    /** @description The `Cache-Control` header, in particular the `max-age` value, contains the number of seconds the result should be considered valid for. During this time subsequent calls should return from the local cache directly. */
+                    "Cache-Control"?: string;
+                    /** @description Specifies the version of the most recent response. Used by clients in the `If-None-Match` request header. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Match"][];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEventPracticeMatchesKeys: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Value of the `ETag` header in the most recently cached response by the client. */
+                "If-None-Match"?: components["parameters"]["If-None-Match"];
+            };
+            path: {
+                /** @description TBA Event Key, eg `2016nytr` */
+                event_key: components["parameters"]["event_key"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    /** @description The `Cache-Control` header, in particular the `max-age` value, contains the number of seconds the result should be considered valid for. During this time subsequent calls should return from the local cache directly. */
+                    "Cache-Control"?: string;
+                    /** @description Specifies the version of the most recent response. Used by clients in the `If-None-Match` request header. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEventPracticeMatchesSimple: {
         parameters: {
             query?: never;
             header?: {

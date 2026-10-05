@@ -17,13 +17,16 @@ export function useMatchImminence(
   useEffect(() => {
     imminentRef.current = false;
 
-    if (!match?.predicted_time) {
+    const predictedTime = match?.predicted_time;
+    const matchKey = match?.key;
+
+    if (predictedTime == null || matchKey == null) {
       return;
     }
 
     const update = () => {
       const diff =
-        match.predicted_time * 1000 - Date.now();
+        predictedTime * 1000 - Date.now();
 
       const imminent =
         diff <= 120000 && diff > -60000;
@@ -40,7 +43,7 @@ export function useMatchImminence(
       ) {
         emitRef.current({
           type: "match_imminent",
-          matchKey: match.key,
+          matchKey,
           severity:
             diff <= 60000
               ? "hard"

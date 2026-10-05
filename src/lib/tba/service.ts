@@ -19,7 +19,7 @@ import type {
   TBATeam,
   TBATeamEventStatus,
   TBATeamSimple,
-} from "./tba/types";
+} from "@/lib/tba/types";
 
 function parseDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);

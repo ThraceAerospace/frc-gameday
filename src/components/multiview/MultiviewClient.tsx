@@ -132,7 +132,7 @@ export default function MultiviewClient({
   const [
     availableEvents,
     setAvailableEvents,
-  ] = useState([]);
+  ] = useState<TBAEvent[]>([]);
 
   const [
     eventsLoading,
@@ -525,7 +525,7 @@ export default function MultiviewClient({
   const [
     priorityEditKey,
     setPriorityEditKey,
-  ] = useState(null);
+  ] = useState<string | null>(null);
 
   const movePriorityEdit = useCallback(
     (direction: -1 | 1) => {
@@ -593,7 +593,9 @@ export default function MultiviewClient({
           HTMLSelectElement ||
         target instanceof
           HTMLButtonElement ||
-        target?.isContentEditable
+        (target instanceof
+          HTMLElement &&
+          target.isContentEditable)
       ) {
         return;
       }
@@ -1216,12 +1218,8 @@ export default function MultiviewClient({
                     )
                   }
                   multiview={{
-                    layoutKey:
-                      selectedLayoutKey,
                     presentation:
                       slotPresentation,
-                    slotIndex,
-                    visible,
                   }}
                 />
               </div>

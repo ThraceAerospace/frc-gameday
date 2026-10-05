@@ -4,21 +4,20 @@ export type Layout = { name: string; slots: LayoutSlot[] };
 
 
 
-const VISIBLE = "visible";
-const HIDDEN = "hidden";
+const VISIBLE = "visible" as const;
+const HIDDEN = "hidden" as const;
 
-
-const LARGE = {
+const LARGE: Presentation = {
   matchInfo: VISIBLE,
   teamTracker: VISIBLE,
 };
 
-const COMPACT = {
+const COMPACT: Presentation = {
   matchInfo: HIDDEN,
   teamTracker: VISIBLE,
 };
 
-const NONE = {
+const NONE: Presentation = {
   matchInfo: HIDDEN,
   teamTracker: HIDDEN,
 };

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { TBA } from "@/lib/tba/service";
-import { TBAMatch } from "@/lib/tba/types";
+import { TBAMatchSimple, TBAMatch } from "@/lib/tba/types";
 
 export default async function EventPage({
   params,
@@ -166,7 +166,7 @@ export default async function EventPage({
               </div>
             ) : (
               <div className="divide-y divide-white/10">
-                {matches.map((match: TBAMatch) => (
+                {matches.map((match: TBAMatchSimple) => (
                   <div
                     key={match.key}
                     className="grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white/[0.02] px-5 py-4"
