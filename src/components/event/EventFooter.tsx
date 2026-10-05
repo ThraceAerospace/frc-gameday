@@ -42,7 +42,7 @@ export default function EventFooter({
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div className="pointer-events-none absolute inset-x-2 bottom-full z-30 flex h-5 items-center justify-between gap-2 overflow-hidden rounded-t bg-neutral-950/85 px-1.5 text-[10px] backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-2 top-0 z-30 flex h-5 w-fit items-center gap-3 rounded-b bg-neutral-950/85 px-1.5 text-[10px] backdrop-blur-sm">
         <div className="flex min-w-0 items-center gap-1">
           <span className="truncate font-semibold text-white">{eventName || "Event"}</span>
           <span
