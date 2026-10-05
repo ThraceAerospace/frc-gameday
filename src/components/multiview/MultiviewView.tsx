@@ -2,6 +2,7 @@
 
 import type { TBAEvent } from "@/lib/tba/types";
 import { useSyncExternalStore } from "react";
+import MultiviewSettings from "./MultiviewSettings";
 import type { MultiviewController } from "./MultiviewActions";
 import {
   LAYOUTS,
@@ -137,6 +138,10 @@ export default function MultiviewView({
           ))}
         </div>
 
+
+
+
+        <MultiviewSettings state={state} actions={actions} />
 
       </header>
 
