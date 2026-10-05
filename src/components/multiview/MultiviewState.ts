@@ -2,10 +2,12 @@
 
 import type { TBAEvent } from "@/lib/tba/types";
 import type { LAYOUTS } from "@/lib/multiview/layouts";
+import type { EventViewConfig } from "../gameday/EventViewConfig";
 
 type LayoutKey = keyof typeof LAYOUTS;
 
 export type MultiviewState = {
+  eventConfigs: Record<string, EventViewConfig>;
   streams: string[];
   priority: string[];
   layoutKey: LayoutKey | null;
@@ -32,8 +34,23 @@ export function createInitialMultiviewState(
   events: string[]
 ): MultiviewState {
   const streams = [...new Set(events.filter(Boolean).map(String))];
+  const eventConfigs = Object.fromEntries(
+    streams.map((eventKey) => [
+      eventKey,
+      {
+        trackedTeams: [],
+        selectedStream: null,
+        chatOpen: false,
+        presentation: {
+          teamTracker: "visible",
+          matchInfo: "visible",
+        },
+      },
+    ])
+  );
 
   return {
+    eventConfigs,
     streams,
     priority: streams,
     layoutKey: null,
