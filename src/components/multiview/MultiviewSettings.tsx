@@ -22,7 +22,6 @@ export default function MultiviewSettings({
   trigger,
 }: MultiviewSettingsProps) {
   const [open, setOpen] = useState(false);
-  const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
 
   const autoLayoutKey = pickLayout(state.streams.length || 1);
@@ -30,7 +29,7 @@ export default function MultiviewSettings({
     state.highlightLayoutKey ?? state.layoutKey ?? autoLayoutKey;
 
   const filteredEvents = useMemo(() => {
-    const query = eventSearch.trim().toLowerCase();
+    const query = state.eventSearch.trim().toLowerCase();
 
     return state.availableEvents
       .filter((event) => !state.streams.includes(String(event.key)))
@@ -52,12 +51,12 @@ export default function MultiviewSettings({
             String(value).toLowerCase().includes(query)
           );
       });
-  }, [eventSearch, state.availableEvents, state.streams]);
+  }, [state.availableEvents, state.eventSearch, state.streams]);
 
   const openSettings = () => setOpen(true);
   const closeSettings = () => {
     setOpen(false);
-    setEventPickerOpen(false);
+    actions.closeEventPicker();
   };
 
   return (
@@ -99,8 +98,6 @@ export default function MultiviewSettings({
 
                 <button
                   onClick={() => {
-                    setEventSearch("");
-                    setEventPickerOpen(true);
                     actions.openEventPicker();
                   }}
                   className="mb-4 w-full rounded bg-neutral-800 px-3 py-2 text-left text-sm hover:bg-neutral-700"
@@ -230,10 +227,10 @@ export default function MultiviewSettings({
         </div>
       ) : null}
 
-      {open && eventPickerOpen ? (
+      {open && state.eventPickerOpen ? (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setEventPickerOpen(false)}
+          onClick={actions.closeEventPicker}
         >
           <div
             className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 shadow-2xl"
@@ -255,8 +252,8 @@ export default function MultiviewSettings({
               <input
                 autoFocus
                 type="text"
-                value={eventSearch}
-                onChange={(event) => setEventSearch(event.target.value)}
+                value={state.eventSearch}
+                onChange={(event) => actions.setEventSearch(event.target.value)}
                 placeholder="Search events..."
                 className="w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500"
               />
@@ -276,10 +273,7 @@ export default function MultiviewSettings({
                   {filteredEvents.map((event) => (
                     <button
                       key={event.key}
-                      onClick={() => {
-                        actions.addEvent(event);
-                        setEventPickerOpen(false);
-                      }}
+                      onClick={() => actions.addEvent(event)}
                       className="w-full rounded px-3 py-2 text-left transition-colors hover:bg-neutral-800"
                     >
                       <div className="truncate text-sm font-semibold">
