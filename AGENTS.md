@@ -2,19 +2,19 @@
 
 ## Project
 
-FieldView / FRC Gameday is a Next.js 16.2.4 application for live FIRST Robotics Competition event presentation.
+FieldView / FRC Gameday is a Next.js application for live FIRST Robotics Competition event presentation.
 
-Read this file before modifying the project. The codebase is in a stabilization and cleanup phase after several architectural rewrites.
+The codebase is in a stabilization and cleanup phase after the Multiview/EventView refactor.
 
 ## Branch
 
-Use main unless the user explicitly requests another branch.
+Use `main` unless the user explicitly requests another branch.
 
 ## Core architecture
 
-The intended flow is:
+The intended realtime flow is:
 
-~~~
+```
 TBA REST / webhooks
        ↓
      Redis
@@ -23,14 +23,8 @@ TBA REST / webhooks
        ↓
  WebSocket
        ↓
-EventView
-   ├── matches
-   ├── teams/statuses
-   ├── playoff alliances
-   └── webcast presentation
-
-Polling is fallback reconciliation.
-~~~
+ EventView
+```
 
 Rules:
 
@@ -42,50 +36,31 @@ Rules:
 6. Polling reconciles missed webhooks.
 7. Do not introduce another cache layer to support webhooks.
 8. Do not hardcode TBA Cache-Control max-age values.
-9. The full event /event/<event>/matches cache is the canonical match cache for current Gameday.
-10. Do not reintroduce old simple/team match caches into the primary realtime path.
+9. The full event `/event/<event>/matches` cache is the canonical match cache for Gameday.
+10. Do not reintroduce the old simple/team match caches into the primary realtime path.
 
 ## TBA webhook authentication
 
-Endpoint: /api/tba/webhook
+Endpoint: `/api/tba/webhook`.
 
-Authenticate X-TBA-HMAC before parsing JSON.
+Authenticate `X-TBA-HMAC` before parsing JSON.
 
-- Missing HMAC header → HTTP 418 intentionally.
+- Missing HMAC → HTTP 418 intentionally.
 - Invalid HMAC → HTTP 401.
 - Authenticated malformed JSON → HTTP 400.
 - Internal/configuration failure → HTTP 500.
-
-Current message handling:
-
-- match_score → mutate canonical event match cache.
-- match_video → mutate canonical event match cache.
-- upcoming_match → merge into cached match data.
-- alliance_selection → update event cache when possible and let clients refetch derived data.
-- schedule_updated → refetch signal.
-- starting_comp_level → refetch signal.
-- awards_posted → refetch signal for now.
-- verification/ping/broadcast → acknowledge without match mutation.
-- unknown types → acknowledge and log.
 
 Broadcast only after successful cache processing. A WSS failure must not turn a successful Redis mutation into a failed webhook response.
 
 ## Client realtime behavior
 
-useWebSocket connects to /api/ws?event=<eventKey> and reconnects with exponential backoff capped at 30 seconds.
+`useWebSocket` connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff.
 
-EventView currently handles:
-
-- upcoming_match, match_score, match_video → reload matches and team statuses.
-- starting_comp_level, schedule_updated → broad live-data refresh.
-- alliance_selection → reload alliances, statuses, and matches.
-- unknown message types → broad live-data refresh.
-
-Keep the manual r refresh behavior unless the user explicitly changes it.
+EventView handles TBA update messages by refreshing the relevant hooks. Keep the manual `r` refresh behavior unless explicitly changed.
 
 ## Polling
 
-usePolling is shared fallback infrastructure.
+`usePolling` is shared fallback infrastructure.
 
 Current intervals:
 
@@ -94,33 +69,25 @@ Current intervals:
 - intermediate: 5 minutes
 - long: 15 minutes
 
-Its generation counter is intentional.
+Its generation counter is intentional. A reload must invalidate older work, cancel the old timer, run the current callback, and allow only the newest generation to schedule the next fallback.
 
-A reload must invalidate older work, cancel the old timer, run the current callback, and allow only the newest generation to schedule the next fallback.
-
-Do not replace this with a naive setInterval implementation.
+Do not replace this with a naive `setInterval` implementation.
 
 ## Match semantics
 
-The client-side canonical match helpers are in src/lib/gameday/matchUtils.ts.
-
-Next match means the first chronologically sorted match whose alliance score is -1.
-
-Do not use actual_time or score_breakdown as the sole next-match criterion.
-
-TBA may provide scores while score_breakdown is null, and actual_time may be null.
+The client-side canonical match helpers are in `src/lib/gameday/matchUtils.ts`.
 
 The presentation chain is:
 
-~~~
-useMatches → EventView → MatchStrip → MatchCard
-~~~
+```
+useMatches → EventView → EventFooter → MatchStrip → MatchCard
+```
 
-useMatches also contains stale-response protection. An async response may update state only if it belongs to the current event and is still the newest request generation. Preserve this protection.
+Preserve the established next-match semantics and the stale-response protection in `useMatches`.
 
 ## Multiview
 
-MultiviewView owns presentation state:
+MultiviewView owns:
 
 - stable streams;
 - priority;
@@ -139,130 +106,114 @@ Keep these concepts separate:
 4. layout;
 5. highlight.
 
-The streams array is the stable set of EventView instances.
+The streams array is the stable set of EventView instances. Never reorder streams merely to change priority. Priority determines which existing streams occupy layout slots.
 
-NEVER reorder streams merely to change priority. Priority determines which existing streams occupy layout slots. This separation prevents React remounts and webcast reloads.
+Layouts are pure data in `src/lib/multiview/layouts.ts`.
 
-Highlighting may promote an event to slot zero without permanently modifying priority.
+Do not restore old positional TeamPill modes.
 
-Layouts are pure data in src/lib/layouts.js.
+## Event footer
 
-Current keyboard model:
+EventView footer configuration is independent from Multiview layout presentation.
 
-- 1–9: highlight stream.
-- 0: clear highlight.
-- Ctrl+1–9: choose stream for priority editing.
-- Arrow Up/Down: move priority item.
-- - / =: cycle explicit layout.
+Valid footer modes are:
 
-Do not restore old positional TeamPill modes. TeamPills are inherently horizontal; Multiview controls visibility.
+- `matchStrip`
+- `rankings`
+- `split`
+- `hidden`
+
+Multiview may temporarily hide the footer bar through `footerHidden`, but it must not select or override the EventView's configured footer content mode.
 
 ## Gameday hooks
 
 Keep responsibilities specialized:
 
-- useEvent — event.
-- useMatches — canonical full matches and event next/last.
-- useTeams — teams.
-- useTeamsStatuses — statuses.
-- usePlayoffAlliances — playoff alliances.
-- useTrackedMatches — tracked-team derivation.
-- useStreamController — stream normalization/selection.
-- useWebSocket — WSS lifecycle.
-- usePolling — fallback scheduling.
-- useNexus — retained Nexus/testing path.
+- `useEvent` — event.
+- `useMatches` — canonical full matches and event next/last.
+- `useTeams` — teams.
+- `useTeamsStatuses` — statuses.
+- `usePlayoffAlliances` — playoff alliances.
+- `useTrackedMatches` — tracked-team derivation.
+- `useStreamController` — stream normalization/selection.
+- `useWebSocket` — WSS lifecycle.
+- `usePolling` — fallback scheduling.
 
-Avoid rebuilding a monolithic useGameday hook.
+Do not reintroduce Nexus unless explicitly requested.
+
+Avoid rebuilding a monolithic `useGameday` hook.
 
 ## Event timezone
 
-/api/events/active interprets start_date and end_date using the event's own timezone.
-
-This intentionally makes active-state results consistent for all users regardless of browser timezone.
-
-Do not replace this with browser-local comparisons.
+`/api/events/active` interprets event dates using the event's own timezone. Do not replace this with browser-local comparisons.
 
 ## TBA client
 
-src/lib/tbaClient.ts owns low-level TBA REST and Redis cache behavior.
+The low-level TBA client is under `src/lib/tba/`.
 
 Preserve:
 
-- Redis-backed caching.
-- TBA ETag handling.
-- TBA Cache-Control max-age handling.
-- race protection against stale TBA responses overwriting webhook-mutated Redis data.
-- 304 expiry refresh.
+- Redis-backed caching;
+- TBA ETag handling;
+- TBA Cache-Control max-age handling;
+- race protection against stale TBA responses overwriting webhook-mutated Redis data;
+- 304 expiry refresh;
 - canonical full-match cache mutation.
 
-Do not add redundant post-write verification GETs or another cache layer unless the architecture is explicitly changed.
-
-src/lib/tbaService.ts is the application-facing service used by API routes.
+The application-facing service is `src/lib/tba/service.ts`.
 
 ## Generated types
 
-Never hand-edit src/lib/tba/generated.ts.
+Never hand-edit `src/lib/tba/generated.ts`.
 
 Regenerate with:
 
-~~~
+```bash
 npm run generate:tba-types
-~~~
+```
 
-src/lib/tba/types.ts contains ergonomic application aliases.
+`src/lib/tba/types.ts` contains ergonomic application aliases and composed application types.
 
 ## File organization
 
 Current major boundaries:
 
-- src/app — pages and API route handlers.
-- src/components/gameday — event-level UI (EventView and its supporting components).
-- src/components/gameday/hooks — specialized client hooks.
-- src/components/gameday/navbar — MatchStrip/MatchCard/event-local-time.
-- src/components/gameday/teamElements — team UI.
-- src/components/multiview — Multiview presentation (MultiviewView) and controller orchestration.
-- src/lib/gameday — Gameday utilities.
-- src/lib/tba — generated/raw TBA types.
-- src/lib/tbaClient.ts — low-level TBA + Redis cache.
-- src/lib/tbaService.ts — application TBA service.
-- src/lib/websocket.ts — Redis Pub/Sub → WebSocket bridge.
-- src/lib/layouts.js — pure Multiview layouts.
-- src/lib/nexus — Nexus types.
-- src/lib/cast — Cast support.
+- `src/app` — pages and API route handlers.
+- `src/components/event` — event-level footer/rankings/time UI.
+- `src/components/eventview` — EventView, settings, and event hooks.
+- `src/components/match` — MatchStrip and MatchCard.
+- `src/components/multiview` — Multiview presentation and controller.
+- `src/components/team` — team UI.
+- `src/lib/gameday` — match and stream utilities.
+- `src/lib/multiview` — pure Multiview layouts.
+- `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
+- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
+- `src/lib/cast` — Cast support.
 
 ## Legacy areas
 
 Treat these as compatibility/legacy areas until their call graphs are audited:
 
-- src/lib/eventState.ts
-- src/app/api/admin/redis/*
-- simple/team match helpers in tbaService.ts
-- Nexus integration/testing
+- `src/lib/eventState.ts`
+- `src/app/api/admin/redis/*`
+- simple/team match helpers in the TBA service
 - generic cache tag machinery
 
-Do not delete them merely because they are not part of the primary Gameday flow.
+Do not delete them merely because they are not part of the primary Gameday flow unless the cleanup is explicitly requested.
 
 ## Dead-file cleanup
 
-Before deleting any file:
+Before deleting a file:
 
 1. Search the entire repository for references.
 2. Check imports, not only matching symbol names.
 3. Verify that a similarly named replacement is actually used.
 4. Delete only after confirming there are no live callers.
 
-Recent examples:
-
-- useStreamController.js was superseded by useStreamController.ts.
-- src/lib/gameday/getMatchesForTeams.ts was superseded by matchUtils.ts.
-- Legacy LastMatch.jsx and NextMatch.jsx presentation components were superseded by MatchStrip/MatchCard and matchUtils.
-
-Dead-file cleanup is intentionally separate from the planned future directory reorganization.
+Prefer small, focused cleanup commits.
 
 ## Coding approach
 
-- Prefer small, focused changes.
-- Preserve working behavior unless the user explicitly asks for a behavior change.
 - Keep data fetching in hooks/services rather than presentation components where practical.
 - Keep Multiview state transitions explicit.
 - Keep WSS payloads small.
@@ -274,4 +225,4 @@ Dead-file cleanup is intentionally separate from the planned future directory re
 
 ## Other agent documentation
 
-CLAUDE.md currently points to AGENTS.md. Keep those instructions aligned.
+`CLAUDE.md` currently points to `AGENTS.md`. Keep those instructions aligned.
