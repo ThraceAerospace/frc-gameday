@@ -335,7 +335,9 @@ export default function EventView({
   }, [refreshLiveData]);
 
   const setTrackedTeams = useCallback((teams: string[]) => {
-    controller?.actions.setEventViewTrackedTeams(event, teams);
+    if (controller) {
+      controller.actions.setEventViewTrackedTeams(event, teams);
+    }
   }, [controller, event]);
 
   const toggleTeam = useCallback(
