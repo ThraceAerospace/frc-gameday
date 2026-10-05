@@ -83,6 +83,26 @@ function EventSettingsRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+            <label className="flex shrink-0 items-center gap-2 text-[16px] text-neutral-500">
+                <span>Bottom Bar Display:</span>
+                <select
+                    value={config?.footerMode ?? ""}
+                    onChange={(event) =>
+                    actions.setEventViewConfig(eventKey, {
+                        footerMode: event.target.value
+                        ? (event.target.value as EventViewFooterMode)
+                        : "matchStrip",
+                    })
+                    }
+                    className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[18px] text-neutral-300 outline-none hover:border-neutral-700"
+                    aria-label="Footer mode"
+                >
+                    <option value="matchStrip">Matches</option>
+                    <option value="rankings">Rankings</option>
+                    <option value="split">Matches + Rankings</option>
+                    <option value="hidden">Hidden</option>
+                </select>
+            </label>
           <button className="icon-button" title="Track teams" aria-label="Track teams" onClick={() => setTeamsOpen(true)}><UserGroupIcon /></button>
           <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}><VideoCameraIcon /></button>
           <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}><ArrowPathIcon /></button>
@@ -93,27 +113,6 @@ function EventSettingsRow({
       </div>
 
       <div className="mt-3 flex items-center gap-3 border-t border-neutral-800 pt-3">
-        <label className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
-          <span>Footer</span>
-          <select
-            value={config?.footerMode ?? ""}
-            onChange={(event) =>
-              actions.setEventViewConfig(eventKey, {
-                footerMode: event.target.value
-                  ? (event.target.value as EventViewFooterMode)
-                  : "matchStrip",
-              })
-            }
-            className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-300 outline-none hover:border-neutral-700"
-            aria-label="Footer mode"
-          >
-              <option value="matchStrip">Match Strip</option>
-            <option value="rankings">Rankings</option>
-            <option value="split">Match + Rankings</option>
-            <option value="hidden">Hidden</option>
-          </select>
-        </label>
-
         <div className="flex min-w-0 flex-1 flex-wrap gap-1">
           {trackedTeams.length > 0 ? (
             trackedTeams.map((team) => (
@@ -199,7 +198,7 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
               <section className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-neutral-900/65 p-4 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                 <div className="mb-4"><h2 className="text-sm font-semibold">Layout</h2><p className="mt-1 text-xs text-neutral-500">Choose how event views are arranged on screen.</p></div>
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-                  <button onClick={actions.resetLayout} className={"w-full rounded px-3 py-3 text-left text-sm " + (state.layoutKey === null ? "bg-green-700" : "bg-neutral-950 hover:bg-neutral-800")}><div className="font-semibold">Auto Layout</div><div className="mt-1 text-xs text-neutral-500">{LAYOUTS[autoLayoutKey].name}</div></button>
+                  <button onClick={actions.resetLayout} className={"w-full rounded px-3 py-3 text-left text-sm " + (state.layoutKey === null ? "bg-green-700" : "bg-neutral-950 hover:bg-neutral-800")}><div className="font-semibold">Auto Layout</div><div className="mt-1 text-xs text-white-500">{LAYOUTS[autoLayoutKey].name}</div></button>
                   {Object.entries(LAYOUTS).map(([key, value]) => <button key={key} onClick={() => actions.setLayout(key as keyof typeof LAYOUTS)} className={"w-full rounded px-3 py-3 text-left text-sm " + (selectedLayoutKey === key ? "bg-neutral-700" : "bg-neutral-950 hover:bg-neutral-800")}>{value.name}</button>)}
                 </div>
               </section>
