@@ -109,5 +109,6 @@ export default function MultiviewSettings({ state, actions, trigger }: Multiview
           </div>
         </div>
       )}
-    </>\n  );
+    </>
+  );
 }
