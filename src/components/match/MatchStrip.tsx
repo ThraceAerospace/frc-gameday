@@ -24,9 +24,14 @@ export default function MatchStrip({
   team?: string[];
   nextMatch?: TBAMatch | null;
   lastMatch?: TBAMatch | null;
+  eventTimezone?: string | null;
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
+  eventName?: string;
+  wssConnected?: boolean;
   teamPills?: ReactNode[];
+  showEventInfo?: boolean;
+  isDivisional?: boolean;
   multiview?: Record<string, unknown>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
