@@ -84,10 +84,7 @@ export function useMultiviewController({
 
     clearControlsTimeout();
 
-    if (
-      stateRef.current.sidebarOpen ||
-      stateRef.current.eventPickerOpen
-    ) {
+    if (stateRef.current.eventPickerOpen) {
       return;
     }
 
@@ -116,7 +113,7 @@ export function useMultiviewController({
   }, [clearControlsTimeout, showControls]);
 
   useEffect(() => {
-    if (state.sidebarOpen || state.eventPickerOpen) {
+    if (state.eventPickerOpen) {
       clearControlsTimeout();
       update((current) => ({
         ...current,
@@ -129,7 +126,6 @@ export function useMultiviewController({
   }, [
     clearControlsTimeout,
     showControls,
-    state.sidebarOpen,
     state.eventPickerOpen,
     update,
   ]);
@@ -287,22 +283,6 @@ export function useMultiviewController({
     () => ({
       showControls,
       hideControls,
-
-      toggleSidebar: () => {
-        showControls();
-        update((current) => ({
-          ...current,
-          sidebarOpen: !current.sidebarOpen,
-        }));
-      },
-
-      setSidebarOpen: (open) => {
-        showControls();
-        update((current) => ({
-          ...current,
-          sidebarOpen: open,
-        }));
-      },
 
       setAutoFocusMatches: (enabled) => {
         update((current) => ({
