@@ -1,12 +1,14 @@
 "use client";
 
 import type { TBAEvent } from "@/lib/tba/types";
+import type { MultiviewController } from "./MultiviewActions";
 import {
   LAYOUTS,
   pickLayout,
 } from "@/lib/multiview/layouts";
 import EventLocalTime from "@/components/gameday/match/EventLocalTime";
 import GamedayWidget from "../gameday/GamedayWidget";
+import { useRouter } from "next/navigation";
 
 import { useMultiviewController, useMultiviewKeyboard } from "./MultiviewController";
 
@@ -23,16 +25,22 @@ type MultiviewClientProps = {
   events?: string[];
   isDivisional?: boolean;
   parentEvent?: TBAEvent | null;
+  controller?: MultiviewController;
 };
 
 export default function MultiviewClient({
   events = [],
   isDivisional = false,
   parentEvent = null,
+  controller,
 }: MultiviewClientProps) {
-  const controller = useMultiviewController({ events });
-  const state = controller.getState();
-  const actions = controller.actions;
+  const router = useRouter();
+  const multiviewController = useMultiviewController({
+    events,
+    controller,
+  });
+  const state = multiviewController.getState();
+  const actions = multiviewController.actions;
 
   useMultiviewKeyboard(state, actions);
 
@@ -105,7 +113,7 @@ export default function MultiviewClient({
       >
         <div className="flex min-w-0 items-center gap-2">
           <button
-            onClick={() => window.history.back()}
+            onClick={() => router.push("/")}
             className="h-[30px] w-[30px] rounded hover:bg-stone-800"
             title="Home"
           >
