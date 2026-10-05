@@ -71,6 +71,8 @@ export default function EventView({
     reload: reloadMatches,
   } = useMatches(event);
 
+  const { rankings } = useEventRankings(event);
+
   const eventConfig = config;
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
