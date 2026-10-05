@@ -1,7 +1,6 @@
 type Presentation = {
   matchInfo: "visible" | "hidden";
   teamTracker: "visible" | "hidden";
-  footerMode: "matchStrip" | "rankings" | "split" | "hidden";
   footerHidden?: boolean;
 };
 type LayoutSlot = { x: number; y: number; w: number; h: number; presentation: Presentation };
@@ -15,13 +14,11 @@ const HIDDEN = "hidden" as const;
 const LARGE: Presentation = {
   matchInfo: VISIBLE,
   teamTracker: VISIBLE,
-  footerMode: "matchStrip",
 };
 
 const COMPACT: Presentation = {
   matchInfo: HIDDEN,
   teamTracker: VISIBLE,
-  footerMode: "matchStrip",
 };
 
 const NONE: Presentation = {
