@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { MultiviewActions } from "./MultiviewActions";
@@ -12,11 +12,15 @@ type MultiviewSettingsProps = {
 };
 
 export default function MultiviewSettings({ state, actions }: MultiviewSettingsProps) {
+  const [open, setOpen] = useState(false);
+  const [eventPickerOpen, setEventPickerOpen] = useState(false);
+  const [eventSearch, setEventSearch] = useState("");
+
   const autoLayoutKey = pickLayout(state.streams.length || 1);
   const selectedLayoutKey = state.highlightLayoutKey ?? state.layoutKey ?? autoLayoutKey;
 
   const filteredEvents = useMemo(() => {
-    const query = state.eventSearch.trim().toLowerCase();
+    const query = eventSearch.trim().toLowerCase();
     return state.availableEvents
       .filter((event) => !state.streams.includes(String(event.key)))
       .filter((event) => {
@@ -25,22 +29,22 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
       });
-  }, [state.availableEvents, state.eventSearch, state.streams]);
+  }, [state.availableEvents, eventSearch, state.streams]);
 
   return (
     <>
       <div
-        onClick={() => actions.setSidebarOpen(false)}
+        onClick={() => setOpen(false)}
         className={"fixed inset-0 z-40 bg-black/50 transition-opacity " +
-          (state.sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0")}
+          (open ? "opacity-100" : "pointer-events-none opacity-0")}
       />
 
       <aside
         className={"fixed right-0 top-0 z-50 flex h-full w-[clamp(280px,25vw,400px)] flex-col border-l border-neutral-700 bg-neutral-900 p-3 shadow-xl transition-transform " +
-          (state.sidebarOpen ? "translate-x-0" : "translate-x-full")}
+          (open ? "translate-x-0" : "translate-x-full")}
       >
-        <div className="mb-3 shrink-0 font-bold">Multiview Settings</div>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="mb-3 flex shrink-0 items-center justify-between font-bold">\n          <span>Multiview Settings</span>\n          <button onClick={() => setOpen(false)} className="icon-button" title="Close settings" aria-label="Close settings"><XMarkIcon /></button>\n        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">\n          <button onClick={() => setEventPickerOpen(true)} className="mb-4 w-full rounded bg-neutral-800 px-3 py-2 text-left text-sm hover:bg-neutral-700">Add Event</button>
           <div className="mb-4 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
             <label className="flex cursor-pointer items-center justify-between gap-3">
               <div className="min-w-0">
@@ -72,21 +76,21 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
         </div>
       </aside>
 
-      {state.eventPickerOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={actions.closeEventPicker}>
+      {eventPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setEventPickerOpen(false)}>
           <div className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
               <div className="font-bold">Add Event</div>
               <button onClick={actions.closeEventPicker} className="icon-button" title="Close"><XMarkIcon /></button>
             </div>
             <div className="border-b border-neutral-800 p-3">
-              <input autoFocus type="text" value={state.eventSearch} onChange={(event) => actions.setEventSearch(event.target.value)} placeholder="Search events..." className="w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
+              <input autoFocus type="text" value={eventSearch} onChange={(event) => setEventSearch(event.target.value)} placeholder="Search events..." className="w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
             </div>
             <div className="min-h-0 overflow-y-auto p-2">
               {state.eventsLoading ? <div className="p-6 text-center text-sm text-neutral-500">Loading events...</div> : filteredEvents.length === 0 ? <div className="p-6 text-center text-sm text-neutral-500">No matching events.</div> : (
                 <div className="space-y-1">
                   {filteredEvents.map((event) => (
-                    <button key={event.key} onClick={() => actions.addEvent(event)} className="w-full rounded px-3 py-2 text-left transition-colors hover:bg-neutral-800">
+                    <button key={event.key} onClick={() => { actions.addEvent(event); setEventPickerOpen(false); }} className="w-full rounded px-3 py-2 text-left transition-colors hover:bg-neutral-800">
                       <div className="truncate text-sm font-semibold">{event.name ?? event.short_name ?? event.key}</div>
                       <div className="mt-0.5 flex gap-2 text-xs text-neutral-500"><span>{event.key}</span>{event.city && <span>{event.city}{event.state_prov ? ", " + event.state_prov : ""}</span>}</div>
                     </button>
@@ -97,6 +101,5 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
           </div>
         </div>
       )}
-    </>
-  );
+      <button\n        onClick={() => setOpen(true)}\n        className="fixed bottom-3 right-3 z-30 rounded bg-neutral-900 px-3 py-2 text-xs font-semibold shadow-lg hover:bg-neutral-800"\n        title="Open Multiview settings"\n      >\n        Settings\n      </button>\n    </>\n  );
 }
