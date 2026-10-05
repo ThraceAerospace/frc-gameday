@@ -2,11 +2,11 @@
 
 import type {
   TBAEliminationAlliance,
-  TBAEventRanking,
+  TBAEventTeamStatuses,
 } from "@/lib/tba/types";
 
 type RankingsStripProps = {
-  rankings: TBAEventRanking | null;
+  teamsStatuses: TBAEventTeamStatuses;
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
 };
@@ -36,7 +36,7 @@ function allianceLabel(alliance: TBAEliminationAlliance, index: number) {
 }
 
 export default function RankingsStrip({
-  rankings,
+  teamsStatuses,
   playoffAlliances = [],
   playoffType = null,
 }: RankingsStripProps) {
@@ -110,7 +110,12 @@ export default function RankingsStrip({
     );
   }
 
-  const entries = rankings?.rankings ?? [];
+  const entries = Object.entries(teamsStatuses)
+    .map(([teamKey, status]) => ({ teamKey, status }))
+    .filter((entry) => entry.status?.qual?.ranking)
+    .sort((a, b) => (a.status!.qual!.ranking!.rank ?? Number.MAX_SAFE_INTEGER) - (b.status!.qual!.ranking!.rank ?? Number.MAX_SAFE_INTEGER));
+
+  const sortOrderName = Object.values(teamsStatuses).find((status) => status?.qual?.sort_order_info?.[0])?.qual?.sort_order_info?.[0]?.name ?? "RP";
 
   return (
     <div className="relative min-w-0 overflow-hidden border-t border-white/10 bg-neutral-950/95">
@@ -123,21 +128,21 @@ export default function RankingsStrip({
                 className="flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3"
               >
                 <span className="w-5 text-center font-mono text-[10px] font-bold text-white">
-                  {entry.rank}
+                  {entry.status!.qual!.ranking!.rank ?? "—"}
                 </span>
 
                 <span className="font-mono text-[11px] font-bold text-white">
-                  {entry.team_key.replace(/^frc/i, "")}
+                  {entry.teamKey.replace(/^frc/i, "")}
                 </span>
 
                 <span className="h-5 w-px bg-white/10" />
 
                 <span className="font-mono text-[10px] text-neutral-400">
-                  RP {entry.sort_orders[0] ?? "—"}
+                  {sortOrderName} {entry.status!.qual!.ranking!.sort_orders?.[0] ?? "—"}
                 </span>
 
                 <span className="font-mono text-[10px] text-neutral-500">
-                  {recordLabel(entry.record)}
+                  {recordLabel(entry.status!.qual!.ranking!.record)}
                 </span>
               </article>
             ))}
