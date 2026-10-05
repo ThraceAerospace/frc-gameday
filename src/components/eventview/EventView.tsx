@@ -36,7 +36,12 @@ type EventViewProps = {
   config: EventViewConfig;
   controller: MultiviewController;
   isDivisional?: boolean;
-  slotPresentation?: { teamTracker: "visible" | "hidden"; matchInfo: "visible" | "hidden"; footerMode: "matchStrip" | "rankings" | "split" | "hidden" };
+  slotPresentation?: {
+    teamTracker: "visible" | "hidden";
+    matchInfo: "visible" | "hidden";
+    footerMode: "matchStrip" | "rankings" | "split" | "hidden";
+    footerHidden?: boolean;
+  };
 };
 
 export default function EventView({
@@ -225,6 +230,8 @@ export default function EventView({
         return;
       }
 
+      setWebSocketStale(false);
+
       if (controller) {
         controller.ingestWebSocketEvent(message, {
           refreshMatches: () => {
@@ -402,6 +409,8 @@ export default function EventView({
         eventTimezone={eventData.timezone}
         isDivisional={isDivisional}
         wssConnected={wssConnected}
+        wssStale={webSocketStale}
+        hidden={footerHidden}
         teamPills={teamPills}
         matches={displayMatches}
         team={trackedTeams}
