@@ -15,7 +15,6 @@ import type {
   TBADistrictRanking,
   TBAMatch,
   TBAMatchSimple,
-  TBANexusEventInfo,
   TBATeam,
   TBATeamEventStatus,
   TBATeamSimple,
@@ -161,11 +160,6 @@ export const TBA = {
       })
     );
   },
-
-  getEventNexusInfo: (
-    eventKey: string
-  ): Promise<TBANexusEventInfo | null> =>
-    tba.get<TBANexusEventInfo | null>(`/event/${eventKey}/nexus_info`),
 
   getTeamsAtEvent: (eventKey: string): Promise<TBATeam[]> =>
     tba.get<TBATeam[]>(`/event/${eventKey}/teams`),
