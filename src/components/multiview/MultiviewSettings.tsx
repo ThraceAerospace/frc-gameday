@@ -106,7 +106,8 @@ function EventSettingsRow({
         </div>
       </div>
 
-      <StreamModal
+      {typeof document !== "undefined" ? createPortal(
+        <StreamModal
         open={streamsOpen}
         onClose={() => setStreamsOpen(false)}
         streams={streamOptions}
@@ -115,16 +116,21 @@ function EventSettingsRow({
           actions.setEventViewStream(eventKey, key);
           setStreamsOpen(false);
         }}
-      />
+        />,
+        document.body
+      ) : null}
 
-      <TeamModal
+      {typeof document !== "undefined" ? createPortal(
+        <TeamModal
         open={teamsOpen}
         onClose={() => setTeamsOpen(false)}
         teams={teams}
         teamsStatuses={teamsStatuses}
         trackedTeams={trackedTeams}
         onToggle={toggleTeam}
-      />
+        />,
+        document.body
+      ) : null}
     </div>
   );
 }
