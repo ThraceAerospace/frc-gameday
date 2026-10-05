@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownIcon, ArrowPathIcon, ArrowUpIcon, ChatBubbleLeftRightIcon,
+  Cog6ToothIcon,
   UserGroupIcon, VideoCameraIcon, XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
