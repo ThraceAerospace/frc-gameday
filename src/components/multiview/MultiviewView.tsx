@@ -48,6 +48,25 @@ export default function MultiviewView({
 
   useMultiviewKeyboard(state, actions);
 
+  const autoLayoutKey = pickLayout(state.streams.length || 1);
+  const selectedLayoutKey =
+    state.highlightLayoutKey ??
+    state.layoutKey ??
+    autoLayoutKey;
+  const layout =
+    LAYOUTS[selectedLayoutKey] ?? LAYOUTS.single;
+
+  const slotOrder =
+    state.activeKey &&
+    state.priority.includes(state.activeKey)
+      ? [
+          state.activeKey,
+          ...state.priority.filter(
+            (eventKey) => eventKey !== state.activeKey
+          ),
+        ]
+      : state.priority;
+
   const emptySlotCount = Math.max(
     0,
     layout.slots.length - state.streams.length
