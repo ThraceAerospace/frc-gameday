@@ -8,6 +8,7 @@ import {
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { MultiviewActions } from "./MultiviewActions";
 import type { MultiviewState } from "./MultiviewState";
+import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import { buildStreams, type BuiltStream } from "@/lib/gameday/buildStreams";
 import { useEvent } from "@/components/eventview/hooks/useEvent";
 import { useTeams } from "@/components/eventview/hooks/useTeams";
@@ -91,7 +92,25 @@ function EventSettingsRow({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-2 border-t border-neutral-800 pt-3">
+      <div className="mt-3 flex items-center gap-3 border-t border-neutral-800 pt-3">
+        <label className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
+          <span>Footer</span>
+          <select
+            value={config?.footerMode ?? "matchStrip"}
+            onChange={(event) =>
+              actions.setEventViewConfig(eventKey, {
+                footerMode: event.target.value as EventViewFooterMode,
+              })
+            }
+            className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-300 outline-none hover:border-neutral-700"
+            aria-label="Footer mode"
+          >
+            <option value="matchStrip">Match Strip</option>
+            <option value="rankings">Rankings</option>
+            <option value="split">Match + Rankings</option>
+          </select>
+        </label>
+
         <div className="flex min-w-0 flex-1 flex-wrap gap-1">
           {trackedTeams.length > 0 ? (
             trackedTeams.map((team) => (
