@@ -3,7 +3,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownIcon, ArrowPathIcon, ArrowUpIcon, ChatBubbleLeftRightIcon, Squares2X2Icon, UserGroupIcon, VideoCameraIcon, XMarkIcon,
+  ArrowDownIcon, ArrowPathIcon, ArrowUpIcon, Squares2X2Icon, UserGroupIcon, VideoCameraIcon, XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { MultiviewActions } from "./MultiviewActions";
@@ -84,7 +84,6 @@ function EventSettingsRow({
         <div className="flex shrink-0 items-center gap-1">
           <button className="icon-button" title="Track teams" aria-label="Track teams" onClick={() => setTeamsOpen(true)}><UserGroupIcon /></button>
           <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}><VideoCameraIcon /></button>
-          <button className={"icon-button " + (config?.chatOpen ? "active" : "")} title={config?.chatOpen ? "Close chat" : "Open chat"} aria-label={config?.chatOpen ? "Close chat" : "Open chat"} onClick={() => actions.setEventViewChat(eventKey, !config?.chatOpen)}><ChatBubbleLeftRightIcon /></button>
           <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}><ArrowPathIcon /></button>
           <button onClick={() => actions.movePriority(position, -1)} disabled={position === 0} className="icon-button disabled:opacity-30" title="Move up" aria-label="Move up"><ArrowUpIcon /></button>
           <button onClick={() => actions.movePriority(position, 1)} disabled={position === state.priority.length - 1} className="icon-button disabled:opacity-30" title="Move down" aria-label="Move down"><ArrowDownIcon /></button>
