@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { TBAEliminationAlliance, TBAEventTeamStatuses } from "@/lib/tba/types";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
@@ -15,7 +14,6 @@ type EventFooterProps = {
   wssStale?: boolean;
   multiviewHidden?: boolean;
   isDivisional?: boolean;
-  teamPills?: ReactNode[];
   matches?: Parameters<typeof MatchStrip>[0]["matches"];
   team?: string[];
   nextMatch?: Parameters<typeof MatchStrip>[0]["nextMatch"];
@@ -34,7 +32,6 @@ export default function EventFooter({
   wssStale = false,
   multiviewHidden = false,
   isDivisional = false,
-  teamPills = [],
   matches = [],
   team = [],
   nextMatch,
@@ -100,7 +97,6 @@ export default function EventFooter({
                   eventTimezone={eventTimezone}
                   playoffAlliances={playoffAlliances}
                   playoffType={playoffType}
-                  teamPills={teamPills}
                   multiview={multiview}
                 />
               </div>
@@ -121,7 +117,6 @@ export default function EventFooter({
               eventTimezone={eventTimezone}
               playoffAlliances={playoffAlliances}
               playoffType={playoffType}
-              teamPills={teamPills}
               multiview={multiview}
             />
           )}
