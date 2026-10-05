@@ -39,7 +39,6 @@ type EventViewProps = {
   slotPresentation?: {
     teamTracker: "visible" | "hidden";
     matchInfo: "visible" | "hidden";
-    footerMode: "matchStrip" | "rankings" | "split" | "hidden";
     footerHidden?: boolean;
   };
 };
@@ -79,7 +78,7 @@ export default function EventView({
   } = useMatches(event, () => setWebSocketStale(true));
 
   const eventConfig = config;
-  const footerMode = eventConfig.footerMode ?? slotPresentation?.footerMode ?? "matchStrip";
+  const footerMode = eventConfig.footerMode;
   const footerHidden = slotPresentation?.footerHidden ?? false;
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
