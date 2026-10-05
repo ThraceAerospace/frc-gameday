@@ -96,18 +96,22 @@ function EventSettingsRow({
         <label className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
           <span>Footer</span>
           <select
-            value={config?.footerMode ?? "matchStrip"}
+            value={config?.footerMode ?? ""}
             onChange={(event) =>
               actions.setEventViewConfig(eventKey, {
-                footerMode: event.target.value as EventViewFooterMode,
+                footerMode: event.target.value
+                  ? (event.target.value as EventViewFooterMode)
+                  : null,
               })
             }
             className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-300 outline-none hover:border-neutral-700"
             aria-label="Footer mode"
           >
+            <option value="">Use Multiview Layout</option>
             <option value="matchStrip">Match Strip</option>
             <option value="rankings">Rankings</option>
             <option value="split">Match + Rankings</option>
+            <option value="hidden">Hidden</option>
           </select>
         </label>
 
