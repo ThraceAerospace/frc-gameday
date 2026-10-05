@@ -12,6 +12,8 @@ type EventFooterProps = {
   eventName?: string | null;
   eventTimezone?: string | null;
   wssConnected?: boolean;
+  wssStale?: boolean;
+  hidden?: boolean;
   isDivisional?: boolean;
   teamPills?: ReactNode[];
   matches?: Parameters<typeof MatchStrip>[0]["matches"];
@@ -29,6 +31,8 @@ export default function EventFooter({
   eventName,
   eventTimezone,
   wssConnected = false,
+  wssStale = false,
+  hidden = false,
   isDivisional = false,
   teamPills = [],
   matches = [],
@@ -40,7 +44,7 @@ export default function EventFooter({
   teamsStatuses,
   multiview = {},
 }: EventFooterProps) {
-  const showContent = mode !== "hidden";
+  const showContent = mode !== "hidden" && !hidden;
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
@@ -48,13 +52,25 @@ export default function EventFooter({
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
           <div className="flex flex-col whitespace-nowrap leading-none translate-y-[5px]">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  !wssConnected
+                    ? "bg-neutral-600"
+                    : wssStale
+                      ? "bg-blue-500"
+                      : "bg-green-500"
+                }`}
+                title={
+                  !wssConnected
+                    ? "Live updates disconnected"
+                    : wssStale
+                      ? "WebSocket quiet; using TBA fallback polling"
+                      : "Live updates connected"
+                }
+              />
               <span className="truncate">
                 {eventName || "Event"}
               </span>
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${wssConnected ? "bg-green-500" : "bg-neutral-600"}`}
-                title={wssConnected ? "Live updates connected" : "Live updates disconnected"}
-              />
             </span>
             {eventTimezone && !isDivisional ? (
               <span className="mt-0.5 text-[9px] text-neutral-500">
