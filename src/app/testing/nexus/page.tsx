@@ -1,6 +1,6 @@
 "use client";
 
-import { useNexus } from "@/components/gameday/hooks/useNexus";
+import { useNexus } from "@/components/eventview/hooks/useNexus";
 import { NexusData, NexusPartsRequest, NexusAnnouncement } from "@/lib/nexus/types";
 
 export default function NexusTest() {
