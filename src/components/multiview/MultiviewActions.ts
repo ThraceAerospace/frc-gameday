@@ -3,7 +3,11 @@ import type {
   MatchImminentSignal,
   MultiviewState,
 } from "./MultiviewState";
-import { EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
+import type {
+  EventViewCommandType,
+  EventViewConfig,
+  EventViewPresentation,
+} from "@/components/eventview/EventViewConfig";
 
 export type MultiviewWebSocketEvent = {
   type: string;
@@ -48,6 +52,8 @@ export type MultiviewActions = {
   setEventViewStream(eventKey: string, streamKey: string | null): void;
   setEventViewChat(eventKey: string, open: boolean): void;
   setEventViewPresentation(eventKey: string, presentation: Partial<EventViewPresentation>): void;
+  runEventViewCommand(eventKey: string, type: EventViewCommandType): void;
+  clearEventViewCommand(eventKey: string): void;
 };
 
 export type MultiviewActionSource =
