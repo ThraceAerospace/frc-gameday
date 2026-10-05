@@ -15,7 +15,6 @@ export type EventViewCommand = {
 export type EventViewConfig = {
   trackedTeams: string[];
   selectedStream: string | null;
-  chatOpen: boolean;
   presentation: EventViewPresentation;
   command: EventViewCommand | null;
 };
@@ -23,7 +22,6 @@ export type EventViewConfig = {
 export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
   trackedTeams: [],
   selectedStream: null,
-  chatOpen: false,
   presentation: {
     teamTracker: "visible",
     matchInfo: "visible",
