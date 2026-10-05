@@ -397,7 +397,7 @@ export default function EventView({
       <footer className="relative z-20 shrink-0">
         {eventConfig.footerMode === "rankings" ? (
           <RankingsStrip
-            rankings={rankings}
+            teamsStatuses={teamsStatuses}
             playoffAlliances={alliances}
             playoffType={eventData.playoff_type}
           />
@@ -419,7 +419,7 @@ export default function EventView({
               multiview={{ presentation: slotPresentation }}
             />
             <RankingsStrip
-              rankings={rankings}
+              teamsStatuses={teamsStatuses}
               playoffAlliances={alliances}
               playoffType={eventData.playoff_type}
             />
