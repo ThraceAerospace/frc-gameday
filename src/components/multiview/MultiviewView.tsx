@@ -216,12 +216,6 @@ export default function MultiviewView({
               <EventView
                 event={eventKey}
                 isDivisional={isDivisional}
-                registerLabel={(label) =>
-                  actions.registerLabel(eventKey, label)
-                }
-                onMatchImminent={(signal) =>
-                  actions.handleMatchImminent(signal)
-                }
                 controller={multiviewController}
                 config={state.eventConfigs[eventKey]}
               />
