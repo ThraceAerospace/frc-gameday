@@ -223,7 +223,7 @@ export default function MultiviewView({
                   actions.handleMatchImminent(signal)
                 }
                 controller={multiviewController}
-                multiview={{ presentation: slotPresentation }}
+                config={state.eventConfigs[eventKey]}
               />
             </div>
           );
