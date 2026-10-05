@@ -9,7 +9,7 @@ The current architecture uses The Blue Alliance (TBA) as the authoritative data 
 ~~~
 TBA REST API ───────────────┐
                            │
-TBA webhooks → Redis cache ├→ API responses → GamedayWidget
+TBA webhooks → Redis cache ├→ API responses → EventView
                   │        │
                   └→ Redis Pub/Sub → WebSocket → browser
                                                │
@@ -28,8 +28,8 @@ Important boundaries:
 - WebSocket messages are invalidation signals, not copies of the data.
 - Clients refetch after WSS notifications.
 - Polling reconciles missed webhooks.
-- GamedayWidget owns event-level data/UI orchestration.
-- Multiview owns stream slots, priority, highlighting, and visual layout.
+- EventView owns event-level data/UI orchestration.
+- MultiviewView owns stream slots, priority, highlighting, and visual layout.
 - Content/data state, stream identity, priority, layout, and highlight are separate concepts.
 - Event active-state dates are interpreted in the event's own timezone, not the user's browser timezone.
 
@@ -97,7 +97,7 @@ Important boundaries:
     │       └── ws/route.ts
     ├── components/
     │   ├── gameday/
-    │   │   ├── GamedayWidget.jsx
+    │   │   ├── EventView.jsx
     │   │   ├── ChatView.jsx
     │   │   ├── EventStatsSideBar.jsx
     │   │   ├── StreamModal.jsx
@@ -124,7 +124,7 @@ Important boundaries:
     │   │       ├── TeamModal.jsx
     │   │       └── TeamPill.jsx
     │   └── multiview/
-    │       ├── MultiviewClient.jsx
+    │       ├── MultiviewView.jsx
     │       └── hooks/useMatchImminence.ts
     ├── lib/
     │   ├── cast/
@@ -182,9 +182,9 @@ Other routes:
 - /api/ws?event=... — event-scoped WebSocket endpoint.
 - /api/admin/redis/* — legacy Redis administration/debugging.
 
-## GamedayWidget
+## EventView
 
-GamedayWidget is the event-level orchestrator.
+EventView is the event-level orchestrator.
 
 It owns event data, teams, team statuses, matches, playoff alliances, tracked teams, webcast selection, chat/stat/team UI, WSS handling, refresh behavior, TeamPills, and MatchStrip data.
 
@@ -210,7 +210,7 @@ The client-side canonical helpers live in src/lib/gameday/matchUtils.ts.
 The match presentation chain is:
 
 ~~~
-useMatches → GamedayWidget → MatchStrip → MatchCard
+useMatches → EventView → MatchStrip → MatchCard
 ~~~
 
 Next match semantics are intentionally based on TBA scores:
@@ -225,7 +225,7 @@ MatchStrip is the compact official-broadcast-inspired overlay. It keeps relevant
 
 ## Multiview
 
-MultiviewClient owns presentation state:
+MultiviewView owns presentation state:
 
 - stable streams;
 - priority;
@@ -239,7 +239,7 @@ MultiviewClient owns presentation state:
 
 The critical rule is that streams and priority are separate.
 
-The streams array is the stable set of GamedayWidget instances and must not be reordered when priority changes. Priority determines which existing stream occupies each visual slot. Highlighting may temporarily promote a stream to slot zero without permanently changing priority.
+The streams array is the stable set of EventView instances and must not be reordered when priority changes. Priority determines which existing stream occupies each visual slot. Highlighting may temporarily promote a stream to slot zero without permanently changing priority.
 
 This prevents unnecessary React remounts and webcast reloads.
 
