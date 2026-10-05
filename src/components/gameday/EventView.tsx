@@ -35,6 +35,8 @@ import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 import type { MultiviewController } from "../multiview/MultiviewActions";
+import type { EventViewConfig, EventViewPresentation } from "./EventViewConfig";
+import { DEFAULT_EVENT_VIEW_CONFIG } from "./EventViewConfig";
 
 const EMPTY_TEAMS: string[] = [];
 
@@ -44,16 +46,9 @@ type MatchImminentSignal = {
   severity: "hard" | "soft";
 };
 
-type PresentationVisibility = "visible" | "hidden";
-
-type EventViewPresentation = {
-  teamTracker: PresentationVisibility;
-  matchInfo: PresentationVisibility;
-};
-
 type EventViewProps = {
   event: string;
-  initialTeams?: string[];
+  config?: EventViewConfig;
   registerLabel?: (label: string) => void;
   onMatchImminent?: (signal: MatchImminentSignal) => void;
   controller?: MultiviewController;
@@ -63,14 +58,9 @@ type EventViewProps = {
   };
 };
 
-const DEFAULT_PRESENTATION: EventViewPresentation = {
-  teamTracker: "visible",
-  matchInfo: "visible",
-};
-
 export default function EventView({
   event,
-  initialTeams = EMPTY_TEAMS,
+  config,
   registerLabel,
   onMatchImminent,
   controller,
@@ -102,8 +92,10 @@ export default function EventView({
     reload: reloadMatches,
   } = useMatches(event);
 
-  const [trackedTeams, setTrackedTeams] =
-    useState<string[]>(initialTeams);
+  const eventConfig = config ?? DEFAULT_EVENT_VIEW_CONFIG;
+  const trackedTeams = eventConfig.trackedTeams;
+  const selectedStreamKey = eventConfig.selectedStream;
+  const chatOpen = eventConfig.chatOpen;
 
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
@@ -117,12 +109,6 @@ export default function EventView({
   const [streamsOpen, setStreamsOpen] =
     useState(false);
 
-  const [chatOpen, setChatOpen] =
-    useState(false);
-
-  useEffect(() => {
-    setTrackedTeams(initialTeams);
-  }, [initialTeams]);
 
   const eventLabel =
     eventData?.short_name ||
@@ -162,6 +148,7 @@ export default function EventView({
   } = useStreamController(
     streamsRaw,
     eventData?.timezone,
+    selectedStreamKey,
   );
 
   const {
@@ -218,8 +205,7 @@ export default function EventView({
   );
 
   const slotPresentation: EventViewPresentation =
-    multiview.presentation ??
-    DEFAULT_PRESENTATION;
+    multiview.presentation ?? eventConfig.presentation;
 
   const showTeamTracker =
     slotPresentation.teamTracker !== "hidden";
@@ -348,21 +334,18 @@ export default function EventView({
     };
   }, [refreshLiveData]);
 
+  const setTrackedTeams = useCallback((teams: string[]) => {
+    controller?.actions.setEventViewTrackedTeams(event, teams);
+  }, [controller, event]);
+
   const toggleTeam = useCallback(
-    (team: string) =>
-      setTrackedTeams(
-        (current) =>
-          current.includes(team)
-            ? current.filter(
-                (value) =>
-                  value !== team,
-              )
-            : [
-                ...current,
-                team,
-              ],
-      ),
-    [],
+    (team: string) => {
+      const next = trackedTeams.includes(team)
+        ? trackedTeams.filter((value) => value !== team)
+        : [...trackedTeams, team];
+      setTrackedTeams(next);
+    },
+    [setTrackedTeams, trackedTeams],
   );
 
   if (loading) {
@@ -444,9 +427,7 @@ export default function EventView({
               }`}
               title="Open chat"
               onClick={() =>
-                setChatOpen(
-                  (value) => !value,
-                )
+                controller?.actions.setEventViewChat(event, !chatOpen)
               }
             >
               <ChatBubbleLeftRightIcon />
@@ -497,7 +478,7 @@ export default function EventView({
 
                 <button
                   onClick={() =>
-                    setChatOpen(false)
+                    controller?.actions.setEventViewChat(event, false)
                   }
                   className="text-neutral-500"
                 >
@@ -556,7 +537,7 @@ export default function EventView({
         }
         streams={streams}
         activeKey={activeKey}
-        onSelect={setActiveKey}
+        onSelect={(key) => controller?.actions.setEventViewStream(event, key)}
       />
 
       <TeamModal
