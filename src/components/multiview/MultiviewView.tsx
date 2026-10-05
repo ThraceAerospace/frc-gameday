@@ -183,6 +183,7 @@ export default function MultiviewView({
                 isDivisional={isDivisional}
                 controller={multiviewController}
                 config={state.eventConfigs[eventKey]}
+                slotPresentation={slotPresentation}
               />
             </div>
           );
