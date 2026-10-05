@@ -48,7 +48,7 @@ export default function EventFooter({
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div className="absolute bottom-full left-0 z-10 -mb-px flex max-w-[calc(100%-0.5rem)] items-end gap-1">
+      <div className={`absolute left-0 z-10 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${hidden ? "bottom-0 pb-1" : "bottom-full -mb-px"}`}>
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
           <div className="flex flex-col whitespace-nowrap leading-none translate-y-[5px]">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
