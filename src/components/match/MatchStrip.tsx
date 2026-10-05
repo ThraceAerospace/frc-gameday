@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { TBAEliminationAlliance, TBAMatch} from "@/lib/tba/types";
 import { useEffect, useRef } from "react";
 import MatchCard from "./MatchCard";
-import EventLocalTime from "./EventLocalTime";
+import EventLocalTime from "../event/EventLocalTime";
 
 export default function MatchStrip({
   matches = [],

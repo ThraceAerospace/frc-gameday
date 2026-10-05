@@ -18,7 +18,7 @@ import {
   PlusIcon,
 } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
-import EventLocalTime from "@/components/eventview/match/EventLocalTime";
+import EventLocalTime from "@/components/event/EventLocalTime";
 
 type MultiviewViewProps = {
   events?: string[];

@@ -15,7 +15,7 @@ import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import MatchStrip from "@/components/match/MatchStrip";
-import RankingsStrip from "./RankingsStrip";
+import RankingsStrip from "../event/RankingsStrip";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
 import type { BuiltStream } from "@/lib/gameday/buildStreams";

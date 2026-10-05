@@ -124,7 +124,7 @@ export default function RankingsStrip({
           <div className="flex h-full min-w-max items-center gap-1.5 px-2">
             {entries.map((entry) => (
               <article
-                key={entry.team_key}
+                key={entry.teamKey}
                 className="flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3"
               >
                 <span className="w-5 text-center font-mono text-[10px] font-bold text-white">
