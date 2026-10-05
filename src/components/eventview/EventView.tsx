@@ -12,9 +12,9 @@ import {
 
 import StreamView from "./StreamView";
 import StreamModal from "./StreamModal";
-import TeamModal from "./team/TeamModal";
-import TeamPill from "./team/TeamPill";
-import MatchStrip from "./match/MatchStrip";
+import TeamModal from "@/components/team/TeamModal";
+import TeamPill from "@/components/team/TeamPill";
+import MatchStrip from "@/components/match/MatchStrip";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
 import type { BuiltStream } from "@/lib/gameday/buildStreams";
