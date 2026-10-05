@@ -15,25 +15,24 @@
     "@heroicons/react": "^2.2.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.9.3",
-    "@vercel/global-config": "^1.5.1",
     "@vercel/speed-insights": "^2.0.0",
     "ioredis": "^5.10.1",
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "next": "16.3.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "redis": "^5.12.1",
-    "ws": "^8.18.3"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.3.8",
     "openapi-typescript": "^7.13.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3"
   }
 }
