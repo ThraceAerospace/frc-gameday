@@ -36,6 +36,7 @@ type EventViewProps = {
   config: EventViewConfig;
   controller: MultiviewController;
   isDivisional?: boolean;
+  slotPresentation?: { teamTracker: "visible" | "hidden"; matchInfo: "visible" | "hidden"; footerMode: "matchStrip" | "rankings" | "split" | "hidden" };
 };
 
 export default function EventView({
@@ -43,6 +44,7 @@ export default function EventView({
   config,
   controller,
   isDivisional = false,
+  slotPresentation,
 }: EventViewProps) {
   const {
     event: eventData,
@@ -71,6 +73,7 @@ export default function EventView({
 
 
   const eventConfig = config;
+  const footerMode = eventConfig.footerMode ?? slotPresentation?.footerMode ?? "matchStrip";
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
 
@@ -394,7 +397,7 @@ export default function EventView({
       </div>
 
       <EventFooter
-        mode={eventConfig.footerMode}
+        mode={footerMode}
         eventName={eventData.short_name || eventData.name}
         eventTimezone={eventData.timezone}
         wssConnected={wssConnected}
