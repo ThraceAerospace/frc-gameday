@@ -23,7 +23,7 @@ TBA REST / webhooks
        ↓
  WebSocket
        ↓
-GamedayWidget
+EventView
    ├── matches
    ├── teams/statuses
    ├── playoff alliances
@@ -74,7 +74,7 @@ Broadcast only after successful cache processing. A WSS failure must not turn a 
 
 useWebSocket connects to /api/ws?event=<eventKey> and reconnects with exponential backoff capped at 30 seconds.
 
-GamedayWidget currently handles:
+EventView currently handles:
 
 - upcoming_match, match_score, match_video → reload matches and team statuses.
 - starting_comp_level, schedule_updated → broad live-data refresh.
@@ -113,14 +113,14 @@ TBA may provide scores while score_breakdown is null, and actual_time may be nul
 The presentation chain is:
 
 ~~~
-useMatches → GamedayWidget → MatchStrip → MatchCard
+useMatches → EventView → MatchStrip → MatchCard
 ~~~
 
 useMatches also contains stale-response protection. An async response may update state only if it belongs to the current event and is still the newest request generation. Preserve this protection.
 
 ## Multiview
 
-MultiviewClient owns presentation state:
+MultiviewView owns presentation state:
 
 - stable streams;
 - priority;
@@ -139,7 +139,7 @@ Keep these concepts separate:
 4. layout;
 5. highlight.
 
-The streams array is the stable set of GamedayWidget instances.
+The streams array is the stable set of EventView instances.
 
 NEVER reorder streams merely to change priority. Priority determines which existing streams occupy layout slots. This separation prevents React remounts and webcast reloads.
 
@@ -216,11 +216,11 @@ src/lib/tba/types.ts contains ergonomic application aliases.
 Current major boundaries:
 
 - src/app — pages and API route handlers.
-- src/components/gameday — event-level UI.
+- src/components/gameday — event-level UI (EventView and its supporting components).
 - src/components/gameday/hooks — specialized client hooks.
 - src/components/gameday/navbar — MatchStrip/MatchCard/event-local-time.
 - src/components/gameday/teamElements — team UI.
-- src/components/multiview — Multiview presentation orchestration.
+- src/components/multiview — Multiview presentation (MultiviewView) and controller orchestration.
 - src/lib/gameday — Gameday utilities.
 - src/lib/tba — generated/raw TBA types.
 - src/lib/tbaClient.ts — low-level TBA + Redis cache.
