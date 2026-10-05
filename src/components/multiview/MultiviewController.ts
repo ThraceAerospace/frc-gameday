@@ -439,6 +439,18 @@ export function useMultiviewController({
           ...next,
           streams: nextStreams,
           priority: [...next.priority, eventKey],
+          eventConfigs: {
+            ...next.eventConfigs,
+            [eventKey]: {
+              trackedTeams: [],
+              selectedStream: null,
+              chatOpen: false,
+              presentation: {
+                teamTracker: "visible",
+                matchInfo: "visible",
+              },
+            },
+          },
           eventPickerOpen: false,
         }));
 
@@ -466,6 +478,9 @@ export function useMultiviewController({
             next.activeKey === eventKey
               ? null
               : next.highlightLayoutKey,
+          eventConfigs: Object.fromEntries(
+            Object.entries(next.eventConfigs).filter(([key]) => key !== eventKey)
+          ),
           labels: Object.fromEntries(
             Object.entries(next.labels).filter(
               ([key]) => key !== eventKey
@@ -475,6 +490,106 @@ export function useMultiviewController({
 
         updateUrl(nextStreams);
         showControls();
+      },
+
+      setEventViewConfig: (eventKey, config) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                ...config,
+                trackedTeams: config.trackedTeams
+                  ? [...config.trackedTeams]
+                  : existing.trackedTeams,
+                presentation: {
+                  ...existing.presentation,
+                  ...config.presentation,
+                },
+              },
+            },
+          };
+        });
+      },
+
+      setEventViewTrackedTeams: (eventKey, teams) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                trackedTeams: [...teams],
+              },
+            },
+          };
+        });
+      },
+
+      setEventViewStream: (eventKey, streamKey) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                selectedStream: streamKey,
+              },
+            },
+          };
+        });
+      },
+
+      setEventViewChat: (eventKey, open) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                chatOpen: open,
+              },
+            },
+          };
+        });
+      },
+
+      setEventViewPresentation: (eventKey, presentation) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                presentation: {
+                  ...existing.presentation,
+                  ...presentation,
+                },
+              },
+            },
+          };
+        });
       },
 
       registerLabel: (eventKey, label) => {
