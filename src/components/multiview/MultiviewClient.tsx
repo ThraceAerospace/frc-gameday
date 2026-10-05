@@ -1,6 +1,7 @@
 "use client";
 
 import type { TBAEvent } from "@/lib/tba/types";
+import { useSyncExternalStore } from "react";
 import type { MultiviewController } from "./MultiviewActions";
 import {
   LAYOUTS,
@@ -39,7 +40,11 @@ export default function MultiviewClient({
     events,
     controller,
   });
-  const state = multiviewController.getState();
+  const state = useSyncExternalStore(
+    multiviewController.subscribe,
+    multiviewController.getState,
+    multiviewController.getState
+  );
   const actions = multiviewController.actions;
 
   useMultiviewKeyboard(state, actions);
