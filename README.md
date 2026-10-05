@@ -186,7 +186,7 @@ Other routes:
 
 EventView is the event-level orchestrator.
 
-It owns event data, teams, team statuses, matches, playoff alliances, tracked teams, webcast selection, chat/stat/team UI, WSS handling, refresh behavior, TeamPills, and MatchStrip data.
+It owns event data, teams, team statuses, matches, playoff alliances, tracked teams, webcast selection, stat/team UI, WSS handling, refresh behavior, TeamPills, and MatchStrip data.
 
 It does not own Multiview layout or stream priority.
 
