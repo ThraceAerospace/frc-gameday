@@ -17,6 +17,7 @@ import { usePolling } from "./usePolling";
 
 export function useMatches(
   eventKey: string,
+  onFallbackPoll?: () => void,
 ) {
   const [matches, setMatches] =
     useState<TBAMatch[]>([]);
@@ -81,6 +82,7 @@ export function useMatches(
     {
       enabled: Boolean(eventKey),
       resetKey: eventKey,
+      onFallback: onFallbackPoll,
     },
   );
 
