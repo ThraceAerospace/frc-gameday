@@ -10,7 +10,6 @@ import {
 import {
   ArrowPathIcon,
   ChatBubbleLeftRightIcon,
-  Cog6ToothIcon,
   UserGroupIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
@@ -83,15 +82,11 @@ export default function EventView({
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
 
-  const [settingsOpen, setSettingsOpen] =
-    useState(false);
-
   const [teamsOpen, setTeamsOpen] =
     useState(false);
 
   const [streamsOpen, setStreamsOpen] =
     useState(false);
-
 
   const eventLabel =
     eventData?.short_name ||
@@ -277,6 +272,28 @@ export default function EventView({
   );
 
   useEffect(() => {
+    const command = eventConfig.command;
+
+    if (!command) {
+      return;
+    }
+
+    switch (command.type) {
+      case "teams":
+        setTeamsOpen(true);
+        break;
+      case "stream":
+        setStreamsOpen(true);
+        break;
+      case "refresh":
+        refreshLiveData();
+        break;
+    }
+
+    controller.actions.clearEventViewCommand(event);
+  }, [controller, event, eventConfig.command, refreshLiveData]);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (
         event.key.toLowerCase() !==
@@ -358,78 +375,6 @@ export default function EventView({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
-      <div className="absolute left-2 top-2 z-50">
-        <button
-          type="button"
-          aria-label="Settings"
-          title="Settings"
-          onClick={() =>
-            setSettingsOpen(
-              (value) => !value,
-            )
-          }
-          className={`icon-button rounded-md border border-white/10 bg-neutral-950/85 shadow-lg backdrop-blur ${
-            settingsOpen
-              ? "active"
-              : ""
-          }`}
-        >
-          <Cog6ToothIcon />
-        </button>
-
-        {settingsOpen && (
-          <div className="absolute left-0 top-full mt-1 flex flex-col gap-1 rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
-            <button
-              className={`icon-button ${
-                trackedTeams.length
-                  ? "active"
-                  : ""
-              }`}
-              title="Track teams"
-              onClick={() =>
-                setTeamsOpen(true)
-              }
-            >
-              <UserGroupIcon />
-            </button>
-
-            <button
-              className="icon-button"
-              title="Choose webcast"
-              onClick={() =>
-                setStreamsOpen(true)
-              }
-            >
-              <VideoCameraIcon />
-            </button>
-
-            <button
-              className={`icon-button ${
-                chatOpen
-                  ? "active"
-                  : ""
-              }`}
-              title="Open chat"
-              onClick={() =>
-                controller?.actions.setEventViewChat(event, !chatOpen)
-              }
-            >
-              <ChatBubbleLeftRightIcon />
-            </button>
-
-            <button
-              className="icon-button"
-              title="Refresh live data"
-              onClick={
-                refreshLiveData
-              }
-            >
-              <ArrowPathIcon />
-            </button>
-          </div>
-        )}
-      </div>
-
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
         <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
