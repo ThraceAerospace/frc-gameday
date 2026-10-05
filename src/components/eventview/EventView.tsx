@@ -14,8 +14,7 @@ import StreamView from "./StreamView";
 import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
-import MatchStrip from "@/components/match/MatchStrip";
-import RankingsStrip from "../event/RankingsStrip";
+import EventFooter from "@/components/event/EventFooter";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
 import type { BuiltStream } from "@/lib/gameday/buildStreams";
@@ -394,54 +393,21 @@ export default function EventView({
         </div>
       </div>
 
-      <footer className="relative z-20 shrink-0">
-        {eventConfig.footerMode === "rankings" ? (
-          <RankingsStrip
-            teamsStatuses={teamsStatuses}
-            playoffAlliances={alliances}
-            playoffType={eventData.playoff_type}
-          />
-        ) : eventConfig.footerMode === "split" ? (
-          <div className="grid grid-cols-2">
-            <MatchStrip
-              matches={displayMatches}
-              team={trackedTeams}
-              nextMatch={nextMatch}
-              lastMatch={lastMatch}
-              eventTimezone={eventData.timezone}
-              playoffAlliances={alliances}
-              playoffType={eventData.playoff_type}
-              eventName={eventData.short_name || eventData.name}
-              wssConnected={wssConnected}
-              teamPills={teamPills}
-              showEventInfo={true}
-              isDivisional={isDivisional}
-              multiview={{ presentation: slotPresentation }}
-            />
-            <RankingsStrip
-              teamsStatuses={teamsStatuses}
-              playoffAlliances={alliances}
-              playoffType={eventData.playoff_type}
-            />
-          </div>
-        ) : (
-          <MatchStrip
-            matches={displayMatches}
-            team={trackedTeams}
-            nextMatch={nextMatch}
-            lastMatch={lastMatch}
-            eventTimezone={eventData.timezone}
-            playoffAlliances={alliances}
-            playoffType={eventData.playoff_type}
-            eventName={eventData.short_name || eventData.name}
-            wssConnected={wssConnected}
-            teamPills={teamPills}
-            showEventInfo={true}
-            isDivisional={isDivisional}
-            multiview={{ presentation: slotPresentation }}
-          />
-        )}
-      </footer>
+      <EventFooter
+        mode={eventConfig.footerMode}
+        eventName={eventData.short_name || eventData.name}
+        eventTimezone={eventData.timezone}
+        wssConnected={wssConnected}
+        teamPills={teamPills}
+        matches={displayMatches}
+        team={trackedTeams}
+        nextMatch={nextMatch}
+        lastMatch={lastMatch}
+        playoffAlliances={alliances}
+        playoffType={eventData.playoff_type}
+        teamsStatuses={teamsStatuses}
+        multiview={{ presentation: slotPresentation }}
+      />
 
       <StreamModal
         open={streamsOpen}
