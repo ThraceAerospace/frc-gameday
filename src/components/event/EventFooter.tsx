@@ -1,6 +1,7 @@
 "use client";
 
 import type { TBAEliminationAlliance, TBAEventTeamStatuses } from "@/lib/tba/types";
+import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
 import RankingsStrip from "@/components/event/RankingsStrip";
@@ -14,6 +15,7 @@ type EventFooterProps = {
   wssStale?: boolean;
   multiviewHidden?: boolean;
   isDivisional?: boolean;
+  teamPills?: ReactNode[];
   matches?: Parameters<typeof MatchStrip>[0]["matches"];
   team?: string[];
   nextMatch?: Parameters<typeof MatchStrip>[0]["nextMatch"];
@@ -32,6 +34,7 @@ export default function EventFooter({
   wssStale = false,
   multiviewHidden = false,
   isDivisional = false,
+  teamPills = [],
   matches = [],
   team = [],
   nextMatch,
@@ -47,7 +50,7 @@ export default function EventFooter({
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
       <div className={`absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${contentHidden ? "bottom-0" : "bottom-full -mb-px"}`}>
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-          <div className="relative z-30 flex flex-col whitespace-nowrap leading-none translate-y-[5px]">
+          <div className="relative z-30 flex items-end gap-2 whitespace-nowrap leading-none translate-y-[5px]">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -69,10 +72,17 @@ export default function EventFooter({
                 {eventName || "Event"}
               </span>
             </span>
+            <div className="flex min-w-0 flex-col">
             {eventTimezone && !isDivisional ? (
               <span className="mt-0.5 text-[9px] text-neutral-500">
                 <EventLocalTime timezone={eventTimezone} />
               </span>
+            ) : null}
+            </div>
+            {teamPills.length > 0 ? (
+              <div className="flex items-center gap-1">
+                {teamPills}
+              </div>
             ) : null}
           </div>
         </div>
@@ -94,6 +104,8 @@ export default function EventFooter({
                   team={team}
                   nextMatch={nextMatch}
                   lastMatch={lastMatch}
+              teamPills={teamPills}
+                  teamPills={teamPills}
                   eventTimezone={eventTimezone}
                   playoffAlliances={playoffAlliances}
                   playoffType={playoffType}
