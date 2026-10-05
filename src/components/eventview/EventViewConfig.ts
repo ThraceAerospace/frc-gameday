@@ -5,11 +5,19 @@ export type EventViewPresentation = {
   matchInfo: EventViewVisibility;
 };
 
+export type EventViewCommandType = "teams" | "stream" | "refresh";
+
+export type EventViewCommand = {
+  id: number;
+  type: EventViewCommandType;
+};
+
 export type EventViewConfig = {
   trackedTeams: string[];
   selectedStream: string | null;
   chatOpen: boolean;
   presentation: EventViewPresentation;
+  command: EventViewCommand | null;
 };
 
 export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
@@ -20,6 +28,7 @@ export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
     teamTracker: "visible",
     matchInfo: "visible",
   },
+  command: null,
 };
 
 export function createEventViewConfig(
