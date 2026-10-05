@@ -400,6 +400,7 @@ export default function EventView({
         mode={footerMode}
         eventName={eventData.short_name || eventData.name}
         eventTimezone={eventData.timezone}
+        isDivisional={isDivisional}
         wssConnected={wssConnected}
         teamPills={teamPills}
         matches={displayMatches}
