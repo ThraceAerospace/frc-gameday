@@ -3,9 +3,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownIcon, ArrowPathIcon, ArrowUpIcon, ChatBubbleLeftRightIcon,
-  Cog6ToothIcon,
-  UserGroupIcon, VideoCameraIcon, XMarkIcon,
+  ArrowDownIcon, ArrowPathIcon, ArrowUpIcon, ChatBubbleLeftRightIcon, Squares2X2Icon, UserGroupIcon, VideoCameraIcon, XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { MultiviewActions } from "./MultiviewActions";
@@ -74,7 +72,7 @@ function EventSettingsRow({
   };
 
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/75 backdrop-blur-xl p-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">
@@ -153,15 +151,15 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
 
   return (
     <>
-      <button
+        <button
         type="button"
         onClick={() => setOpen(true)}
-        className="h-[30px] w-[30px] rounded hover:bg-stone-800"
-        title="Multiview settings"
+          className="h-[30px] w-[30px] rounded hover:bg-stone-800"
+          title="Multiview settings"
         aria-label="Multiview settings"
-      >
-        <Cog6ToothIcon className="mx-auto h-[17px] w-[17px]" />
-      </button>
+        >
+          <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
+        </button>
 
       {mounted && open ? createPortal(
         <div className="fixed inset-0 z-[100] flex h-screen w-screen flex-col bg-neutral-950 text-white">

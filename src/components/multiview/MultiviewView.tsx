@@ -138,11 +138,7 @@ export default function MultiviewView({
           ))}
         </div>
 
-
-
-
         <MultiviewSettings state={state} actions={actions} />
-
       </header>
 
       <main className="relative min-h-0 flex-1">
