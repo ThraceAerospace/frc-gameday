@@ -104,8 +104,6 @@ export default function EventFooter({
                   team={team}
                   nextMatch={nextMatch}
                   lastMatch={lastMatch}
-              teamPills={teamPills}
-                  teamPills={teamPills}
                   eventTimezone={eventTimezone}
                   playoffAlliances={playoffAlliances}
                   playoffType={playoffType}
