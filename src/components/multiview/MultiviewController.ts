@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { TBAEvent } from "@/lib/tba/types";
+import { createEventViewConfig } from "../gameday/EventViewConfig";
 import {
   LAYOUTS,
   pickHighlightLayout,
@@ -143,6 +144,12 @@ export function useMultiviewController({
         ...current,
         streams: eventKeys,
         priority: eventKeys,
+        eventConfigs: Object.fromEntries(
+          eventKeys.map((eventKey) => [
+            eventKey,
+            current.eventConfigs[eventKey] ?? createEventViewConfig(),
+          ])
+        ),
         activeKey: null,
         highlightLayoutKey: null,
       }));
@@ -441,15 +448,7 @@ export function useMultiviewController({
           priority: [...next.priority, eventKey],
           eventConfigs: {
             ...next.eventConfigs,
-            [eventKey]: {
-              trackedTeams: [],
-              selectedStream: null,
-              chatOpen: false,
-              presentation: {
-                teamTracker: "visible",
-                matchInfo: "visible",
-              },
-            },
+            [eventKey]: createEventViewConfig(),
           },
           eventPickerOpen: false,
         }));
