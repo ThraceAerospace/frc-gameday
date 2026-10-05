@@ -147,8 +147,9 @@ export default function MultiviewView({
           const geometry = layout.slots[slotIndex];
           const slotPresentation =
             geometry?.presentation ?? {
-              teamTracker: "sides" as const,
+              teamTracker: "hidden" as const,
               matchInfo: "visible" as const,
+              footerMode: "matchStrip" as const,
             };
 
           const visible = Boolean(geometry);
