@@ -1,7 +1,9 @@
 "use client";
 
 import type { TBAEvent } from "@/lib/tba/types";
-import type { LayoutKey } from "@/lib/multiview/layouts";
+import type { LAYOUTS } from "@/lib/multiview/layouts";
+
+type LayoutKey = keyof typeof LAYOUTS;
 
 export type MultiviewState = {
   streams: string[];
