@@ -12,6 +12,7 @@ type EventFooterProps = {
   eventName?: string | null;
   eventTimezone?: string | null;
   wssConnected?: boolean;
+  isDivisional?: boolean;
   teamPills?: ReactNode[];
   matches?: Parameters<typeof MatchStrip>[0]["matches"];
   team?: string[];
@@ -28,6 +29,7 @@ export default function EventFooter({
   eventName,
   eventTimezone,
   wssConnected = false,
+  isDivisional = false,
   teamPills = [],
   matches = [],
   team = [],
@@ -42,15 +44,25 @@ export default function EventFooter({
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div className="pointer-events-none absolute left-2 top-0 z-30 flex h-5 w-fit items-center gap-3 rounded-b bg-neutral-950/85 px-1.5 text-[10px] backdrop-blur-sm">
-        <div className="flex min-w-0 items-center gap-1">
-          <span className="truncate font-semibold text-white">{eventName || "Event"}</span>
-          <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full ${wssConnected ? "bg-green-500" : "bg-neutral-600"}`}
-            title={wssConnected ? "Live updates connected" : "Live updates disconnected"}
-          />
+      <div className="absolute bottom-full left-0 z-10 -mb-px flex max-w-[calc(100%-0.5rem)] items-end gap-1">
+        <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
+          <div className="flex flex-col whitespace-nowrap leading-none translate-y-[5px]">
+            <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
+              <span className="truncate">
+                {eventName || "Event"}
+              </span>
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${wssConnected ? "bg-green-500" : "bg-neutral-600"}`}
+                title={wssConnected ? "Live updates connected" : "Live updates disconnected"}
+              />
+            </span>
+            {eventTimezone && !isDivisional ? (
+              <span className="mt-0.5 text-[9px] text-neutral-500">
+                <EventLocalTime timezone={eventTimezone} />
+              </span>
+            ) : null}
+          </div>
         </div>
-        {eventTimezone ? <EventLocalTime timezone={eventTimezone} /> : null}
       </div>
 
       {showContent ? (
