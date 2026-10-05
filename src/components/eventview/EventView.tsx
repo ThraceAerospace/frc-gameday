@@ -180,10 +180,10 @@ export default function EventView({
     ],
   );
 
-  const slotPresentation = eventConfig.presentation;
+  const presentation = eventConfig.presentation;
 
   const showTeamTracker =
-    slotPresentation.teamTracker !== "hidden";
+    presentation.teamTracker !== "hidden";
 
   const teamPills = showTeamTracker
     ? trackedTeams.map((team) => (
@@ -409,7 +409,7 @@ export default function EventView({
         playoffAlliances={alliances}
         playoffType={eventData.playoff_type}
         teamsStatuses={teamsStatuses}
-        multiview={{ presentation: slotPresentation }}
+        multiview={{ presentation }}
       />
 
       <StreamModal
