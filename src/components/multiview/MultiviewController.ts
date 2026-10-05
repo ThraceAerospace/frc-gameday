@@ -15,7 +15,12 @@ import {
   pickLayout,
 } from "@/lib/multiview/layouts";
 
-import type { MultiviewActions, MultiviewController } from "./MultiviewActions";
+import type {
+  MultiviewActions,
+  MultiviewController,
+  MultiviewWebSocketEvent,
+  MultiviewWebSocketHandlers,
+} from "./MultiviewActions";
 import {
   createInitialMultiviewState,
   type MatchImminentSignal,
@@ -517,6 +522,48 @@ export function useMultiviewController({
     });
   }, [state.streams, update]);
 
+  const ingestWebSocketEvent = useCallback(
+    (
+      event: MultiviewWebSocketEvent,
+      handlers: MultiviewWebSocketHandlers
+    ) => {
+      if (event.type !== "tba-update") {
+        return;
+      }
+
+      const messageType = event.messageType;
+
+      if (!messageType) {
+        return;
+      }
+
+      switch (messageType) {
+        case "upcoming_match":
+        case "match_score":
+        case "match_video":
+          handlers.refreshMatches();
+          handlers.refreshStatuses();
+          return;
+
+        case "starting_comp_level":
+        case "schedule_updated":
+          handlers.refreshAll();
+          return;
+
+        case "alliance_selection":
+          handlers.refreshAlliances();
+          handlers.refreshStatuses();
+          handlers.refreshMatches();
+          return;
+
+        default:
+          handlers.refreshAll();
+          return;
+      }
+    },
+    []
+  );
+
   const localController = useMemo<MultiviewController>(
     () => ({
       getState: () => stateRef.current,
@@ -525,8 +572,9 @@ export function useMultiviewController({
         return () => listenersRef.current.delete(listener);
       },
       actions,
+      ingestWebSocketEvent,
     }),
-    [actions]
+    [actions, ingestWebSocketEvent]
   );
 
   return externalController ?? localController;
