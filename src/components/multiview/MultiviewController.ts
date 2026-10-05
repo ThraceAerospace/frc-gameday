@@ -551,6 +551,45 @@ export function useMultiviewController({
         });
       },
 
+      runEventViewCommand: (eventKey, type) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                command: {
+                  id: Date.now(),
+                  type,
+                },
+              },
+            },
+          };
+        });
+      },
+
+      clearEventViewCommand: (eventKey) => {
+        update((current) => {
+          const existing = current.eventConfigs[eventKey];
+          if (!existing || !existing.command) return current;
+
+          return {
+            ...current,
+            eventConfigs: {
+              ...current.eventConfigs,
+              [eventKey]: {
+                ...existing,
+                command: null,
+              },
+            },
+          };
+        });
+      },
+
       setEventViewPresentation: (eventKey, presentation) => {
         update((current) => {
           const existing = current.eventConfigs[eventKey];
