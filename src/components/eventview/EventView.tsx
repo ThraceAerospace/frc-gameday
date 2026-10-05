@@ -69,13 +69,14 @@ export default function EventView({
     reload: reloadAlliances,
   } = usePlayoffAlliances(event);
 
+  const [webSocketStale, setWebSocketStale] = useState(false);
+
   const {
     matches,
     eventNextMatch,
     eventLastMatch,
     reload: reloadMatches,
-  } = useMatches(event);
-
+  } = useMatches(event, () => setWebSocketStale(true));
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode ?? slotPresentation?.footerMode ?? "matchStrip";
