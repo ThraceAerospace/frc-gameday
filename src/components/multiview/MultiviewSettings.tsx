@@ -32,7 +32,12 @@ export default function MultiviewSettings({ state, actions, trigger }: Multiview
       });
   }, [state.availableEvents, eventSearch, state.streams]);
 
-  return (\n    <>\n      {trigger ? (\n        <span onClick={() => setOpen(true)}>{trigger}</span>\n      ) : null}\n      <div
+  return (
+    <>
+      {trigger ? (
+        <span onClick={() => setOpen(true)}>{trigger}</span>
+      ) : null}
+      <div
         onClick={() => setOpen(false)}
         className={"fixed inset-0 z-40 bg-black/50 transition-opacity " +
           (open ? "opacity-100" : "pointer-events-none opacity-0")}
@@ -42,8 +47,12 @@ export default function MultiviewSettings({ state, actions, trigger }: Multiview
         className={"fixed right-0 top-0 z-50 flex h-full w-[clamp(280px,25vw,400px)] flex-col border-l border-neutral-700 bg-neutral-900 p-3 shadow-xl transition-transform " +
           (open ? "translate-x-0" : "translate-x-full")}
       >
-        <div className="mb-3 flex shrink-0 items-center justify-between font-bold">\n          <span>Multiview Settings</span>\n          <button onClick={() => setOpen(false)} className="icon-button" title="Close settings" aria-label="Close settings"><XMarkIcon /></button>\n        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">\n          <button onClick={() => setEventPickerOpen(true)} className="mb-4 w-full rounded bg-neutral-800 px-3 py-2 text-left text-sm hover:bg-neutral-700">Add Event</button>
+        <div className="mb-3 flex shrink-0 items-center justify-between font-bold">
+          <span>Multiview Settings</span>
+          <button onClick={() => setOpen(false)} className="icon-button" title="Close settings" aria-label="Close settings"><XMarkIcon /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <button onClick={() => setEventPickerOpen(true)} className="mb-4 w-full rounded bg-neutral-800 px-3 py-2 text-left text-sm hover:bg-neutral-700">Add Event</button>
           <div className="mb-4 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
             <label className="flex cursor-pointer items-center justify-between gap-3">
               <div className="min-w-0">
@@ -100,5 +109,5 @@ export default function MultiviewSettings({ state, actions, trigger }: Multiview
           </div>
         </div>
       )}
-      <button\n        onClick={() => setOpen(true)}\n        className="fixed bottom-3 right-3 z-30 rounded bg-neutral-900 px-3 py-2 text-xs font-semibold shadow-lg hover:bg-neutral-800"\n        title="Open Multiview settings"\n      >\n        Settings\n      </button>\n    </>\n  );
+    </>\n  );
 }
