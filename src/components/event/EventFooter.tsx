@@ -41,18 +41,15 @@ export default function EventFooter({
   const showContent = mode !== "hidden";
 
   return (
-    <footer className="relative z-20 shrink-0 border-t border-white/10 bg-neutral-950/95">
-      <div className="flex h-7 min-w-0 items-center justify-between gap-3 border-b border-white/10 px-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[11px] font-bold text-white">
-            {eventName || "Event"}
-          </span>
+    <footer className="relative z-20 shrink-0 bg-neutral-950/95">
+      <div className="pointer-events-none absolute inset-x-2 bottom-full z-30 flex h-5 items-center justify-between gap-2 overflow-hidden rounded-t bg-neutral-950/85 px-1.5 text-[10px] backdrop-blur-sm">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="truncate font-semibold text-white">{eventName || "Event"}</span>
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${wssConnected ? "bg-green-500" : "bg-neutral-600"}`}
             title={wssConnected ? "Live updates connected" : "Live updates disconnected"}
           />
         </div>
-
         {eventTimezone ? <EventLocalTime timezone={eventTimezone} /> : null}
       </div>
 
