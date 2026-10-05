@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TBAEvent } from "@/lib/tba/types";
-import MultiviewClient from "@/components/multiview/MultiviewClient";
+import MultiviewView from "@/components/multiview/MultiviewView";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +65,7 @@ export default function DivisionalEvent({ params }: { params: Promise<{ parentEv
   ];
 
   return (
-    <MultiviewClient
+    <MultiviewView
       events={events}
       isDivisional
       parentEvent={data}
