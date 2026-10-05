@@ -411,7 +411,7 @@ export default function EventView({
         isDivisional={isDivisional}
         wssConnected={wssConnected}
         wssStale={webSocketStale}
-        hidden={footerHidden}
+        multiviewHidden={footerHidden}
         teamPills={teamPills}
         matches={displayMatches}
         team={trackedTeams}
