@@ -77,22 +77,25 @@ export default function RankingsStrip({
                   <div className="h-6 w-px bg-white/10" />
 
                   <div className="flex flex-col justify-center text-right">
-                    <span className="text-[9px] uppercase tracking-wide text-neutral-500">
+                    {/* <span className="text-[9px] uppercase tracking-wide text-neutral-500">
                       {playoffType === 10 ? "DE Round" : "Level"}
-                    </span>
+                    </span> */}
                     <span className="font-mono text-[10px] text-neutral-300">
                       {playoffLevel(alliance, playoffType)}
                     </span>
+                    <span className="font-mono text-[10px] text-neutral-300">
+                      {recordLabel(status?.record)}
+                    </span>
                   </div>
 
-                  <div className="flex flex-col justify-center text-right">
+                  {/* <div className="flex flex-col justify-center text-right">
                     <span className="text-[9px] uppercase tracking-wide text-neutral-500">
                       Record
                     </span>
                     <span className="font-mono text-[10px] text-neutral-300">
                       {recordLabel(status?.record)}
                     </span>
-                  </div>
+                  </div> */}
                 </article>
               );
             })}
