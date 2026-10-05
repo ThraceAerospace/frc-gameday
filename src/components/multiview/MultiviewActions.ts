@@ -1,4 +1,5 @@
 import type { TBAEvent } from "@/lib/tba/types";
+import type { EventViewConfig, EventViewPresentation } from "../gameday/EventViewConfig";
 import type {
   MatchImminentSignal,
   MultiviewState,
@@ -43,6 +44,12 @@ export type MultiviewActions = {
   removeEvent(eventKey: string): void;
 
   registerLabel(eventKey: string, label: string): void;
+
+  setEventViewConfig(eventKey: string, config: Partial<EventViewConfig>): void;
+  setEventViewTrackedTeams(eventKey: string, teams: string[]): void;
+  setEventViewStream(eventKey: string, streamKey: string | null): void;
+  setEventViewChat(eventKey: string, open: boolean): void;
+  setEventViewPresentation(eventKey: string, presentation: Partial<EventViewPresentation>): void;
 };
 
 export type MultiviewActionSource =
