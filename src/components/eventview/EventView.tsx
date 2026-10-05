@@ -25,7 +25,6 @@ import { useTeams } from "./hooks/useTeams";
 import { useTeamsStatuses } from "./hooks/useTeamsStatuses";
 import { usePlayoffAlliances } from "./hooks/usePlayoffAlliances";
 import { useMatches } from "./hooks/useMatches";
-import { useEventRankings } from "./hooks/useEventRankings";
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -71,7 +70,6 @@ export default function EventView({
     reload: reloadMatches,
   } = useMatches(event);
 
-  const { rankings } = useEventRankings(event);
 
   const eventConfig = config;
   const trackedTeams = eventConfig.trackedTeams;
