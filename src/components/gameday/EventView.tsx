@@ -36,13 +36,6 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 import type { MultiviewController } from "../multiview/MultiviewActions";
 import type { EventViewConfig } from "./EventViewConfig";
-import { DEFAULT_EVENT_VIEW_CONFIG } from "./EventViewConfig";
-
-type MatchImminentSignal = {
-  type: "match_imminent";
-  matchKey: string;
-  severity: "hard" | "soft";
-};
 
 type EventViewProps = {
   event: string;
@@ -82,7 +75,7 @@ export default function EventView({
     reload: reloadMatches,
   } = useMatches(event);
 
-  const eventConfig = config ?? DEFAULT_EVENT_VIEW_CONFIG;
+  const eventConfig = config;
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
   const chatOpen = eventConfig.chatOpen;
