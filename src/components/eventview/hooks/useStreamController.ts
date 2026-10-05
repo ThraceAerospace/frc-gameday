@@ -22,7 +22,7 @@ export function useStreamController(input: Stream[] = [], timezone?: string | nu
       const ordered = [...streams].sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")));
       return ([...ordered].reverse().find((s) => String(s.date ?? "") <= now) ?? ordered[0])?.key ?? null;
     });
-  }, [map, streams, timezone]);
+  }, [map, streams, timezone, preferredKey]);
 
   return { streams, activeKey, activeStream: activeKey ? map.get(activeKey) ?? null : null, setActiveKey };
 }
