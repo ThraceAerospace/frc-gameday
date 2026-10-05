@@ -59,7 +59,7 @@ export default function RankingsStrip({
                 <article
                   key={alliance.name ?? index}
                   className={[
-                    "flex h-[42px] shrink-0 items-center gap-3 rounded-md border px-3",
+                    "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
                     status?.status === "playing"
                       ? "border-white/20 bg-white/[0.08]"
                       : "border-zinc-800 bg-zinc-950",
@@ -125,7 +125,7 @@ export default function RankingsStrip({
             {entries.map((entry) => (
               <article
                 key={entry.teamKey}
-                className="flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3"
+                className="flex h-[34px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3"
               >
                 <span className="w-5 text-center font-mono text-[10px] font-bold text-white">
                   {entry.status!.qual!.ranking!.rank ?? "—"}
