@@ -533,23 +533,6 @@ export function useMultiviewController({
         });
       },
 
-      setEventViewChat: (eventKey, open) => {
-        update((current) => {
-          const existing = current.eventConfigs[eventKey];
-          if (!existing) return current;
-
-          return {
-            ...current,
-            eventConfigs: {
-              ...current.eventConfigs,
-              [eventKey]: {
-                ...existing,
-                chatOpen: open,
-              },
-            },
-          };
-        });
-      },
 
       runEventViewCommand: (eventKey, type) => {
         update((current) => {
