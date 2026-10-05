@@ -150,6 +150,7 @@ export default function MultiviewView({
               teamTracker: "hidden" as const,
               matchInfo: "visible" as const,
               footerMode: "matchStrip" as const,
+              footerHidden: false,
             };
 
           const visible = Boolean(geometry);
