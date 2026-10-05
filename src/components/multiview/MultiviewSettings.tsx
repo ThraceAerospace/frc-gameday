@@ -238,7 +238,7 @@ export default function MultiviewSettings({
           )
         : null}
 
-      {false ? (
+      {mounted && open && state.eventPickerOpen ? (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
           onClick={actions.closeEventPicker}
