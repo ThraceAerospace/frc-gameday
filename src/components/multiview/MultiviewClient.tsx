@@ -219,9 +219,10 @@ export default function MultiviewClient({
                 registerLabel={(label) =>
                   actions.registerLabel(eventKey, label)
                 }
-                onMatchImminent={() =>
-                  actions.handleMatchImminent(eventKey)
+                onMatchImminent={(signal) =>
+                  actions.handleMatchImminent(signal)
                 }
+                controller={multiviewController}
                 multiview={{ presentation: slotPresentation }}
               />
             </div>
