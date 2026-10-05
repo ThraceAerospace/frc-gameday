@@ -2,339 +2,184 @@
 
 FieldView is a Next.js application for presenting live FIRST Robotics Competition event data alongside event webcasts.
 
-The current architecture uses The Blue Alliance (TBA) as the authoritative data source, Redis as the server-side cache, TBA webhooks as the preferred realtime update path, Redis Pub/Sub as the internal notification bus, and WebSockets as the browser notification transport.
-
 ## Architecture
 
-~~~
-TBA REST API ───────────────┐
-                           │
-TBA webhooks → Redis cache ├→ API responses → EventView
-                  │        │
-                  └→ Redis Pub/Sub → WebSocket → browser
-                                               │
-                                               ├→ matches
-                                               ├→ teams/statuses
-                                               ├→ playoff alliances
-                                               └→ webcast UI
+```
+TBA REST / webhooks
+        ↓
+      Redis
+        ↓
+  Redis Pub/Sub
+        ↓
+     WebSocket
+        ↓
+    EventView
+   ┌────┼──────────────┐
+matches teams/statuses playoff alliances
+        │
+     webcast UI
 
-Polling is fallback reconciliation for missed or incomplete webhook updates.
-~~~
+Polling is fallback reconciliation for missed or incomplete updates.
+```
 
-Important boundaries:
+The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks are the preferred realtime mutation path, Redis Pub/Sub carries invalidation events internally, and event-scoped WebSockets notify browsers.
 
-- Redis is the server-side cache.
-- TBA webhook handlers mutate the existing Redis cache before broadcasting.
-- WebSocket messages are invalidation signals, not copies of the data.
-- Clients refetch after WSS notifications.
-- Polling reconciles missed webhooks.
-- EventView owns event-level data/UI orchestration.
-- MultiviewView owns stream slots, priority, highlighting, and visual layout.
-- Content/data state, stream identity, priority, layout, and highlight are separate concepts.
-- Event active-state dates are interpreted in the event's own timezone, not the user's browser timezone.
+WebSocket messages are intentionally small invalidation signals. Clients refetch the affected data after receiving them.
 
 ## Repository structure
 
-~~~
-.
-├── AGENTS.md
-├── CLAUDE.md
-├── README.md
-├── README-TBA-TYPES.md
-├── eslint.config.mjs
-├── next.config.ts
-├── package.json
-├── package-lock.json
-├── postcss.config.mjs
-├── tsconfig.json
-├── public/
-│   ├── file.svg
-│   ├── globe.svg
-│   ├── next.svg
-│   ├── vercel.svg
-│   └── window.svg
-├── scripts/
-│   └── generate-tba-types.mjs
-└── src/
-    ├── app/
-    │   ├── page.tsx
-    │   ├── layout.tsx
-    │   ├── globals.css
-    │   ├── ads.txt
-    │   ├── favicon.ico
-    │   ├── gameday/
-    │   │   ├── page.jsx
-    │   │   └── divisional-event/[parentEvent]/page.jsx
-    │   ├── cast/reciever/page.tsx
-    │   ├── testing/nexus/page.tsx
-    │   └── api/
-    │       ├── admin/redis/
-    │       │   ├── route.ts
-    │       │   └── delete/route.ts
-    │       ├── district/
-    │       │   ├── route.ts
-    │       │   ├── all/cmp/route.ts
-    │       │   └── [district]/advancement/
-    │       │       ├── route.ts
-    │       │       └── cmp/route.ts
-    │       ├── event/[event]/
-    │       │   ├── route.ts
-    │       │   ├── matches/
-    │       │   │   ├── route.ts
-    │       │   │   ├── next/route.ts
-    │       │   │   └── last/route.ts
-    │       │   ├── nexus/route.ts
-    │       │   ├── playoffs/alliances/route.ts
-    │       │   ├── teams/route.ts
-    │       │   ├── teams/statuses/route.ts
-    │       │   └── webcasts/route.ts
-    │       ├── events/active/route.ts
-    │       ├── nexus/webhook/route.ts
-    │       ├── tba/webhook/route.ts
-    │       ├── team/[team]/
-    │       │   ├── route.ts
-    │       │   └── district/route.ts
-    │       └── ws/route.ts
-    ├── components/
-    │   ├── gameday/
-    │   │   ├── EventView.jsx
-    │   │   ├── ChatView.jsx
-    │   │   ├── EventStatsSideBar.jsx
-    │   │   ├── StreamModal.jsx
-    │   │   ├── StreamView.jsx
-    │   │   ├── hooks/
-    │   │   │   ├── useEvent.ts
-    │   │   │   ├── useMatches.ts
-    │   │   │   ├── useNexus.ts
-    │   │   │   ├── usePlayoffAlliances.ts
-    │   │   │   ├── usePolling.ts
-    │   │   │   ├── useStreamController.ts
-    │   │   │   ├── useTeams.ts
-    │   │   │   ├── useTeamsStatuses.ts
-    │   │   │   ├── useTrackedMatches.ts
-    │   │   │   └── useWebSocket.ts
-    │   │   ├── navbar/
-    │   │   │   ├── EventLocalTime.jsx
-    │   │   │   ├── MatchCard.tsx
-    │   │   │   ├── MatchStrip.jsx
-    │   │   │   └── NextMatchCountdown.tsx
-    │   │   └── teamElements/
-    │   │       ├── Rank.jsx
-    │   │       ├── Record.jsx
-    │   │       ├── TeamModal.jsx
-    │   │       └── TeamPill.jsx
-    │   └── multiview/
-    │       ├── MultiviewView.jsx
-    │       └── hooks/useMatchImminence.ts
-    ├── lib/
-    │   ├── cast/
-    │   │   ├── castClient.ts
-    │   │   ├── types.ts
-    │   │   └── useCastSession.ts
-    │   ├── gameday/
-    │   │   ├── buildStreams.js
-    │   │   ├── matchUtils.ts
-    │   │   └── normalizeMatches.ts
-    │   ├── nexus/types.ts
-    │   ├── tba/
-    │   │   ├── generated.ts
-    │   │   └── types.ts
-    │   ├── eventState.ts
-    │   ├── layouts.js
-    │   ├── redis.ts
-    │   ├── tba.ts
-    │   ├── tbaClient.ts
-    │   ├── tbaFormatters.js
-    │   ├── tbaService.ts
-    │   ├── time.js
-    │   └── websocket.ts
-    └── types/cast.d.ts
-~~~
+```
+src/
+├── app/
+│   ├── page.tsx
+│   ├── gameday/
+│   ├── divisional-event/
+│   ├── cast/reciever/
+│   └── api/
+│       ├── event/[event]/
+│       ├── events/active/
+│       ├── district/
+│       ├── team/[team]/
+│       ├── tba/webhook/
+│       ├── admin/redis/
+│       └── ws/
+├── components/
+│   ├── event/
+│   ├── eventview/
+│   ├── match/
+│   ├── multiview/
+│   └── team/
+└── lib/
+    ├── cast/
+    ├── cache/
+    ├── gameday/
+    ├── multiview/
+    ├── realtime/
+    └── tba/
+```
 
-## Application pages
-
-- / — FieldView event picker and active-event search.
-- /gameday?event=... — Multiview for one or more events.
-- /gameday/divisional-event/[parentEvent] — championship/divisional-event Multiview.
-- /cast/reciever — Cast receiver.
-- /testing/nexus — Nexus development/testing page.
-
-## API
-
-Event routes under /api/event/[event]:
-
-- / — event details.
-- /matches — canonical full event match list.
-- /matches/next — server-side next-match helper.
-- /matches/last — server-side last-match helper.
-- /playoffs/alliances — playoff alliances.
-- /teams — event teams.
-- /teams/statuses — event team statuses.
-- /webcasts — event webcast definitions converted to application stream objects.
-- /nexus — current Nexus payload from Redis.
-
-Other routes:
-
-- /api/events/active — current/upcoming events.
-- /api/team/[team] and /district routes — supporting TBA data.
-- /api/tba/webhook — TBA webhook ingestion.
-- /api/nexus/webhook — Nexus webhook ingestion.
-- /api/ws?event=... — event-scoped WebSocket endpoint.
-- /api/admin/redis/* — legacy Redis administration/debugging.
+The current component organization reflects the post-refactor architecture. Do not reintroduce the removed monolithic Gameday components.
 
 ## EventView
 
-EventView is the event-level orchestrator.
+EventView owns event-level data and presentation:
 
-It owns event data, teams, team statuses, matches, playoff alliances, tracked teams, webcast selection, stat/team UI, WSS handling, refresh behavior, TeamPills, and MatchStrip data.
+- event metadata;
+- teams and team statuses;
+- canonical event matches;
+- playoff alliances;
+- tracked teams;
+- webcast selection;
+- WebSocket lifecycle;
+- fallback refreshes;
+- event footer content.
 
-It does not own Multiview layout or stream priority.
+The specialized hooks remain separate:
 
-The specialized hooks are deliberately separate:
-
-- useEvent — event data.
-- useMatches — canonical full event matches plus derived event next/last matches.
-- useTeams — event teams.
-- useTeamsStatuses — event team statuses.
-- usePlayoffAlliances — playoff alliances.
-- useTrackedMatches — tracked-team match derivation.
-- useStreamController — webcast stream normalization and selection.
-- useWebSocket — WSS lifecycle and reconnect.
-- usePolling — shared fallback polling.
-- useNexus — retained Nexus/testing path.
+- `useEvent` — event data.
+- `useMatches` — canonical matches and derived next/last matches.
+- `useTeams` — event teams.
+- `useTeamsStatuses` — event team statuses.
+- `usePlayoffAlliances` — playoff alliances.
+- `useTrackedMatches` — tracked-team match derivation.
+- `useStreamController` — webcast normalization and selection.
+- `useWebSocket` — WSS lifecycle and reconnect.
+- `usePolling` — fallback scheduling.
 
 ## Match data
 
-The client-side canonical helpers live in src/lib/gameday/matchUtils.ts.
+The client-side match helpers live in `src/lib/gameday/matchUtils.ts`.
 
-The match presentation chain is:
+The presentation chain is:
 
-~~~
-useMatches → EventView → MatchStrip → MatchCard
-~~~
+```
+useMatches → EventView → EventFooter → MatchStrip → MatchCard
+```
 
-Next match semantics are intentionally based on TBA scores:
+Next-match selection is based on TBA match state and the canonical match ordering. Do not replace the client-side semantics with `actual_time` or `score_breakdown` alone.
 
-- The next match is the first chronologically sorted match whose alliance score is -1.
-- Do not substitute actual_time for this rule.
-- Do not substitute score_breakdown for this rule.
-- score_breakdown can be null even when scores are available.
-- actual_time can also be null.
+Match cards can also represent playoff alliance information, including Double Elimination events.
 
-MatchStrip is the compact official-broadcast-inspired overlay. It keeps relevant matches available, focuses the next match, supports tracked TeamPills, and auto-scrolls while retaining previous-match context.
+## Event footer
+
+Each EventView has an independent footer mode:
+
+- `Hidden`
+- `Matches`
+- `Rankings`
+- `Matches + Rankings`
+
+The event identity tab remains visible when the match/rankings bar is hidden. Multiview layouts can temporarily hide the footer bar without changing the EventView's configured footer mode.
+
+The event identity tab also reports WebSocket state:
+
+- green — connected and receiving WebSocket updates;
+- blue — connected, but fallback polling has fired;
+- gray — disconnected.
 
 ## Multiview
 
-MultiviewView owns presentation state:
+Multiview separates five concepts:
 
-- stable streams;
-- priority;
-- explicit layout;
-- active/highlighted event;
-- highlight layout;
-- event picker;
-- labels;
-- automatic match-imminence focus;
-- keyboard controls.
+1. content/data;
+2. stable stream identity;
+3. priority;
+4. layout;
+5. highlight.
 
-The critical rule is that streams and priority are separate.
+The streams array is the stable set of EventView instances. Priority determines which existing streams occupy layout slots; changing priority must not reorder or remount the streams.
 
-The streams array is the stable set of EventView instances and must not be reordered when priority changes. Priority determines which existing stream occupies each visual slot. Highlighting may temporarily promote a stream to slot zero without permanently changing priority.
+Layout definitions live in `src/lib/multiview/layouts.ts`.
 
-This prevents unnecessary React remounts and webcast reloads.
+Current keyboard controls:
 
-src/lib/layouts.js contains pure layout definitions. Current layouts include Single, Dual, 1+2, Quad, 1+3, 2+3, Hex, 1+5, 1+6, Octo, 2+6, Nona/9-grid, and 1+8.
-
-Presentation metadata currently controls match-information and team-tracker visibility. TeamPills remain horizontal; Multiview controls visibility rather than assigning positional TeamPill modes.
-
-Keyboard controls:
-
-- 1–9 — highlight a stream.
-- 0 — clear highlight.
-- Ctrl+1–9 — select a stream for priority editing.
-- Arrow Up/Down — move the selected priority item.
-- - / = — cycle the explicit layout.
+- `1–9` — highlight a stream;
+- `0` — clear highlight;
+- `Ctrl+1–9` — select a stream for priority editing;
+- `Arrow Up/Down` — move the selected priority item;
+- `-` / `=` — cycle the explicit layout.
 
 ## TBA client and cache
 
-src/lib/tbaClient.ts is the low-level TBA REST + Redis cache layer.
+The low-level TBA client lives under `src/lib/tba/`.
 
 Rules:
 
-- Redis is the cache used by the application.
+- Redis is the application cache.
 - TBA ETag and Cache-Control max-age determine freshness.
-- Never hardcode a max-age observed from a TBA response.
-- Webhook match mutations operate on the existing canonical event full-match cache.
-- A TBA response must not overwrite a newer Redis value written by a webhook.
-- 304 responses refresh Redis expiry using TBA's supplied cache lifetime.
-- Do not add a second cache layer for webhook support.
+- Never hardcode a TBA max-age.
+- Webhook match mutations operate on the canonical full event match cache.
+- A newer Redis value written by a webhook must not be overwritten by an older in-flight TBA response.
+- A 304 response refreshes Redis expiry using TBA's supplied cache lifetime.
+- Do not add another cache layer for webhook support.
 
-src/lib/tbaService.ts is the application-facing service used by API routes. It covers events, teams, matches, alliances, statuses, districts, advancement, rankings/OPRs, Nexus information, and webcasts.
+The application-facing service is `src/lib/tba/service.ts`.
 
-Some simple/team match methods remain for legacy active-event functionality and should be caller-audited before removal.
+## TBA webhooks and WebSockets
 
-## TBA webhooks
+The TBA webhook flow is:
 
-The webhook flow is:
-
-~~~
+```
 authenticate
     ↓
 parse payload
     ↓
-mutate existing Redis cache when possible
+mutate Redis cache when applicable
     ↓
 broadcast event-scoped WSS invalidation
     ↓
 client refetch
-~~~
+```
 
-Authentication uses X-TBA-HMAC and TBA_WEBHOOK_TOKEN:
+Webhook authentication uses `X-TBA-HMAC` and `TBA_WEBHOOK_TOKEN`.
 
-- Missing HMAC → 418 intentionally.
-- Invalid HMAC → 401.
-- Authenticated malformed JSON → 400.
-- Server/configuration failure → 500.
+The WebSocket endpoint is `/api/ws?event=<eventKey>`. Redis Pub/Sub feeds the local WebSocket bridge through the `gameday:tba` channel.
 
-Current webhook behavior:
-
-- match_score — mutate canonical event match cache.
-- match_video — mutate canonical event match cache.
-- upcoming_match — merge timing/team information into cached match data.
-- alliance_selection — update event cache when possible; clients refetch alliances/statuses/matches.
-- schedule_updated — refetch signal.
-- starting_comp_level — refetch signal.
-- awards_posted — refetch signal for now.
-- verification, ping, broadcast — acknowledge without match mutation.
-- unknown message types — acknowledge and log.
-
-Redis mutation happens before the WSS broadcast. A broadcast failure does not invalidate a successful cache mutation.
-
-## WebSockets
-
-src/app/api/ws/route.ts upgrades an event-scoped request to WebSocket.
-
-src/lib/websocket.ts bridges Redis Pub/Sub to local WebSocket clients through the gameday:tba channel.
-
-Messages are intentionally small:
-
-~~~
-{
-  type: "tba-update",
-  eventKey: "...",
-  messageType: "match_score"
-}
-~~~
-
-The client uses useWebSocket, reconnecting with exponential backoff up to 30 seconds.
-
-WSS is the preferred realtime path. Polling is reconciliation, not the primary transport.
+Polling is reconciliation, not the primary realtime transport.
 
 ## Polling
 
-usePolling provides fallback scheduling.
-
-Current intervals:
+Current fallback intervals:
 
 | Tier | Interval |
 | --- | ---: |
@@ -343,74 +188,39 @@ Current intervals:
 | intermediate | 5 minutes |
 | long | 15 minutes |
 
-The generation counter is intentional. A reload invalidates the previous generation, cancels its timer, performs the current callback, and lets only the newest generation schedule the next fallback.
+`usePolling` uses a generation counter so an older async reload cannot schedule a new polling window after a newer reload has taken over.
 
 ## Event timezone
 
-/api/events/active parses each event's start/end dates in that event's own TBA timezone.
-
-This means a user in any browser timezone sees the same event active/upcoming state.
-
-Do not replace this with browser-local date comparisons.
-
-## Nexus
-
-Nexus support is retained but is secondary to TBA.
-
-Relevant files:
-
-- src/lib/nexus/types.ts
-- src/app/api/nexus/webhook/route.ts
-- src/app/api/event/[event]/nexus/route.ts
-- src/components/gameday/hooks/useNexus.ts
-- src/app/testing/nexus/page.tsx
-
-Nexus payloads are stored under nexus:event:<eventKey> and use dataAsOfTime as the ETag.
-
-Nexus is intentionally not part of the primary Gameday realtime flow right now.
+Event active-state calculations use each event's own TBA timezone rather than the browser timezone. This keeps active/upcoming event results consistent across users.
 
 ## Cast
 
-Cast support is isolated under src/lib/cast and src/app/cast/reciever. It is separate from the TBA/Redis/WSS architecture.
+Cast support is isolated under `src/lib/cast` and `src/app/cast/reciever`. It is separate from the TBA/Redis/WSS data architecture.
 
 ## TBA types
 
-src/lib/tba/generated.ts is generated from the TBA OpenAPI schema. Never hand-edit it.
+`src/lib/tba/generated.ts` is generated directly from the current TBA OpenAPI schema and must never be hand-edited.
 
-~~~
+```bash
 npm run generate:tba-types
-~~~
+```
 
-src/lib/tba/types.ts contains application-facing aliases.
+`src/lib/tba/types.ts` contains only application-facing aliases and small composed types used by FieldView. It is intentionally much smaller than the generated schema.
 
-See README-TBA-TYPES.md for the type-generation workflow.
+The generated schema may contain endpoints or schemas that FieldView does not currently use. That is expected; removing an unused generated schema belongs in the OpenAPI generation process, not in the generated file.
 
-## Cleanup and future reorganization
-
-The project went through several architectural iterations, so some historical files and subsystems remain.
-
-Dead-file cleanup is intentionally separate from the eventual directory reorganization.
-
-Before deleting a file:
-
-1. Search the whole repository for references.
-2. Distinguish a function/data name from an actual file import.
-3. Confirm that a newer replacement is really the implementation in use.
-4. Delete only after confirming there are no live callers.
-
-Known historical cleanup includes the duplicate JavaScript useStreamController implementation, the standalone getMatchesForTeams helper, and legacy LastMatch/NextMatch presentation components.
-
-The directory layout will eventually be reorganized around the current architecture, but that is a separate refactor. Do not mix a broad directory move with routine dead-code cleanup unless explicitly requested.
+See [README-TBA-TYPES.md](README-TBA-TYPES.md) for the type-generation workflow.
 
 ## Development
 
-~~~
+```bash
 npm install
 npm run dev
 npm run lint
 npm run build
-~~~
+```
 
-TBA types are regenerated automatically by predev and prebuild.
+TBA types are regenerated automatically by `predev` and `prebuild`.
 
-Do not commit secrets. The TBA webhook requires TBA_WEBHOOK_TOKEN; stream URL construction may use NEXT_PUBLIC_DOMAIN.
+Do not commit secrets. The TBA webhook requires `TBA_WEBHOOK_TOKEN`; stream URL construction may use `NEXT_PUBLIC_DOMAIN`.
