@@ -3,7 +3,6 @@
 import type { TBAEvent } from "@/lib/tba/types";
 import { useSyncExternalStore } from "react";
 import type { MultiviewController } from "./MultiviewActions";
-import MultiviewSettings from "./MultiviewSettings";
 import {
   LAYOUTS,
   pickLayout,
@@ -16,7 +15,6 @@ import { useMultiviewController, useMultiviewKeyboard } from "./MultiviewControl
 import {
   HomeIcon,
   PlusIcon,
-  Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import EventLocalTime from "@/components/eventview/match/EventLocalTime";
@@ -139,19 +137,7 @@ export default function MultiviewView({
           ))}
         </div>
 
-        <MultiviewSettings
-          state={state}
-          actions={actions}
-          trigger={
-            <button
-              className="h-[30px] w-[30px] rounded hover:bg-stone-800"
-              title="Multiview settings"
-              aria-label="Multiview settings"
-            >
-              <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
-            </button>
-          }
-        />
+
       </header>
 
       <main className="relative min-h-0 flex-1">
