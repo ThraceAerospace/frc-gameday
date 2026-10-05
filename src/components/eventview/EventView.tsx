@@ -122,7 +122,6 @@ export default function EventView({
     streams,
     activeKey,
     activeStream,
-    setActiveKey,
   } = useStreamController(
     streamsRaw,
     eventData?.timezone,
