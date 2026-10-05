@@ -35,10 +35,8 @@ import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 import type { MultiviewController } from "../multiview/MultiviewActions";
-import type { EventViewConfig, EventViewPresentation } from "./EventViewConfig";
+import type { EventViewConfig } from "./EventViewConfig";
 import { DEFAULT_EVENT_VIEW_CONFIG } from "./EventViewConfig";
-
-const EMPTY_TEAMS: string[] = [];
 
 type MatchImminentSignal = {
   type: "match_imminent";
@@ -48,24 +46,16 @@ type MatchImminentSignal = {
 
 type EventViewProps = {
   event: string;
-  config?: EventViewConfig;
-  registerLabel?: (label: string) => void;
-  onMatchImminent?: (signal: MatchImminentSignal) => void;
-  controller?: MultiviewController;
+  config: EventViewConfig;
+  controller: MultiviewController;
   isDivisional?: boolean;
-  multiview?: {
-    presentation?: EventViewPresentation;
-  };
 };
 
 export default function EventView({
   event,
   config,
-  registerLabel,
-  onMatchImminent,
   controller,
   isDivisional = false,
-  multiview = {},
 }: EventViewProps) {
   const {
     event: eventData,
@@ -117,9 +107,9 @@ export default function EventView({
 
   useEffect(() => {
     if (eventLabel) {
-      registerLabel?.(eventLabel);
+      controller.actions.registerLabel(event, eventLabel);
     }
-  }, [eventLabel, registerLabel]);
+  }, [event, eventLabel, controller]);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +175,7 @@ export default function EventView({
         signal?.type ===
         "match_imminent"
       ) {
-        onMatchImminent?.(signal);
+        controller.actions.handleMatchImminent(signal);
       }
     },
   );
@@ -204,8 +194,7 @@ export default function EventView({
     ],
   );
 
-  const slotPresentation: EventViewPresentation =
-    multiview.presentation ?? eventConfig.presentation;
+  const slotPresentation = eventConfig.presentation;
 
   const showTeamTracker =
     slotPresentation.teamTracker !== "hidden";
