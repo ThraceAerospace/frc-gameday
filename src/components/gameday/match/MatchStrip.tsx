@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-
+import type { TBAEliminationAlliance, TBAMatch} from "@/lib/tba/types";
 import { useEffect, useRef } from "react";
 import MatchCard from "./MatchCard";
 import EventLocalTime from "./EventLocalTime";
@@ -9,8 +9,8 @@ import EventLocalTime from "./EventLocalTime";
 export default function MatchStrip({
   matches = [],
   team = [],
-  nextMatch = null,
-  lastMatch = null,
+  nextMatch,
+  lastMatch,
   eventTimezone,
   playoffAlliances = [],
   playoffType = null,
@@ -20,8 +20,22 @@ export default function MatchStrip({
   showEventInfo = true,
   isDivisional = false,
   multiview = {},
+}: {
+  matches?: TBAMatch[];
+  team?: string[];
+  nextMatch?: TBAMatch | null;
+  lastMatch?: TBAMatch | null;
+  eventTimezone?: string | null;
+  playoffAlliances?: TBAEliminationAlliance[];
+  playoffType?: number | null;
+  eventName?: string;
+  wssConnected?: boolean;
+  teamPills?: ReactNode[];
+  showEventInfo?: boolean;
+  isDivisional?: boolean;
+  multiview?: Record<string, unknown>;
 }) {
-  const scrollRef = useRef(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   /*
    * Keep every match in the strip while avoiding duplicate keys.
@@ -49,12 +63,12 @@ export default function MatchStrip({
   }
 
   const presentation =
-    multiview?.presentation ?? {};
+    (multiview?.presentation as
+      | { matchInfo?: string }
+      | undefined) ?? {};
 
   const hideMatchCards =
-    presentation.matchInfo ===
-    "hidden";
-
+    presentation.matchInfo === "hidden";
   /*
    * Automatically bring the next match into view whenever the
    * actual next match changes.
@@ -74,7 +88,7 @@ useEffect(() => {
   const nextElement =
     scrollRef.current.querySelector(
       `[data-match-key="${CSS.escape(nextMatch.key)}"]`,
-    );
+    ) as HTMLElement | null;
 
   if (!nextElement) {
     return;
@@ -179,7 +193,7 @@ useEffect(() => {
                       playoffType
                     }
                     eventTimezone={
-                      eventTimezone
+                      eventTimezone ?? undefined
                     }
                   />
                 </div>

@@ -1,15 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
-import type { BuiltStream } from "@/lib/gameday/buildStreams";
-
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+
 import {
   ArrowPathIcon,
   ChatBubbleLeftRightIcon,
@@ -17,13 +15,17 @@ import {
   UserGroupIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
+
 import StreamView from "./StreamView";
 import ChatView from "./ChatView";
 import StreamModal from "./StreamModal";
 import TeamModal from "./team/TeamModal";
 import TeamPill from "./team/TeamPill";
 import MatchStrip from "./match/MatchStrip";
+
 import { buildStreams } from "@/lib/gameday/buildStreams";
+import type { BuiltStream } from "@/lib/gameday/buildStreams";
+
 import { useEvent } from "./hooks/useEvent";
 import { useTeams } from "./hooks/useTeams";
 import { useTeamsStatuses } from "./hooks/useTeamsStatuses";
@@ -34,13 +36,33 @@ import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 
-const EMPTY_TEAMS = [];
+const EMPTY_TEAMS: string[] = [];
 
-type MatchImminentSignal = { type: "match_imminent"; matchKey: string; severity: "hard" | "soft" };
+type MatchImminentSignal = {
+  type: "match_imminent";
+  matchKey: string;
+  severity: "hard" | "soft";
+};
 
-type GamedayWidgetProps = { event: string; initialTeams?: string[]; registerLabel?: (label: string) => void; onMatchImminent?: (signal: MatchImminentSignal) => void; isDivisional?: boolean; multiview?: { presentation?: { teamTracker?: "visible" | "hidden"; matchInfo?: "visible" | "hidden" } } };
+type PresentationVisibility = "visible" | "hidden";
 
-const DEFAULT_PRESENTATION = {
+type Presentation = {
+  teamTracker: PresentationVisibility;
+  matchInfo: PresentationVisibility;
+};
+
+type GamedayWidgetProps = {
+  event: string;
+  initialTeams?: string[];
+  registerLabel?: (label: string) => void;
+  onMatchImminent?: (signal: MatchImminentSignal) => void;
+  isDivisional?: boolean;
+  multiview?: {
+    presentation?: Presentation;
+  };
+};
+
+const DEFAULT_PRESENTATION: Presentation = {
   teamTracker: "visible",
   matchInfo: "visible",
 };
@@ -53,13 +75,11 @@ export default function GamedayWidget({
   isDivisional = false,
   multiview = {},
 }: GamedayWidgetProps) {
-  
-const {
-  event: eventData,
-  loading,
-  error,
-  reloadEvent,
-} = useEvent(event);
+  const {
+    event: eventData,
+    loading,
+    error,
+  } = useEvent(event);
 
   const { teams } = useTeams(event);
 
@@ -81,7 +101,7 @@ const {
   } = useMatches(event);
 
   const [trackedTeams, setTrackedTeams] =
-    useState(initialTeams);
+    useState<string[]>(initialTeams);
 
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
@@ -89,7 +109,7 @@ const {
   const [settingsOpen, setSettingsOpen] =
     useState(false);
 
-const [teamsOpen, setTeamsOpen] =
+  const [teamsOpen, setTeamsOpen] =
     useState(false);
 
   const [streamsOpen, setStreamsOpen] =
@@ -121,9 +141,7 @@ const [teamsOpen, setTeamsOpen] =
       return;
     }
 
-    buildStreams(
-      eventData.webcasts,
-    ).then((streams) => {
+    buildStreams(eventData.webcasts).then((streams) => {
       if (!cancelled) {
         setStreamsRaw(streams);
       }
@@ -197,7 +215,7 @@ const [teamsOpen, setTeamsOpen] =
     ],
   );
 
-  const slotPresentation =
+  const slotPresentation: Presentation =
     multiview.presentation ??
     DEFAULT_PRESENTATION;
 
@@ -221,7 +239,7 @@ const [teamsOpen, setTeamsOpen] =
       console.log(
         "[WSS] Refreshing all data sources...",
       );
-      
+
       void reloadAlliances();
       void reloadMatches();
       void reloadStatuses();
@@ -231,12 +249,6 @@ const [teamsOpen, setTeamsOpen] =
       reloadStatuses,
     ]);
 
-  /*
-   * WebSocket notifications are invalidation
-   * signals. The socket is scoped to this event,
-   * so a received event means the existing TBA
-   * data sources should be refreshed.
-   */
   const {
     connected: wssConnected,
   } = useWebSocket(
@@ -293,7 +305,7 @@ const [teamsOpen, setTeamsOpen] =
   );
 
   useEffect(() => {
-    const handler = (event) => {
+    const handler = (event: KeyboardEvent) => {
       if (
         event.key.toLowerCase() !==
         "r"
@@ -333,7 +345,7 @@ const [teamsOpen, setTeamsOpen] =
   }, [refreshLiveData]);
 
   const toggleTeam = useCallback(
-    (team) =>
+    (team: string) =>
       setTrackedTeams(
         (current) =>
           current.includes(team)
@@ -396,7 +408,7 @@ const [teamsOpen, setTeamsOpen] =
 
         {settingsOpen && (
           <div className="absolute left-0 top-full mt-1 flex flex-col gap-1 rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-xl">
-<button
+            <button
               className={`icon-button ${
                 trackedTeams.length
                   ? "active"
@@ -450,7 +462,7 @@ const [teamsOpen, setTeamsOpen] =
       </div>
 
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
-<div className="relative min-w-0 min-h-0 flex-1">
+        <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
             stream={activeStream}
           />

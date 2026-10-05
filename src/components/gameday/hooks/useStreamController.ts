@@ -8,7 +8,7 @@ type Stream = BuiltStream & { key?: string };
 function streamKey(stream: Stream) { return stream.key ?? `${stream.type}:${stream.channel}:${stream.date ?? ""}`; }
 function today(timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 
-export function useStreamController(input: Stream[] = [], timezone?: string) {
+export function useStreamController(input: Stream[] = [], timezone?: string | null) {
   const streams = useMemo(() => input.filter((s) => s?.type && s?.channel).map((s) => ({ ...s, key: streamKey(s) })), [input]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const map = useMemo(() => new Map(streams.map((stream) => [stream.key!, stream])), [streams]);
