@@ -265,25 +265,47 @@ export default function GamedayWidget({
         return;
       }
 
-      if (!controller) {
-        console.warn(
-          "[WSS] Received an event without a MultiviewController."
-        );
+      if (controller) {
+        controller.ingestWebSocketEvent(message, {
+          refreshMatches: () => {
+            void reloadMatches();
+          },
+          refreshStatuses: () => {
+            void reloadStatuses();
+          },
+          refreshAlliances: () => {
+            void reloadAlliances();
+          },
+          refreshAll: refreshLiveData,
+        });
         return;
       }
 
-      controller.ingestWebSocketEvent(message, {
-        refreshMatches: () => {
+      // Standalone GamedayWidget instances still own their refresh lifecycle.
+      // Multiview instances always pass the controller above.
+      switch (message.messageType) {
+        case "upcoming_match":
+        case "match_score":
+        case "match_video":
           void reloadMatches();
-        },
-        refreshStatuses: () => {
           void reloadStatuses();
-        },
-        refreshAlliances: () => {
+          break;
+
+        case "starting_comp_level":
+        case "schedule_updated":
+          refreshLiveData();
+          break;
+
+        case "alliance_selection":
           void reloadAlliances();
-        },
-        refreshAll: refreshLiveData,
-      });
+          void reloadStatuses();
+          void reloadMatches();
+          break;
+
+        default:
+          refreshLiveData();
+          break;
+      }
     },
   );
 
