@@ -7,6 +7,7 @@ import MatchCard from "./MatchCard";
 
 export default function MatchStrip({
   matches = [],
+  eventTimezone,
   team = [],
   nextMatch,
   lastMatch,
@@ -19,6 +20,7 @@ export default function MatchStrip({
   team?: string[];
   nextMatch?: TBAMatch | null;
   lastMatch?: TBAMatch | null;
+  eventTimezone?: string | null;
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   teamPills?: ReactNode[];
