@@ -1,9 +1,9 @@
 import type { TBAEvent } from "@/lib/tba/types";
-import type { EventViewConfig, EventViewPresentation } from "../gameday/EventViewConfig";
 import type {
   MatchImminentSignal,
   MultiviewState,
 } from "./MultiviewState";
+import { EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 
 export type MultiviewWebSocketEvent = {
   type: string;

@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import type { TBAEvent } from "@/lib/tba/types";
-import { createEventViewConfig } from "../gameday/EventViewConfig";
+
 import {
   LAYOUTS,
   pickHighlightLayout,
@@ -27,6 +27,7 @@ import {
   type MatchImminentSignal,
   type MultiviewState,
 } from "./MultiviewState";
+import { createEventViewConfig } from "@/components/eventview/EventViewConfig";
 
 const CONTROLS_HIDE_DELAY = 3000;
 

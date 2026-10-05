@@ -7,8 +7,7 @@ import {
   LAYOUTS,
   pickLayout,
 } from "@/lib/multiview/layouts";
-import EventLocalTime from "@/components/gameday/match/EventLocalTime";
-import EventView from "../gameday/EventView";
+
 import { useRouter } from "next/navigation";
 
 import { useMultiviewController, useMultiviewKeyboard } from "./MultiviewController";
@@ -21,6 +20,8 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
 } from "@heroicons/react/24/outline";
+import EventView from "@/components/eventview/EventView";
+import EventLocalTime from "@/components/eventview/match/EventLocalTime";
 
 type MultiviewViewProps = {
   events?: string[];

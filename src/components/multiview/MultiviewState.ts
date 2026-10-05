@@ -2,7 +2,8 @@
 
 import type { TBAEvent } from "@/lib/tba/types";
 import type { LAYOUTS } from "@/lib/multiview/layouts";
-import { createEventViewConfig, type EventViewConfig } from "../gameday/EventViewConfig";
+import { EventViewConfig, createEventViewConfig } from "@/components/eventview/EventViewConfig";
+
 
 type LayoutKey = keyof typeof LAYOUTS;
 
