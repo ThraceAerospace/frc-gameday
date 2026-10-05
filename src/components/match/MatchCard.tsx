@@ -131,6 +131,7 @@ export default function MatchCard({
       className={[
         "shrink-0",
         "min-w-[204px]",
+        "h-[42px]",
         "rounded-md",
         "border",
         "px-2 py-1",
