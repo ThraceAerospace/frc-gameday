@@ -21,8 +21,6 @@ export type MultiviewWebSocketHandlers = {
 export type MultiviewActions = {
   showControls(): void;
   hideControls(): void;
-  toggleSidebar(): void;
-  setSidebarOpen(open: boolean): void;
 
   setAutoFocusMatches(enabled: boolean): void;
   handleMatchImminent(signal: string | MatchImminentSignal): void;
