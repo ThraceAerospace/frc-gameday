@@ -24,7 +24,6 @@ const COMPACT: Presentation = {
 const NONE: Presentation = {
   matchInfo: HIDDEN,
   teamTracker: HIDDEN,
-  footerMode: "matchStrip",
   footerHidden: true,
 };
 
