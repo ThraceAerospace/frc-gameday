@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import {
