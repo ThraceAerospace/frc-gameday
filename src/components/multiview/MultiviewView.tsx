@@ -166,13 +166,19 @@ export default function MultiviewView({
           ))}
         </div>
 
-        <button
-          onClick={actions.toggleSidebar}
-          className="h-[30px] w-[30px] rounded hover:bg-stone-800"
-          title="Multiview settings"
-        >
-          <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
-        </button>
+        <MultiviewSettings
+          state={state}
+          actions={actions}
+          trigger={
+            <button
+              className="h-[30px] w-[30px] rounded hover:bg-stone-800"
+              title="Multiview settings"
+              aria-label="Multiview settings"
+            >
+              <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
+            </button>
+          }
+        />
       </header>
 
       <main className="relative min-h-0 flex-1">
