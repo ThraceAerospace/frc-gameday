@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -23,6 +24,11 @@ export default function MultiviewSettings({
 }: MultiviewSettingsProps) {
   const [open, setOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const autoLayoutKey = pickLayout(state.streams.length || 1);
   const selectedLayoutKey =
@@ -65,7 +71,9 @@ export default function MultiviewSettings({
         <span onClick={openSettings}>{trigger}</span>
       ) : null}
 
-      {open ? (
+      {mounted && open
+        ? createPortal(
+            <>
         <div className="fixed inset-0 z-[100] flex h-screen w-screen flex-col bg-neutral-950 text-white">
           <header className="flex shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-950 px-6 py-4">
             <div>
@@ -225,9 +233,12 @@ export default function MultiviewSettings({
             </div>
           </main>
         </div>
-      ) : null}
+            </>,
+            document.body,
+          )
+        : null}
 
-      {open && state.eventPickerOpen ? (
+      {false ? (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
           onClick={actions.closeEventPicker}
