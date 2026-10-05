@@ -3,12 +3,9 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
-import {
-} from "@heroicons/react/24/outline";
 
 import StreamView from "./StreamView";
 import StreamModal from "./StreamModal";
