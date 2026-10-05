@@ -2,8 +2,6 @@ export type EventViewVisibility = "visible" | "hidden";
 
 export type EventViewFooterMode = "matchStrip" | "rankings" | "split" | "hidden";
 
-export type EventViewFooterOverride = EventViewFooterMode | null;
-
 export type EventViewPresentation = {
   teamTracker: EventViewVisibility;
   matchInfo: EventViewVisibility;
@@ -20,7 +18,7 @@ export type EventViewConfig = {
   trackedTeams: string[];
   selectedStream: string | null;
   presentation: EventViewPresentation;
-  footerMode: EventViewFooterOverride;
+  footerMode: EventViewFooterMode;
   command: EventViewCommand | null;
 };
 
@@ -32,7 +30,7 @@ export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
     matchInfo: "visible",
   },
   command: null,
-  footerMode: null,
+  footerMode: "matchStrip",
 };
 
 export function createEventViewConfig(
