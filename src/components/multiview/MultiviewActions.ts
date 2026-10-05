@@ -50,7 +50,6 @@ export type MultiviewActions = {
   setEventViewConfig(eventKey: string, config: Partial<EventViewConfig>): void;
   setEventViewTrackedTeams(eventKey: string, teams: string[]): void;
   setEventViewStream(eventKey: string, streamKey: string | null): void;
-  setEventViewChat(eventKey: string, open: boolean): void;
   setEventViewPresentation(eventKey: string, presentation: Partial<EventViewPresentation>): void;
   runEventViewCommand(eventKey: string, type: EventViewCommandType): void;
   clearEventViewCommand(eventKey: string): void;
