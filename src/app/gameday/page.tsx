@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import type { ReactNode } from "react";
-import MultiviewClient from "@/components/multiview/MultiviewClient";
+import MultiviewView from "@/components/multiview/MultiviewView";
 
 function normalizeParams(param: string | string[] | undefined): string[] {
   if (!param) return [];
@@ -19,7 +19,7 @@ export default function GamedayPage({ searchParams }: { searchParams: Promise<{ 
   }
 
   return (
-    <MultiviewClient
+    <MultiviewView
       events={eventKeys}
       isDivisional={false}
     />
