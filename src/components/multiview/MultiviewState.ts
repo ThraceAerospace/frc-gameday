@@ -14,7 +14,6 @@ export type MultiviewState = {
   layoutKey: LayoutKey | null;
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
-  sidebarOpen: boolean;
   autoFocusMatches: boolean;
   eventPickerOpen: boolean;
   eventSearch: string;
@@ -46,7 +45,6 @@ export function createInitialMultiviewState(
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
-    sidebarOpen: false,
     autoFocusMatches: true,
     eventPickerOpen: false,
     eventSearch: "",
