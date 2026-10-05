@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { TBAEliminationAlliance, TBAMatch } from "@/lib/tba/types";
 import { useEffect, useRef } from "react";
 import MatchCard from "./MatchCard";
@@ -13,7 +12,6 @@ export default function MatchStrip({
   lastMatch,
   playoffAlliances = [],
   playoffType = null,
-  teamPills = [],
   multiview = {},
 }: {
   matches?: TBAMatch[];
@@ -23,7 +21,6 @@ export default function MatchStrip({
   eventTimezone?: string | null;
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
-  teamPills?: ReactNode[];
   multiview?: Record<string, unknown>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
