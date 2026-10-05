@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "src/components/gameday/teamElements/TeamPill.jsx", "src/components/gameday/navbar/MatchStrip.jsx"  ],
+ ],
   "exclude": ["node_modules"]
 }
