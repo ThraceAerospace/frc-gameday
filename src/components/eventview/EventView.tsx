@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -10,6 +11,7 @@ import {
 import StreamView from "./StreamView";
 import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
+import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
@@ -166,6 +168,21 @@ export default function EventView({
       }
     },
   );
+
+  const teamCount = useMemo(
+    () => Math.max(teams.length, Object.keys(teamsStatuses).length),
+    [teams, teamsStatuses],
+  );
+
+  const teamPills = trackedTeams.map((team) => (
+    <TeamPill
+      key={team}
+      team={team}
+      status={teamsStatuses[team]}
+      teamCount={teamCount}
+      nextMatch={trackedNextMatches[team]}
+    />
+  ));
 
   const presentation = eventConfig.presentation;
 
@@ -385,6 +402,7 @@ export default function EventView({
         playoffAlliances={alliances}
         playoffType={eventData.playoff_type}
         teamsStatuses={teamsStatuses}
+        teamPills={teamPills}
         multiview={{ presentation }}
       />
 
