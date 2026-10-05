@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import type { TBAEvent } from "@/lib/tba/types";
@@ -26,10 +27,12 @@ const CONTROLS_HIDE_DELAY = 3000;
 
 export type UseMultiviewControllerOptions = {
   events: string[];
+  controller?: MultiviewController;
 };
 
 export function useMultiviewController({
   events,
+  controller: externalController,
 }: UseMultiviewControllerOptions): MultiviewController {
   const initialStreams = useMemo(
     () => [...new Set(events.filter(Boolean).map(String))],
@@ -39,12 +42,18 @@ export function useMultiviewController({
   const [state, setState] = useState<MultiviewState>(() =>
     createInitialMultiviewState(initialStreams)
   );
+  const listenersRef = useRef(
+    new Set<(state: MultiviewState) => void>()
+  );
 
   const stateRef = useRef(state);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
+    for (const listener of listenersRef.current) {
+      listener(state);
+    }
   }, [state]);
 
   const update = useCallback(
@@ -509,14 +518,19 @@ export function useMultiviewController({
     });
   }, [state.streams, update]);
 
-  return useMemo<MultiviewController>(
+  const localController = useMemo<MultiviewController>(
     () => ({
       getState: () => stateRef.current,
-      subscribe: () => () => {},
+      subscribe: (listener) => {
+        listenersRef.current.add(listener);
+        return () => listenersRef.current.delete(listener);
+      },
       actions,
     }),
     [actions]
   );
+
+  return externalController ?? localController;
 }
 
 export function useMultiviewKeyboard(
