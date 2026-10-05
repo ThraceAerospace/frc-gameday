@@ -13,7 +13,7 @@ type EventFooterProps = {
   eventTimezone?: string | null;
   wssConnected?: boolean;
   wssStale?: boolean;
-  hidden?: boolean;
+  multiviewHidden?: boolean;
   isDivisional?: boolean;
   teamPills?: ReactNode[];
   matches?: Parameters<typeof MatchStrip>[0]["matches"];
@@ -32,7 +32,7 @@ export default function EventFooter({
   eventTimezone,
   wssConnected = false,
   wssStale = false,
-  hidden = false,
+  multiviewHidden = false,
   isDivisional = false,
   teamPills = [],
   matches = [],
@@ -44,11 +44,11 @@ export default function EventFooter({
   teamsStatuses,
   multiview = {},
 }: EventFooterProps) {
-  const showContent = mode !== "hidden" && !hidden;
+  const showContent = mode !== "hidden" && !multiviewHidden;
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div className={`absolute bottom-full left-0 z-10 flex max-w-[calc(100%-0.5rem)] items-end gap-1 transition-transform duration-200 ${hidden ? "translate-y-full" : "mb-[-0.5]"}`}>
+      <div className={`absolute bottom-full left-0 z-10 flex max-w-[calc(100%-0.5rem)] items-end gap-1 transition-transform duration-200 ${multiviewHidden ? "translate-y-full" : "mb-[-0.5]"}`}>
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
           <div className="flex flex-col whitespace-nowrap leading-none translate-y-[5px]">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
