@@ -14,7 +14,7 @@ import { useEvent } from "@/components/eventview/hooks/useEvent";
 import { useTeams } from "@/components/eventview/hooks/useTeams";
 import { useTeamsStatuses } from "@/components/eventview/hooks/useTeamsStatuses";
 import StreamModal from "@/components/eventview/StreamModal";
-import TeamModal from "@/components/eventview/team/TeamModal";
+import TeamModal from "@/components/team/TeamModal";
 
 
 type MultiviewSettingsProps = { state: MultiviewState; actions: MultiviewActions; };
