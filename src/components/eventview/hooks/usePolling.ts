@@ -17,11 +17,13 @@ export function usePolling(
   options: {
     enabled?: boolean;
     resetKey?: string | null;
+    onFallback?: () => void;
   } = {},
 ) {
   const {
     enabled = true,
     resetKey = null,
+    onFallback,
   } = options;
 
   const callbackRef = useRef(callback);
@@ -29,6 +31,9 @@ export function usePolling(
   const generationRef = useRef(0);
 
   callbackRef.current = callback;
+
+  const fallbackRef = useRef(onFallback);
+  fallbackRef.current = onFallback;
 
   const schedule = useCallback(() => {
     if (timerRef.current !== null) {
@@ -40,6 +45,8 @@ export function usePolling(
 
       const generation =
         ++generationRef.current;
+
+      fallbackRef.current?.();
 
       Promise.resolve(
         callbackRef.current(),
