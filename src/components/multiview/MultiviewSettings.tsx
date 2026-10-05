@@ -239,7 +239,7 @@ export default function MultiviewSettings({
             <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
               <div className="font-bold">Add Event</div>
               <button
-                onClick={() => setEventPickerOpen(false)}
+                onClick={() => actions.closeEventPicker()}
                 className="icon-button"
                 title="Close"
                 aria-label="Close"
