@@ -11,7 +11,6 @@ import {
 } from "@heroicons/react/24/outline";
 
 import StreamView from "./StreamView";
-import ChatView from "./ChatView";
 import StreamModal from "./StreamModal";
 import TeamModal from "./team/TeamModal";
 import TeamPill from "./team/TeamPill";
@@ -73,7 +72,6 @@ export default function EventView({
   const eventConfig = config;
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
-  const chatOpen = eventConfig.chatOpen;
 
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
@@ -392,33 +390,6 @@ export default function EventView({
             </div>
           )}
         </div>
-
-        {chatOpen && (
-          <aside className="h-full w-[min(420px,92vw)] shrink-0 border-l border-white/10 bg-black shadow-2xl">
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs font-semibold">
-                <span>
-                  Live chat
-                </span>
-
-                <button
-                  onClick={() =>
-                    controller?.actions.setEventViewChat(event, false)
-                  }
-                  className="text-neutral-500"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="min-h-0 flex-1">
-                <ChatView
-                  stream={activeStream}
-                />
-              </div>
-            </div>
-          </aside>
-        )}
       </div>
 
       <footer className="relative z-20 shrink-0">
