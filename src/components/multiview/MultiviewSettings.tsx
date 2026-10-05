@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { MultiviewActions } from "./MultiviewActions";
@@ -9,9 +9,10 @@ import type { MultiviewState } from "./MultiviewState";
 type MultiviewSettingsProps = {
   state: MultiviewState;
   actions: MultiviewActions;
+  trigger?: ReactNode;
 };
 
-export default function MultiviewSettings({ state, actions }: MultiviewSettingsProps) {
+export default function MultiviewSettings({ state, actions, trigger }: MultiviewSettingsProps) {
   const [open, setOpen] = useState(false);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
@@ -31,9 +32,7 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
       });
   }, [state.availableEvents, eventSearch, state.streams]);
 
-  return (
-    <>
-      <div
+  return (\n    <>\n      {trigger ? (\n        <span onClick={() => setOpen(true)}>{trigger}</span>\n      ) : null}\n      <div
         onClick={() => setOpen(false)}
         className={"fixed inset-0 z-40 bg-black/50 transition-opacity " +
           (open ? "opacity-100" : "pointer-events-none opacity-0")}
