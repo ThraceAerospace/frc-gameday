@@ -35,6 +35,7 @@ import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
+import type { MultiviewController } from "../multiview/MultiviewActions";
 
 const EMPTY_TEAMS: string[] = [];
 
@@ -56,6 +57,7 @@ type GamedayWidgetProps = {
   initialTeams?: string[];
   registerLabel?: (label: string) => void;
   onMatchImminent?: (signal: MatchImminentSignal) => void;
+  controller?: MultiviewController;
   isDivisional?: boolean;
   multiview?: {
     presentation?: Presentation;
@@ -72,6 +74,7 @@ export default function GamedayWidget({
   initialTeams = EMPTY_TEAMS,
   registerLabel,
   onMatchImminent,
+  controller,
   isDivisional = false,
   multiview = {},
 }: GamedayWidgetProps) {
@@ -262,45 +265,25 @@ export default function GamedayWidget({
         return;
       }
 
-      console.log(
-        `[WSS] Received ${message.messageType} for event ${message.eventKey}`,
-      );
-
-      switch (message.messageType) {
-        case "upcoming_match":
-        case "match_score":
-        case "match_video":
-          console.log(
-            "[WSS] Reloading Matches and Team Statuses...",
-          );
-          void reloadMatches();
-          void reloadStatuses();
-          break;
-
-        case "starting_comp_level":
-        case "schedule_updated":
-          console.log(
-            "[WSS] Full refresh triggered...",
-          );
-          refreshLiveData();
-          break;
-
-        case "alliance_selection":
-          console.log(
-            "[WSS] Reloading Playoff Alliances and Team Statuses...",
-          );
-          void reloadAlliances();
-          void reloadStatuses();
-          void reloadMatches();
-          break;
-
-        default:
-          console.log(
-            `[WSS] Unknown message type "${message.messageType}", refreshing all data sources`,
-          );
-          refreshLiveData();
-          break;
+      if (!controller) {
+        console.warn(
+          "[WSS] Received an event without a MultiviewController."
+        );
+        return;
       }
+
+      controller.ingestWebSocketEvent(message, {
+        refreshMatches: () => {
+          void reloadMatches();
+        },
+        refreshStatuses: () => {
+          void reloadStatuses();
+        },
+        refreshAlliances: () => {
+          void reloadAlliances();
+        },
+        refreshAll: refreshLiveData,
+      });
     },
   );
 
