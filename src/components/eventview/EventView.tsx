@@ -171,24 +171,7 @@ export default function EventView({
     },
   );
 
-  const teamCount = useMemo(
-    () =>
-      Math.max(
-        teams.length,
-        Object.keys(
-          teamsStatuses,
-        ).length,
-      ),
-    [
-      teams,
-      teamsStatuses,
-    ],
-  );
-
   const presentation = eventConfig.presentation;
-
-  const showTeamTracker =
-    presentation.teamTracker !== "hidden";
 
   const refreshLiveData =
     useCallback(() => {
