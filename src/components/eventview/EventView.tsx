@@ -13,7 +13,6 @@ import {
 import StreamView from "./StreamView";
 import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
-import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
@@ -190,18 +189,6 @@ export default function EventView({
 
   const showTeamTracker =
     presentation.teamTracker !== "hidden";
-
-  const teamPills = showTeamTracker
-    ? trackedTeams.map((team) => (
-        <TeamPill
-          key={team}
-          team={team}
-          status={teamsStatuses[team]}
-          teamCount={teamCount}
-          nextMatch={trackedNextMatches[team]}
-        />
-      ))
-    : [];
 
   const refreshLiveData =
     useCallback(() => {
@@ -412,7 +399,6 @@ export default function EventView({
         wssConnected={wssConnected}
         wssStale={webSocketStale}
         multiviewHidden={footerHidden}
-        teamPills={teamPills}
         matches={displayMatches}
         team={trackedTeams}
         nextMatch={nextMatch}
