@@ -80,6 +80,7 @@ export default function EventView({
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode ?? slotPresentation?.footerMode ?? "matchStrip";
+  const footerHidden = slotPresentation?.footerHidden ?? false;
   const trackedTeams = eventConfig.trackedTeams;
   const selectedStreamKey = eventConfig.selectedStream;
 
