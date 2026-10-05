@@ -1,4 +1,9 @@
-type Presentation = { matchInfo: "visible" | "hidden"; teamTracker: "visible" | "hidden"; footerMode: "matchStrip" | "rankings" | "split" | "hidden" };
+type Presentation = {
+  matchInfo: "visible" | "hidden";
+  teamTracker: "visible" | "hidden";
+  footerMode: "matchStrip" | "rankings" | "split" | "hidden";
+  footerHidden?: boolean;
+};
 type LayoutSlot = { x: number; y: number; w: number; h: number; presentation: Presentation };
 export type Layout = { name: string; slots: LayoutSlot[] };
 
@@ -22,7 +27,8 @@ const COMPACT: Presentation = {
 const NONE: Presentation = {
   matchInfo: HIDDEN,
   teamTracker: HIDDEN,
-  footerMode: "hidden",
+  footerMode: "matchStrip",
+  footerHidden: true,
 };
 
 export const LAYOUTS: Record<string, Layout> = {
