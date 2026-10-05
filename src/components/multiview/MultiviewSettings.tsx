@@ -60,6 +60,11 @@ function EventSettingsRow({
   const config = state.eventConfigs[eventKey];
   const trackedTeams = config?.trackedTeams ?? [];
 
+  const streamOptions = streams.map((stream) => ({
+    ...stream,
+    key: `${stream.type}:${stream.channel}:${stream.date ?? ""}`,
+  }));
+
   const toggleTeam = (team: string) => {
     const next = trackedTeams.includes(team)
       ? trackedTeams.filter((value) => value !== team)
@@ -106,7 +111,7 @@ function EventSettingsRow({
       <StreamModal
         open={streamsOpen}
         onClose={() => setStreamsOpen(false)}
-        streams={streams}
+        streams={streamOptions}
         activeKey={config?.selectedStream ?? null}
         onSelect={(key) => {
           actions.setEventViewStream(eventKey, key);
