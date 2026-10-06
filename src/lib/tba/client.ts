@@ -127,6 +127,116 @@ export class TBAClient {
   constructor(private readonly authKey: string) {}
 
   /**
+   * Mutate an existing Redis cache entry in place.
+   *
+   * Returns false when the endpoint is not currently cached.
+   */
+  async mutateCached<T>(
+    endpoint: string,
+    mutate: (data: T) => T,
+  ): Promise<boolean> {
+    const key = cacheKey(endpoint);
+    const raw = await redis.get(key);
+
+    if (raw === null) return false;
+
+    const cached = parseCached<T>(raw);
+
+    if (!cached) {
+      console.warn(
+        `[Client][TBA] invalid cache entry for ${endpoint}`,
+      );
+      await redis.del(key);
+      return false;
+    }
+
+    try {
+      const updated: CacheEntry<T> = {
+        ...cached,
+        data: mutate(cached.data),
+      };
+
+      await redis.set(key, JSON.stringify(updated));
+      return true;
+    } catch (error) {
+      console.error(
+        `[Client][TBA] cache mutation failed for ${endpoint}`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  async replaceCached<T>(
+    endpoint: string,
+    data: T,
+  ): Promise<boolean> {
+    return this.mutateCached<T>(endpoint, () => data);
+  }
+
+  /**
+   * Merge a complete match webhook into the canonical full-event match cache.
+   */
+  async mutateMatchCaches(match: TBAMatch): Promise<void> {
+    if (!match.key || !match.event_key) {
+      console.warn(
+        "[Client][TBA] match webhook missing key or event_key",
+      );
+      return;
+    }
+
+    await this.mutateCached<TBAMatch[]>(
+      `/event/${match.event_key}/matches`,
+      (matches) =>
+        matches.map((cachedMatch) =>
+          cachedMatch.key === match.key
+            ? { ...cachedMatch, ...match }
+            : cachedMatch,
+        ),
+    );
+  }
+
+  /**
+   * Merge schedule/team information from an upcoming_match webhook.
+   */
+  async mutateUpcomingMatch(data: {
+    event_key?: string;
+    match_key?: string;
+    team_keys?: string[];
+    scheduled_time?: number;
+    predicted_time?: number;
+  }): Promise<void> {
+    if (!data.match_key || !data.event_key) {
+      console.warn(
+        "[Client][TBA] upcoming_match webhook missing match_key or event_key",
+      );
+      return;
+    }
+
+    const patch: Partial<TBAMatch> = {
+      key: data.match_key,
+      event_key: data.event_key,
+      team_keys: data.team_keys,
+      scheduled_time: data.scheduled_time,
+      predicted_time: data.predicted_time,
+    };
+
+    const cleanPatch = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    ) as Partial<TBAMatch>;
+
+    await this.mutateCached<TBAMatch[]>(
+      `/event/${data.event_key}/matches`,
+      (matches) =>
+        matches.map((match) =>
+          match.key === data.match_key
+            ? { ...match, ...cleanPatch }
+            : match,
+        ),
+    );
+  }
+
+  /**
    * Get data from Redis when fresh, otherwise fetch it from TBA.
    * TBA controls the cache lifetime through Cache-Control max-age.
    */
