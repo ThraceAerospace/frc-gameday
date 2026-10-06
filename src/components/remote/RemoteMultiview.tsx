@@ -143,8 +143,8 @@ export default function RemoteMultiview({ role, events, code, onStatus }: Props)
   );
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-black text-white">
-      <MultiviewStage controller={controller} className="absolute inset-0" />
+    <>
+      <MultiviewStage controller={controller} className="fixed inset-0" />
       <div className="pointer-events-auto fixed left-3 top-3 z-50">
         <MultiviewSettings
           state={displayState}
@@ -153,6 +153,6 @@ export default function RemoteMultiview({ role, events, code, onStatus }: Props)
           triggerTitle="Multiview settings"
         />
       </div>
-    </main>
+    </>
   );
 }

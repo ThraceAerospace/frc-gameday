@@ -17,7 +17,7 @@ export default function RemoteDisplayPage() {
   }, []);
 
   return (
-    <main className="relative min-h-screen bg-black text-white">
+    <>
       {code && !connected && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
           <div className="text-center">
@@ -44,6 +44,6 @@ export default function RemoteDisplayPage() {
           }}
         />
       )}
-    </main>
+    </>
   );
 }
