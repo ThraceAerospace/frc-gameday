@@ -5,6 +5,7 @@ export type TBAEventSimple = components["schemas"]["Event_Simple"];
 export type TBATeam = components["schemas"]["Team"];
 export type TBATeamSimple = components["schemas"]["Team_Simple"];
 export type TBATeamEventStatus = components["schemas"]["Team_Event_Status"];
+export type TBAAward = components["schemas"]["Award"];
 export type TBAMatch = components["schemas"]["Match"];
 export type TBAMatchSimple = components["schemas"]["Match_Simple"];
 export type TBAEliminationAlliance = components["schemas"]["Elimination_Alliance"];
