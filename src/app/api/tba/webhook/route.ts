@@ -211,7 +211,7 @@ export async function POST(
       case "match_score":
       case "match_video": {
         if (data?.match) {
-          await TBA.mutateMatchCaches(data.match as never);
+          await TBA.mutateMatchCaches(data.match);
         }
 
         break;
