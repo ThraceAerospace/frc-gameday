@@ -5,8 +5,12 @@ export type RemotePeerStatus = "connecting" | "waiting" | "connecting-peer" | "c
 
 type SignalMessage =
   | { type: "peer-ready" }
-  | { type: "signal"; payload: RTCSessionDescriptionInit | RTCIceCandidateInit }
+  | { type: "signal"; payload: WebRTCSignalPayload }
   | { type: "error"; message: string };
+
+type WebRTCSignalPayload =
+  | { kind: "description"; description: RTCSessionDescriptionInit }
+  | { kind: "candidate"; candidate: RTCIceCandidateInit };
 
 type PeerOptions = {
   code: string;
@@ -99,7 +103,7 @@ export class RemotePeer {
 
     peer.onicecandidate = (event) => {
       if (event.candidate) {
-        this.sendSignal({ type: "signal", payload: event.candidate.toJSON() });
+        this.sendSignal({ type: "signal", payload: { kind: "candidate", candidate: event.candidate.toJSON() } });
       }
     };
 
@@ -152,35 +156,37 @@ export class RemotePeer {
     const peer = this.createPeerConnection();
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    this.sendSignal({ type: "signal", payload: offer });
+    this.sendSignal({ type: "signal", payload: { kind: "description", description: offer } });
   }
 
-  private async handlePeerSignal(signal: RTCSessionDescriptionInit | RTCIceCandidateInit) {
+  private async handlePeerSignal(signal: WebRTCSignalPayload) {
     const peer = this.createPeerConnection();
 
-    if ("candidate" in signal && !("sdp" in signal)) {
+    if (signal.kind === "candidate") {
       if (!this.remoteDescriptionSet) {
-        this.pendingCandidates.push(signal as RTCIceCandidateInit);
+        this.pendingCandidates.push(signal.candidate);
         return;
       }
-      await peer.addIceCandidate(signal as RTCIceCandidateInit);
+      await peer.addIceCandidate(signal.candidate);
       return;
     }
 
-    if (this.options.role === "display" && signal.type === "offer") {
-      await peer.setRemoteDescription(signal);
+    const description = signal.description;
+
+    if (this.options.role === "display" && description.type === "offer") {
+      await peer.setRemoteDescription(description);
       this.remoteDescriptionSet = true;
       for (const candidate of this.pendingCandidates) await peer.addIceCandidate(candidate);
       this.pendingCandidates = [];
 
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      this.sendSignal({ type: "signal", payload: answer });
+      this.sendSignal({ type: "signal", payload: { kind: "description", description: answer } });
       return;
     }
 
-    if (this.options.role === "controller" && signal.type === "answer") {
-      await peer.setRemoteDescription(signal);
+    if (this.options.role === "controller" && description.type === "answer") {
+      await peer.setRemoteDescription(description);
       this.remoteDescriptionSet = true;
       for (const candidate of this.pendingCandidates) await peer.addIceCandidate(candidate);
       this.pendingCandidates = [];
