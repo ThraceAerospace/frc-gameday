@@ -60,20 +60,7 @@ export default function RemoteMultiview({
         },
         onMessage: (message: RemoteMultiviewMessage) => {
           if (message.type === "requestState" && role === "display") {
-            const state = localControllerRef.current.getState();
-
-            peerRef.current?.sendMessage({
-              type: "stateSnapshot",
-              state: {
-                ...state,
-                eventConfigs: Object.fromEntries(
-                  Object.entries(state.eventConfigs).map(([eventKey, config]) => [
-                    eventKey,
-                    { ...config, command: null },
-                  ]),
-                ),
-              },
-            });
+            sendDisplayState();
             return;
           }
 
@@ -96,10 +83,40 @@ export default function RemoteMultiview({
 
   peerRef.current = peer;
 
+  const sendDisplayState = useMemo(
+    () => () => {
+      if (role !== "display") return;
+
+      const state = localControllerRef.current.getState();
+
+      peerRef.current?.sendMessage({
+        type: "stateSnapshot",
+        state: {
+          ...state,
+          eventConfigs: Object.fromEntries(
+            Object.entries(state.eventConfigs).map(([eventKey, config]) => [
+              eventKey,
+              { ...config, command: null },
+            ]),
+          ),
+        },
+      });
+    },
+    [role],
+  );
+
   useEffect(() => {
     peer.start();
     return () => peer.close();
   }, [peer]);
+
+  useEffect(() => {
+    if (role !== "display") return;
+
+    return localController.subscribe(() => {
+      sendDisplayState();
+    });
+  }, [localController, role, sendDisplayState]);
 
   const controller = useMemo<MultiviewController>(() => {
     if (role === "controller") {
