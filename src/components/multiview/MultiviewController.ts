@@ -69,6 +69,10 @@ export function useMultiviewController({
     []
   );
 
+  const replaceState = useCallback((nextState: MultiviewState) => {
+    setState(nextState);
+  }, []);
+
   const clearControlsTimeout = useCallback(() => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
@@ -684,6 +688,7 @@ export function useMultiviewController({
   const localController = useMemo<MultiviewController>(
     () => ({
       getState: () => stateRef.current,
+      replaceState,
       subscribe: (listener) => {
         listenersRef.current.add(listener);
         return () => listenersRef.current.delete(listener);
@@ -691,7 +696,7 @@ export function useMultiviewController({
       actions,
       ingestWebSocketEvent,
     }),
-    [actions, ingestWebSocketEvent]
+    [actions, ingestWebSocketEvent, replaceState]
   );
 
   return externalController ?? localController;
