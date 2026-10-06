@@ -292,6 +292,7 @@ export class RemotePeer {
     this.peer = null;
     this.pendingCandidates = [];
     this.remoteDescriptionSet = false;
+    this.queuedActions = [];
 
     if (this.socket) {
       this.socket.close();
