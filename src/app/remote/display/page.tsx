@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import RemoteMultiview from "@/components/remote/RemoteMultiview";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
@@ -9,12 +9,16 @@ function createPairingCode() {
 }
 
 export default function RemoteDisplayPage() {
-  const [code] = useState(createPairingCode);
+  const [code, setCode] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    setCode(createPairingCode());
+  }, []);
 
   return (
     <main className="relative min-h-screen bg-black text-white">
-      {!connected && (
+      {code && !connected && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
           <div className="text-center">
             <p className="text-sm uppercase tracking-[0.3em] text-neutral-500">
@@ -30,14 +34,16 @@ export default function RemoteDisplayPage() {
         </div>
       )}
 
-      <RemoteMultiview
-        role="display"
-        events={[]}
-        code={code}
-        onStatus={(status: RemotePeerStatus) => {
-          setConnected(status === "connected");
-        }}
-      />
+      {code && (
+        <RemoteMultiview
+          role="display"
+          events={[]}
+          code={code}
+          onStatus={(status: RemotePeerStatus) => {
+            setConnected(status === "connected");
+          }}
+        />
+      )}
     </main>
   );
 }
