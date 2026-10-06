@@ -235,10 +235,8 @@ export class RemotePeer {
         channel.send(JSON.stringify({ type: "requestState" } satisfies RemoteMultiviewMessage));
       }
 
-      for (const action of this.queuedActions) {
-        channel.send(JSON.stringify({ type: "action", action } satisfies RemoteMultiviewMessage));
-      }
-
+      // The display is authoritative after a reconnect. Do not replay
+      // controller actions queued while the old peer was unavailable.
       this.queuedActions = [];
     };
 
@@ -260,9 +258,10 @@ export class RemotePeer {
     };
 
     channel.onclose = () => {
-      if (!this.closed && this.peer?.connectionState === "closed") {
-        this.options.onStatus?.("disconnected");
-      }
+      if (this.closed) return;
+
+      this.options.onStatus?.("disconnected");
+      this.restartPeer();
     };
   }
 
