@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type WebSocketEvent = {
+export type WebSocketEvent = {
   type: string;
   eventKey?: string;
   messageType?: string;
