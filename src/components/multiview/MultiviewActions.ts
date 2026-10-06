@@ -61,6 +61,7 @@ export type MultiviewActionSource =
 
 export type MultiviewController = {
   getState(): MultiviewState;
+  replaceState(state: MultiviewState): void;
   subscribe(listener: (state: MultiviewState) => void): () => void;
   actions: MultiviewActions;
   ingestWebSocketEvent(
