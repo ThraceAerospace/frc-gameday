@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
@@ -11,8 +12,15 @@ type RankingsStripProps = {
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   trackedTeams?: string[];
+  trackedTeams?: string[];
 };
 
+function recordLabel(
+  record:
+    | { wins?: number; losses?: number; ties?: number }
+    | null
+    | undefined,
+) {
 function recordLabel(
   record:
     | { wins?: number; losses?: number; ties?: number }
@@ -81,70 +89,64 @@ export default function RankingsStrip({
       return;
     }
 
-    let animationFrame = 0;
-    let delayTimer: ReturnType<typeof setTimeout> | null = null;
-    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
-    let intervalTimer: ReturnType<typeof setTimeout> | null = null;
-    let startedAt: number | null = null;
+    scroller.scrollLeft = 0;
 
-    const sweep = () => {
-      if (scroller.scrollWidth <= scroller.clientWidth) {
-        return;
+    const distance =
+      scroller.scrollWidth - scroller.clientWidth;
+
+    const duration = Math.max(
+      5000,
+      Math.min(14000, distance * 8),
+    );
+
+    let animationFrame = 0;
+    let startedAt: number | null = null;
+    let pauseTimer: ReturnType<typeof setTimeout> | null =
+      null;
+
+    const animate = (now: number) => {
+      if (startedAt === null) {
+        startedAt = now;
       }
 
-      scroller.scrollLeft = 0;
-
-      const distance =
-        scroller.scrollWidth - scroller.clientWidth;
-      const duration = Math.max(
-        5000,
-        Math.min(14000, distance * 8),
+      const progress = Math.min(
+        (now - startedAt) / duration,
+        1,
       );
 
-      startedAt = null;
+      scroller.scrollLeft = distance * progress;
 
-      const animate = (now: number) => {
-        if (startedAt === null) {
-          startedAt = now;
-        }
-
-        const progress = Math.min(
-          (now - startedAt) / duration,
-          1,
-        );
-
-        scroller.scrollLeft = distance * progress;
-
-        if (progress < 1) {
-          animationFrame = requestAnimationFrame(animate);
-          return;
-        }
-
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
         pauseTimer = setTimeout(() => {
           scroller.scrollLeft = 0;
-          intervalTimer = setTimeout(sweep, SWEEP_INTERVAL);
-        }, SWEEP_PAUSE);
-      };
-
-      animationFrame = requestAnimationFrame(animate);
+        }, 4000);
+      }
     };
 
-    delayTimer = setTimeout(sweep, SWEEP_DELAY);
+    pauseTimer = setTimeout(() => {
+      animationFrame = requestAnimationFrame(animate);
+    }, 2500);
 
     return () => {
       cancelAnimationFrame(animationFrame);
-      if (delayTimer) clearTimeout(delayTimer);
-      if (pauseTimer) clearTimeout(pauseTimer);
-      if (intervalTimer) clearTimeout(intervalTimer);
+
+      if (pauseTimer) {
+        clearTimeout(pauseTimer);
+      }
     };
   }, [contentKey]);
 
   if (hasAlliances) {
     const currentAlliance =
       playoffAlliances.find(
-        (alliance) => alliance.status?.status === "playing",
+        (alliance) =>
+          alliance.status?.status === "playing",
       ) ??
-      playoffAlliances.find((alliance) => alliance.status) ??
+      playoffAlliances.find(
+        (alliance) => alliance.status,
+      ) ??
       playoffAlliances[0];
 
     return (
@@ -153,13 +155,20 @@ export default function RankingsStrip({
           ref={scrollerRef}
           className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
         >
+        <div
+          ref={scrollerRef}
+          className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
+        >
           <div className="flex h-full min-w-max items-center gap-1.5 px-2">
             {playoffAlliances.map((alliance, index) => {
               const status = alliance.status;
+
               const isTracked = alliance.picks.some(
                 (team) =>
                   trackedTeams.includes(team) ||
-                  trackedTeams.includes(team.replace(/^frc/i, "")),
+                  trackedTeams.includes(
+                    team.replace(/^frc/i, ""),
+                  ),
               );
 
               return (
@@ -167,7 +176,9 @@ export default function RankingsStrip({
                   key={alliance.name ?? index}
                   className={[
                     "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
-                    isTracked ? "border-b-2 border-b-white" : "",
+                    isTracked
+                      ? "border-b-2 border-b-white"
+                      : "",
                     status?.status === "playing"
                       ? "border-white/20 bg-white/[0.08]"
                       : "border-zinc-800 bg-zinc-950",
@@ -175,11 +186,17 @@ export default function RankingsStrip({
                 >
                   <div className="flex flex-col justify-center">
                     <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
-                      {allianceLabel(alliance, index)}
+                      {allianceLabel(
+                        alliance,
+                        index,
+                      )}
                     </span>
+
                     <span className="mt-0.5 text-[10px] font-semibold text-white">
                       {alliance.picks
-                        .map((team) => team.replace(/^frc/i, ""))
+                        .map((team) =>
+                          team.replace(/^frc/i, ""),
+                        )
                         .join(" · ")}
                     </span>
                   </div>
@@ -188,8 +205,12 @@ export default function RankingsStrip({
 
                   <div className="flex flex-col justify-center text-right">
                     <span className="font-mono text-[10px] text-neutral-300">
-                      {playoffLevel(alliance, playoffType)}
+                      {playoffLevel(
+                        alliance,
+                        playoffType,
+                      )}
                     </span>
+
                     <span className="font-mono text-[10px] text-neutral-300">
                       {recordLabel(status?.record)}
                     </span>
@@ -212,17 +233,25 @@ export default function RankingsStrip({
   }
 
   const entries = Object.entries(teamsStatuses)
-    .map(([teamKey, status]) => ({ teamKey, status }))
-    .filter((entry) => entry.status?.qual?.ranking)
+    .map(([teamKey, status]) => ({
+      teamKey,
+      status,
+    }))
+    .filter(
+      (entry) => entry.status?.qual?.ranking,
+    )
     .sort(
       (a, b) =>
-        (a.status!.qual!.ranking!.rank ?? Number.MAX_SAFE_INTEGER) -
-        (b.status!.qual!.ranking!.rank ?? Number.MAX_SAFE_INTEGER),
+        (a.status!.qual!.ranking!.rank ??
+          Number.MAX_SAFE_INTEGER) -
+        (b.status!.qual!.ranking!.rank ??
+          Number.MAX_SAFE_INTEGER),
     );
 
   const sortOrderName =
     Object.values(teamsStatuses).find(
-      (status) => status?.qual?.sort_order_info?.[0],
+      (status) =>
+        status?.qual?.sort_order_info?.[0],
     )?.qual?.sort_order_info?.[0]?.name ?? "RP";
 
   return (
@@ -231,11 +260,17 @@ export default function RankingsStrip({
         ref={scrollerRef}
         className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
       >
+      <div
+        ref={scrollerRef}
+        className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
+      >
         {entries.length > 0 ? (
           <div className="flex h-full min-w-max items-center gap-1.5 px-2">
             {entries.map((entry) => {
               const isTracked =
-                trackedTeams.includes(entry.teamKey) ||
+                trackedTeams.includes(
+                  entry.teamKey,
+                ) ||
                 trackedTeams.includes(
                   entry.teamKey.replace(/^frc/i, ""),
                 );
@@ -245,26 +280,37 @@ export default function RankingsStrip({
                   key={entry.teamKey}
                   className={[
                     "flex h-[34px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3",
-                    isTracked ? "border-b-2 border-b-white" : "",
+                    isTracked
+                      ? "border-b-2 border-b-white"
+                      : "",
                   ].join(" ")}
                 >
                   <span className="w-5 text-center font-mono text-[10px] font-bold text-white">
-                    {entry.status!.qual!.ranking!.rank ?? "—"}
+                    {entry.status!.qual!.ranking!
+                      .rank ?? "—"}
                   </span>
 
                   <span className="font-mono text-[11px] font-bold text-white">
-                    {entry.teamKey.replace(/^frc/i, "")}
+                    {entry.teamKey.replace(
+                      /^frc/i,
+                      "",
+                    )}
                   </span>
 
+                  <span className="h-5 w-px bg-white/10" />
                   <span className="h-5 w-px bg-white/10" />
 
                   <span className="font-mono text-[10px] text-neutral-400">
                     {sortOrderName}{" "}
-                    {entry.status!.qual!.ranking!.sort_orders?.[0] ?? "—"}
+                    {entry.status!.qual!.ranking!
+                      .sort_orders?.[0] ?? "—"}
                   </span>
 
                   <span className="font-mono text-[10px] text-neutral-500">
-                    {recordLabel(entry.status!.qual!.ranking!.record)}
+                    {recordLabel(
+                      entry.status!.qual!.ranking!
+                        .record,
+                    )}
                   </span>
                 </article>
               );
