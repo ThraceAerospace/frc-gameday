@@ -68,8 +68,6 @@ export default function EventView({
   } = usePlayoffAlliances(event);
 
   const [webSocketStale, setWebSocketStale] = useState(false);
-  const websocketRefreshTimerRef = useRef<number | null>(null);
-
 
   const {
     matches,
@@ -229,43 +227,9 @@ export default function EventView({
     ],
   );
 
-  const scheduleWebSocketRefresh = useCallback(
-    (message: WebSocketEvent) => {
-      if (message.type !== "tba-update") {
-        return;
-      }
-
-      if (message.eventKey && message.eventKey !== event) {
-        return;
-      }
-
-      setWebSocketStale(true);
-
-      if (websocketRefreshTimerRef.current !== null) {
-        window.clearTimeout(websocketRefreshTimerRef.current);
-      }
-
-      websocketRefreshTimerRef.current = window.setTimeout(() => {
-        websocketRefreshTimerRef.current = null;
-        setWebSocketStale(false);
-        handleWebSocketEvent(message);
-      }, 65_000);
-    },
-    [event, handleWebSocketEvent],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (websocketRefreshTimerRef.current !== null) {
-        window.clearTimeout(websocketRefreshTimerRef.current);
-        websocketRefreshTimerRef.current = null;
-      }
-    };
-  }, []);
-
   const {
     connected: wssConnected,
-  } = useWebSocket(event, scheduleWebSocketRefresh);
+  } = useWebSocket(event, handleWebSocketEvent);
 
   useEffect(() => {
     const command = eventConfig.command;
