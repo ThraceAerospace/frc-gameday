@@ -178,11 +178,7 @@ export class TBAClient {
   /**
    * Merge a complete match webhook into the canonical full-event match cache.
    */
-  async mutateMatchCaches(match: {
-    key?: string;
-    event_key?: string;
-    [key: string]: unknown;
-  }): Promise<void> {
+  async mutateMatchCaches(match: TBAMatch): Promise<void> {
     if (!match.key || !match.event_key) {
       console.warn(
         "[Client][TBA] match webhook missing key or event_key",
@@ -209,7 +205,6 @@ export class TBAClient {
   async mutateUpcomingMatch(data: {
     event_key?: string;
     match_key?: string;
-    team_keys?: string[];
     scheduled_time?: number;
     predicted_time?: number;
   }): Promise<void> {
