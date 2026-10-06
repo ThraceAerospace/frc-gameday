@@ -1,11 +1,12 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { useState } from "react";
 import RemoteMultiview from "@/components/remote/RemoteMultiview";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
-export default function RemotePage() {
+function RemotePageContent() {
   const searchParams = useSearchParams();
   const events = searchParams.getAll("event");
   const [code, setCode] = useState("");
@@ -68,5 +69,20 @@ export default function RemotePage() {
         }
       }}
     />
+  );
+}
+
+
+export default function RemotePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-black text-white">
+          <p className="text-sm text-neutral-400">Loading remote…</p>
+        </main>
+      }
+    >
+      <RemotePageContent />
+    </Suspense>
   );
 }
