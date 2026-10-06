@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useEffect, useMemo, useRef } from "react";
 import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
@@ -12,29 +11,21 @@ type RankingsStripProps = {
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   trackedTeams?: string[];
-  trackedTeams?: string[];
 };
 
 function recordLabel(
   record:
-    | { wins?: number; losses?: number; ties?: number }
-    | null
-    | undefined,
-) {
-function recordLabel(
-  record:
-    | { wins?: number; losses?: number; ties?: number }
+    | {
+        wins?: number;
+        losses?: number;
+        ties?: number;
+      }
     | null
     | undefined,
 ) {
   if (!record) return "—";
-  return (
-    String(record.wins ?? 0) +
-    "-" +
-    String(record.losses ?? 0) +
-    "-" +
-    String(record.ties ?? 0)
-  );
+
+  return `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}`;
 }
 
 function playoffLevel(
@@ -56,12 +47,19 @@ function allianceLabel(
   alliance: TBAEliminationAlliance,
   index: number,
 ) {
-  return alliance.name || "Alliance " + String(index + 1);
+  return alliance.name || `Alliance ${index + 1}`;
 }
 
-const SWEEP_DELAY = 2500;
-const SWEEP_PAUSE = 4000;
-const SWEEP_INTERVAL = 90000;
+/*
+ * Rankings are intentionally different from the match strip.
+ *
+ * Match data should move the strip only when the match state changes.
+ * Rankings, however, should periodically sweep through the entire
+ * ranking list even when the underlying data has not changed.
+ */
+const SWEEP_DELAY = 2_500;
+const SWEEP_PAUSE = 4_000;
+const SWEEP_INTERVAL = 90_000;
 
 export default function RankingsStrip({
   teamsStatuses,
@@ -72,6 +70,11 @@ export default function RankingsStrip({
   const hasAlliances = playoffAlliances.length > 0;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
+  /*
+   * Restart the sweep whenever the ranking/alliance data actually
+   * changes. The periodic timer below handles sweeps when nothing
+   * changes.
+   */
   const contentKey = useMemo(
     () =>
       JSON.stringify({
@@ -85,59 +88,109 @@ export default function RankingsStrip({
   useEffect(() => {
     const scroller = scrollerRef.current;
 
-    if (!scroller || scroller.scrollWidth <= scroller.clientWidth) {
+    if (
+      !scroller ||
+      scroller.scrollWidth <= scroller.clientWidth
+    ) {
       return;
     }
 
-    scroller.scrollLeft = 0;
-
-    const distance =
-      scroller.scrollWidth - scroller.clientWidth;
-
-    const duration = Math.max(
-      5000,
-      Math.min(14000, distance * 8),
-    );
-
     let animationFrame = 0;
+    let delayTimer: ReturnType<typeof setTimeout> | null = null;
+    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
+    let intervalTimer: ReturnType<typeof setTimeout> | null = null;
     let startedAt: number | null = null;
-    let pauseTimer: ReturnType<typeof setTimeout> | null =
-      null;
 
-    const animate = (now: number) => {
-      if (startedAt === null) {
-        startedAt = now;
+    const sweep = () => {
+      if (
+        !scroller ||
+        scroller.scrollWidth <= scroller.clientWidth
+      ) {
+        return;
       }
 
-      const progress = Math.min(
-        (now - startedAt) / duration,
-        1,
+      scroller.scrollLeft = 0;
+
+      const distance =
+        scroller.scrollWidth - scroller.clientWidth;
+
+      const duration = Math.max(
+        5_000,
+        Math.min(14_000, distance * 8),
       );
 
-      scroller.scrollLeft = distance * progress;
+      startedAt = null;
 
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
-      } else {
+      const animate = (now: number) => {
+        if (startedAt === null) {
+          startedAt = now;
+        }
+
+        const progress = Math.min(
+          (now - startedAt) / duration,
+          1,
+        );
+
+        scroller.scrollLeft =
+          distance * progress;
+
+        if (progress < 1) {
+          animationFrame =
+            requestAnimationFrame(animate);
+          return;
+        }
+
+        /*
+         * Leave the final rankings visible briefly before
+         * returning to the beginning.
+         */
         pauseTimer = setTimeout(() => {
           scroller.scrollLeft = 0;
-        }, 4000);
-      }
+
+          /*
+           * Wait before starting another sweep. This means
+           * rankings continue moving periodically even if
+           * absolutely nothing changes at the event.
+           */
+          intervalTimer = setTimeout(
+            sweep,
+            SWEEP_INTERVAL,
+          );
+        }, SWEEP_PAUSE);
+      };
+
+      animationFrame =
+        requestAnimationFrame(animate);
     };
 
-    pauseTimer = setTimeout(() => {
-      animationFrame = requestAnimationFrame(animate);
-    }, 2500);
+    /*
+     * Give the footer a moment to settle before the first sweep.
+     */
+    delayTimer = setTimeout(
+      sweep,
+      SWEEP_DELAY,
+    );
 
     return () => {
       cancelAnimationFrame(animationFrame);
 
+      if (delayTimer) {
+        clearTimeout(delayTimer);
+      }
+
       if (pauseTimer) {
         clearTimeout(pauseTimer);
+      }
+
+      if (intervalTimer) {
+        clearTimeout(intervalTimer);
       }
     };
   }, [contentKey]);
 
+  /*
+   * Playoff alliance rankings.
+   */
   if (hasAlliances) {
     const currentAlliance =
       playoffAlliances.find(
@@ -155,69 +208,75 @@ export default function RankingsStrip({
           ref={scrollerRef}
           className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
         >
-        <div
-          ref={scrollerRef}
-          className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
-        >
           <div className="flex h-full min-w-max items-center gap-1.5 px-2">
-            {playoffAlliances.map((alliance, index) => {
-              const status = alliance.status;
+            {playoffAlliances.map(
+              (alliance, index) => {
+                const status = alliance.status;
 
-              const isTracked = alliance.picks.some(
-                (team) =>
-                  trackedTeams.includes(team) ||
-                  trackedTeams.includes(
-                    team.replace(/^frc/i, ""),
-                  ),
-              );
+                const isTracked =
+                  alliance.picks.some(
+                    (team) =>
+                      trackedTeams.includes(team) ||
+                      trackedTeams.includes(
+                        team.replace(/^frc/i, ""),
+                      ),
+                  );
 
-              return (
-                <article
-                  key={alliance.name ?? index}
-                  className={[
-                    "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
-                    isTracked
-                      ? "border-b-2 border-b-white"
-                      : "",
-                    status?.status === "playing"
-                      ? "border-white/20 bg-white/[0.08]"
-                      : "border-zinc-800 bg-zinc-950",
-                  ].join(" ")}
-                >
-                  <div className="flex flex-col justify-center">
-                    <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
-                      {allianceLabel(
-                        alliance,
-                        index,
-                      )}
-                    </span>
+                return (
+                  <article
+                    key={
+                      alliance.name ?? index
+                    }
+                    className={[
+                      "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
+                      isTracked
+                        ? "border-b-2 border-b-white"
+                        : "",
+                      status?.status === "playing"
+                        ? "border-white/20 bg-white/[0.08]"
+                        : "border-zinc-800 bg-zinc-950",
+                    ].join(" ")}
+                  >
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                        {allianceLabel(
+                          alliance,
+                          index,
+                        )}
+                      </span>
 
-                    <span className="mt-0.5 text-[10px] font-semibold text-white">
-                      {alliance.picks
-                        .map((team) =>
-                          team.replace(/^frc/i, ""),
-                        )
-                        .join(" · ")}
-                    </span>
-                  </div>
+                      <span className="mt-0.5 text-[10px] font-semibold text-white">
+                        {alliance.picks
+                          .map((team) =>
+                            team.replace(
+                              /^frc/i,
+                              "",
+                            ),
+                          )
+                          .join(" · ")}
+                      </span>
+                    </div>
 
-                  <div className="h-6 w-px bg-white/10" />
+                    <div className="h-6 w-px bg-white/10" />
 
-                  <div className="flex flex-col justify-center text-right">
-                    <span className="font-mono text-[10px] text-neutral-300">
-                      {playoffLevel(
-                        alliance,
-                        playoffType,
-                      )}
-                    </span>
+                    <div className="flex flex-col justify-center text-right">
+                      <span className="font-mono text-[10px] text-neutral-300">
+                        {playoffLevel(
+                          alliance,
+                          playoffType,
+                        )}
+                      </span>
 
-                    <span className="font-mono text-[10px] text-neutral-300">
-                      {recordLabel(status?.record)}
-                    </span>
-                  </div>
-                </article>
-              );
-            })}
+                      <span className="font-mono text-[10px] text-neutral-300">
+                        {recordLabel(
+                          status?.record,
+                        )}
+                      </span>
+                    </div>
+                  </article>
+                );
+              },
+            )}
           </div>
         </div>
 
@@ -232,13 +291,19 @@ export default function RankingsStrip({
     );
   }
 
-  const entries = Object.entries(teamsStatuses)
+  /*
+   * Qualification rankings.
+   */
+  const entries = Object.entries(
+    teamsStatuses,
+  )
     .map(([teamKey, status]) => ({
       teamKey,
       status,
     }))
     .filter(
-      (entry) => entry.status?.qual?.ranking,
+      (entry) =>
+        entry.status?.qual?.ranking,
     )
     .sort(
       (a, b) =>
@@ -252,14 +317,11 @@ export default function RankingsStrip({
     Object.values(teamsStatuses).find(
       (status) =>
         status?.qual?.sort_order_info?.[0],
-    )?.qual?.sort_order_info?.[0]?.name ?? "RP";
+    )?.qual?.sort_order_info?.[0]?.name ??
+    "RP";
 
   return (
     <div className="relative min-w-0 overflow-hidden border-t border-white/10 bg-neutral-950/95">
-      <div
-        ref={scrollerRef}
-        className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
-      >
       <div
         ref={scrollerRef}
         className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar"
@@ -272,7 +334,10 @@ export default function RankingsStrip({
                   entry.teamKey,
                 ) ||
                 trackedTeams.includes(
-                  entry.teamKey.replace(/^frc/i, ""),
+                  entry.teamKey.replace(
+                    /^frc/i,
+                    "",
+                  ),
                 );
 
               return (
@@ -297,7 +362,6 @@ export default function RankingsStrip({
                     )}
                   </span>
 
-                  <span className="h-5 w-px bg-white/10" />
                   <span className="h-5 w-px bg-white/10" />
 
                   <span className="font-mono text-[10px] text-neutral-400">
