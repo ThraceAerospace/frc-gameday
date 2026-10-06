@@ -11,7 +11,7 @@ export type CacheEntry<T> = {
 };
 
 function norm(endpoint: string) {
-  return endpoint.replace(/\//gg, ":");
+  return endpoint.replace(/\//g, ":");
 }
 
 export function cacheKey(endpoint: string) {
