@@ -59,6 +59,7 @@ function allianceLabel(
  */
 const SWEEP_DELAY = 2_500;
 const SWEEP_PAUSE = 4_000;
+const RETURN_DURATION = 2_500;
 const SWEEP_INTERVAL = 90_000;
 
 export default function RankingsStrip({
@@ -145,17 +146,51 @@ export default function RankingsStrip({
          * returning to the beginning.
          */
         pauseTimer = setTimeout(() => {
-          scroller.scrollLeft = 0;
+          const returnStart = scroller.scrollLeft;
+          const returnStartedAt = performance.now();
 
-          /*
-           * Wait before starting another sweep. This means
-           * rankings continue moving periodically even if
-           * absolutely nothing changes at the event.
-           */
-          intervalTimer = setTimeout(
-            sweep,
-            SWEEP_INTERVAL,
-          );
+          const animateReturn = (returnNow: number) => {
+            const returnProgress = Math.min(
+              (returnNow - returnStartedAt) /
+                RETURN_DURATION,
+              1,
+            );
+
+            /*
+             * Ease back to the beginning instead of snapping.
+             * The ranking strip effectively "rewinds" after
+             * showing the final entries.
+             */
+            const eased =
+              1 -
+              Math.pow(1 - returnProgress, 3);
+
+            scroller.scrollLeft =
+              returnStart * (1 - eased);
+
+            if (returnProgress < 1) {
+              animationFrame =
+                requestAnimationFrame(
+                  animateReturn,
+                );
+              return;
+            }
+
+            scroller.scrollLeft = 0;
+
+            /*
+             * Wait before starting another sweep. This means
+             * rankings continue moving periodically even if
+             * absolutely nothing changes at the event.
+             */
+            intervalTimer = setTimeout(
+              sweep,
+              SWEEP_INTERVAL,
+            );
+          };
+
+          animationFrame =
+            requestAnimationFrame(animateReturn);
         }, SWEEP_PAUSE);
       };
 
