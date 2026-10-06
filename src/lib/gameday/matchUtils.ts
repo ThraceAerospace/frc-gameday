@@ -1,9 +1,16 @@
 import type { TBAMatch } from "@/lib/tba/types";
 
-export function isPlayed(
-  match: TBAMatch,
-) {
+export function isPlayed(match: TBAMatch) {
   return Boolean(match.actual_time);
+}
+
+export function hasPostedScore(match: TBAMatch) {
+  return (
+    match.alliances.red.score != null &&
+    match.alliances.red.score >= 0 &&
+    match.alliances.blue.score != null &&
+    match.alliances.blue.score >= 0
+  );
 }
 
 export function matchTime(
@@ -45,7 +52,9 @@ export function getNextMatch(
 ) {
   return (
     matches.find(
-      (match) => match.alliances.red.score === -1 || match.alliances.blue.score === -1,
+      (match) =>
+        match.alliances.red.score === -1 ||
+        match.alliances.blue.score === -1,
     ) ?? null
   );
 }

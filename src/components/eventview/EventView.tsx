@@ -3,7 +3,7 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -67,6 +67,9 @@ export default function EventView({
   } = usePlayoffAlliances(event);
 
   const [webSocketStale, setWebSocketStale] = useState(false);
+  const websocketRefreshTimerRef = useRef<number | null>(null);
+
+  const WEBHOOK_REFRESH_DELAY = 60_000;
 
   const {
     matches,
@@ -169,11 +172,6 @@ export default function EventView({
     },
   );
 
-  const teamCount = useMemo(
-    () => Math.max(teams.length, Object.keys(teamsStatuses).length),
-    [teams, teamsStatuses],
-  );
-
   const teamPills = trackedTeams.map((team) => (
     <TeamPill
       key={team}
@@ -202,64 +200,76 @@ export default function EventView({
       reloadStatuses,
     ]);
 
-  const {
-    connected: wssConnected,
-  } = useWebSocket(
-    event,
-    (message) => {
+  const handleWebSocketEvent = useCallback(
+    (message: Parameters<NonNullable<Parameters<typeof useWebSocket>[1]>>[0]) => {
       if (message.type !== "tba-update") {
         return;
       }
 
-      if (message.eventKey !== event) {
+      if (message.eventKey && message.eventKey !== event) {
         return;
       }
 
-      setWebSocketStale(false);
-
-      if (controller) {
-        controller.ingestWebSocketEvent(message, {
-          refreshMatches: () => {
-            void reloadMatches();
-          },
-          refreshStatuses: () => {
-            void reloadStatuses();
-          },
-          refreshAlliances: () => {
-            void reloadAlliances();
-          },
-          refreshAll: refreshLiveData,
-        });
-        return;
-      }
-
-      // Standalone EventView instances still own their refresh lifecycle.
-      // Multiview instances always pass the controller above.
-      switch (message.messageType) {
-        case "upcoming_match":
-        case "match_score":
-        case "match_video":
+      controller.ingestWebSocketEvent(message, {
+        refreshMatches: () => {
           void reloadMatches();
+        },
+        refreshStatuses: () => {
           void reloadStatuses();
-          break;
-
-        case "starting_comp_level":
-        case "schedule_updated":
-          refreshLiveData();
-          break;
-
-        case "alliance_selection":
+        },
+        refreshAlliances: () => {
           void reloadAlliances();
-          void reloadStatuses();
-          void reloadMatches();
-          break;
-
-        default:
-          refreshLiveData();
-          break;
-      }
+        },
+        refreshAll: refreshLiveData,
+      });
     },
+    [
+      controller,
+      event,
+      refreshLiveData,
+      reloadAlliances,
+      reloadMatches,
+      reloadStatuses,
+    ],
   );
+
+  const scheduleWebSocketRefresh = useCallback(
+    (message: Parameters<NonNullable<Parameters<typeof useWebSocket>[1]>>[0]) => {
+      if (message.type !== "tba-update") {
+        return;
+      }
+
+      if (message.eventKey && message.eventKey !== event) {
+        return;
+      }
+
+      setWebSocketStale(true);
+
+      if (websocketRefreshTimerRef.current !== null) {
+        window.clearTimeout(websocketRefreshTimerRef.current);
+      }
+
+      websocketRefreshTimerRef.current = window.setTimeout(() => {
+        websocketRefreshTimerRef.current = null;
+        setWebSocketStale(false);
+        handleWebSocketEvent(message);
+      }, WEBHOOK_REFRESH_DELAY);
+    },
+    [event, handleWebSocketEvent],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (websocketRefreshTimerRef.current !== null) {
+        window.clearTimeout(websocketRefreshTimerRef.current);
+        websocketRefreshTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const {
+    connected: wssConnected,
+  } = useWebSocket(event, scheduleWebSocketRefresh);
 
   useEffect(() => {
     const command = eventConfig.command;
@@ -324,9 +334,7 @@ export default function EventView({
   }, [refreshLiveData]);
 
   const setTrackedTeams = useCallback((teams: string[]) => {
-    if (controller) {
-      controller.actions.setEventViewTrackedTeams(event, teams);
-    }
+    controller.actions.setEventViewTrackedTeams(event, teams);
   }, [controller, event]);
 
   const toggleTeam = useCallback(
@@ -414,7 +422,7 @@ export default function EventView({
         }
         streams={streams}
         activeKey={activeKey}
-        onSelect={(key) => controller?.actions.setEventViewStream(event, key)}
+        onSelect={(key) => controller.actions.setEventViewStream(event, key)}
       />
 
       <TeamModal

@@ -29,11 +29,11 @@ TBA REST / webhooks
 Rules:
 
 1. Redis is the server-side cache.
-2. TBA webhooks are the preferred realtime mutation path.
-3. Webhooks mutate the existing Redis cache before broadcasting WSS.
-4. WSS messages are invalidation signals, not data payloads.
-5. Clients refetch after WSS.
-6. Polling reconciles missed webhooks.
+2. TBA webhooks are the preferred realtime invalidation path.
+3. Webhooks do not mutate Redis; they authenticate the payload and broadcast an event-scoped WSS invalidation.
+4. EventView debounces WSS invalidations for 60 seconds before refetching TBA through the normal Redis-backed client.
+5. WSS messages are invalidation signals, not data payloads.
+6. Polling reconciles missed webhooks and every explicit reload restarts the polling generation.
 7. Do not introduce another cache layer to support webhooks.
 8. Do not hardcode TBA Cache-Control max-age values.
 9. The full event `/event/<event>/matches` cache is the canonical match cache for Gameday.
@@ -50,7 +50,7 @@ Authenticate `X-TBA-HMAC` before parsing JSON.
 - Authenticated malformed JSON → HTTP 400.
 - Internal/configuration failure → HTTP 500.
 
-Broadcast only after successful cache processing. A WSS failure must not turn a successful Redis mutation into a failed webhook response.
+Broadcast after successful authentication and parsing. The webhook does not write application data to Redis.
 
 ## Client realtime behavior
 
@@ -156,9 +156,8 @@ Preserve:
 - Redis-backed caching;
 - TBA ETag handling;
 - TBA Cache-Control max-age handling;
-- race protection against stale TBA responses overwriting webhook-mutated Redis data;
 - 304 expiry refresh;
-- canonical full-match cache mutation.
+- match-result reconciliation when TBA returns an older/incomplete match representation.
 
 The application-facing service is `src/lib/tba/service.ts`.
 
@@ -188,18 +187,10 @@ Current major boundaries:
 - `src/lib/multiview` — pure Multiview layouts.
 - `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
 - `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
-- `src/lib/cast` — Cast support.
 
 ## Legacy areas
 
-Treat these as compatibility/legacy areas until their call graphs are audited:
-
-- `src/lib/eventState.ts`
-- `src/app/api/admin/redis/*`
-- simple/team match helpers in the TBA service
-- generic cache tag machinery
-
-Do not delete them merely because they are not part of the primary Gameday flow unless the cleanup is explicitly requested.
+Simple/team match helpers in the TBA service remain compatibility helpers. Do not make them part of the primary Gameday realtime path.
 
 ## Dead-file cleanup
 

@@ -22,9 +22,9 @@ matches teams/statuses playoff alliances
 Polling is fallback reconciliation for missed or incomplete updates.
 ```
 
-The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks are the preferred realtime mutation path, Redis Pub/Sub carries invalidation events internally, and event-scoped WebSockets notify browsers.
+The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks are the preferred realtime invalidation path, Redis Pub/Sub carries invalidation events internally, and event-scoped WebSockets notify browsers.
 
-WebSocket messages are intentionally small invalidation signals. Clients refetch the affected data after receiving them.
+WebSocket messages are intentionally small invalidation signals. EventView debounces them for 60 seconds before refetching TBA through the normal Redis-backed client. Polling remains the reconciliation path for missed or incomplete updates.
 
 ## Repository structure
 
@@ -34,14 +34,12 @@ src/
 │   ├── page.tsx
 │   ├── gameday/
 │   ├── divisional-event/
-│   ├── cast/reciever/
 │   └── api/
 │       ├── event/[event]/
 │       ├── events/active/
 │       ├── district/
 │       ├── team/[team]/
 │       ├── tba/webhook/
-│       ├── admin/redis/
 │       └── ws/
 ├── components/
 │   ├── event/
@@ -50,7 +48,6 @@ src/
 │   ├── multiview/
 │   └── team/
 └── lib/
-    ├── cast/
     ├── cache/
     ├── gameday/
     ├── multiview/
@@ -148,9 +145,10 @@ Rules:
 - Redis is the application cache.
 - TBA ETag and Cache-Control max-age determine freshness.
 - Never hardcode a TBA max-age.
-- Webhook match mutations operate on the canonical full event match cache.
-- A newer Redis value written by a webhook must not be overwritten by an older in-flight TBA response.
+- The full event match cache remains the canonical Gameday cache.
+- TBA Cache-Control max-age controls cache freshness.
 - A 304 response refreshes Redis expiry using TBA's supplied cache lifetime.
+- Webhooks do not write match data directly into Redis; the delayed client refetch keeps TBA authoritative and avoids webhook/API race conditions.
 - Do not add another cache layer for webhook support.
 
 The application-facing service is `src/lib/tba/service.ts`.
@@ -164,11 +162,13 @@ authenticate
     ↓
 parse payload
     ↓
-mutate Redis cache when applicable
-    ↓
 broadcast event-scoped WSS invalidation
     ↓
-client refetch
+60-second client debounce
+    ↓
+TBA refetch through Redis-backed client
+    ↓
+polling reconciliation restarts
 ```
 
 Webhook authentication uses `X-TBA-HMAC` and `TBA_WEBHOOK_TOKEN`.
@@ -193,10 +193,6 @@ Current fallback intervals:
 ## Event timezone
 
 Event active-state calculations use each event's own TBA timezone rather than the browser timezone. This keeps active/upcoming event results consistent across users.
-
-## Cast
-
-Cast support is isolated under `src/lib/cast` and `src/app/cast/reciever`. It is separate from the TBA/Redis/WSS data architecture.
 
 ## TBA types
 

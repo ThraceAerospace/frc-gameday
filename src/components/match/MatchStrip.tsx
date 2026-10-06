@@ -2,6 +2,7 @@
 
 import type { TBAEliminationAlliance, TBAMatch } from "@/lib/tba/types";
 import { useEffect, useRef } from "react";
+import { hasPostedScore } from "@/lib/gameday/matchUtils";
 import MatchCard from "./MatchCard";
 
 export default function MatchStrip({
@@ -69,11 +70,7 @@ export default function MatchStrip({
   const furthestScoredMatch = [...cards]
     .reverse()
     .find(
-      (match) =>
-        match.alliances.red.score != null &&
-        match.alliances.red.score >= 0 &&
-        match.alliances.blue.score != null &&
-        match.alliances.blue.score >= 0,
+      hasPostedScore,
     );
 
   useEffect(() => {
@@ -101,9 +98,7 @@ export default function MatchStrip({
   }, [furthestScoredMatch?.key, hideMatchCards]);
 
   return (
-    <div className="relative border-t border-l border-white/10 bg-neutral-950/95">
-
-
+    <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
       {!hideMatchCards && (
         <div
           ref={scrollRef}

@@ -1,6 +1,9 @@
 "use client";
 
-import type { TBAEliminationAlliance, TBAEventTeamStatuses } from "@/lib/tba/types";
+import type {
+  TBAEliminationAlliance,
+  TBAEventTeamStatuses,
+} from "@/lib/tba/types";
 import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
@@ -48,9 +51,13 @@ export default function EventFooter({
 
   return (
     <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div className={`absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${contentHidden ? "bottom-0" : "bottom-full -mb-px"}`}>
+      <div
+        className={`absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+          contentHidden ? "bottom-0" : "bottom-full -mb-px"
+        }`}
+      >
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-          <div className="relative z-30 flex items-end gap-2 whitespace-nowrap leading-none translate-y-[5px]">
+          <div className="relative z-30 flex translate-y-[5px] items-end gap-2 whitespace-nowrap leading-none">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -84,9 +91,16 @@ export default function EventFooter({
                 {teamPills}
               </div>
             ) : null}
+        {teamPills.length > 0 ? (
+          <div className="flex items-center gap-1">{teamPills}</div>
+        ) : null}
       </div>
 
-      <div className={`transition-transform duration-200 ${contentHidden ? "translate-y-full" : ""}`}>
+      <div
+        className={`transition-transform duration-200 ${
+          contentHidden ? "translate-y-full" : ""
+        }`}
+      >
         <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
           {mode === "rankings" ? (
             <RankingsStrip
@@ -114,6 +128,7 @@ export default function EventFooter({
                   teamsStatuses={teamsStatuses}
                   playoffAlliances={playoffAlliances}
                   playoffType={playoffType}
+                  trackedTeams={team}
                 />
               </div>
             </>
