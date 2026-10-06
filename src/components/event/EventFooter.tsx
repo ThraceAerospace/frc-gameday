@@ -93,6 +93,7 @@ export default function EventFooter({
               teamsStatuses={teamsStatuses}
               playoffAlliances={playoffAlliances}
               playoffType={playoffType}
+              trackedTeams={team}
             />
           ) : mode === "split" ? (
             <>
