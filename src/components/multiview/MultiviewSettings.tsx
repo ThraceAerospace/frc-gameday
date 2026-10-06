@@ -25,6 +25,8 @@ import TeamModal from "@/components/team/TeamModal";
 type MultiviewSettingsProps = {
   state: MultiviewState;
   actions: MultiviewActions;
+  triggerClassName?: string;
+  triggerTitle?: string;
 };
 
 function EventSettingsRow({
@@ -66,6 +68,12 @@ function EventSettingsRow({
 
   const config = state.eventConfigs[eventKey];
   const trackedTeams = config?.trackedTeams ?? [];
+  const configuredLabel = label.replace(" - FIRST Robotics Competition", "");
+  const eventName = event?.name?.replace(" - FIRST Robotics Competition", "");
+  const displayLabel =
+    !configuredLabel || /^Stream \d+$/.test(configuredLabel)
+      ? eventName ?? eventKey
+      : configuredLabel;
 
   const streamOptions = streams.map((stream) => ({
     ...stream,
@@ -85,13 +93,13 @@ function EventSettingsRow({
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">
-            {label.replace(" - FIRST Robotics Competition", "")}
+            {displayLabel}
           </div>
           <div className="mt-1 text-[11px] text-neutral-500">{eventKey}</div>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:flex xl:shrink-0">
-          <label className="col-span-2 flex min-w-0 items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900 px-2 py-1.5 text-xs text-neutral-500 sm:col-span-3 xl:w-auto xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:flex xl:shrink-0">
+          <label className="flex min-w-0 items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-500 xl:w-auto xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
             <span className="truncate">Bottom Bar</span>
             <select
               value={config?.footerMode ?? "matchStrip"}
@@ -181,7 +189,12 @@ function EventSettingsRow({
   );
 }
 
-export default function MultiviewSettings({ state, actions }: MultiviewSettingsProps) {
+export default function MultiviewSettings({
+  state,
+  actions,
+  triggerClassName = "h-[30px] w-[30px] rounded hover:bg-stone-800",
+  triggerTitle = "Multiview settings",
+}: MultiviewSettingsProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -371,9 +384,9 @@ export default function MultiviewSettings({ state, actions }: MultiviewSettingsP
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="h-[30px] w-[30px] rounded hover:bg-stone-800"
-        title="Multiview settings"
-        aria-label="Multiview settings"
+        className={triggerClassName}
+        title={triggerTitle}
+        aria-label={triggerTitle}
       >
         <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
       </button>

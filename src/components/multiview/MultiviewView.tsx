@@ -4,10 +4,6 @@ import type { TBAEvent } from "@/lib/tba/types";
 import { useSyncExternalStore } from "react";
 import MultiviewSettings from "./MultiviewSettings";
 import type { MultiviewController } from "./MultiviewActions";
-import {
-  LAYOUTS,
-  pickLayout,
-} from "@/lib/multiview/layouts";
 
 import { useRouter } from "next/navigation";
 
@@ -17,8 +13,8 @@ import {
   HomeIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
-import EventView from "@/components/eventview/EventView";
 import EventLocalTime from "@/components/event/EventLocalTime";
+import MultiviewStage from "./MultiviewStage";
 
 type MultiviewViewProps = {
   events?: string[];
@@ -47,29 +43,6 @@ export default function MultiviewView({
 
   useMultiviewKeyboard(state, actions);
 
-  const autoLayoutKey = pickLayout(state.streams.length || 1);
-  const selectedLayoutKey =
-    state.highlightLayoutKey ??
-    state.layoutKey ??
-    autoLayoutKey;
-  const layout =
-    LAYOUTS[selectedLayoutKey] ?? LAYOUTS.single;
-
-  const slotOrder =
-    state.activeKey &&
-    state.priority.includes(state.activeKey)
-      ? [
-          state.activeKey,
-          ...state.priority.filter(
-            (eventKey) => eventKey !== state.activeKey
-          ),
-        ]
-      : state.priority;
-
-  const emptySlotCount = Math.max(
-    0,
-    layout.slots.length - state.streams.length
-  );
 
   return (
     <div
@@ -141,83 +114,11 @@ export default function MultiviewView({
         <MultiviewSettings state={state} actions={actions} />
       </header>
 
-      <main className="relative min-h-0 flex-1">
-        {state.streams.map((eventKey) => {
-          const slotIndex = slotOrder.indexOf(eventKey);
-          const geometry = layout.slots[slotIndex];
-          const slotPresentation =
-            geometry?.presentation ?? {
-              teamTracker: "hidden" as const,
-              matchInfo: "visible" as const,
-              footerHidden: false,
-            };
+      <MultiviewStage
+        controller={multiviewController}
+        isDivisional={isDivisional}
+      />
 
-          const visible = Boolean(geometry);
-
-          return (
-            <div
-              key={eventKey}
-              className={
-                visible
-                  ? "absolute"
-                  : "pointer-events-none absolute invisible"
-              }
-              style={
-                visible
-                  ? {
-                      left: `${geometry.x}%`,
-                      top: `${geometry.y}%`,
-                      width: `${geometry.w}%`,
-                      height: `${geometry.h}%`,
-                      transition: "all 300ms ease",
-                    }
-                  : {
-                      left: 0,
-                      top: 0,
-                      width: 1,
-                      height: 1,
-                    }
-              }
-            >
-              <EventView
-                event={eventKey}
-                isDivisional={isDivisional}
-                controller={multiviewController}
-                config={state.eventConfigs[eventKey]}
-                slotPresentation={slotPresentation}
-              />
-            </div>
-          );
-        })}
-
-        {Array.from({ length: emptySlotCount }).map((_, index) => {
-          const slotIndex = state.streams.length + index;
-          const geometry = layout.slots[slotIndex];
-
-          if (!geometry) {
-            return null;
-          }
-
-          return (
-            <button
-              key={`empty-slot-${slotIndex}`}
-              onClick={actions.openEventPicker}
-              className="absolute flex items-center justify-center border border-dashed border-neutral-700 bg-neutral-950/80 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
-              style={{
-                left: `${geometry.x}%`,
-                top: `${geometry.y}%`,
-                width: `${geometry.w}%`,
-                height: `${geometry.h}%`,
-              }}
-            >
-              <div className="flex flex-col items-center gap-2 text-neutral-500">
-                <PlusIcon className="h-8 w-8" />
-                <span className="text-sm font-semibold">Add Event</span>
-              </div>
-            </button>
-          );
-        })}
-      </main>
 
     </div>
   );
