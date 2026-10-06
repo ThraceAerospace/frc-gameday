@@ -27,6 +27,7 @@ import { useStreamController } from "./hooks/useStreamController";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 import type { MultiviewController } from "../multiview/MultiviewActions";
+import type { WebSocketEvent } from "./hooks/useWebSocket";
 import type { EventViewConfig } from "./EventViewConfig";
 
 type EventViewProps = {
@@ -69,7 +70,6 @@ export default function EventView({
   const [webSocketStale, setWebSocketStale] = useState(false);
   const websocketRefreshTimerRef = useRef<number | null>(null);
 
-  const WEBHOOK_REFRESH_DELAY = 60_000;
 
   const {
     matches,
@@ -187,10 +187,6 @@ export default function EventView({
 
   const refreshLiveData =
     useCallback(() => {
-      console.log(
-        "[WSS] Refreshing all data sources...",
-      );
-
       void reloadAlliances();
       void reloadMatches();
       void reloadStatuses();
@@ -201,7 +197,7 @@ export default function EventView({
     ]);
 
   const handleWebSocketEvent = useCallback(
-    (message: Parameters<NonNullable<Parameters<typeof useWebSocket>[1]>>[0]) => {
+    (message: WebSocketEvent) => {
       if (message.type !== "tba-update") {
         return;
       }
@@ -234,7 +230,7 @@ export default function EventView({
   );
 
   const scheduleWebSocketRefresh = useCallback(
-    (message: Parameters<NonNullable<Parameters<typeof useWebSocket>[1]>>[0]) => {
+    (message: WebSocketEvent) => {
       if (message.type !== "tba-update") {
         return;
       }
@@ -253,7 +249,7 @@ export default function EventView({
         websocketRefreshTimerRef.current = null;
         setWebSocketStale(false);
         handleWebSocketEvent(message);
-      }, WEBHOOK_REFRESH_DELAY);
+      }, 60_000);
     },
     [event, handleWebSocketEvent],
   );
