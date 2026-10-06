@@ -22,9 +22,9 @@ matches teams/statuses playoff alliances
 Polling is fallback reconciliation for missed or incomplete updates.
 ```
 
-The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks are the preferred realtime invalidation path, Redis Pub/Sub carries invalidation events internally, and event-scoped WebSockets notify browsers.
+The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks mutate existing Redis cache entries and then publish event-scoped invalidations through Redis Pub/Sub to WebSocket clients.
 
-WebSocket messages are intentionally small invalidation signals. EventView debounces them for 60 seconds before refetching TBA through the normal Redis-backed client. Polling remains the reconciliation path for missed or incomplete updates.
+WebSocket messages are intentionally small invalidation signals. EventView can immediately refetch the webhook-mutated Redis cache, while direct TBA reconciliation is debounced for 65 seconds so upstream TBA has time to catch up and avoids a stale 304. Polling remains the reconciliation path for missed or incomplete updates.
 
 ## Repository structure
 
@@ -148,7 +148,9 @@ Rules:
 - The full event match cache remains the canonical Gameday cache.
 - TBA Cache-Control max-age controls cache freshness.
 - A 304 response refreshes Redis expiry using TBA's supplied cache lifetime.
-- Webhooks do not write match data directly into Redis; the delayed client refetch keeps TBA authoritative and avoids webhook/API race conditions.
+- Webhooks mutate existing Redis match data directly when the payload contains the changed match information.
+- EventView refetches the webhook-mutated Redis cache immediately.
+- Direct TBA reconciliation is delayed 65 seconds to avoid racing TBA's upstream propagation and receiving a stale 304.
 - Do not add another cache layer for webhook support.
 
 The application-facing service is `src/lib/tba/service.ts`.
@@ -162,11 +164,13 @@ authenticate
     ↓
 parse payload
     ↓
+mutate existing Redis cache
+    ↓
 broadcast event-scoped WSS invalidation
     ↓
-60-second client debounce
+client refetches Redis-mutated data
     ↓
-TBA refetch through Redis-backed client
+65-second delayed TBA reconciliation
     ↓
 polling reconciliation restarts
 ```
