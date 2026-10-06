@@ -249,7 +249,7 @@ export default function EventView({
         websocketRefreshTimerRef.current = null;
         setWebSocketStale(false);
         handleWebSocketEvent(message);
-      }, 60_000);
+      }, 65_000);
     },
     [event, handleWebSocketEvent],
   );
