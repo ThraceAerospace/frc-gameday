@@ -148,7 +148,7 @@ export class RemotePeer {
     };
   }
 
-  private sendSignal(message: { type: "signal"; payload: RTCSessionDescriptionInit | RTCIceCandidateInit }) {
+  private sendSignal(message: { type: "signal"; payload: WebRTCSignalPayload }) {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
 
