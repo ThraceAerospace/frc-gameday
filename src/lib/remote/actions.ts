@@ -3,6 +3,11 @@ import type { MatchImminentSignal, MultiviewState } from "@/components/multiview
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { MultiviewActions, MultiviewController } from "@/components/multiview/MultiviewActions";
 
+export type RemoteMultiviewMessage =
+  | { type: "action"; action: RemoteMultiviewAction }
+  | { type: "requestState" }
+  | { type: "stateSnapshot"; state: MultiviewState };
+
 export type RemoteMultiviewAction =
   | { type: "showControls" }
   | { type: "hideControls" }
