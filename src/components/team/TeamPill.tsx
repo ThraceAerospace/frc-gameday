@@ -25,7 +25,7 @@ function allianceLabel(
     return null;
   }
 
-  return alliance.name.replace(/^Alliance\\s*/i, "A");
+  return alliance.name.replace("Alliance ", "A");
 }
 
 function matchLabel(
@@ -93,11 +93,11 @@ export default function TeamPill({
         {teamNumber}
       </span>
 
-      <span className="font-mono text-[9px] text-neutral-400">
+      <span className="font-mono text-[11px] text-neutral-300">
         {recordLabel}
       </span>
 
-      <span className="font-mono text-[9px] text-neutral-500">
+      <span className="font-mono text-[11px] text-neutral-300">
         {rankLabel}
       </span>
 
@@ -110,7 +110,7 @@ export default function TeamPill({
           </span>
 
           {nextMatch?.predicted_time != null && (
-            <span className="font-mono text-[9px] text-neutral-400">
+            <span className="font-mono text-[11px] text-neutral-400">
               <NextMatchCountdown nextMatch={nextMatch} />
             </span>
           )}
