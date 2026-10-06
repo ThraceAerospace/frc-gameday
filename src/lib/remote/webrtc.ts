@@ -49,7 +49,11 @@ export class RemotePeer {
     socket.onopen = () => this.options.onStatus?.("waiting");
     socket.onmessage = (event) => {
       let message: SignalMessage;
-      try { message = JSON.parse(String(event.data)) as SignalMessage; } catch { return; }
+      try {
+        message = JSON.parse(String(event.data)) as SignalMessage;
+      } catch {
+        return;
+      }
       void this.handleSignalMessage(message);
     };
     socket.onerror = () => this.options.onStatus?.("error");
@@ -87,11 +91,15 @@ export class RemotePeer {
 
     if (message.type === "peer-ready") {
       this.options.onStatus?.("connecting-peer");
-      if (this.options.role === "controller") await this.createControllerOffer();
+      if (this.options.role === "controller") {
+        await this.createControllerOffer();
+      }
       return;
     }
 
-    if (message.type === "signal") await this.handlePeerSignal(message.payload);
+    if (message.type === "signal") {
+      await this.handlePeerSignal(message.payload);
+    }
   }
 
   private createPeerConnection() {
@@ -103,19 +111,33 @@ export class RemotePeer {
 
     peer.onicecandidate = (event) => {
       if (event.candidate) {
-        this.sendSignal({ type: "signal", payload: { kind: "candidate", candidate: event.candidate.toJSON() } });
+        this.sendSignal({
+          type: "signal",
+          payload: {
+            kind: "candidate",
+            candidate: event.candidate.toJSON(),
+          },
+        });
       }
     };
 
     peer.onconnectionstatechange = () => {
-      if (peer.connectionState === "connected") this.options.onStatus?.("connected");
-      if (peer.connectionState === "failed" || peer.connectionState === "closed" || peer.connectionState === "disconnected") {
+      if (peer.connectionState === "connected") {
+        this.options.onStatus?.("connected");
+      }
+
+      if (
+        peer.connectionState === "failed" ||
+        peer.connectionState === "closed"
+      ) {
         this.options.onStatus?.("disconnected");
       }
     };
 
     if (this.options.role === "controller") {
-      this.attachChannel(peer.createDataChannel("multiview-actions", { ordered: true }));
+      this.attachChannel(
+        peer.createDataChannel("multiview-actions", { ordered: true }),
+      );
     } else {
       peer.ondatachannel = (event) => this.attachChannel(event.channel);
     }
@@ -129,7 +151,9 @@ export class RemotePeer {
 
     channel.onopen = () => {
       this.options.onStatus?.("connected");
-      for (const action of this.queuedActions) channel.send(JSON.stringify(action));
+      for (const action of this.queuedActions) {
+        channel.send(JSON.stringify(action));
+      }
       this.queuedActions = [];
     };
 
@@ -137,7 +161,9 @@ export class RemotePeer {
       if (this.options.role !== "display") return;
 
       try {
-        this.options.onAction?.(JSON.parse(String(event.data)) as RemoteMultiviewAction);
+        this.options.onAction?.(
+          JSON.parse(String(event.data)) as RemoteMultiviewAction,
+        );
       } catch (error) {
         console.error("[Remote] Invalid action:", error);
       }
@@ -148,15 +174,34 @@ export class RemotePeer {
     };
   }
 
-  private sendSignal(message: { type: "signal"; payload: WebRTCSignalPayload }) {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+  private sendSignal(message: {
+    type: "signal";
+    payload: WebRTCSignalPayload;
+  }) {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+
+    const target: RemoteRole =
+      this.options.role === "controller" ? "display" : "controller";
+
+    this.socket.send(
+      JSON.stringify({
+        ...message,
+        target,
+      }),
+    );
   }
 
   private async createControllerOffer() {
     const peer = this.createPeerConnection();
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    this.sendSignal({ type: "signal", payload: { kind: "description", description: offer } });
+    this.sendSignal({
+      type: "signal",
+      payload: {
+        kind: "description",
+        description: offer,
+      },
+    });
   }
 
   private async handlePeerSignal(signal: WebRTCSignalPayload) {
@@ -167,6 +212,7 @@ export class RemotePeer {
         this.pendingCandidates.push(signal.candidate);
         return;
       }
+
       await peer.addIceCandidate(signal.candidate);
       return;
     }
@@ -176,19 +222,33 @@ export class RemotePeer {
     if (this.options.role === "display" && description.type === "offer") {
       await peer.setRemoteDescription(description);
       this.remoteDescriptionSet = true;
-      for (const candidate of this.pendingCandidates) await peer.addIceCandidate(candidate);
+
+      for (const candidate of this.pendingCandidates) {
+        await peer.addIceCandidate(candidate);
+      }
+
       this.pendingCandidates = [];
 
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      this.sendSignal({ type: "signal", payload: { kind: "description", description: answer } });
+      this.sendSignal({
+        type: "signal",
+        payload: {
+          kind: "description",
+          description: answer,
+        },
+      });
       return;
     }
 
     if (this.options.role === "controller" && description.type === "answer") {
       await peer.setRemoteDescription(description);
       this.remoteDescriptionSet = true;
-      for (const candidate of this.pendingCandidates) await peer.addIceCandidate(candidate);
+
+      for (const candidate of this.pendingCandidates) {
+        await peer.addIceCandidate(candidate);
+      }
+
       this.pendingCandidates = [];
     }
   }
