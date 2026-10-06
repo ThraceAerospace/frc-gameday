@@ -18,6 +18,45 @@ export function cacheKey(endpoint: string) {
   return `cache${norm(endpoint)}`;
 }
 
+function tagKey(tag: string) {
+  return `tag:${tag}`;
+}
+
+function deriveTags(endpoint: string): string[] {
+  const parts = endpoint.split("/").filter(Boolean);
+  const tags = new Set<string>();
+
+  const eventIdx = parts.indexOf("event");
+  if (eventIdx !== -1 && parts[eventIdx + 1]) {
+    const eventKey = parts[eventIdx + 1];
+    tags.add(`event:${eventKey}`);
+    if (parts[eventIdx + 2]) {
+      tags.add(`event:${eventKey}:${parts[eventIdx + 2]}`);
+    }
+  }
+
+  const teamIdx = parts.indexOf("team");
+  if (teamIdx !== -1 && parts[teamIdx + 1]) {
+    const teamKey = parts[teamIdx + 1];
+    tags.add(`team:${teamKey}`);
+    const teamEventIdx = teamIdx + 2;
+    if (parts[teamEventIdx] === "event" && parts[teamEventIdx + 1]) {
+      const eventKey = parts[teamEventIdx + 1];
+      tags.add(`team:${teamKey}:event:${eventKey}`);
+      if (parts[teamEventIdx + 2]) {
+        tags.add(`team:${teamKey}:event:${eventKey}:${parts[teamEventIdx + 2]}`);
+      }
+    }
+  }
+
+  const matchIdx = parts.indexOf("match");
+  if (matchIdx !== -1 && parts[matchIdx + 1]) {
+    tags.add(`match:${parts[matchIdx + 1]}`);
+  }
+
+  return [...tags];
+}
+
 function getMaxAge(cacheControl: string | null): number | null {
   if (!cacheControl) {
     return null;
@@ -272,6 +311,55 @@ export class TBAClient {
    * Get data from Redis when fresh, otherwise fetch it from TBA.
    * TBA controls the cache lifetime through Cache-Control max-age.
    */
+  async invalidateTag(tag: string) {
+    const key = tagKey(tag);
+    const members = await redis.smembers(key);
+
+    if (!members?.length) {
+      return;
+    }
+
+    const pipeline = redis.pipeline();
+    for (const cache of members) {
+      pipeline.del(cache);
+    }
+    pipeline.del(key);
+    await pipeline.exec();
+  }
+
+  async invalidateTags(tags: string[]) {
+    const uniqueTags = [...new Set(tags)];
+    if (!uniqueTags.length) {
+      return;
+    }
+
+    const pipeline = redis.pipeline();
+    const cacheKeys = new Set<string>();
+    const existingTagKeys: string[] = [];
+
+    for (const tag of uniqueTags) {
+      const key = tagKey(tag);
+      const members = await redis.smembers(key);
+      if (!members?.length) continue;
+
+      existingTagKeys.push(key);
+      for (const cache of members) {
+        cacheKeys.add(cache);
+      }
+    }
+
+    for (const cache of cacheKeys) {
+      pipeline.del(cache);
+    }
+    for (const key of existingTagKeys) {
+      pipeline.del(key);
+    }
+
+    if (cacheKeys.size || existingTagKeys.length) {
+      await pipeline.exec();
+    }
+  }
+
   async get<T>(
     endpoint: string,
     options?: { forceRefresh?: boolean },
@@ -385,6 +473,19 @@ export class TBAClient {
     };
 
     await redis.set(cKey, JSON.stringify(entry));
+
+    const tags = deriveTags(endpoint);
+
+    if (tags.length) {
+      const pipeline = redis.pipeline();
+
+      for (const tag of tags) {
+        pipeline.sadd(tagKey(tag), cKey);
+      }
+
+      await pipeline.exec();
+    }
+
     return reconciledData;
   }
 }
