@@ -40,7 +40,7 @@ export default function RankingsStrip({
   playoffAlliances = [],
   playoffType = null,
 }: RankingsStripProps) {
-  const hasAlliances = playoffAlliances.length > 0;
+  const hasAlliances = playoffAlliances.length > 0;\n  const scrollerRef = useRef<HTMLDivElement | null>(null);\n  const contentKey = useMemo(\n    () => JSON.stringify({ teamsStatuses, playoffAlliances, playoffType }),\n    [teamsStatuses, playoffAlliances, playoffType],\n  );\n\n  useEffect(() => {\n    const scroller = scrollerRef.current;\n    if (!scroller || scroller.scrollWidth <= scroller.clientWidth) return;\n\n    scroller.scrollLeft = 0;\n    const distance = scroller.scrollWidth - scroller.clientWidth;\n    const duration = Math.max(5000, Math.min(14000, distance * 8));\n    let animationFrame = 0;\n    let startedAt: number | null = null;\n    let pauseTimer: ReturnType<typeof setTimeout> | null = null;\n\n    const animate = (now: number) => {\n      if (startedAt === null) startedAt = now;\n      const progress = Math.min((now - startedAt) / duration, 1);\n      scroller.scrollLeft = distance * progress;\n\n      if (progress < 1) {\n        animationFrame = requestAnimationFrame(animate);\n      } else {\n        pauseTimer = setTimeout(() => {\n          scroller.scrollLeft = 0;\n        }, 4000);\n      }\n    };\n\n    pauseTimer = setTimeout(() => {\n      animationFrame = requestAnimationFrame(animate);\n    }, 2500);\n\n    return () => {\n      cancelAnimationFrame(animationFrame);\n      if (pauseTimer) clearTimeout(pauseTimer);\n    };\n  }, [contentKey]);
 
   if (hasAlliances) {
     const currentAlliance =
@@ -50,7 +50,7 @@ export default function RankingsStrip({
 
     return (
       <div className="relative min-w-0 overflow-hidden border-t border-white/10 bg-neutral-950/95">
-        <div className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar">
+        <div ref={scrollerRef} className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar">
           <div className="flex h-full min-w-max items-center gap-1.5 px-2">
             {playoffAlliances.map((alliance, index) => {
               const status = alliance.status;
@@ -59,7 +59,7 @@ export default function RankingsStrip({
                 <article
                   key={alliance.name ?? index}
                   className={[
-                    "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
+                    "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",\n                    isTracked ? "border-b-2 border-b-white" : "",
                     status?.status === "playing"
                       ? "border-white/20 bg-white/[0.08]"
                       : "border-zinc-800 bg-zinc-950",
