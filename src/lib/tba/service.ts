@@ -212,10 +212,22 @@ export const TBA = {
     let bestTime = -Infinity;
 
     for (const match of matches) {
-      if (match.actual_time == null) continue;
+      const hasPostedScore =
+        match.alliances.red.score != null &&
+        match.alliances.red.score >= 0 &&
+        match.alliances.blue.score != null &&
+        match.alliances.blue.score >= 0;
 
-      if (match.actual_time > bestTime) {
-        bestTime = match.actual_time;
+      if (!hasPostedScore) continue;
+
+      const time =
+        match.actual_time ??
+        match.predicted_time ??
+        match.time ??
+        -Infinity;
+
+      if (time > bestTime) {
+        bestTime = time;
         lastMatch = match;
       }
     }
