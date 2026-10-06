@@ -58,42 +58,47 @@ export default function MatchStrip({
   const hideMatchCards =
     presentation.matchInfo === "hidden";
   /*
-   * Automatically bring the next match into view whenever the
-   * actual next match changes.
+   * Scroll only when the furthest scored match changes.
    *
-   * The data refreshes may cause this component to render many
-   * times, so the dependency is specifically nextMatch?.key.
+   * We deliberately do not use nextMatch as the scroll target. An
+   * aborted/E-Stopped match can remain unscored in TBA for a long time,
+   * so waiting for it would leave the strip stuck. Instead, find the last
+   * match with both alliance scores posted and bring that card to the
+   * left edge. Upcoming matches remain visible to its right.
    */
-useEffect(() => {
-  if (
-    hideMatchCards ||
-    !nextMatch?.key ||
-    !scrollRef.current
-  ) {
-    return;
-  }
+  const furthestScoredMatch = [...cards]
+    .reverse()
+    .find(
+      (match) =>
+        match.alliances.red.score != null &&
+        match.alliances.red.score >= 0 &&
+        match.alliances.blue.score != null &&
+        match.alliances.blue.score >= 0,
+    );
 
-  const nextElement =
-    scrollRef.current.querySelector(
-      `[data-match-key="${CSS.escape(nextMatch.key)}"]`,
+  useEffect(() => {
+    if (
+      hideMatchCards ||
+      !furthestScoredMatch?.key ||
+      !scrollRef.current
+    ) {
+      return;
+    }
+
+    const container = scrollRef.current;
+    const scoredElement = container.querySelector(
+      '[data-match-key="' + furthestScoredMatch.key + '"]',
     ) as HTMLElement | null;
 
-  if (!nextElement) {
-    return;
-  }
+    if (!scoredElement) {
+      return;
+    }
 
-  const container = scrollRef.current;
-
-  const targetLeft =
-    nextElement.offsetLeft -
-    nextElement.offsetWidth -
-    8;
-
-  container.scrollTo({
-    left: Math.max(0, targetLeft),
-    behavior: "smooth",
-  });
-}, [nextMatch?.key, hideMatchCards]);
+    container.scrollTo({
+      left: Math.max(0, scoredElement.offsetLeft - 8),
+      behavior: "smooth",
+    });
+  }, [furthestScoredMatch?.key, hideMatchCards]);
 
   return (
     <div className="relative border-t border-l border-white/10 bg-neutral-950/95">
