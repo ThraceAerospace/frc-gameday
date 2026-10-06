@@ -11,7 +11,7 @@ export type CacheEntry<T> = {
 };
 
 function norm(endpoint: string) {
-  return endpoint.replace(/\\//g, ":");
+  return endpoint.replace(/\//gg, ":");
 }
 
 export function cacheKey(endpoint: string) {
@@ -24,7 +24,7 @@ function getMaxAge(cacheControl: string | null): number | null {
   }
 
   const match = cacheControl.match(
-    /(?:^|,)\\s*max-age\\s*=\\s*"?([0-9]+)"?/i,
+    /(?:^|,)\s*max-age\s*=\s*"?([0-9]+)"?/i,
   );
 
   return match ? Number(match[1]) : null;
