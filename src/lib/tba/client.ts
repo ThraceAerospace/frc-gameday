@@ -360,6 +360,24 @@ export class TBAClient {
       );
     }
 
+    /*
+     * The TBA request may have overlapped a webhook mutation.
+     * Re-read Redis before writing the upstream response so a
+     * newer webhook-mutated value cannot be overwritten by a
+     * stale TBA response.
+     */
+    const latestRaw = await redis.get(cKey);
+
+    if (latestRaw !== cachedRaw) {
+      const latestCached = latestRaw
+        ? parseCached<T>(latestRaw)
+        : null;
+
+      if (latestCached) {
+        return latestCached.data;
+      }
+    }
+
     const entry: CacheEntry<T> = {
       data: reconciledData,
       etag: res.headers.get("ETag"),
