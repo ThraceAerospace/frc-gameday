@@ -36,6 +36,7 @@ export default function RemoteMultiview({
   const localController = useMultiviewController({ events });
   const localControllerRef = useRef(localController);
   localControllerRef.current = localController;
+  const peerRef = useRef<RemotePeer | null>(null);
 
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
@@ -59,7 +60,7 @@ export default function RemoteMultiview({
         },
         onMessage: (message: RemoteMultiviewMessage) => {
           if (message.type === "requestState" && role === "display") {
-            peer.sendMessage({
+            peerRef.current?.sendMessage({
               type: "stateSnapshot",
               state: localControllerRef.current.getState(),
             });
@@ -82,6 +83,8 @@ export default function RemoteMultiview({
         },
       }),
   );
+
+  peerRef.current = peer;
 
   useEffect(() => {
     peer.start();
