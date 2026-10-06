@@ -1,4 +1,4 @@
-import type { RemoteMultiviewAction } from "./actions";
+import type { RemoteMultiviewAction, RemoteMultiviewMessage } from "./actions";
 
 export type RemoteRole = "controller" | "display";
 export type RemotePeerStatus =
@@ -29,12 +29,11 @@ type PeerOptions = {
   onStatus?: (status: RemotePeerStatus) => void;
   onSignalingStatus?: (status: RemoteSignalingStatus) => void;
   onAction?: (action: RemoteMultiviewAction) => void;
+  onMessage?: (message: RemoteMultiviewMessage) => void;
 };
 
-function getSignalingUrl(code: string, role: RemoteRole) {
+function getSignalingUrl(code: string, role: RemoteRole, token: string) {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const token = crypto.randomUUID();
-
   return `${protocol}//${window.location.host}/api/remote/ws?code=${encodeURIComponent(code)}&role=${role}&token=${encodeURIComponent(token)}`;
 }
 
@@ -48,6 +47,8 @@ export class RemotePeer {
   private remoteDescriptionSet = false;
   private signalingReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  private readonly token = crypto.randomUUID();
+  private reconnectingPeer = false;
 
   constructor(options: PeerOptions) {
     this.options = options;
@@ -59,12 +60,18 @@ export class RemotePeer {
   }
 
   sendAction(action: RemoteMultiviewAction) {
+    this.sendMessage({ type: "action", action });
+  }
+
+  sendMessage(message: RemoteMultiviewMessage) {
     if (this.channel?.readyState === "open") {
-      this.channel.send(JSON.stringify(action));
+      this.channel.send(JSON.stringify(message));
       return;
     }
 
-    this.queuedActions.push(action);
+    if (message.type === "action") {
+      this.queuedActions.push(message.action);
+    }
   }
 
   close() {
@@ -89,10 +96,12 @@ export class RemotePeer {
   private connectSignaling() {
     if (this.closed) return;
 
+    if (this.socket) return;
+
     this.options.onSignalingStatus?.("connecting");
 
     const socket = new WebSocket(
-      getSignalingUrl(this.options.code, this.options.role),
+      getSignalingUrl(this.options.code, this.options.role, this.token),
     );
 
     this.socket = socket;
@@ -138,11 +147,7 @@ export class RemotePeer {
 
     const state = this.peer?.connectionState;
 
-    return (
-      !this.peer ||
-      state === "new" ||
-      state === "connecting"
-    );
+    return !this.peer || state === "new" || state === "connecting" || state === "failed" || state === "closed";
   }
 
   private scheduleSignalingReconnect() {
@@ -202,11 +207,9 @@ export class RemotePeer {
         this.options.onStatus?.("connected");
       }
 
-      if (
-        peer.connectionState === "failed" ||
-        peer.connectionState === "closed"
-      ) {
+      if (peer.connectionState === "failed" || peer.connectionState === "closed") {
         this.options.onStatus?.("disconnected");
+        this.restartPeer();
       }
     };
 
@@ -228,22 +231,31 @@ export class RemotePeer {
     channel.onopen = () => {
       this.options.onStatus?.("connected");
 
+      if (this.options.role === "controller") {
+        channel.send(JSON.stringify({ type: "requestState" } satisfies RemoteMultiviewMessage));
+      }
+
       for (const action of this.queuedActions) {
-        channel.send(JSON.stringify(action));
+        channel.send(JSON.stringify({ type: "action", action } satisfies RemoteMultiviewMessage));
       }
 
       this.queuedActions = [];
     };
 
     channel.onmessage = (event) => {
-      if (this.options.role !== "display") return;
-
       try {
-        this.options.onAction?.(
-          JSON.parse(String(event.data)) as RemoteMultiviewAction,
-        );
+        const message = JSON.parse(String(event.data)) as RemoteMultiviewMessage;
+
+        if (message.type === "action") {
+          if (this.options.role === "display") {
+            this.options.onAction?.(message.action);
+          }
+          return;
+        }
+
+        this.options.onMessage?.(message);
       } catch (error) {
-        console.error("[Remote] Invalid action:", error);
+        console.error("[Remote] Invalid message:", error);
       }
     };
 
@@ -271,10 +283,29 @@ export class RemotePeer {
     );
   }
 
+  private restartPeer() {
+    if (this.closed || this.reconnectingPeer) return;
+
+    this.reconnectingPeer = true;
+    this.channel = null;
+    this.peer?.close();
+    this.peer = null;
+    this.pendingCandidates = [];
+    this.remoteDescriptionSet = false;
+
+    if (this.socket) {
+      this.socket.close();
+    } else {
+      this.scheduleSignalingReconnect();
+    }
+
+    this.reconnectingPeer = false;
+  }
+
   private async createControllerOffer() {
     const peer = this.createPeerConnection();
 
-    if (peer.connectionState === "connected") return;
+    if (peer.connectionState === "connected" || peer.signalingState !== "stable") return;
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
