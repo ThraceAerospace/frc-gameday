@@ -1,28 +1,23 @@
 import crypto from "node:crypto";
 import { tba as TBA } from "@/lib/tba";
-import type { TBAMatch } from "@/lib/tba/types";
+import type {
+  TBAAward,
+  TBAEvent,
+  TBAMatch,
+} from "@/lib/tba/types";
 import { broadcastTBAEvent } from "@/lib/realtime/websocket";
 
 type TBAWebhookMatch = TBAMatch;
 
-type TBAWebhookAward = {
-  recipient_list?: Array<{
-    team_number?: number | null;
-  }>;
-};
-
 type TBAWebhookData = {
   verification_key?: string;
   event_key?: string;
-  event?: {
-    key?: string;
-    [key: string]: unknown;
-  };
+  event?: TBAEvent;
   team_key?: string;
   team_keys?: string[];
   match_key?: string;
   match?: TBAWebhookMatch;
-  awards?: TBAWebhookAward[];
+  awards?: TBAAward[];
 };
 
 type TBAWebhookPayload = {
