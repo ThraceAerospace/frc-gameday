@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import MultiviewView from "@/components/multiview/MultiviewView";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import MultiviewStage from "@/components/multiview/MultiviewStage";
+import MultiviewSettings from "@/components/multiview/MultiviewSettings";
 import { useMultiviewController } from "@/components/multiview/MultiviewController";
 import type { MultiviewController } from "@/components/multiview/MultiviewActions";
 import { createRemoteMultiviewActions, applyRemoteMultiviewAction } from "@/lib/remote/actions";
@@ -135,5 +136,23 @@ export default function RemoteMultiview({ role, events, code, onStatus }: Props)
     return <RemoteSurface controller={controller} peerStatus={peerStatus} />;
   }
 
-  return <MultiviewView controller={controller} />;
+  const displayState = useSyncExternalStore(
+    controller.subscribe,
+    controller.getState,
+    controller.getState,
+  );
+
+  return (
+    <main className="relative h-screen w-screen overflow-hidden bg-black text-white">
+      <MultiviewStage controller={controller} />
+      <div className="pointer-events-auto fixed left-3 top-3 z-50">
+        <MultiviewSettings
+          state={displayState}
+          actions={controller.actions}
+          triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
+          triggerTitle="Multiview settings"
+        />
+      </div>
+    </main>
+  );
 }

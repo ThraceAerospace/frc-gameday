@@ -124,6 +124,14 @@ function EventSettingsRow({
           <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}>
             <VideoCameraIcon />
           </button>
+          <button
+            className="icon-button"
+            title="Reload webcast"
+            aria-label="Reload webcast"
+            onClick={() => actions.runEventViewCommand(eventKey, "reloadStream")}
+          >
+            <ArrowPathIcon />
+          </button>
           <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
             <ArrowPathIcon />
           </button>

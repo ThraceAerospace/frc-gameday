@@ -86,6 +86,7 @@ export default function EventView({
 
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
+  const [streamReloadKey, setStreamReloadKey] = useState(0);
 
   const [teamsOpen, setTeamsOpen] =
     useState(false);
@@ -295,6 +296,9 @@ export default function EventView({
       case "refresh":
         refreshLiveData();
         break;
+      case "reloadStream":
+        setStreamReloadKey((value) => value + 1);
+        break;
     }
 
     controller.actions.clearEventViewCommand(event);
@@ -384,6 +388,7 @@ export default function EventView({
         <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
             stream={activeStream}
+            reloadKey={streamReloadKey}
           />
 
           {!activeStream && (

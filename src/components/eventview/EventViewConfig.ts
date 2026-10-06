@@ -7,7 +7,7 @@ export type EventViewPresentation = {
   matchInfo: EventViewVisibility;
 };
 
-export type EventViewCommandType = "teams" | "stream" | "refresh";
+export type EventViewCommandType = "teams" | "stream" | "refresh" | "reloadStream";
 
 export type EventViewCommand = {
   id: number;
