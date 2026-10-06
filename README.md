@@ -150,7 +150,7 @@ Rules:
 - A 304 response refreshes Redis expiry using TBA's supplied cache lifetime.
 - Webhooks mutate existing Redis match data directly when the payload contains the changed match information.
 - EventView refetches the webhook-mutated Redis cache immediately.
-- Webhook-mutated match cache entries defer their next direct TBA refresh for 65 seconds to avoid racing TBA's upstream propagation and receiving a stale 304.
+- The client debounces the direct TBA refetch associated with the WSS broadcast for 65 seconds; Redis TTLs are never modified by webhook handling.
 - Do not add another cache layer for webhook support.
 
 The application-facing service is `src/lib/tba/service.ts`.
@@ -166,13 +166,11 @@ parse payload
     ↓
 mutate existing Redis cache
     ↓
-defer TBA refresh deadline 65 seconds
-    ↓
 broadcast event-scoped WSS invalidation
     ↓
 client immediately refetches Redis-mutated data
     ↓
-next cache miss/refetch reaches TBA after 65 seconds
+client-side broadcast refetch after 65 seconds
     ↓
 polling reconciliation restarts
 ```
