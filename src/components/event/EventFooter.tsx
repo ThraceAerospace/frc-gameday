@@ -64,7 +64,7 @@ export default function EventFooter({
                   !wssConnected
                     ? "bg-neutral-600"
                     : wssStale
-                      ? "bg-blue-500"
+                      ? "bg-blue-700"
                       : "bg-green-500"
                 }`}
                 title={
