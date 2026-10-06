@@ -6,6 +6,7 @@ import { useMultiviewController } from "@/components/multiview/MultiviewControll
 import type { MultiviewController } from "@/components/multiview/MultiviewActions";
 import { createRemoteMultiviewActions, applyRemoteMultiviewAction } from "@/lib/remote/actions";
 import { RemotePeer, type RemotePeerStatus, type RemoteRole } from "@/lib/remote/webrtc";
+import RemoteSurface from "./RemoteSurface";
 
 type Props = {
   role: RemoteRole;
@@ -18,13 +19,19 @@ export default function RemoteMultiview({ role, events, code, onStatus }: Props)
   const localController = useMultiviewController({ events });
   const localControllerRef = useRef(localController);
   localControllerRef.current = localController;
+  const [peerStatus, setPeerStatus] = useState<RemotePeerStatus>("connecting");
+
+  const handleStatus = (status: RemotePeerStatus) => {
+    setPeerStatus(status);
+    onStatus?.(status);
+  };
 
   const [peer] = useState(
     () =>
       new RemotePeer({
         code,
         role,
-        onStatus,
+        onStatus: handleStatus,
         onAction: (action) => {
           if (role === "display") {
             applyRemoteMultiviewAction(localControllerRef.current, action);
@@ -62,6 +69,10 @@ export default function RemoteMultiview({ role, events, code, onStatus }: Props)
       ),
     };
   }, [localController, peer, role]);
+
+  if (role === "controller") {
+    return <RemoteSurface controller={controller} peerStatus={peerStatus} />;
+  }
 
   return <MultiviewView controller={controller} />;
 }
