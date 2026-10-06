@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
@@ -17,7 +17,7 @@ type MultiviewStageProps = {
     controller: MultiviewController;
     config: MultiviewState["eventConfigs"][string] | undefined;
     slotPresentation: EventViewPresentation;
-  }) => React.ReactNode;
+  }) => ReactNode;
 };
 
 function getSlotPresentation(

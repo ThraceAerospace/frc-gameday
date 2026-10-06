@@ -11,7 +11,6 @@ import { useMultiviewController, useMultiviewKeyboard } from "./MultiviewControl
 
 import {
   HomeIcon,
-  PlusIcon,
 } from "@heroicons/react/24/outline";
 import EventLocalTime from "@/components/event/EventLocalTime";
 import MultiviewStage from "./MultiviewStage";
@@ -42,7 +41,6 @@ export default function MultiviewView({
   const actions = multiviewController.actions;
 
   useMultiviewKeyboard(state, actions);
-
 
   return (
     <div
@@ -118,8 +116,6 @@ export default function MultiviewView({
         controller={multiviewController}
         isDivisional={isDivisional}
       />
-
-
     </div>
   );
 }
