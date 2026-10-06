@@ -1,9 +1,20 @@
 import type { RemoteMultiviewAction } from "./actions";
 
 export type RemoteRole = "controller" | "display";
-export type RemotePeerStatus = "connecting" | "waiting" | "connecting-peer" | "connected" | "disconnected" | "error";
+export type RemotePeerStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
+
+export type RemoteSignalingStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 
 type SignalMessage =
+  | { type: "connected"; role: RemoteRole }
   | { type: "peer-ready" }
   | { type: "signal"; payload: WebRTCSignalPayload }
   | { type: "error"; message: string };
@@ -16,6 +27,7 @@ type PeerOptions = {
   code: string;
   role: RemoteRole;
   onStatus?: (status: RemotePeerStatus) => void;
+  onSignalingStatus?: (status: RemoteSignalingStatus) => void;
   onAction?: (action: RemoteMultiviewAction) => void;
 };
 
@@ -34,6 +46,7 @@ export class RemotePeer {
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private queuedActions: RemoteMultiviewAction[] = [];
   private remoteDescriptionSet = false;
+  private signalingReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
   constructor(options: PeerOptions) {
@@ -41,25 +54,8 @@ export class RemotePeer {
   }
 
   start() {
-    this.options.onStatus?.("connecting");
-
-    const socket = new WebSocket(getSignalingUrl(this.options.code, this.options.role));
-    this.socket = socket;
-
-    socket.onopen = () => this.options.onStatus?.("waiting");
-    socket.onmessage = (event) => {
-      let message: SignalMessage;
-      try {
-        message = JSON.parse(String(event.data)) as SignalMessage;
-      } catch {
-        return;
-      }
-      void this.handleSignalMessage(message);
-    };
-    socket.onerror = () => this.options.onStatus?.("error");
-    socket.onclose = () => {
-      if (!this.closed) this.options.onStatus?.("disconnected");
-    };
+    this.closed = false;
+    this.connectSignaling();
   }
 
   sendAction(action: RemoteMultiviewAction) {
@@ -67,14 +63,22 @@ export class RemotePeer {
       this.channel.send(JSON.stringify(action));
       return;
     }
+
     this.queuedActions.push(action);
   }
 
   close() {
     this.closed = true;
+
+    if (this.signalingReconnectTimer) {
+      clearTimeout(this.signalingReconnectTimer);
+      this.signalingReconnectTimer = null;
+    }
+
     this.channel?.close();
     this.peer?.close();
     this.socket?.close();
+
     this.channel = null;
     this.peer = null;
     this.socket = null;
@@ -82,18 +86,90 @@ export class RemotePeer {
     this.pendingCandidates = [];
   }
 
+  private connectSignaling() {
+    if (this.closed) return;
+
+    this.options.onSignalingStatus?.("connecting");
+
+    const socket = new WebSocket(
+      getSignalingUrl(this.options.code, this.options.role),
+    );
+
+    this.socket = socket;
+
+    socket.onopen = () => {
+      if (this.socket !== socket || this.closed) return;
+      this.options.onSignalingStatus?.("connected");
+    };
+
+    socket.onmessage = (event) => {
+      if (this.socket !== socket || this.closed) return;
+
+      let message: SignalMessage;
+
+      try {
+        message = JSON.parse(String(event.data)) as SignalMessage;
+      } catch {
+        return;
+      }
+
+      void this.handleSignalMessage(message);
+    };
+
+    socket.onerror = () => {
+      if (this.socket !== socket || this.closed) return;
+      this.options.onSignalingStatus?.("error");
+    };
+
+    socket.onclose = () => {
+      if (this.socket !== socket || this.closed) return;
+
+      this.socket = null;
+      this.options.onSignalingStatus?.("disconnected");
+
+      if (this.shouldReconnectSignaling()) {
+        this.scheduleSignalingReconnect();
+      }
+    };
+  }
+
+  private shouldReconnectSignaling() {
+    if (this.closed) return false;
+
+    const state = this.peer?.connectionState;
+
+    return (
+      !this.peer ||
+      state === "new" ||
+      state === "connecting"
+    );
+  }
+
+  private scheduleSignalingReconnect() {
+    if (this.signalingReconnectTimer || this.closed) return;
+
+    this.signalingReconnectTimer = setTimeout(() => {
+      this.signalingReconnectTimer = null;
+      this.connectSignaling();
+    }, 1000);
+  }
+
   private async handleSignalMessage(message: SignalMessage) {
     if (message.type === "error") {
-      this.options.onStatus?.("error");
+      this.options.onSignalingStatus?.("error");
       console.error("[Remote] Signaling error:", message.message);
       return;
     }
 
+    if (message.type === "connected") {
+      return;
+    }
+
     if (message.type === "peer-ready") {
-      this.options.onStatus?.("connecting-peer");
       if (this.options.role === "controller") {
         await this.createControllerOffer();
       }
+
       return;
     }
 
@@ -151,9 +227,11 @@ export class RemotePeer {
 
     channel.onopen = () => {
       this.options.onStatus?.("connected");
+
       for (const action of this.queuedActions) {
         channel.send(JSON.stringify(action));
       }
+
       this.queuedActions = [];
     };
 
@@ -170,7 +248,9 @@ export class RemotePeer {
     };
 
     channel.onclose = () => {
-      if (!this.closed) this.options.onStatus?.("disconnected");
+      if (!this.closed && this.peer?.connectionState === "closed") {
+        this.options.onStatus?.("disconnected");
+      }
     };
   }
 
@@ -193,8 +273,12 @@ export class RemotePeer {
 
   private async createControllerOffer() {
     const peer = this.createPeerConnection();
+
+    if (peer.connectionState === "connected") return;
+
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
+
     this.sendSignal({
       type: "signal",
       payload: {
@@ -231,6 +315,7 @@ export class RemotePeer {
 
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
+
       this.sendSignal({
         type: "signal",
         payload: {
@@ -238,6 +323,7 @@ export class RemotePeer {
           description: answer,
         },
       });
+
       return;
     }
 
