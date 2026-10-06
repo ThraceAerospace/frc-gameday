@@ -174,6 +174,24 @@ export class TBAClient {
     return this.mutateCached<T>(endpoint, () => data);
   }
 
+
+  private async deferTBARefresh(endpoint: string) {
+    const key = cacheKey(endpoint);
+    const raw = await redis.get(key);
+
+    if (raw === null) return;
+
+    const cached = parseCached<unknown>(raw);
+    if (!cached) return;
+
+    await redis.set(
+      key,
+      JSON.stringify({
+        ...cached,
+        expiresAt: Date.now() + 65_000,
+      }),
+    );
+  }
   /**
    * Merge a complete match webhook into the canonical full-event match cache.
    */
@@ -185,8 +203,10 @@ export class TBAClient {
       return;
     }
 
+    const endpoint = `/event/${match.event_key}/matches`;
+
     await this.mutateCached<TBAMatch[]>(
-      `/event/${match.event_key}/matches`,
+      endpoint,
       (matches) =>
         matches.map((cachedMatch) =>
           cachedMatch.key === match.key
@@ -194,6 +214,8 @@ export class TBAClient {
             : cachedMatch,
         ),
     );
+
+    await this.deferTBARefresh(endpoint);
   }
 
   /**
@@ -225,8 +247,10 @@ export class TBAClient {
       Object.entries(patch).filter(([, value]) => value !== undefined),
     ) as Partial<TBAMatch>;
 
+    const endpoint = `/event/${data.event_key}/matches`;
+
     await this.mutateCached<TBAMatch[]>(
-      `/event/${data.event_key}/matches`,
+      endpoint,
       (matches) =>
         matches.map((match) =>
           match.key === data.match_key
@@ -234,6 +258,8 @@ export class TBAClient {
             : match,
         ),
     );
+
+    await this.deferTBARefresh(endpoint);
   }
 
   /**
