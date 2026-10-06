@@ -60,9 +60,19 @@ export default function RemoteMultiview({
         },
         onMessage: (message: RemoteMultiviewMessage) => {
           if (message.type === "requestState" && role === "display") {
+            const state = localControllerRef.current.getState();
+
             peerRef.current?.sendMessage({
               type: "stateSnapshot",
-              state: localControllerRef.current.getState(),
+              state: {
+                ...state,
+                eventConfigs: Object.fromEntries(
+                  Object.entries(state.eventConfigs).map(([eventKey, config]) => [
+                    eventKey,
+                    { ...config, command: null },
+                  ]),
+                ),
+              },
             });
             return;
           }
