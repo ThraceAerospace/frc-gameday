@@ -86,11 +86,6 @@ export default function EventFooter({
             </span>
           </div>
         </div>
-            {teamPills.length > 0 ? (
-              <div className="flex items-center gap-1">
-                {teamPills}
-              </div>
-            ) : null}
         {teamPills.length > 0 ? (
           <div className="flex items-center gap-1">{teamPills}</div>
         ) : null}
