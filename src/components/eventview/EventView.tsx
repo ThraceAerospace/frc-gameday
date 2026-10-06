@@ -179,8 +179,9 @@ export default function EventView({
       key={team}
       team={team}
       status={teamsStatuses[team]}
-      teamCount={teamCount}
       nextMatch={trackedNextMatches[team]}
+      playoffAlliances={alliances}
+      playoffType={eventData?.playoff_type}
     />
   ));
 
