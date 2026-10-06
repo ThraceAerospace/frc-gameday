@@ -68,6 +68,8 @@ export default function EventView({
   } = usePlayoffAlliances(event);
 
   const [webSocketStale, setWebSocketStale] = useState(false);
+  const websocketRefreshTimersRef =
+    useRef<Map<string, number>>(new Map());
 
   const {
     matches,
@@ -204,7 +206,9 @@ export default function EventView({
         return;
       }
 
-      controller.ingestWebSocketEvent(message, {
+      setWebSocketStale(true);
+
+      const handlers = {
         refreshMatches: () => {
           void reloadMatches();
         },
@@ -215,7 +219,38 @@ export default function EventView({
           void reloadAlliances();
         },
         refreshAll: refreshLiveData,
-      });
+      };
+
+      /*
+       * The webhook has already mutated Redis before the WSS
+       * broadcast is sent. Refetch Redis immediately so the UI
+       * gets the webhook payload without waiting for TBA.
+       *
+       * Then debounce the same authoritative TBA refetch for
+       * 65 seconds. This gives TBA's upstream API time to catch
+       * up before the client asks it for the authoritative
+       * representation. Redis TTLs are never modified here.
+       */
+      controller.ingestWebSocketEvent(message, handlers);
+
+      const refreshKey = message.messageType ?? message.type;
+      const existingTimer =
+        websocketRefreshTimersRef.current.get(refreshKey);
+
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer);
+      }
+
+      const timer = window.setTimeout(() => {
+        websocketRefreshTimersRef.current.delete(refreshKey);
+        setWebSocketStale(false);
+        controller.ingestWebSocketEvent(message, handlers);
+      }, 65_000);
+
+      websocketRefreshTimersRef.current.set(
+        refreshKey,
+        timer,
+      );
     },
     [
       controller,
@@ -226,6 +261,18 @@ export default function EventView({
       reloadStatuses,
     ],
   );
+
+  useEffect(() => {
+    const timers = websocketRefreshTimersRef.current;
+
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+
+      timers.clear();
+    };
+  }, []);
 
   const {
     connected: wssConnected,
