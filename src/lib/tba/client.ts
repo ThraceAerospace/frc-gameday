@@ -175,23 +175,6 @@ export class TBAClient {
   }
 
 
-  private async deferTBARefresh(endpoint: string) {
-    const key = cacheKey(endpoint);
-    const raw = await redis.get(key);
-
-    if (raw === null) return;
-
-    const cached = parseCached<unknown>(raw);
-    if (!cached) return;
-
-    await redis.set(
-      key,
-      JSON.stringify({
-        ...cached,
-        expiresAt: Date.now() + 65_000,
-      }),
-    );
-  }
   /**
    * Merge a complete match webhook into the canonical full-event match cache.
    */
@@ -218,8 +201,6 @@ export class TBAClient {
             : cachedMatch,
         ),
     );
-
-    await this.deferTBARefresh(endpoint);
   }
 
   /**
@@ -262,8 +243,6 @@ export class TBAClient {
             : match,
         ),
     );
-
-    await this.deferTBARefresh(endpoint);
   }
 
   /**
