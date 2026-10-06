@@ -176,9 +176,15 @@ export class TBAClient {
 
 
   /**
-   * Merge a complete match webhook into the canonical full-event match cache.
+   * Update event/team match caches from a full match webhook.
    */
-  async mutateMatchCaches(match: TBAMatch): Promise<void> {
+  async mutateMatchCaches(
+    match: {
+      key?: string;
+      event_key?: string;
+      [key: string]: unknown;
+    },
+  ) {
     if (!match.key || !match.event_key) {
       console.warn(
         "[Client][TBA] match webhook missing key or event_key",
@@ -186,28 +192,40 @@ export class TBAClient {
       return;
     }
 
-    const endpoint = `/event/${match.event_key}/matches`;
+    const matchKey = match.key;
+    const eventKey = match.event_key;
 
-    await this.mutateCached<TBAMatch[]>(
-      endpoint,
-      (matches) =>
-        matches.map((cachedMatch) =>
-          cachedMatch.key === match.key
-            ? { ...cachedMatch, ...match }
-            : cachedMatch,
-        ),
+    const updateMatches = (
+      matches: any[],
+    ) =>
+      matches.map((cachedMatch) =>
+        cachedMatch.key === matchKey
+          ? {
+              ...cachedMatch,
+              ...match,
+            }
+          : cachedMatch,
+      );
+
+    await this.mutateCached<any[]>(
+      `/event/${eventKey}/matches`,
+      updateMatches,
     );
   }
 
   /**
-   * Merge schedule/team information from an upcoming_match webhook.
+   * Update cached match schedule information from an
+   * upcoming_match webhook.
    */
-  async mutateUpcomingMatch(data: {
-    event_key?: string;
-    match_key?: string;
-    scheduled_time?: number;
-    predicted_time?: number;
-  }): Promise<void> {
+  async mutateUpcomingMatch(
+    data: {
+      event_key?: string;
+      match_key?: string;
+      team_keys?: string[];
+      scheduled_time?: number;
+      predicted_time?: number;
+    },
+  ) {
     if (!data.match_key || !data.event_key) {
       console.warn(
         "[Client][TBA] upcoming_match webhook missing match_key or event_key",
@@ -215,28 +233,38 @@ export class TBAClient {
       return;
     }
 
-    const patch: Partial<TBAMatch> = {
-      key: data.match_key,
-      event_key: data.event_key,
+    const matchKey = data.match_key;
+    const eventKey = data.event_key;
+
+    const patch = {
+      key: matchKey,
+      event_key: eventKey,
       team_keys: data.team_keys,
       scheduled_time: data.scheduled_time,
       predicted_time: data.predicted_time,
     };
 
     const cleanPatch = Object.fromEntries(
-      Object.entries(patch).filter(([, value]) => value !== undefined),
-    ) as Partial<TBAMatch>;
+      Object.entries(patch).filter(
+        ([, value]) => value !== undefined,
+      ),
+    );
 
-    const endpoint = `/event/${data.event_key}/matches`;
+    const updateMatches = (
+      matches: any[],
+    ) =>
+      matches.map((match) =>
+        match.key === matchKey
+          ? {
+              ...match,
+              ...cleanPatch,
+            }
+          : match,
+      );
 
-    await this.mutateCached<TBAMatch[]>(
-      endpoint,
-      (matches) =>
-        matches.map((match) =>
-          match.key === data.match_key
-            ? { ...match, ...cleanPatch }
-            : match,
-        ),
+    await this.mutateCached<any[]>(
+      `/event/${eventKey}/matches`,
+      updateMatches,
     );
   }
 
