@@ -71,21 +71,19 @@ export default function EventFooter({
               <span className="truncate">
                 {eventName || "Event"}
               </span>
+              {eventTimezone && !isDivisional ? (
+                <span className="mt-0.5 text-[9px] text-neutral-500">
+                  <EventLocalTime timezone={eventTimezone} />
+                </span>
+              ) : null}
             </span>
-            <div className="flex min-w-0 flex-col">
-            {eventTimezone && !isDivisional ? (
-              <span className="mt-0.5 text-[9px] text-neutral-500">
-                <EventLocalTime timezone={eventTimezone} />
-              </span>
-            ) : null}
-            </div>
+          </div>
+        </div>
             {teamPills.length > 0 ? (
               <div className="flex items-center gap-1">
                 {teamPills}
               </div>
             ) : null}
-          </div>
-        </div>
       </div>
 
       <div className={`transition-transform duration-200 ${contentHidden ? "translate-y-full" : ""}`}>
