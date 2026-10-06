@@ -192,10 +192,18 @@ export const TBA = {
   getNextMatch: async (eventKey: string): Promise<TBAMatch | null> => {
     const matches = await TBA.getEventMatches(eventKey);
     const sorted = [...matches].sort(
-      (a, b) => (a.predicted_time ?? Infinity) - (b.predicted_time ?? Infinity)
+      (a, b) =>
+        (a.predicted_time ?? a.time ?? Infinity) -
+        (b.predicted_time ?? b.time ?? Infinity)
     );
 
-    return sorted.find((match) => match.actual_time == null) ?? null;
+    return (
+      sorted.find(
+        (match) =>
+          match.alliances.red.score === -1 ||
+          match.alliances.blue.score === -1,
+      ) ?? null
+    );
   },
 
   getLastMatch: async (eventKey: string): Promise<TBAMatch | null> => {
