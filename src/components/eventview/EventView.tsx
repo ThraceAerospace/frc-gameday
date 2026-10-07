@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -59,17 +58,6 @@ export default function EventView({
     websocketStale: webSocketStale,
   } = useEventState(event);
 
-  const reloadMatches = useCallback(() => {
-    eventState?.reloadMatches();
-  }, [eventState]);
-
-  const reloadStatuses = useCallback(() => {
-    eventState?.reloadStatuses();
-  }, [eventState]);
-
-  const reloadAlliances = useCallback(() => {
-    eventState?.reloadAlliances();
-  }, [eventState]);
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode;
