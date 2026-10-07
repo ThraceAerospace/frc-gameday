@@ -20,7 +20,7 @@ import type { BuiltStream } from "@/lib/gameday/buildStreams";
 
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
-import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
+import { useMatchImminence } from "../surface/hooks/useMatchImminence";
 import type { TileSurfaceController } from "../multiview/MultiviewActions";
 import type { EventViewConfig } from "./EventViewConfig";
 
