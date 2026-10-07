@@ -91,6 +91,10 @@ export class EventState {
 
     return () => {
       this.listeners.delete(listener);
+
+      if (this.listeners.size === 0) {
+        this.stop();
+      }
     };
   }
 
@@ -129,6 +133,7 @@ export class EventState {
     }
 
     this.stopped = true;
+    this.started = false;
 
     this.unsubscribeWebSocket?.();
     this.unsubscribeWebSocketStatus?.();
