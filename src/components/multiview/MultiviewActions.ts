@@ -9,19 +9,6 @@ import type {
   EventViewPresentation,
 } from "@/components/eventview/EventViewConfig";
 
-export type MultiviewWebSocketEvent = {
-  type: string;
-  eventKey?: string;
-  messageType?: string;
-};
-
-export type MultiviewWebSocketHandlers = {
-  refreshMatches(): void;
-  refreshStatuses(): void;
-  refreshAlliances(): void;
-  refreshAll(): void;
-};
-
 export type MultiviewActions = {
   showControls(): void;
   hideControls(): void;
@@ -64,8 +51,4 @@ export type MultiviewController = {
   replaceState(state: MultiviewState): void;
   subscribe(listener: (state: MultiviewState) => void): () => void;
   actions: MultiviewActions;
-  ingestWebSocketEvent(
-    event: MultiviewWebSocketEvent,
-    handlers: MultiviewWebSocketHandlers
-  ): void;
 };
