@@ -3,69 +3,82 @@
 import { useEffect, useRef } from "react";
 import type { TBAMatch } from "@/lib/tba/types";
 
+export type MatchImminenceSignal =
+  | {
+      type: "match_imminent";
+      matchKey: string;
+      severity: "hard" | "soft";
+    }
+  | {
+      type: "match_no_longer_imminent";
+      matchKey: string;
+    };
+
+/**
+ * A tracked match is imminent when it is both:
+ * - the event's next unscored match, and
+ * - the next unscored match for at least one tracked team.
+ *
+ * The transition out of imminence is emitted when the match is no longer
+ * the event/tracker's next match, normally because its score was posted.
+ */
 export function useMatchImminence(
-  match: TBAMatch | null,
-  emit: (signal: { type: "match_imminent"; matchKey: string; severity: "hard" | "soft" }) => void
+  eventNextMatch: TBAMatch | null,
+  trackedNextMatch: TBAMatch | null,
+  enabled: boolean,
+  emit: (signal: MatchImminenceSignal) => void,
 ) {
   const emitRef = useRef(emit);
-  const imminentRef = useRef(false);
+  const imminentKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     emitRef.current = emit;
   }, [emit]);
 
   useEffect(() => {
-    imminentRef.current = false;
+    const eventKey = eventNextMatch?.key ?? null;
+    const trackedKey = trackedNextMatch?.key ?? null;
+    const nextImminentKey =
+      enabled && eventKey && trackedKey && eventKey === trackedKey
+        ? eventKey
+        : null;
 
-    const predictedTime = match?.predicted_time;
-    const matchKey = match?.key;
+    const previousKey = imminentKeyRef.current;
 
-    if (predictedTime == null || matchKey == null) {
-      return;
+    if (previousKey && previousKey !== nextImminentKey) {
+      emitRef.current({
+        type: "match_no_longer_imminent",
+        matchKey: previousKey,
+      });
     }
 
-    const update = () => {
-      const diff =
-        predictedTime * 1000 - Date.now();
+    if (nextImminentKey && previousKey !== nextImminentKey) {
+      emitRef.current({
+        type: "match_imminent",
+        matchKey: nextImminentKey,
+        severity: "hard",
+      });
+    }
 
-      const imminent =
-        diff <= 120000 && diff > -60000;
+    imminentKeyRef.current = nextImminentKey;
+  }, [
+    enabled,
+    eventNextMatch?.key,
+    trackedNextMatch?.key,
+  ]);
 
-      /*
-       * Emit only when the match enters the imminent window.
-       *
-       * Once emitted, the same match cannot repeatedly steal
-       * focus every ten seconds.
-       */
-      if (
-        imminent &&
-        !imminentRef.current
-      ) {
+  useEffect(() => {
+    return () => {
+      const key = imminentKeyRef.current;
+
+      if (key) {
         emitRef.current({
-          type: "match_imminent",
-          matchKey,
-          severity:
-            diff <= 60000
-              ? "hard"
-              : "soft",
+          type: "match_no_longer_imminent",
+          matchKey: key,
         });
       }
 
-      imminentRef.current = imminent;
+      imminentKeyRef.current = null;
     };
-
-    update();
-
-    const interval =
-      window.setInterval(
-        update,
-        10000
-      );
-
-    return () =>
-      window.clearInterval(interval);
-  }, [
-    match?.key,
-    match?.predicted_time,
-  ]);
+  }, []);
 }
