@@ -22,7 +22,7 @@ export type RemoteMultiviewMessage =
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteMultiviewAction =
-  | { type: "handleMatchImminent"; signal: string | MatchImminentSignal }
+  | { type: "handleMatchImminent"; signal: MatchImminentSignal }
   | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
