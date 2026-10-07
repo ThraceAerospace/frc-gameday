@@ -34,11 +34,11 @@ export default function FieldViewSurface({
     controller,
   });
   const state = useSyncExternalStore(
-    multiviewController.subscribe,
-    multiviewController.getState,
-    multiviewController.getState
+    tileSurfaceController.subscribe,
+    tileSurfaceController.getState,
+    tileSurfaceController.getState
   );
-  const actions = multiviewController.actions;
+  const actions = tileSurfaceController.actions;
 
   useTileSurfaceKeyboard(state, actions);
 
@@ -113,7 +113,7 @@ export default function FieldViewSurface({
       </header>
 
       <TileSurface
-        controller={multiviewController}
+        controller={tileSurfaceController}
         isDivisional={isDivisional}
       />
     </div>
