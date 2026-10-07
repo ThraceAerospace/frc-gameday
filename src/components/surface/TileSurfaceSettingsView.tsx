@@ -25,6 +25,8 @@ type TileSurfaceSettingsViewProps = {
   actions: TileSurfaceActions;
   triggerClassName?: string;
   triggerTitle?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 function EventSettingsRow({
@@ -198,8 +200,18 @@ export default function TileSurfaceSettingsView({
   actions,
   triggerClassName = "h-[30px] w-[30px] rounded hover:bg-stone-800",
   triggerTitle = "Multiview settings",
+  open: controlledOpen,
+  onOpenChange,
 }: TileSurfaceSettingsViewProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(next);
+    }
+    onOpenChange?.(next);
+  };
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
