@@ -15,6 +15,11 @@ export type TileSurfaceState = {
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
   autoFocusMatches: boolean;
+  imminentMatchKey: string | null;
+  preImminenceState: {
+    activeKey: string | null;
+    highlightLayoutKey: LayoutKey | null;
+  } | null;
   eventPickerOpen: boolean;
   eventSearch: string;
   availableEvents: TBAEvent[];
@@ -45,7 +50,9 @@ export function createInitialTileSurfaceState(
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
-    autoFocusMatches: true,
+    autoFocusMatches: false,
+  imminentMatchKey: null,
+  preImminenceState: null,
     eventPickerOpen: false,
     eventSearch: "",
     availableEvents: [],
