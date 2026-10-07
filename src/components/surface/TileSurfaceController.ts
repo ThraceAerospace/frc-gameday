@@ -252,46 +252,63 @@ export function useTileSurfaceController({
   );
 
   const handleMatchImminent = useCallback(
-    (signal: string | MatchImminentSignal) => {
+    (signal: MatchImminentSignal) => {
+      if (signal.type === "match_no_longer_imminent") {
+        update((current) => {
+          if (current.imminentMatchKey !== signal.matchKey) {
+            return current;
+          }
+
+          const previous = current.preImminenceState;
+
+          return {
+            ...current,
+            imminentMatchKey: null,
+            preImminenceState: null,
+            activeKey: previous?.activeKey ?? current.activeKey,
+            highlightLayoutKey:
+              previous?.highlightLayoutKey ?? current.highlightLayoutKey,
+          };
+        });
+        return;
+      }
+
       const current = stateRef.current;
 
-      if (!current.autoFocusMatches) {
+      if (!current.streams.includes(signal.matchKey)) {
         return;
       }
 
-      const eventKey =
-        typeof signal === "string" ? signal : signal.matchKey;
+      update((next) => {
+        if (next.imminentMatchKey === signal.matchKey) {
+          return next;
+        }
 
-      if (!current.streams.includes(eventKey)) {
-        return;
-      }
+        const layoutKey =
+          next.layoutKey ??
+          pickLayout(next.streams.length || 1);
 
-      const layoutKey =
-        current.layoutKey ??
-        pickLayout(current.streams.length || 1);
-
-      update((next) => ({
-        ...next,
-        activeKey: eventKey,
-        highlightLayoutKey: pickHighlightLayout(
-          LAYOUTS[layoutKey]?.slots.length ?? 1
-        ),
-      }));
+        return {
+          ...next,
+          imminentMatchKey: signal.matchKey,
+          preImminenceState: {
+            activeKey: next.activeKey,
+            highlightLayoutKey: next.highlightLayoutKey,
+          },
+          activeKey: signal.matchKey,
+          highlightLayoutKey: pickHighlightLayout(
+            LAYOUTS[layoutKey]?.slots.length ?? 1
+          ),
+        };
+      });
     },
-    [update]
+    [update],
   );
 
   const actions = useMemo<TileSurfaceActions>(
     () => ({
       showControls,
       hideControls,
-
-      setAutoFocusMatches: (enabled) => {
-        update((current) => ({
-          ...current,
-          autoFocusMatches: enabled,
-        }));
-      },
 
       handleMatchImminent,
 
