@@ -1,7 +1,10 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
+import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
+import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
+import RemoteEventCard from "./RemoteEventCard";
 import {
   subscribeEventWebSocketStatus,
   type EventWebSocketStatus,
@@ -38,8 +41,6 @@ export default function RemoteSurface({ controller, peerStatus }: Props) {
             </div>
           </div>
           <div className="shrink-0">
-            <TileSurfaceSettingsView state={state} actions={controller.actions} />
-          </div>
             <TileSurfaceSettingsView state={state} actions={controller.actions} />
           </div>
         </div>
