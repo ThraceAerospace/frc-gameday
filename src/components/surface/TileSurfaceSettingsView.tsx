@@ -184,7 +184,22 @@ function EventSettingsRow({
         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-600">
           Tracked Teams
         </div>
-        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+          <label className="mr-1 flex cursor-pointer items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-400">
+            <input
+              type="checkbox"
+              checked={config?.matchImminence ?? false}
+              onChange={(event) =>
+                actions.setEventViewConfig(eventKey, {
+                  matchImminence: event.target.checked,
+                })
+              }
+              className="h-3 w-3"
+              aria-label="Highlight imminent match"
+              title="Highlight this event when its next match is also a tracked team's next match"
+            />
+            <span>Imminent</span>
+          </label>
           {trackedTeams.length > 0 ? (
             trackedTeams.map((team) => (
               <span key={team} className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] text-neutral-300">
