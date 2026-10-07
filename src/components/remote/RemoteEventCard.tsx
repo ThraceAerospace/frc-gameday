@@ -1,7 +1,6 @@
 "use client";
 
-import { useEvent } from "@/components/eventview/hooks/useEvent";
-import { useMatches } from "@/components/eventview/hooks/useMatches";
+import { useEventState } from "@/lib/events";
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
 import type { MultiviewActions } from "@/components/multiview/MultiviewActions";
@@ -30,8 +29,7 @@ type Props = {
 };
 
 export default function RemoteEventCard({ eventKey, position, state, actions }: Props) {
-  const { event } = useEvent(eventKey);
-  const { matches, eventNextMatch } = useMatches(eventKey);
+  const { event, matches, eventNextMatch } = useEventState(eventKey);
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
