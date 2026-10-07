@@ -21,7 +21,7 @@ import type { BuiltStream } from "@/lib/gameday/buildStreams";
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
 import { useMatchImminence } from "../surface/hooks/useMatchImminence";
-import type { TileSurfaceController } from "../multiview/MultiviewActions";
+import type { TileSurfaceController } from "../surface/TileSurfaceActions";
 import type { EventViewConfig } from "./EventViewConfig";
 
 type EventViewProps = {
