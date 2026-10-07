@@ -70,6 +70,15 @@ class EventWebSocketManager {
     this.statusHandlers.add(handler);
     this.ensureStarted();
 
+    // A subscriber may be added after the shared socket is already connected.
+    // Deliver the current status asynchronously so every EventState gets the
+    // same connection state without re-entering React subscription setup.
+    queueMicrotask(() => {
+      if (this.statusHandlers.has(handler)) {
+        handler(this.status);
+      }
+    });
+
     return () => {
       this.statusHandlers.delete(handler);
     };
