@@ -172,17 +172,50 @@ export default function RemoteMultiview({
     controller.getState,
   );
 
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
+  useEffect(() => {
+    if (role !== "display") return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() === "s" &&
+        !(event.target instanceof HTMLInputElement) &&
+        !(event.target instanceof HTMLTextAreaElement) &&
+        !(event.target instanceof HTMLSelectElement) &&
+        !(event.target instanceof HTMLButtonElement)
+      ) {
+        event.preventDefault();
+        setSettingsVisible(true);
+      }
+    };
+
+    const showSettingsButton = () => setSettingsVisible(true);
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousedown", showSettingsButton);
+    window.addEventListener("touchstart", showSettingsButton, { passive: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mousedown", showSettingsButton);
+      window.removeEventListener("touchstart", showSettingsButton);
+    };
+  }, [role]);
+
   return (
     <>
       <TileSurface controller={controller} className="fixed inset-0" />
-      <div className="pointer-events-auto fixed left-3 top-3 z-50">
-        <TileSurfaceSettingsView
-          state={displayState}
-          actions={controller.actions}
-          triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
-          triggerTitle="Multiview settings"
-        />
-      </div>
+      {settingsVisible ? (
+        <div className="pointer-events-auto fixed right-3 top-3 z-50">
+          <TileSurfaceSettingsView
+            state={displayState}
+            actions={controller.actions}
+            triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
+            triggerTitle="Multiview settings"
+          />
+        </div>
+      ) : null}
     </>
   );
 }
