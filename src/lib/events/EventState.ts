@@ -417,11 +417,6 @@ export class EventState {
       return;
     }
 
-    this.update((current) => ({
-      ...current,
-      websocketStale: true,
-    }));
-
     switch (message.messageType) {
       case "upcoming_match":
       case "match_score":
@@ -458,10 +453,6 @@ export class EventState {
 
     const timer = window.setTimeout(() => {
       this.authoritativeTimers.delete(refreshKey);
-      this.update((current) => ({
-        ...current,
-        websocketStale: false,
-      }));
 
       switch (message.messageType) {
         case "upcoming_match":
