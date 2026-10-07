@@ -66,7 +66,6 @@ class EventWebSocketManager {
 
   subscribeStatus(handler: StatusHandler): () => void {
     this.statusHandlers.add(handler);
-    handler(this.status);
     this.ensureStarted();
 
     return () => {
