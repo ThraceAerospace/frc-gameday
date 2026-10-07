@@ -16,6 +16,7 @@ export type EventViewCommand = {
 
 export type EventViewConfig = {
   trackedTeams: string[];
+  matchImminence: boolean;
   selectedStream: string | null;
   presentation: EventViewPresentation;
   footerMode: EventViewFooterMode;
@@ -26,6 +27,7 @@ export type EventViewConfig = {
 
 export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
   trackedTeams: [],
+  matchImminence: false,
   selectedStream: null,
   presentation: {
     teamTracker: "visible",
