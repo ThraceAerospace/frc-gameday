@@ -53,11 +53,11 @@ export default function EventFooter({
     <footer className="relative z-20 shrink-0">
       <div
         className={`pointer-events-auto absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
-          contentHidden ? "bottom-[3px]" : "bottom-full -mb-px"
+          contentHidden ? "bottom-2" : "bottom-full"
         }`}
       >
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-          <div className="relative z-30 flex translate-y-[5px] items-end gap-2 whitespace-nowrap leading-none">
+          <div className="relative z-30 flex items-end gap-2 whitespace-nowrap leading-none">
             <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
