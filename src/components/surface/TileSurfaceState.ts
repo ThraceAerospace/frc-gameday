@@ -14,7 +14,6 @@ export type TileSurfaceState = {
   layoutKey: LayoutKey | null;
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
-  autoFocusMatches: boolean;
   imminentMatchKey: string | null;
   preImminenceState: {
     activeKey: string | null;
@@ -55,8 +54,7 @@ export function createInitialTileSurfaceState(
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
-    autoFocusMatches: false,
-  imminentMatchKey: null,
+    imminentMatchKey: null,
   preImminenceState: null,
     eventPickerOpen: false,
     eventSearch: "",
