@@ -13,8 +13,7 @@ export type TileSurfaceActions = {
   showControls(): void;
   hideControls(): void;
 
-  setAutoFocusMatches(enabled: boolean): void;
-  handleMatchImminent(signal: string | MatchImminentSignal): void;
+  handleMatchImminent(signal: MatchImminentSignal): void;
 
   toggleActive(eventKey: string): void;
   clearActive(): void;
