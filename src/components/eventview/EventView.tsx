@@ -161,7 +161,9 @@ export default function EventView({
   const presentation = eventConfig.presentation;
 
   const refreshLiveData = useCallback(() => {
-    eventState?.reloadAll();
+    eventState?.reloadAlliances();
+    eventState?.reloadMatches();
+    eventState?.reloadStatuses();
   }, [eventState]);
 
   const wssConnected = websocketStatus === "connected";
