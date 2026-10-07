@@ -124,7 +124,6 @@ export default function RemoteMultiview({
         getState: localController.getState,
         replaceState: localController.replaceState,
         subscribe: localController.subscribe,
-        ingestWebSocketEvent: localController.ingestWebSocketEvent,
         actions: createRemoteMultiviewActions(
           localController,
           (action) => peer.sendAction(action),
