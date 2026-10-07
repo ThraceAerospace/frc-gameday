@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownIcon,
   ArrowPathIcon,
+  ArrowUturnRightIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
   ArrowUpIcon,
   Squares2X2Icon,
   UserGroupIcon,
@@ -124,11 +127,43 @@ function EventSettingsRow({
           </button>
           <button
             className="icon-button"
+            title={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
+            aria-label={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
+            onClick={() =>
+              actions.setEventViewConfig(eventKey, {
+                streamMuted: !(config?.streamMuted ?? true),
+              })
+            }
+          >
+            {config?.streamMuted ? <SpeakerXMarkIcon /> : <SpeakerWaveIcon />}
+          </button>
+          <label className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900 px-2 text-xs text-neutral-500 xl:border-0 xl:bg-transparent">
+            <span className="sr-only">Webcast volume</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={config?.streamVolume ?? 100}
+              onChange={(event) =>
+                actions.setEventViewConfig(eventKey, {
+                  streamVolume: Number(event.target.value),
+                })
+              }
+              className="w-20"
+              aria-label="Webcast volume"
+            />
+            <span className="w-8 text-right text-[10px] tabular-nums text-neutral-500">
+              {config?.streamVolume ?? 100}%
+            </span>
+          </label>
+          <button
+            className="icon-button"
             title="Reload webcast"
             aria-label="Reload webcast"
             onClick={() => actions.runEventViewCommand(eventKey, "reloadStream")}
           >
-            <ArrowPathIcon />
+            <ArrowUturnRightIcon />
           </button>
           <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
             <ArrowPathIcon />
