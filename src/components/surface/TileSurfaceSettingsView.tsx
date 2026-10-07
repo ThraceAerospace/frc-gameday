@@ -89,8 +89,24 @@ function EventSettingsRow({
     actions.setEventViewTrackedTeams(eventKey, next);
   };
 
+  const movePriority = (direction: -1 | 1) => {
+    const move = () => actions.movePriority(position, direction);
+    const transitionDocument = document as Document & {
+      startViewTransition?: (callback: () => void) => unknown;
+    };
+
+    if (transitionDocument.startViewTransition) {
+      transitionDocument.startViewTransition(move);
+    } else {
+      move();
+    }
+  };
+
   return (
-    <div className="rounded-xl border border-white/10 bg-neutral-950/60 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md sm:p-4">
+    <div
+      style={{ viewTransitionName: `event-card-${eventKey.replace(/[^a-zA-Z0-9_-]/g, "_")}` }}
+      className="rounded-xl border border-white/10 bg-neutral-950/60 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md sm:p-4"
+    >
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">
@@ -99,84 +115,88 @@ function EventSettingsRow({
           <div className="mt-1 text-[11px] text-neutral-500">{eventKey}</div>
         </div>
 
-        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:flex xl:shrink-0">
-          <label className="flex min-w-0 items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-500 xl:w-auto xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
-            <span className="truncate">Bottom Bar</span>
-            <select
-              value={config?.footerMode ?? "matchStrip"}
-              onChange={(event) =>
-                actions.setEventViewConfig(eventKey, {
-                  footerMode: event.target.value as EventViewFooterMode,
-                })
-              }
-              className="min-w-0 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none hover:border-neutral-700"
-              aria-label="Footer mode"
-            >
-              <option value="matchStrip">Matches</option>
-              <option value="rankings">Rankings</option>
-              <option value="split">Matches + Rankings</option>
-              <option value="hidden">Hidden</option>
-            </select>
-          </label>
+        <div className="flex min-w-0 flex-col gap-2 xl:shrink-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <label className="flex min-w-0 items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-500 xl:w-auto xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
+              <span className="truncate">Bottom Bar</span>
+              <select
+                value={config?.footerMode ?? "matchStrip"}
+                onChange={(event) =>
+                  actions.setEventViewConfig(eventKey, {
+                    footerMode: event.target.value as EventViewFooterMode,
+                  })
+                }
+                className="min-w-0 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none hover:border-neutral-700"
+                aria-label="Footer mode"
+              >
+                <option value="matchStrip">Matches</option>
+                <option value="rankings">Rankings</option>
+                <option value="split">Matches + Rankings</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </label>
+            <button className="icon-button" title="Track teams" aria-label="Track teams" onClick={() => setTeamsOpen(true)}>
+              <UserGroupIcon />
+            </button>
+            <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
+              <ArrowPathIcon />
+            </button>
+            <button onClick={() => movePriority(-1)} disabled={position === 0} className="icon-button disabled:opacity-30" title="Move up" aria-label="Move up">
+              <ArrowUpIcon />
+            </button>
+            <button onClick={() => movePriority(1)} disabled={position === state.priority.length - 1} className="icon-button disabled:opacity-30" title="Move down" aria-label="Move down">
+              <ArrowDownIcon />
+            </button>
+            <button onClick={() => actions.removeEvent(eventKey)} className="icon-button" title="Remove event" aria-label="Remove event">
+              <XMarkIcon />
+            </button>
+          </div>
 
-          <button className="icon-button" title="Track teams" aria-label="Track teams" onClick={() => setTeamsOpen(true)}>
-            <UserGroupIcon />
-          </button>
-          <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
-            <ArrowPathIcon />
-          </button>
-          <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}>
-            <VideoCameraIcon />
-          </button>
-          <button
-            className="icon-button"
-            title={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
-            aria-label={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
-            onClick={() =>
-              actions.setEventViewConfig(eventKey, {
-                streamMuted: !(config?.streamMuted ?? true),
-              })
-            }
-          >
-            {config?.streamMuted ? <SpeakerXMarkIcon /> : <SpeakerWaveIcon />}
-          </button>
-          <label className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900 px-2 text-xs text-neutral-500 xl:border-0 xl:bg-transparent">
-            <span className="sr-only">Webcast volume</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={config?.streamVolume ?? 100}
-              onChange={(event) =>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}>
+              <VideoCameraIcon />
+            </button>
+            <button
+              className="icon-button"
+              title={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
+              aria-label={config?.streamMuted ? "Unmute webcast" : "Mute webcast"}
+              onClick={() =>
                 actions.setEventViewConfig(eventKey, {
-                  streamVolume: Number(event.target.value),
+                  streamMuted: !(config?.streamMuted ?? true),
                 })
               }
-              className="w-20"
-              aria-label="Webcast volume"
-            />
-            <span className="w-8 text-right text-[10px] tabular-nums text-neutral-500">
-              {config?.streamVolume ?? 100}%
-            </span>
-          </label>
-          <button
-            className="icon-button"
-            title="Reload webcast"
-            aria-label="Reload webcast"
-            onClick={() => actions.runEventViewCommand(eventKey, "reloadStream")}
-          >
-            <ArrowUturnRightIcon />
-          </button>
-          <button onClick={() => actions.movePriority(position, -1)} disabled={position === 0} className="icon-button disabled:opacity-30" title="Move up" aria-label="Move up">
-            <ArrowUpIcon />
-          </button>
-          <button onClick={() => actions.movePriority(position, 1)} disabled={position === state.priority.length - 1} className="icon-button disabled:opacity-30" title="Move down" aria-label="Move down">
-            <ArrowDownIcon />
-          </button>
-          <button onClick={() => actions.removeEvent(eventKey)} className="icon-button" title="Remove event" aria-label="Remove event">
-            <XMarkIcon />
-          </button>
+            >
+              {config?.streamMuted ? <SpeakerXMarkIcon /> : <SpeakerWaveIcon />}
+            </button>
+            <label className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900 px-2 text-xs text-neutral-500 xl:border-0 xl:bg-transparent">
+              <span className="sr-only">Webcast volume</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={config?.streamVolume ?? 100}
+                onChange={(event) =>
+                  actions.setEventViewConfig(eventKey, {
+                    streamVolume: Number(event.target.value),
+                  })
+                }
+                className="w-61"
+                aria-label="Webcast volume"
+              />
+              <span className="w-8 text-right text-[10px] tabular-nums text-neutral-500">
+                {config?.streamVolume ?? 100}%
+              </span>
+            </label>
+            <button
+              className="icon-button"
+              title="Reload webcast"
+              aria-label="Reload webcast"
+              onClick={() => actions.runEventViewCommand(eventKey, "reloadStream")}
+            >
+              <ArrowUturnRightIcon />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -198,12 +218,12 @@ function EventSettingsRow({
               aria-label="Highlight imminent match"
               title="Highlight this event when its next match is also a tracked team's next match"
             />
-            <span>Imminent</span>
+            <span>Auto Highlight</span>
           </label>
           {trackedTeams.length > 0 ? (
             trackedTeams.map((team) => (
               <span key={team} className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] text-neutral-300">
-                {team}
+                {team.replace(/^frc/i, "")}
               </span>
             ))
           ) : (
