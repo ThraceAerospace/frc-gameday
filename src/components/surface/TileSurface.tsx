@@ -4,8 +4,8 @@ import { useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
-import type { TileSurfaceController } from "./MultiviewActions";
-import type { MultiviewState } from "./MultiviewState";
+import type { TileSurfaceController } from "./TileSurfaceActions";
+import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
 
 type TileSurfaceProps = {
@@ -15,7 +15,7 @@ type TileSurfaceProps = {
   renderEventView?: (args: {
     eventKey: string;
     controller: TileSurfaceController;
-    config: MultiviewState["eventConfigs"][string] | undefined;
+    config: TileSurfaceState["eventConfigs"][string] | undefined;
     slotPresentation: EventViewPresentation;
   }) => ReactNode;
 };
