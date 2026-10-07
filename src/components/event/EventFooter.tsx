@@ -54,7 +54,7 @@ export default function EventFooter({
       <div className="relative">
         <div
           className={`pointer-events-auto absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
-            contentHidden ? "bottom-2" : "bottom-full"
+            contentHidden ? "bottom-0 translate-y-0" : "bottom-full translate-y-[1px]"
           }`}
         >
           <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-1 shadow-lg">
