@@ -59,6 +59,7 @@ export class EventState {
   private readonly listeners = new Set<Listener>();
 
   private started = false;
+  private startScheduled = false;
   private stopped = false;
   private unsubscribeWebSocket: (() => void) | null = null;
   private unsubscribeWebSocketStatus: (() => void) | null = null;
@@ -85,7 +86,18 @@ export class EventState {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    this.start();
+
+    if (!this.started && !this.startScheduled) {
+      this.startScheduled = true;
+
+      queueMicrotask(() => {
+        this.startScheduled = false;
+
+        if (this.listeners.size > 0 && !this.started) {
+          this.start();
+        }
+      });
+    }
 
     return () => {
       this.listeners.delete(listener);
