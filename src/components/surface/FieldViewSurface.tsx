@@ -29,7 +29,7 @@ export default function FieldViewSurface({
   controller,
 }: FieldViewSurfaceProps) {
   const router = useRouter();
-  const multiviewController = useTileSurfaceController({
+  const tileSurfaceController = useTileSurfaceController({
     events,
     controller,
   });
