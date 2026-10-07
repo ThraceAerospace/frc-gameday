@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { SignalIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
