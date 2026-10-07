@@ -225,3 +225,10 @@ class EventWebSocketManager {
 }
 
 export const eventWebSocket = new EventWebSocketManager();
+
+
+export function subscribeEventWebSocketStatus(
+  handler: StatusHandler,
+): () => void {
+  return eventWebSocket.subscribeStatus(handler);
+}
