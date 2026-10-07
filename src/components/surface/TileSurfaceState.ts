@@ -29,11 +29,16 @@ export type TileSurfaceState = {
   priorityEditKey: string | null;
 };
 
-export type MatchImminentSignal = {
-  type: "match_imminent";
-  matchKey: string;
-  severity: "hard" | "soft";
-};
+export type MatchImminentSignal =
+  | {
+      type: "match_imminent";
+      matchKey: string;
+      severity: "hard" | "soft";
+    }
+  | {
+      type: "match_no_longer_imminent";
+      matchKey: string;
+    };
 
 export function createInitialTileSurfaceState(
   events: string[]
