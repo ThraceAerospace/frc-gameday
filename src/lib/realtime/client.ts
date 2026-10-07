@@ -117,7 +117,7 @@ class EventWebSocketManager {
       window.location.protocol === "https:" ? "wss:" : "ws:";
 
     const socket = new WebSocket(
-      `${protocol}//${window.location.host}/api/ws`,
+      `${protocol}//${process.env.NEXT_PUBLIC_REMOTE_WEBSOCKET_URL || window.location.host}/api/ws`,
     );
 
     this.socket = socket;
