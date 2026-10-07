@@ -283,6 +283,8 @@ export default function EventView({
           <StreamView
             stream={activeStream}
             reloadKey={streamReloadKey}
+            muted={eventConfig.streamMuted}
+            volume={eventConfig.streamVolume}
           />
 
           {!activeStream && (
