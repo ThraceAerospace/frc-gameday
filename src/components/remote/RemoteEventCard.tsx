@@ -29,7 +29,13 @@ type Props = {
 };
 
 export default function RemoteEventCard({ eventKey, position, state, actions }: Props) {
-  const { event, matches, eventNextMatch } = useEventState(eventKey);
+  const {
+    event,
+    matches,
+    eventNextMatch,
+    websocketStatus,
+    websocketStale,
+  } = useEventState(eventKey);
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
@@ -64,7 +70,28 @@ export default function RemoteEventCard({ eventKey, position, state, actions }: 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-base font-semibold">
-            {event?.name?.replace(" - FIRST Robotics Competition", "") ?? eventKey}
+            <span className="flex items-center gap-1.5">
+              <span
+                className={
+                  "h-1.5 w-1.5 shrink-0 rounded-full " +
+                  (websocketStatus === "connected"
+                    ? websocketStale
+                      ? "bg-blue-700"
+                      : "bg-green-500"
+                    : "bg-neutral-600")
+                }
+                title={
+                  websocketStatus !== "connected"
+                    ? "Live updates disconnected"
+                    : websocketStale
+                      ? "WebSocket quiet; using TBA fallback polling"
+                      : "Live updates connected"
+                }
+              />
+              <span className="truncate">
+                {event?.name?.replace(" - FIRST Robotics Competition", "") ?? eventKey}
+              </span>
+            </span>
           </div>
           <div className="mt-1 truncate text-xs text-neutral-500">{eventKey}</div>
         </div>
