@@ -7,7 +7,7 @@ import type { TileSurfaceController } from "./TileSurfaceActions";
 
 import { useRouter } from "next/navigation";
 
-import { useTileSurfaceController, useMultiviewKeyboard } from "./TileSurfaceController";
+import { useTileSurfaceController, useTileSurfaceKeyboard } from "./TileSurfaceController";
 
 import {
   HomeIcon,
@@ -40,7 +40,7 @@ export default function FieldViewSurface({
   );
   const actions = multiviewController.actions;
 
-  useMultiviewKeyboard(state, actions);
+  useTileSurfaceKeyboard(state, actions);
 
   return (
     <div
