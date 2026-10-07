@@ -3,8 +3,8 @@
 import { useEventState } from "@/lib/events";
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
-import type { MultiviewActions } from "@/components/multiview/MultiviewActions";
-import type { MultiviewState } from "@/components/multiview/MultiviewState";
+import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
+import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { TBAMatch } from "@/lib/tba/types";
 
 function teamNumber(teamKey: string) {
@@ -24,8 +24,8 @@ function formatMatchTime(match: TBAMatch) {
 type Props = {
   eventKey: string;
   position: number;
-  state: MultiviewState;
-  actions: MultiviewActions;
+  state: TileSurfaceState;
+  actions: TileSurfaceActions;
 };
 
 export default function RemoteEventCard({ eventKey, position, state, actions }: Props) {
