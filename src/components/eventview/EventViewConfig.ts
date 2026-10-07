@@ -19,6 +19,8 @@ export type EventViewConfig = {
   selectedStream: string | null;
   presentation: EventViewPresentation;
   footerMode: EventViewFooterMode;
+  streamMuted: boolean;
+  streamVolume: number;
   command: EventViewCommand | null;
 };
 
@@ -31,6 +33,8 @@ export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
   },
   command: null,
   footerMode: "matchStrip",
+  streamMuted: true,
+  streamVolume: 100,
 };
 
 export function createEventViewConfig(
