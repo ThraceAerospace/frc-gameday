@@ -9,6 +9,7 @@ import {
   createRemoteMultiviewActions,
   applyRemoteMultiviewAction,
   type RemoteMultiviewMessage,
+  type RemoteSurfaceState,
 } from "@/lib/remote/actions";
 import {
   RemotePeer,
@@ -69,13 +70,10 @@ export default function RemoteMultiview({
 
             localControllerRef.current.replaceState({
               ...message.state,
-              availableEvents: current.availableEvents,
-              eventsLoading: current.eventsLoading,
-              // UI-only settings state belongs to this controller instance.
-              // Do not let the authoritative display snapshot close the
-              // remote event picker or overwrite its local search state.
               eventPickerOpen: current.eventPickerOpen,
               eventSearch: current.eventSearch,
+              availableEvents: current.availableEvents,
+              eventsLoading: current.eventsLoading,
               controlsVisible: current.controlsVisible,
               priorityEditKey: current.priorityEditKey,
             });
@@ -92,17 +90,36 @@ export default function RemoteMultiview({
 
       const state = localControllerRef.current.getState();
 
+      const {
+        eventPickerOpen,
+        eventSearch,
+        availableEvents,
+        eventsLoading,
+        controlsVisible,
+        priorityEditKey,
+        ...surfaceState
+      } = state;
+
+      void eventPickerOpen;
+      void eventSearch;
+      void availableEvents;
+      void eventsLoading;
+      void controlsVisible;
+      void priorityEditKey;
+
+      const snapshot: RemoteSurfaceState = {
+        ...surfaceState,
+        eventConfigs: Object.fromEntries(
+          Object.entries(surfaceState.eventConfigs).map(([eventKey, config]) => [
+            eventKey,
+            { ...config, command: null },
+          ]),
+        ),
+      };
+
       peerRef.current?.sendMessage({
         type: "stateSnapshot",
-        state: {
-          ...state,
-          eventConfigs: Object.fromEntries(
-            Object.entries(state.eventConfigs).map(([eventKey, config]) => [
-              eventKey,
-              { ...config, command: null },
-            ]),
-          ),
-        },
+        state: snapshot,
       });
     },
     [role],
