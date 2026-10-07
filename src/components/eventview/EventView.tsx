@@ -141,17 +141,10 @@ export default function EventView({
     : matches;
 
   useMatchImminence(
-    teamMode
-      ? trackedNextMatch
-      : null,
-    (signal) => {
-      if (
-        signal?.type ===
-        "match_imminent"
-      ) {
-        controller.actions.handleMatchImminent(signal);
-      }
-    },
+    eventNextMatch,
+    trackedNextMatch,
+    Boolean(eventConfig.matchImminence && teamMode),
+    controller.actions.handleMatchImminent,
   );
 
   const teamPills = trackedTeams.map((team) => (
