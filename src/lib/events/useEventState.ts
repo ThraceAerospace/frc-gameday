@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  useEffect,
+  useCallback,
   useSyncExternalStore,
 } from "react";
 import {
@@ -41,27 +41,27 @@ export function useEventState(eventKey: string) {
     ? getEventState(eventKey)
     : null;
 
-  const snapshot = useSyncExternalStore(
-    (listener) =>
+  const subscribe = useCallback(
+    (listener: () => void) =>
       state
         ? state.subscribe(listener)
         : () => {},
+    [state],
+  );
+
+  const getSnapshot = useCallback(
     () =>
       state
         ? state.getSnapshot()
         : EMPTY_SNAPSHOT,
-    () => EMPTY_SNAPSHOT,
+    [state],
   );
 
-  useEffect(() => {
-    if (!state) {
-      return;
-    }
-
-    return () => {
-      state.stop();
-    };
-  }, [state]);
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => EMPTY_SNAPSHOT,
+  );
 
   return {
     state,
