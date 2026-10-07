@@ -1,12 +1,12 @@
 import type { TBAEvent } from "@/lib/tba/types";
-import type { MatchImminentSignal, MultiviewState } from "@/components/multiview/MultiviewState";
+import type { MatchImminentSignal, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
-import type { MultiviewActions, MultiviewController } from "@/components/multiview/MultiviewActions";
+import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 
 export type RemoteMultiviewMessage =
   | { type: "action"; action: RemoteMultiviewAction }
   | { type: "requestState" }
-  | { type: "stateSnapshot"; state: MultiviewState };
+  | { type: "stateSnapshot"; state: TileSurfaceState };
 
 export type RemoteMultiviewAction =
   | { type: "showControls" }
@@ -15,7 +15,7 @@ export type RemoteMultiviewAction =
   | { type: "handleMatchImminent"; signal: string | MatchImminentSignal }
   | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
-  | { type: "setLayout"; layoutKey: MultiviewState["layoutKey"] }
+  | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
   | { type: "resetLayout" }
   | { type: "movePriority"; position: number; direction: -1 | 1 }
   | { type: "selectPriorityEdit"; eventKey: string | null }
@@ -33,10 +33,10 @@ export type RemoteMultiviewAction =
   | { type: "runEventViewCommand"; eventKey: string; commandType: EventViewCommandType }
   | { type: "clearEventViewCommand"; eventKey: string };
 
-export function createRemoteMultiviewActions(
-  localController: MultiviewController,
+export function createRemoteTileSurfaceActions(
+  localController: TileSurfaceController,
   send: (action: RemoteMultiviewAction) => void,
-): MultiviewActions {
+): TileSurfaceActions {
   const local = localController.actions;
 
   return {
@@ -67,7 +67,7 @@ export function createRemoteMultiviewActions(
 }
 
 export function applyRemoteMultiviewAction(
-  controller: MultiviewController,
+  controller: TileSurfaceController,
   action: RemoteMultiviewAction,
 ) {
   const actions = controller.actions;
