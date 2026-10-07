@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import MultiviewStage from "@/components/multiview/MultiviewStage";
-import MultiviewSettings from "@/components/multiview/MultiviewSettings";
-import { useMultiviewController } from "@/components/multiview/MultiviewController";
-import type { MultiviewController } from "@/components/multiview/MultiviewActions";
+import TileSurface from "@/components/surface/TileSurface";
+import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
+import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
+import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import {
   createRemoteMultiviewActions,
   applyRemoteMultiviewAction,
@@ -33,7 +33,7 @@ export default function RemoteMultiview({
   onStatus,
   onSignalingStatus,
 }: Props) {
-  const localController = useMultiviewController({ events });
+  const localController = useTileSurfaceController({ events });
   const localControllerRef = useRef(localController);
   localControllerRef.current = localController;
   const peerRef = useRef<RemotePeer | null>(null);
@@ -118,7 +118,7 @@ export default function RemoteMultiview({
     });
   }, [localController, role, sendDisplayState]);
 
-  const controller = useMemo<MultiviewController>(() => {
+  const controller = useMemo<TileSurfaceController>(() => {
     if (role === "controller") {
       return {
         getState: localController.getState,
@@ -154,9 +154,9 @@ export default function RemoteMultiview({
 
   return (
     <>
-      <MultiviewStage controller={controller} className="fixed inset-0" />
+      <TileSurface controller={controller} className="fixed inset-0" />
       <div className="pointer-events-auto fixed left-3 top-3 z-50">
-        <MultiviewSettings
+        <TileSurfaceSettingsView
           state={displayState}
           actions={controller.actions}
           triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
