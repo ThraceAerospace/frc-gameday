@@ -2,13 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 import { Cog6ToothIcon, SignalIcon } from "@heroicons/react/24/outline";
-import type { MultiviewController } from "@/components/multiview/MultiviewActions";
-import MultiviewSettings from "@/components/multiview/MultiviewSettings";
+import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
+import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
 type Props = {
-  controller: MultiviewController;
+  controller: TileSurfaceController;
   peerStatus: RemotePeerStatus;
 };
 
@@ -31,7 +31,7 @@ export default function RemoteSurface({ controller, peerStatus }: Props) {
             </div>
           </div>
           <div className="shrink-0">
-            <MultiviewSettings state={state} actions={controller.actions} />
+            <TileSurfaceSettingsView state={state} actions={controller.actions} />
           </div>
         </div>
       </header>
