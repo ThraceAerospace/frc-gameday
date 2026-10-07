@@ -122,6 +122,9 @@ function EventSettingsRow({
           <button className="icon-button" title="Track teams" aria-label="Track teams" onClick={() => setTeamsOpen(true)}>
             <UserGroupIcon />
           </button>
+          <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
+            <ArrowPathIcon />
+          </button>
           <button className="icon-button" title="Choose webcast" aria-label="Choose webcast" onClick={() => setStreamsOpen(true)}>
             <VideoCameraIcon />
           </button>
@@ -164,9 +167,6 @@ function EventSettingsRow({
             onClick={() => actions.runEventViewCommand(eventKey, "reloadStream")}
           >
             <ArrowUturnRightIcon />
-          </button>
-          <button className="icon-button" title="Refresh live data" aria-label="Refresh live data" onClick={() => actions.runEventViewCommand(eventKey, "refresh")}>
-            <ArrowPathIcon />
           </button>
           <button onClick={() => actions.movePriority(position, -1)} disabled={position === 0} className="icon-button disabled:opacity-30" title="Move up" aria-label="Move up">
             <ArrowUpIcon />
@@ -308,7 +308,7 @@ export default function TileSurfaceSettingsView({
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6">
-        <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">
+        <div className="mx-auto grid w-full h-full grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">
           <section className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-neutral-900/65 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] xl:col-span-3 xl:max-h-[calc(100vh-132px)]">
             <div className="mb-3">
               <h2 className="text-sm font-semibold">Layout</h2>
