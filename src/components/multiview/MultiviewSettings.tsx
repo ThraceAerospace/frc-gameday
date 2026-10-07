@@ -16,9 +16,7 @@ import type { MultiviewActions } from "./MultiviewActions";
 import type { MultiviewState } from "./MultiviewState";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import { buildStreams, type BuiltStream } from "@/lib/gameday/buildStreams";
-import { useEvent } from "@/components/eventview/hooks/useEvent";
-import { useTeams } from "@/components/eventview/hooks/useTeams";
-import { useTeamsStatuses } from "@/components/eventview/hooks/useTeamsStatuses";
+import { useEventState } from "@/lib/events";
 import StreamModal from "@/components/eventview/StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 
@@ -42,9 +40,7 @@ function EventSettingsRow({
   state: MultiviewState;
   actions: MultiviewActions;
 }) {
-  const { event } = useEvent(eventKey);
-  const { teams } = useTeams(eventKey);
-  const { teamsStatuses } = useTeamsStatuses(eventKey);
+  const { event, teams, teamsStatuses } = useEventState(eventKey);
   const [streams, setStreams] = useState<BuiltStream[]>([]);
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [streamsOpen, setStreamsOpen] = useState(false);
