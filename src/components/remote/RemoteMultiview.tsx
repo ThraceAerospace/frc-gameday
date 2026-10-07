@@ -173,6 +173,7 @@ export default function RemoteMultiview({
   );
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsButtonVisible, setSettingsButtonVisible] = useState(false);
 
   useEffect(() => {
     if (role !== "display") return;
@@ -190,7 +191,7 @@ export default function RemoteMultiview({
       }
     };
 
-    const showSettingsButton = () => setSettingsOpen(false);
+    const showSettingsButton = () => setSettingsButtonVisible(true);
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("mousedown", showSettingsButton);
@@ -207,16 +208,18 @@ export default function RemoteMultiview({
   return (
     <>
       <TileSurface controller={controller} className="fixed inset-0" />
-      <div className="pointer-events-auto fixed right-3 top-3 z-50">
-        <TileSurfaceSettingsView
+      {settingsButtonVisible ? (
+        <div className="pointer-events-auto fixed right-3 top-3 z-50">
+          <TileSurfaceSettingsView
           state={displayState}
           actions={controller.actions}
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
           triggerTitle="Multiview settings"
-        />
-      </div>
+          />
+        </div>
+      ) : null}
     </>
   );
 }
