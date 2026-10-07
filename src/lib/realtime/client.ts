@@ -39,6 +39,8 @@ class EventWebSocketManager {
 
     handlers.add(handler);
 
+    console.debug("[EventWebSocket] Subscribe:", eventKey);
+
     this.ensureStarted();
     this.send({
       type: "subscribe",
@@ -107,6 +109,8 @@ class EventWebSocketManager {
       return;
     }
 
+    console.debug("[EventWebSocket] Connecting");
+
     this.setStatus("connecting");
 
     const protocol =
@@ -125,6 +129,7 @@ class EventWebSocketManager {
 
       this.reconnectDelay = 1000;
       this.setStatus("connected");
+      console.debug("[EventWebSocket] Connected");
 
       for (const eventKey of this.handlers.keys()) {
         this.send({
@@ -142,6 +147,8 @@ class EventWebSocketManager {
       try {
         const message =
           JSON.parse(event.data) as EventWebSocketMessage;
+
+        console.debug("[EventWebSocket] Message received:", message);
 
         if (message.eventKey) {
           for (const handler of this.handlers.get(message.eventKey) ?? []) {
@@ -176,6 +183,7 @@ class EventWebSocketManager {
 
       this.socket = null;
       this.setStatus("disconnected");
+      console.debug("[EventWebSocket] Disconnected");
 
       if (this.reconnectTimer !== null) {
         return;
@@ -202,6 +210,7 @@ class EventWebSocketManager {
       return;
     }
 
+    console.debug("[EventWebSocket] Send:", message);
     this.socket.send(JSON.stringify(message));
   }
 }
