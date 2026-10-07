@@ -172,7 +172,7 @@ export default function RemoteMultiview({
     controller.getState,
   );
 
-  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (role !== "display") return;
@@ -186,11 +186,11 @@ export default function RemoteMultiview({
         !(event.target instanceof HTMLButtonElement)
       ) {
         event.preventDefault();
-        setSettingsVisible(true);
+        setSettingsOpen(true);
       }
     };
 
-    const showSettingsButton = () => setSettingsVisible(true);
+    const showSettingsButton = () => setSettingsOpen(false);
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("mousedown", showSettingsButton);
@@ -203,19 +203,20 @@ export default function RemoteMultiview({
     };
   }, [role]);
 
+
   return (
     <>
       <TileSurface controller={controller} className="fixed inset-0" />
-      {settingsVisible ? (
-        <div className="pointer-events-auto fixed right-3 top-3 z-50">
-          <TileSurfaceSettingsView
-            state={displayState}
-            actions={controller.actions}
-            triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
-            triggerTitle="Multiview settings"
-          />
-        </div>
-      ) : null}
+      <div className="pointer-events-auto fixed right-3 top-3 z-50">
+        <TileSurfaceSettingsView
+          state={displayState}
+          actions={controller.actions}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
+          triggerTitle="Multiview settings"
+        />
+      </div>
     </>
   );
 }
