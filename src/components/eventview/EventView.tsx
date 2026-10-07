@@ -21,13 +21,13 @@ import type { BuiltStream } from "@/lib/gameday/buildStreams";
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
-import type { MultiviewController } from "../multiview/MultiviewActions";
+import type { TileSurfaceController } from "../multiview/MultiviewActions";
 import type { EventViewConfig } from "./EventViewConfig";
 
 type EventViewProps = {
   event: string;
   config: EventViewConfig;
-  controller: MultiviewController;
+  controller: TileSurfaceController;
   isDivisional?: boolean;
   slotPresentation?: {
     teamTracker: "visible" | "hidden";
