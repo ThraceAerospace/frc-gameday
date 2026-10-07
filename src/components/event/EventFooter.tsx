@@ -50,14 +50,22 @@ export default function EventFooter({
   const contentHidden = mode === "hidden" || multiviewHidden;
 
   return (
-    <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-      <div className="relative">
+    <footer
+      className={`pointer-events-none z-20 w-full ${
+        contentHidden
+          ? "absolute inset-x-0 bottom-0"
+          : "relative shrink-0"
+      }`}
+    >
+      <div className={`relative ${contentHidden ? "h-0" : ""}`}>
         <div
-          className={`pointer-events-auto absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
-            contentHidden ? "bottom-0 translate-y-0" : "bottom-full translate-y-[1px]"
+          className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+            contentHidden
+              ? "bottom-0 left-0"
+              : "bottom-full left-0 translate-y-[1px]"
           }`}
         >
-          <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-1 shadow-lg">
+          <div className={`shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg`}>
             <div className="flex items-end gap-2 whitespace-nowrap leading-none">
               <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
                 <span
@@ -91,9 +99,11 @@ export default function EventFooter({
         </div>
 
         <div
-          className={`pointer-events-auto transition-transform duration-200 ${
-            contentHidden ? "translate-y-full" : "translate-y-0"
-          }`}
+          className={`pointer-events-auto ${
+            contentHidden
+              ? "absolute inset-x-0 bottom-0 translate-y-full"
+              : "relative translate-y-0"
+          } transition-transform duration-200`}
         >
           <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
             {mode === "rankings" ? (
