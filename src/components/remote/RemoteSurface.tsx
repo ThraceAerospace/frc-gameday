@@ -1,10 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Cog6ToothIcon, SignalIcon } from "@heroicons/react/24/outline";
-import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
-import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
-import RemoteEventCard from "./RemoteEventCard";
+import { useSyncExternalStore } from "react";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import {
   subscribeEventWebSocketStatus,
@@ -41,23 +37,9 @@ export default function RemoteSurface({ controller, peerStatus }: Props) {
               {peerStatus === "connected" ? "Connected" : "Connecting…"}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-neutral-500" title={
-              websocketStatus === "connected"
-                ? "Live updates connected"
-                : websocketStatus === "connecting"
-                  ? "Connecting to live updates"
-                  : "Live updates disconnected"
-            }>
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                websocketStatus === "connected"
-                  ? "bg-green-500"
-                  : websocketStatus === "connecting"
-                    ? "bg-yellow-500"
-                    : "bg-neutral-600"
-              }`} />
-              <span className="hidden sm:inline">Live</span>
-            </div>
+          <div className="shrink-0">
+            <TileSurfaceSettingsView state={state} actions={controller.actions} />
+          </div>
             <TileSurfaceSettingsView state={state} actions={controller.actions} />
           </div>
         </div>
