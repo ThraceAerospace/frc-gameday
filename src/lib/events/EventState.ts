@@ -87,8 +87,6 @@ export class EventState {
     this.listeners.add(listener);
     this.start();
 
-    listener(this.snapshot);
-
     return () => {
       this.listeners.delete(listener);
 
