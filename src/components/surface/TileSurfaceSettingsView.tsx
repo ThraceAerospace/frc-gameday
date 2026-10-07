@@ -365,26 +365,7 @@ export default function TileSurfaceSettingsView({
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-neutral-900/65 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] xl:col-span-3 xl:max-h-[calc(100vh-132px)]">
-            <div className="mb-3">
-              <h2 className="text-sm font-semibold">Behavior</h2>
-              <p className="mt-1 text-xs leading-5 text-neutral-500">Configure automatic Multiview behavior.</p>
-            </div>
-            <label className="flex cursor-pointer items-start justify-between gap-3 rounded-xl border border-neutral-800 bg-neutral-950 p-3">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-white">Focus imminent matches</div>
-                <div className="mt-1 text-[10px] leading-4 text-neutral-500">
-                  Automatically highlight an event when a tracked team&apos;s match is approaching.
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={state.autoFocusMatches}
-                onChange={(event) => actions.setAutoFocusMatches(event.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0"
-              />
-            </label>
-          </section>
+
         </div>
       </main>
 
