@@ -99,10 +99,11 @@ export class EventState {
   }
 
   start() {
-    if (this.started || this.stopped || !this.eventKey) {
+    if (this.started || !this.eventKey) {
       return;
     }
 
+    this.stopped = false;
     this.started = true;
 
     this.unsubscribeWebSocket =
