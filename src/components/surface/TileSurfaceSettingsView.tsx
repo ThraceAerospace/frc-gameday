@@ -362,7 +362,10 @@ export default function TileSurfaceSettingsView({
                       {filteredEvents.map((event) => (
                         <button
                           key={event.key}
-                          onClick={() => actions.addEvent(event)}
+                          onClick={() => {
+                            actions.addEvent(event);
+                            actions.closeEventPicker();
+                          }}
                           className="w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-neutral-800"
                         >
                           <div className="truncate text-sm font-semibold">{event.name ?? event.short_name ?? event.key}</div>
