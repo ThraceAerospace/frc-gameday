@@ -15,19 +15,14 @@ import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
+import { useEventState } from "@/lib/events";
 import type { BuiltStream } from "@/lib/gameday/buildStreams";
 
-import { useEvent } from "./hooks/useEvent";
-import { useTeams } from "./hooks/useTeams";
-import { useTeamsStatuses } from "./hooks/useTeamsStatuses";
-import { usePlayoffAlliances } from "./hooks/usePlayoffAlliances";
-import { useMatches } from "./hooks/useMatches";
+
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
-import { useWebSocket } from "./hooks/useWebSocket";
 import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
 import type { MultiviewController } from "../multiview/MultiviewActions";
-import type { WebSocketEvent } from "./hooks/useWebSocket";
 import type { EventViewConfig } from "./EventViewConfig";
 
 type EventViewProps = {
@@ -50,33 +45,31 @@ export default function EventView({
   slotPresentation,
 }: EventViewProps) {
   const {
+    state: eventState,
     event: eventData,
-    loading,
-    error,
-  } = useEvent(event);
-
-  const { teams } = useTeams(event);
-
-  const {
-    teamsStatuses,
-    reload: reloadStatuses,
-  } = useTeamsStatuses(event);
-
-  const {
-    alliances,
-    reload: reloadAlliances,
-  } = usePlayoffAlliances(event);
-
-  const [webSocketStale, setWebSocketStale] = useState(false);
-  const websocketRefreshTimersRef =
-    useRef<Map<string, number>>(new Map());
-
-  const {
+    teams,
     matches,
     eventNextMatch,
     eventLastMatch,
-    reload: reloadMatches,
-  } = useMatches(event, () => setWebSocketStale(true));
+    teamsStatuses,
+    alliances,
+    loading,
+    error,
+    websocketStatus,
+    websocketStale: webSocketStale,
+  } = useEventState(event);
+
+  const reloadMatches = useCallback(() => {
+    eventState?.reloadMatches();
+  }, [eventState]);
+
+  const reloadStatuses = useCallback(() => {
+    eventState?.reloadStatuses();
+  }, [eventState]);
+
+  const reloadAlliances = useCallback(() => {
+    eventState?.reloadAlliances();
+  }, [eventState]);
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode;
@@ -186,98 +179,11 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
-  const refreshLiveData =
-    useCallback(() => {
-      void reloadAlliances();
-      void reloadMatches();
-      void reloadStatuses();
-    }, [
-      reloadMatches,
-      reloadAlliances,
-      reloadStatuses,
-    ]);
+  const refreshLiveData = useCallback(() => {
+    eventState?.reloadAll();
+  }, [eventState]);
 
-  const handleWebSocketEvent = useCallback(
-    (message: WebSocketEvent) => {
-      if (message.type !== "tba-update") {
-        return;
-      }
-
-      if (message.eventKey && message.eventKey !== event) {
-        return;
-      }
-
-      setWebSocketStale(true);
-
-      const handlers = {
-        refreshMatches: () => {
-          void reloadMatches();
-        },
-        refreshStatuses: () => {
-          void reloadStatuses();
-        },
-        refreshAlliances: () => {
-          void reloadAlliances();
-        },
-        refreshAll: refreshLiveData,
-      };
-
-      /*
-       * The webhook has already mutated Redis before the WSS
-       * broadcast is sent. Refetch Redis immediately so the UI
-       * gets the webhook payload without waiting for TBA.
-       *
-       * Then debounce the same authoritative TBA refetch for
-       * 65 seconds. This gives TBA's upstream API time to catch
-       * up before the client asks it for the authoritative
-       * representation. Redis TTLs are never modified here.
-       */
-      controller.ingestWebSocketEvent(message, handlers);
-
-      const refreshKey = message.messageType ?? message.type;
-      const existingTimer =
-        websocketRefreshTimersRef.current.get(refreshKey);
-
-      if (existingTimer !== undefined) {
-        window.clearTimeout(existingTimer);
-      }
-
-      const timer = window.setTimeout(() => {
-        websocketRefreshTimersRef.current.delete(refreshKey);
-        setWebSocketStale(false);
-        controller.ingestWebSocketEvent(message, handlers);
-      }, 65_000);
-
-      websocketRefreshTimersRef.current.set(
-        refreshKey,
-        timer,
-      );
-    },
-    [
-      controller,
-      event,
-      refreshLiveData,
-      reloadAlliances,
-      reloadMatches,
-      reloadStatuses,
-    ],
-  );
-
-  useEffect(() => {
-    const timers = websocketRefreshTimersRef.current;
-
-    return () => {
-      for (const timer of timers.values()) {
-        window.clearTimeout(timer);
-      }
-
-      timers.clear();
-    };
-  }, []);
-
-  const {
-    connected: wssConnected,
-  } = useWebSocket(event, handleWebSocketEvent);
+  const wssConnected = websocketStatus === "connected";
 
   useEffect(() => {
     const command = eventConfig.command;
