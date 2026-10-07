@@ -22,7 +22,6 @@ export type RemoteMultiviewMessage =
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteMultiviewAction =
-  | { type: "setAutoFocusMatches"; enabled: boolean }
   | { type: "handleMatchImminent"; signal: string | MatchImminentSignal }
   | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
@@ -49,7 +48,6 @@ export function createRemoteMultiviewActions(
   return {
     showControls() { local.showControls(); },
     hideControls() { local.hideControls(); },
-    setAutoFocusMatches(enabled) { local.setAutoFocusMatches(enabled); send({ type: "setAutoFocusMatches", enabled }); },
     handleMatchImminent(signal) { local.handleMatchImminent(signal); send({ type: "handleMatchImminent", signal }); },
     toggleActive(eventKey) { local.toggleActive(eventKey); send({ type: "toggleActive", eventKey }); },
     clearActive() { local.clearActive(); send({ type: "clearActive" }); },
@@ -80,7 +78,6 @@ export function applyRemoteMultiviewAction(
   const actions = controller.actions;
 
   switch (action.type) {
-    case "setAutoFocusMatches": actions.setAutoFocusMatches(action.enabled); break;
     case "handleMatchImminent": actions.handleMatchImminent(action.signal); break;
     case "toggleActive": actions.toggleActive(action.eventKey); break;
     case "clearActive": actions.clearActive(); break;
