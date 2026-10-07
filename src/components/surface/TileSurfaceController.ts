@@ -433,7 +433,6 @@ export function useTileSurfaceController({
             ...next.eventConfigs,
             [eventKey]: createEventViewConfig(),
           },
-          eventPickerOpen: false,
         }));
 
         updateUrl(nextStreams);
