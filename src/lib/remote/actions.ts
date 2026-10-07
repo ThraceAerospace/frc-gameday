@@ -3,14 +3,25 @@ import type { MatchImminentSignal, TileSurfaceState } from "@/components/surface
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 
+type TileSurfaceUiState =
+  | "eventPickerOpen"
+  | "eventSearch"
+  | "availableEvents"
+  | "eventsLoading"
+  | "controlsVisible"
+  | "priorityEditKey";
+
+export type RemoteSurfaceState = Omit<
+  TileSurfaceState,
+  TileSurfaceUiState
+>;
+
 export type RemoteMultiviewMessage =
   | { type: "action"; action: RemoteMultiviewAction }
   | { type: "requestState" }
-  | { type: "stateSnapshot"; state: TileSurfaceState };
+  | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteMultiviewAction =
-  | { type: "showControls" }
-  | { type: "hideControls" }
   | { type: "setAutoFocusMatches"; enabled: boolean }
   | { type: "handleMatchImminent"; signal: string | MatchImminentSignal }
   | { type: "toggleActive"; eventKey: string }
@@ -18,11 +29,7 @@ export type RemoteMultiviewAction =
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
   | { type: "resetLayout" }
   | { type: "movePriority"; position: number; direction: -1 | 1 }
-  | { type: "selectPriorityEdit"; eventKey: string | null }
   | { type: "movePriorityEdit"; direction: -1 | 1 }
-  | { type: "openEventPicker" }
-  | { type: "closeEventPicker" }
-  | { type: "setEventSearch"; search: string }
   | { type: "addEvent"; event: TBAEvent }
   | { type: "removeEvent"; eventKey: string }
   | { type: "registerLabel"; eventKey: string; label: string }
@@ -40,8 +47,8 @@ export function createRemoteMultiviewActions(
   const local = localController.actions;
 
   return {
-    showControls() { local.showControls(); send({ type: "showControls" }); },
-    hideControls() { local.hideControls(); send({ type: "hideControls" }); },
+    showControls() { local.showControls(); },
+    hideControls() { local.hideControls(); },
     setAutoFocusMatches(enabled) { local.setAutoFocusMatches(enabled); send({ type: "setAutoFocusMatches", enabled }); },
     handleMatchImminent(signal) { local.handleMatchImminent(signal); send({ type: "handleMatchImminent", signal }); },
     toggleActive(eventKey) { local.toggleActive(eventKey); send({ type: "toggleActive", eventKey }); },
@@ -49,11 +56,11 @@ export function createRemoteMultiviewActions(
     setLayout(layoutKey) { local.setLayout(layoutKey); send({ type: "setLayout", layoutKey }); },
     resetLayout() { local.resetLayout(); send({ type: "resetLayout" }); },
     movePriority(position, direction) { local.movePriority(position, direction); send({ type: "movePriority", position, direction }); },
-    selectPriorityEdit(eventKey) { local.selectPriorityEdit(eventKey); send({ type: "selectPriorityEdit", eventKey }); },
+    selectPriorityEdit(eventKey) { local.selectPriorityEdit(eventKey); },
     movePriorityEdit(direction) { local.movePriorityEdit(direction); send({ type: "movePriorityEdit", direction }); },
-    openEventPicker() { local.openEventPicker(); send({ type: "openEventPicker" }); },
-    closeEventPicker() { local.closeEventPicker(); send({ type: "closeEventPicker" }); },
-    setEventSearch(search) { local.setEventSearch(search); send({ type: "setEventSearch", search }); },
+    openEventPicker() { local.openEventPicker(); },
+    closeEventPicker() { local.closeEventPicker(); },
+    setEventSearch(search) { local.setEventSearch(search); },
     addEvent(event) { local.addEvent(event); send({ type: "addEvent", event }); },
     removeEvent(eventKey) { local.removeEvent(eventKey); send({ type: "removeEvent", eventKey }); },
     registerLabel(eventKey, label) { local.registerLabel(eventKey, label); send({ type: "registerLabel", eventKey, label }); },
@@ -73,8 +80,6 @@ export function applyRemoteMultiviewAction(
   const actions = controller.actions;
 
   switch (action.type) {
-    case "showControls": actions.showControls(); break;
-    case "hideControls": actions.hideControls(); break;
     case "setAutoFocusMatches": actions.setAutoFocusMatches(action.enabled); break;
     case "handleMatchImminent": actions.handleMatchImminent(action.signal); break;
     case "toggleActive": actions.toggleActive(action.eventKey); break;
@@ -82,11 +87,7 @@ export function applyRemoteMultiviewAction(
     case "setLayout": actions.setLayout(action.layoutKey); break;
     case "resetLayout": actions.resetLayout(); break;
     case "movePriority": actions.movePriority(action.position, action.direction); break;
-    case "selectPriorityEdit": actions.selectPriorityEdit(action.eventKey); break;
     case "movePriorityEdit": actions.movePriorityEdit(action.direction); break;
-    case "openEventPicker": actions.openEventPicker(); break;
-    case "closeEventPicker": actions.closeEventPicker(); break;
-    case "setEventSearch": actions.setEventSearch(action.search); break;
     case "addEvent": actions.addEvent(action.event); break;
     case "removeEvent": actions.removeEvent(action.eventKey); break;
     case "registerLabel": actions.registerLabel(action.eventKey, action.label); break;
