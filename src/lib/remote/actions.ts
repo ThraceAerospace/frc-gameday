@@ -33,7 +33,7 @@ export type RemoteMultiviewAction =
   | { type: "runEventViewCommand"; eventKey: string; commandType: EventViewCommandType }
   | { type: "clearEventViewCommand"; eventKey: string };
 
-export function createRemoteTileSurfaceActions(
+export function createRemoteMultiviewActions(
   localController: TileSurfaceController,
   send: (action: RemoteMultiviewAction) => void,
 ): TileSurfaceActions {
