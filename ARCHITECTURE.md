@@ -28,7 +28,23 @@ Examples: `EventState`, future `MatchState`, future `TeamState`, and Surface con
 
 An `EventState` can be consumed by `EventStreamView`, `EventDataPanelView`, `MatchView`, `ScheduleView`, and multiple Surfaces at once. State is not a React component and is not tied to one View.
 
-State represents the authoritative client-side representation of information needed by Views. Acquisition, synchronization, invalidation, and freshness are infrastructure responsibilities rather than View responsibilities.
+State represents the authoritative client-side representation of information needed by Views.
+
+### EventState owns event data acquisition
+
+`EventState` is an **active owner** of the complete client-side data lifecycle for one event. It owns all acquisition and synchronization for that event, including:
+
+- initial data acquisition
+- realtime update handling
+- freshness tracking
+- invalidation/reconciliation
+- upstream refetching
+- fallback timing
+- synchronization lifecycle
+
+An EventState is not a passive data container waiting for another data layer to fetch its data.
+
+All event data needed by Views for a given event belongs to that event's EventState. Views must not independently fetch, poll, or subscribe to the same event data.
 
 ### Surface
 
@@ -122,42 +138,89 @@ Settings therefore belong to the Surface instance they control, rather than bein
 
 The old architecture allowed components such as `EventView` and hooks such as `useMatches` to become owners of networking and polling. The new architecture explicitly forbids this.
 
+Views do not create independent acquisition lifecycles because they need the same data.
+
 ```text
-TBA / Redis / WebSocket
-          ↓
-      Data layer
-          ↓
-      EventState
-          ↓
-   ┌──────┴──────┐
-   ↓             ↓
+TBA / Redis / Server WebSocket
+             ↓
+       EventWebSocketManager
+             ↓
+        EventState
+             ↓
+    ┌────────┴────────┐
+    ↓                 ↓
 EventStreamView  EventDataPanelView
 ```
 
-Views subscribe to State. They do not create independent polling loops because they need the same data.
+Views subscribe to State. They do not create independent polling loops, WebSocket connections, or upstream requests for shared event data.
 
 ## 6. Client Event Data Architecture
 
-The browser should maintain one shared event-data connection and state system.
+The browser maintains one shared physical event-data WebSocket for the lifetime of the client runtime.
+
+The WebSocket connection is shared by every EventState in that client:
 
 ```text
-TBA / Redis
-     ↓
-Server WebSocket
-     ↓
-Client Event Store / Event Hub
-     ├── EventState A
-     ├── EventState B
-     └── EventState C
-             ↓
-           Views
+                    ONE physical WebSocket
+                           │
+                           ▼
+                EventWebSocketManager
+                  /         |         \
+                 /          |          \
+                ▼           ▼           ▼
+          EventState A  EventState B  EventState C
+                │           │           │
+                ▼           ▼           ▼
+              Views       Views       Views
 ```
 
-There should be one WebSocket per browser/client rather than one WebSocket per View or per event hook.
+There is **exactly one physical event-data WebSocket per browser/client runtime**. It is not created per View, per hook, or per EventState.
 
-Each EventState independently tracks freshness and synchronization status. The Event Store/Hub owns subscriptions, WebSocket lifecycle, event routing, initial data acquisition, invalidation/refetch, fallback freshness, and synchronization status.
+The shared `EventWebSocketManager` owns only the transport connection and routing of messages to the appropriate EventState. It does not own event data, freshness, refetching, or fallback logic.
 
-Views only subscribe to the resulting State.
+Each EventState subscribes to the shared connection for its event and remains responsible for its complete event lifecycle:
+
+- handling realtime messages for its event
+- updating its event data
+- tracking freshness
+- maintaining its own fallback timer
+- refetching its own event data upstream when necessary
+- reconciling after missed or stale realtime updates
+
+```text
+WebSocket update for Event A
+            ↓
+EventWebSocketManager
+            ↓
+EventState A
+            ├── update data
+            ├── update freshness
+            └── reset Event A fallback timer
+
+No update for Event A for too long
+            ↓
+EventState A fallback timer
+            ↓
+EventState A refetches Event A upstream
+```
+
+Event A becoming stale does not cause Event B or Event C to refetch.
+
+### WebSocket lifetime
+
+The shared WebSocket is intentionally **not closed when the last EventState unsubscribes**.
+
+Once the client runtime establishes the connection, it remains open for the lifetime of that runtime. There is no reference-counted idle shutdown and no connection churn caused by EventState mounting/unmounting.
+
+If the physical connection fails, the shared WebSocket manager reconnects it. Existing EventStates remain subscribed to the manager and do not independently create replacement connections.
+
+When the browser/client runtime itself disappears, the runtime naturally terminates the connection.
+
+This gives the architecture a simple invariant:
+
+> **EventStates subscribe and unsubscribe from event routing, but they never create or destroy the physical event-data WebSocket.**
+
+The WebSocket manager is shared transport infrastructure. EventState remains the owner of event data acquisition.
 
 ## 7. Data Infrastructure
 
@@ -175,14 +238,15 @@ Server data/cache layer
  ↓
 Server realtime layer
  ↓
-Client Event Store
+ONE client WebSocket
  ↓
-EventState
- ↓
-Views
+EventWebSocketManager
+ ├── routes Event A → EventState A
+ ├── routes Event B → EventState B
+ └── routes Event C → EventState C
 ```
 
-Redis remains infrastructure rather than UI state. The client EventState is not a substitute for Redis: Redis is server-side cache/fan-out infrastructure, while EventState is the client-side representation consumed by the UI.
+Redis remains infrastructure rather than UI state. The client EventState is not a substitute for Redis: Redis is server-side cache/fan-out infrastructure, while EventState is the active client-side owner of the event data lifecycle consumed by the UI.
 
 ## 8. Actions and Commands
 
@@ -232,6 +296,8 @@ The architecture depends on controller actions, state synchronization, and conne
 
 The existing WebRTC implementation is therefore treated as a transport implementation, not as the definition of remote control.
 
+The **event-data WebSocket** described in Section 6 is an explicit shared client infrastructure component. Its single-connection requirement is an implementation invariant of the event-data architecture, not a requirement that all application transports use WebSocket.
+
 ## 11. Sessions and Multiple Surfaces
 
 A future viewing session may contain multiple Surfaces.
@@ -269,8 +335,9 @@ For now, Surface + SurfaceController is the fundamental boundary.
 
 - JSX
 - presentation layout
-- browser transport details
 - Surface-specific UI behavior
+
+An EventState does own its event-data acquisition and synchronization lifecycle. It should not own the physical shared WebSocket connection itself; it subscribes to the shared WebSocket manager.
 
 ### Surfaces should not own
 
@@ -303,7 +370,7 @@ The following naming rules are architectural constraints, not merely stylistic p
 | UI parent/container | `*Surface` |
 | Surface action/control logic | `*SurfaceController` |
 | Remote Surface proxy | explicit remote SurfaceController name |
-| Local Surface controller | explicit local SurfaceController name |
+| Local Surface controller | explicit local Surface controller name |
 
 Examples: `EventState`, `EventStreamView`, `EventDataPanelView`, `TileSurface`, `TileSurfaceController`, `TileSurfaceSettingsView`.
 
@@ -321,19 +388,25 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
 
 1. **Views display data; they do not acquire shared data.**
 2. **Shared data is represented by State.**
-3. **Surfaces contain Views.**
-4. **Surfaces are controlled through SurfaceControllers.**
-5. **User actions enter through SurfaceControllers.**
-6. **Remote actions use the same action path as local actions.**
-7. **Remote transport never directly manipulates Surface React state.**
-8. **Domain State is independent of Surface configuration.**
-9. **One client should maintain one shared realtime event-data connection.**
-10. **Per-event freshness is tracked independently.**
-11. **Redis is server-side infrastructure, not the UI's State.**
-12. **Transport implementations remain replaceable.**
-13. **Settings for a Surface operate through that Surface's controller.**
-14. **A Surface has one authoritative state/controller path.**
-15. **Generic abstractions should be introduced only when real product requirements justify them.**
+3. **Each EventState owns all acquisition and synchronization for its event.**
+4. **An EventState is an active owner of its event lifecycle, not a passive data container.**
+5. **Surfaces contain Views.**
+6. **Surfaces are controlled through SurfaceControllers.**
+7. **User actions enter through SurfaceControllers.**
+8. **Remote actions use the same action path as local actions.**
+9. **Remote transport never directly manipulates Surface React state.**
+10. **Domain State is independent of Surface configuration.**
+11. **One client maintains exactly one physical event-data WebSocket.**
+12. **The shared event-data WebSocket remains open for the lifetime of the client runtime.**
+13. **EventStates subscribe to shared WebSocket routing; they do not create or destroy the physical connection.**
+14. **The shared WebSocket manager owns transport and routing only, not event data or acquisition policy.**
+15. **Each EventState owns its own freshness and fallback timer.**
+16. **A stale EventState refetches only its own event upstream.**
+17. **Redis is server-side infrastructure, not the UI's State.**
+18. **Transport implementations remain replaceable.**
+19. **Settings for a Surface operate through that Surface's controller.**
+20. **A Surface has one authoritative state/controller path.**
+21. **Generic abstractions should be introduced only when real product requirements justify them.**
 
 ## 16. Target Architecture
 
@@ -346,30 +419,47 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
                           ↓
                     Server WebSocket
                           ↓
-                 Client Event Store
+                ONE client WebSocket
                           ↓
-                      EventState
-                    ┌─────┴─────┐
-                    ↓           ↓
-              EventStreamView  EventDataPanelView
-                    │           │
-                    └─────┬─────┘
-                          ↓
-                       Surface
-                          ↓
-                 SurfaceController
-                    ┌─────┴─────┐
-                    ↓           ↓
-                 Local       Remote Proxy
-                control       control
+             EventWebSocketManager
+                    /      |      \
+                   /       |       \
+                  ▼        ▼        ▼
+             EventState A EventState B EventState C
+                  │        │        │
+            fallback   fallback   fallback
+                  │        │        │
+             upstream  upstream  upstream
+              refetch   refetch   refetch
+                  │        │        │
+                  ▼        ▼        ▼
+                Views    Views    Views
+                  \        |       /
+                   \       |      /
+                    ▼      ▼     ▼
+                       Surfaces
+                           ↓
+                  SurfaceController
+                    ┌──────┴──────┐
+                    ↓             ↓
+                 Local        Remote Proxy
+                 control        control
                                   ↓
                                transport
                                   ↓
-                           authoritative Surface
+                         authoritative Surface
 ```
 
 The architecture is deliberately layered:
 
-**Data → State → View → Surface → Controller → User/Remote Control**
+**Server data → Shared client transport → EventState → View → Surface → SurfaceController → User/Remote Control**
 
-The controller is the action boundary; State is the shared-data boundary; View is the presentation boundary; and Surface is the display/container boundary.
+The important ownership boundaries are:
+
+- **Server data/cache layer:** server-side cache and upstream integration.
+- **Shared client WebSocket manager:** one physical connection and message routing.
+- **EventState:** all acquisition, synchronization, freshness, fallback, and event data for one event.
+- **View:** presentation.
+- **Surface:** UI containment and presentation environment.
+- **SurfaceController:** user-facing Surface actions and configuration.
+- **Remote transport:** transport of controller actions/state synchronization, never direct React manipulation.
