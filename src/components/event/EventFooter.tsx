@@ -50,10 +50,10 @@ export default function EventFooter({
   const contentHidden = mode === "hidden" || multiviewHidden;
 
   return (
-    <footer className="relative z-20 shrink-0 bg-neutral-950/95">
+    <footer className="relative z-20 shrink-0">
       <div
-        className={`absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
-          contentHidden ? "bottom-0" : "bottom-full -mb-px"
+        className={`pointer-events-auto absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+          contentHidden ? "bottom-[3px]" : "bottom-full -mb-px"
         }`}
       >
         <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
@@ -75,9 +75,7 @@ export default function EventFooter({
                       : "Live updates connected"
                 }
               />
-              <span className="truncate">
-                {eventName || "Event"}
-              </span>
+              <span className="truncate">{eventName || "Event"}</span>
               {eventTimezone && !isDivisional ? (
                 <span className="mt-0.5 text-[9px] text-neutral-500">
                   <EventLocalTime timezone={eventTimezone} />
@@ -92,8 +90,8 @@ export default function EventFooter({
       </div>
 
       <div
-        className={`transition-transform duration-200 ${
-          contentHidden ? "translate-y-full" : ""
+        className={`pointer-events-auto absolute inset-x-0 bottom-0 transition-transform duration-200 ${
+          contentHidden ? "translate-y-full" : "translate-y-0"
         }`}
       >
         <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
