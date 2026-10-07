@@ -71,10 +71,13 @@ export default function RemoteMultiview({
               ...message.state,
               availableEvents: current.availableEvents,
               eventsLoading: current.eventsLoading,
-              eventPickerOpen: false,
-              eventSearch: "",
-              controlsVisible: true,
-              priorityEditKey: null,
+              // UI-only settings state belongs to this controller instance.
+              // Do not let the authoritative display snapshot close the
+              // remote event picker or overwrite its local search state.
+              eventPickerOpen: current.eventPickerOpen,
+              eventSearch: current.eventSearch,
+              controlsVisible: current.controlsVisible,
+              priorityEditKey: current.priorityEditKey,
             });
           }
         },
