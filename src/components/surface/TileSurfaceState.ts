@@ -15,10 +15,6 @@ export type TileSurfaceState = {
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
   upcomingMatchKey: string | null;
-  preImminenceState: {
-    activeKey: string | null;
-    highlightLayoutKey: LayoutKey | null;
-  } | null;
   eventPickerOpen: boolean;
   eventSearch: string;
   availableEvents: TBAEvent[];
@@ -56,7 +52,6 @@ export function createInitialTileSurfaceState(
     activeKey: null,
     highlightLayoutKey: null,
     upcomingMatchKey: null,
-  preImminenceState: null,
     eventPickerOpen: false,
     eventSearch: "",
     availableEvents: [],
