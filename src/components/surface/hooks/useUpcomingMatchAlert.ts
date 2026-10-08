@@ -41,6 +41,28 @@ export function useUpcomingMatchAlert({
     const upcomingMatchKey = eventState?.upcomingMatchKey ?? null;
     const previous = previousUpcomingMatchRef.current;
 
+    const trackedUpcoming = Boolean(
+      upcomingMatchKey &&
+      eventState &&
+      hasTrackedTeam(
+        eventState.upcomingMatchTeamKeys,
+        trackedTeams,
+      ),
+    );
+
+    if (
+      upcomingMatchKey === previous &&
+      upcomingMatchKey &&
+      eventState &&
+      !trackedUpcoming
+    ) {
+      actions.setUpcomingMatchAlert({
+        type: "upcoming_match_cleared",
+        eventKey,
+        matchKey: upcomingMatchKey,
+      });
+    }
+
     if (upcomingMatchKey !== previous) {
       if (previous) {
         actions.setUpcomingMatchAlert({
@@ -52,11 +74,7 @@ export function useUpcomingMatchAlert({
 
       if (
         upcomingMatchKey &&
-        eventState &&
-        hasTrackedTeam(
-          eventState.upcomingMatchTeamKeys,
-          trackedTeams,
-        )
+        trackedUpcoming
       ) {
         actions.setUpcomingMatchAlert({
           type: "upcoming_match",
