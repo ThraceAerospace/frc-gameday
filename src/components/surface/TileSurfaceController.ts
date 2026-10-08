@@ -255,7 +255,10 @@ export function useTileSurfaceController({
     (signal: MatchImminentSignal) => {
       if (signal.type === "match_no_longer_imminent") {
         update((current) => {
-          if (current.imminentMatchKey !== signal.matchKey) {
+          if (
+            current.imminentMatchKey !== signal.matchKey ||
+            !current.streams.includes(signal.eventKey)
+          ) {
             return current;
           }
 
@@ -275,7 +278,7 @@ export function useTileSurfaceController({
 
       const current = stateRef.current;
 
-      if (!current.streams.includes(signal.matchKey)) {
+      if (!current.streams.includes(signal.eventKey)) {
         return;
       }
 
@@ -295,7 +298,7 @@ export function useTileSurfaceController({
             activeKey: next.activeKey,
             highlightLayoutKey: next.highlightLayoutKey,
           },
-          activeKey: signal.matchKey,
+          activeKey: signal.eventKey,
           highlightLayoutKey: pickHighlightLayout(
             LAYOUTS[layoutKey]?.slots.length ?? 1
           ),
