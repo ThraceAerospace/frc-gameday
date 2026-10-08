@@ -14,30 +14,36 @@ export default function TeamEventMatches({
   return (
     <section className="border-t border-slate-200 first:border-t-0">
       <div className="bg-slate-50 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <Link
             href={`/event/${event.key}`}
             className="font-bold text-slate-900 hover:text-blue-600"
           >
             {event.name}
           </Link>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500">
+            {event.city}
+            {event.state_prov ? `, ${event.state_prov}` : ""}
+            {" · "}
+            {event.start_date} – {event.end_date}
+            {" · "}
             {matches.length} match{matches.length === 1 ? "" : "es"}
           </span>
         </div>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {event.start_date} – {event.end_date}
-        </p>
       </div>
 
-      {matches.map((match) => (
-        <TeamMatch
-          key={match.key}
-          event={event}
-          match={match}
-          teamKey={teamKey}
-        />
-      ))}
+      {matches.length === 0 ? (
+        <div className="px-4 py-3 text-sm text-slate-500">No matches.</div>
+      ) : (
+        matches.map((match) => (
+          <TeamMatch
+            key={match.key}
+            event={event}
+            match={match}
+            teamKey={teamKey}
+          />
+        ))
+      )}
     </section>
   );
 }
