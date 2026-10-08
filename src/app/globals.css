@@ -108,3 +108,20 @@ button:disabled {
   background: #2563eb;
   color: #fff;
 }
+
+
+/* Gameday remains a dark presentation surface even though the site shell is light. */
+.dark-surface .icon-button {
+  background: rgba(255, 255, 255, 0.06);
+  color: #d4d4d8;
+}
+
+.dark-surface .icon-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.dark-surface .icon-button.active {
+  background: #404040;
+  color: #fff;
+}
