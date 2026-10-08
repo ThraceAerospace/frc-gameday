@@ -17,13 +17,13 @@ export type RemoteSurfaceState = Omit<
   TileSurfaceUiState
 >;
 
-export type RemoteMultiviewMessage =
-  | { type: "action"; action: RemoteMultiviewAction }
+export type RemoteSessionMessage =
+  | { type: "action"; action: RemoteSessionAction }
   | { type: "requestState" }
   | { type: "eventStateSnapshot"; eventKey: string; state: EventStateSnapshot }
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
-export type RemoteMultiviewAction =
+export type RemoteSessionAction =
   | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
   | { type: "highlightEvent"; eventKey: string }
   | { type: "toggleActive"; eventKey: string }
@@ -43,9 +43,9 @@ export type RemoteMultiviewAction =
   | { type: "runEventViewCommand"; eventKey: string; commandType: EventViewCommandType }
   | { type: "clearEventViewCommand"; eventKey: string };
 
-export function createRemoteMultiviewActions(
+export function createRemoteSessionActions(
   localController: TileSurfaceController,
-  send: (action: RemoteMultiviewAction) => void,
+  send: (action: RemoteSessionAction) => void,
 ): TileSurfaceActions {
   const local = localController.actions;
 
@@ -76,9 +76,9 @@ export function createRemoteMultiviewActions(
   };
 }
 
-export function applyRemoteMultiviewAction(
+export function applyRemoteSessionAction(
   controller: TileSurfaceController,
-  action: RemoteMultiviewAction,
+  action: RemoteSessionAction,
 ) {
   const actions = controller.actions;
 
