@@ -403,6 +403,8 @@ export class EventState {
     this.update((current) => ({
       ...current,
       websocketStatus: status,
+      websocketStale:
+        status === "connected" ? false : current.websocketStale,
     }));
   };
 

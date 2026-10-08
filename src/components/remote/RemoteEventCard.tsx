@@ -6,6 +6,7 @@ import { compactMatchLabel } from "@/lib/gameday/matchUtils";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { TBAMatch } from "@/lib/tba/types";
+import type { EventWebSocketStatus } from "@/lib/realtime/client";
 
 function teamNumber(teamKey: string) {
   return teamKey.replace(/^frc/, "");
@@ -26,14 +27,20 @@ type Props = {
   position: number;
   state: TileSurfaceState;
   actions: TileSurfaceActions;
+  websocketStatus: EventWebSocketStatus;
 };
 
-export default function RemoteEventCard({ eventKey, position, state, actions }: Props) {
+export default function RemoteEventCard({
+  eventKey,
+  position,
+  state,
+  actions,
+  websocketStatus,
+}: Props) {
   const {
     event,
     matches,
     eventNextMatch,
-    websocketStatus,
     websocketStale,
   } = useEventState(eventKey);
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
@@ -81,11 +88,13 @@ export default function RemoteEventCard({ eventKey, position, state, actions }: 
                     : "bg-neutral-600")
                 }
                 title={
-                  websocketStatus !== "connected"
-                    ? "Live updates disconnected"
-                    : websocketStale
+                  websocketStatus === "connected"
+                    ? websocketStale
                       ? "WebSocket quiet; using TBA fallback polling"
                       : "Live updates connected"
+                    : websocketStatus === "connecting"
+                      ? "Connecting to live updates"
+                      : "Live updates disconnected"
                 }
               />
               <span className="truncate">

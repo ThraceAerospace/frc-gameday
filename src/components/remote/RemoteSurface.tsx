@@ -67,6 +67,7 @@ export default function RemoteSurface({ controller, peerStatus }: Props) {
                 position={position}
                 state={state}
                 actions={controller.actions}
+                websocketStatus={websocketStatus}
               />
             ))}
           </div>
