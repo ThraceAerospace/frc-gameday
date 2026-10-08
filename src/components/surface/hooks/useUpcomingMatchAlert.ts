@@ -35,6 +35,7 @@ export function useUpcomingMatchAlert({
 }: Options) {
   const previousUpcomingMatchRef = useRef<string | null>(null);
   const previousNextMatchRef = useRef<string | null>(null);
+  const nextMatchInitializedRef = useRef(false);
 
   useEffect(() => {
     const upcomingMatchKey = eventState?.upcomingMatchKey ?? null;
@@ -72,7 +73,7 @@ export function useUpcomingMatchAlert({
     const nextMatchKey = eventState?.eventNextMatch?.key ?? null;
     const previous = previousNextMatchRef.current;
 
-    if (previous !== null && nextMatchKey !== previous) {
+    if (nextMatchInitializedRef.current && nextMatchKey !== previous) {
       const nextMatch = eventState?.eventNextMatch;
       const teamKeys = [
         ...(nextMatch?.alliances.red.team_keys ?? []),
@@ -89,6 +90,7 @@ export function useUpcomingMatchAlert({
     }
 
     previousNextMatchRef.current = nextMatchKey;
+    nextMatchInitializedRef.current = true;
   }, [
     actions,
     autoHighlight,
