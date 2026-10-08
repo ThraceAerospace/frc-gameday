@@ -37,6 +37,7 @@ type EventViewProps = {
   };
   priorityEditing?: boolean;
   imminentMatchKey?: string | null;
+  onToggleActive?: () => void;
 };
 
 export default function EventView({
@@ -47,6 +48,7 @@ export default function EventView({
   slotPresentation,
   priorityEditing = false,
   imminentMatchKey = null,
+  onToggleActive,
 }: EventViewProps) {
   const {
     state: eventState,
@@ -344,6 +346,7 @@ export default function EventView({
         teamPills={teamPills}
         multiview={{ presentation }}
         priorityEditing={priorityEditing}
+        onToggleActive={onToggleActive}
       />
 
       <StreamModal
