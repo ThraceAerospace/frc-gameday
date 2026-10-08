@@ -220,7 +220,8 @@ export default async function MatchPage({
           </div>
         </section>
       </div>
-    </main>
+      </main>
+    </SiteShell>
   );
 }
 
