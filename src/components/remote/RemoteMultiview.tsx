@@ -19,7 +19,7 @@ import {
   type RemoteRole,
   type RemoteSignalingStatus,
 } from "@/lib/remote/webrtc";
-import RemoteSurface from "./RemoteSurface";
+import RemoteTileSurface from "./RemoteTileSurface";
 
 type Props = {
   role: RemoteRole;
@@ -215,7 +215,7 @@ export default function RemoteMultiview({
 
   if (role === "controller") {
     return (
-      <RemoteSurface
+      <RemoteTileSurface
         controller={controller}
         peerStatus={peerStatus}
         eventStates={eventStates}
