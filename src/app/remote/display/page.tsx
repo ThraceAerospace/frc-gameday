@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import RemoteMultiview from "@/components/remote/RemoteMultiview";
+import RemoteSession from "@/components/remote/RemoteSession";
 import type {
   RemotePeerStatus,
   RemoteSignalingStatus,
@@ -58,7 +58,7 @@ export default function RemoteDisplayPage() {
       )}
 
       {code && (
-        <RemoteMultiview
+        <RemoteSession
           role="display"
           events={[]}
           code={code}
