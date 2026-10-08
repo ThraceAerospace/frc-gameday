@@ -97,7 +97,7 @@ export default function EventFooter({
                       : "Live updates connected"
                 }
               />
-              <span className="truncate">{eventName || "Event"}</span>
+              {controlHeld && slotNumber ? (\n                <span className="shrink-0 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-neutral-300">\n                  {slotNumber}\n                </span>\n              ) : null}\n              <span className="truncate">{eventName || "Event"}</span>
               {eventTimezone && !isDivisional ? (
                 <span className="mt-0.5 text-[9px] text-neutral-500">
                   <EventLocalTime timezone={eventTimezone} />
