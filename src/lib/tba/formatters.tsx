@@ -30,6 +30,43 @@ export function matchCode(matchKey: string): string {
   }
 }
 
+export function matchLongName(match: TBAMatch, eventPlayoffType: number | null = null): string {
+  try {
+    const compLevel = match.comp_level;
+    const matchNum = match.match_number;
+    const setNum = match.set_number;
+    // console.log("matchShortName", {compLevel, matchNum, setNum, eventPlayoffType});
+    switch (compLevel.toUpperCase()) {
+      case "F":
+        return `Final ${matchNum}`;
+      case "SF":
+        if (eventPlayoffType === 10 || eventPlayoffType === 11) {
+          if ([1, 2, 3, 4, 7, 8, 11].includes(setNum)) {
+            return `Playoff ${setNum} [UB]`;
+          } else if ([5, 6, 9, 10, 12, 13].includes(setNum)) {
+            return `Playoff ${setNum} [LB]`;
+          } else {
+            return `Playoff ${setNum}`;
+          }
+        } else if (eventPlayoffType === 5) {
+          return `Playoff ${setNum}`;
+        } else {
+          return `Semifinal ${setNum} Match ${matchNum}`;
+        }
+      case "QF":
+        return `Quarterfinal ${setNum} Match ${matchNum}`;
+      case "EF":
+        return `Eighthfinal ${setNum} Match ${matchNum}`;
+      case "QM":
+         return `Qualification ${matchNum}`;
+      default:
+        return `Match ${matchNum}`;
+    }
+  } catch {
+    return "UN";
+  }
+}
+
 export function matchShortName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
