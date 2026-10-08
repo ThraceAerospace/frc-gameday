@@ -18,6 +18,8 @@ type TBAWebSocketEvent = {
   type: "tba-update";
   eventKey: string;
   messageType?: string;
+  matchKey?: string;
+  teamKeys?: string[];
 };
 
 const clients = new Set<ConnectedClient>();
@@ -127,6 +129,7 @@ export function registerWebSocket(socket: WebSocket) {
 export async function broadcastTBAEvent(
   eventKey: string,
   messageType?: string,
+  details?: Pick<TBAWebSocketEvent, "matchKey" | "teamKeys">,
 ) {
   if (!eventKey) {
     return;
@@ -136,6 +139,7 @@ export async function broadcastTBAEvent(
     type: "tba-update",
     eventKey,
     messageType,
+    ...details,
   };
 
   await redis.publish(
