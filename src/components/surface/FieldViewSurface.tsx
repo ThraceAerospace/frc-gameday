@@ -41,7 +41,7 @@ export default function FieldViewSurface({
   const actions = tileSurfaceController.actions;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  useTileSurfaceKeyboard(state, actions, () => setSettingsOpen(true));
+  useTileSurfaceKeyboard(state, actions, () => setSettingsOpen((open) => !open));
 
   return (
     <div
