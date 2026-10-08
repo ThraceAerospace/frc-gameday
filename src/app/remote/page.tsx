@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useState } from "react";
-import RemoteMultiview from "@/components/remote/RemoteMultiview";
+import RemoteSession from "@/components/remote/RemoteSession";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
 function RemotePageContent() {
@@ -59,7 +59,7 @@ function RemotePageContent() {
   }
 
   return (
-    <RemoteMultiview
+    <RemoteSession
       role="controller"
       events={events}
       code={code}
