@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { SignalIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
@@ -27,6 +27,14 @@ export default function RemoteSurface({
 
   return (
     <main className="min-h-screen bg-black text-white">
+      <TileSurfaceSettingsView
+        state={state}
+        actions={controller.actions}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        triggerClassName="hidden"
+      />
+
       <header className="sticky top-0 z-40 border-b border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="min-w-0">
