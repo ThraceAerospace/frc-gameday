@@ -1,6 +1,6 @@
 import type { TBAEvent } from "@/lib/tba/types";
 import type {
-  MatchImminentSignal,
+  UpcomingMatchAlert,
   TileSurfaceState,
 } from "./TileSurfaceState";
 import type {
@@ -13,7 +13,8 @@ export type TileSurfaceActions = {
   showControls(): void;
   hideControls(): void;
 
-  handleMatchImminent(signal: MatchImminentSignal): void;
+  setUpcomingMatchAlert(signal: UpcomingMatchAlert): void;
+  highlightEvent(eventKey: string): void;
 
   toggleActive(eventKey: string): void;
   clearActive(): void;
