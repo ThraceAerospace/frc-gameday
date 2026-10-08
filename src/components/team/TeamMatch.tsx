@@ -1,20 +1,9 @@
 import Link from "next/link";
 import type { TBAEventSimple, TBAMatch } from "@/lib/tba/types";
+import { matchLongName } from "@/lib/tba/formatters";
 
 function teamNumber(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
-}
-
-function formatMatchName(match: TBAMatch): string {
-  const set = match.set_number ?? 0;
-  const number = match.match_number ?? 0;
-
-  if (match.comp_level === "qm") return `Qualification ${number}`;
-  if (match.comp_level === "ef") return `Eighthfinal ${set}-${number}`;
-  if (match.comp_level === "qf") return `Quarterfinal ${set}-${number}`;
-  if (match.comp_level === "sf") return `Semifinal ${set}-${number}`;
-  if (match.comp_level === "f") return `Final ${number}`;
-  return match.key;
 }
 
 function allianceClasses(alliance: "red" | "blue") {
@@ -92,7 +81,7 @@ export default function TeamMatch({
             href={`/event/${event.key}/match/${match.key}`}
             className="font-semibold text-slate-900 hover:text-blue-600"
           >
-            {formatMatchName(match)}
+            {matchLongName(match, event.playoff_type ?? null)}
           </Link>
           <p className="mt-0.5 text-xs text-slate-400">
             {isPlayed ? "Final" : "Upcoming"}
