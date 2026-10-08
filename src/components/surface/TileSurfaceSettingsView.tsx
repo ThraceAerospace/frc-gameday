@@ -208,17 +208,32 @@ function EventSettingsRow({
           <label className="mr-1 flex cursor-pointer items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-400">
             <input
               type="checkbox"
-              checked={config?.matchImminence ?? false}
+              checked={config?.autoHighlight ?? false}
               onChange={(event) =>
                 actions.setEventViewConfig(eventKey, {
-                  matchImminence: event.target.checked,
+                  autoHighlight: event.target.checked,
                 })
               }
               className="h-3 w-3"
               aria-label="Highlight imminent match"
-              title="Highlight this event when its next match is also a tracked team's next match"
+              title="Automatically highlight this event when its next match includes a tracked team"
             />
             <span>Auto Highlight</span>
+          </label>
+          <label className="mr-1 flex cursor-pointer items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-400">
+            <input
+              type="checkbox"
+              checked={config?.matchNotifications ?? true}
+              onChange={(event) =>
+                actions.setEventViewConfig(eventKey, {
+                  matchNotifications: event.target.checked,
+                })
+              }
+              className="h-3 w-3"
+              aria-label="Show match notifications"
+              title="Show the upcoming match banner when a tracked team appears in an upcoming match webhook"
+            />
+            <span>Match Notifications</span>
           </label>
           {trackedTeams.length > 0 ? (
             trackedTeams.map((team) => (
