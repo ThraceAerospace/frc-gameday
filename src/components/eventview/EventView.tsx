@@ -70,6 +70,8 @@ export default function EventView({
   } = useEventState(event);
 
 
+  const eventStateSnapshot = eventState?.getSnapshot() ?? null;
+
   const eventConfig = config;
   const footerMode = eventConfig.footerMode;
   const footerHidden = slotPresentation?.footerHidden ?? false;
@@ -153,7 +155,7 @@ export default function EventView({
 
   useUpcomingMatchAlert({
     eventKey: event,
-    eventState,
+    eventState: eventStateSnapshot,
     trackedTeams,
     autoHighlight: eventConfig.autoHighlight,
     actions: controller.actions,
