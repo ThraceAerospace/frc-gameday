@@ -28,18 +28,38 @@ function getTeamResult(match: TBAMatch, teamKey: string) {
   const opponent = isRed ? blue : red;
 
   if (!alliance || !opponent || alliance.score < 0 || opponent.score < 0) {
-    return { alliance: isRed ? "Red" : "Blue", result: "Upcoming", score: null, opponentScore: null };
+    return {
+      alliance: isRed ? "Red" : "Blue",
+      result: "Upcoming",
+      score: null,
+      opponentScore: null,
+    };
   }
 
   if (alliance.score > opponent.score) {
-    return { alliance: isRed ? "Red" : "Blue", result: "Win", score: alliance.score, opponentScore: opponent.score };
+    return {
+      alliance: isRed ? "Red" : "Blue",
+      result: "Win",
+      score: alliance.score,
+      opponentScore: opponent.score,
+    };
   }
 
   if (alliance.score < opponent.score) {
-    return { alliance: isRed ? "Red" : "Blue", result: "Loss", score: alliance.score, opponentScore: opponent.score };
+    return {
+      alliance: isRed ? "Red" : "Blue",
+      result: "Loss",
+      score: alliance.score,
+      opponentScore: opponent.score,
+    };
   }
 
-  return { alliance: isRed ? "Red" : "Blue", result: "Tie", score: alliance.score, opponentScore: opponent.score };
+  return {
+    alliance: isRed ? "Red" : "Blue",
+    result: "Tie",
+    score: alliance.score,
+    opponentScore: opponent.score,
+  };
 }
 
 function sortEvents(a: TBAEventSimple, b: TBAEventSimple) {
@@ -47,6 +67,119 @@ function sortEvents(a: TBAEventSimple, b: TBAEventSimple) {
     a.start_date.localeCompare(b.start_date) ||
     a.name.localeCompare(b.name) ||
     a.key.localeCompare(b.key, undefined, { numeric: true })
+  );
+}
+
+function sortMatches(a: TBAMatch, b: TBAMatch) {
+  return (
+    (a.time ?? a.actual_time ?? Infinity) - (b.time ?? b.actual_time ?? Infinity) ||
+    (a.comp_level === "qm" ? 0 : 1) - (b.comp_level === "qm" ? 0 : 1) ||
+    (a.set_number ?? 0) - (b.set_number ?? 0) ||
+    (a.match_number ?? 0) - (b.match_number ?? 0)
+  );
+}
+
+function teamNumber(teamKey: string): string {
+  return teamKey.replace(/^frc/, "");
+}
+
+function AllianceTeams({
+  teamKeys,
+  alliance,
+  highlightedTeamKey,
+}: {
+  teamKeys: string[];
+  alliance: "red" | "blue";
+  highlightedTeamKey: string;
+}) {
+  const classes =
+    alliance === "red"
+      ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+      : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100";
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {teamKeys.map((teamKey) => (
+        <Link
+          key={teamKey}
+          href={`/team/${teamKey}`}
+          className={`rounded-md border px-2 py-1 font-mono text-xs font-bold transition ${classes} ${teamKey === highlightedTeamKey ? "ring-2 ring-slate-400 ring-offset-1" : ""}`}
+        >
+          {teamNumber(teamKey)}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function MatchRow({
+  event,
+  match,
+  teamKey,
+}: {
+  event: TBAEventSimple;
+  match: TBAMatch;
+  teamKey: string;
+}) {
+  const result = getTeamResult(match, teamKey);
+  const redScore = match.alliances?.red?.score;
+  const blueScore = match.alliances?.blue?.score;
+  const isPlayed = redScore != null && blueScore != null && redScore >= 0 && blueScore >= 0;
+
+  return (
+    <div className="border-t border-slate-100 px-4 py-3 first:border-t-0">
+      <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_110px] lg:items-center">
+        <div>
+          <Link
+            href={`/event/${event.key}/match/${match.key}`}
+            className="font-semibold text-slate-900 hover:text-blue-600"
+          >
+            {formatMatchName(match)}
+          </Link>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {isPlayed ? "Final" : "Upcoming"}
+          </p>
+        </div>
+
+        <div className="min-w-0">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-red-500">
+            Red {redScore != null && redScore >= 0 ? redScore : "—"}
+          </p>
+          <AllianceTeams
+            teamKeys={match.alliances?.red?.team_keys ?? []}
+            alliance="red"
+            highlightedTeamKey={teamKey}
+          />
+        </div>
+
+        <div className="min-w-0">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-blue-500">
+            Blue {blueScore != null && blueScore >= 0 ? blueScore : "—"}
+          </p>
+          <AllianceTeams
+            teamKeys={match.alliances?.blue?.team_keys ?? []}
+            alliance="blue"
+            highlightedTeamKey={teamKey}
+          />
+        </div>
+
+        <div
+          className={
+            result.result === "Win"
+              ? "font-bold text-emerald-600"
+              : result.result === "Loss"
+                ? "font-bold text-red-600"
+                : result.result === "Tie"
+                  ? "font-bold text-amber-600"
+                  : "font-semibold text-slate-400"
+          }
+        >
+          {result.score != null
+            ? `${result.result} ${result.score}-${result.opponentScore}`
+            : result.result}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -59,30 +192,24 @@ export default async function TeamPage({
   const teamKey = normalizeTeamKey(rawTeam);
   const year = new Date().getFullYear();
 
-  const [team, events, districts] = await Promise.all([
+  const [team, events, districts, allEvents] = await Promise.all([
     TBA.getTeam(teamKey),
     TBA.getTeamEvents(teamKey, year),
     TBA.getTeamDistricts(teamKey),
+    TBA.getEvents(year),
   ]);
 
   const sortedEvents = [...events].sort(sortEvents);
   const eventMatches = await Promise.all(
     sortedEvents.map(async (event) => ({
       event,
-      matches: await TBA.getTeamMatches(teamKey, event.key),
+      matches: (await TBA.getTeamMatches(teamKey, event.key)).sort(sortMatches),
     }))
   );
 
-  const matches = eventMatches
-    .flatMap(({ event, matches }) =>
-      matches.map((match) => ({ event, match }))
-    )
-    .sort(
-      (a, b) =>
-        (b.match.actual_time ?? b.match.time ?? 0) -
-          (a.match.actual_time ?? a.match.time ?? 0) ||
-        b.event.start_date.localeCompare(a.event.start_date)
-    );
+  const matches = eventMatches.flatMap(({ event, matches }) =>
+    matches.map((match) => ({ event, match }))
+  );
 
   const completedMatches = matches.filter(({ match }) => {
     const red = match.alliances?.red?.score ?? -1;
@@ -101,7 +228,7 @@ export default async function TeamPage({
   ).length;
 
   return (
-    <SiteShell events={await TBA.getEvents(year)}>
+    <SiteShell events={allEvents}>
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -192,46 +319,36 @@ export default async function TeamPage({
                   No matches found for {year}.
                 </p>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {matches.map(({ event, match }) => {
-                    const result = getTeamResult(match, teamKey);
-                    return (
-                      <div
-                        key={match.key}
-                        className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_140px_90px] sm:items-center"
-                      >
-                        <div className="min-w-0">
+                <div>
+                  {eventMatches.map(({ event, matches: eventTeamMatches }) => (
+                    <section key={event.key} className="border-t border-slate-200 first:border-t-0">
+                      <div className="bg-slate-50 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
                           <Link
-                            href={`/event/${event.key}/match/${match.key}`}
-                            className="font-semibold text-slate-900 hover:text-blue-600"
+                            href={`/event/${event.key}`}
+                            className="font-bold text-slate-900 hover:text-blue-600"
                           >
-                            {formatMatchName(match)}
-                          </Link>
-                          <p className="truncate text-xs text-slate-400">
                             {event.name}
-                          </p>
+                          </Link>
+                          <span className="text-xs text-slate-400">
+                            {eventTeamMatches.length} match{eventTeamMatches.length === 1 ? "" : "es"}
+                          </span>
                         </div>
-                        <span className="text-xs font-semibold text-slate-500">
-                          {result.alliance}
-                        </span>
-                        <span
-                          className={
-                            result.result === "Win"
-                              ? "font-bold text-emerald-600"
-                              : result.result === "Loss"
-                                ? "font-bold text-red-600"
-                                : result.result === "Tie"
-                                  ? "font-bold text-amber-600"
-                                  : "font-semibold text-slate-400"
-                          }
-                        >
-                          {result.score != null
-                            ? `${result.result} ${result.score}-${result.opponentScore}`
-                            : result.result}
-                        </span>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {event.start_date} – {event.end_date}
+                        </p>
                       </div>
-                    );
-                  })}
+
+                      {eventTeamMatches.map((match) => (
+                        <MatchRow
+                          key={match.key}
+                          event={event}
+                          match={match}
+                          teamKey={teamKey}
+                        />
+                      ))}
+                    </section>
+                  ))}
                 </div>
               )}
             </div>
@@ -258,7 +375,7 @@ export default async function TeamPage({
                     {districts.map((district) => (
                       <Link
                         key={district.key}
-                        href={`/districts`}
+                        href="/districts"
                         className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                       >
                         {district.display_name || district.abbreviation || district.key}
