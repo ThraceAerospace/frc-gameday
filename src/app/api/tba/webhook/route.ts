@@ -14,7 +14,6 @@ type TBAWebhookData = {
   event_key?: string;
   event?: TBAEvent;
   team_key?: string;
-  team_keys?: string[];
   match_key?: string;
   match?: TBAWebhookMatch;
   awards?: TBAAward[];
@@ -182,6 +181,25 @@ export async function POST(
     data?.event?.key ??
     data?.match?.event_key;
 
+  let upcomingMatchTeamKeys: string[] | undefined;
+
+  if (type === "upcoming_match" && data?.match_key) {
+    try {
+      const match = await TBA.getMatch(data.match_key);
+      upcomingMatchTeamKeys = [
+        ...(match.alliances.red.team_keys ?? []),
+        ...(match.alliances.blue.team_keys ?? []),
+      ];
+    } catch (error) {
+      console.warn(
+        "[WEBHOOK][TBA] Failed to load upcoming match " +
+          data.match_key +
+          " for WSS team data:",
+        error,
+      );
+    }
+  }
+
   console.log(
     `[WEBHOOK][TBA] Received ${type ?? "unknown"}`,
   );
@@ -331,7 +349,7 @@ export async function POST(
         type === "upcoming_match"
           ? {
               matchKey: data?.match_key,
-              teamKeys: data?.team_keys,
+              teamKeys: upcomingMatchTeamKeys,
             }
           : type === "match_score"
             ? {
