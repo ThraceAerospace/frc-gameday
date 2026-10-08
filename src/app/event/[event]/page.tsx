@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import { TBAMatchSimple, TBAMatch } from "@/lib/tba/types";
 
@@ -11,26 +12,29 @@ export default async function EventPage({
 
   if (!eventKey) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <p className="text-neutral-400">Missing event key.</p>
-      </main>
+      <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
+        <p className="text-slate-500">Missing event key.</p>
+        </main>
+    </SiteShell>
     );
   }
 
   let event;
   let matches;
+  let navigationEvents;
 
   try {
-    [event, matches] = await Promise.all([
+    [event, matches, navigationEvents] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getEventMatchesSimple(eventKey),
+      TBA.getEvents(new Date().getFullYear()),
     ]);
   } catch {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
+      <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <div className="mx-auto max-w-5xl">
           <h1 className="text-2xl font-semibold">Event unavailable</h1>
-          <p className="mt-2 text-neutral-400">
+          <p className="mt-2 text-slate-500">
             Could not load event <code>{eventKey}</code>.
           </p>
         </div>
@@ -54,13 +58,14 @@ export default async function EventPage({
       : event.start_date ?? event.end_date ?? null;
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+      <main className="min-h-full bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-5xl px-6 py-10">
         {/* Header */}
-        <header className="border-b border-white/10 pb-8">
+        <header className="border-b border-slate-200 pb-8">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <p className="font-mono text-sm text-neutral-500">
+              <p className="font-mono text-sm text-slate-400">
                 {event.key}
               </p>
 
@@ -70,7 +75,7 @@ export default async function EventPage({
 
               {event.short_name &&
                 event.short_name !== event.name && (
-                  <p className="mt-1 text-lg text-neutral-400">
+                  <p className="mt-1 text-lg text-slate-500">
                     {event.short_name}
                   </p>
                 )}
@@ -78,7 +83,7 @@ export default async function EventPage({
 
             <Link
               href={`/gameday?event=${event.key}`}
-              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium transition hover:bg-white/10"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-100"
             >
               Open Gameday
             </Link>
@@ -89,7 +94,7 @@ export default async function EventPage({
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Event Information</h2>
 
-          <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:grid-cols-2">
+          <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-white/10 sm:grid-cols-2">
             <InfoItem label="Date" value={dates} />
             <InfoItem label="Location" value={location} />
             <InfoItem label="Venue" value={event.location_name} />
@@ -131,14 +136,14 @@ export default async function EventPage({
 
             <Link
               href={`/event/${event.key}/teams`}
-              className="text-sm text-neutral-400 hover:text-white"
+              className="text-sm text-slate-500 hover:text-slate-900"
             >
               View teams →
             </Link>
           </div>
 
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-6">
-            <p className="text-sm text-neutral-500">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
+            <p className="text-sm text-slate-400">
               Team listing coming soon.
             </p>
           </div>
@@ -151,16 +156,16 @@ export default async function EventPage({
 
             <Link
               href={`/event/${event.key}/matches`}
-              className="text-sm text-neutral-400 hover:text-white"
+              className="text-sm text-slate-500 hover:text-slate-900"
             >
               View all matches →
             </Link>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
             {matches.length === 0 ? (
-              <div className="bg-white/[0.02] p-6">
-                <p className="text-sm text-neutral-500">
+              <div className="bg-white p-6">
+                <p className="text-sm text-slate-400">
                   No matches are currently available.
                 </p>
               </div>
@@ -169,14 +174,14 @@ export default async function EventPage({
                 {matches.map((match: TBAMatchSimple) => (
                   <div
                     key={match.key}
-                    className="grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white/[0.02] px-5 py-4"
+                    className="grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-5 py-4"
                   >
                     <div className="min-w-20">
                       <p className="font-mono text-sm font-medium">
                         {formatMatchName(match)}
                       </p>
 
-                      <p className="mt-0.5 text-xs text-neutral-500">
+                      <p className="mt-0.5 text-xs text-slate-400">
                         {match.comp_level === "qm"
                           ? "Qualification"
                           : match.comp_level === "sf"
@@ -200,12 +205,12 @@ export default async function EventPage({
                     </div>
 
                     <div className="text-right">
-                      <p className="text-sm text-neutral-300">
+                      <p className="text-sm text-slate-600">
                         {formatMatchTime(match.time)}
                       </p>
 
                       {match.actual_time != null && (
-                        <p className="mt-0.5 text-xs text-neutral-500">
+                        <p className="mt-0.5 text-xs text-slate-400">
                           Played
                         </p>
                       )}
@@ -229,8 +234,8 @@ function InfoItem({
   value?: string | number | null;
 }) {
   return (
-    <div className="bg-neutral-950 px-5 py-4">
-      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+    <div className="bg-white px-5 py-4">
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
         {label}
       </dt>
 
@@ -253,7 +258,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/10 hover:text-white"
+      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
     >
       {label}
     </a>
@@ -269,11 +274,11 @@ function Alliance({
 }) {
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
         {label}
       </p>
 
-      <p className="mt-1 font-mono text-xs text-neutral-300">
+      <p className="mt-1 font-mono text-xs text-slate-600">
         {teams?.length
           ? teams.map((team) => team.replace(/^frc/, "#")).join(" · ")
           : "—"}
