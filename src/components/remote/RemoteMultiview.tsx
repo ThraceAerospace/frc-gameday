@@ -5,10 +5,8 @@ import TileSurface from "@/components/surface/TileSurface";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
-import {
-  subscribeEventRealtimeStatus,
-  type EventRealtimeStatus,
-} from "@/lib/events/useEventState";
+import { subscribeEventState } from "@/lib/events/useEventState";
+import type { EventStateSnapshot } from "@/lib/events/EventState";
 import {
   createRemoteMultiviewActions,
   applyRemoteMultiviewAction,
@@ -45,10 +43,8 @@ export default function RemoteMultiview({
 
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
-  const [realtimeStatuses, setRealtimeStatuses] = useState<
-    Record<string, EventRealtimeStatus>
-  >({});
-  const realtimeStatusesRef = useRef<Record<string, EventRealtimeStatus>>({});
+  const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
+  const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
 
   const surfaceState = useSyncExternalStore(
     localController.subscribe,
@@ -74,20 +70,27 @@ export default function RemoteMultiview({
           }
         },
         onMessage: (message: RemoteMultiviewMessage) => {
-          if (message.type === "eventRealtimeStatus" && role === "controller") {
-            setRealtimeStatuses((current) => {
-              const next = {
-                ...current,
-                [message.eventKey]: message.status,
-              };
-              realtimeStatusesRef.current = next;
-              return next;
-            });
+          if (message.type === "requestState" && role === "display") {
+            sendDisplayState();
+            for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
+              peerRef.current?.sendMessage({
+                type: "eventStateSnapshot",
+                eventKey,
+                state,
+              });
+            }
             return;
           }
 
-          if (message.type === "requestState" && role === "display") {
-            sendDisplayState();
+          if (message.type === "eventStateSnapshot" && role === "controller") {
+            setEventStates((current) => {
+              const next = {
+                ...current,
+                [message.eventKey]: message.state,
+              };
+              eventStatesRef.current = next;
+              return next;
+            });
             return;
           }
 
@@ -114,37 +117,23 @@ export default function RemoteMultiview({
     if (role !== "display") return;
 
     const unsubscribe = surfaceState.streams.map((eventKey) =>
-      subscribeEventRealtimeStatus(eventKey, (status) => {
+      subscribeEventState(eventKey, (state) => {
         const next = {
-          ...realtimeStatusesRef.current,
-          [eventKey]: status,
+          ...eventStatesRef.current,
+          [eventKey]: state,
         };
-        realtimeStatusesRef.current = next;
+        eventStatesRef.current = next;
+        setEventStates(next);
         peerRef.current?.sendMessage({
-          type: "eventRealtimeStatus",
+          type: "eventStateSnapshot",
           eventKey,
-          status,
+          state,
         });
       }),
     );
 
     return () => unsubscribe.forEach((stop) => stop());
   }, [role, surfaceState.streams]);
-
-  useEffect(() => {
-    if (role !== "display" || peerStatus !== "connected") return;
-
-    for (const eventKey of surfaceState.streams) {
-      const status = realtimeStatusesRef.current[eventKey];
-      if (!status) continue;
-
-      peerRef.current?.sendMessage({
-        type: "eventRealtimeStatus",
-        eventKey,
-        status,
-      });
-    }
-  }, [peerStatus, role, surfaceState.streams]);
 
   const sendDisplayState = useMemo(
     () => () => {
@@ -229,7 +218,7 @@ export default function RemoteMultiview({
       <RemoteSurface
         controller={controller}
         peerStatus={peerStatus}
-        realtimeStatuses={realtimeStatuses}
+        eventStates={eventStates}
       />
     );
   }
