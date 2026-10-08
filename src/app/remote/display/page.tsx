@@ -57,7 +57,7 @@ export default function RemoteDisplayPage() {
         </div>
       )}
 
-      {code && (
+      {code && hasConnected && (
         <RemoteSession
           role="display"
           events={[]}
