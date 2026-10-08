@@ -7,7 +7,6 @@ import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import NextMatchCountdown from "../match/NextMatchCountdown";
-import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
 
 function teamNumber(teamKey: string) {
   return teamKey.replace(/^frc/, "");
@@ -71,17 +70,10 @@ export default function RemoteEventCard({
         upcomingAlert
           ? "border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
           : selected
-            ? "border-white/50 bg-white/[0.09] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+            ? "border-blue-500/50 bg-white/[0.09] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
             : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
       }`}
     >
-      {upcomingAlert && state.eventConfigs[eventKey]?.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
-        <ImminentMatchBanner
-          match={upcomingMatch}
-          teams={upcomingTeams}
-          eventName={event?.short_name || event?.name || eventKey}
-        />
-      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-base font-semibold">
