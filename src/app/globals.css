@@ -125,3 +125,71 @@ button:disabled {
   background: #404040;
   color: #fff;
 }
+
+
+.site-theme-dark {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.site-theme-dark header {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: #334155;
+}
+
+.site-theme-dark aside {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.site-theme-dark aside .border-slate-100 {
+  border-color: #1e293b;
+}
+
+.site-theme-dark main {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.site-theme-dark .text-slate-950,
+.site-theme-dark .text-slate-900,
+.site-theme-dark .text-slate-800 {
+  color: #f1f5f9;
+}
+
+.site-theme-dark .text-slate-700,
+.site-theme-dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+.site-theme-dark .text-slate-500 {
+  color: #94a3b8;
+}
+
+.site-theme-dark .border-slate-200 {
+  border-color: #334155;
+}
+
+.site-theme-dark .bg-white {
+  background-color: #111c30;
+}
+
+.site-theme-dark .bg-slate-50 {
+  background-color: #0b1220;
+}
+
+.site-theme-dark .bg-blue-50 {
+  background-color: #172554;
+}
+
+.site-theme-dark input,
+.site-theme-dark select {
+  background-color: #111c30;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.site-theme-dark .site-theme-light,
+.site-theme-dark .dark-surface {
+  color-scheme: dark;
+}
