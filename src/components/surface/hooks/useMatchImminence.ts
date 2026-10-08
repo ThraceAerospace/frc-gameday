@@ -6,11 +6,13 @@ import type { TBAMatch, TBAEventTeamStatuses } from "@/lib/tba/types";
 export type MatchImminenceSignal =
   | {
       type: "match_imminent";
+      eventKey: string;
       matchKey: string;
       severity: "hard" | "soft";
     }
   | {
       type: "match_no_longer_imminent";
+      eventKey: string;
       matchKey: string;
     };
 
@@ -53,6 +55,7 @@ export function useMatchImminence(
     if (previousKey && previousKey !== nextImminentKey) {
       emitRef.current({
         type: "match_no_longer_imminent",
+        eventKey: eventKey ?? "",
         matchKey: previousKey,
       });
     }
@@ -60,6 +63,7 @@ export function useMatchImminence(
     if (nextImminentKey && previousKey !== nextImminentKey) {
       emitRef.current({
         type: "match_imminent",
+        eventKey: eventKey,
         matchKey: nextImminentKey,
         severity: "hard",
       });
@@ -80,6 +84,7 @@ export function useMatchImminence(
       if (key) {
         emitRef.current({
           type: "match_no_longer_imminent",
+          eventKey: "",
           matchKey: key,
         });
       }
