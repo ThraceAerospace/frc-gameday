@@ -7,6 +7,7 @@ import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import NextMatchCountdown from "../match/NextMatchCountdown";
+import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
 
 function teamNumber(teamKey: string) {
   return teamKey.replace(/^frc/, "");
@@ -35,6 +36,19 @@ export default function RemoteEventCard({
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
+  const upcomingMatch = eventState?.upcomingMatchKey
+    ? matches.find((item) => item.key === eventState.upcomingMatchKey) ?? null
+    : null;
+  const upcomingTeams = upcomingMatch
+    ? trackedTeams.filter((team) => [
+        ...(upcomingMatch.alliances.red.team_keys ?? []),
+        ...(upcomingMatch.alliances.blue.team_keys ?? []),
+      ].includes(team))
+    : [];
+  const upcomingAlert = Boolean(
+    eventState?.upcomingMatchKey &&
+    eventState.upcomingMatchTeamKeys.some((team) => trackedTeams.includes(team)),
+  );
 
   const match = eventNextMatch;
   const redTeams = match?.alliances.red.team_keys ?? [];
@@ -53,12 +67,21 @@ export default function RemoteEventCard({
     <button
       type="button"
       onClick={() => actions.toggleActive(eventKey)}
-      className={`w-full rounded-2xl border p-4 text-left transition-colors active:scale-[0.99] ${
-        selected
-          ? "border-white/50 bg-white/[0.09] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-          : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
+      className={`relative w-full rounded-2xl border p-4 text-left transition-colors active:scale-[0.99] ${
+        upcomingAlert
+          ? "border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
+          : selected
+            ? "border-white/50 bg-white/[0.09] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+            : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
       }`}
     >
+      {upcomingAlert && state.eventConfigs[eventKey]?.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
+        <ImminentMatchBanner
+          match={upcomingMatch}
+          teams={upcomingTeams}
+          eventName={event?.short_name || event?.name || eventKey}
+        />
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-base font-semibold">
