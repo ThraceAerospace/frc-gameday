@@ -113,6 +113,7 @@ export default function TileSurface({
                 imminentMatchKey={state.imminentMatchKey}
                 isDivisional={isDivisional}
                 controller={controller}
+                onToggleActive={() => controller.actions.toggleActive(eventKey)}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}
               />
