@@ -181,25 +181,6 @@ export async function POST(
     data?.event?.key ??
     data?.match?.event_key;
 
-  let upcomingMatchTeamKeys: string[] | undefined;
-
-  if (type === "upcoming_match" && data?.match_key) {
-    try {
-      const match = await TBA.getMatch(data.match_key);
-      upcomingMatchTeamKeys = [
-        ...(match.alliances.red.team_keys ?? []),
-        ...(match.alliances.blue.team_keys ?? []),
-      ];
-    } catch (error) {
-      console.warn(
-        "[WEBHOOK][TBA] Failed to load upcoming match " +
-          data.match_key +
-          " for WSS team data:",
-        error,
-      );
-    }
-  }
-
   console.log(
     `[WEBHOOK][TBA] Received ${type ?? "unknown"}`,
   );
@@ -349,7 +330,7 @@ export async function POST(
         type === "upcoming_match"
           ? {
               matchKey: data?.match_key,
-              teamKeys: upcomingMatchTeamKeys,
+              teamKeys: data?.match?.alliances\n                ? [\n                    ...(data.match.alliances.red.team_keys ?? []),\n                    ...(data.match.alliances.blue.team_keys ?? []),\n                  ]\n                : undefined,
             }
           : type === "match_score"
             ? {
