@@ -259,21 +259,27 @@ export function useTileSurfaceController({
 
       update((current) => {
         if (signal.type === "upcoming_match_cleared") {
-          if (current.upcomingMatchKey !== signal.matchKey) {
+          if (current.upcomingMatchKeys[signal.eventKey] !== signal.matchKey) {
             return current;
           }
 
+          const upcomingMatchKeys = { ...current.upcomingMatchKeys };
+          delete upcomingMatchKeys[signal.eventKey];
+
           return {
             ...current,
-            upcomingMatchKey: null,
+            upcomingMatchKeys,
           };
         }
 
-        return current.upcomingMatchKey === signal.matchKey
+        return current.upcomingMatchKeys[signal.eventKey] === signal.matchKey
           ? current
           : {
               ...current,
-              upcomingMatchKey: signal.matchKey,
+              upcomingMatchKeys: {
+                ...current.upcomingMatchKeys,
+                [signal.eventKey]: signal.matchKey,
+              },
             };
       });
     },
