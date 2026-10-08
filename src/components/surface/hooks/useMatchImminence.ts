@@ -46,16 +46,20 @@ export function useMatchImminence(
       (team) => teamsStatuses[team]?.next_match_key ?? null,
     );
 
-    const nextImminentKey =
+    const nextImminent =
       enabled &&
-      eventKey &&
+      eventKey !== null &&
       trackedNextMatchKeys.some((matchKey) => matchKey === eventKey)
-        ? eventKey
+        ? { eventKey, matchKey: eventKey }
         : null;
 
     const previous = imminentRef.current;
+    const hasChanged =
+      previous &&
+      (previous.eventKey !== nextImminent?.eventKey ||
+        previous.matchKey !== nextImminent?.matchKey);
 
-    if (previous && previous.matchKey !== nextImminentKey) {
+    if (previous && hasChanged) {
       emitRef.current({
         type: "match_no_longer_imminent",
         eventKey: previous.eventKey,
@@ -63,21 +67,16 @@ export function useMatchImminence(
       });
     }
 
-    if (nextImminentKey && previous?.matchKey !== nextImminentKey) {
+    if (nextImminent && hasChanged) {
       emitRef.current({
         type: "match_imminent",
-        eventKey,
-        matchKey: nextImminentKey,
+        eventKey: nextImminent.eventKey,
+        matchKey: nextImminent.matchKey,
         severity: "hard",
       });
     }
 
-    imminentRef.current = nextImminentKey
-      ? {
-          eventKey,
-          matchKey: nextImminentKey,
-        }
-      : null;
+    imminentRef.current = nextImminent;
   }, [
     enabled,
     eventNextMatch?.key,
