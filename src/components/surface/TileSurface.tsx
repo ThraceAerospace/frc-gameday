@@ -10,7 +10,38 @@ import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
 
-function SurfaceUpcomingMatchBanner({\n  eventKey,\n  config,\n}: {\n  eventKey: string;\n  config: TileSurfaceState["eventConfigs"][string] | undefined;\n}) {\n  const { event, matches, upcomingMatchKey } = useEventState(eventKey);\n\n  if (!config?.matchNotifications || !upcomingMatchKey) return null;\n\n  const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;\n  if (!upcomingMatch) return null;\n\n  const upcomingTeams = config.trackedTeams.filter((team) =>\n    [\n      ...(upcomingMatch.alliances.red.team_keys ?? []),\n      ...(upcomingMatch.alliances.blue.team_keys ?? []),\n    ].includes(team),\n  );\n\n  if (upcomingTeams.length === 0) return null;\n\n  return (\n    <ImminentMatchBanner\n      key={eventKey + ":" + upcomingMatch.key}\n      match={upcomingMatch}\n      teams={upcomingTeams}\n      eventName={event?.short_name || event?.name || eventKey}\n    />\n  );\n}\n\ntype TileSurfaceProps = {
+function SurfaceUpcomingMatchBanner({
+  eventKey,
+  config,
+}: {
+  eventKey: string;
+  config: TileSurfaceState["eventConfigs"][string] | undefined;
+}) {
+  const { event, matches, upcomingMatchKey } = useEventState(eventKey);
+  if (!config?.matchNotifications || !upcomingMatchKey) return null;
+  const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;
+  if (!upcomingMatch) return null;
+
+  const upcomingTeams = config.trackedTeams.filter((team) => 
+    [
+      ...(upcomingMatch.alliances.red.team_keys ?? []),
+      ...(upcomingMatch.alliances.blue.team_keys ?? []),
+    ].includes(team),
+  );
+
+  if (upcomingTeams.length === 0) return null;
+
+  return (
+    <ImminentMatchBanner
+      key={eventKey + ":" + upcomingMatch.key}
+      match={upcomingMatch}
+      teams={upcomingTeams}
+      eventName={event?.short_name || event?.name || eventKey}
+    />
+  );
+}
+
+type TileSurfaceProps = {
   controller: TileSurfaceController;
   isDivisional?: boolean;
   className?: string;
