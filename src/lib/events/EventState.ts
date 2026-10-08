@@ -30,6 +30,8 @@ export type EventStateSnapshot = {
   error: Error | null;
   websocketStatus: EventWebSocketStatus;
   websocketStale: boolean;
+  upcomingMatchKey: string | null;
+  upcomingMatchTeamKeys: string[];
 };
 
 type Listener = (snapshot: EventStateSnapshot) => void;
@@ -54,6 +56,8 @@ export class EventState {
     error: null,
     websocketStatus: "disconnected",
     websocketStale: false,
+    upcomingMatchKey: null,
+    upcomingMatchTeamKeys: [],
   };
 
   private readonly listeners = new Set<Listener>();
@@ -428,10 +432,25 @@ export class EventState {
 
     switch (message.messageType) {
       case "upcoming_match":
+        this.update((current) => ({
+          ...current,
+          upcomingMatchKey: message.matchKey ?? null,
+          upcomingMatchTeamKeys: message.teamKeys ?? [],
+        }));
         this.reloadMatches();
         break;
 
       case "match_score":
+        this.update((current) =>
+          message.matchKey &&
+          current.upcomingMatchKey === message.matchKey
+            ? {
+                ...current,
+                upcomingMatchKey: null,
+                upcomingMatchTeamKeys: [],
+              }
+            : current,
+        );
         this.reloadMatches();
         this.reloadStatuses();
         this.reloadAlliances();
