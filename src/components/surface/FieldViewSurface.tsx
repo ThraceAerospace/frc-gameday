@@ -1,7 +1,7 @@
 "use client";
 
 import type { TBAEvent } from "@/lib/tba/types";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import TileSurfaceSettingsView from "./TileSurfaceSettingsView";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 
@@ -39,8 +39,9 @@ export default function FieldViewSurface({
     tileSurfaceController.getState
   );
   const actions = tileSurfaceController.actions;
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  useTileSurfaceKeyboard(state, actions);
+  useTileSurfaceKeyboard(state, actions, () => setSettingsOpen(true));
 
   return (
     <div
@@ -109,7 +110,12 @@ export default function FieldViewSurface({
           ))}
         </div>
 
-        <TileSurfaceSettingsView state={state} actions={actions} />
+        <TileSurfaceSettingsView
+          state={state}
+          actions={actions}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+        />
       </header>
 
       <TileSurface
