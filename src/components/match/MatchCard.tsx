@@ -119,12 +119,14 @@ export default function MatchCard({
   const matchName = compactMatchName(match, playoffType);
 
   const time =
-    isNext && match.predicted_time != null ? (
+    isNext && (match.predicted_time != null || match.time != null) ? (
       <NextMatchCountdown nextMatch={match} />
     ) : match.actual_time != null ? (
       formatEventTime(match.actual_time, eventTimezone)
     ) : match.predicted_time != null ? (
       formatEventTime(match.predicted_time, eventTimezone)
+    ) : match.time != null ? (
+      formatEventTime(match.time, eventTimezone)
     ) : null;
   return (
     <article

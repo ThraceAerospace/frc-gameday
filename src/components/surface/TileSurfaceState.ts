@@ -7,14 +7,14 @@ import { createEventViewConfig, EventViewConfig } from "@/components/eventview/E
 
 type LayoutKey = keyof typeof LAYOUTS;
 
-export type MultiviewState = {
+export type TileSurfaceState = {
   eventConfigs: Record<string, EventViewConfig>;
   streams: string[];
   priority: string[];
   layoutKey: LayoutKey | null;
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
-  autoFocusMatches: boolean;
+  upcomingMatchKey: string | null;
   eventPickerOpen: boolean;
   eventSearch: string;
   availableEvents: TBAEvent[];
@@ -24,15 +24,21 @@ export type MultiviewState = {
   priorityEditKey: string | null;
 };
 
-export type MatchImminentSignal = {
-  type: "match_imminent";
-  matchKey: string;
-  severity: "hard" | "soft";
-};
+export type UpcomingMatchAlert =
+  | {
+      type: "upcoming_match";
+      eventKey: string;
+      matchKey: string;
+    }
+  | {
+      type: "upcoming_match_cleared";
+      eventKey: string;
+      matchKey: string;
+    };
 
-export function createInitialMultiviewState(
+export function createInitialTileSurfaceState(
   events: string[]
-): MultiviewState {
+): TileSurfaceState {
   const streams = [...new Set(events.filter(Boolean).map(String))];
   const eventConfigs = Object.fromEntries(
     streams.map((eventKey) => [eventKey, createEventViewConfig()])
@@ -45,7 +51,7 @@ export function createInitialMultiviewState(
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
-    autoFocusMatches: true,
+    upcomingMatchKey: null,
     eventPickerOpen: false,
     eventSearch: "",
     availableEvents: [],

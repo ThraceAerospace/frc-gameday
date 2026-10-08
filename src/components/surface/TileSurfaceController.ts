@@ -17,39 +17,37 @@ import {
 } from "@/lib/multiview/layouts";
 
 import type {
-  MultiviewActions,
-  MultiviewController,
-  MultiviewWebSocketEvent,
-  MultiviewWebSocketHandlers,
-} from "./MultiviewActions";
+  TileSurfaceActions,
+  TileSurfaceController,
+} from "./TileSurfaceActions";
 import {
-  createInitialMultiviewState,
-  type MatchImminentSignal,
-  type MultiviewState,
-} from "./MultiviewState";
+  createInitialTileSurfaceState,
+  type UpcomingMatchAlert,
+  type TileSurfaceState,
+} from "./TileSurfaceState";
 import { createEventViewConfig } from "@/components/eventview/EventViewConfig";
 
 const CONTROLS_HIDE_DELAY = 3000;
 
-export type UseMultiviewControllerOptions = {
+export type UseTileSurfaceControllerOptions = {
   events: string[];
-  controller?: MultiviewController;
+  controller?: TileSurfaceController;
 };
 
-export function useMultiviewController({
+export function useTileSurfaceController({
   events,
   controller: externalController,
-}: UseMultiviewControllerOptions): MultiviewController {
+}: UseTileSurfaceControllerOptions): TileSurfaceController {
   const initialStreams = useMemo(
     () => [...new Set(events.filter(Boolean).map(String))],
     [events]
   );
 
-  const [state, setState] = useState<MultiviewState>(() =>
-    createInitialMultiviewState(initialStreams)
+  const [state, setState] = useState<TileSurfaceState>(() =>
+    createInitialTileSurfaceState(initialStreams)
   );
   const listenersRef = useRef(
-    new Set<(state: MultiviewState) => void>()
+    new Set<(state: TileSurfaceState) => void>()
   );
 
   const stateRef = useRef(state);
@@ -63,11 +61,15 @@ export function useMultiviewController({
   }, [state]);
 
   const update = useCallback(
-    (updater: (current: MultiviewState) => MultiviewState) => {
+    (updater: (current: TileSurfaceState) => TileSurfaceState) => {
       setState((current) => updater(current));
     },
     []
   );
+
+  const replaceState = useCallback((nextState: TileSurfaceState) => {
+    setState(nextState);
+  }, []);
 
   const clearControlsTimeout = useCallback(() => {
     if (controlsTimeoutRef.current) {
@@ -249,49 +251,74 @@ export function useMultiviewController({
     [showControls, update]
   );
 
-  const handleMatchImminent = useCallback(
-    (signal: string | MatchImminentSignal) => {
-      const current = stateRef.current;
-
-      if (!current.autoFocusMatches) {
+  const setUpcomingMatchAlert = useCallback(
+    (signal: UpcomingMatchAlert) => {
+      if (!stateRef.current.streams.includes(signal.eventKey)) {
         return;
       }
 
-      const eventKey =
-        typeof signal === "string" ? signal : signal.matchKey;
+      update((current) => {
+        if (signal.type === "upcoming_match_cleared") {
+          if (current.upcomingMatchKey !== signal.matchKey) {
+            return current;
+          }
 
-      if (!current.streams.includes(eventKey)) {
-        return;
-      }
+          return {
+            ...current,
+            upcomingMatchKey: null,
+          };
+        }
 
-      const layoutKey =
-        current.layoutKey ??
-        pickLayout(current.streams.length || 1);
-
-      update((next) => ({
-        ...next,
-        activeKey: eventKey,
-        highlightLayoutKey: pickHighlightLayout(
-          LAYOUTS[layoutKey]?.slots.length ?? 1
-        ),
-      }));
+        return current.upcomingMatchKey === signal.matchKey
+          ? current
+          : {
+              ...current,
+              upcomingMatchKey: signal.matchKey,
+            };
+      });
     },
-    [update]
+    [update],
   );
 
-  const actions = useMemo<MultiviewActions>(
+  const highlightEvent = useCallback(
+    (eventKey: string) => {
+      showControls();
+
+      update((current) => {
+        if (!current.streams.includes(eventKey)) {
+          return current;
+        }
+
+        const layoutKey =
+          current.layoutKey ??
+          pickLayout(current.streams.length || 1);
+
+        if (
+          current.activeKey === eventKey &&
+          current.highlightLayoutKey !== null
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          activeKey: eventKey,
+          highlightLayoutKey: pickHighlightLayout(
+            LAYOUTS[layoutKey]?.slots.length ?? 1,
+          ),
+        };
+      });
+    },
+    [showControls, update],
+  );
+
+  const actions = useMemo<TileSurfaceActions>(
     () => ({
       showControls,
       hideControls,
 
-      setAutoFocusMatches: (enabled) => {
-        update((current) => ({
-          ...current,
-          autoFocusMatches: enabled,
-        }));
-      },
-
-      handleMatchImminent,
+      setUpcomingMatchAlert,
+      highlightEvent,
 
       toggleActive,
 
@@ -431,7 +458,6 @@ export function useMultiviewController({
             ...next.eventConfigs,
             [eventKey]: createEventViewConfig(),
           },
-          eventPickerOpen: false,
         }));
 
         updateUrl(nextStreams);
@@ -611,7 +637,8 @@ export function useMultiviewController({
       },
     }),
     [
-      handleMatchImminent,
+      setUpcomingMatchAlert,
+      highlightEvent,
       hideControls,
       showControls,
       toggleActive,
@@ -639,67 +666,26 @@ export function useMultiviewController({
     });
   }, [state.streams, update]);
 
-  const ingestWebSocketEvent = useCallback(
-    (
-      event: MultiviewWebSocketEvent,
-      handlers: MultiviewWebSocketHandlers
-    ) => {
-      if (event.type !== "tba-update") {
-        return;
-      }
-
-      const messageType = event.messageType;
-
-      if (!messageType) {
-        return;
-      }
-
-      switch (messageType) {
-        case "upcoming_match":
-        case "match_score":
-        case "match_video":
-          handlers.refreshMatches();
-          handlers.refreshStatuses();
-          return;
-
-        case "starting_comp_level":
-        case "schedule_updated":
-          handlers.refreshAll();
-          return;
-
-        case "alliance_selection":
-          handlers.refreshAlliances();
-          handlers.refreshStatuses();
-          handlers.refreshMatches();
-          return;
-
-        default:
-          handlers.refreshAll();
-          return;
-      }
-    },
-    []
-  );
-
-  const localController = useMemo<MultiviewController>(
+  const localController = useMemo<TileSurfaceController>(
     () => ({
       getState: () => stateRef.current,
+      replaceState,
       subscribe: (listener) => {
         listenersRef.current.add(listener);
         return () => listenersRef.current.delete(listener);
       },
       actions,
-      ingestWebSocketEvent,
     }),
-    [actions, ingestWebSocketEvent]
+[actions, replaceState]
   );
 
   return externalController ?? localController;
 }
 
-export function useMultiviewKeyboard(
-  state: MultiviewState,
-  actions: MultiviewActions
+export function useTileSurfaceKeyboard(
+  state: TileSurfaceState,
+  actions: TileSurfaceActions,
+  onSettings?: () => void,
 ) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -716,6 +702,12 @@ export function useMultiviewKeyboard(
       }
 
       actions.showControls();
+
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        onSettings?.();
+        return;
+      }
 
       if (event.key >= "1" && event.key <= "9") {
         event.preventDefault();
@@ -776,5 +768,5 @@ export function useMultiviewKeyboard(
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [actions, state]);
+  }, [actions, onSettings, state]);
 }

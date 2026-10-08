@@ -14,8 +14,8 @@ type TBAWebhookData = {
   event_key?: string;
   event?: TBAEvent;
   team_key?: string;
-  team_keys?: string[];
   match_key?: string;
+  team_keys?: string[];
   match?: TBAWebhookMatch;
   awards?: TBAAward[];
 };
@@ -328,6 +328,21 @@ export async function POST(
       await broadcastTBAEvent(
         eventKey,
         type,
+        type === "upcoming_match"
+          ? {
+              matchKey: data?.match_key,
+              teamKeys: data?.match?.alliances
+              ? [
+                ...(data.match.alliances.red.team_keys ?? []),
+                ...(data.match.alliances.blue.team_keys ?? []),
+              ]
+              : undefined,
+            }
+          : type === "match_score"
+            ? {
+                matchKey: data?.match_key ?? data?.match?.key,
+              }
+            : undefined,
       );
     } catch (error) {
       console.error(

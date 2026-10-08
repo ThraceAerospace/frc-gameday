@@ -20,16 +20,17 @@ export default function NextMatchCountdown({
     return () => window.clearInterval(id);
   }, []);
 
-  if (nextMatch.predicted_time == null) {
+  const matchTime = nextMatch.predicted_time ?? nextMatch.time;
+  if (matchTime == null) {
     return null;
   }
 
   const now = Date.now();
-  const target = nextMatch.predicted_time * 1_000;
+  const target = matchTime * 1_000;
 
   const seconds = Math.max(
     0,
-    Math.round(nextMatch.predicted_time - now / 1_000)
+    Math.round((target - now) / 1_000)
   );
 
   const nowDate = new Date(now);

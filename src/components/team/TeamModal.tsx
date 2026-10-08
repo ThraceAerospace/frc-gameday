@@ -40,6 +40,8 @@ export default function TeamModal({
 
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         onClose();
       }
     };
@@ -84,6 +86,7 @@ export default function TeamModal({
 
   return (
     <div
+      data-modal-layer
       className="modal-backdrop"
       onMouseDown={onClose}
     >

@@ -27,6 +27,10 @@ type EventFooterProps = {
   playoffType?: number | null;
   teamsStatuses: TBAEventTeamStatuses;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
+  priorityEditing?: boolean;
+  onToggleActive?: () => void;
+  slotNumber?: number;
+  controlHeld?: boolean;
 };
 
 export default function EventFooter({
@@ -46,19 +50,41 @@ export default function EventFooter({
   playoffType = null,
   teamsStatuses,
   multiview = {},
+  priorityEditing = false,
+  onToggleActive,
+  slotNumber,
+  controlHeld = false,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
   return (
-    <footer className="relative z-20 shrink-0 bg-neutral-950/95">
-      <div
-        className={`absolute left-0 z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
-          contentHidden ? "bottom-0" : "bottom-full -mb-px"
-        }`}
-      >
-        <div className="shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 py-0 shadow-lg">
-          <div className="relative z-30 flex translate-y-[5px] items-end gap-2 whitespace-nowrap leading-none">
-            <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
+    <footer
+      className={`pointer-events-none z-20 w-full ${
+        contentHidden
+          ? "absolute inset-x-0 bottom-0"
+          : "relative shrink-0"
+      }`}
+    >
+      <div className={`relative ${contentHidden ? "h-0" : ""}`}>
+        <div
+          className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+            contentHidden
+              ? "bottom-0 left-0"
+              : "bottom-full left-0 translate-y-[1px]"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={onToggleActive}
+            disabled={!onToggleActive}
+            className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg ${
+              onToggleActive
+                ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                : "cursor-default"
+            }`}
+            aria-label={onToggleActive ? `Activate ${eventName || "event"}` : undefined}
+          >
+            <span className="flex items-center gap-1.5 whitespace-nowrap leading-none text-[11px] font-bold text-white">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                   !wssConnected
@@ -75,70 +101,75 @@ export default function EventFooter({
                       : "Live updates connected"
                 }
               />
-              <span className="truncate">
-                {eventName || "Event"}
-              </span>
-              {eventTimezone && !isDivisional ? (
-                <span className="mt-0.5 text-[9px] text-neutral-500">
-                  <EventLocalTime timezone={eventTimezone} />
+              {controlHeld && slotNumber ? (
+                <span className="shrink-0 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-neutral-300">
+                  {slotNumber}
                 </span>
               ) : null}
+              <span className="truncate">{eventName || "Event"}</span>
+                  {eventTimezone && !isDivisional ? (
+                    <span className="mt-0.5 text-[9px] text-neutral-500">
+                      <EventLocalTime timezone={eventTimezone} />
+                    </span>
+              ) : null}
             </span>
-          </div>
+          </button>
+          {teamPills.length > 0 ? (
+            <div className="flex items-center gap-1">{teamPills}</div>
+          ) : null}
         </div>
-        {teamPills.length > 0 ? (
-          <div className="flex items-center gap-1">{teamPills}</div>
-        ) : null}
-      </div>
 
-      <div
-        className={`transition-transform duration-200 ${
-          contentHidden ? "translate-y-full" : ""
-        }`}
-      >
-        <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
-          {mode === "rankings" ? (
-            <RankingsStrip
-              teamsStatuses={teamsStatuses}
-              playoffAlliances={playoffAlliances}
-              playoffType={playoffType}
-              trackedTeams={team}
-            />
-          ) : mode === "split" ? (
-            <>
-              <div className="min-w-0 border-r border-white/15">
-                <MatchStrip
-                  matches={matches}
-                  team={team}
-                  nextMatch={nextMatch}
-                  lastMatch={lastMatch}
-                  eventTimezone={eventTimezone}
-                  playoffAlliances={playoffAlliances}
-                  playoffType={playoffType}
-                  multiview={multiview}
-                />
-              </div>
-              <div className="min-w-0">
-                <RankingsStrip
-                  teamsStatuses={teamsStatuses}
-                  playoffAlliances={playoffAlliances}
-                  playoffType={playoffType}
-                  trackedTeams={team}
-                />
-              </div>
-            </>
-          ) : (
-            <MatchStrip
-              matches={matches}
-              team={team}
-              nextMatch={nextMatch}
-              lastMatch={lastMatch}
-              eventTimezone={eventTimezone}
-              playoffAlliances={playoffAlliances}
-              playoffType={playoffType}
-              multiview={multiview}
-            />
-          )}
+        <div
+          className={`pointer-events-auto ${priorityEditing ? "border-t border-blue-500/80" : ""} ${
+            contentHidden
+              ? "absolute inset-x-0 bottom-0 translate-y-full"
+              : "relative translate-y-0"
+          } transition-transform duration-200`}
+        >
+          <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
+            {mode === "rankings" ? (
+              <RankingsStrip
+                teamsStatuses={teamsStatuses}
+                playoffAlliances={playoffAlliances}
+                playoffType={playoffType}
+                trackedTeams={team}
+              />
+            ) : mode === "split" ? (
+              <>
+                <div className="min-w-0 border-r border-white/15">
+                  <MatchStrip
+                    matches={matches}
+                    team={team}
+                    nextMatch={nextMatch}
+                    lastMatch={lastMatch}
+                    eventTimezone={eventTimezone}
+                    playoffAlliances={playoffAlliances}
+                    playoffType={playoffType}
+                    multiview={multiview}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <RankingsStrip
+                    teamsStatuses={teamsStatuses}
+                    playoffAlliances={playoffAlliances}
+                    playoffType={playoffType}
+                    trackedTeams={team}
+                  />
+                </div>
+              </>
+            ) : (
+              <MatchStrip
+                matches={matches}
+                team={team}
+                nextMatch={nextMatch}
+                lastMatch={lastMatch}
+                eventTimezone={eventTimezone}
+                playoffAlliances={playoffAlliances}
+                playoffType={playoffType}
+                multiview={multiview}
+              />
+            )}
+          </div>
         </div>
       </div>
     </footer>

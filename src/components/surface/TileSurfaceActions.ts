@@ -1,38 +1,25 @@
 import type { TBAEvent } from "@/lib/tba/types";
 import type {
-  MatchImminentSignal,
-  MultiviewState,
-} from "./MultiviewState";
+  UpcomingMatchAlert,
+  TileSurfaceState,
+} from "./TileSurfaceState";
 import type {
   EventViewCommandType,
   EventViewConfig,
   EventViewPresentation,
 } from "@/components/eventview/EventViewConfig";
 
-export type MultiviewWebSocketEvent = {
-  type: string;
-  eventKey?: string;
-  messageType?: string;
-};
-
-export type MultiviewWebSocketHandlers = {
-  refreshMatches(): void;
-  refreshStatuses(): void;
-  refreshAlliances(): void;
-  refreshAll(): void;
-};
-
-export type MultiviewActions = {
+export type TileSurfaceActions = {
   showControls(): void;
   hideControls(): void;
 
-  setAutoFocusMatches(enabled: boolean): void;
-  handleMatchImminent(signal: string | MatchImminentSignal): void;
+  setUpcomingMatchAlert(signal: UpcomingMatchAlert): void;
+  highlightEvent(eventKey: string): void;
 
   toggleActive(eventKey: string): void;
   clearActive(): void;
 
-  setLayout(layoutKey: MultiviewState["layoutKey"]): void;
+  setLayout(layoutKey: TileSurfaceState["layoutKey"]): void;
   resetLayout(): void;
 
   movePriority(position: number, direction: -1 | 1): void;
@@ -55,16 +42,13 @@ export type MultiviewActions = {
   clearEventViewCommand(eventKey: string): void;
 };
 
-export type MultiviewActionSource =
-  | MultiviewActions
-  | ((actions: MultiviewActions) => void);
+export type TileSurfaceActionSource =
+  | TileSurfaceActions
+  | ((actions: TileSurfaceActions) => void);
 
-export type MultiviewController = {
-  getState(): MultiviewState;
-  subscribe(listener: (state: MultiviewState) => void): () => void;
-  actions: MultiviewActions;
-  ingestWebSocketEvent(
-    event: MultiviewWebSocketEvent,
-    handlers: MultiviewWebSocketHandlers
-  ): void;
+export type TileSurfaceController = {
+  getState(): TileSurfaceState;
+  replaceState(state: TileSurfaceState): void;
+  subscribe(listener: (state: TileSurfaceState) => void): () => void;
+  actions: TileSurfaceActions;
 };

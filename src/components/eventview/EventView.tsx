@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -13,33 +12,34 @@ import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
+import ImminentMatchBanner from "./ImminentMatchBanner";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
+import { useEventState } from "@/lib/events";
 import type { BuiltStream } from "@/lib/gameday/buildStreams";
 
-import { useEvent } from "./hooks/useEvent";
-import { useTeams } from "./hooks/useTeams";
-import { useTeamsStatuses } from "./hooks/useTeamsStatuses";
-import { usePlayoffAlliances } from "./hooks/usePlayoffAlliances";
-import { useMatches } from "./hooks/useMatches";
+
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
-import { useWebSocket } from "./hooks/useWebSocket";
-import { useMatchImminence } from "../multiview/hooks/useMatchImminence";
-import type { MultiviewController } from "../multiview/MultiviewActions";
-import type { WebSocketEvent } from "./hooks/useWebSocket";
+import { useUpcomingMatchAlert } from "../surface/hooks/useUpcomingMatchAlert";
+import type { TileSurfaceController } from "../surface/TileSurfaceActions";
 import type { EventViewConfig } from "./EventViewConfig";
 
 type EventViewProps = {
   event: string;
   config: EventViewConfig;
-  controller: MultiviewController;
+  controller: TileSurfaceController;
   isDivisional?: boolean;
   slotPresentation?: {
     teamTracker: "visible" | "hidden";
     matchInfo: "visible" | "hidden";
     footerHidden?: boolean;
   };
+  priorityEditing?: boolean;
+  upcomingMatchKey?: string | null;
+  onToggleActive?: () => void;
+  slotNumber?: number;
+  controlHeld?: boolean;
 };
 
 export default function EventView({
@@ -48,35 +48,29 @@ export default function EventView({
   controller,
   isDivisional = false,
   slotPresentation,
+  priorityEditing = false,
+  upcomingMatchKey = null,
+  onToggleActive,
+  slotNumber,
+  controlHeld = false,
 }: EventViewProps) {
   const {
+    state: eventState,
     event: eventData,
-    loading,
-    error,
-  } = useEvent(event);
-
-  const { teams } = useTeams(event);
-
-  const {
-    teamsStatuses,
-    reload: reloadStatuses,
-  } = useTeamsStatuses(event);
-
-  const {
-    alliances,
-    reload: reloadAlliances,
-  } = usePlayoffAlliances(event);
-
-  const [webSocketStale, setWebSocketStale] = useState(false);
-  const websocketRefreshTimersRef =
-    useRef<Map<string, number>>(new Map());
-
-  const {
+    teams,
     matches,
     eventNextMatch,
     eventLastMatch,
-    reload: reloadMatches,
-  } = useMatches(event, () => setWebSocketStale(true));
+    teamsStatuses,
+    alliances,
+    loading,
+    error,
+    websocketStatus,
+    websocketStale: webSocketStale,
+  } = useEventState(event);
+
+
+  const eventStateSnapshot = eventState?.getSnapshot() ?? null;
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode;
@@ -86,6 +80,7 @@ export default function EventView({
 
   const [streamsRaw, setStreamsRaw] =
     useState<BuiltStream[]>([]);
+  const [streamReloadKey, setStreamReloadKey] = useState(0);
 
   const [teamsOpen, setTeamsOpen] =
     useState(false);
@@ -158,19 +153,13 @@ export default function EventView({
     ? trackedMatches
     : matches;
 
-  useMatchImminence(
-    teamMode
-      ? trackedNextMatch
-      : null,
-    (signal) => {
-      if (
-        signal?.type ===
-        "match_imminent"
-      ) {
-        controller.actions.handleMatchImminent(signal);
-      }
-    },
-  );
+  useUpcomingMatchAlert({
+    eventKey: event,
+    eventState: eventStateSnapshot,
+    trackedTeams,
+    autoHighlight: eventConfig.autoHighlight,
+    actions: controller.actions,
+  });
 
   const teamPills = trackedTeams.map((team) => (
     <TeamPill
@@ -185,98 +174,26 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
-  const refreshLiveData =
-    useCallback(() => {
-      void reloadAlliances();
-      void reloadMatches();
-      void reloadStatuses();
-    }, [
-      reloadMatches,
-      reloadAlliances,
-      reloadStatuses,
-    ]);
+  const upcomingMatch = upcomingMatchKey
+    ? matches.find((match) => match.key === upcomingMatchKey) ?? null
+    : null;
 
-  const handleWebSocketEvent = useCallback(
-    (message: WebSocketEvent) => {
-      if (message.type !== "tba-update") {
-        return;
-      }
+  const upcomingTeams = upcomingMatch
+    ? trackedTeams.filter((team) =>
+        [
+          ...(upcomingMatch.alliances.red.team_keys ?? []),
+          ...(upcomingMatch.alliances.blue.team_keys ?? []),
+        ].includes(team),
+      )
+    : [];
 
-      if (message.eventKey && message.eventKey !== event) {
-        return;
-      }
+  const refreshLiveData = useCallback(() => {
+    eventState?.reloadAlliances();
+    eventState?.reloadMatches();
+    eventState?.reloadStatuses();
+  }, [eventState]);
 
-      setWebSocketStale(true);
-
-      const handlers = {
-        refreshMatches: () => {
-          void reloadMatches();
-        },
-        refreshStatuses: () => {
-          void reloadStatuses();
-        },
-        refreshAlliances: () => {
-          void reloadAlliances();
-        },
-        refreshAll: refreshLiveData,
-      };
-
-      /*
-       * The webhook has already mutated Redis before the WSS
-       * broadcast is sent. Refetch Redis immediately so the UI
-       * gets the webhook payload without waiting for TBA.
-       *
-       * Then debounce the same authoritative TBA refetch for
-       * 65 seconds. This gives TBA's upstream API time to catch
-       * up before the client asks it for the authoritative
-       * representation. Redis TTLs are never modified here.
-       */
-      controller.ingestWebSocketEvent(message, handlers);
-
-      const refreshKey = message.messageType ?? message.type;
-      const existingTimer =
-        websocketRefreshTimersRef.current.get(refreshKey);
-
-      if (existingTimer !== undefined) {
-        window.clearTimeout(existingTimer);
-      }
-
-      const timer = window.setTimeout(() => {
-        websocketRefreshTimersRef.current.delete(refreshKey);
-        setWebSocketStale(false);
-        controller.ingestWebSocketEvent(message, handlers);
-      }, 65_000);
-
-      websocketRefreshTimersRef.current.set(
-        refreshKey,
-        timer,
-      );
-    },
-    [
-      controller,
-      event,
-      refreshLiveData,
-      reloadAlliances,
-      reloadMatches,
-      reloadStatuses,
-    ],
-  );
-
-  useEffect(() => {
-    const timers = websocketRefreshTimersRef.current;
-
-    return () => {
-      for (const timer of timers.values()) {
-        window.clearTimeout(timer);
-      }
-
-      timers.clear();
-    };
-  }, []);
-
-  const {
-    connected: wssConnected,
-  } = useWebSocket(event, handleWebSocketEvent);
+  const wssConnected = websocketStatus === "connected";
 
   useEffect(() => {
     const command = eventConfig.command;
@@ -294,6 +211,9 @@ export default function EventView({
         break;
       case "refresh":
         refreshLiveData();
+        break;
+      case "reloadStream":
+        setStreamReloadKey((value) => value + 1);
         break;
     }
 
@@ -380,10 +300,21 @@ export default function EventView({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
+      {eventConfig.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
+        <ImminentMatchBanner
+          key={upcomingMatch.key}
+          match={upcomingMatch}
+          teams={upcomingTeams}
+          eventName={eventData.short_name || eventData.name || event}
+        />
+      ) : null}
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
         <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
             stream={activeStream}
+            reloadKey={streamReloadKey}
+            muted={eventConfig.streamMuted}
+            volume={eventConfig.streamVolume}
           />
 
           {!activeStream && (
@@ -420,6 +351,10 @@ export default function EventView({
         teamsStatuses={teamsStatuses}
         teamPills={teamPills}
         multiview={{ presentation }}
+        priorityEditing={priorityEditing}
+        onToggleActive={onToggleActive}
+        slotNumber={slotNumber}
+        controlHeld={controlHeld}
       />
 
       <StreamModal

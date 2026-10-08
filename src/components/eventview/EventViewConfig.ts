@@ -7,7 +7,7 @@ export type EventViewPresentation = {
   matchInfo: EventViewVisibility;
 };
 
-export type EventViewCommandType = "teams" | "stream" | "refresh";
+export type EventViewCommandType = "teams" | "stream" | "refresh" | "reloadStream";
 
 export type EventViewCommand = {
   id: number;
@@ -16,14 +16,20 @@ export type EventViewCommand = {
 
 export type EventViewConfig = {
   trackedTeams: string[];
+  autoHighlight: boolean;
+  matchNotifications: boolean;
   selectedStream: string | null;
   presentation: EventViewPresentation;
   footerMode: EventViewFooterMode;
+  streamMuted: boolean;
+  streamVolume: number;
   command: EventViewCommand | null;
 };
 
 export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
   trackedTeams: [],
+  autoHighlight: false,
+  matchNotifications: true,
   selectedStream: null,
   presentation: {
     teamTracker: "visible",
@@ -31,6 +37,8 @@ export const DEFAULT_EVENT_VIEW_CONFIG: EventViewConfig = {
   },
   command: null,
   footerMode: "matchStrip",
+  streamMuted: true,
+  streamVolume: 100,
 };
 
 export function createEventViewConfig(

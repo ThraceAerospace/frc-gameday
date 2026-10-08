@@ -15,7 +15,7 @@ export async function buildStreams(webcasts: TBAWebcast[] = []): Promise<BuiltSt
         return {
           type: "twitch",
           channel: wc.channel,
-          url: `https://player.twitch.tv/?autoplay=true&channel=${wc.channel}&parent=${process.env.NEXT_PUBLIC_DOMAIN || "localhost"}`,
+          url: `https://player.twitch.tv/?autoplay=true&muted=true&channel=${wc.channel}&parent=${process.env.NEXT_PUBLIC_DOMAIN || "localhost"}`,
           date: wc.date,
           meta: null,
         };
@@ -36,7 +36,7 @@ export async function buildStreams(webcasts: TBAWebcast[] = []): Promise<BuiltSt
       return {
         type: "youtube",
         channel: wc.channel,
-        url: `https://www.youtube.com/embed/${wc.channel}?autoplay=1`,
+        url: `https://www.youtube.com/embed/${wc.channel}?autoplay=1&mute=1&playsinline=1`,
         date: wc.date,
         meta,
       };
