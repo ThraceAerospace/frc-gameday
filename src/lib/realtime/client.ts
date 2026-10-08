@@ -4,8 +4,7 @@ export type EventWebSocketMessage = {
   type: string;
   eventKey?: string;
   messageType?: string;
-  matchKey?: string;
-  teamKeys?: string[];
+  messageData?: Record<string, unknown>;
 };
 
 export type EventWebSocketStatus =
@@ -21,49 +20,33 @@ class EventWebSocketManager {
   private reconnectTimer: number | null = null;
   private reconnectDelay = 1000;
   private started = false;
-
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private readonly statusHandlers = new Set<StatusHandler>();
-
   private status: EventWebSocketStatus = "disconnected";
 
   subscribe(eventKey: string, handler: EventHandler): () => void {
-    if (!eventKey) {
-      return () => {};
-    }
+    if (!eventKey) return () => {};
 
     let handlers = this.handlers.get(eventKey);
-
     if (!handlers) {
       handlers = new Set();
       this.handlers.set(eventKey, handlers);
     }
 
     handlers.add(handler);
-
     console.debug("[EventWebSocket] Subscribe:", eventKey);
 
     this.ensureStarted();
-    this.send({
-      type: "subscribe",
-      eventKey,
-    });
+    this.send({ type: "subscribe", eventKey });
 
     return () => {
       const current = this.handlers.get(eventKey);
-
-      if (!current) {
-        return;
-      }
+      if (!current) return;
 
       current.delete(handler);
-
       if (current.size === 0) {
         this.handlers.delete(eventKey);
-        this.send({
-          type: "unsubscribe",
-          eventKey,
-        });
+        this.send({ type: "unsubscribe", eventKey });
       }
     };
   }
@@ -72,13 +55,8 @@ class EventWebSocketManager {
     this.statusHandlers.add(handler);
     this.ensureStarted();
 
-    // A subscriber may be added after the shared socket is already connected.
-    // Deliver the current status asynchronously so every EventState gets the
-    // same connection state without re-entering React subscription setup.
     queueMicrotask(() => {
-      if (this.statusHandlers.has(handler)) {
-        handler(this.status);
-      }
+      if (this.statusHandlers.has(handler)) handler(this.status);
     });
 
     return () => {
@@ -87,30 +65,19 @@ class EventWebSocketManager {
   }
 
   private ensureStarted() {
-    if (this.started) {
-      return;
-    }
-
+    if (this.started) return;
     this.started = true;
     this.connect();
   }
 
   private setStatus(status: EventWebSocketStatus) {
-    if (this.status === status) {
-      return;
-    }
-
+    if (this.status === status) return;
     this.status = status;
-
-    for (const handler of this.statusHandlers) {
-      handler(status);
-    }
+    for (const handler of this.statusHandlers) handler(status);
   }
 
   private connect() {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
 
     if (
       this.socket &&
@@ -121,7 +88,6 @@ class EventWebSocketManager {
     }
 
     console.debug("[EventWebSocket] Connecting");
-
     this.setStatus("connecting");
 
     const protocol =
@@ -134,26 +100,19 @@ class EventWebSocketManager {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
-      if (this.socket !== socket) {
-        return;
-      }
+      if (this.socket !== socket) return;
 
       this.reconnectDelay = 1000;
       this.setStatus("connected");
       console.debug("[EventWebSocket] Connected");
 
       for (const eventKey of this.handlers.keys()) {
-        this.send({
-          type: "subscribe",
-          eventKey,
-        });
+        this.send({ type: "subscribe", eventKey });
       }
     });
 
     socket.addEventListener("message", (event) => {
-      if (this.socket !== socket) {
-        return;
-      }
+      if (this.socket !== socket) return;
 
       try {
         const message =
@@ -182,32 +141,22 @@ class EventWebSocketManager {
     });
 
     socket.addEventListener("error", () => {
-      if (this.socket === socket) {
-        this.setStatus("disconnected");
-      }
+      if (this.socket === socket) this.setStatus("disconnected");
     });
 
     socket.addEventListener("close", () => {
-      if (this.socket !== socket) {
-        return;
-      }
+      if (this.socket !== socket) return;
 
       this.socket = null;
       this.setStatus("disconnected");
       console.debug("[EventWebSocket] Disconnected");
 
-      if (this.reconnectTimer !== null) {
-        return;
-      }
+      if (this.reconnectTimer !== null) return;
 
       const delay = this.reconnectDelay;
-
       this.reconnectTimer = window.setTimeout(() => {
         this.reconnectTimer = null;
-        this.reconnectDelay = Math.min(
-          this.reconnectDelay * 2,
-          30_000,
-        );
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
         this.connect();
       }, delay);
     });
@@ -217,9 +166,7 @@ class EventWebSocketManager {
     type: "subscribe" | "unsubscribe";
     eventKey: string;
   }) {
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      return;
-    }
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
 
     console.debug("[EventWebSocket] Send:", message);
     this.socket.send(JSON.stringify(message));
@@ -227,7 +174,6 @@ class EventWebSocketManager {
 }
 
 export const eventWebSocket = new EventWebSocketManager();
-
 
 export function subscribeEventWebSocketStatus(
   handler: StatusHandler,
