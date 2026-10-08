@@ -50,9 +50,9 @@ All event data needed by Views for a given event belongs to that event's EventSt
 
 Every UI parent/container that hosts one or more Views is a `Surface`.
 
-Examples include `TileSurface` and future dedicated display surfaces.
+Examples include `TileViewSurface` and future dedicated display surfaces.
 
-The existing Multiview stage is therefore redefined as a `TileSurface`.
+The existing Multiview stage is therefore redefined as a `TileViewSurface`.
 
 A Surface determines the presentation environment in which Views are displayed. It does not own the domain data displayed by those Views.
 
@@ -372,7 +372,7 @@ The following naming rules are architectural constraints, not merely stylistic p
 | Remote Surface proxy | explicit remote SurfaceController name |
 | Local Surface controller | explicit local Surface controller name |
 
-Examples: `EventState`, `EventStreamView`, `EventDataPanelView`, `TileSurface`, `TileSurfaceController`, `TileSurfaceSettingsView`.
+Examples: `EventState`, `EventStreamView`, `EventDataPanelView`, `TileViewSurface`, `TileSurfaceController`, `TileSurfaceSettingsView`.
 
 ## 14. Migration Rule
 
@@ -380,7 +380,7 @@ Existing components should not be renamed merely to satisfy the naming conventio
 
 Each existing component must first have its responsibilities identified and then be moved into the appropriate architectural boundary.
 
-For example, the current Multiview stage becomes a `TileSurface`, and the existing Multiview controller/action work becomes the proven implementation concept for `TileSurfaceController`.
+For example, the current Multiview stage becomes a `TileViewSurface`, and the existing Multiview controller/action work becomes the proven implementation concept for `TileSurfaceController`.
 
 The goal is not to preserve Multiview-specific architecture. The goal is to generalize the successful controller/action model so the architecture is no longer specifically about Multiview.
 
