@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import type { ReactNode } from "react";
-import FieldViewSurface from "@/components/surface/FieldViewSurface";
+import TileViewSurface from "@/components/surface/TileViewSurface";
 
 function normalizeParams(param: string | string[] | undefined): string[] {
   if (!param) return [];
@@ -19,7 +19,7 @@ export default function GamedayPage({ searchParams }: { searchParams: Promise<{ 
   }
 
   return (
-    <FieldViewSurface
+    <TileViewSurface
       events={eventKeys}
       isDivisional={false}
     />
