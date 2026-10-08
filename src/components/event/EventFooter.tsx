@@ -28,6 +28,7 @@ type EventFooterProps = {
   teamsStatuses: TBAEventTeamStatuses;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
   priorityEditing?: boolean;
+  onToggleActive?: () => void;
 };
 
 export default function EventFooter({
@@ -48,6 +49,7 @@ export default function EventFooter({
   teamsStatuses,
   multiview = {},
   priorityEditing = false,
+  onToggleActive,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
@@ -67,34 +69,42 @@ export default function EventFooter({
               : "bottom-full left-0 translate-y-[1px]"
           }`}
         >
-          <div className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg`}>
-            <div className="flex items-end gap-2 whitespace-nowrap leading-none">
-              <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    !wssConnected
-                      ? "bg-neutral-600"
-                      : wssStale
-                        ? "bg-blue-700"
-                        : "bg-green-500"
-                  }`}
-                  title={
-                    !wssConnected
-                      ? "Live updates disconnected"
-                      : wssStale
-                        ? "WebSocket quiet; using TBA fallback polling"
-                        : "Live updates connected"
-                  }
-                />
-                <span className="truncate">{eventName || "Event"}</span>
-                {eventTimezone && !isDivisional ? (
-                  <span className="mt-0.5 text-[9px] text-neutral-500">
-                    <EventLocalTime timezone={eventTimezone} />
-                  </span>
-                ) : null}
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={onToggleActive}
+            disabled={!onToggleActive}
+            className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg ${
+              onToggleActive
+                ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                : "cursor-default"
+            }`}
+            aria-label={onToggleActive ? `Activate ${eventName || "event"}` : undefined}
+          >
+            <span className="flex items-center gap-1.5 whitespace-nowrap leading-none text-[11px] font-bold text-white">
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  !wssConnected
+                    ? "bg-neutral-600"
+                    : wssStale
+                      ? "bg-blue-700"
+                      : "bg-green-500"
+                }`}
+                title={
+                  !wssConnected
+                    ? "Live updates disconnected"
+                    : wssStale
+                      ? "WebSocket quiet; using TBA fallback polling"
+                      : "Live updates connected"
+                }
+              />
+              <span className="truncate">{eventName || "Event"}</span>
+              {eventTimezone && !isDivisional ? (
+                <span className="mt-0.5 text-[9px] text-neutral-500">
+                  <EventLocalTime timezone={eventTimezone} />
+                </span>
+              ) : null}
+            </span>
+          </button>
           {teamPills.length > 0 ? (
             <div className="flex items-center gap-1">{teamPills}</div>
           ) : null}
