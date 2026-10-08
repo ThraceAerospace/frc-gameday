@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import FieldViewSurface from "@/components/surface/FieldViewSurface";
+import TileViewSurface from "@/components/surface/TileViewSurface";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import { subscribeEventState } from "@/lib/events/useEventState";
@@ -208,5 +208,5 @@ export default function RemoteSession({
     );
   }
 
-  return <FieldViewSurface controller={controller} />;
+  return <TileViewSurface controller={controller} />;
 }
