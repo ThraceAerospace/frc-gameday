@@ -678,7 +678,8 @@ export function useTileSurfaceController({
 
 export function useTileSurfaceKeyboard(
   state: TileSurfaceState,
-  actions: TileSurfaceActions
+  actions: TileSurfaceActions,
+  onSettings?: () => void,
 ) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -695,6 +696,12 @@ export function useTileSurfaceKeyboard(
       }
 
       actions.showControls();
+
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        onSettings?.();
+        return;
+      }
 
       if (event.key >= "1" && event.key <= "9") {
         event.preventDefault();
@@ -755,5 +762,5 @@ export function useTileSurfaceKeyboard(
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [actions, state]);
+  }, [actions, onSettings, state]);
 }
