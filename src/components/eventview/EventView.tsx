@@ -12,6 +12,7 @@ import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
+import ImminentMatchBanner from "./ImminentMatchBanner";
 
 import { buildStreams } from "@/lib/gameday/buildStreams";
 import { useEventState } from "@/lib/events";
@@ -34,6 +35,8 @@ type EventViewProps = {
     matchInfo: "visible" | "hidden";
     footerHidden?: boolean;
   };
+  priorityEditing?: boolean;
+  imminentMatchKey?: string | null;
 };
 
 export default function EventView({
@@ -42,6 +45,8 @@ export default function EventView({
   controller,
   isDivisional = false,
   slotPresentation,
+  priorityEditing = false,
+  imminentMatchKey = null,
 }: EventViewProps) {
   const {
     state: eventState,
@@ -161,6 +166,19 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
+  const imminentMatch = imminentMatchKey
+    ? matches.find((match) => match.key === imminentMatchKey) ?? null
+    : null;
+
+  const imminentTeams = imminentMatch
+    ? trackedTeams.filter((team) =>
+        [
+          ...(imminentMatch.alliances.red.team_keys ?? []),
+          ...(imminentMatch.alliances.blue.team_keys ?? []),
+        ].includes(team),
+      )
+    : [];
+
   const refreshLiveData = useCallback(() => {
     eventState?.reloadAlliances();
     eventState?.reloadMatches();
@@ -274,6 +292,14 @@ export default function EventView({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
+      {imminentMatch && imminentTeams.length > 0 ? (
+        <ImminentMatchBanner
+          key={imminentMatch.key}
+          match={imminentMatch}
+          teams={imminentTeams}
+          eventName={eventData.short_name || eventData.name || event}
+        />
+      ) : null}
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
         <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
@@ -317,6 +343,7 @@ export default function EventView({
         teamsStatuses={teamsStatuses}
         teamPills={teamPills}
         multiview={{ presentation }}
+        priorityEditing={priorityEditing}
       />
 
       <StreamModal
