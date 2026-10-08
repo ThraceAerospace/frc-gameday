@@ -459,9 +459,7 @@ export class EventState {
         const matchKey =
           typeof message.messageData?.match_key === "string"
             ? message.messageData.match_key
-            : typeof message.messageData?.match?.key === "string"
-              ? message.messageData.match.key
-              : null;
+            : null;
 
         this.update((current) =>
           matchKey &&
