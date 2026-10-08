@@ -403,8 +403,6 @@ export class EventState {
     this.update((current) => ({
       ...current,
       websocketStatus: status,
-      websocketStale:
-        status === "connected" ? false : current.websocketStale,
     }));
   };
 
@@ -414,10 +412,14 @@ export class EventState {
     if (
       this.stopped ||
       message.type !== "tba-update" ||
-      (message.eventKey && message.eventKey !== this.eventKey)
+      message.eventKey !== this.eventKey
     ) {
       return;
     }
+
+    this.clearTimer("match");
+    this.clearTimer("status");
+    this.clearTimer("alliance");
 
     this.update((current) =>
       current.websocketStale
