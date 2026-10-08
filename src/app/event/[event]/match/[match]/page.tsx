@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import type { TBAMatch, TBAWebcast } from "@/lib/tba/types";
 import { formatAlliance } from "@/lib/tba/formatters";
@@ -16,33 +17,36 @@ export default async function MatchPage({
 
   if (!eventKey || !matchKey) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <p className="text-neutral-400">Missing event or match key.</p>
-      </main>
+      <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
+        <p className="text-slate-500">Missing event or match key.</p>
+        </main>
+    </SiteShell>
     );
   }
 
   let match;
   let event;
+  let navigationEvents;
 
   try {
-    [match, event] = await Promise.all([
+    [match, event, navigationEvents] = await Promise.all([
       TBA.getMatch(matchKey),
       TBA.getEvent(eventKey),
+      TBA.getEvents(new Date().getFullYear()),
     ]);
   } catch {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
+      <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <div className="mx-auto max-w-5xl">
           <h1 className="text-2xl font-semibold">Match unavailable</h1>
 
-          <p className="mt-2 text-neutral-400">
+          <p className="mt-2 text-slate-500">
             Could not load match <code>{matchKey}</code>.
           </p>
 
           <Link
             href={`/event/${eventKey}`}
-            className="mt-6 inline-block text-sm text-neutral-400 hover:text-white"
+            className="mt-6 inline-block text-sm text-slate-500 hover:text-slate-900"
           >
             ← Back to event
           </Link>
@@ -52,29 +56,30 @@ export default async function MatchPage({
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+      <main className="min-h-full bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-5xl px-6 py-10">
         {/* Breadcrumb */}
-        <nav className="text-sm text-neutral-500">
+        <nav className="text-sm text-slate-400">
           <Link
             href={`/event/${event.key}`}
-            className="hover:text-white"
+            className="hover:text-slate-900"
           >
             {event.name}
           </Link>
 
           <span className="mx-2">/</span>
 
-          <span className="text-neutral-300">
+          <span className="text-slate-600">
             {formatMatchName(match)}
           </span>
         </nav>
 
         {/* Header */}
-        <header className="mt-6 border-b border-white/10 pb-8">
+        <header className="mt-6 border-b border-slate-200 pb-8">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <p className="font-mono text-sm text-neutral-500">
+              <p className="font-mono text-sm text-slate-400">
                 {match.key}
               </p>
 
@@ -82,14 +87,14 @@ export default async function MatchPage({
                 {formatMatchName(match)}
               </h1>
 
-              <p className="mt-2 text-neutral-400">
+              <p className="mt-2 text-slate-500">
                 {formatMatchType(match)}
               </p>
             </div>
 
             <Link
               href={`/gameday?event=${event.key}`}
-              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium transition hover:bg-white/10"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-100"
             >
               Open Gameday
             </Link>
@@ -98,7 +103,7 @@ export default async function MatchPage({
 
         {/* Match status */}
         <section className="mt-8">
-          <div className="grid gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:grid-cols-3">
+          <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-white/10 sm:grid-cols-3">
             <InfoItem
               label="Scheduled"
               value={formatTime(match.time, event.timezone)}
@@ -139,8 +144,8 @@ export default async function MatchPage({
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Result</h2>
 
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
-            <div className="grid grid-cols-3 border-b border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+            <div className="grid grid-cols-3 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-medium uppercase tracking-wide text-slate-400">
               <span>Alliance</span>
               <span className="text-center">Score</span>
               <span className="text-right">Result</span>
@@ -166,7 +171,7 @@ export default async function MatchPage({
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Match Information</h2>
 
-          <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:grid-cols-2">
+          <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-white/10 sm:grid-cols-2">
             <InfoItem label="Event" value={event.name} />
             <InfoItem label="Event Key" value={event.key} />
             <InfoItem label="Match Key" value={match.key} />
@@ -192,7 +197,7 @@ export default async function MatchPage({
           <div className="mt-4 flex flex-wrap gap-3">
             <Link
               href={`/event/${event.key}`}
-              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/10 hover:text-white"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
             >
               Event
             </Link>
@@ -262,7 +267,7 @@ function AlliancePanel({
           <Link
             key={team}
             href={`/team/${team}`}
-            className="rounded-lg border border-white/10 bg-black/30 px-3 py-3 font-mono text-sm text-neutral-200 transition hover:border-white/20 hover:bg-white/5"
+            className="rounded-lg border border-slate-200 bg-slate-50/30 px-3 py-3 font-mono text-sm text-neutral-200 transition hover:border-white/20 hover:bg-white"
           >
             {team.replace(/^frc/, "#")}
           </Link>
@@ -302,7 +307,7 @@ function ScoreRow({
   }
 
   return (
-    <div className="grid grid-cols-3 items-center border-b border-white/10 px-5 py-4 last:border-b-0">
+    <div className="grid grid-cols-3 items-center border-b border-slate-200 px-5 py-4 last:border-b-0">
       <span
         className={[
           "font-medium",
@@ -318,7 +323,7 @@ function ScoreRow({
         {formatScore(score)}
       </span>
 
-      <span className="text-right text-sm text-neutral-400">
+      <span className="text-right text-sm text-slate-500">
         {result}
       </span>
     </div>
@@ -334,7 +339,7 @@ function InfoItem({
 }) {
   return (
     <div className="bg-neutral-950 px-5 py-4">
-      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
         {label}
       </dt>
 
@@ -357,7 +362,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/10 hover:text-white"
+      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
     >
       {label}
     </a>
