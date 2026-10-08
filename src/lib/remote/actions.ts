@@ -30,6 +30,7 @@ export type RemoteMultiviewAction =
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
   | { type: "resetLayout" }
   | { type: "movePriority"; position: number; direction: -1 | 1 }
+  | { type: "selectPriorityEdit"; eventKey: string | null }
   | { type: "movePriorityEdit"; direction: -1 | 1 }
   | { type: "addEvent"; event: TBAEvent }
   | { type: "removeEvent"; eventKey: string }
@@ -56,7 +57,7 @@ export function createRemoteMultiviewActions(
     setLayout(layoutKey) { local.setLayout(layoutKey); send({ type: "setLayout", layoutKey }); },
     resetLayout() { local.resetLayout(); send({ type: "resetLayout" }); },
     movePriority(position, direction) { local.movePriority(position, direction); send({ type: "movePriority", position, direction }); },
-    selectPriorityEdit(eventKey) { local.selectPriorityEdit(eventKey); },
+    selectPriorityEdit(eventKey) { local.selectPriorityEdit(eventKey); send({ type: "selectPriorityEdit", eventKey }); },
     movePriorityEdit(direction) { local.movePriorityEdit(direction); send({ type: "movePriorityEdit", direction }); },
     openEventPicker() { local.openEventPicker(); },
     closeEventPicker() { local.closeEventPicker(); },
@@ -86,6 +87,7 @@ export function applyRemoteMultiviewAction(
     case "setLayout": actions.setLayout(action.layoutKey); break;
     case "resetLayout": actions.resetLayout(); break;
     case "movePriority": actions.movePriority(action.position, action.direction); break;
+    case "selectPriorityEdit": actions.selectPriorityEdit(action.eventKey); break;
     case "movePriorityEdit": actions.movePriorityEdit(action.direction); break;
     case "addEvent": actions.addEvent(action.event); break;
     case "removeEvent": actions.removeEvent(action.eventKey); break;
