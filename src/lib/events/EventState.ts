@@ -450,6 +450,40 @@ export class EventState {
     const refreshKey =
       message.messageType ?? message.type;
 
+    /*
+     * A known webhook only replaces its own pending
+     * authoritative refresh. Other resource timers remain
+     * independent and continue running.
+     *
+     * Unknown messages are treated as a full refresh signal:
+     * reset every pending authoritative timer, then schedule
+     * one full authoritative refresh for 65 seconds later.
+     */
+    if (!message.messageType) {
+      for (const timer of this.authoritativeTimers.values()) {
+        window.clearTimeout(timer);
+      }
+
+      this.authoritativeTimers.clear();
+
+      const timer = window.setTimeout(() => {
+        this.authoritativeTimers.clear();
+
+        if (this.stopped) {
+          return;
+        }
+
+        this.reloadAll();
+      }, AUTHORITATIVE_REFETCH_DELAY);
+
+      this.authoritativeTimers.set(
+        message.type,
+        timer,
+      );
+
+      return;
+    }
+
     const existing =
       this.authoritativeTimers.get(refreshKey);
 
@@ -459,6 +493,10 @@ export class EventState {
 
     const timer = window.setTimeout(() => {
       this.authoritativeTimers.delete(refreshKey);
+
+      if (this.stopped) {
+        return;
+      }
 
       switch (message.messageType) {
         case "upcoming_match":
