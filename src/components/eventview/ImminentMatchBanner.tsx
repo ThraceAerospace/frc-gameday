@@ -42,7 +42,7 @@ export default function ImminentMatchBanner({
   eventName,
 }: ImminentMatchBannerProps) {
   const [now, setNow] = useState(() => Date.now());
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(true);
 
   const matchTime = match.predicted_time ?? match.time ?? null;
@@ -61,6 +61,10 @@ export default function ImminentMatchBanner({
   }, []);
 
   useEffect(() => {
+    const enterFrame = window.requestAnimationFrame(() => {
+      setExpanded(true);
+    });
+
     const collapseTimer = window.setTimeout(() => {
       setExpanded(false);
     }, 7500);
@@ -70,6 +74,7 @@ export default function ImminentMatchBanner({
     }, 8000);
 
     return () => {
+      window.cancelAnimationFrame(enterFrame);
       window.clearTimeout(collapseTimer);
       window.clearTimeout(hideTimer);
     };
