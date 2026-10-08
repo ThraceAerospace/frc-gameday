@@ -14,7 +14,7 @@ export type TileSurfaceState = {
   layoutKey: LayoutKey | null;
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
-  imminentMatchKey: string | null;
+  upcomingMatchKey: string | null;
   preImminenceState: {
     activeKey: string | null;
     highlightLayoutKey: LayoutKey | null;
@@ -28,15 +28,14 @@ export type TileSurfaceState = {
   priorityEditKey: string | null;
 };
 
-export type MatchImminentSignal =
+export type UpcomingMatchAlert =
   | {
-      type: "match_imminent";
+      type: "upcoming_match";
       eventKey: string;
       matchKey: string;
-      severity: "hard" | "soft";
     }
   | {
-      type: "match_no_longer_imminent";
+      type: "upcoming_match_cleared";
       eventKey: string;
       matchKey: string;
     };
@@ -56,7 +55,7 @@ export function createInitialTileSurfaceState(
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
-    imminentMatchKey: null,
+    upcomingMatchKey: null,
   preImminenceState: null,
     eventPickerOpen: false,
     eventSearch: "",
