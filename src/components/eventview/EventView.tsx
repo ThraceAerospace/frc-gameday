@@ -21,7 +21,7 @@ import type { BuiltStream } from "@/lib/gameday/buildStreams";
 
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
 import { useStreamController } from "./hooks/useStreamController";
-import { useMatchImminence } from "../surface/hooks/useMatchImminence";
+import { useUpcomingMatchAlert } from "../surface/hooks/useUpcomingMatchAlert";
 import type { TileSurfaceController } from "../surface/TileSurfaceActions";
 import type { EventViewConfig } from "./EventViewConfig";
 
@@ -151,13 +151,13 @@ export default function EventView({
     ? trackedMatches
     : matches;
 
-  useMatchImminence(
-    eventNextMatch,
+  useUpcomingMatchAlert({
+    eventKey: event,
+    eventState,
     trackedTeams,
-    teamsStatuses,
-    Boolean(eventConfig.matchImminence && teamMode),
-    controller.actions.handleMatchImminent,
-  );
+    autoHighlight: eventConfig.autoHighlight,
+    actions: controller.actions,
+  });
 
   const teamPills = trackedTeams.map((team) => (
     <TeamPill
@@ -172,15 +172,15 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
-  const imminentMatch = imminentMatchKey
+  const upcomingMatch = imminentMatchKey
     ? matches.find((match) => match.key === imminentMatchKey) ?? null
     : null;
 
-  const imminentTeams = imminentMatch
+  const upcomingTeams = upcomingMatch
     ? trackedTeams.filter((team) =>
         [
-          ...(imminentMatch.alliances.red.team_keys ?? []),
-          ...(imminentMatch.alliances.blue.team_keys ?? []),
+          ...(upcomingMatch.alliances.red.team_keys ?? []),
+          ...(upcomingMatch.alliances.blue.team_keys ?? []),
         ].includes(team),
       )
     : [];
@@ -298,11 +298,11 @@ export default function EventView({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
-      {imminentMatch && imminentTeams.length > 0 ? (
+      {eventConfig.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
         <ImminentMatchBanner
           key={imminentMatch.key}
-          match={imminentMatch}
-          teams={imminentTeams}
+          match={upcomingMatch}
+          teams={upcomingTeams}
           eventName={eventData.short_name || eventData.name || event}
         />
       ) : null}
