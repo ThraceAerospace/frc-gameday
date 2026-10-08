@@ -188,8 +188,17 @@ export default function RemoteSession({
     });
   }, [localController, role, sendDisplayState]);
 
-  const controller = useMemo<TileSurfaceController>(() => {
-    if (role === "controller") {
+  const controller = useMemo<TileSurfaceController>(() => ({
+    getState: localController.getState,
+    replaceState: localController.replaceState,
+    subscribe: localController.subscribe,
+    actions: createRemoteSessionActions(
+      localController,
+      (action) => peer.sendAction(action),
+    ),
+  }), [localController, peer]);
+
+  if (role === "controller") {
     return (
       <RemoteTileSurface
         controller={controller}
