@@ -13,6 +13,7 @@ import {
   UserGroupIcon,
   VideoCameraIcon,
   XMarkIcon,
+  Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceActions } from "./TileSurfaceActions";
@@ -498,7 +499,7 @@ export default function TileSurfaceSettingsView({
         title={triggerTitle}
         aria-label={triggerTitle}
       >
-        <Squares2X2Icon className="h-[17px] w-[17px] justify-self-center" />
+        <Cog6ToothIcon className="h-[17px] w-[17px] justify-self-center" />
       </button>
 
       {mounted && open ? createPortal(panel, document.body) : null}
