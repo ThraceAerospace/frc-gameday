@@ -1,8 +1,8 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
-import type { TBAMatch, TBAWebcast } from "@/lib/tba/types";
-import { formatAlliance } from "@/lib/tba/formatters";
+import type { TBAMatch } from "@/lib/tba/types";
+import { matchLongName } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 export default async function MatchPage({
@@ -19,8 +19,7 @@ export default async function MatchPage({
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <p className="text-slate-500">Missing event or match key.</p>
-        </main>
-    </SiteShell>
+      </main>
     );
   }
 
@@ -71,7 +70,7 @@ export default async function MatchPage({
           <span className="mx-2">/</span>
 
           <span className="text-slate-600">
-            {formatMatchName(match)}
+            {matchLongName(match, event.playoff_type ?? null)}
           </span>
         </nav>
 
@@ -84,7 +83,7 @@ export default async function MatchPage({
               </p>
 
               <h1 className="mt-2 text-3xl font-bold tracking-tight">
-                {formatMatchName(match)}
+                {matchLongName(match, event.playoff_type ?? null)}
               </h1>
 
               <p className="mt-2 text-slate-500">
