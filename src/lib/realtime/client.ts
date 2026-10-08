@@ -4,6 +4,8 @@ export type EventWebSocketMessage = {
   type: string;
   eventKey?: string;
   messageType?: string;
+  matchKey?: string;
+  teamKeys?: string[];
 };
 
 export type EventWebSocketStatus =
