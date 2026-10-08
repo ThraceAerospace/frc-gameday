@@ -104,16 +104,6 @@ export default async function MatchPage({
         <section className="mt-8">
           <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-white/10 sm:grid-cols-3">
             <InfoItem
-              label="Scheduled"
-              value={formatTime(match.time, event.timezone)}
-            />
-
-            <InfoItem
-              label="Predicted"
-              value={formatTime(match.predicted_time, event.timezone)}
-            />
-
-            <InfoItem
               label="Actual"
               value={formatTime(match.actual_time, event.timezone)}
             />
@@ -165,6 +155,26 @@ export default async function MatchPage({
             />
           </div>
         </section>
+
+        {/* Score breakdown */}
+        {match.score_breakdown && (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Score Breakdown</h2>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <ScoreBreakdownPanel
+                name="Red"
+                breakdown={match.score_breakdown.red}
+                variant="red"
+              />
+              <ScoreBreakdownPanel
+                name="Blue"
+                breakdown={match.score_breakdown.blue}
+                variant="blue"
+              />
+            </div>
+          </section>
+        )}
 
         {/* Match information */}
         <section className="mt-8">
@@ -241,8 +251,8 @@ function AlliancePanel({
       className={[
         "rounded-xl border p-5",
         variant === "red"
-          ? "border-red-500/20 bg-red-500/[0.04]"
-          : "border-blue-500/20 bg-blue-500/[0.04]",
+          ? "border-red-200 bg-red-50"
+          : "border-blue-200 bg-blue-50",
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-4">
@@ -267,9 +277,9 @@ function AlliancePanel({
           <Link
             key={team}
             href={`/team/${team}`}
-            className="rounded-lg border border-slate-200 bg-slate-50/30 px-3 py-3 font-mono text-sm text-neutral-200 transition hover:border-white/20 hover:bg-white"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-3 font-mono text-sm text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
           >
-            {team.replace(/^frc/, "#")}
+            {team.replace(/^frc/i, "")}
           </Link>
         ))}
       </div>
@@ -312,8 +322,8 @@ function ScoreRow({
         className={[
           "font-medium",
           variant === "red"
-            ? "text-red-400"
-            : "text-blue-400",
+            ? "text-red-700"
+            : "text-blue-700",
         ].join(" ")}
       >
         {name}
@@ -338,7 +348,7 @@ function InfoItem({
   value?: string | number | null;
 }) {
   return (
-    <div className="bg-neutral-950 px-5 py-4">
+    <div className="bg-white px-5 py-4">
       <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
         {label}
       </dt>
@@ -397,6 +407,60 @@ function formatMatchName(match: TBAMatch) {
     default:
       return `${level.toUpperCase()} ${match.match_number}`;
   }
+}
+
+function ScoreBreakdownPanel({
+  name,
+  breakdown,
+  variant,
+}: {
+  name: string;
+  breakdown: NonNullable<TBAMatch["score_breakdown"]>["red"];
+  variant: "red" | "blue";
+}) {
+  const entries = Object.entries(breakdown).filter(
+    ([, value]) => typeof value !== "object" || value === null,
+  );
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+        <h3
+          className={[
+            "font-semibold",
+            variant === "red" ? "text-red-700" : "text-blue-700",
+          ].join(" ")}
+        >
+          {name} Alliance
+        </h3>
+        <span className="font-mono font-bold">
+          {String(breakdown.totalPoints)}
+        </span>
+      </div>
+
+      <dl className="divide-y divide-slate-100">
+        {entries.map(([key, value]) => (
+          <div
+            key={key}
+            className="flex items-center justify-between gap-4 px-5 py-2.5"
+          >
+            <dt className="text-sm text-slate-600">
+              {formatBreakdownLabel(key)}
+            </dt>
+            <dd className="font-mono text-sm font-semibold text-slate-900">
+              {String(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function formatBreakdownLabel(key: string) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function formatMatchType(match: TBAMatch) {
