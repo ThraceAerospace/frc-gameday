@@ -286,6 +286,31 @@ export default function TileSurfaceSettingsView({
 
   useEffect(() => setMounted(true), []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      // Nested modals own their Escape handling. Do not let the settings
+      // surface close underneath them.
+      if (document.querySelector("[data-modal-layer]")) return;
+
+      if (state.eventPickerOpen) {
+        event.preventDefault();
+        actions.closeEventPicker();
+        return;
+      }
+
+      event.preventDefault();
+      setOpen(false);
+      actions.closeEventPicker();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [actions, open, state.eventPickerOpen]);
+
   const autoLayoutKey = pickLayout(state.streams.length || 1);
   const selectedLayoutKey = state.highlightLayoutKey ?? state.layoutKey ?? autoLayoutKey;
 
