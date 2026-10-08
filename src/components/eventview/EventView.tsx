@@ -12,8 +12,6 @@ import StreamModal from "./StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
-import ImminentMatchBanner from "./ImminentMatchBanner";
-
 import { buildStreams } from "@/lib/tba/buildStreams";
 import { useEventState } from "@/lib/events";
 import type { BuiltStream } from "@/lib/tba/buildStreams";
@@ -174,19 +172,6 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
-  const upcomingMatch = upcomingMatchKey
-    ? matches.find((match) => match.key === upcomingMatchKey) ?? null
-    : null;
-
-  const upcomingTeams = upcomingMatch
-    ? trackedTeams.filter((team) =>
-        [
-          ...(upcomingMatch.alliances.red.team_keys ?? []),
-          ...(upcomingMatch.alliances.blue.team_keys ?? []),
-        ].includes(team),
-      )
-    : [];
-
   const refreshLiveData = useCallback(() => {
     eventState?.reloadAlliances();
     eventState?.reloadMatches();
@@ -300,14 +285,6 @@ export default function EventView({
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
-      {eventConfig.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
-        <ImminentMatchBanner
-          key={upcomingMatch.key}
-          match={upcomingMatch}
-          teams={upcomingTeams}
-          eventName={eventData.short_name || eventData.name || event}
-        />
-      ) : null}
       <div className="relative min-h-0 flex-1 flex overflow-hidden">
         <div className="relative min-w-0 min-h-0 flex-1">
           <StreamView
