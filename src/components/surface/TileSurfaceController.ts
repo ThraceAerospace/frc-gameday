@@ -22,7 +22,7 @@ import type {
 } from "./TileSurfaceActions";
 import {
   createInitialTileSurfaceState,
-  type MatchImminentSignal,
+  type UpcomingMatchAlert,
   type TileSurfaceState,
 } from "./TileSurfaceState";
 import { createEventViewConfig } from "@/components/eventview/EventViewConfig";
@@ -251,61 +251,65 @@ export function useTileSurfaceController({
     [showControls, update]
   );
 
-  const handleMatchImminent = useCallback(
-    (signal: MatchImminentSignal) => {
-      if (signal.type === "match_no_longer_imminent") {
-        update((current) => {
-          if (
-            current.imminentMatchKey !== signal.matchKey ||
-            !current.streams.includes(signal.eventKey)
-          ) {
+  const setUpcomingMatchAlert = useCallback(
+    (signal: UpcomingMatchAlert) => {
+      if (!stateRef.current.streams.includes(signal.eventKey)) {
+        return;
+      }
+
+      update((current) => {
+        if (signal.type === "upcoming_match_cleared") {
+          if (current.upcomingMatchKey !== signal.matchKey) {
             return current;
           }
 
-          const previous = current.preImminenceState;
-
           return {
             ...current,
-            imminentMatchKey: null,
-            preImminenceState: null,
-            activeKey: previous?.activeKey ?? current.activeKey,
-            highlightLayoutKey:
-              previous?.highlightLayoutKey ?? current.highlightLayoutKey,
+            upcomingMatchKey: null,
           };
-        });
-        return;
-      }
+        }
 
-      const current = stateRef.current;
+        return current.upcomingMatchKey === signal.matchKey
+          ? current
+          : {
+              ...current,
+              upcomingMatchKey: signal.matchKey,
+            };
+      });
+    },
+    [update],
+  );
 
-      if (!current.streams.includes(signal.eventKey)) {
-        return;
-      }
+  const highlightEvent = useCallback(
+    (eventKey: string) => {
+      showControls();
 
-      update((next) => {
-        if (next.imminentMatchKey === signal.matchKey) {
-          return next;
+      update((current) => {
+        if (!current.streams.includes(eventKey)) {
+          return current;
         }
 
         const layoutKey =
-          next.layoutKey ??
-          pickLayout(next.streams.length || 1);
+          current.layoutKey ??
+          pickLayout(current.streams.length || 1);
+
+        if (
+          current.activeKey === eventKey &&
+          current.highlightLayoutKey !== null
+        ) {
+          return current;
+        }
 
         return {
-          ...next,
-          imminentMatchKey: signal.matchKey,
-          preImminenceState: {
-            activeKey: next.activeKey,
-            highlightLayoutKey: next.highlightLayoutKey,
-          },
-          activeKey: signal.eventKey,
+          ...current,
+          activeKey: eventKey,
           highlightLayoutKey: pickHighlightLayout(
-            LAYOUTS[layoutKey]?.slots.length ?? 1
+            LAYOUTS[layoutKey]?.slots.length ?? 1,
           ),
         };
       });
     },
-    [update],
+    [showControls, update],
   );
 
   const actions = useMemo<TileSurfaceActions>(
@@ -313,7 +317,7 @@ export function useTileSurfaceController({
       showControls,
       hideControls,
 
-      handleMatchImminent,
+      setUpcomingMatchAlert,\n      highlightEvent,
 
       toggleActive,
 
