@@ -4,7 +4,7 @@ import {
   getLastMatch,
   getNextMatch,
   sortMatches,
-} from "@/lib/gameday/matchUtils";
+} from "@/lib/tba/matchUtils";
 import type {
   TBAEliminationAlliance,
   TBAEvent,

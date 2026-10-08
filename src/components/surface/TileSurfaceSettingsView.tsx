@@ -18,7 +18,7 @@ import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceActions } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
-import { buildStreams, type BuiltStream } from "@/lib/gameday/buildStreams";
+import { buildStreams, type BuiltStream } from "@/lib/tba/buildStreams";
 import { useEventState } from "@/lib/events";
 import StreamModal from "@/components/eventview/StreamModal";
 import TeamModal from "@/components/team/TeamModal";

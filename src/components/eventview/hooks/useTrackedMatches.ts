@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { TBAMatch } from "@/lib/tba/types";
-import { getLastMatch, getMatchesForTeams, getNextMatch } from "@/lib/gameday/matchUtils";
+import { getLastMatch, getMatchesForTeams, getNextMatch } from "@/lib/tba/matchUtils";
 
 export function useTrackedMatches(matches: TBAMatch[], trackedTeams: string[]) {
   const trackedMatches = useMemo(() => getMatchesForTeams(matches, trackedTeams), [matches, trackedTeams]);

@@ -2,7 +2,7 @@
 
 import type { TBAEliminationAlliance, TBAMatch } from "@/lib/tba/types";
 import { useEffect, useRef } from "react";
-import { hasPostedScore } from "@/lib/gameday/matchUtils";
+import { hasPostedScore } from "@/lib/tba/matchUtils";
 import MatchCard from "./MatchCard";
 
 export default function MatchStrip({

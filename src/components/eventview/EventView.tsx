@@ -14,9 +14,9 @@ import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 import ImminentMatchBanner from "./ImminentMatchBanner";
 
-import { buildStreams } from "@/lib/gameday/buildStreams";
+import { buildStreams } from "@/lib/tba/buildStreams";
 import { useEventState } from "@/lib/events";
-import type { BuiltStream } from "@/lib/gameday/buildStreams";
+import type { BuiltStream } from "@/lib/tba/buildStreams";
 
 
 import { useTrackedMatches } from "./hooks/useTrackedMatches";

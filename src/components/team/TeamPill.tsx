@@ -6,7 +6,7 @@ import type {
   TBATeamEventStatus,
 } from "@/lib/tba/types";
 
-import { compactMatchLabel } from "@/lib/gameday/matchUtils";
+import { compactMatchLabel } from "@/lib/tba/matchUtils";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(

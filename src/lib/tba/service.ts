@@ -1,5 +1,5 @@
 import { tba } from "./index";
-import { buildStreams } from "@/lib/gameday/buildStreams";
+import { buildStreams } from "@/lib/tba/buildStreams";
 import type {
   TBAEliminationAlliance,
   TBAEvent,

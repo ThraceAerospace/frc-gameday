@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { BuiltStream } from "@/lib/gameday/buildStreams";
+import type { BuiltStream } from "@/lib/tba/buildStreams";
 
 type Stream = BuiltStream & { key?: string };
 

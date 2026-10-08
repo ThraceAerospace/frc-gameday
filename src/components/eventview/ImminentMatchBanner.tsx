@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { TBAMatch } from "@/lib/tba/types";
-import { compactMatchLabel } from "@/lib/gameday/matchUtils";
+import { compactMatchLabel } from "@/lib/tba/matchUtils";
 
 type ImminentMatchBannerProps = {
   match: TBAMatch;

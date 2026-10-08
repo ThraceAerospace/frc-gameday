@@ -1,7 +1,7 @@
 "use client";
 
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
-import { compactMatchLabel } from "@/lib/gameday/matchUtils";
+import { compactMatchLabel } from "@/lib/tba/matchUtils";
 import { matchLongName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
