@@ -142,7 +142,8 @@ export default function EventView({
 
   useMatchImminence(
     eventNextMatch,
-    trackedNextMatch,
+    trackedTeams,
+    teamsStatuses,
     Boolean(eventConfig.matchImminence && teamMode),
     controller.actions.handleMatchImminent,
   );
