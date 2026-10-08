@@ -350,7 +350,7 @@ export default function TileSurfaceSettingsView({
   };
 
   const panel = (
-    <div className="fixed inset-0 z-[100] flex h-screen w-screen flex-col overflow-hidden bg-black/60 text-white backdrop-blur-xl">
+    <div className="dark-surface fixed inset-0 z-[100] flex h-screen w-screen flex-col overflow-hidden bg-black/60 text-white backdrop-blur-xl">
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-neutral-950/80 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="min-w-0">
           <div className="text-base font-semibold sm:text-lg">Multiview Settings</div>
