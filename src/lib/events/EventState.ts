@@ -474,8 +474,14 @@ export class EventState {
       }
 
       /*
+       * Keep the watchdog alive. A webhook-triggered reload
+       * will replace this timer and restart its 65s countdown.
+       */
+      this.resetAuthoritativeTimer(resource);
+
+      /*
        * Use the underlying load directly so the authoritative
-       * reconciliation does not schedule another 65s timer.
+       * reconciliation does not itself reset the watchdog.
        * The normal TBA client/cache path determines whether
        * this reaches Redis or upstream.
        */
