@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import TileSurface from "@/components/surface/TileSurface";
-import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
+import FieldViewSurface from "@/components/surface/FieldViewSurface";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import { subscribeEventState } from "@/lib/events/useEventState";
@@ -191,29 +190,6 @@ export default function RemoteMultiview({
 
   const controller = useMemo<TileSurfaceController>(() => {
     if (role === "controller") {
-      return {
-        getState: localController.getState,
-        replaceState: localController.replaceState,
-        subscribe: localController.subscribe,
-        actions: createRemoteMultiviewActions(
-          localController,
-          (action) => peer.sendAction(action),
-        ),
-      };
-    }
-
-    return {
-      getState: localController.getState,
-      replaceState: localController.replaceState,
-      subscribe: localController.subscribe,
-      actions: createRemoteMultiviewActions(
-        localController,
-        (action) => peer.sendAction(action),
-      ),
-    };
-  }, [localController, peer, role]);
-
-  if (role === "controller") {
     return (
       <RemoteTileSurface
         controller={controller}
@@ -223,56 +199,5 @@ export default function RemoteMultiview({
     );
   }
 
-  const displayState = surfaceState;
-
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsButtonVisible, setSettingsButtonVisible] = useState(false);
-
-  useEffect(() => {
-    if (role !== "display") return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() === "s" &&
-        !(event.target instanceof HTMLInputElement) &&
-        !(event.target instanceof HTMLTextAreaElement) &&
-        !(event.target instanceof HTMLSelectElement) &&
-        !(event.target instanceof HTMLButtonElement)
-      ) {
-        event.preventDefault();
-        setSettingsOpen(true);
-      }
-    };
-
-    const showSettingsButton = () => setSettingsButtonVisible(true);
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("mousedown", showSettingsButton);
-    window.addEventListener("touchstart", showSettingsButton, { passive: true });
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("mousedown", showSettingsButton);
-      window.removeEventListener("touchstart", showSettingsButton);
-    };
-  }, [role]);
-
-
-  return (
-    <>
-      <TileSurface controller={controller} className="fixed inset-0" />
-      {settingsButtonVisible ? (
-        <div className="pointer-events-auto fixed right-3 top-3 z-50">
-          <TileSurfaceSettingsView
-          state={displayState}
-          actions={controller.actions}
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          triggerClassName="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/15 active:scale-95"
-          triggerTitle="Multiview settings"
-          />
-        </div>
-      ) : null}
-    </>
-  );
+  return <FieldViewSurface controller={controller} />;
 }
