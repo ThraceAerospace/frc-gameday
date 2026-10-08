@@ -74,11 +74,14 @@ export default function TileSurface({
         return (
           <div
             key={eventKey}
-            className={
-              visible
-                ? "absolute"
-                : "pointer-events-none absolute invisible"
-            }
+            className={[
+              visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
+              state.priorityEditKey === eventKey
+                ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
+                : state.imminentMatchKey === eventKey
+                  ? "border border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
+                  : "border border-transparent",
+            ].join(" ")}
             style={
               visible
                 ? {
@@ -106,6 +109,8 @@ export default function TileSurface({
             ) : (
               <EventView
                 event={eventKey}
+                priorityEditing={state.priorityEditKey === eventKey}
+                imminentMatchKey={state.imminentMatchKey}
                 isDivisional={isDivisional}
                 controller={controller}
                 config={state.eventConfigs[eventKey]}
