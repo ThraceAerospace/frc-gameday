@@ -31,7 +31,25 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
       list.push(event);
       map.set(key, list);
     }
-    return [...map.entries()];
+    return [...map.entries()]
+      .map(([name, groupEvents]) => [
+        name,
+        [...groupEvents].sort((a, b) =>
+          a.start_date.localeCompare(b.start_date, undefined, { numeric: true }) ||
+          a.name.localeCompare(b.name, undefined, { numeric: true }) ||
+          a.key.localeCompare(b.key, undefined, { numeric: true })
+        ),
+      ] as [string, TBAEvent[]])
+      .sort(([a], [b]) => {
+        if (mode === "week") {
+          const weekA = /^Week (\d+)$/.exec(a);
+          const weekB = /^Week (\d+)$/.exec(b);
+          if (weekA && weekB) return Number(weekA[1]) - Number(weekB[1]);
+          if (weekA) return -1;
+          if (weekB) return 1;
+        }
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+      });
   }, [filtered, mode]);
 
   const districts = [...new Map(
@@ -43,7 +61,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
 
   const dates = [...new Set(
     events.flatMap((event) => [event.start_date, event.end_date]).filter(Boolean)
-  )].sort();
+  )].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   return (
     <SiteShell events={events}>
