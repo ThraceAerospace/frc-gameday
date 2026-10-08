@@ -135,7 +135,7 @@ export default function TileSurface({
                   }
             }
           >
-            {state.upcomingMatchKey === eventKey ? (
+            {Boolean(state.upcomingMatchKeys[eventKey]) ? (
               <div
                 className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
                 aria-hidden="true"
@@ -153,7 +153,7 @@ export default function TileSurface({
               <EventView
                 event={eventKey}
                 priorityEditing={state.priorityEditKey === eventKey}
-                upcomingMatchKey={state.upcomingMatchKey}
+                upcomingMatchKey={state.upcomingMatchKeys[eventKey] ?? null}
                 isDivisional={isDivisional}
                 controller={controller}
                 onToggleActive={() => controller.actions.toggleActive(eventKey)}
