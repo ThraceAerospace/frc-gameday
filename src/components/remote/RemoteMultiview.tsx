@@ -6,6 +6,10 @@ import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsVie
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import {
+  subscribeEventRealtimeStatus,
+  type EventRealtimeStatus,
+} from "@/lib/events/useEventState";
+import {
   createRemoteMultiviewActions,
   applyRemoteMultiviewAction,
   type RemoteMultiviewMessage,
@@ -41,6 +45,16 @@ export default function RemoteMultiview({
 
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
+  const [realtimeStatuses, setRealtimeStatuses] = useState<
+    Record<string, EventRealtimeStatus>
+  >({});
+  const realtimeStatusesRef = useRef<Record<string, EventRealtimeStatus>>({});
+
+  const surfaceState = useSyncExternalStore(
+    localController.subscribe,
+    localController.getState,
+    localController.getState,
+  );
 
   const handleStatus = (status: RemotePeerStatus) => {
     setPeerStatus(status);
@@ -60,6 +74,18 @@ export default function RemoteMultiview({
           }
         },
         onMessage: (message: RemoteMultiviewMessage) => {
+          if (message.type === "eventRealtimeStatus" && role === "controller") {
+            setRealtimeStatuses((current) => {
+              const next = {
+                ...current,
+                [message.eventKey]: message.status,
+              };
+              realtimeStatusesRef.current = next;
+              return next;
+            });
+            return;
+          }
+
           if (message.type === "requestState" && role === "display") {
             sendDisplayState();
             return;
@@ -83,6 +109,42 @@ export default function RemoteMultiview({
   );
 
   peerRef.current = peer;
+
+  useEffect(() => {
+    if (role !== "display") return;
+
+    const unsubscribe = surfaceState.streams.map((eventKey) =>
+      subscribeEventRealtimeStatus(eventKey, (status) => {
+        const next = {
+          ...realtimeStatusesRef.current,
+          [eventKey]: status,
+        };
+        realtimeStatusesRef.current = next;
+        peerRef.current?.sendMessage({
+          type: "eventRealtimeStatus",
+          eventKey,
+          status,
+        });
+      }),
+    );
+
+    return () => unsubscribe.forEach((stop) => stop());
+  }, [role, surfaceState.streams]);
+
+  useEffect(() => {
+    if (role !== "display" || peerStatus !== "connected") return;
+
+    for (const eventKey of surfaceState.streams) {
+      const status = realtimeStatusesRef.current[eventKey];
+      if (!status) continue;
+
+      peerRef.current?.sendMessage({
+        type: "eventRealtimeStatus",
+        eventKey,
+        status,
+      });
+    }
+  }, [peerStatus, role, surfaceState.streams]);
 
   const sendDisplayState = useMemo(
     () => () => {
@@ -163,14 +225,16 @@ export default function RemoteMultiview({
   }, [localController, peer, role]);
 
   if (role === "controller") {
-    return <RemoteSurface controller={controller} peerStatus={peerStatus} />;
+    return (
+      <RemoteSurface
+        controller={controller}
+        peerStatus={peerStatus}
+        realtimeStatuses={realtimeStatuses}
+      />
+    );
   }
 
-  const displayState = useSyncExternalStore(
-    controller.subscribe,
-    controller.getState,
-    controller.getState,
-  );
+  const displayState = surfaceState;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsButtonVisible, setSettingsButtonVisible] = useState(false);

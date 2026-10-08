@@ -36,6 +36,28 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   websocketStale: false,
 };
 
+export type EventRealtimeStatus = Pick<
+  EventStateSnapshot,
+  "websocketStatus" | "websocketStale"
+>;
+
+export function subscribeEventRealtimeStatus(
+  eventKey: string,
+  listener: (status: EventRealtimeStatus) => void,
+) {
+  const state = getEventState(eventKey);
+  const emitStatus = (snapshot: EventStateSnapshot) =>
+    listener({
+      websocketStatus: snapshot.websocketStatus,
+      websocketStale: snapshot.websocketStale,
+    });
+  const unsubscribe = state.subscribe(emitStatus);
+
+  emitStatus(state.getSnapshot());
+
+  return unsubscribe;
+}
+
 export function useEventState(eventKey: string) {
   const state = eventKey
     ? getEventState(eventKey)

@@ -6,7 +6,7 @@ import { compactMatchLabel } from "@/lib/gameday/matchUtils";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { TBAMatch } from "@/lib/tba/types";
-import type { EventWebSocketStatus } from "@/lib/realtime/client";
+import type { EventRealtimeStatus } from "@/lib/events/useEventState";
 
 function teamNumber(teamKey: string) {
   return teamKey.replace(/^frc/, "");
@@ -27,7 +27,7 @@ type Props = {
   position: number;
   state: TileSurfaceState;
   actions: TileSurfaceActions;
-  websocketStatus: EventWebSocketStatus;
+  realtimeStatus?: EventRealtimeStatus;
 };
 
 export default function RemoteEventCard({
@@ -35,14 +35,15 @@ export default function RemoteEventCard({
   position,
   state,
   actions,
-  websocketStatus,
+  realtimeStatus,
 }: Props) {
   const {
     event,
     matches,
     eventNextMatch,
-    websocketStale,
   } = useEventState(eventKey);
+  const websocketStatus = realtimeStatus?.websocketStatus;
+  const websocketStale = realtimeStatus?.websocketStale ?? false;
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
@@ -85,10 +86,14 @@ export default function RemoteEventCard({
                     ? websocketStale
                       ? "bg-blue-700"
                       : "bg-green-500"
-                    : "bg-neutral-600")
+                    : websocketStatus === "connecting"
+                      ? "bg-yellow-500"
+                      : "bg-neutral-600")
                 }
                 title={
-                  websocketStatus === "connected"
+                  websocketStatus === undefined
+                    ? "Waiting for display live-update status"
+                    : websocketStatus === "connected"
                     ? websocketStale
                       ? "WebSocket quiet; using TBA fallback polling"
                       : "Live updates connected"

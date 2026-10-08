@@ -419,6 +419,12 @@ export class EventState {
       return;
     }
 
+    this.update((current) =>
+      current.websocketStale
+        ? { ...current, websocketStale: false }
+        : current,
+    );
+
     switch (message.messageType) {
       case "upcoming_match":
       case "match_score":

@@ -2,6 +2,7 @@ import type { TBAEvent } from "@/lib/tba/types";
 import type { MatchImminentSignal, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
+import type { EventRealtimeStatus } from "@/lib/events/useEventState";
 
 type TileSurfaceUiState =
   | "eventPickerOpen"
@@ -19,6 +20,7 @@ export type RemoteSurfaceState = Omit<
 export type RemoteMultiviewMessage =
   | { type: "action"; action: RemoteMultiviewAction }
   | { type: "requestState" }
+  | { type: "eventRealtimeStatus"; eventKey: string; status: EventRealtimeStatus }
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteMultiviewAction =

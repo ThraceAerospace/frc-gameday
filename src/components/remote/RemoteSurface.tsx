@@ -1,29 +1,24 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { SignalIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
-import {
-  subscribeEventWebSocketStatus,
-  type EventWebSocketStatus,
-} from "@/lib/realtime/client";
+import type { EventRealtimeStatus } from "@/lib/events/useEventState";
 
 type Props = {
   controller: TileSurfaceController;
   peerStatus: RemotePeerStatus;
+  realtimeStatuses: Record<string, EventRealtimeStatus>;
 };
 
-export default function RemoteSurface({ controller, peerStatus }: Props) {
-  const [websocketStatus, setWebsocketStatus] =
-    useState<EventWebSocketStatus>("disconnected");
-
-  useEffect(() => {
-    return subscribeEventWebSocketStatus(setWebsocketStatus);
-  }, []);
-
+export default function RemoteSurface({
+  controller,
+  peerStatus,
+  realtimeStatuses,
+}: Props) {
   const state = useSyncExternalStore(
     controller.subscribe,
     controller.getState,
@@ -67,7 +62,7 @@ export default function RemoteSurface({ controller, peerStatus }: Props) {
                 position={position}
                 state={state}
                 actions={controller.actions}
-                websocketStatus={websocketStatus}
+                realtimeStatus={realtimeStatuses[eventKey]}
               />
             ))}
           </div>
