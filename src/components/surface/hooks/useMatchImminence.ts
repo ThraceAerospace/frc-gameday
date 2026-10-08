@@ -31,8 +31,10 @@ export function useMatchImminence(
   emit: (signal: MatchImminenceSignal) => void,
 ) {
   const emitRef = useRef(emit);
-  const imminentKeyRef = useRef<string | null>(null);
-  const eventKeyRef = useRef<string | null>(null);
+  const imminentRef = useRef<{
+    eventKey: string;
+    matchKey: string;
+  } | null>(null);
 
   useEffect(() => {
     emitRef.current = emit;
@@ -40,7 +42,6 @@ export function useMatchImminence(
 
   useEffect(() => {
     const eventKey = eventNextMatch?.key ?? null;
-    eventKeyRef.current = eventKey;
     const trackedNextMatchKeys = trackedTeams.map(
       (team) => teamsStatuses[team]?.next_match_key ?? null,
     );
@@ -52,26 +53,31 @@ export function useMatchImminence(
         ? eventKey
         : null;
 
-    const previousKey = imminentKeyRef.current;
+    const previous = imminentRef.current;
 
-    if (previousKey && previousKey !== nextImminentKey) {
+    if (previous && previous.matchKey !== nextImminentKey) {
       emitRef.current({
         type: "match_no_longer_imminent",
-        eventKey: eventKeyRef.current ?? "",
-        matchKey: previousKey,
+        eventKey: previous.eventKey,
+        matchKey: previous.matchKey,
       });
     }
 
-    if (nextImminentKey && previousKey !== nextImminentKey) {
+    if (nextImminentKey && previous?.matchKey !== nextImminentKey) {
       emitRef.current({
         type: "match_imminent",
-        eventKey: eventKey,
+        eventKey,
         matchKey: nextImminentKey,
         severity: "hard",
       });
     }
 
-    imminentKeyRef.current = nextImminentKey;
+    imminentRef.current = nextImminentKey
+      ? {
+          eventKey,
+          matchKey: nextImminentKey,
+        }
+      : null;
   }, [
     enabled,
     eventNextMatch?.key,
@@ -81,17 +87,17 @@ export function useMatchImminence(
 
   useEffect(() => {
     return () => {
-      const key = imminentKeyRef.current;
+      const imminent = imminentRef.current;
 
-      if (key) {
+      if (imminent) {
         emitRef.current({
           type: "match_no_longer_imminent",
-          eventKey: "",
-          matchKey: key,
+          eventKey: imminent.eventKey,
+          matchKey: imminent.matchKey,
         });
       }
 
-      imminentKeyRef.current = null;
+      imminentRef.current = null;
     };
   }, []);
 }
