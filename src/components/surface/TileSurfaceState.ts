@@ -31,11 +31,13 @@ export type TileSurfaceState = {
 export type MatchImminentSignal =
   | {
       type: "match_imminent";
+      eventKey: string;
       matchKey: string;
       severity: "hard" | "soft";
     }
   | {
       type: "match_no_longer_imminent";
+      eventKey: string;
       matchKey: string;
     };
 
