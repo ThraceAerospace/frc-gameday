@@ -1,4 +1,4 @@
-import type { RemoteMultiviewAction, RemoteMultiviewMessage } from "./actions";
+import type { RemoteSessionAction, RemoteSessionMessage } from "./actions";
 
 export type RemoteRole = "controller" | "display";
 export type RemotePeerStatus =
@@ -28,8 +28,8 @@ type PeerOptions = {
   role: RemoteRole;
   onStatus?: (status: RemotePeerStatus) => void;
   onSignalingStatus?: (status: RemoteSignalingStatus) => void;
-  onAction?: (action: RemoteMultiviewAction) => void;
-  onMessage?: (message: RemoteMultiviewMessage) => void;
+  onAction?: (action: RemoteSessionAction) => void;
+  onMessage?: (message: RemoteSessionMessage) => void;
 };
 
 function getSignalingUrl(code: string, role: RemoteRole, token: string) {
@@ -43,7 +43,7 @@ export class RemotePeer {
   private peer: RTCPeerConnection | null = null;
   private channel: RTCDataChannel | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
-  private queuedActions: RemoteMultiviewAction[] = [];
+  private queuedActions: RemoteSessionAction[] = [];
   private remoteDescriptionSet = false;
   private signalingReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
@@ -59,11 +59,11 @@ export class RemotePeer {
     this.connectSignaling();
   }
 
-  sendAction(action: RemoteMultiviewAction) {
+  sendAction(action: RemoteSessionAction) {
     this.sendMessage({ type: "action", action });
   }
 
-  sendMessage(message: RemoteMultiviewMessage) {
+  sendMessage(message: RemoteSessionMessage) {
     if (this.channel?.readyState === "open") {
       this.channel.send(JSON.stringify(message));
       return;
@@ -232,7 +232,7 @@ export class RemotePeer {
       this.options.onStatus?.("connected");
 
       if (this.options.role === "controller") {
-        channel.send(JSON.stringify({ type: "requestState" } satisfies RemoteMultiviewMessage));
+        channel.send(JSON.stringify({ type: "requestState" } satisfies RemoteSessionMessage));
       }
 
       // The display is authoritative after a reconnect. Do not replay
@@ -242,7 +242,7 @@ export class RemotePeer {
 
     channel.onmessage = (event) => {
       try {
-        const message = JSON.parse(String(event.data)) as RemoteMultiviewMessage;
+        const message = JSON.parse(String(event.data)) as RemoteSessionMessage;
 
         if (message.type === "action") {
           if (this.options.role === "display") {
