@@ -106,7 +106,7 @@ export default function TileSurface({
               visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
               state.priorityEditKey === eventKey
                 ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
-                : state.imminentMatchKey === eventKey
+                : state.upcomingMatchKey === eventKey
                   ? "border border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
                   : "border border-transparent",
             ].join(" ")}
