@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarDaysIcon, MagnifyingGlassIcon, TvIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { CalendarDaysIcon, MagnifyingGlassIcon, TvIcon } from "@heroicons/react/24/outline";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type NavigationEvent = Pick<TBAEvent, "key" | "name" | "short_name" | "city" | "state_prov" | "country" | "start_date" | "end_date">;
@@ -25,6 +25,8 @@ export default function SiteShell({ children, events, selectedEventKey }: { chil
           <nav className="hidden shrink-0 items-center gap-1 md:flex">
             <NavLink href="/" active={!selectedEventKey}>Events</NavLink>
             <NavLink href="/teams">Teams</NavLink>
+            <NavLink href="/districts">Districts</NavLink>
+            <NavLink href="/insights">Insights</NavLink>
             <NavLink href="/gameday">Gameday</NavLink>
           </nav>
           <div className="relative mx-auto hidden min-w-0 max-w-md flex-1 lg:block">
