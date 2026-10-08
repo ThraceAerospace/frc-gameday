@@ -1,5 +1,5 @@
 import type { TBAEvent } from "@/lib/tba/types";
-import type { MatchImminentSignal, TileSurfaceState } from "@/components/surface/TileSurfaceState";
+import type { UpcomingMatchAlert, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
@@ -24,8 +24,8 @@ export type RemoteMultiviewMessage =
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteMultiviewAction =
-  | { type: "handleMatchImminent"; signal: MatchImminentSignal }
-  | { type: "toggleActive"; eventKey: string }
+  | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
+  | { type: "highlightEvent"; eventKey: string }\n  | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
   | { type: "resetLayout" }
@@ -51,7 +51,7 @@ export function createRemoteMultiviewActions(
   return {
     showControls() { local.showControls(); },
     hideControls() { local.hideControls(); },
-    handleMatchImminent(signal) { local.handleMatchImminent(signal); send({ type: "handleMatchImminent", signal }); },
+    setUpcomingMatchAlert(signal) { local.setUpcomingMatchAlert(signal); send({ type: "setUpcomingMatchAlert", signal }); },\n    highlightEvent(eventKey) { local.highlightEvent(eventKey); send({ type: "highlightEvent", eventKey }); },
     toggleActive(eventKey) { local.toggleActive(eventKey); send({ type: "toggleActive", eventKey }); },
     clearActive() { local.clearActive(); send({ type: "clearActive" }); },
     setLayout(layoutKey) { local.setLayout(layoutKey); send({ type: "setLayout", layoutKey }); },
@@ -81,7 +81,7 @@ export function applyRemoteMultiviewAction(
   const actions = controller.actions;
 
   switch (action.type) {
-    case "handleMatchImminent": actions.handleMatchImminent(action.signal); break;
+    case "setUpcomingMatchAlert": actions.setUpcomingMatchAlert(action.signal); break;\n    case "highlightEvent": actions.highlightEvent(action.eventKey); break;
     case "toggleActive": actions.toggleActive(action.eventKey); break;
     case "clearActive": actions.clearActive(); break;
     case "setLayout": actions.setLayout(action.layoutKey); break;
