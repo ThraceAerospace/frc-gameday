@@ -27,6 +27,7 @@ type EventFooterProps = {
   playoffType?: number | null;
   teamsStatuses: TBAEventTeamStatuses;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
+  priorityEditing?: boolean;
 };
 
 export default function EventFooter({
@@ -46,6 +47,7 @@ export default function EventFooter({
   playoffType = null,
   teamsStatuses,
   multiview = {},
+  priorityEditing = false,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
@@ -65,7 +67,7 @@ export default function EventFooter({
               : "bottom-full left-0 translate-y-[1px]"
           }`}
         >
-          <div className={`shrink-0 rounded-t-lg border-x border-t border-white/10 bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg`}>
+          <div className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg`}>
             <div className="flex items-end gap-2 whitespace-nowrap leading-none">
               <span className="flex items-center gap-1.5 truncate text-[11px] font-bold text-white">
                 <span
@@ -99,7 +101,7 @@ export default function EventFooter({
         </div>
 
         <div
-          className={`pointer-events-auto ${
+          className={`pointer-events-auto ${priorityEditing ? "border-t border-blue-500/80" : ""} ${
             contentHidden
               ? "absolute inset-x-0 bottom-0 translate-y-full"
               : "relative translate-y-0"
