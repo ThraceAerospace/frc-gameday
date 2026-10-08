@@ -1,8 +1,7 @@
 import type { WebSocket } from "ws";
 import { redis } from "@/lib/cache/redis";
 
-export const TBA_WEBSOCKET_CHANNEL =
-  "gameday:tba";
+export const TBA_WEBSOCKET_CHANNEL = "gameday:tba";
 
 type ConnectedClient = {
   socket: WebSocket;
@@ -14,27 +13,21 @@ type ClientSubscriptionMessage = {
   eventKey: string;
 };
 
-type TBAWebSocketEvent = {
+export type TBAWebSocketEvent = {
   type: "tba-update";
   eventKey: string;
   messageType?: string;
-  matchKey?: string;
-  teamKeys?: string[];
+  messageData?: Record<string, unknown>;
 };
 
 const clients = new Set<ConnectedClient>();
-
 let subscriberStarted = false;
 
 async function ensureSubscriber() {
-  if (subscriberStarted) {
-    return;
-  }
-
+  if (subscriberStarted) return;
   subscriberStarted = true;
 
   const subscriber = redis.duplicate();
-
   subscriber.on("error", (error) => {
     console.error("[WSS] Redis subscriber error:", error);
   });
@@ -42,12 +35,9 @@ async function ensureSubscriber() {
   await subscriber.subscribe(TBA_WEBSOCKET_CHANNEL);
 
   subscriber.on("message", (channel, message) => {
-    if (channel !== TBA_WEBSOCKET_CHANNEL) {
-      return;
-    }
+    if (channel !== TBA_WEBSOCKET_CHANNEL) return;
 
     let event: TBAWebSocketEvent;
-
     try {
       event = JSON.parse(message) as TBAWebSocketEvent;
     } catch (error) {
@@ -56,9 +46,7 @@ async function ensureSubscriber() {
     }
 
     for (const client of clients) {
-      if (!client.eventKeys.has(event.eventKey)) {
-        continue;
-      }
+      if (!client.eventKeys.has(event.eventKey)) continue;
 
       if (client.socket.readyState !== 1) {
         clients.delete(client);
@@ -86,9 +74,7 @@ export function registerWebSocket(socket: WebSocket) {
   clients.add(client);
   void ensureSubscriber();
 
-  console.log(
-    "[WSS] Connected (" + clients.size + " local clients)",
-  );
+  console.log("[WSS] Connected (" + clients.size + " local clients)");
 
   socket.on("message", (raw) => {
     try {
@@ -115,9 +101,7 @@ export function registerWebSocket(socket: WebSocket) {
 
   socket.on("close", () => {
     clients.delete(client);
-    console.log(
-      "[WSS] Disconnected (" + clients.size + " local clients)",
-    );
+    console.log("[WSS] Disconnected (" + clients.size + " local clients)");
   });
 
   socket.on("error", (error) => {
@@ -129,17 +113,15 @@ export function registerWebSocket(socket: WebSocket) {
 export async function broadcastTBAEvent(
   eventKey: string,
   messageType?: string,
-  details?: Pick<TBAWebSocketEvent, "matchKey" | "teamKeys">,
+  messageData?: Record<string, unknown>,
 ) {
-  if (!eventKey) {
-    return;
-  }
+  if (!eventKey) return;
 
   const event: TBAWebSocketEvent = {
     type: "tba-update",
     eventKey,
     messageType,
-    ...details,
+    messageData,
   };
 
   await redis.publish(
