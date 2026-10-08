@@ -328,6 +328,16 @@ export async function POST(
       await broadcastTBAEvent(
         eventKey,
         type,
+        type === "upcoming_match"
+          ? {
+              matchKey: data?.match_key,
+              teamKeys: data?.team_keys,
+            }
+          : type === "match_score"
+            ? {
+                matchKey: data?.match_key ?? data?.match?.key,
+              }
+            : undefined,
       );
     } catch (error) {
       console.error(
