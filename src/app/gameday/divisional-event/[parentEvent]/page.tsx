@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TBAEvent } from "@/lib/tba/types";
-import FieldViewSurface from "@/components/surface/FieldViewSurface";
+import TileViewSurface from "@/components/surface/TileViewSurface";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +65,7 @@ export default function DivisionalEvent({ params }: { params: Promise<{ parentEv
   ];
 
   return (
-    <FieldViewSurface
+    <TileViewSurface
       events={events}
       isDivisional
       parentEvent={data}
