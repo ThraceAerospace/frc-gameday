@@ -1,14 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Bars3Icon, CalendarDaysIcon, MagnifyingGlassIcon, TvIcon } from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useState } from "react";
+import { Bars3Icon, CalendarDaysIcon, MagnifyingGlassIcon, MoonIcon, SunIcon, TvIcon } from "@heroicons/react/24/outline";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type NavigationEvent = Pick<TBAEvent, "key" | "name" | "short_name" | "city" | "state_prov" | "country" | "start_date" | "end_date">;
 
 export default function SiteShell({ children, events, selectedEventKey }: { children: React.ReactNode; events: NavigationEvent[]; selectedEventKey?: string }) {
   const [query, setQuery] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    setDarkMode(window.localStorage.getItem("fieldview-theme") === "dark");
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("fieldview-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
   const thisWeek = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return events
@@ -17,7 +26,7 @@ export default function SiteShell({ children, events, selectedEventKey }: { chil
   }, [events, query]);
 
   return (
-    <div className="flex h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
+    <div className={`site-theme ${darkMode ? "site-theme-dark" : "site-theme-light"} flex h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50 text-slate-900`}>
       <header className="z-40 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-[1600px] min-w-0 items-center gap-3 px-4 lg:px-6">
           <button type="button" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 lg:hidden"><Bars3Icon className="h-5 w-5" /></button>
@@ -34,6 +43,9 @@ export default function SiteShell({ children, events, selectedEventKey }: { chil
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search this week's events" className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+              {darkMode ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
+            </button>
             <Link href="/remote/display" className="hidden items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 sm:flex"><TvIcon className="h-4 w-4" />Remote Display</Link>
             <Link href="/remote" className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Remote Controller</Link>
           </div>
