@@ -1,7 +1,7 @@
 "use client";
 
 import type { TBAEvent } from "@/lib/tba/types";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import TileSurfaceSettingsView from "./TileSurfaceSettingsView";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 
@@ -40,6 +40,14 @@ export default function TileViewSurface({
   );
   const actions = tileSurfaceController.actions;
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // The event picker is rendered inside the settings portal. If an empty tile
+  // opens it directly, open the owning panel as well so the picker is visible.
+  useEffect(() => {
+    if (state.eventPickerOpen) {
+      setSettingsOpen(true);
+    }
+  }, [state.eventPickerOpen]);
 
   useTileSurfaceKeyboard(state, actions, () => setSettingsOpen((open) => !open));
 
