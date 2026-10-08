@@ -6,18 +6,18 @@ import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
-import type { EventRealtimeStatus } from "@/lib/events/useEventState";
+import type { EventStateSnapshot } from "@/lib/events/EventState";
 
 type Props = {
   controller: TileSurfaceController;
   peerStatus: RemotePeerStatus;
-  realtimeStatuses: Record<string, EventRealtimeStatus>;
+  eventStates: Record<string, EventStateSnapshot>;
 };
 
 export default function RemoteSurface({
   controller,
   peerStatus,
-  realtimeStatuses,
+  eventStates,
 }: Props) {
   const state = useSyncExternalStore(
     controller.subscribe,
@@ -62,7 +62,7 @@ export default function RemoteSurface({
                 position={position}
                 state={state}
                 actions={controller.actions}
-                realtimeStatus={realtimeStatuses[eventKey]}
+                eventState={eventStates[eventKey]}
               />
             ))}
           </div>
