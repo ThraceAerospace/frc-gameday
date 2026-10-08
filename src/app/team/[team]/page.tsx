@@ -20,8 +20,10 @@ function sortEvents(a: TBAEventSimple, b: TBAEventSimple) {
 
 function sortMatches(a: TBAMatch, b: TBAMatch) {
   return (
-    (a.time ?? a.actual_time ?? Infinity) - (b.time ?? b.actual_time ?? Infinity) ||
-    (a.comp_level === "qm" ? 0 : 1) - (b.comp_level === "qm" ? 0 : 1) ||
+    (a.time ?? a.actual_time ?? Infinity) -
+      (b.time ?? b.actual_time ?? Infinity) ||
+    (a.comp_level === "qm" ? 0 : 1) -
+      (b.comp_level === "qm" ? 0 : 1) ||
     (a.set_number ?? 0) - (b.set_number ?? 0) ||
     (a.match_number ?? 0) - (b.match_number ?? 0)
   );
@@ -105,166 +107,108 @@ export default async function TeamPage({
   return (
     <SiteShell events={allEvents}>
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
-        <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
+        <header className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <TeamAvatar team={team} />
+            <TeamAvatar team={team} size="lg" />
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-                Team
-              </p>
-              <h1 className="mt-1 text-4xl font-black tracking-tight text-slate-950">
-                {team.team_number}
-              </h1>
-              <p className="mt-1 text-lg font-semibold text-slate-700">
-                {team.nickname || team.name || "Team"}
-              </p>
-              <p className="mt-2 text-sm text-slate-500">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h1 className="text-4xl font-black tracking-tight text-slate-950">
+                  {team.team_number}
+                </h1>
+                <p className="text-xl font-semibold text-slate-700">
+                  {team.nickname || team.name || "Team"}
+                </p>
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
                 {team.city}
                 {team.state_prov ? `, ${team.state_prov}` : ""}
                 {team.country ? `, ${team.country}` : ""}
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                {team.rookie_year != null && <span>Rookie {team.rookie_year}</span>}
+                {team.website && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <a
+                      href={team.website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      Team website
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            {team.rookie_year != null && (
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600">
-                Rookie {team.rookie_year}
-              </span>
-            )}
-            {team.website && (
-              <a
-                href={team.website}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-blue-600 hover:border-blue-200 hover:bg-blue-50"
-              >
-                Team website
-              </a>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-black tracking-tight text-slate-950">
-            {year} Season
-          </h2>
           <TeamSeasonSelector
-            teamKey={teamKey}
             years={years}
             selectedYear={year}
           />
-        </div>
+        </header>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-4">
-          <Summary label="Events" value={sortedEvents.length} />
-          <Summary label="Matches" value={completedMatches.length} />
-          <Summary label="Record" value={`${wins}-${losses}-${ties}`} />
-          <Summary
-            label="District"
-            value={district?.abbreviation || district?.display_name || "None"}
-          />
-        </div>
-
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <section className="min-w-0">
-            <SectionTitle title={`${year} Events`} />
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              {sortedEvents.length === 0 ? (
-                <p className="p-5 text-sm text-slate-500">
-                  No events found for {year}.
-                </p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {eventMatches.map(({ event, matches: eventTeamMatches }) => (
-                    <div key={event.key} className="p-4">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <Link
-                          href={`/event/${event.key}`}
-                          className="font-bold text-slate-900 hover:text-blue-600"
-                        >
-                          {event.name}
-                        </Link>
-                        <span className="text-xs text-slate-400">
-                          {event.start_date} – {event.end_date}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {event.city}
-                        {event.state_prov ? `, ${event.state_prov}` : ""}
-                      </p>
-                      <p className="mt-2 text-xs text-slate-500">
-                        {eventTeamMatches.length} match{eventTeamMatches.length === 1 ? "" : "es"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
+        <section className="mt-5 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <div>
+              <span className="font-black text-slate-950">{year}</span>
+              <span className="ml-1.5 text-slate-500">season</span>
             </div>
+            <Stat label="District" value={district?.abbreviation || district?.display_name || "None"} />
+            <Stat label="Events" value={sortedEvents.length} />
+            <Stat label="Matches" value={completedMatches.length} />
+            <Stat label="Record" value={`${wins}-${losses}-${ties}`} />
+          </div>
+        </section>
 
-            <SectionTitle title="Match Results" className="mt-8" />
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              {matches.length === 0 ? (
-                <p className="p-5 text-sm text-slate-500">
-                  No matches found for {year}.
-                </p>
-              ) : (
-                <div>
-                  {eventMatches.map(({ event, matches: eventTeamMatches }) => (
-                    <TeamEventMatches
-                      key={event.key}
-                      event={event}
-                      matches={eventTeamMatches}
-                      teamKey={teamKey}
-                    />
-                  ))}
-                </div>
-              )}
+        <main className="mt-8">
+          <div className="flex items-baseline justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-slate-950">
+                {year} Results
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Events, matches, alliances, and results for this season.
+              </p>
             </div>
-          </section>
+            {district && (
+              <Link
+                href={`/district/${district.key}`}
+                className="hidden text-sm font-semibold text-blue-600 hover:text-blue-700 sm:block"
+              >
+                View district
+              </Link>
+            )}
+          </div>
 
-          <aside className="space-y-6">
-            <section>
-              <SectionTitle title="Team Information" />
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
-                <Info label="Team number" value={String(team.team_number)} />
-                <Info label="Nickname" value={team.nickname || "—"} />
-                <Info label="Rookie year" value={team.rookie_year == null ? "—" : String(team.rookie_year)} />
-                <Info label="Location" value={[team.city, team.state_prov, team.country].filter(Boolean).join(", ") || "—"} />
-                <Info label="District" value={district?.display_name || district?.abbreviation || "None"} />
-              </div>
-            </section>
-          </aside>
-        </div>
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            {eventMatches.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500">
+                No events found for {year}.
+              </p>
+            ) : (
+              eventMatches.map(({ event, matches: eventTeamMatches }) => (
+                <TeamEventMatches
+                  key={event.key}
+                  event={event}
+                  matches={eventTeamMatches}
+                  teamKey={teamKey}
+                />
+              ))
+            )}
+          </div>
+        </main>
       </div>
     </SiteShell>
   );
 }
 
-function Summary({ label, value }: { label: string; value: string | number }) {
+function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-2xl font-black text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function SectionTitle({ title, className = "" }: { title: string; className?: string }) {
-  return (
-    <h2 className={`text-lg font-black tracking-tight text-slate-950 ${className}`}>
-      {title}
-    </h2>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-2 last:border-b-0">
+    <div>
       <span className="text-slate-400">{label}</span>
-      <span className="text-right font-semibold text-slate-700">{value}</span>
+      <span className="ml-1.5 font-bold text-slate-700">{value}</span>
     </div>
   );
 }
