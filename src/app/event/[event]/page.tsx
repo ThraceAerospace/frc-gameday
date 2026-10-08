@@ -49,6 +49,13 @@ export default async function EventPage({
     .filter(Boolean)
     .join(", ");
 
+  matches = [...matches].sort((a: TBAMatchSimple, b: TBAMatchSimple) => {
+    const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+    return (levelOrder[a.comp_level] ?? 99) - (levelOrder[b.comp_level] ?? 99)
+      || (a.set_number ?? 0) - (b.set_number ?? 0)
+      || (a.match_number ?? 0) - (b.match_number ?? 0);
+  });
+
   const dates =
     event.start_date && event.end_date
       ? event.start_date === event.end_date
