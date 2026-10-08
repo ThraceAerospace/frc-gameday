@@ -32,6 +32,7 @@ export function useMatchImminence(
 ) {
   const emitRef = useRef(emit);
   const imminentKeyRef = useRef<string | null>(null);
+  const eventKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     emitRef.current = emit;
@@ -39,6 +40,7 @@ export function useMatchImminence(
 
   useEffect(() => {
     const eventKey = eventNextMatch?.key ?? null;
+    eventKeyRef.current = eventKey;
     const trackedNextMatchKeys = trackedTeams.map(
       (team) => teamsStatuses[team]?.next_match_key ?? null,
     );
@@ -55,7 +57,7 @@ export function useMatchImminence(
     if (previousKey && previousKey !== nextImminentKey) {
       emitRef.current({
         type: "match_no_longer_imminent",
-        eventKey: eventKey ?? "",
+        eventKey: eventKeyRef.current ?? "",
         matchKey: previousKey,
       });
     }
