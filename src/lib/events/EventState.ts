@@ -431,19 +431,41 @@ export class EventState {
     );
 
     switch (message.messageType) {
-      case "upcoming_match":
+      case "upcoming_match": {
+        const matchKey =
+          typeof message.messageData?.match_key === "string"
+            ? message.messageData.match_key
+            : null;
+
+        const teamKeys = Array.isArray(
+          message.messageData?.team_keys,
+        )
+          ? message.messageData.team_keys.filter(
+              (team): team is string => typeof team === "string",
+            )
+          : [];
+
         this.update((current) => ({
           ...current,
-          upcomingMatchKey: message.matchKey ?? null,
-          upcomingMatchTeamKeys: message.teamKeys ?? [],
+          upcomingMatchKey: matchKey,
+          upcomingMatchTeamKeys: teamKeys,
         }));
+
         this.reloadMatches();
         break;
+      }
 
-      case "match_score":
+      case "match_score": {
+        const matchKey =
+          typeof message.messageData?.match_key === "string"
+            ? message.messageData.match_key
+            : typeof message.messageData?.match?.key === "string"
+              ? message.messageData.match.key
+              : null;
+
         this.update((current) =>
-          message.matchKey &&
-          current.upcomingMatchKey === message.matchKey
+          matchKey &&
+          current.upcomingMatchKey === matchKey
             ? {
                 ...current,
                 upcomingMatchKey: null,
@@ -455,6 +477,7 @@ export class EventState {
         this.reloadStatuses();
         this.reloadAlliances();
         break;
+      }
 
       case "match_video":
         this.reloadMatches();
