@@ -34,6 +34,8 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   error: null,
   websocketStatus: "disconnected",
   websocketStale: false,
+  upcomingMatchKey: null,
+  upcomingMatchTeamKeys: [],
 };
 
 export function subscribeEventState(
