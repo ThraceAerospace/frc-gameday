@@ -36,7 +36,7 @@ type EventViewProps = {
     footerHidden?: boolean;
   };
   priorityEditing?: boolean;
-  imminentMatchKey?: string | null;
+  upcomingMatchKey?: string | null;
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
