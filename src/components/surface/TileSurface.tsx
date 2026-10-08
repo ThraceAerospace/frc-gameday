@@ -138,7 +138,7 @@ export default function TileSurface({
               <EventView
                 event={eventKey}
                 priorityEditing={state.priorityEditKey === eventKey}
-                upcomingMatchKey={state.imminentMatchKey}
+                upcomingMatchKey={state.upcomingMatchKey}
                 isDivisional={isDivisional}
                 controller={controller}
                 onToggleActive={() => controller.actions.toggleActive(eventKey)}
