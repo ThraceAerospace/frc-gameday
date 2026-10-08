@@ -8,19 +8,10 @@ import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { TBAMatch } from "@/lib/tba/types";
 import type { EventRealtimeStatus } from "@/lib/events/useEventState";
+import NextMatchCountdown from "../match/NextMatchCountdown";
 
 function teamNumber(teamKey: string) {
   return teamKey.replace(/^frc/, "");
-}
-
-function formatMatchTime(match: TBAMatch) {
-  const timestamp = match.predicted_time ?? match.time;
-  if (!timestamp) return null;
-
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(timestamp * 1000));
 }
 
 type Props = {
@@ -120,8 +111,8 @@ export default function RemoteEventCard({
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
             Next Match
           </span>
-          {match && formatMatchTime(match) ? (
-            <span className="text-xs text-neutral-500">{formatMatchTime(match)}</span>
+          {match ? (
+            <NextMatchCountdown nextMatch={match} />
           ) : null}
         </div>
 
