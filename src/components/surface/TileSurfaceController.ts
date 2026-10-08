@@ -317,7 +317,8 @@ export function useTileSurfaceController({
       showControls,
       hideControls,
 
-      setUpcomingMatchAlert,\n      highlightEvent,
+      setUpcomingMatchAlert,
+      highlightEvent,
 
       toggleActive,
 
@@ -636,7 +637,8 @@ export function useTileSurfaceController({
       },
     }),
     [
-      handleMatchImminent,
+      setUpcomingMatchAlert,
+      highlightEvent,
       hideControls,
       showControls,
       toggleActive,
