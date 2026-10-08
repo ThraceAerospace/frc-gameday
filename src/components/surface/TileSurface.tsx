@@ -3,12 +3,14 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
+import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
+import { useEventState } from "@/lib/events";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
 
-type TileSurfaceProps = {
+function SurfaceUpcomingMatchBanner({\n  eventKey,\n  config,\n}: {\n  eventKey: string;\n  config: TileSurfaceState["eventConfigs"][string] | undefined;\n}) {\n  const { event, matches, upcomingMatchKey } = useEventState(eventKey);\n\n  if (!config?.matchNotifications || !upcomingMatchKey) return null;\n\n  const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;\n  if (!upcomingMatch) return null;\n\n  const upcomingTeams = config.trackedTeams.filter((team) =>\n    [\n      ...(upcomingMatch.alliances.red.team_keys ?? []),\n      ...(upcomingMatch.alliances.blue.team_keys ?? []),\n    ].includes(team),\n  );\n\n  if (upcomingTeams.length === 0) return null;\n\n  return (\n    <ImminentMatchBanner\n      key={eventKey + ":" + upcomingMatch.key}\n      match={upcomingMatch}\n      teams={upcomingTeams}\n      eventName={event?.short_name || event?.name || eventKey}\n    />\n  );\n}\n\ntype TileSurfaceProps = {
   controller: TileSurfaceController;
   isDivisional?: boolean;
   className?: string;
@@ -93,6 +95,14 @@ export default function TileSurface({
 
   return (
     <main className={`relative min-h-0 flex-1 ${className}`}>
+      {state.streams.map((eventKey) => (
+        <SurfaceUpcomingMatchBanner
+          key={"banner-" + eventKey}
+          eventKey={eventKey}
+          config={state.eventConfigs[eventKey]}
+        />
+      ))}
+
       {state.streams.map((eventKey) => {
         const slotIndex = slotOrder.indexOf(eventKey);
         const geometry = layout.slots[slotIndex];
@@ -106,9 +116,7 @@ export default function TileSurface({
               visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
               state.priorityEditKey === eventKey
                 ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
-                : state.upcomingMatchKey === eventKey
-                  ? "border border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
-                  : "border border-transparent",
+                : "border border-transparent",
             ].join(" ")}
             style={
               visible
@@ -127,6 +135,13 @@ export default function TileSurface({
                   }
             }
           >
+            {state.upcomingMatchKey === eventKey ? (
+              <div
+                className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
+                aria-hidden="true"
+              />
+            ) : null}
+
             {renderEventView ? (
               renderEventView({
                 eventKey,
