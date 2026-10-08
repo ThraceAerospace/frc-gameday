@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TBAMatch } from "@/lib/tba/types";
 import { compactMatchLabel } from "@/lib/tba/matchUtils";
+import { matchLongName } from "@/lib/tba/formatters";
 
 type ImminentMatchBannerProps = {
   match: TBAMatch;
@@ -45,7 +46,7 @@ export default function ImminentMatchBanner({
   const [visible, setVisible] = useState(true);
 
   const matchTime = match.predicted_time ?? match.time ?? null;
-  const matchLabel = compactMatchLabel(match) ?? match.key;
+  const matchLabel = matchLongName(match) ?? match.key;
   const teamLabel = useMemo(
     () =>
       teams
@@ -62,11 +63,11 @@ export default function ImminentMatchBanner({
   useEffect(() => {
     const collapseTimer = window.setTimeout(() => {
       setExpanded(false);
-    }, 4500);
+    }, 7500);
 
     const hideTimer = window.setTimeout(() => {
       setVisible(false);
-    }, 5000);
+    }, 8000);
 
     return () => {
       window.clearTimeout(collapseTimer);
