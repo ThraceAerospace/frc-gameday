@@ -44,7 +44,7 @@ export default function RemoteDisplayPage() {
       )}
 
       {code && hasConnected && !connected && (
-        <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-neutral-300 shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-xl border border-white/15 bg-black/60 px-3 py-2 text-xl text-neutral-300 shadow-[0_8px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <span className="font-semibold tracking-[0.12em] text-white">
             {code}
           </span>
