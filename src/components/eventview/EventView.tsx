@@ -49,7 +49,7 @@ export default function EventView({
   isDivisional = false,
   slotPresentation,
   priorityEditing = false,
-  imminentMatchKey = null,
+  upcomingMatchKey = null,
   onToggleActive,
   slotNumber,
   controlHeld = false,
@@ -172,8 +172,8 @@ export default function EventView({
 
   const presentation = eventConfig.presentation;
 
-  const upcomingMatch = imminentMatchKey
-    ? matches.find((match) => match.key === imminentMatchKey) ?? null
+  const upcomingMatch = upcomingMatchKey
+    ? matches.find((match) => match.key === upcomingMatchKey) ?? null
     : null;
 
   const upcomingTeams = upcomingMatch
