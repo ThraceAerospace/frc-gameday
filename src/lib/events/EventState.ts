@@ -163,21 +163,24 @@ export class EventState {
   reloadAll() {
     void this.loadEvent();
     void this.loadTeams();
-    void this.loadMatches();
-    void this.loadStatuses();
-    void this.loadAlliances();
+    this.reloadMatches();
+    this.reloadStatuses();
+    this.reloadAlliances();
   }
 
   reloadMatches() {
     void this.loadMatches();
+    this.resetAuthoritativeTimer("matches");
   }
 
   reloadStatuses() {
     void this.loadStatuses();
+    this.resetAuthoritativeTimer("statuses");
   }
 
   reloadAlliances() {
     void this.loadAlliances();
+    this.resetAuthoritativeTimer("alliances");
   }
 
   private update(
@@ -425,111 +428,73 @@ export class EventState {
 
     switch (message.messageType) {
       case "upcoming_match":
-      case "match_score":
-      case "match_video":
         this.reloadMatches();
-        this.reloadStatuses();
         break;
 
-      case "starting_comp_level":
-      case "schedule_updated":
-        this.reloadAll();
+      case "match_score":
+        this.reloadMatches();
+        this.reloadStatuses();
+        this.reloadAlliances();
+        break;
+
+      case "match_video":
+        this.reloadMatches();
         break;
 
       case "alliance_selection":
         this.reloadAlliances();
-        this.reloadStatuses();
-        this.reloadMatches();
         break;
 
       default:
+        /*
+         * Full-refresh webhook types and unknown future types
+         * intentionally go through reloadAll(). Each independent
+         * reload resets its own authoritative timer.
+         */
         this.reloadAll();
         break;
     }
+  };
 
-    /*
-     * A known webhook only replaces its own pending
-     * authoritative refresh. Other resource timers remain
-     * independent and continue running.
-     *
-     * Unknown messages are treated as a full refresh signal:
-     * reset every pending authoritative timer, then schedule
-     * one full authoritative refresh for 65 seconds later.
-     */
-    const isKnownMessage =
-      message.messageType === "upcoming_match" ||
-      message.messageType === "match_score" ||
-      message.messageType === "match_video" ||
-      message.messageType === "starting_comp_level" ||
-      message.messageType === "schedule_updated" ||
-      message.messageType === "alliance_selection";
-
-    if (!isKnownMessage) {
-      for (const timer of this.authoritativeTimers.values()) {
-        window.clearTimeout(timer);
-      }
-
-      this.authoritativeTimers.clear();
-
-      const timer = window.setTimeout(() => {
-        this.authoritativeTimers.clear();
-
-        if (this.stopped) {
-          return;
-        }
-
-        this.reloadAll();
-      }, AUTHORITATIVE_REFETCH_DELAY);
-
-      this.authoritativeTimers.set(
-        "unknown",
-        timer,
-      );
-
-      return;
-    }
-
-    const refreshKey = message.messageType;
+  private resetAuthoritativeTimer(
+    resource: "matches" | "statuses" | "alliances",
+  ) {
     const existing =
-      this.authoritativeTimers.get(refreshKey);
+      this.authoritativeTimers.get(resource);
 
     if (existing !== undefined) {
       window.clearTimeout(existing);
     }
 
     const timer = window.setTimeout(() => {
-      this.authoritativeTimers.delete(refreshKey);
+      this.authoritativeTimers.delete(resource);
 
       if (this.stopped) {
         return;
       }
 
-      switch (message.messageType) {
-        case "upcoming_match":
-        case "match_score":
-        case "match_video":
-          this.reloadMatches();
-          this.reloadStatuses();
+      /*
+       * Use the underlying load directly so the authoritative
+       * reconciliation does not schedule another 65s timer.
+       * The normal TBA client/cache path determines whether
+       * this reaches Redis or upstream.
+       */
+      switch (resource) {
+        case "matches":
+          void this.loadMatches();
           break;
 
-        case "starting_comp_level":
-        case "schedule_updated":
-          this.reloadAll();
+        case "statuses":
+          void this.loadStatuses();
           break;
 
-        case "alliance_selection":
-          this.reloadAlliances();
-          this.reloadStatuses();
-          this.reloadMatches();
-          break;
-
-        default:
-          this.reloadAll();
+        case "alliances":
+          void this.loadAlliances();
           break;
       }
     }, AUTHORITATIVE_REFETCH_DELAY);
 
-    this.authoritativeTimers.set(refreshKey, timer);
+    this.authoritativeTimers.set(resource, timer);
   };
 
   private scheduleMatchFallback() {
