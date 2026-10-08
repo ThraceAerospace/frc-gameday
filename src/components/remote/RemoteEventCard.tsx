@@ -1,13 +1,11 @@
 "use client";
 
-import { useEventState } from "@/lib/events";
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
-import { matchLongName, matchShortName } from "@/lib/tba/formatters";
+import { matchLongName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
-import type { TBAMatch } from "@/lib/tba/types";
-import type { EventRealtimeStatus } from "@/lib/events/useEventState";
+import type { EventStateSnapshot } from "@/lib/events/EventState";
 import NextMatchCountdown from "../match/NextMatchCountdown";
 
 function teamNumber(teamKey: string) {
@@ -18,24 +16,22 @@ type Props = {
   eventKey: string;
   position: number;
   state: TileSurfaceState;
+  eventState?: EventStateSnapshot;
   actions: TileSurfaceActions;
-  realtimeStatus?: EventRealtimeStatus;
 };
 
 export default function RemoteEventCard({
   eventKey,
   position,
   state,
+  eventState,
   actions,
-  realtimeStatus,
 }: Props) {
-  const {
-    event,
-    matches,
-    eventNextMatch,
-  } = useEventState(eventKey);
-  const websocketStatus = realtimeStatus?.websocketStatus;
-  const websocketStale = realtimeStatus?.websocketStale ?? false;
+  const event = eventState?.event;
+  const matches = eventState?.matches ?? [];
+  const eventNextMatch = eventState?.eventNextMatch ?? null;
+  const websocketStatus = eventState?.websocketStatus;
+  const websocketStale = eventState?.websocketStale ?? false;
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
@@ -82,12 +78,12 @@ export default function RemoteEventCard({
                   websocketStatus === undefined
                     ? "Waiting for display live-update status"
                     : websocketStatus === "connected"
-                    ? websocketStale
-                      ? "WebSocket quiet; using TBA fallback polling"
-                      : "Live updates connected"
-                    : websocketStatus === "connecting"
-                      ? "Connecting to live updates"
-                      : "Live updates disconnected"
+                      ? websocketStale
+                        ? "WebSocket quiet; using TBA fallback polling"
+                        : "Live updates connected"
+                      : websocketStatus === "connecting"
+                        ? "Connecting to live updates"
+                        : "Live updates disconnected"
                 }
               />
               <span className="truncate">
@@ -111,9 +107,7 @@ export default function RemoteEventCard({
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
             Next Match
           </span>
-          {match ? (
-            <NextMatchCountdown nextMatch={match} />
-          ) : null}
+          {match ? <NextMatchCountdown nextMatch={match} /> : null}
         </div>
 
         {match ? (
@@ -126,7 +120,9 @@ export default function RemoteEventCard({
                 ({ name, teams }) => (
                   <div key={name} className="flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`w-9 text-[10px] font-bold uppercase ${name === "Red" ? "text-red-400" : "text-blue-400"}`}
+                      className={`w-9 text-[10px] font-bold uppercase ${
+                        name === "Red" ? "text-red-400" : "text-blue-400"
+                      }`}
                     >
                       {name}
                     </span>
