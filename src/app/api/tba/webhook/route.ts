@@ -15,6 +15,7 @@ type TBAWebhookData = {
   event?: TBAEvent;
   team_key?: string;
   match_key?: string;
+  team_keys?: string[];
   match?: TBAWebhookMatch;
   awards?: TBAAward[];
 };
