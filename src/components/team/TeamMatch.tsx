@@ -83,9 +83,6 @@ export default function TeamMatch({
           >
             {matchLongName(match, event.playoff_type ?? null)}
           </Link>
-          <p className="mt-0.5 text-xs text-slate-400">
-            {isPlayed ? "Final" : "Upcoming"}
-          </p>
         </div>
 
         <div className="min-w-0">
