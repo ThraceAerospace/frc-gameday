@@ -149,6 +149,10 @@ export class EventState {
     this.unsubscribeWebSocket?.();
     this.unsubscribeWebSocketStatus?.();
 
+    this.clearTimer("match");
+    this.clearTimer("status");
+    this.clearTimer("alliance");
+
     for (const timer of this.authoritativeTimers.values()) {
       window.clearTimeout(timer);
     }
@@ -412,10 +416,6 @@ export class EventState {
     ) {
       return;
     }
-
-    this.clearTimer("match");
-    this.clearTimer("status");
-    this.clearTimer("alliance");
 
     this.update((current) =>
       current.websocketStale
