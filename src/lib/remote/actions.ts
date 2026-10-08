@@ -25,7 +25,8 @@ export type RemoteMultiviewMessage =
 
 export type RemoteMultiviewAction =
   | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
-  | { type: "highlightEvent"; eventKey: string }\n  | { type: "toggleActive"; eventKey: string }
+  | { type: "highlightEvent"; eventKey: string }
+  | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
   | { type: "resetLayout" }
