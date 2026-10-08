@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarDaysIcon, MagnifyingGlassIcon, TvIcon } from "@heroicons/react/24/outline";
+import { Bars3Icon, CalendarDaysIcon, MagnifyingGlassIcon, TvIcon } from "@heroicons/react/24/outline";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type NavigationEvent = Pick<TBAEvent, "key" | "name" | "short_name" | "city" | "state_prov" | "country" | "start_date" | "end_date">;
