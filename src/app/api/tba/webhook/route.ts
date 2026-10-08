@@ -331,7 +331,12 @@ export async function POST(
         type === "upcoming_match"
           ? {
               matchKey: data?.match_key,
-              teamKeys: data?.match?.alliances\n                ? [\n                    ...(data.match.alliances.red.team_keys ?? []),\n                    ...(data.match.alliances.blue.team_keys ?? []),\n                  ]\n                : undefined,
+              teamKeys: data?.match?.alliances
+              ? [
+                ...(data.match.alliances.red.team_keys ?? []),
+                ...(data.match.alliances.blue.team_keys ?? []),
+              ]
+              : undefined,
             }
           : type === "match_score"
             ? {
