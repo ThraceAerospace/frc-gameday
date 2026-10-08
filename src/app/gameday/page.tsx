@@ -1,7 +1,6 @@
 "use client";
 
 import { use } from "react";
-import type { ReactNode } from "react";
 import TileViewSurface from "@/components/surface/TileViewSurface";
 
 function normalizeParams(param: string | string[] | undefined): string[] {
@@ -11,31 +10,9 @@ function normalizeParams(param: string | string[] | undefined): string[] {
 
 export default function GamedayPage({ searchParams }: { searchParams: Promise<{ event?: string | string[] }> }) {
   const params = use(searchParams);
-
   const eventKeys = normalizeParams(params?.event);
 
-  if (!eventKeys.length) {
-    return <EmptyState />;
-  }
-
-  return (
-    <TileViewSurface
-      events={eventKeys}
-      isDivisional={false}
-    />
-  );
-}
-
-function EmptyState({
-  title = "No events selected",
-  detail = "Choose an event from the FieldView home page.",
-}: { title?: string; detail?: string }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-black px-6 text-white">
-      <div className="max-w-md text-center">
-        <div className="text-lg font-semibold">{title}</div>
-        <div className="mt-2 text-sm text-neutral-500">{detail}</div>
-      </div>
-    </div>
-  );
+  // An empty event list is a valid starting state. TileViewSurface renders a
+  // single empty slot, while retaining the normal controller/settings flow.
+  return <TileViewSurface events={eventKeys} isDivisional={false} />;
 }
