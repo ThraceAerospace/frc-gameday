@@ -7,6 +7,7 @@ import type { TileSurfaceController } from "@/components/surface/TileSurfaceActi
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
+import { useTileSurfaceKeyboard } from "@/components/surface/TileSurfaceController";
 
 type Props = {
   controller: TileSurfaceController;
@@ -19,11 +20,15 @@ export default function RemoteSurface({
   peerStatus,
   eventStates,
 }: Props) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const state = useSyncExternalStore(
     controller.subscribe,
     controller.getState,
     controller.getState,
   );
+
+  useTileSurfaceKeyboard(state, controller.actions, () => setSettingsOpen((open) => !open));
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -44,9 +49,7 @@ export default function RemoteSurface({
               {peerStatus === "connected" ? "Connected" : "Connecting…"}
             </div>
           </div>
-          <div className="shrink-0">
-            <TileSurfaceSettingsView state={state} actions={controller.actions} />
-          </div>
+
         </div>
       </header>
 
