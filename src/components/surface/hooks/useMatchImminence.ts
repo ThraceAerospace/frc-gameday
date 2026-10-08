@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { TBAMatch, TBAEventTeamStatuses } from "@/lib/tba/types";
 
 export type MatchImminenceSignal =
   | {
@@ -15,16 +15,16 @@ export type MatchImminenceSignal =
     };
 
 /**
- * A tracked match is imminent when it is both:
+ * A match is imminent when it is both:
  * - the event's next unscored match, and
- * - the next unscored match for at least one tracked team.
+ * - the next match reported by TBA for at least one tracked team.
  *
- * The transition out of imminence is emitted when the match is no longer
- * the event/tracker's next match, normally because its score was posted.
+ * TBA's team-event status is authoritative for the team's next match.
  */
 export function useMatchImminence(
   eventNextMatch: TBAMatch | null,
-  trackedNextMatch: TBAMatch | null,
+  trackedTeams: string[],
+  teamsStatuses: TBAEventTeamStatuses,
   enabled: boolean,
   emit: (signal: MatchImminenceSignal) => void,
 ) {
@@ -37,9 +37,14 @@ export function useMatchImminence(
 
   useEffect(() => {
     const eventKey = eventNextMatch?.key ?? null;
-    const trackedKey = trackedNextMatch?.key ?? null;
+    const trackedNextMatchKeys = trackedTeams.map(
+      (team) => teamsStatuses[team]?.next_match_key ?? null,
+    );
+
     const nextImminentKey =
-      enabled && eventKey && trackedKey && eventKey === trackedKey
+      enabled &&
+      eventKey &&
+      trackedNextMatchKeys.some((matchKey) => matchKey === eventKey)
         ? eventKey
         : null;
 
@@ -64,7 +69,8 @@ export function useMatchImminence(
   }, [
     enabled,
     eventNextMatch?.key,
-    trackedNextMatch?.key,
+    trackedTeams,
+    teamsStatuses,
   ]);
 
   useEffect(() => {
