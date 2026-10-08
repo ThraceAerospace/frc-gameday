@@ -142,6 +142,8 @@ export default function TileSurface({
                 isDivisional={isDivisional}
                 controller={controller}
                 onToggleActive={() => controller.actions.toggleActive(eventKey)}
+                slotNumber={state.streams.indexOf(eventKey) + 1}
+                controlHeld={controlHeld}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}
               />
