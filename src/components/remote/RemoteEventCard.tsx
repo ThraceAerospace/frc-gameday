@@ -3,6 +3,7 @@
 import { useEventState } from "@/lib/events";
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
 import { compactMatchLabel } from "@/lib/gameday/matchUtils";
+import { matchLongName, matchShortName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { TBAMatch } from "@/lib/tba/types";
@@ -49,12 +50,8 @@ export default function RemoteEventCard({
   const selected = state.activeKey === eventKey;
 
   const match = eventNextMatch;
-  const matchTeams = match
-    ? [
-        ...(match.alliances.red.team_keys ?? []),
-        ...(match.alliances.blue.team_keys ?? []),
-      ]
-    : [];
+  const redTeams = match?.alliances.red.team_keys ?? [];
+  const blueTeams = match?.alliances.blue.team_keys ?? [];
 
   const trackedNext = trackedTeams
     .map((team) => ({ team, match: trackedNextMatches[team] }))
@@ -131,24 +128,32 @@ export default function RemoteEventCard({
         {match ? (
           <>
             <div className="mt-1 text-xl font-bold tracking-tight">
-              {compactMatchLabel(match) ?? "Next"}
+              {matchLongName(match, event?.playoff_type ?? null)}
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {matchTeams.map((team) => {
-                const tracked = trackedTeams.includes(team);
-                return (
-                  <span
-                    key={team}
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      tracked
-                        ? "bg-white text-black"
-                        : "bg-neutral-800 text-neutral-300"
-                    }`}
-                  >
-                    {teamNumber(team)}
-                  </span>
-                );
-              })}
+            <div className="mt-3 space-y-2">
+              {[{ name: "Red", teams: redTeams }, { name: "Blue", teams: blueTeams }].map(
+                ({ name, teams }) => (
+                  <div key={name} className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`w-9 text-[10px] font-bold uppercase ${name === "Red" ? "text-red-400" : "text-blue-400"}`}
+                    >
+                      {name}
+                    </span>
+                    {teams.map((team) => (
+                      <span
+                        key={team}
+                        className={`rounded-full border px-2.5 py-1 text-xs ${
+                          name === "Red"
+                            ? "border-red-800 bg-red-950 text-red-200"
+                            : "border-blue-800 bg-blue-950 text-blue-200"
+                        } ${trackedTeams.includes(team) ? "font-bold ring-1 ring-white/70" : "font-semibold"}`}
+                      >
+                        {teamNumber(team)}
+                      </span>
+                    ))}
+                  </div>
+                ),
+              )}
             </div>
           </>
         ) : (
