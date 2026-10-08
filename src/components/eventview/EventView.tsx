@@ -300,7 +300,7 @@ export default function EventView({
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-black">
       {eventConfig.matchNotifications && upcomingMatch && upcomingTeams.length > 0 ? (
         <ImminentMatchBanner
-          key={imminentMatch.key}
+          key={upcomingMatch.key}
           match={upcomingMatch}
           teams={upcomingTeams}
           eventName={eventData.short_name || eventData.name || event}
