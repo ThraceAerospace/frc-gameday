@@ -29,6 +29,8 @@ type EventFooterProps = {
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
   priorityEditing?: boolean;
   onToggleActive?: () => void;
+  slotNumber?: number;
+  controlHeld?: boolean;
 };
 
 export default function EventFooter({
@@ -50,6 +52,8 @@ export default function EventFooter({
   multiview = {},
   priorityEditing = false,
   onToggleActive,
+  slotNumber,
+  controlHeld = false,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
