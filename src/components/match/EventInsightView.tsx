@@ -10,13 +10,13 @@ import MatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
 type AllianceColor = "red" | "blue";
 type AllianceEstimates = {
-  opr: number;
-  dpr: number;
-  ccwm: number;
-  epa: number;
-  autoEpa: number;
-  teleopEpa: number;
-  endgameEpa: number;
+  opr: number | undefined;
+  dpr: number | undefined;
+  ccwm: number | undefined;
+  epa: number | undefined;
+  autoEpa: number | undefined;
+  teleopEpa: number | undefined;
+  endgameEpa: number | undefined;
 };
 
 const PRE_EPA_FIELDS = [
@@ -36,24 +36,28 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
+function sumAvailableValues(values: (number | undefined)[]): number | undefined {
+  if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
+    return undefined;
+  }
+  return values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+}
+
 function sumAllianceEstimates(
   teamKeys: string[],
   oprs: EventStateSnapshot["oprs"],
   preEpas: StatboticsMatch["pre_epas"],
 ): AllianceEstimates {
-  return teamKeys.reduce<AllianceEstimates>((total, teamKey) => {
-    const numericKey = teamNumberKey(teamKey);
-    const epa = preEpas?.[numericKey];
-    return {
-      opr: total.opr + (oprs?.oprs?.[teamKey] ?? 0),
-      dpr: total.dpr + (oprs?.dprs?.[teamKey] ?? 0),
-      ccwm: total.ccwm + (oprs?.ccwms?.[teamKey] ?? 0),
-      epa: total.epa + (epa?.epa ?? 0),
-      autoEpa: total.autoEpa + (epa?.auto_epa ?? 0),
-      teleopEpa: total.teleopEpa + (epa?.teleop_epa ?? 0),
-      endgameEpa: total.endgameEpa + (epa?.endgame_epa ?? 0),
-    };
-  }, { opr: 0, dpr: 0, ccwm: 0, epa: 0, autoEpa: 0, teleopEpa: 0, endgameEpa: 0 });
+  const teamEpas = teamKeys.map((teamKey) => preEpas?.[teamNumberKey(teamKey)]);
+  return {
+    opr: sumAvailableValues(teamKeys.map((teamKey) => oprs?.oprs?.[teamKey])),
+    dpr: sumAvailableValues(teamKeys.map((teamKey) => oprs?.dprs?.[teamKey])),
+    ccwm: sumAvailableValues(teamKeys.map((teamKey) => oprs?.ccwms?.[teamKey])),
+    epa: sumAvailableValues(teamEpas.map((epa) => epa?.epa)),
+    autoEpa: sumAvailableValues(teamEpas.map((epa) => epa?.auto_epa)),
+    teleopEpa: sumAvailableValues(teamEpas.map((epa) => epa?.teleop_epa)),
+    endgameEpa: sumAvailableValues(teamEpas.map((epa) => epa?.endgame_epa)),
+  };
 }
 
 function AllianceCard({
