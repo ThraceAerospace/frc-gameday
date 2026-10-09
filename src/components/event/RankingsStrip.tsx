@@ -5,6 +5,7 @@ import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
 } from "@/lib/tba/types";
+import { formatAllianceName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
 
 type RankingsStripProps = {
   teamsStatuses: TBAEventTeamStatuses;
@@ -13,42 +14,6 @@ type RankingsStripProps = {
   trackedTeams?: string[];
 };
 
-function recordLabel(
-  record:
-    | {
-        wins?: number;
-        losses?: number;
-        ties?: number;
-      }
-    | null
-    | undefined,
-) {
-  if (!record) return "—";
-
-  return `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}`;
-}
-
-function playoffLevel(
-  alliance: TBAEliminationAlliance,
-  playoffType?: number | null,
-) {
-  const status = alliance.status;
-
-  if (!status) return "—";
-
-  if (playoffType === 10) {
-    return status.double_elim_round ?? "—";
-  }
-
-  return status.level ?? "—";
-}
-
-function allianceLabel(
-  alliance: TBAEliminationAlliance,
-  index: number,
-) {
-  return alliance.name || `Alliance ${index + 1}`;
-}
 
 /*
  * Rankings are intentionally different from the match strip.
@@ -253,7 +218,7 @@ export default function RankingsStrip({
                     (team) =>
                       trackedTeams.includes(team) ||
                       trackedTeams.includes(
-                        team.replace(/^frc/i, ""),
+                        formatTeamNumber(team),
                       ),
                   );
 
@@ -274,19 +239,13 @@ export default function RankingsStrip({
                   >
                     <div className="flex flex-col justify-center">
                       <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
-                        {allianceLabel(
-                          alliance,
-                          index,
-                        )}
+                        {formatAllianceName(alliance.name, index)}
                       </span>
 
                       <span className="mt-0.5 text-[10px] font-semibold text-white">
                         {alliance.picks
                           .map((team) =>
-                            team.replace(
-                              /^frc/i,
-                              "",
-                            ),
+                            formatTeamNumber(team),
                           )
                           .join(" · ")}
                       </span>
@@ -296,16 +255,11 @@ export default function RankingsStrip({
 
                     <div className="flex flex-col justify-center text-right">
                       <span className="font-mono text-[10px] text-neutral-300">
-                        {playoffLevel(
-                          alliance,
-                          playoffType,
-                        )}
+                        {formatPlayoffLevel(alliance, playoffType)}
                       </span>
 
                       <span className="font-mono text-[10px] text-neutral-300">
-                        {recordLabel(
-                          status?.record,
-                        )}
+                        {formatRecord(status?.record)}
                       </span>
                     </div>
                   </article>
@@ -369,10 +323,7 @@ export default function RankingsStrip({
                   entry.teamKey,
                 ) ||
                 trackedTeams.includes(
-                  entry.teamKey.replace(
-                    /^frc/i,
-                    "",
-                  ),
+                  formatTeamNumber(entry.teamKey),
                 );
 
               return (
@@ -391,10 +342,7 @@ export default function RankingsStrip({
                   </span>
 
                   <span className="font-mono text-[11px] font-bold text-white">
-                    {entry.teamKey.replace(
-                      /^frc/i,
-                      "",
-                    )}
+                    {formatTeamNumber(entry.teamKey)}
                   </span>
 
                   <span className="h-5 w-px bg-white/10" />
@@ -406,10 +354,7 @@ export default function RankingsStrip({
                   </span>
 
                   <span className="font-mono text-[10px] text-neutral-500">
-                    {recordLabel(
-                      entry.status!.qual!.ranking!
-                        .record,
-                    )}
+                    {formatRecord(entry.status!.qual!.ranking!.record)}
                   </span>
                 </article>
               );
