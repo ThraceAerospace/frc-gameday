@@ -127,15 +127,25 @@ export default function EventFooter({
               : "relative translate-y-0"
           } transition-transform duration-200`}
         >
-          <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
+          <div className={mode === "split" || mode === "statbotics" ? "grid grid-cols-2" : undefined}>
             {mode === "statbotics" ? (
-              <StatboticsPredictionStrip
-                match={nextMatch ?? lastMatch ?? null}
-                team={team}
-                playoffType={playoffType}
-                playoffAlliances={playoffAlliances}
-                eventTimezone={eventTimezone}
-              />
+              <>
+                <div className="min-w-0 border-r border-white/15">
+                  <MatchStrip
+                    matches={matches}
+                    team={team}
+                    nextMatch={nextMatch}
+                    lastMatch={lastMatch}
+                    eventTimezone={eventTimezone}
+                    playoffAlliances={playoffAlliances}
+                    playoffType={playoffType}
+                    multiview={multiview}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <StatboticsPredictionStrip match={nextMatch ?? lastMatch ?? null} />
+                </div>
+              </>
             ) : mode === "rankings" ? (
               <RankingsStrip
                 teamsStatuses={teamsStatuses}
