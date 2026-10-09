@@ -27,6 +27,7 @@ type Props = {
   code: string;
   onStatus?: (status: RemotePeerStatus) => void;
   onSignalingStatus?: (status: RemoteSignalingStatus) => void;
+  hidden?: boolean;
 };
 
 export default function RemoteSession({
@@ -35,6 +36,7 @@ export default function RemoteSession({
   code,
   onStatus,
   onSignalingStatus,
+  hidden = false,
 }: Props) {
   const localController = useTileSurfaceController({ events });
   const localControllerRef = useRef(localController);
@@ -240,11 +242,13 @@ export default function RemoteSession({
 
   if (role === "controller") {
     return (
-      <RemoteTileSurface
-        controller={controller}
-        peerStatus={peerStatus}
-        eventStates={eventStates}
-      />
+      <div hidden={hidden}>
+        <RemoteTileSurface
+          controller={controller}
+          peerStatus={peerStatus}
+          eventStates={eventStates}
+        />
+      </div>
     );
   }
 
