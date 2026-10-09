@@ -242,3 +242,17 @@ npm run build
 TBA types are regenerated automatically by `predev` and `prebuild`.
 
 Do not commit secrets. The TBA webhook requires `TBA_WEBHOOK_TOKEN`; stream URL construction may use `NEXT_PUBLIC_DOMAIN`.
+
+
+## Match Insights and multi-display sessions
+
+FieldView follows one-session/one-state ownership: **one session → one set of event states → many displays**. Configure the event list, tracked teams, and streams once; connected displays consume the same session configuration and event snapshots. Presentation mode can vary by display, but a display must not have its own event selection.
+
+The integrated Match Insights display follows the Tile View's valid highlighted tile, falling back to the first tile in priority order. Tile IDs are resolved to event keys through `tileEvents`. The standalone local route `/event/<event>/insights` uses the URL event when no Tile View surface is present.
+
+Architecture boundaries:
+
+- `EventInsightsSurface` hosts the Insights experience for one supplied event key and subscribes to shared `EventState`.
+- `EventInsightView` renders the match insight presentation; it does not fetch event or Statbotics data.
+- `EventState` owns TBA and Statbotics match acquisition and refresh behavior. Remote displays receive these snapshots from the controller and do not start duplicate acquisition.
+- Numeric Statbotics values are rendered from the API response without application-side rounding, truncation, or derived alliance totals.
