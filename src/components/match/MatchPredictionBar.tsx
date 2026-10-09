@@ -29,7 +29,7 @@ function formatPredictionLabel(key: string): string {
   return key
     .replace(/_rp$/, " RP")
     .replace(/_/g, " ")
-    .replace(/\\b[a-z]/g, (character) => character.toUpperCase());
+    .replace(/\b[a-z]/g, (character) => character.toUpperCase());
 }
 
 function AlliancePredictionBox({
