@@ -24,7 +24,7 @@ export default function MatchStrip({
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   multiview?: Record<string, unknown>;
-  onOpenInsights?: () => void;
+  onOpenInsights?: (match: TBAMatch) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,14 +116,14 @@ export default function MatchStrip({
                     "shrink-0",
                     onOpenInsights ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300 rounded-md" : "",
                   ].join(" ")}
-                  onClick={onOpenInsights}
+                  onClick={() => onOpenInsights?.(match)}
                   onKeyDown={(event) => {
                     if (!onOpenInsights || (event.key !== "Enter" && event.key !== " ")) {
                       return;
                     }
 
                     event.preventDefault();
-                    onOpenInsights();
+                    onOpenInsights(match);
                   }}
                   role={onOpenInsights ? "button" : undefined}
                   tabIndex={onOpenInsights ? 0 : undefined}
