@@ -7,7 +7,7 @@ import {
 } from "./EventState";
 
 const eventStates = new Map<string, EventState>();
-const EventStateSnapshotsContext = createContext<Record<string, EventStateSnapshot> | null>(null);
+export const EventStateSnapshotsContext = createContext<Record<string, EventStateSnapshot> | null>(null);
 
 export function EventStateSnapshotsProvider({
   snapshots,
