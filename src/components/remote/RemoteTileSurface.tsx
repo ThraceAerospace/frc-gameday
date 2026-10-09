@@ -47,7 +47,7 @@ export default function RemoteSurface({
       <header className="sticky top-0 z-40 border-b border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-base font-semibold">FieldView Remote</div>
+            <div className="text-base font-semibold">FieldView Session</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
               <SignalIcon className={`h-3.5 w-3.5 ${peerStatus === "connected" ? "text-green-400" : "text-yellow-400"}`} />
               {peerStatus === "connected" ? "Connected" : "Connecting…"}
@@ -55,7 +55,7 @@ export default function RemoteSurface({
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <label className="flex items-center gap-2 text-xs text-neutral-500">
-              <span>Mode</span>
+              <span>Display mode</span>
               <select
                 value={displayMode}
                 onChange={(event) => onDisplayModeChange(event.target.value as "gameday" | "insights")}
