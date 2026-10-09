@@ -33,7 +33,7 @@ Rules:
 1. Redis is the server-side cache.
 2. TBA webhooks are the preferred realtime invalidation path.
 3. TBA webhooks mutate existing Redis cache entries first, then broadcast an event-scoped WSS invalidation.
-4. EventView refetches Redis immediately after the webhook mutation. Webhook-mutated match caches keep the new data available to the UI while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before ETag/304 validation.
+4. EventState refetches Redis immediately after the webhook mutation. Webhook-mutated match caches keep the new data available to the UI while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before ETag/304 validation.
 5. WSS messages are invalidation signals, not data payloads.
 6. Polling reconciles missed webhooks and every explicit reload restarts the polling generation.
 7. Do not introduce another cache layer to support webhooks.
