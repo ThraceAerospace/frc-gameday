@@ -179,6 +179,8 @@ export class EventState {
     this.authoritativeTimers.clear();
     for (const timer of this.statboticsRefreshTimers.values()) window.clearTimeout(timer);
     this.statboticsRefreshTimers.clear();
+    // Re-evaluate the current and last match when this EventState starts again.
+    this.statboticsSignatures.clear();
 
     for (const [matchKey, request] of this.statboticsRequests) {
       this.statboticsRequests.set(matchKey, request + 1);
