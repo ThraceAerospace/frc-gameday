@@ -28,9 +28,9 @@ function AllianceTeams({
   return (
     <div className="min-w-0">
       <div className={`mb-1 text-[9px] font-bold uppercase tracking-widest ${styles.label}`}>{color} alliance</div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-0.5">
         {teams.length > 0 ? teams.map((team) => (
-          <span key={team} className={`rounded border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-neutral-200 ${styles.border} ${styles.background}`}>
+          <span key={team} className={`rounded border px-1 py-0 font-mono text-[9px] font-semibold tabular-nums text-neutral-200 ${styles.border} ${styles.background}`}>
             {formatTeamNumber(team)}
           </span>
         )) : <span className="text-[10px] text-neutral-600">Teams unavailable</span>}
@@ -88,21 +88,21 @@ export default function StatboticsPredictionStrip({
   const prediction = asRecord(payload?.pred ?? payload?.prediction);
 
   return (
-    <div className="border-t border-white/10 bg-neutral-950/95 p-2 sm:p-3">
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(150px,0.65fr)_minmax(0,2fr)]">
-        <section className="flex min-w-0 flex-col justify-center rounded-xl border border-white/10 bg-white/[0.02] p-3">
-          <div className="mb-3 min-w-0">
-            <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Match</div>
-            <div className="mt-1 truncate text-xl font-bold text-white" title={match.key}>
+    <div className="border-t border-white/10 bg-neutral-950/95 px-2 py-1">
+      <div className="grid min-w-0 grid-cols-[minmax(112px,0.45fr)_minmax(0,2fr)] items-center gap-2">
+        <section className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-1">
+          <div className="min-w-0 shrink-0">
+            <div className="text-[8px] font-semibold uppercase tracking-wider text-neutral-500">Match</div>
+            <div className="truncate text-base font-bold leading-tight text-white" title={match.key}>
               {matchShortName(match, playoffType)}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-1">
             <AllianceTeams color="red" teams={match.alliances.red.team_keys ?? []} />
             <AllianceTeams color="blue" teams={match.alliances.blue.team_keys ?? []} />
           </div>
         </section>
-        <div className="min-w-0 rounded-xl border border-white/10 bg-neutral-950/95 p-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1.7fr)_minmax(100px,0.7fr)] items-center gap-1 rounded-lg border border-white/10 bg-neutral-950/95 px-1 py-0.5">
           <StatboticsMatchPredictionMetrics prediction={prediction} compact />
           <StatboticsMatchPredictionBar prediction={prediction} status={status} compact />
         </div>
