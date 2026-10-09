@@ -96,22 +96,25 @@ export default function TileViewSurface({
 
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0 flex flex-col">
-          {displayMode === "gameday" ? (
+          <div className={`absolute inset-0 ${displayMode === "gameday" ? "" : "hidden"}`}>
             <TileView
               controller={tileSurfaceController}
               isDivisional={isDivisional}
             />
-          ) : activeEventKey ? (
-            <EventInsightsSurface
-              eventKey={activeEventKey}
-              trackedTeams={trackedTeams}
-              embedded
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center bg-[#07090d] p-8 text-center text-sm text-neutral-500">
-              Add an event to Tile View to use Match Insights.
-            </div>
-          )}
+          </div>
+          <div className={`absolute inset-0 ${displayMode === "insights" ? "" : "hidden"}`}>
+            {activeEventKey ? (
+              <EventInsightsSurface
+                eventKey={activeEventKey}
+                trackedTeams={trackedTeams}
+                embedded
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center bg-[#07090d] p-8 text-center text-sm text-neutral-500">
+                Add an event to Tile View to use Match Insights.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
