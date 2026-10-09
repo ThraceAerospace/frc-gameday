@@ -20,7 +20,8 @@ import {
   type RemoteSignalingStatus,
 } from "@/lib/remote/webrtc";
 import RemoteTileSurface from "./RemoteTileSurface";
-import MatchInsightsView from "@/components/match/MatchInsightsView";
+import EventInsightsSurface from "@/components/surface/EventInsightsSurface";
+import { resolveActiveEventKey } from "@/lib/surface/resolveActiveEventKey";
 
 type Props = {
   role: RemoteRole;
@@ -271,13 +272,7 @@ export default function RemoteSession({
   }
 
   const displayState = surfaceState;
-  const activeTileId =
-    displayState.activeKey && displayState.priority.includes(displayState.activeKey)
-      ? displayState.activeKey
-      : displayState.priority[0] ?? null;
-  const resolvedInsightsEventKey = activeTileId
-    ? displayState.tileEvents[activeTileId] ?? activeTileId
-    : null;
+  const resolvedInsightsEventKey = resolveActiveEventKey(displayState);
   const trackedTeams = resolvedInsightsEventKey
     ? displayState.eventConfigs[resolvedInsightsEventKey]?.trackedTeams ?? []
     : [];
@@ -290,7 +285,7 @@ export default function RemoteSession({
         </div>
         <div hidden={displayMode !== "insights"}>
           {resolvedInsightsEventKey ? (
-            <MatchInsightsView eventKey={resolvedInsightsEventKey} trackedTeams={trackedTeams} />
+            <EventInsightsSurface eventKey={resolvedInsightsEventKey} trackedTeams={trackedTeams} />
           ) : (
             <main className="flex min-h-screen items-center justify-center bg-black p-8 text-center text-sm text-neutral-500">
               Add an event from the controller before switching this display to Match Insights.
