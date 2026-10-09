@@ -48,11 +48,8 @@ export default function RemoteSession({
     useState<RemotePeerStatus>("connecting");
   const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
   const [displayMode, setDisplayMode] = useState<"gameday" | "insights">("gameday");
-  const [insightsEventKey, setInsightsEventKey] = useState<string | null>(events[0] ?? null);
   const displayModeRef = useRef(displayMode);
   displayModeRef.current = displayMode;
-  const insightsEventKeyRef = useRef(insightsEventKey);
-  insightsEventKeyRef.current = insightsEventKey;
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
 
@@ -85,7 +82,6 @@ export default function RemoteSession({
             peerRef.current?.sendMessage({
               type: "displayModeSnapshot",
               mode: displayModeRef.current,
-              eventKey: insightsEventKeyRef.current,
             });
             for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
               peerRef.current?.sendMessage({
@@ -99,7 +95,6 @@ export default function RemoteSession({
 
           if (message.type === "displayModeSnapshot") {
             setDisplayMode(message.mode);
-            setInsightsEventKey(message.eventKey);
             return;
           }
 
@@ -269,14 +264,7 @@ export default function RemoteSession({
           insightsEventKey={insightsEventKey}
           onDisplayModeChange={(mode) => {
             setDisplayMode(mode);
-            const currentSurface = localController.getState();
-            const nextEventKey = insightsEventKey ?? (currentSurface.streams[0] ? currentSurface.tileEvents[currentSurface.streams[0]] ?? currentSurface.streams[0] : null);
-            setInsightsEventKey(nextEventKey);
-            peer.sendMessage({ type: "displayModeSnapshot", mode, eventKey: nextEventKey });
-          }}
-          onInsightsEventKeyChange={(eventKey) => {
-            setInsightsEventKey(eventKey);
-            peer.sendMessage({ type: "displayModeSnapshot", mode: displayMode, eventKey });
+            peer.sendMessage({ type: "displayModeSnapshot", mode });
           }}
         />
       </div>
@@ -284,10 +272,13 @@ export default function RemoteSession({
   }
 
   const displayState = surfaceState;
-  const resolvedInsightsEventKey =
-    insightsEventKey ??
-    displayState.streams.map((tileId) => displayState.tileEvents[tileId] ?? tileId)[0] ??
-    null;
+  const activeTileId =
+    displayState.activeKey && displayState.priority.includes(displayState.activeKey)
+      ? displayState.activeKey
+      : displayState.priority[0] ?? null;
+  const resolvedInsightsEventKey = activeTileId
+    ? displayState.tileEvents[activeTileId] ?? activeTileId
+    : null;
   const trackedTeams = resolvedInsightsEventKey
     ? displayState.eventConfigs[resolvedInsightsEventKey]?.trackedTeams ?? []
     : [];
