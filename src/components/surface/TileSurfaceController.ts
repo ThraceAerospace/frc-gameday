@@ -218,7 +218,7 @@ export function useTileSurfaceController({
     };
   }, [state.eventPickerOpen, update]);
 
-  const updateUrl = useCallback((tileIds: string[], tileEvents: Record<string, string>, tileTypes: Record<string, "eventView">) => {
+  const updateUrl = useCallback((tileIds: string[], tileEvents: Record<string, string>) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("event");
 
@@ -479,7 +479,7 @@ export function useTileSurfaceController({
           },
         }));
 
-        updateUrl(nextStreams, nextTileEvents, nextTileTypes);
+        updateUrl(nextStreams, nextTileEvents);
         showControls();
       },
 
