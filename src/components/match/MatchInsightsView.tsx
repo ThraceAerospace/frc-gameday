@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./MatchPredictionBar";
 
 type AllianceColor = "red" | "blue";
@@ -119,8 +119,8 @@ function AllianceCard({
           <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {ALLIANCE_METRICS.map((metric) => (
-              <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
-                {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
+              <span key={metric.key} className="whitespace-nowrap text-[15px] text-neutral-400">
+                {metric.label}: <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
               </span>
             ))}
           </div>
@@ -129,9 +129,9 @@ function AllianceCard({
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max border-collapse text-left text-xs">
-          <thead className="bg-black/20 text-[10px] uppercase tracking-wider text-neutral-500">
+          <thead className="text-[10px] uppercase tracking-wider text-neutral-500">
             <tr>
-              <th className="sticky left-0 z-10 bg-neutral-950/95 px-3 py-2">Team</th>
+              <th className="sticky left-0 z-10 px-3 py-2">Team</th>
               <th className="px-2 py-2 text-right">OPR</th>
               <th className="px-2 py-2 text-right">DPR</th>
               <th className="px-2 py-2 text-right">CCWM</th>
@@ -144,9 +144,9 @@ function AllianceCard({
               const teamEstimates = estimates[teamKey];
               return (
                 <tr key={teamKey} className={tracked ? "bg-amber-300/[0.08]" : ""}>
-                  <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.sticky} px-3 py-3 text-left font-normal`}>
+                  <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.header} px-3 py-3 text-left font-normal`}>
                     <div className={`font-mono text-xl font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
-                    <div className="mt-1 max-w-40 truncate text-[10px] text-neutral-400">{teamNames.get(teamKey) ?? teamKey}</div>
+                    <div className="mt-1 max-w-40 truncate text-md text-neutral-400">{teamNames.get(teamKey) ?? teamKey}</div>
                   </th>
                   <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.opr)}</td>
                   <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.dpr)}</td>
@@ -276,7 +276,6 @@ export function MatchInsightsContent({
   const isShowingTransitionResult = Boolean(resultMatchKey && resultMatchKey === displayMatch?.key);
   const eventTitle = event?.short_name || event?.name || eventKey;
   const prediction = asRecord(statboticsData?.pred ?? statboticsData?.prediction);
-  const redWinProbability = prediction.red_win_prob;
   const preEpas = asRecord(statboticsData?.pre_epas);
   const estimates = useMemo(() => {
     const result: Record<string, TeamEstimates> = {};
@@ -302,7 +301,7 @@ export function MatchInsightsContent({
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
         <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">
           <h1 className="min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{eventTitle}</h1>
-          <h1 className="min-w-0 truncate text-center text-sm font-semibold text-neutral-200">{displayMatch ? matchShortName(displayMatch, event?.playoff_type ?? null) : "No match selected"}</h1>
+          <h1 className="min-w-0 truncate text-center text-xl font-semibold text-neutral-200">{displayMatch ? matchLongName(displayMatch, event?.playoff_type ?? null) : "No match selected"}</h1>
           <span className="text-right text-xs text-neutral-500">{displayMatch ? displayMatch.key : ""}</span>
         </div>
       </header>
