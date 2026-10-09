@@ -2,7 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
+import { formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 export default async function MatchPage({
@@ -87,7 +87,7 @@ export default async function MatchPage({
               </h1>
 
               <p className="mt-2 text-slate-500">
-                {formatMatchType(match)}
+                {formatMatchType(match.comp_level)}
               </p>
             </div>
 
@@ -429,33 +429,5 @@ function ScoreBreakdownPanel({
       </dl>
     </div>
   );
-}
-
-function formatMatchType(match: TBAMatch) {
-  switch (match.comp_level.toLowerCase()) {
-    case "qm":
-      return "Qualification Match";
-    case "ef":
-      return "Eighthfinal Match";
-    case "qf":
-      return "Quarterfinal Match";
-    case "sf":
-      return "Semifinal Match";
-    case "f":
-      return "Final Match";
-    default:
-      return "Competition Match";
-  }
-}
-
-function formatTime(
-  timestamp: number | null | undefined,
-  timezone?: string | null,
-) {
-  if (timestamp == null) {
-    return "—";
-  }
-
-  return formatEventTime(timestamp, timezone ?? undefined);
 }
 
