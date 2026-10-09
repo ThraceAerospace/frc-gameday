@@ -14,6 +14,13 @@ type FieldRow = {
   blue: unknown;
 };
 
+type FieldSection = {
+  key: string;
+  label: string;
+  order: number;
+  fields: FieldRow[];
+};
+
 function formatLabel(key: string): string {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -40,7 +47,7 @@ function flattenFields(value: unknown, prefix = ""): Map<string, unknown> {
     return fields;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>);
+  const entries = Object.entries(value);
   if (entries.length === 0 && prefix) fields.set(prefix, value);
 
   for (const [key, childValue] of entries) {
@@ -56,25 +63,13 @@ function flattenFields(value: unknown, prefix = ""): Map<string, unknown> {
 function isInactive(value: unknown): boolean {
   if (value === null || value === undefined || value === false || value === 0) return true;
   if (typeof value === "string") {
-    return value.trim() === "" || value.trim().toLowerCase() === "none";
+    const normalized = value.trim().toLowerCase();
+    return normalized === "" || normalized === "none" || normalized === "no";
   }
   return Array.isArray(value) && value.length === 0;
 }
 
-function fieldOrder(key: string): number {
-  const normalized = key.toLowerCase().replace(/[._-]/g, " ");
-
-  if (/\b(total|score)\b/.test(normalized) && /(total|score|points)/.test(normalized)) return 0;
-  if (/\b(rp|ranking point|ranking points)\b/.test(normalized) || /_rp\b/.test(key)) return 1;
-  if (/(foul|penalt|adjustment|disqualification|\bdq\b)/.test(normalized)) return 3;
-  if (/(point|score|fuel|piece|tower|auto|teleop|endgame|shift|amp|speaker|coral|algae|stage|climb|park|trap|leave|mobility|charge|dock|note|cube|cone)/.test(normalized)) return 2;
-  return 4;
-}
-
 function compareFieldKeys(left: string, right: string): number {
-  const orderDifference = fieldOrder(left) - fieldOrder(right);
-  if (orderDifference !== 0) return orderDifference;
-
   const leftParts = left.toLowerCase().split(".");
   const rightParts = right.toLowerCase().split(".");
   for (let index = 0; index < Math.min(leftParts.length, rightParts.length); index += 1) {
@@ -114,6 +109,63 @@ function getAllianceFields(breakdown: unknown): FieldRow[] {
     }));
 }
 
+function sectionForField(field: FieldRow): { key: string; label: string; order: number } {
+  const separator = field.key.indexOf(".");
+  if (separator >= 0) {
+    const parent = field.key.slice(0, separator);
+    const normalizedParent = parent.toLowerCase();
+    const order = /(penalt|foul|adjust)/.test(normalizedParent)
+      ? 5
+      : /(endgame|tower|climb|stage)/.test(normalizedParent)
+        ? 3
+        : /(auto|autonomous)/.test(normalizedParent)
+          ? 1
+          : /(teleop|hub|shift|transition)/.test(normalizedParent)
+            ? 2
+            : 4;
+    return { key: `group:${parent}`, label: formatLabel(parent), order };
+  }
+
+  const normalized = field.key.toLowerCase().replace(/[_-]/g, " ");
+  if (/(foul|penalt|adjustment|disqualification|\bdq\b)/.test(normalized)) {
+    return { key: "penalties", label: "Penalties & adjustments", order: 5 };
+  }
+  if (/(ranking point|\brp\b|_rp\b)/.test(normalized)) {
+    return { key: "ranking-points", label: "Ranking points", order: 4 };
+  }
+  if (/(auto|autonomous)/.test(normalized)) {
+    return { key: "autonomous", label: "Autonomous", order: 1 };
+  }
+  if (/(teleop|transition|shift)/.test(normalized)) {
+    return { key: "teleop", label: "Teleoperated", order: 2 };
+  }
+  if (/(endgame|tower|climb|stage|park|traversal)/.test(normalized)) {
+    return { key: "endgame", label: "Endgame", order: 3 };
+  }
+  if (/(total|score|points)/.test(normalized)) {
+    return { key: "totals", label: "Scoring totals", order: 6 };
+  }
+  return { key: "other", label: "Other details", order: 7 };
+}
+
+function groupFields(fields: FieldRow[]): FieldSection[] {
+  const sections = new Map<string, FieldSection>();
+
+  for (const field of fields) {
+    const section = sectionForField(field);
+    const existing = sections.get(section.key);
+    if (existing) {
+      existing.fields.push(field);
+    } else {
+      sections.set(section.key, { ...section, fields: [field] });
+    }
+  }
+
+  return [...sections.values()].sort(
+    (left, right) => left.order - right.order || left.label.localeCompare(right.label),
+  );
+}
+
 function renderCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -133,30 +185,42 @@ export default function ScoreBreakdown({ match, year }: ScoreBreakdownProps) {
 
   if (!breakdown || !scoresPosted) return null;
 
-  const fields = getAllianceFields(breakdown);
-  if (fields.length === 0) return null;
+  const sections = groupFields(getAllianceFields(breakdown));
+  if (sections.length === 0) return null;
 
   return (
     <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">
+      <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-300">
         Official score breakdown{year ? ` · ${year}` : ""}
       </h2>
-      <div className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-center gap-3 text-xs font-bold uppercase tracking-wider">
-        <div className="text-left text-red-300">Red alliance</div>
-        <div className="text-center text-neutral-400">Field</div>
-        <div className="text-right text-blue-300">Blue alliance</div>
+      <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] items-center gap-3 px-2 text-[10px] font-bold uppercase tracking-wider">
+        <div className="text-left text-red-300">Red</div>
+        <div className="text-center text-neutral-500">Scoring detail</div>
+        <div className="text-right text-blue-300">Blue</div>
       </div>
-      <div className="divide-y divide-white/[0.06]">
-        {fields.map((field) => (
-          <div key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-start gap-3 py-2.5">
-            <div className="break-words text-left text-sm font-medium tabular-nums text-red-200">
-              {renderCell(field.red)}
-            </div>
-            <div className="break-words text-center text-xs font-medium text-neutral-400">
-              {field.label}
-            </div>
-            <div className="break-words text-right text-sm font-medium tabular-nums text-blue-200">
-              {renderCell(field.blue)}
+      <div className="space-y-3">
+        {sections.map((section) => (
+          <div key={section.key} className="overflow-hidden rounded-lg border border-white/[0.07]">
+            <h3 className="border-b border-white/[0.07] bg-white/[0.035] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-300">
+              {section.label}
+            </h3>
+            <div className="divide-y divide-white/[0.04] px-3">
+              {section.fields.map((field) => (
+                <div
+                  key={field.key}
+                  className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] items-center gap-3 py-2"
+                >
+                  <div className="break-words text-left text-sm font-medium tabular-nums text-red-200">
+                    {renderCell(field.red)}
+                  </div>
+                  <div className="break-words text-center text-xs text-neutral-400">
+                    {field.label}
+                  </div>
+                  <div className="break-words text-right text-sm font-medium tabular-nums text-blue-200">
+                    {renderCell(field.blue)}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
