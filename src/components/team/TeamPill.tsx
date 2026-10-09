@@ -28,16 +28,6 @@ function allianceLabel(
   return formatAllianceName(alliance.name);
 }
 
-function matchLabel(
-  match: TBAMatch | null | undefined,
-) {
-  if (!match) {
-    return null;
-  }
-
-  return matchCode(match.key);
-}
-
 export default function TeamPill({
   team,
   status,
@@ -66,7 +56,7 @@ export default function TeamPill({
       ? `#${status.qual.ranking.rank}`
       : "—";
 
-  const nextMatchLabel = matchLabel(nextMatch);
+  const nextMatchLabel = nextMatch ? matchCode(nextMatch.key) : null;
 
   return (
     <div className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-neutral-950/90 px-2 shadow-lg backdrop-blur">
