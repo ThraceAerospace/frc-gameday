@@ -45,11 +45,11 @@ export default function StatboticsPredictionStrip({
   }
 
   return (
-    <div className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar border-l border-t border-white/10 bg-neutral-950/95">
-      <div className="flex min-w-max items-center gap-1.5 px-2 pb-0 mb-0">
+    <div className="flex h-[52px] flex-col overflow-hidden border-l border-t border-white/10 bg-neutral-950/95">
+      <div className="w-full shrink-0 px-0">
         <StatboticsMatchPredictionBar prediction={prediction} status={status} compact={true} />
       </div>
-      <div className="flex h-full min-w-max items-center gap-1.5 px-2">
+      <div className="flex min-h-0 min-w-max flex-1 items-center gap-1.5 overflow-hidden px-2">
         <MatchCard
           match={match}
           team={team}
