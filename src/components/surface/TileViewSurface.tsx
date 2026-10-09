@@ -14,6 +14,8 @@ import {
 } from "@heroicons/react/24/outline";
 import EventLocalTime from "@/components/event/EventLocalTime";
 import TileView from "./TileView";
+import EventInsightsSurface from "./EventInsightsSurface";
+import { resolveActiveEventKey } from "@/lib/surface/resolveActiveEventKey";
 
 type TileViewSurfaceProps = {
   events?: string[];
@@ -40,6 +42,11 @@ export default function TileViewSurface({
   );
   const actions = tileSurfaceController.actions;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [displayMode, setDisplayMode] = useState<"gameday" | "insights">("gameday");
+  const activeEventKey = resolveActiveEventKey(state);
+  const trackedTeams = activeEventKey
+    ? state.eventConfigs[activeEventKey]?.trackedTeams ?? []
+    : [];
 
   // The event picker is rendered inside the settings portal. If an empty tile
   // opens it directly, open the owning panel as well so the picker is visible.
@@ -79,17 +86,30 @@ export default function TileViewSurface({
             )}
           </div>
         </div>
-        <div className="pointer-events-auto rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+          <button type="button" onClick={() => setDisplayMode((mode) => mode === "gameday" ? "insights" : "gameday")} className="rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40" aria-label={displayMode === "gameday" ? "Switch to Match Insights" : "Switch to Gameday"}>{displayMode === "gameday" ? "Insights" : "Gameday"}</button>
           <TileSurfaceSettingsView state={state} actions={actions} triggerClassName="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40" open={settingsOpen} onOpenChange={setSettingsOpen} />
         </div>
       </header>
 
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0 flex flex-col">
-          <TileView
-            controller={tileSurfaceController}
-            isDivisional={isDivisional}
-          />
+          {displayMode === "gameday" ? (
+            <TileView
+              controller={tileSurfaceController}
+              isDivisional={isDivisional}
+            />
+          ) : activeEventKey ? (
+            <EventInsightsSurface
+              eventKey={activeEventKey}
+              trackedTeams={trackedTeams}
+              embedded
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-[#07090d] p-8 text-center text-sm text-neutral-500">
+              Add an event to Tile View to use Match Insights.
+            </div>
+          )}
         </div>
       </div>
     </div>
