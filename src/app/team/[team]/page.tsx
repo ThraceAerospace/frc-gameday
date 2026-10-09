@@ -4,7 +4,7 @@ import TeamAvatar from "@/components/team/TeamAvatar";
 import TeamEventMatches from "@/components/team/TeamEventMatches";
 import TeamSeasonSelector from "@/components/team/TeamSeasonSelector";
 import { TBA } from "@/lib/tba/service";
-import type { TBAEliminationAlliance, TBAEvent, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
+import type { TBAEventSimple, TBAMatch } from "@/lib/tba/types";
 
 function normalizeTeamKey(value: string): string {
   return value.startsWith("frc") ? value : `frc${value}`;
