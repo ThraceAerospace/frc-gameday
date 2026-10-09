@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatTeamNumber } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
 
 type AllianceColor = "red" | "blue";
 type JsonRecord = Record<string, unknown>;
@@ -45,20 +45,6 @@ const PRE_EPA_FIELDS = [
   ["auto_epa", "Auto EPA"],
   ["teleop_epa", "Teleop EPA"],
   ["endgame_epa", "Endgame EPA"],
-  ["rp_1_epa", "RP 1 EPA"],
-  ["rp_2_epa", "RP 2 EPA"],
-  ["rp_3_epa", "RP 3 EPA"],
-  ["tiebreaker_epa", "Tiebreaker EPA"],
-  ["comp_0_epa", "Comp 0 EPA"],
-  ["comp_1_epa", "Comp 1 EPA"],
-  ["comp_2_epa", "Comp 2 EPA"],
-  ["comp_3_epa", "Comp 3 EPA"],
-  ["comp_4_epa", "Comp 4 EPA"],
-  ["comp_5_epa", "Comp 5 EPA"],
-  ["comp_6_epa", "Comp 6 EPA"],
-  ["comp_7_epa", "Comp 7 EPA"],
-  ["comp_8_epa", "Comp 8 EPA"],
-  ["comp_9_epa", "Comp 9 EPA"],
 ] as const;
 
 function AllianceCard({
@@ -67,14 +53,12 @@ function AllianceCard({
   snapshot,
   trackedTeams,
   estimates,
-  predictedScore,
 }: {
   color: AllianceColor;
   match: TBAMatch;
   snapshot: EventStateSnapshot;
   trackedTeams: string[];
   estimates: Record<string, TeamEstimates>;
-  predictedScore: unknown;
 }) {
   const alliance = match.alliances[color];
   const teamNames = useMemo(
@@ -89,13 +73,7 @@ function AllianceCard({
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${color === "red" ? "border-red-400/30 bg-red-950/20" : "border-blue-400/30 bg-blue-950/20"}`}>
       <header className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${color === "red" ? "border-red-400/20" : "border-blue-400/20"}`}>
         <span className={`text-xs font-bold uppercase tracking-[0.18em] ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</span>
-        <div className="flex items-baseline gap-3 tabular-nums">
-          <span className="text-right text-xs text-neutral-500">
-            <span className="block text-[9px] uppercase tracking-wider">Predicted</span>
-            {exactNumber(predictedScore)}
-          </span>
-          <span className="text-2xl font-semibold text-white">{scorePosted ? alliance.score : "—"}</span>
-        </div>
+        <span className="text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max border-collapse text-left text-xs">
@@ -260,9 +238,10 @@ export function MatchInsightsContent({
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[#07090d] text-white">
       <header className="shrink-0 border-b border-white/10 bg-neutral-950/80 px-5 py-4 sm:px-7">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
-        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-lg font-semibold sm:text-xl">{eventTitle}</h1>
-          <span className="text-xs text-neutral-500">{displayMatch ? matchLabel(displayMatch) : "No match selected"}</span>
+        <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">
+          <h1 className="min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{eventTitle}</h1>
+          <span className="text-center text-sm font-semibold text-neutral-300">{displayMatch ? matchShortName(displayMatch) : "No match selected"}</span>
+          <span className="text-right text-xs text-neutral-500">{displayMatch ? matchLabel(displayMatch) : ""}</span>
         </div>
       </header>
 
@@ -278,25 +257,34 @@ export function MatchInsightsContent({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
           {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
-          <section className="mb-4 rounded-xl border border-violet-300/15 bg-violet-950/10 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <section className="mb-4 rounded-xl border border-violet-300/15 bg-violet-950/10 p-4 sm:p-5">
+            <div className="mb-4 grid grid-cols-2 gap-4">
+              <div className="rounded-lg border border-red-400/15 bg-red-950/15 px-4 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-red-300/60">Red predicted score</div>
+                <div className="mt-1 text-3xl font-semibold tabular-nums text-red-300">{exactNumber(prediction.red_score)}</div>
+              </div>
+              <div className="rounded-lg border border-blue-400/15 bg-blue-950/15 px-4 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Blue predicted score</div>
+                <div className="mt-1 text-3xl font-semibold tabular-nums text-blue-300">{exactNumber(prediction.blue_score)}</div>
+              </div>
+            </div>
+            {typeof redWinProbability === "number" ? (
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-violet-200/60">Statbotics predicted winner</div>
-                <div className={`mt-1 text-lg font-semibold ${predictedWinner === "red" ? "text-red-300" : predictedWinner === "blue" ? "text-blue-300" : "text-neutral-400"}`}>
-                  {statboticsStatus === "loading" ? "Loading prediction…" : statboticsStatus === "unavailable" ? "Prediction unavailable" : predictedWinner === "red" || predictedWinner === "blue" ? `${predictedWinner.toUpperCase()} alliance` : "No winner prediction"}
+                <div className="mb-2 flex justify-between text-xs">
+                  <span className="font-semibold text-red-300">Red {String(redWinProbability * 100)}%</span>
+                  <span className="font-semibold text-blue-300">Blue {String((1 - redWinProbability) * 100)}%</span>
+                </div>
+                <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redWinProbability * 100)} percent; Blue win probability ${String((1 - redWinProbability) * 100)} percent`}>
+                  <div className="h-full bg-red-400 transition-[width]" style={{ width: String(Math.max(0, Math.min(1, redWinProbability)) * 100) + "%" }} />
                 </div>
               </div>
-              {typeof redWinProbability === "number" ? (
-                <div className="text-right text-xs text-neutral-400">
-                  <div>Red win probability</div>
-                  <div className="mt-1 font-mono text-sm text-neutral-300">{String(redWinProbability)}</div>
-                </div>
-              ) : null}
-            </div>
+            ) : (
+              <p className="text-xs text-neutral-500">{statboticsStatus === "loading" ? "Loading win probability…" : "Win probability unavailable."}</p>
+            )}
           </section>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} predictedScore={prediction.red_score} />
-            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} predictedScore={prediction.blue_score} />
+            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
+            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
           </div>
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and breakdowns are shown only when published by TBA. Numeric Statbotics values are displayed without application-side rounding or truncation.</p>
         </div>
