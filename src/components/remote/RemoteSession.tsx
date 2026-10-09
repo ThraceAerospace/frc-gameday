@@ -283,11 +283,7 @@ export default function RemoteSession({
     );
   }
 
-  const displayState = useSyncExternalStore(
-    localController.subscribe,
-    localController.getState,
-    localController.getState,
-  );
+  const displayState = surfaceState;
   const resolvedInsightsEventKey =
     insightsEventKey ??
     displayState.streams.map((tileId) => displayState.tileEvents[tileId] ?? tileId)[0] ??
