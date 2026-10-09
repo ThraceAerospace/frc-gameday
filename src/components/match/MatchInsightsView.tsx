@@ -301,7 +301,7 @@ export function MatchInsightsContent({
           <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
-            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} prediction={prediction} />
+            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
           </div>
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and breakdowns are shown only when published by TBA. Numeric Statbotics values are displayed without application-side rounding or truncation.</p>
         </div>
