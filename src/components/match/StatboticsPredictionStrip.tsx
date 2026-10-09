@@ -46,7 +46,7 @@ export default function StatboticsPredictionStrip({
 
   return (
     <div className="flex h-[52px] flex-col overflow-hidden border-l border-t border-white/10 bg-neutral-950/95">
-      <div className="w-full shrink-0 px-0">
+      <div className="h-1 w-full shrink-0">
         <StatboticsMatchPredictionBar prediction={prediction} status={status} compact={true} />
       </div>
       <div className="flex min-h-0 min-w-max flex-1 items-center gap-1.5 overflow-hidden px-2">
