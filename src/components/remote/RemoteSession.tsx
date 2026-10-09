@@ -259,7 +259,7 @@ export default function RemoteSession({
     <EventStateSnapshotsProvider snapshots={eventStates}>
       <div hidden={hidden}>
         <div hidden={displayMode !== "gameday"}>
-          <TileViewSurface controller={controller} />
+          <TileViewSurface controller={controller} showModeToggle={false} />
         </div>
         <div hidden={displayMode !== "insights"}>
           {resolvedInsightsEventKey ? (
