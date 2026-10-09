@@ -1,6 +1,6 @@
 "use client";
 
-import type { TBAEvent } from "@/lib/tba/types";
+import type { TBAEvent, TBAMatch } from "@/lib/tba/types";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import TileSurfaceSettingsView from "./TileSurfaceSettingsView";
 import type { TileSurfaceController } from "./TileSurfaceActions";
@@ -42,6 +42,7 @@ export default function TileViewSurface({
   const actions = tileSurfaceController.actions;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsEventKey, setInsightsEventKey] = useState<string | null>(null);
+  const [insightsMatch, setInsightsMatch] = useState<TBAMatch | null>(null);
 
   // The event picker is rendered inside the settings portal. If an empty tile
   // opens it directly, open the owning panel as well so the picker is visible.
@@ -91,14 +92,20 @@ export default function TileViewSurface({
           <TileView
             controller={tileSurfaceController}
             isDivisional={isDivisional}
-            onOpenMatchInsights={setInsightsEventKey}
+            onOpenMatchInsights={(eventKey, match) => {
+              setInsightsEventKey(eventKey);
+              setInsightsMatch(match);
+            }}
           />
         </div>
         {insightsEventKey ? (
           <div className="absolute inset-0 z-40">
             <button
               type="button"
-              onClick={() => setInsightsEventKey(null)}
+              onClick={() => {
+                setInsightsEventKey(null);
+                setInsightsMatch(null);
+              }}
               className="absolute bottom-3 right-3 z-[60] rounded-lg border border-white/15 bg-neutral-900/90 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             >
               ← Back to Gameday
@@ -107,7 +114,11 @@ export default function TileViewSurface({
               key={insightsEventKey}
               eventKey={insightsEventKey}
               trackedTeams={state.eventConfigs[insightsEventKey]?.trackedTeams ?? []}
-              onClose={() => setInsightsEventKey(null)}
+              onClose={() => {
+                setInsightsEventKey(null);
+                setInsightsMatch(null);
+              }}
+              matchOverride={insightsMatch}
             />
           </div>
         ) : null}
