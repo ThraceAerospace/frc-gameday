@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type R
 import type { TBAMatch } from "@/lib/tba/types";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
+import EventDataPanel from "@/components/eventdata/EventDataPanel";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
 import { useEventState } from "@/lib/events";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
@@ -178,16 +179,19 @@ export default function TileView({
 
   return (
     <main className={`relative min-h-0 flex-1 ${className}`}>
-      {state.streams.map((eventKey) => (
-        <SurfaceUpcomingMatchAlertSource
-          key={"alert-source-" + eventKey}
-          eventKey={eventKey}
-          config={state.eventConfigs[eventKey]}
-          onAlert={handleUpcomingAlert}
-        />
-      ))}
+      {state.streams.filter((tileId) => state.tileTypes[tileId] !== "dataPanel").map((tileId) => {
+        const eventKey = state.tileEvents[tileId] ?? tileId;
+        return (
+          <SurfaceUpcomingMatchAlertSource
+            key={"alert-source-" + tileId}
+            eventKey={eventKey}
+            config={state.eventConfigs[eventKey]}
+            onAlert={handleUpcomingAlert}
+          />
+        );
+      })}
 
-      {upcomingAlert && state.streams.includes(upcomingAlert.eventKey) && (
+      {upcomingAlert && state.streams.some((tileId) => state.tileTypes[tileId] !== "dataPanel" && state.tileEvents[tileId] === upcomingAlert.eventKey) && (
         <ImminentMatchBanner
           key={upcomingAlert.eventKey + ":" + upcomingAlert.match.key}
           match={upcomingAlert.match}
@@ -197,18 +201,20 @@ export default function TileView({
         />
       )}
 
-      {state.streams.map((eventKey) => {
-        const slotIndex = slotOrder.indexOf(eventKey);
+      {state.streams.map((tileId) => {
+        const eventKey = state.tileEvents[tileId] ?? tileId;
+        const tileType = state.tileTypes[tileId] ?? "eventView";
+        const slotIndex = slotOrder.indexOf(tileId);
         const geometry = layout.slots[slotIndex];
         const slotPresentation = getSlotPresentation(geometry);
         const visible = Boolean(geometry);
 
         return (
           <div
-            key={eventKey}
+            key={tileId}
             className={[
               visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
-              state.priorityEditKey === eventKey
+              state.priorityEditKey === tileId
                 ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
                 : "border border-transparent",
             ].join(" ")}
@@ -233,14 +239,16 @@ export default function TileView({
               className={[
                 "pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90",
                 "transition-[opacity,box-shadow] duration-500 ease-out",
-                Boolean(state.upcomingMatchKeys?.[eventKey])
+                Boolean(tileType === "eventView" && state.upcomingMatchKeys?.[eventKey])
                   ? "opacity-100 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
                   : "opacity-0 shadow-none",
               ].join(" ")}
               aria-hidden="true"
             />
 
-            {renderEventView ? (
+            {tileType === "dataPanel" ? (
+              <EventDataPanel eventKey={eventKey} />
+            ) : renderEventView ? (
               renderEventView({
                 eventKey,
                 controller,
@@ -250,12 +258,12 @@ export default function TileView({
             ) : (
               <EventView
                 event={eventKey}
-                priorityEditing={state.priorityEditKey === eventKey}
+                priorityEditing={state.priorityEditKey === tileId}
                 upcomingMatchKey={state.upcomingMatchKeys?.[eventKey] ?? null}
                 isDivisional={isDivisional}
                 controller={controller}
-                onToggleActive={() => controller.actions.toggleActive(eventKey)}
-                slotNumber={state.streams.indexOf(eventKey) + 1}
+                onToggleActive={() => controller.actions.toggleActive(tileId)}
+                slotNumber={state.streams.indexOf(tileId) + 1}
                 controlHeld={controlHeld}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}

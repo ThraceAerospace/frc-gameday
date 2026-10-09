@@ -31,11 +31,13 @@ const CONTROLS_HIDE_DELAY = 3000;
 
 export type UseTileSurfaceControllerOptions = {
   events: string[];
+  panels?: string[];
   controller?: TileSurfaceController;
 };
 
 export function useTileSurfaceController({
   events,
+  panels = [],
   controller: externalController,
 }: UseTileSurfaceControllerOptions): TileSurfaceController {
   const initialStreams = useMemo(
@@ -43,8 +45,10 @@ export function useTileSurfaceController({
     [events]
   );
 
+  const initialPanels = useMemo(() => [...new Set(panels.filter(Boolean).map(String))], [panels]);
+
   const [state, setState] = useState<TileSurfaceState>(() =>
-    createInitialTileSurfaceState(initialStreams)
+    createInitialTileSurfaceState(initialStreams, initialPanels)
   );
   const listenersRef = useRef(
     new Set<(state: TileSurfaceState) => void>()
@@ -135,14 +139,24 @@ export function useTileSurfaceController({
   useEffect(() => {
     const handlePopState = () => {
       const url = new URL(window.location.href);
-      const eventKeys = [
-        ...new Set(url.searchParams.getAll("event").filter(Boolean)),
-      ];
+      const eventKeys = [...new Set(url.searchParams.getAll("event").filter(Boolean))];
+      const panelKeys = [...new Set(url.searchParams.getAll("panel").filter(Boolean))];
+      const tileEvents = Object.fromEntries([
+        ...eventKeys.map((eventKey) => [eventKey, eventKey] as const),
+        ...panelKeys.map((eventKey) => [`data:${eventKey}`, eventKey] as const),
+      ]);
+      const tileTypes = Object.fromEntries([
+        ...eventKeys.map((eventKey) => [eventKey, "eventView"] as const),
+        ...panelKeys.map((eventKey) => [`data:${eventKey}`, "dataPanel"] as const),
+      ]);
+      const tileIds = [...eventKeys, ...panelKeys.map((eventKey) => `data:${eventKey}`)];
 
       update((current) => ({
         ...current,
-        streams: eventKeys,
-        priority: eventKeys,
+        streams: tileIds,
+        priority: tileIds,
+        tileEvents,
+        tileTypes,
         eventConfigs: Object.fromEntries(
           eventKeys.map((eventKey) => [
             eventKey,
@@ -211,12 +225,15 @@ export function useTileSurfaceController({
     };
   }, [state.eventPickerOpen, update]);
 
-  const updateUrl = useCallback((eventKeys: string[]) => {
+  const updateUrl = useCallback((tileIds: string[], tileEvents: Record<string, string>, tileTypes: Record<string, "eventView" | "dataPanel">) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("event");
+    url.searchParams.delete("panel");
 
-    for (const eventKey of eventKeys) {
-      url.searchParams.append("event", eventKey);
+    for (const tileId of tileIds) {
+      const eventKey = tileEvents[tileId];
+      if (!eventKey) continue;
+      url.searchParams.append(tileTypes[tileId] === "dataPanel" ? "panel" : "event", eventKey);
     }
 
     window.history.pushState({}, "", url);
@@ -450,57 +467,73 @@ export function useTileSurfaceController({
         const eventKey = String(event.key);
         const current = stateRef.current;
 
-        if (current.streams.includes(eventKey)) {
+        if (current.streams.some((tileId) => current.tileTypes[tileId] !== "dataPanel" && current.tileEvents[tileId] === eventKey)) {
           return;
         }
 
         const nextStreams = [...current.streams, eventKey];
+        const nextTileEvents = { ...current.tileEvents, [eventKey]: eventKey };
+        const nextTileTypes = { ...current.tileTypes, [eventKey]: "eventView" as const };
 
         update((next) => ({
           ...next,
           streams: nextStreams,
           priority: [...next.priority, eventKey],
+          tileEvents: nextTileEvents,
+          tileTypes: nextTileTypes,
           eventConfigs: {
             ...next.eventConfigs,
-            [eventKey]: createEventViewConfig(),
+            [eventKey]: next.eventConfigs[eventKey] ?? createEventViewConfig(),
           },
         }));
 
-        updateUrl(nextStreams);
+        updateUrl(nextStreams, nextTileEvents, nextTileTypes);
         showControls();
       },
 
-      removeEvent: (eventKey) => {
+      addDataPanel: (eventKey) => {
         const current = stateRef.current;
-        const nextStreams = current.streams.filter(
-          (key) => key !== eventKey
-        );
-
+        const tileId = `data:${eventKey}`;
+        if (current.streams.includes(tileId)) return;
+        const nextStreams = [...current.streams, tileId];
+        const nextTileEvents = { ...current.tileEvents, [tileId]: eventKey };
+        const nextTileTypes = { ...current.tileTypes, [tileId]: "dataPanel" as const };
         update((next) => ({
           ...next,
           streams: nextStreams,
-          priority: next.priority.filter(
-            (key) => key !== eventKey
-          ),
-          activeKey:
-            next.activeKey === eventKey
-              ? null
-              : next.activeKey,
-          highlightLayoutKey:
-            next.activeKey === eventKey
-              ? null
-              : next.highlightLayoutKey,
-          eventConfigs: Object.fromEntries(
-            Object.entries(next.eventConfigs).filter(([key]) => key !== eventKey)
-          ),
-          labels: Object.fromEntries(
-            Object.entries(next.labels).filter(
-              ([key]) => key !== eventKey
-            )
-          ),
+          priority: [...next.priority, tileId],
+          tileEvents: nextTileEvents,
+          tileTypes: nextTileTypes,
+          eventConfigs: { ...next.eventConfigs, [eventKey]: next.eventConfigs[eventKey] ?? createEventViewConfig() },
         }));
+        updateUrl(nextStreams, nextTileEvents, nextTileTypes);
+        showControls();
+      },
 
-        updateUrl(nextStreams);
+      removeEvent: (tileId) => {
+        const current = stateRef.current;
+        const nextStreams = current.streams.filter((key) => key !== tileId);
+        const nextTileEvents = { ...current.tileEvents };
+        const nextTileTypes = { ...current.tileTypes };
+        delete nextTileEvents[tileId];
+        delete nextTileTypes[tileId];
+        const removedEventKey = current.tileEvents[tileId];
+        const stillHasEventView = nextStreams.some((key) => nextTileTypes[key] === "eventView" && nextTileEvents[key] === removedEventKey);
+        update((next) => ({
+          ...next,
+          streams: nextStreams,
+          priority: next.priority.filter((key) => key !== tileId),
+          activeKey: next.activeKey === tileId ? null : next.activeKey,
+          highlightLayoutKey: next.activeKey === tileId ? null : next.highlightLayoutKey,
+          priorityEditKey: next.priorityEditKey === tileId ? null : next.priorityEditKey,
+          tileEvents: nextTileEvents,
+          tileTypes: nextTileTypes,
+          eventConfigs: !stillHasEventView && nextTileTypes[removedEventKey ?? ""] !== "eventView"
+            ? Object.fromEntries(Object.entries(next.eventConfigs).filter(([key]) => key !== removedEventKey))
+            : next.eventConfigs,
+          labels: Object.fromEntries(Object.entries(next.labels).filter(([key]) => key !== tileId)),
+        }));
+        updateUrl(nextStreams, nextTileEvents, nextTileTypes);
         showControls();
       },
 

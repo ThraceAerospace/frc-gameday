@@ -34,6 +34,7 @@ export type RemoteSessionAction =
   | { type: "selectPriorityEdit"; eventKey: string | null }
   | { type: "movePriorityEdit"; direction: -1 | 1 }
   | { type: "addEvent"; event: TBAEvent }
+  | { type: "addDataPanel"; eventKey: string }
   | { type: "removeEvent"; eventKey: string }
   | { type: "registerLabel"; eventKey: string; label: string }
   | { type: "setEventViewConfig"; eventKey: string; config: Partial<EventViewConfig> }
@@ -65,6 +66,7 @@ export function createRemoteSessionActions(
     closeEventPicker() { local.closeEventPicker(); },
     setEventSearch(search) { local.setEventSearch(search); },
     addEvent(event) { local.addEvent(event); send({ type: "addEvent", event }); },
+    addDataPanel(eventKey) { local.addDataPanel(eventKey); send({ type: "addDataPanel", eventKey }); },
     removeEvent(eventKey) { local.removeEvent(eventKey); send({ type: "removeEvent", eventKey }); },
     registerLabel(eventKey, label) { local.registerLabel(eventKey, label); send({ type: "registerLabel", eventKey, label }); },
     setEventViewConfig(eventKey, config) { local.setEventViewConfig(eventKey, config); send({ type: "setEventViewConfig", eventKey, config }); },
@@ -93,6 +95,7 @@ export function applyRemoteSessionAction(
     case "selectPriorityEdit": actions.selectPriorityEdit(action.eventKey); break;
     case "movePriorityEdit": actions.movePriorityEdit(action.direction); break;
     case "addEvent": actions.addEvent(action.event); break;
+    case "addDataPanel": actions.addDataPanel(action.eventKey); break;
     case "removeEvent": actions.removeEvent(action.eventKey); break;
     case "registerLabel": actions.registerLabel(action.eventKey, action.label); break;
     case "setEventViewConfig": actions.setEventViewConfig(action.eventKey, action.config); break;

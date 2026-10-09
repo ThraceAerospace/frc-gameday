@@ -69,6 +69,12 @@ The current component organization reflects the post-refactor architecture. Do n
 - If the tracked-team amber is ever changed, update every tracked-team indicator across the application together. Centralize the color token/helper where practical rather than duplicating amber values in individual components.
 - Keep tracked status visually distinct from alliance identity: red and blue continue to identify match alliances; amber identifies tracked teams.
 
+## Reusable event data panels
+
+`src/components/eventdata/EventDataPanel.tsx` is a reusable event-scoped performance panel. It consumes `useEventState`, not its own network/cache path, and currently presents The Blue Alliance OPR, DPR, and CCWM values when available. The same component can be rendered inside TileView or independently at `/event/<event>/data`. OPR values are fetched through `/api/event/<event>/oprs` and share the event-state lifecycle; Statbotics is not required.
+
+Tile surfaces support both EventView tiles (`event=<eventKey>`) and data-panel tiles (`panel=<eventKey>`). Their stable tile IDs are separate from event keys, so an event can appear as both a live EventView and a performance panel at once.
+
 ## EventView
 
 EventView owns event-level data and presentation:
