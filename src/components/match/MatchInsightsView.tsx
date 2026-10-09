@@ -119,17 +119,16 @@ function AllianceCard({
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
       <header className={`border-b px-4 py-3 ${colorClasses.header}`}>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
-          <span className="text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Combined</span>
-          {ALLIANCE_METRICS.map((metric) => (
-            <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
-              {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
-            </span>
-          ))}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {ALLIANCE_METRICS.map((metric) => (
+              <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
+                {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
+              </span>
+            ))}
+          </div>
+          <span className="ml-auto text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
         </div>
       </header>
       <div className="overflow-x-auto">
