@@ -9,12 +9,14 @@ type ImminentMatchBannerProps = {
   match: TBAMatch;
   teams: string[];
   eventName: string;
+  eventTimezone: string | null;
 };
 
 export default function ImminentMatchBanner({
   match,
   teams,
   eventName,
+  eventTimezone,
 }: ImminentMatchBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -68,7 +70,7 @@ export default function ImminentMatchBanner({
             Team {teamLabel} is playing in {matchLabel} at {eventName}
           </span>
           <span className="shrink-0 font-mono text-amber-200">
-            <NextMatchCountdown nextMatch={match} />
+            <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
           </span>
         </div>
       </div>
