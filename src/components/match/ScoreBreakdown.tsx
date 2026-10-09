@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { TBAMatch } from "@/lib/tba/types";
 
 type ScoreBreakdownProps = {
@@ -22,42 +21,74 @@ function formatLabel(key: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function renderValue(value: unknown): ReactNode {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "string" || typeof value === "number") return String(value);
+function flattenFields(value: unknown, prefix = ""): Map<string, unknown> {
+  const fields = new Map<string, unknown>();
+
+  if (value === null || typeof value !== "object") {
+    if (prefix) fields.set(prefix, value);
+    return fields;
+  }
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return "—";
-    return (
-      <div className="flex flex-wrap justify-center gap-1.5">
-        {value.map((item, index) => (
-          <span key={index} className="rounded bg-white/[0.06] px-1.5 py-0.5 text-xs">
-            {typeof item === "object" && item !== null ? JSON.stringify(item) : String(item)}
-          </span>
-        ))}
-      </div>
-    );
+    if (value.length === 0 && prefix) fields.set(prefix, value);
+    value.forEach((item, index) => {
+      const childPrefix = prefix ? `${prefix}.${index + 1}` : String(index + 1);
+      for (const [key, childValue] of flattenFields(item, childPrefix)) {
+        fields.set(key, childValue);
+      }
+    });
+    return fields;
   }
 
-  if (typeof value === "object") {
-    const objectValue = value as Record<string, unknown>;
-    const childKeys = Object.keys(objectValue);
-    return (
-      <div className="space-y-2">
-        {childKeys.map((key) => (
-          <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start gap-3">
-            <div className="text-left text-xs text-neutral-500">{formatLabel(key)}</div>
-            <div className="min-w-0 break-words text-right text-sm tabular-nums text-neutral-200">
-              {renderValue(objectValue[key])}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0 && prefix) fields.set(prefix, value);
+
+  for (const [key, childValue] of entries) {
+    const childPrefix = prefix ? `${prefix}.${key}` : key;
+    for (const [fieldKey, fieldValue] of flattenFields(childValue, childPrefix)) {
+      fields.set(fieldKey, fieldValue);
+    }
   }
 
-  return String(value);
+  return fields;
+}
+
+function isInactive(value: unknown): boolean {
+  if (value === null || value === undefined || value === false || value === 0) return true;
+  if (typeof value === "string") {
+    return value.trim() === "" || value.trim().toLowerCase() === "none";
+  }
+  return Array.isArray(value) && value.length === 0;
+}
+
+function fieldOrder(key: string): number {
+  const normalized = key.toLowerCase().replace(/[._-]/g, " ");
+
+  if (/\b(total|score)\b/.test(normalized) && /(total|score|points)/.test(normalized)) return 0;
+  if (/\b(rp|ranking point|ranking points)\b/.test(normalized) || /_rp\b/.test(key)) return 1;
+  if (/(foul|penalt|adjustment|disqualification|\bdq\b)/.test(normalized)) return 3;
+  if (/(point|score|fuel|piece|tower|auto|teleop|endgame|shift|amp|speaker|coral|algae|stage|climb|park|trap|leave|mobility|charge|dock|note|cube|cone)/.test(normalized)) return 2;
+  return 4;
+}
+
+function compareFieldKeys(left: string, right: string): number {
+  const orderDifference = fieldOrder(left) - fieldOrder(right);
+  if (orderDifference !== 0) return orderDifference;
+
+  const leftParts = left.toLowerCase().split(".");
+  const rightParts = right.toLowerCase().split(".");
+  for (let index = 0; index < Math.min(leftParts.length, rightParts.length); index += 1) {
+    const a = leftParts[index];
+    const b = rightParts[index];
+    if (a === b) continue;
+    const aNumber = Number(a);
+    const bNumber = Number(b);
+    if (a !== "" && b !== "" && Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
+      return aNumber - bNumber;
+    }
+    return a.localeCompare(b);
+  }
+  return leftParts.length - rightParts.length;
 }
 
 function getAllianceFields(breakdown: unknown): FieldRow[] {
@@ -67,23 +98,27 @@ function getAllianceFields(breakdown: unknown): FieldRow[] {
   const blue = sides.blue;
   if (!red || typeof red !== "object" || !blue || typeof blue !== "object") return [];
 
-  const redFields = red as Record<string, unknown>;
-  const blueFields = blue as Record<string, unknown>;
-  const keys = [...new Set([...Object.keys(redFields), ...Object.keys(blueFields)])];
+  const redFields = flattenFields(red);
+  const blueFields = flattenFields(blue);
+  const keys = [...new Set([...redFields.keys(), ...blueFields.keys()])];
 
-  return keys.map((key) => ({
-    key,
-    label: formatLabel(key),
-    red: redFields[key],
-    blue: blueFields[key],
-  }));
+  return keys
+    .filter((key) => !/threshold/i.test(key))
+    .filter((key) => !isInactive(redFields.get(key)) || !isInactive(blueFields.get(key)))
+    .sort(compareFieldKeys)
+    .map((key) => ({
+      key,
+      label: key.split(".").map(formatLabel).join(" · "),
+      red: redFields.get(key),
+      blue: blueFields.get(key),
+    }));
 }
 
-function renderCell(value: unknown): ReactNode {
+function renderCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value !== "object") return String(value);
-  return renderValue(value);
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 export default function ScoreBreakdown({ match, year }: ScoreBreakdownProps) {
@@ -99,13 +134,14 @@ export default function ScoreBreakdown({ match, year }: ScoreBreakdownProps) {
   if (!breakdown || !scoresPosted) return null;
 
   const fields = getAllianceFields(breakdown);
+  if (fields.length === 0) return null;
 
   return (
     <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">
         Official score breakdown{year ? ` · ${year}` : ""}
       </h2>
-      <div className="mb-3 grid grid-cols-[1fr_2fr_1fr] items-center gap-3 text-xs font-bold uppercase tracking-wider">
+      <div className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-center gap-3 text-xs font-bold uppercase tracking-wider">
         <div className="text-left text-red-300">Red alliance</div>
         <div className="text-center text-neutral-400">Field</div>
         <div className="text-right text-blue-300">Blue alliance</div>
