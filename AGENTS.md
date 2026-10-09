@@ -125,7 +125,7 @@ Tile identity is distinct from event identity. `TileSurfaceState.streams` and `p
 - `EventState` owns Statbotics match acquisition alongside TBA event data. It keeps the current next/last match data available to all Views, refreshes completed matches after the existing delay, and exposes results in `statboticsMatches`.
 - Use `resolveActiveEventKey` for the integrated Insights display: valid highlighted tile first, otherwise the first tile in priority order; resolve tile ID through `tileEvents`.
 - The local Tile View can switch to Insights using the same active-event rule. The standalone `/event/<event>/insights` route supplies its event key directly and uses the same `EventState` lifecycle.
-- Display Statbotics numeric values directly from the API response. Do not add application-side rounding, truncation, or derived alliance totals.
+- Read Statbotics values directly from the typed response object; do not coerce/cast individual values to another numeric type. Format displayed metrics to at most one decimal place for readability, without modifying the underlying response. Show alliance totals by summing all three teams’ estimates; show `—` until every team value for that metric is available.
 
 ## Event footer
 
