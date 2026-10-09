@@ -80,91 +80,97 @@ export default function MatchCard({
       formatMatchEventTime(match.time, eventTimezone)
     ) : null;
   return (
-    <article
-      className={[
-        "shrink-0",
-        "min-w-[204px]",
-        "rounded-md",
-        "border",
-        "px-2 py-1",
-        "transition-colors",
-        isNext
-          ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
-          : isLast
-            ? `border-zinc-700 ${resultBackground ?? "bg-zinc-900/80"}`
-            : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
-      ].join(" ")}
+    <div
+      key={match.key}
+      data-match-key={match.key}
+      className="shrink-0"  
     >
-      <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
-        {/* Match name */}
-        <div className="row-span-2 flex h-full flex-col justify-center">
-          <span
+      <article
+        className={[
+          "shrink-0",
+          "min-w-[204px]",
+          "rounded-md",
+          "border",
+          "px-2 py-1",
+          "transition-colors",
+          isNext
+            ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
+            : isLast
+              ? `border-zinc-700 ${resultBackground ?? "bg-zinc-900/80"}`
+              : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
+        ].join(" ")}
+      >
+        <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
+          {/* Match name */}
+          <div className="row-span-2 flex h-full flex-col justify-center">
+            <span
+              className={[
+                "text-[10px] font-bold uppercase tracking-wide",
+                isNext ? "text-white" : "text-zinc-300",
+              ].join(" ")}
+            >
+              {matchName}
+            </span>
+
+            <span
+              className={[
+                "mt-1 font-mono text-[9px] tabular-nums",
+                isNext
+                  ? "font-semibold text-zinc-200"
+                  : "text-zinc-500",
+              ].join(" ")}
+            >
+              {time}
+            </span>
+          </div>
+
+          {/* Red alliance */}
+          <div
             className={[
-              "text-[10px] font-bold uppercase tracking-wide",
-              isNext ? "text-white" : "text-zinc-300",
+              "min-w-0 truncate text-[10px] text-red-400",
+              trackedRed ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            {matchName}
-          </span>
+            {formatAllianceName(redAlliance?.name)}
+            {formatAlliance(red, team)}
+          </div>
 
-          <span
+          {/* Red score */}
+          <div
             className={[
-              "mt-1 font-mono text-[9px] tabular-nums",
-              isNext
-                ? "font-semibold text-zinc-200"
-                : "text-zinc-500",
+              "text-right font-mono text-[10px] tabular-nums",
+              match.alliances.red.score != null
+                ? "font-bold text-red-400"
+                : "text-transparent",
             ].join(" ")}
           >
-            {time}
-          </span>
-        </div>
+            {match.alliances.red.score != -1 ? match.alliances.red.score : ""}
+          </div>
 
-        {/* Red alliance */}
-        <div
-          className={[
-            "min-w-0 truncate text-[10px] text-red-400",
-            trackedRed ? "font-bold" : "font-medium",
-          ].join(" ")}
-        >
-          {formatAllianceName(redAlliance?.name)}
-          {formatAlliance(red, team)}
-        </div>
+          {/* Blue alliance */}
+          <div
+            className={[
+              "min-w-0 truncate text-[10px] text-blue-400",
+              trackedBlue ? "font-bold" : "font-medium",
+            ].join(" ")}
+          >
+            {formatAllianceName(blueAlliance?.name)}
+            {formatAlliance(blue, team)}
+          </div>
 
-        {/* Red score */}
-        <div
-          className={[
-            "text-right font-mono text-[10px] tabular-nums",
-            match.alliances.red.score != null
-              ? "font-bold text-red-400"
-              : "text-transparent",
-          ].join(" ")}
-        >
-          {match.alliances.red.score != -1 ? match.alliances.red.score : ""}
+          {/* Blue score */}
+          <div
+            className={[
+              "text-right font-mono text-[10px] tabular-nums",
+              match.alliances.blue.score != null
+                ? "font-bold text-blue-400"
+                : "text-transparent",
+            ].join(" ")}
+          >
+            {match.alliances.blue.score != -1 ? match.alliances.blue.score : ""}
+          </div>
         </div>
-
-        {/* Blue alliance */}
-        <div
-          className={[
-            "min-w-0 truncate text-[10px] text-blue-400",
-            trackedBlue ? "font-bold" : "font-medium",
-          ].join(" ")}
-        >
-          {formatAllianceName(blueAlliance?.name)}
-          {formatAlliance(blue, team)}
-        </div>
-
-        {/* Blue score */}
-        <div
-          className={[
-            "text-right font-mono text-[10px] tabular-nums",
-            match.alliances.blue.score != null
-              ? "font-bold text-blue-400"
-              : "text-transparent",
-          ].join(" ")}
-        >
-          {match.alliances.blue.score != -1 ? match.alliances.blue.score : ""}
-        </div>
-      </div>
-    </article>
+      </article>
+    </div>
   );
 }

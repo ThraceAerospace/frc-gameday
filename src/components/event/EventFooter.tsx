@@ -10,6 +10,8 @@ import MatchStrip from "@/components/match/MatchStrip";
 import RankingsStrip from "@/components/event/RankingsStrip";
 import EventLocalTime from "@/components/event/EventLocalTime";
 import StatboticsPredictionStrip from "@/components/match/StatboticsPredictionStrip";
+import StatboticsMatchPredictionMetrics from "../match/StatboticsMatchPredictionMetrics";
+import MatchCard from "../match/MatchCard";
 
 type EventFooterProps = {
   mode: EventViewFooterMode;
@@ -129,7 +131,16 @@ export default function EventFooter({
         >
           <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
             {mode === "statbotics" ? (
-              <StatboticsPredictionStrip match={nextMatch ?? lastMatch ?? null} playoffType={playoffType} />
+              <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
+                <div className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar">
+                  <div className="flex h-full min-w-max items-center gap-1.5 px-2">
+                    {nextMatch ? (
+                      <MatchCard match={nextMatch} team={team} playoffType={playoffType} playoffAlliances={playoffAlliances} eventTimezone={eventTimezone ?? undefined} />
+                      <StatboticsMatchPredictionMetrics prediction={nextMatch.prediction} status={nextMatch.statbotics_status} />
+                    ) : null}
+                    </div>
+                </div>
+              </div>
             ) : mode === "rankings" ? (
               <RankingsStrip
                 teamsStatuses={teamsStatuses}
