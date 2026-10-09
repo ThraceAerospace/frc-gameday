@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useEventState } from "@/lib/events";
 import type { TBAMatch } from "@/lib/tba/types";
 import EventInsightView from "@/components/match/EventInsightView";
@@ -26,6 +27,18 @@ export default function EventInsightsSurface({
 }: EventInsightsSurfaceProps) {
   const snapshot = useEventState(eventKey);
 
+  useEffect(() => {
+    if (!onClose) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <main className="h-screen overflow-hidden bg-black text-white">
       <EventInsightView
@@ -33,7 +46,6 @@ export default function EventInsightsSurface({
         snapshot={snapshot}
         trackedTeams={trackedTeams}
         matchOverride={matchOverride}
-        onClose={onClose}
       />
     </main>
   );
