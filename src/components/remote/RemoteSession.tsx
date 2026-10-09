@@ -45,6 +45,7 @@ export default function RemoteSession({
     useState<RemotePeerStatus>("connecting");
   const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
+  const eventSubscriptionsRef = useRef(new Map<string, () => void>());
 
   const surfaceState = useSyncExternalStore(
     localController.subscribe,
@@ -116,9 +117,29 @@ export default function RemoteSession({
   useEffect(() => {
     if (role !== "controller") return;
 
-    const eventKeys = [...new Set(surfaceState.streams.map((tileId) => surfaceState.tileEvents[tileId] ?? tileId))];
-    const unsubscribe = eventKeys.map((eventKey) =>
-      subscribeEventState(eventKey, (state) => {
+    const eventKeys = new Set(
+      localControllerRef.current.getState().streams.map(
+        (tileId) => localControllerRef.current.getState().tileEvents[tileId] ?? tileId,
+      ),
+    );
+
+    for (const [eventKey, unsubscribe] of eventSubscriptionsRef.current) {
+      if (!eventKeys.has(eventKey)) {
+        unsubscribe();
+        eventSubscriptionsRef.current.delete(eventKey);
+        setEventStates((current) => {
+          const next = { ...current };
+          delete next[eventKey];
+          eventStatesRef.current = next;
+          return next;
+        });
+      }
+    }
+
+    for (const eventKey of eventKeys) {
+      if (eventSubscriptionsRef.current.has(eventKey)) continue;
+
+      const unsubscribe = subscribeEventState(eventKey, (state) => {
         const next = {
           ...eventStatesRef.current,
           [eventKey]: state,
@@ -130,11 +151,18 @@ export default function RemoteSession({
           eventKey,
           state,
         });
-      }),
-    );
+      });
 
-    return () => unsubscribe.forEach((stop) => stop());
+      eventSubscriptionsRef.current.set(eventKey, unsubscribe);
+    }
   }, [role, surfaceState.streams, surfaceState.tileEvents]);
+
+  useEffect(() => () => {
+    for (const unsubscribe of eventSubscriptionsRef.current.values()) {
+      unsubscribe();
+    }
+    eventSubscriptionsRef.current.clear();
+  }, []);
 
   const sendDisplayState = useMemo(
     () => () => {
