@@ -15,6 +15,7 @@ import { buildStreams, type BuiltStream } from "@/lib/tba/buildStreams";
 import { useEventState } from "@/lib/events";
 import StreamModal from "@/components/eventview/StreamModal";
 import TeamModal from "@/components/team/TeamModal";
+import { formatEventName } from "@/lib/tba/formatters";
 
 type TileSurfaceSettingsViewProps = { state: TileSurfaceState; actions: TileSurfaceActions; triggerClassName?: string; triggerTitle?: string; open?: boolean; onOpenChange?: (open: boolean) => void; };
 
@@ -26,8 +27,8 @@ function EventSettingsRow({ eventKey, label, position, state, actions }: { event
   useEffect(() => { let cancelled = false; if (!event?.webcasts) { setStreams([]); return; } buildStreams(event.webcasts).then((builtStreams) => { if (!cancelled) setStreams(builtStreams); }); return () => { cancelled = true; }; }, [event?.webcasts]);
   const config = state.eventConfigs[eventKey];
   const trackedTeams = config?.trackedTeams ?? [];
-  const configuredLabel = label.replace(" - FIRST Robotics Competition", "");
-  const eventName = event?.name?.replace(" - FIRST Robotics Competition", "");
+  const configuredLabel = formatEventName(label);
+  const eventName = formatEventName(event?.name);
   const displayLabel = !configuredLabel || /^Stream \d+$/.test(configuredLabel) ? eventName ?? eventKey : configuredLabel;
   const streamOptions = streams.map((stream) => ({ ...stream, key: `${stream.type}:${stream.channel}:${stream.date ?? ""}` }));
   const toggleTeam = (team: string) => { const next = trackedTeams.includes(team) ? trackedTeams.filter((value) => value !== team) : [...trackedTeams, team]; actions.setEventViewTrackedTeams(eventKey, next); };
