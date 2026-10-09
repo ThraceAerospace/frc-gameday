@@ -15,7 +15,6 @@ import EventFooter from "@/components/event/EventFooter";
 import { buildStreams } from "@/lib/tba/buildStreams";
 import { useEventState } from "@/lib/events";
 import type { BuiltStream } from "@/lib/tba/buildStreams";
-import type { TBAMatch } from "@/lib/tba/types";
 
 
 import { useTrackedMatches } from "./hooks/useTrackedMatches";
@@ -39,7 +38,6 @@ type EventViewProps = {
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
-  onOpenMatchInsights?: (match: TBAMatch) => void;
 };
 
 export default function EventView({
@@ -53,7 +51,6 @@ export default function EventView({
   onToggleActive,
   slotNumber,
   controlHeld = false,
-  onOpenMatchInsights,
 }: EventViewProps) {
   const {
     state: eventState,
@@ -335,7 +332,6 @@ export default function EventView({
         onToggleActive={onToggleActive}
         slotNumber={slotNumber}
         controlHeld={controlHeld}
-        onOpenMatchInsights={onOpenMatchInsights}
       />
 
       <StreamModal
