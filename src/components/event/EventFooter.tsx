@@ -129,17 +129,13 @@ export default function EventFooter({
         >
           <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
             {mode === "statbotics" ? (
-              <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
-                <div className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar">
-                  <StatboticsPredictionStrip
-                    match={nextMatch ?? lastMatch ?? null}
-                    team={team}
-                    playoffType={playoffType}
-                    playoffAlliances={playoffAlliances}
-                    eventTimezone={eventTimezone}
-                  />
-                </div>
-              </div>
+              <StatboticsPredictionStrip
+                match={nextMatch ?? lastMatch ?? null}
+                team={team}
+                playoffType={playoffType}
+                playoffAlliances={playoffAlliances}
+                eventTimezone={eventTimezone}
+              />
             ) : mode === "rankings" ? (
               <RankingsStrip
                 teamsStatuses={teamsStatuses}
