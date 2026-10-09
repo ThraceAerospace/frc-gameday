@@ -61,14 +61,13 @@ function AlliancePredictionBox({
 
 export default function MatchPredictionMetrics({ prediction, compact = false }: { prediction: JsonRecord; compact?: boolean }) {
   return (
-    <section className={`mb-4 rounded-xl p-3 sm:p-4 ${compact ? "" : "border border-white/10 bg-white/[0.02]"}`}>
-      { !compact && (
-        <div className={`mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400`}>
+    <section className={`${compact ? "m-0 shrink-0 rounded-none p-0" : "mb-4 rounded-xl border border-white/10 bg-white/[0.02] p-3 sm:p-4"}`}>
+      {!compact && (
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
           Statbotics Prediction
         </div>
-      )
-      }
-      <div className={`grid auto-rows-fr grid-cols-1 items-stretch ${compact ? "gap-1 sm:grid-cols-2 sm:gap-2 mt-4" : "gap-3 sm:grid-cols-2 sm:gap-4"}`}>
+      )}
+      <div className={`grid auto-rows-fr grid-cols-1 items-stretch ${compact ? "mt-0 gap-1 sm:grid-cols-2 sm:gap-2" : "gap-3 sm:grid-cols-2 sm:gap-4"}`}>
         <AlliancePredictionBox color="red" prediction={prediction} compact={compact} />
         <AlliancePredictionBox color="blue" prediction={prediction} compact={compact} />
       </div>
