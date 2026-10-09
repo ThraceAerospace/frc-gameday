@@ -2,8 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance, formatAllianceName, matchCode } from "@/lib/tba/formatters";
-import { formatEventTime } from "@/lib/time";
+import { formatAlliance, formatAllianceName, formatMatchEventTime, matchCode } from "@/lib/tba/formatters";
 
 type PlayoffAlliance = {
   name?: string;
@@ -71,11 +70,11 @@ export default function MatchCard({
     isNext && (match.predicted_time != null || match.time != null) ? (
       <NextMatchCountdown nextMatch={match} />
     ) : match.actual_time != null ? (
-      formatEventTime(match.actual_time, eventTimezone)
+      formatMatchEventTime(match.actual_time, eventTimezone)
     ) : match.predicted_time != null ? (
-      formatEventTime(match.predicted_time, eventTimezone)
+      formatMatchEventTime(match.predicted_time, eventTimezone)
     ) : match.time != null ? (
-      formatEventTime(match.time, eventTimezone)
+      formatMatchEventTime(match.time, eventTimezone)
     ) : null;
   return (
     <article
