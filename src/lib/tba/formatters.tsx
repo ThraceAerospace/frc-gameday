@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { TBAMatch, TBAEliminationAlliance } from "@/lib/tba/types";
+import { formatEventTime } from "@/lib/time";
 
 export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
   const num = formatTeamNumber(teamKey);
@@ -198,4 +199,14 @@ export function formatMatchTime(timestampSeconds: number | null | undefined): st
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+
+/** Format a TBA match timestamp in the event's timezone. */
+export function formatMatchEventTime(
+  timestampSeconds: number | null | undefined,
+  eventTimeZone?: string | null,
+): string {
+  if (timestampSeconds == null) return "—";
+  return formatEventTime(timestampSeconds, eventTimeZone ?? undefined);
 }
