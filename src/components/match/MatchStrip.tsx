@@ -14,6 +14,7 @@ export default function MatchStrip({
   playoffAlliances = [],
   playoffType = null,
   multiview = {},
+  onOpenInsights,
 }: {
   matches?: TBAMatch[];
   team?: string[];
@@ -23,6 +24,7 @@ export default function MatchStrip({
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   multiview?: Record<string, unknown>;
+  onOpenInsights?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -132,6 +134,7 @@ export default function MatchStrip({
                     eventTimezone={
                       eventTimezone ?? undefined
                     }
+                    onOpenInsights={onOpenInsights}
                   />
                 </div>
               ))}
