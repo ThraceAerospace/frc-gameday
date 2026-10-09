@@ -118,6 +118,15 @@ Do not restore old positional TeamPill modes.
 
 Tile identity is distinct from event identity. `TileSurfaceState.streams` and `priority` contain stable tile IDs; `tileEvents` maps each tile to its event key, and `tileTypes` distinguishes `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event may be represented by both tile types. All displays connected to one session share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
 
+## Match Insights surfaces
+
+- `EventInsightsSurface` is the Surface/container for one event's Insights experience.
+- `EventInsightView` is presentation only. It consumes the supplied `EventStateSnapshot`; it must not fetch Statbotics data or create event-data subscriptions.
+- `EventState` owns Statbotics match acquisition alongside TBA event data. It keeps the current next/last match data available to all Views, refreshes completed matches after the existing delay, and exposes results in `statboticsMatches`.
+- Use `resolveActiveEventKey` for the integrated Insights display: valid highlighted tile first, otherwise the first tile in priority order; resolve tile ID through `tileEvents`.
+- The local Tile View can switch to Insights using the same active-event rule. The standalone `/event/<event>/insights` route supplies its event key directly and uses the same `EventState` lifecycle.
+- Display Statbotics numeric values directly from the API response. Do not add application-side rounding, truncation, or derived alliance totals.
+
 ## Event footer
 
 EventView footer configuration is independent from Multiview layout presentation.
