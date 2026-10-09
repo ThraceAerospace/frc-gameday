@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { TBAMatch } from "@/lib/tba/types";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
@@ -12,7 +13,7 @@ import type { EventViewPresentation } from "@/components/eventview/EventViewConf
 
 type SurfaceUpcomingMatchAlert = {
   eventKey: string;
-  match: import("@/lib/tba/types").TBAMatch;
+  match: TBAMatch;
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
@@ -25,25 +26,37 @@ function SurfaceUpcomingMatchAlertSource({
 }: {
   eventKey: string;
   config: TileSurfaceState["eventConfigs"][string] | undefined;
-  onAlert: (alert: SurfaceUpcomingMatchAlert) => void;
+  onAlert: (eventKey: string, alert: SurfaceUpcomingMatchAlert | null) => void;
 }) {
-  const { event, matches, upcomingMatchKey, upcomingMatchTeamKeys } = useEventState(eventKey);
+  const { event, matches, upcomingMatchKey } = useEventState(eventKey);
   const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;
-  const upcomingTeams = config?.matchNotifications && upcomingMatch
-    ? config.trackedTeams.filter((team) =>
-        [
-          ...(upcomingMatch.alliances.red.team_keys ?? []),
-          ...(upcomingMatch.alliances.blue.team_keys ?? []),
-        ].includes(team),
-      )
-    : [];
+  const upcomingTeams = useMemo(() => {
+    if (!config?.matchNotifications || !upcomingMatch) return [];
+
+    const matchTeams = [
+      ...(upcomingMatch.alliances.red.team_keys ?? []),
+      ...(upcomingMatch.alliances.blue.team_keys ?? []),
+    ];
+
+    return config.trackedTeams.filter((team) => matchTeams.includes(team));
+  }, [config?.matchNotifications, config?.trackedTeams, upcomingMatch]);
 
   useEffect(() => {
-    if (!config?.matchNotifications || !upcomingMatch || upcomingTeams.length === 0) {
+    if (!config?.matchNotifications) {
+      onAlert(eventKey, null);
       return;
     }
 
-    onAlert({
+    // A webhook may arrive before the refreshed match list is available.
+    // Keep the current banner until we can resolve the updated match.
+    if (!upcomingMatch) return;
+
+    if (upcomingTeams.length === 0) {
+      onAlert(eventKey, null);
+      return;
+    }
+
+    onAlert(eventKey, {
       eventKey,
       match: upcomingMatch,
       teams: upcomingTeams,
@@ -59,7 +72,6 @@ function SurfaceUpcomingMatchAlertSource({
     onAlert,
     upcomingMatch,
     upcomingMatchKey,
-    upcomingMatchTeamKeys,
     upcomingTeams,
   ]);
 
@@ -104,12 +116,18 @@ export default function TileView({
   const [controlHeld, setControlHeld] = useState(false);
   const [upcomingAlert, setUpcomingAlert] = useState<SurfaceUpcomingMatchAlert | null>(null);
 
-  const handleUpcomingAlert = useCallback((alert: SurfaceUpcomingMatchAlert) => {
-    setUpcomingAlert((current) =>
-      current?.eventKey === alert.eventKey && current.match.key === alert.match.key
-        ? current
-        : alert,
-    );
+  const handleUpcomingAlert = useCallback((
+    eventKey: string,
+    alert: SurfaceUpcomingMatchAlert | null,
+  ) => {
+    setUpcomingAlert((current) => {
+      if (!alert) {
+        return current?.eventKey === eventKey ? null : current;
+      }
+
+      // Always accept fresh webhook-derived data, even for the same match key.
+      return alert;
+    });
   }, []);
 
   useEffect(() => {
