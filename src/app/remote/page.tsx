@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import RemoteSession from "@/components/remote/RemoteSession";
+import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
 type DisplaySession = {
@@ -15,6 +16,7 @@ function createId() {
 }
 
 export default function RemotePage() {
+  const sessionController = useTileSurfaceController({ events: [] });
   const [codeInput, setCodeInput] = useState("");
   const [displays, setDisplays] = useState<DisplaySession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function RemotePage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold">FieldView Remote Controller</h1>
-            <p className="mt-1 text-sm text-neutral-500">Connect and manage multiple displays independently.</p>
+            <p className="mt-1 text-sm text-neutral-500">Configure one shared session and send it to every connected display.</p>
           </div>
           <span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-neutral-400">{displays.length} {displays.length === 1 ? "display" : "displays"}</span>
         </div>
@@ -104,13 +106,14 @@ export default function RemotePage() {
             <>
               <div className="border-b border-white/10 px-4 py-3">
                 <div className="text-sm font-semibold">Display configuration</div>
-                <div className="mt-1 text-xs text-neutral-500">Code {activeDisplay.code} · This display's settings are independent.</div>
+                <div className="mt-1 text-xs text-neutral-500">Code {activeDisplay.code} · Shared session settings · presentation mode is per display.</div>
               </div>
               {displays.map((display) => (
                 <div key={display.id} hidden={display.id !== activeId}>
                   <RemoteSession
                     role="controller"
                     events={[]}
+                    controller={sessionController}
                     code={display.code}
                     hidden={display.id !== activeId}
                     onStatus={(status) => updateStatus(display.id, status)}
@@ -121,7 +124,7 @@ export default function RemotePage() {
           ) : (
             <div className="flex min-h-80 flex-col items-center justify-center p-8 text-center">
               <h2 className="text-base font-semibold">Choose a display to configure</h2>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">Each display keeps its own layout, event selection, and surface settings. Switching tabs does not disconnect the other displays.</p>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">Configure events, tracked teams, streams, layout, and highlight once. Every connected display follows the same session state. Switching tabs does not disconnect other displays.</p>
             </div>
           )}
         </section>
