@@ -8,9 +8,15 @@ const REWARD_FIELDS = [
   ["traversal_rp", "Traversal RP"],
 ] as const;
 
-function formatNumber(value: number | undefined): string {
+function formatScore(value: number | undefined): string {
   return typeof value === "number" && Number.isFinite(value)
-    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)
+    ? String(Math.trunc(value))
+    : "—";
+}
+
+function formatProbability(value: number | undefined): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value * 100)}%`
     : "—";
 }
 
@@ -54,12 +60,12 @@ function AlliancePredictionBox({
       <div className={`grid min-w-0 grid-cols-4 ${compact ? "gap-x-2" : "gap-x-3 gap-y-2"}`}>
         <div className="min-w-0">
           <div className={`font-semibold uppercase ${compact ? "text-[8px] tracking-wide" : "text-[10px] tracking-widest"} ${styles.label}`}>Score</div>
-          <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(getAllianceValue(prediction, color, "score"))}</div>
+          <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatScore(getAllianceValue(prediction, color, "score"))}</div>
         </div>
         {REWARD_FIELDS.map(([field, label]) => (
           <div key={field} className="min-w-0">
             <div className={`font-semibold uppercase ${compact ? "text-[8px] tracking-wide" : "text-[10px] tracking-widest"} ${styles.label}`}>{label}</div>
-            <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(getAllianceValue(prediction, color, field))}</div>
+            <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatProbability(getAllianceValue(prediction, color, field))}</div>
           </div>
         ))}
       </div>
