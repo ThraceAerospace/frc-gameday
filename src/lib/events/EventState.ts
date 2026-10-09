@@ -277,7 +277,7 @@ export class EventState {
         (refresh ? "?refresh=1" : "");
       const response = await fetch(endpoint, { cache: "no-store" });
       if (!response.ok) throw new Error(`Statbotics request failed: ${response.status}`);
-      const data = await response.json() as StatboticsMatch;
+      const data: StatboticsMatch = await response.json();
       if (this.stopped || this.statboticsRequests.get(matchKey) !== request) return;
       this.update((current) => ({
         ...current,
