@@ -59,7 +59,7 @@ function AlliancePredictionBox({
 
 export default function MatchPredictionMetrics({ prediction }: { prediction: JsonRecord }) {
   return (
-    <section className="mb-4 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 sm:gap-4">
+    <section className="mb-4 grid auto-rows-fr grid-cols-1 items-stretch gap-3 sm:grid-cols-2 sm:gap-4">
       <AlliancePredictionBox color="red" prediction={prediction} />
       <AlliancePredictionBox color="blue" prediction={prediction} />
     </section>
