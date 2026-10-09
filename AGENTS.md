@@ -23,7 +23,9 @@ TBA REST / webhooks
        ↓
  WebSocket
        ↓
- EventView
+ EventState
+       ↓
+ Views
 ```
 
 Rules:
@@ -54,9 +56,7 @@ Mutate the relevant existing Redis cache after authentication/parsing, then broa
 
 ## Client realtime behavior
 
-`useWebSocket` connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff.
-
-EventView handles TBA update messages by refreshing the relevant hooks. Keep the manual `r` refresh behavior unless explicitly changed.
+The shared event WebSocket manager connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff. Each `EventState` handles event-scoped TBA invalidations, refreshes its own resources, and owns its fallback/reconciliation lifecycle. Views consume the resulting snapshots; they must not start duplicate refresh loops. Keep the manual `r` refresh behavior unless explicitly changed.
 
 ## Polling
 
