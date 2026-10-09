@@ -24,9 +24,11 @@ function probabilityPercent(value: number, complement = false): string {
 export default function MatchPredictionBar({
   prediction,
   status,
+  compact = false,
 }: {
   prediction: JsonRecord;
   status: "loading" | "ready" | "unavailable";
+  compact?: boolean;
 }) {
   const redWinProbability = prediction.red_win_prob;
   const hasProbability = typeof redWinProbability === "number" && Number.isFinite(redWinProbability);
@@ -35,14 +37,14 @@ export default function MatchPredictionBar({
   const redWidth = hasProbability ? Math.max(0, Math.min(1, redWinProbability)) * 100 : 50;
 
   return (
-    <section className="mb-4 rounded-xl p-4 sm:p-5">
+    <section className={compact ? "rounded-lg px-2 py-2" : "mb-4 rounded-xl p-4 sm:p-5"}>
       {hasProbability ? (
         <div>
-          <div className="mb-2 flex justify-between text-xs">
+          <div className="mb-1 flex justify-between text-xs">
             <span className="font-semibold text-red-300">Red {redPercent}%</span>
             <span className="font-semibold text-blue-300">Blue {bluePercent}%</span>
           </div>
-          <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
+          <div className={`flex overflow-hidden rounded-full bg-blue-400/80 ${compact ? "h-2" : "h-3"}`} role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
             <div className="h-full bg-red-500 transition-[width]" style={{ width: String(redWidth) + "%" }} />
           </div>
         </div>
