@@ -1,15 +1,17 @@
 import Link from "next/link";
-import type { TBAEventSimple, TBAMatch } from "@/lib/tba/types";
+import type { TBAEliminationAlliance, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
 import TeamMatch from "./TeamMatch";
 
 export default function TeamEventMatches({
   event,
   matches,
-  teamKey,
+  highlightedTeamKeys,
+  playoffAlliances,
 }: {
-  event: TBAEventSimple;
+  event: TBAEventSimple & { playoff_type?: number | null };
   matches: TBAMatch[];
-  teamKey: string;
+  highlightedTeamKeys: string[];
+  playoffAlliances?: TBAEliminationAlliance[] | null;
 }) {
   return (
     <section className="border-t border-slate-200 first:border-t-0">
@@ -40,7 +42,8 @@ export default function TeamEventMatches({
             key={match.key}
             event={event}
             match={match}
-            teamKey={teamKey}
+            highlightedTeamKeys={highlightedTeamKeys}
+            playoffAlliances={playoffAlliances}
           />
         ))
       )}
