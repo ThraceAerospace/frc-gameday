@@ -3,13 +3,13 @@
 import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
-  TBAMatch,
 } from "@/lib/tba/types";
 import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
 import RankingsStrip from "@/components/event/RankingsStrip";
 import EventLocalTime from "@/components/event/EventLocalTime";
+import StatboticsPredictionStrip from "@/components/match/StatboticsPredictionStrip";
 
 type EventFooterProps = {
   mode: EventViewFooterMode;
@@ -32,7 +32,6 @@ type EventFooterProps = {
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
-  onOpenMatchInsights?: (match: TBAMatch) => void;
 };
 
 export default function EventFooter({
@@ -56,7 +55,6 @@ export default function EventFooter({
   onToggleActive,
   slotNumber,
   controlHeld = false,
-  onOpenMatchInsights,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
@@ -130,7 +128,9 @@ export default function EventFooter({
           } transition-transform duration-200`}
         >
           <div className={mode === "split" ? "grid grid-cols-2" : undefined}>
-            {mode === "rankings" ? (
+            {mode === "statbotics" ? (
+              <StatboticsPredictionStrip match={nextMatch ?? lastMatch ?? null} playoffType={playoffType} />
+            ) : mode === "rankings" ? (
               <RankingsStrip
                 teamsStatuses={teamsStatuses}
                 playoffAlliances={playoffAlliances}
@@ -149,7 +149,6 @@ export default function EventFooter({
                     playoffAlliances={playoffAlliances}
                     playoffType={playoffType}
                     multiview={multiview}
-                    onOpenInsights={onOpenMatchInsights}
                   />
                 </div>
                 <div className="min-w-0">
@@ -171,7 +170,6 @@ export default function EventFooter({
                 playoffAlliances={playoffAlliances}
                 playoffType={playoffType}
                 multiview={multiview}
-                onOpenInsights={onOpenMatchInsights}
               />
             )}
           </div>
