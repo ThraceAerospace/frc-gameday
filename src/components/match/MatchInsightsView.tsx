@@ -213,7 +213,6 @@ export function MatchInsightsContent({
   const isShowingTransitionResult = Boolean(resultMatchKey && resultMatchKey === displayMatch?.key);
   const eventTitle = event?.short_name || event?.name || eventKey;
   const prediction = asRecord(statboticsData?.pred ?? statboticsData?.prediction);
-  const predictedWinner = typeof prediction.winner === "string" ? prediction.winner.toLowerCase() : null;
   const redWinProbability = prediction.red_win_prob;
   const preEpas = asRecord(statboticsData?.pre_epas);
   const estimates = useMemo(() => {
@@ -296,10 +295,27 @@ export function MatchInsightsContent({
 export default function MatchInsightsView({
   eventKey,
   trackedTeams = [],
+  onClose,
 }: {
   eventKey: string;
   trackedTeams?: string[];
+  onClose?: () => void;
 }) {
   const snapshot = useEventState(eventKey);
+
+  useEffect(() => {
+    if (!onClose) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return <MatchInsightsContent eventKey={eventKey} snapshot={snapshot} trackedTeams={trackedTeams} />;
 }
