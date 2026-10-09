@@ -5,6 +5,7 @@ import TileViewSurface from "@/components/surface/TileViewSurface";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import { subscribeEventState } from "@/lib/events/useEventState";
+import { EventStateSnapshotsProvider } from "@/lib/events/EventStateSnapshotsProvider";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import {
   createRemoteSessionActions,
@@ -81,7 +82,7 @@ export default function RemoteSession({
             return;
           }
 
-          if (message.type === "eventStateSnapshot" && role === "controller") {
+          if (message.type === "eventStateSnapshot" && role === "display") {
             setEventStates((current) => {
               const next = {
                 ...current,
@@ -113,7 +114,7 @@ export default function RemoteSession({
   peerRef.current = peer;
 
   useEffect(() => {
-    if (role !== "display") return;
+    if (role !== "controller") return;
 
     const eventKeys = [...new Set(surfaceState.streams.map((tileId) => surfaceState.tileEvents[tileId] ?? tileId))];
     const unsubscribe = eventKeys.map((eventKey) =>
@@ -209,5 +210,9 @@ export default function RemoteSession({
     );
   }
 
-  return <TileViewSurface controller={controller} />;
+  return (
+    <EventStateSnapshotsProvider snapshots={eventStates}>
+      <TileViewSurface controller={controller} />
+    </EventStateSnapshotsProvider>
+  );
 }
