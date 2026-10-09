@@ -5,6 +5,7 @@ import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber } from "@/lib/tba/formatters";
+import StatboticsPrediction from "./StatboticsPrediction";
 
 type AllianceColor = "red" | "blue";
 
@@ -158,7 +159,8 @@ export function MatchInsightsContent({
               </div>
             ) : <p className="mt-3 text-sm text-neutral-500">OPR data has not been published for this event yet.</p>}
           </section>
-          <p className="mt-4 text-[10px] leading-5 text-neutral-600">Official scores and breakdowns are shown only when published by TBA. Statbotics predictions are not yet connected; the integration will be isolated behind a replaceable service.</p>
+          <StatboticsPrediction matchKey={displayMatch.key} />
+          <p className="mt-4 text-[10px] leading-5 text-neutral-600">Official scores and breakdowns are shown only when published by TBA.</p>
         </div>
       )}
     </main>
