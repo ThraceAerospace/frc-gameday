@@ -41,7 +41,6 @@ export type StatboticsMatch = {
     winner?: "red" | "blue" | null;
     red_score?: number;
     blue_score?: number;
-    [key: string]: string | number | boolean | undefined;
   };
 };
 
