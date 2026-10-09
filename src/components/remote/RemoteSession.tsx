@@ -49,6 +49,10 @@ export default function RemoteSession({
   const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
   const [displayMode, setDisplayMode] = useState<"gameday" | "insights">("gameday");
   const [insightsEventKey, setInsightsEventKey] = useState<string | null>(events[0] ?? null);
+  const displayModeRef = useRef(displayMode);
+  displayModeRef.current = displayMode;
+  const insightsEventKeyRef = useRef(insightsEventKey);
+  insightsEventKeyRef.current = insightsEventKey;
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
 
@@ -80,8 +84,8 @@ export default function RemoteSession({
             sendDisplayState();
             peerRef.current?.sendMessage({
               type: "displayModeSnapshot",
-              mode: displayMode,
-              eventKey: insightsEventKey,
+              mode: displayModeRef.current,
+              eventKey: insightsEventKeyRef.current,
             });
             for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
               peerRef.current?.sendMessage({
