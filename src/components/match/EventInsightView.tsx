@@ -191,10 +191,49 @@ function ScoreBreakdown({
     );
   }
 
+  const formatLabel = (key: string) => key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+
+  const renderEntries = (value: object, prefix = "") =>
+    Object.entries(value).map(([key, fieldValue]) => {
+      const label = formatLabel(key);
+      const nested = typeof fieldValue === "object" && fieldValue !== null && !Array.isArray(fieldValue);
+      if (nested) {
+        return (
+          <div key={prefix + key} className="col-span-full rounded-md bg-black/15 p-2">
+            <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{label}</h4>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {Object.entries(fieldValue).map(([childKey, childValue]) => (
+                <div key={childKey} className="flex flex-col gap-0.5">
+                  <dt className="text-xs text-neutral-500">{formatLabel(childKey)}</dt>
+                  <dd className="text-sm tabular-nums text-neutral-200">{String(childValue)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        );
+      }
+      return (
+        <div key={prefix + key} className="flex flex-col gap-0.5">
+          <dt className="text-xs text-neutral-500">{label}</dt>
+          <dd className="text-sm tabular-nums text-neutral-200">{fieldValue == null ? "—" : String(fieldValue)}</dd>
+        </div>
+      );
+    });
+
   return (
     <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown</h2>
-      <p className="text-sm text-neutral-500">A detailed breakdown is available for this match, but this year’s fields are not yet presented in Insights.</p>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown · {year ?? "match year"}</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {(["red", "blue"] as const).map((color) => (
+          <div key={color} className={`rounded-lg border p-3 ${color === "red" ? "border-red-400/20 bg-red-950/10" : "border-blue-400/20 bg-blue-950/10"}`}>
+            <h3 className={`mb-2 text-xs font-bold uppercase ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</h3>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">{renderEntries(breakdown[color], color)}</dl>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
