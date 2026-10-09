@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
 
 type AllianceColor = "red" | "blue";
 type JsonRecord = Record<string, unknown>;
@@ -29,16 +29,7 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
-function matchLabel(match: TBAMatch | null) {
-  if (!match) return "Waiting for next match";
-  const level = match.comp_level?.toUpperCase();
-  if (level === "qm") return `Qualification ${match.match_number}`;
-  if (level === "ef") return `Octofinal ${match.set_number}-${match.match_number}`;
-  if (level === "qf") return `Quarterfinal ${match.set_number}-${match.match_number}`;
-  if (level === "sf") return `Semifinal ${match.set_number}-${match.match_number}`;
-  if (level === "f") return `Final ${match.set_number}-${match.match_number}`;
-  return match.key;
-}
+
 
 const PRE_EPA_FIELDS = [
   ["epa", "EPA"],
@@ -77,9 +68,9 @@ function AllianceCard({
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max border-collapse text-left text-xs">
-          <thead className="bg-black/20 text-[9px] uppercase tracking-wider text-neutral-500">
+          <thead className="bg-black/20 text-[10px] uppercase tracking-wider text-neutral-500">
             <tr>
-              <th className="sticky left-0 z-10 bg-neutral-950/95 px-3 py-2">Team</th>
+              <th className={`sticky left-0 z-10 px-3 py-2`}>Team</th>
               <th className="px-2 py-2 text-right">OPR</th>
               <th className="px-2 py-2 text-right">DPR</th>
               <th className="px-2 py-2 text-right">CCWM</th>
@@ -91,16 +82,16 @@ function AllianceCard({
               const tracked = trackedTeams.includes(teamKey);
               const teamEstimates = estimates[teamKey];
               return (
-                <tr key={teamKey} className={tracked ? "bg-amber-300/[0.08]" : ""}>
-                  <th scope="row" className="sticky left-0 z-10 min-w-32 bg-[#0d0b10] px-3 py-3 text-left font-normal">
-                    <div className={`font-mono text-xs font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
-                    <div className="mt-1 max-w-40 truncate text-[10px] text-neutral-500">{teamNames.get(teamKey) ?? teamKey}</div>
+                <tr key={teamKey}>
+                  <th scope="row" className={`sticky left-0 z-10 min-w-32 bg-${color ? color : "neutral-950/95"} px-3 py-3 text-left font-normal`}>
+                    <div className={`font-mono text-xl font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
+                    <div className="mt-1 font-mono text-md font-bold text-gray-100/60 tabular-nums">{teamNames.get(teamKey) ?? teamKey}</div>
                   </th>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300">{exactNumber(teamEstimates?.opr)}</td>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300">{exactNumber(teamEstimates?.dpr)}</td>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300">{exactNumber(teamEstimates?.ccwm)}</td>
+                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.opr)}</td>
+                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.dpr)}</td>
+                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.ccwm)}</td>
                   {PRE_EPA_FIELDS.map(([key]) => (
-                    <td key={key} className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300">{exactNumber(teamEstimates?.preEpa?.[key])}</td>
+                    <td key={key} className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.preEpa?.[key])}</td>
                   ))}
                 </tr>
               );
@@ -239,8 +230,7 @@ export function MatchInsightsContent({
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
         <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">
           <h1 className="min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{eventTitle}</h1>
-          <span className="text-center text-sm font-semibold text-neutral-300">{displayMatch ? matchShortName(displayMatch) : "No match selected"}</span>
-          <span className="text-right text-xs text-neutral-500">{displayMatch ? matchLabel(displayMatch) : ""}</span>
+          <h1 className="text-center min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{displayMatch ? matchLongName(displayMatch) : "No match selected"}</h1>
         </div>
       </header>
 
@@ -256,7 +246,7 @@ export function MatchInsightsContent({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
           {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
-          <section className="mb-4 rounded-xl border border-violet-300/15 bg-violet-950/10 p-4 sm:p-5">
+          <section className="mb-4 rounded-xl p-4 sm:p-5">
             <div className="mb-4 grid grid-cols-2 gap-4">
               <div className="rounded-lg border border-red-400/15 bg-red-950/15 px-4 py-3">
                 <div className="text-[10px] font-semibold uppercase tracking-widest text-red-300/60">Red predicted score</div>
@@ -274,7 +264,7 @@ export function MatchInsightsContent({
                   <span className="font-semibold text-blue-300">Blue {String((1 - redWinProbability) * 100)}%</span>
                 </div>
                 <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redWinProbability * 100)} percent; Blue win probability ${String((1 - redWinProbability) * 100)} percent`}>
-                  <div className="h-full bg-red-400 transition-[width]" style={{ width: String(Math.max(0, Math.min(1, redWinProbability)) * 100) + "%" }} />
+                  <div className="h-full bg-red-500 transition-[width]" style={{ width: String(Math.max(0, Math.min(1, redWinProbability)) * 100) + "%" }} />
                 </div>
               </div>
             ) : (
