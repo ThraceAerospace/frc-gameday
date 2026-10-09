@@ -286,7 +286,7 @@ TileSurface
 
 The display should not have two competing independent state owners.
 
-When authoritative Surface state changes, the remote side may receive a state snapshot or state-change notification as appropriate. This preserves the existing remote Multiview principle that the display remains authoritative for its display state.
+When authoritative session Surface state changes, every connected display receives a state snapshot or state-change notification as appropriate. Displays are replicas of the shared session configuration; they do not independently author event or Tile View configuration.
 
 ## 10. Transport Is Not Architecture
 
@@ -464,7 +464,7 @@ The important ownership boundaries are:
 
 For a connected remote session, the controller is the owner of live event acquisition. It subscribes to the shared local EventState instances and publishes their snapshots over the remote data channel. A remote display consumes those snapshots through EventStateSnapshotsProvider; its useEventState calls are read-only and must not create EventState instances or start duplicate TBA polling/WebSocket subscriptions.
 
-The display remains authoritative for its surface configuration at connection and reconnect: it sends a state snapshot to the controller, after which controller actions update that configuration. The controller then sends the current event snapshots back to the display. Event snapshots and surface configuration remain separate message types.
+The controller/session is authoritative for shared Tile View configuration at connection and reconnect. It sends the current surface snapshot and EventState snapshots to each display; displays report user actions as controller requests and never replace the shared configuration with a per-display snapshot. Event snapshots and surface configuration remain separate message types.
 
 A standalone local surface (including /event/[event]/insights) can host its own EventState in its browser runtime. It does not persist that runtime across refreshes. The stop-on-zero-subscribers lifecycle remains in effect; retained subscribers should not be torn down and recreated merely because another event is added to a surface.
 
