@@ -8,7 +8,7 @@ export type StatboticsMatchState = {
   status: "loading" | "ready" | "unavailable";
 };
 
-const RESULT_REFRESH_DELAY_MS = 90_000;
+const RESULT_REFRESH_DELAY_MS = 3 * 60 * 1000;
 
 export function useStatboticsMatch(
   matchKey: string | null | undefined,
