@@ -90,7 +90,7 @@ export default function TileViewSurface({
       </header>
 
       <div className="relative min-h-0 flex-1">
-        <div className={insightsEventKey ? "invisible pointer-events-none absolute inset-0" : "absolute inset-0"}>
+        <div className={insightsEventKey ? "invisible pointer-events-none absolute inset-0 flex flex-col" : "absolute inset-0 flex flex-col"}>
           <TileView
             controller={tileSurfaceController}
             isDivisional={isDivisional}
