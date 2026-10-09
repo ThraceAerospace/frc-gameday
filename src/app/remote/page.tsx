@@ -105,7 +105,7 @@ export default function RemotePage() {
           {activeDisplay ? (
             <>
               <div className="border-b border-white/10 px-4 py-3">
-                <div className="text-sm font-semibold">Display configuration</div>
+                <div className="text-sm font-semibold">Shared session configuration</div>
                 <div className="mt-1 text-xs text-neutral-500">Code {activeDisplay.code} · Shared session settings · presentation mode is per display.</div>
               </div>
               {displays.map((display) => (
