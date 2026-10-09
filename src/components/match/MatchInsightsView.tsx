@@ -6,6 +6,7 @@ import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./MatchPredictionBar";
+import MatchPredictionMetrics from "./MatchPredictionMetrics";
 
 type AllianceColor = "red" | "blue";
 type JsonRecord = Record<string, unknown>;
@@ -318,6 +319,7 @@ export function MatchInsightsContent({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
           {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
+          <MatchPredictionMetrics prediction={prediction} />
           <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
