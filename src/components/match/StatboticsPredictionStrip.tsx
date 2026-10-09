@@ -102,9 +102,9 @@ export default function StatboticsPredictionStrip({
             <AllianceTeams color="blue" teams={match.alliances.blue.team_keys ?? []} />
           </div>
         </section>
-        <div className="min-w-0">
-          <StatboticsMatchPredictionMetrics prediction={prediction} />
-          <StatboticsMatchPredictionBar prediction={prediction} status={status} />
+        <div className="min-w-0 rounded-xl border border-white/10 bg-neutral-950/95 p-2">
+          <StatboticsMatchPredictionMetrics prediction={prediction} compact />
+          <StatboticsMatchPredictionBar prediction={prediction} status={status} compact />
         </div>
       </div>
     </div>
