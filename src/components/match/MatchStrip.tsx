@@ -107,11 +107,6 @@ export default function MatchStrip({
           {cards.length > 0 ? (
             <div className="flex h-full min-w-max items-center gap-1.5 px-2">
               {cards.map((match) => (
-                <div
-                  key={match.key}
-                  data-match-key={match.key}
-                  className="shrink-0"
-                >
                   <MatchCard
                     match={match}
                     team={team}
@@ -133,7 +128,6 @@ export default function MatchStrip({
                       eventTimezone ?? undefined
                     }
                   />
-                </div>
               ))}
             </div>
           ) : (

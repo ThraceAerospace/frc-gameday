@@ -9,6 +9,7 @@ import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
+import { TBAMatch } from "@/lib/tba/types";
 
 type SurfaceUpcomingMatchAlert = {
   eventKey: string;
