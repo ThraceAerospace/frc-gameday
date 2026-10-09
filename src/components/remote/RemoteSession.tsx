@@ -20,6 +20,7 @@ import {
   type RemoteSignalingStatus,
 } from "@/lib/remote/webrtc";
 import RemoteTileSurface from "./RemoteTileSurface";
+import MatchInsightsView from "@/components/match/MatchInsightsView";
 
 type Props = {
   role: RemoteRole;
@@ -46,6 +47,8 @@ export default function RemoteSession({
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
   const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
+  const [displayMode, setDisplayMode] = useState<"gameday" | "insights">("gameday");
+  const [insightsEventKey, setInsightsEventKey] = useState<string | null>(events[0] ?? null);
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
 
@@ -75,6 +78,11 @@ export default function RemoteSession({
         onMessage: (message: RemoteSessionMessage) => {
           if (message.type === "requestState" && role === "display") {
             sendDisplayState();
+            peerRef.current?.sendMessage({
+              type: "displayModeSnapshot",
+              mode: displayMode,
+              eventKey: insightsEventKey,
+            });
             for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
               peerRef.current?.sendMessage({
                 type: "eventStateSnapshot",
@@ -82,6 +90,12 @@ export default function RemoteSession({
                 state,
               });
             }
+            return;
+          }
+
+          if (message.type === "displayModeSnapshot") {
+            setDisplayMode(message.mode);
+            setInsightsEventKey(message.eventKey);
             return;
           }
 
@@ -247,14 +261,52 @@ export default function RemoteSession({
           controller={controller}
           peerStatus={peerStatus}
           eventStates={eventStates}
+          displayMode={displayMode}
+          insightsEventKey={insightsEventKey}
+          onDisplayModeChange={(mode) => {
+            setDisplayMode(mode);
+            const nextEventKey = insightsEventKey ?? localController.getState().streams[0] ?? null;
+            setInsightsEventKey(nextEventKey);
+            peer.sendMessage({ type: "displayModeSnapshot", mode, eventKey: nextEventKey });
+          }}
+          onInsightsEventKeyChange={(eventKey) => {
+            setInsightsEventKey(eventKey);
+            peer.sendMessage({ type: "displayModeSnapshot", mode: displayMode, eventKey });
+          }}
         />
       </div>
     );
   }
 
+  const displayState = useSyncExternalStore(
+    localController.subscribe,
+    localController.getState,
+    localController.getState,
+  );
+  const resolvedInsightsEventKey =
+    insightsEventKey ??
+    displayState.streams.map((tileId) => displayState.tileEvents[tileId] ?? tileId)[0] ??
+    null;
+  const trackedTeams = resolvedInsightsEventKey
+    ? displayState.eventConfigs[resolvedInsightsEventKey]?.trackedTeams ?? []
+    : [];
+
   return (
     <EventStateSnapshotsProvider snapshots={eventStates}>
-      <TileViewSurface controller={controller} />
+      <div hidden={hidden}>
+        <div hidden={displayMode !== "gameday"}>
+          <TileViewSurface controller={controller} />
+        </div>
+        <div hidden={displayMode !== "insights"}>
+          {resolvedInsightsEventKey ? (
+            <MatchInsightsView eventKey={resolvedInsightsEventKey} trackedTeams={trackedTeams} />
+          ) : (
+            <main className="flex min-h-screen items-center justify-center bg-black p-8 text-center text-sm text-neutral-500">
+              Add an event from the controller before switching this display to Match Insights.
+            </main>
+          )}
+        </div>
+      </div>
     </EventStateSnapshotsProvider>
   );
 }
