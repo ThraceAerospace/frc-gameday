@@ -57,6 +57,18 @@ src/
 
 The current component organization reflects the post-refactor architecture. Do not reintroduce the removed monolithic Gameday components.
 
+## UI invariants
+
+### Tracked-team color
+
+**Tracked teams must always use the application's shared amber color to communicate tracked status.** This is a hard visual invariant, not a component-specific styling preference.
+
+- Use the same amber color currently used by `TileView` / `TileSurface` for tracked-team indicators.
+- The indicator may vary by context (for example, an amber outline, ring, border, or highlight), but the color must remain the same.
+- Do not use another color to indicate that a team is tracked, even if the component's ordinary team/alliance colors differ.
+- If the tracked-team amber is ever changed, update every tracked-team indicator across the application together. Centralize the color token/helper where practical rather than duplicating amber values in individual components.
+- Keep tracked status visually distinct from alliance identity: red and blue continue to identify match alliances; amber identifies tracked teams.
+
 ## EventView
 
 EventView owns event-level data and presentation:
