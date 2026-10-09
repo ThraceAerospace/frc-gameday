@@ -10,6 +10,7 @@ type EventInsightsSurfaceProps = {
   trackedTeams?: string[];
   matchOverride?: TBAMatch | null;
   onClose?: () => void;
+  embedded?: boolean;
 };
 
 /**
@@ -24,6 +25,7 @@ export default function EventInsightsSurface({
   trackedTeams = [],
   matchOverride = null,
   onClose,
+  embedded = false,
 }: EventInsightsSurfaceProps) {
   const snapshot = useEventState(eventKey);
 
@@ -40,7 +42,7 @@ export default function EventInsightsSurface({
   }, [onClose]);
 
   return (
-    <main className="h-screen overflow-hidden bg-black text-white">
+    <main className={`${embedded ? "h-full" : "h-screen"} overflow-hidden bg-black text-white`}>
       <EventInsightView
         eventKey={eventKey}
         snapshot={snapshot}
