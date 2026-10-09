@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
@@ -82,7 +81,6 @@ type TileViewProps = {
   controller: TileSurfaceController;
   isDivisional?: boolean;
   className?: string;
-  onOpenMatchInsights?: (eventKey: string, match: TBAMatch) => void;
   renderEventView?: (args: {
     eventKey: string;
     controller: TileSurfaceController;
@@ -106,7 +104,6 @@ export default function TileView({
   controller,
   isDivisional = false,
   className = "",
-  onOpenMatchInsights,
   renderEventView,
 }: TileViewProps) {
   const state = useSyncExternalStore(
@@ -265,7 +262,6 @@ export default function TileView({
                 controlHeld={controlHeld}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}
-                onOpenMatchInsights={(match) => onOpenMatchInsights?.(eventKey, match)}
               />
             )}
           </div>
