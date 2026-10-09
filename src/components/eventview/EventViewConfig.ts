@@ -1,6 +1,6 @@
 export type EventViewVisibility = "visible" | "hidden";
 
-export type EventViewFooterMode = "matchStrip" | "rankings" | "split" | "hidden";
+export type EventViewFooterMode = "matchStrip" | "rankings" | "split" | "statbotics" | "hidden";
 
 export type EventViewPresentation = {
   teamTracker: EventViewVisibility;
