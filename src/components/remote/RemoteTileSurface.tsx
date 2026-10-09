@@ -6,7 +6,6 @@ import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
-import { EventDataPanelContent } from "@/components/eventdata/EventDataPanel";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import { useTileSurfaceKeyboard } from "@/components/surface/TileSurfaceController";
 
@@ -74,30 +73,6 @@ export default function RemoteSurface({
             {state.priority.map((tileId, position) => {
               const eventKey = state.tileEvents[tileId] ?? tileId;
               const eventState = eventStates[eventKey];
-
-              if (state.tileTypes[tileId] === "dataPanel") {
-                return (
-                  <div
-                    key={tileId}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => controller.actions.toggleActive(tileId)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        controller.actions.toggleActive(tileId);
-                      }
-                    }}
-                    className={`min-h-64 overflow-hidden rounded-2xl ${state.activeKey === tileId ? "ring-2 ring-blue-500/70" : ""}`}
-                  >
-                    {eventState ? (
-                      <EventDataPanelContent eventKey={eventKey} snapshot={eventState} />
-                    ) : (
-                      <div className="flex min-h-64 items-center justify-center rounded-xl border border-white/10 bg-neutral-950 p-6 text-sm text-neutral-500">Waiting for event data…</div>
-                    )}
-                  </div>
-                );
-              }
 
               return (
                 <RemoteEventCard
