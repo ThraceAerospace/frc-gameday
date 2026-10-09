@@ -204,7 +204,6 @@ export default function TileView({
 
       {state.streams.map((tileId) => {
         const eventKey = state.tileEvents[tileId] ?? tileId;
-        const tileType = state.tileTypes[tileId] ?? "eventView";
         const slotIndex = slotOrder.indexOf(tileId);
         const geometry = layout.slots[slotIndex];
         const slotPresentation = getSlotPresentation(geometry);
@@ -240,7 +239,7 @@ export default function TileView({
               className={[
                 "pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90",
                 "transition-[opacity,box-shadow] duration-500 ease-out",
-                Boolean(tileType === "eventView" && state.upcomingMatchKeys?.[eventKey])
+                Boolean(state.upcomingMatchKeys?.[eventKey])
                   ? "opacity-100 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
                   : "opacity-0 shadow-none",
               ].join(" ")}
