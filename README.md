@@ -13,18 +13,18 @@ TBA REST / webhooks
         ↓
      WebSocket
         ↓
-    EventView
-   ┌────┼──────────────┐
-matches teams/statuses playoff alliances
-        │
-     webcast UI
+    EventState
+        ↓
+       Views
+        ↓
+     Surfaces
 
-Polling is fallback reconciliation for missed or incomplete updates.
+Polling is fallback reconciliation owned by EventState for missed or incomplete updates.
 ```
 
 The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks mutate existing Redis cache entries and then publish event-scoped invalidations through Redis Pub/Sub to WebSocket clients.
 
-WebSocket messages are intentionally small invalidation signals. EventView immediately refetches the webhook-mutated Redis cache. Those webhook-mutated match entries defer their next TBA refresh for 65 seconds, giving upstream TBA time to catch up before ETag/304 validation. Polling remains the reconciliation path for missed or incomplete updates.
+WebSocket messages are intentionally small invalidation signals. EventState immediately refetches the webhook-mutated Redis cache. Those webhook-mutated match entries defer their next TBA refresh for 65 seconds, giving upstream TBA time to catch up before ETag/304 validation. Polling remains the reconciliation path for missed or incomplete updates.
 
 ## Repository structure
 
