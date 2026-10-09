@@ -17,6 +17,7 @@ type MatchCardProps = {
   playoffAlliances?: PlayoffAlliance[];
   playoffType?: number | null;
   eventTimezone?: string;
+  onOpenInsights?: () => void;
 };
 
 export default function MatchCard({
@@ -27,6 +28,7 @@ export default function MatchCard({
   playoffAlliances = [],
   playoffType = null,
   eventTimezone,
+  onOpenInsights,
 }: MatchCardProps) {
   const red = match.alliances.red.team_keys;
   const blue = match.alliances.blue.team_keys;
@@ -96,14 +98,19 @@ export default function MatchCard({
       <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
         {/* Match name */}
         <div className="row-span-2 flex h-full flex-col justify-center">
-          <span
+          <button
+            type="button"
+            onClick={onOpenInsights}
+            disabled={!onOpenInsights}
+            title={onOpenInsights ? "Open Match Insights for this event" : undefined}
             className={[
-              "text-[10px] font-bold uppercase tracking-wide",
+              "text-left text-[10px] font-bold uppercase tracking-wide",
               isNext ? "text-white" : "text-zinc-300",
+              onOpenInsights ? "cursor-pointer hover:text-amber-200 focus-visible:outline-none focus-visible:text-amber-200" : "cursor-default",
             ].join(" ")}
           >
             {matchName}
-          </span>
+          </button>
 
           <span
             className={[
