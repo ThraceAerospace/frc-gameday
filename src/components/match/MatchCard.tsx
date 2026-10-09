@@ -2,7 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance, formatAllianceName, formatMatchEventTime, matchCode } from "@/lib/tba/formatters";
+import { formatAlliance, formatAllianceName, matchCode, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
 type PlayoffAlliance = {
   name?: string;
@@ -25,6 +25,7 @@ export default function MatchCard({
   isNext = false,
   isLast = false,
   playoffAlliances = [],
+  playoffType = null,
   eventTimezone,
 }: MatchCardProps) {
   const red = match.alliances.red.team_keys;
@@ -64,7 +65,7 @@ export default function MatchCard({
         ? "bg-blue-950/50"
         : "bg-zinc-800/80";
 
-  const matchName = matchCode(match.key);
+  const matchName = matchShortName(match, playoffType);
 
   const time =
     isNext && (match.predicted_time != null || match.time != null) ? (
