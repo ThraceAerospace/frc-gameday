@@ -355,7 +355,7 @@ function InfoItem({
         {label}
       </dt>
 
-      <dd className="mt-1 text-sm text-neutral-200">
+      <dd className="mt-1 text-sm text-slate-800">
         {value ?? "—"}
       </dd>
     </div>
