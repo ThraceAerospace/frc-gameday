@@ -46,6 +46,9 @@ export default function StatboticsPredictionStrip({
 
   return (
     <div className="h-[52px] overflow-x-auto overflow-y-hidden no-scrollbar border-l border-t border-white/10 bg-neutral-950/95">
+      <div className="flex min-w-max items-center gap-1.5 px-2 pb-0 mb-0">
+        <StatboticsMatchPredictionBar prediction={prediction} status={status} compact={true} />
+      </div>
       <div className="flex h-full min-w-max items-center gap-1.5 px-2">
         <MatchCard
           match={match}
@@ -56,8 +59,7 @@ export default function StatboticsPredictionStrip({
           isNext={!resultPosted}
           isLast={resultPosted}
         />
-        <StatboticsMatchPredictionMetrics prediction={prediction} compact />
-        <StatboticsMatchPredictionBar prediction={prediction} status={status} compact />
+        <StatboticsMatchPredictionMetrics prediction={prediction} compact={true} />
       </div>
     </div>
   );
