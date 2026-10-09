@@ -77,15 +77,21 @@ export default async function TeamPage({
 
   const eventMatches = await Promise.all(
     sortedEvents.map(async (event) => {
-      const [fullEvent, matches, playoffAlliances] = await Promise.all([
+      const [fullEvent, eventMatches] = await Promise.all([
         TBA.getEvent(event.key),
         TBA.getTeamMatches(teamKey, event.key),
-        TBA.getEventPlayoffAlliances(event.key),
       ]);
+      const matches = eventMatches.sort(sortMatches);
+      const hasEliminationMatches = matches.some((match) =>
+        ["ef", "qf", "sf", "f"].includes(match.comp_level.toLowerCase()),
+      );
+      const playoffAlliances = hasEliminationMatches
+        ? await TBA.getEventPlayoffAlliances(event.key)
+        : null;
 
       return {
         event: { ...event, playoff_type: fullEvent.playoff_type },
-        matches: matches.sort(sortMatches),
+        matches,
         playoffAlliances,
       };
     }),
