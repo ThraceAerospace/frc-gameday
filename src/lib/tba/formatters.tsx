@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { TBAMatch, TBAEliminationAlliance } from "@/lib/tba/types";
 
 export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
-  const num = teamKey.replace("frc", "");
+  const num = formatTeamNumber(teamKey);
 
   const isTracked =
     Array.isArray(trackedTeams)
@@ -119,4 +119,61 @@ export function compLevelShortName(compLevel: string): string {
     default:
       return compLevel.toUpperCase();
   }
+}
+
+/** Return a display-ready team number without the TBA `frc` key prefix. */
+export function formatTeamNumber(teamKey: string | number | null | undefined): string {
+  return String(teamKey ?? "").replace(/^frc/i, "");
+}
+
+/**
+ * Remove the suffix TBA appends to some event names, notably FIRST
+ * Championship, so event labels remain concise and consistent everywhere.
+ */
+export function formatEventName(
+  eventName: string | null | undefined,
+  fallback = "",
+): string {
+  const name = eventName?.replace(/ - FIRST Robotics Competition$/, "").trim();
+  return name || fallback;
+}
+
+/** Normalize score values for display; TBA uses negative scores for unplayed matches. */
+export function formatScore(score: number | null | undefined): number | string {
+  return score == null || score < 0 ? "—" : score;
+}
+
+/** Turn TBA score-breakdown keys such as autoPoints into readable labels. */
+export function formatScoreBreakdownLabel(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+/** Consistent W-L-T display for TBA ranking and alliance records. */
+export function formatRecord(
+  record: { wins?: number | null; losses?: number | null; ties?: number | null } | null | undefined,
+): string {
+  if (!record) return "—";
+  return `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}`;
+}
+
+/** Use compact alliance labels (A1, A2) while retaining unknown/custom names. */
+export function formatAllianceName(
+  name: string | null | undefined,
+  fallbackIndex?: number,
+): string {
+  if (!name) return fallbackIndex == null ? "" : `A${fallbackIndex + 1}`;
+  return name.replace(/^Alliance\s+/i, "A");
+}
+
+/** Format the TBA playoff status according to the event's bracket type. */
+export function formatPlayoffLevel(
+  alliance: Pick<TBAEliminationAlliance, "status">,
+  playoffType?: number | null,
+): string {
+  const status = alliance.status;
+  if (!status) return "—";
+  if (playoffType === 10) return status.double_elim_round ?? "—";
+  return status.level ?? "—";
 }
