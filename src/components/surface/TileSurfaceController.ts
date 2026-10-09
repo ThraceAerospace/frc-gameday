@@ -506,7 +506,7 @@ export function useTileSurfaceController({
             : next.eventConfigs,
           labels: Object.fromEntries(Object.entries(next.labels).filter(([key]) => key !== tileId)),
         }));
-        updateUrl(nextStreams, nextTileEvents, nextTileTypes);
+        updateUrl(nextStreams, nextTileEvents);
         showControls();
       },
 
