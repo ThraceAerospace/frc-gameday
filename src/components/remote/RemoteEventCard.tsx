@@ -171,7 +171,7 @@ export default function RemoteEventCard({
                   key={team}
                   className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200"
                 >
-                  {teamNumber(team)}
+                  {formatTeamNumber(team)}
                   {next ? (
                     <span className="text-[10px] font-normal text-neutral-500">
                       {matchCode(next.key)}
