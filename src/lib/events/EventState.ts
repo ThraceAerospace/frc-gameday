@@ -425,11 +425,21 @@ export class EventState {
 
       const eventNextMatch = getNextMatch(matches);
       const eventLastMatch = getLastMatch(matches);
+      const relevantStatboticsKeys = new Set(
+        [eventNextMatch?.key, eventLastMatch?.key].filter(
+          (key): key is string => Boolean(key),
+        ),
+      );
       this.update((current) => ({
         ...current,
         matches,
         eventNextMatch,
         eventLastMatch,
+        statboticsMatches: Object.fromEntries(
+          Object.entries(current.statboticsMatches).filter(([key]) =>
+            relevantStatboticsKeys.has(key),
+          ),
+        ),
       }));
 
       // Statbotics match data is event-domain state. Keep predictions for the
