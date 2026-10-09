@@ -165,11 +165,13 @@ export default async function MatchPage({
               <ScoreBreakdownPanel
                 name="Red"
                 breakdown={match.score_breakdown.red}
+                score={match.alliances.red.score}
                 variant="red"
               />
               <ScoreBreakdownPanel
                 name="Blue"
                 breakdown={match.score_breakdown.blue}
+                score={match.alliances.blue.score}
                 variant="blue"
               />
             </div>
@@ -260,8 +262,8 @@ function AlliancePanel({
           className={[
             "text-sm font-semibold",
             variant === "red"
-              ? "text-red-400"
-              : "text-blue-400",
+              ? "text-red-700"
+              : "text-blue-700",
           ].join(" ")}
         >
           {name}
@@ -379,43 +381,15 @@ function ExternalLink({
   );
 }
 
-function formatMatchName(match: TBAMatch) {
-  const level = match.comp_level.toLowerCase();
-
-  switch (level) {
-    case "qm":
-      return `Qualification ${match.match_number}`;
-
-    case "ef":
-      return match.set_number != null
-        ? `Eighthfinal ${match.set_number}-${match.match_number}`
-        : `Eighthfinal ${match.match_number}`;
-
-    case "qf":
-      return match.set_number != null
-        ? `Quarterfinal ${match.set_number}-${match.match_number}`
-        : `Quarterfinal ${match.match_number}`;
-
-    case "sf":
-      return match.set_number != null
-        ? `Semifinal ${match.set_number}-${match.match_number}`
-        : `Semifinal ${match.match_number}`;
-
-    case "f":
-      return `Final ${match.match_number}`;
-
-    default:
-      return `${level.toUpperCase()} ${match.match_number}`;
-  }
-}
-
 function ScoreBreakdownPanel({
   name,
   breakdown,
+  score,
   variant,
 }: {
   name: string;
   breakdown: NonNullable<TBAMatch["score_breakdown"]>["red"];
+  score: number | null;
   variant: "red" | "blue";
 }) {
   const entries = Object.entries(breakdown).filter(
@@ -434,7 +408,7 @@ function ScoreBreakdownPanel({
           {name} Alliance
         </h3>
         <span className="font-mono font-bold">
-          {String(breakdown.totalPoints)}
+          {formatScore(score)}
         </span>
       </div>
 
