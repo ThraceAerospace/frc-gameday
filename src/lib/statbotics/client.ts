@@ -12,6 +12,7 @@ const LOCK_PREFIX = "lock:statbotics:match:";
 
 type CachedMatch = {
   fetchedAt: number;
+  lastRefreshAt?: number;
   data: StatboticsMatch | null;
 };
 
@@ -75,9 +76,11 @@ export class StatboticsClient {
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsMatch | null> {
     const cached = await readCache(matchKey);
-    const age = cached ? Date.now() - cached.fetchedAt : Infinity;
+    const sinceLastRefresh = cached?.lastRefreshAt == null
+      ? Infinity
+      : Date.now() - cached.lastRefreshAt;
 
-    if (cached && (!options.refresh || age < MATCH_REFRESH_COOLDOWN_MS)) {
+    if (cached && (!options.refresh || sinceLastRefresh < MATCH_REFRESH_COOLDOWN_MS)) {
       return cached.data;
     }
 
@@ -102,8 +105,10 @@ export class StatboticsClient {
       // Re-read after acquiring the lock: another request may have populated
       // the cache between our initial read and lock acquisition.
       const latest = await readCache(matchKey);
-      const latestAge = latest ? Date.now() - latest.fetchedAt : Infinity;
-      if (latest && (!options.refresh || latestAge < MATCH_REFRESH_COOLDOWN_MS)) {
+      const sinceLatestRefresh = latest?.lastRefreshAt == null
+        ? Infinity
+        : Date.now() - latest.lastRefreshAt;
+      if (latest && (!options.refresh || sinceLatestRefresh < MATCH_REFRESH_COOLDOWN_MS)) {
         return latest.data;
       }
 
@@ -115,7 +120,11 @@ export class StatboticsClient {
       );
 
       if (response.status === 404) {
-        const entry: CachedMatch = { fetchedAt: Date.now(), data: null };
+        const entry: CachedMatch = {
+          fetchedAt: Date.now(),
+          lastRefreshAt: options.refresh ? Date.now() : latest?.lastRefreshAt,
+          data: null,
+        };
         await redis.set(
           matchCacheKey(matchKey),
           JSON.stringify(entry),
@@ -130,7 +139,11 @@ export class StatboticsClient {
       }
 
       const data = await response.json() as StatboticsMatch;
-      const entry: CachedMatch = { fetchedAt: Date.now(), data };
+      const entry: CachedMatch = {
+        fetchedAt: Date.now(),
+        lastRefreshAt: options.refresh ? Date.now() : latest?.lastRefreshAt,
+        data,
+      };
       await redis.set(
         matchCacheKey(matchKey),
         JSON.stringify(entry),
