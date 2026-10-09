@@ -17,6 +17,7 @@ import TileView from "./TileView";
 
 type TileViewSurfaceProps = {
   events?: string[];
+  panels?: string[];
   isDivisional?: boolean;
   parentEvent?: TBAEvent | null;
   controller?: TileSurfaceController;
@@ -24,6 +25,7 @@ type TileViewSurfaceProps = {
 
 export default function TileViewSurface({
   events = [],
+  panels = [],
   isDivisional = false,
   parentEvent = null,
   controller,
@@ -31,6 +33,7 @@ export default function TileViewSurface({
   const router = useRouter();
   const tileSurfaceController = useTileSurfaceController({
     events,
+    panels,
     controller,
   });
   const state = useSyncExternalStore(

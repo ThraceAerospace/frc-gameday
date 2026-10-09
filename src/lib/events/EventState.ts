@@ -9,6 +9,7 @@ import type {
   TBAEliminationAlliance,
   TBAEvent,
   TBAEventTeamStatuses,
+  TBAEventOPRs,
   TBAMatch,
   TBATeam,
 } from "@/lib/tba/types";
@@ -26,6 +27,7 @@ export type EventStateSnapshot = {
   eventLastMatch: TBAMatch | null;
   teamsStatuses: TBAEventTeamStatuses;
   alliances: TBAEliminationAlliance[];
+  oprs: TBAEventOPRs | null;
   loading: boolean;
   error: Error | null;
   websocketStatus: EventWebSocketStatus;
@@ -52,6 +54,7 @@ export class EventState {
     eventLastMatch: null,
     teamsStatuses: {},
     alliances: [],
+    oprs: null,
     loading: true,
     error: null,
     websocketStatus: "disconnected",
@@ -71,12 +74,14 @@ export class EventState {
   private matchTimer: number | null = null;
   private statusTimer: number | null = null;
   private allianceTimer: number | null = null;
+  private oprTimer: number | null = null;
 
   private eventRequest = 0;
   private teamsRequest = 0;
   private matchesRequest = 0;
   private statusesRequest = 0;
   private alliancesRequest = 0;
+  private oprsRequest = 0;
 
   private readonly authoritativeTimers = new Map<string, number>();
 
@@ -136,10 +141,12 @@ export class EventState {
     void this.loadMatches();
     void this.loadStatuses();
     void this.loadAlliances();
+    void this.loadOprs();
 
     this.scheduleMatchFallback();
     this.scheduleStatusFallback();
     this.scheduleAllianceFallback();
+    this.scheduleOprsFallback();
   }
 
   stop() {
@@ -156,6 +163,7 @@ export class EventState {
     this.clearTimer("match");
     this.clearTimer("status");
     this.clearTimer("alliance");
+    this.clearTimer("oprs");
 
     for (const timer of this.authoritativeTimers.values()) {
       window.clearTimeout(timer);
@@ -170,6 +178,7 @@ export class EventState {
     this.reloadMatches();
     this.reloadStatuses();
     this.reloadAlliances();
+    this.reloadOprs();
   }
 
   reloadMatches() {
@@ -185,6 +194,11 @@ export class EventState {
   reloadAlliances() {
     void this.loadAlliances();
     this.resetAuthoritativeTimer("alliances");
+  }
+
+  reloadOprs() {
+    void this.loadOprs();
+    this.resetAuthoritativeTimer("oprs");
   }
 
   private update(
@@ -400,6 +414,41 @@ export class EventState {
     }
   }
 
+  private async loadOprs() {
+    const request = ++this.oprsRequest;
+
+    try {
+      const response = await fetch(
+        `/api/event/${encodeURIComponent(this.eventKey)}/oprs`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (request !== this.oprsRequest || this.stopped) {
+        return;
+      }
+
+      this.update((current) => ({
+        ...current,
+        oprs: data && typeof data === "object" ? (data as TBAEventOPRs) : null,
+      }));
+
+      this.scheduleOprsFallback();
+    } catch (error) {
+      if (request !== this.oprsRequest || this.stopped) {
+        return;
+      }
+
+      console.error("[EventState] OPRs request failed", error);
+      this.scheduleOprsFallback();
+    }
+  }
+
   private handleWebSocketStatus = (
     status: EventWebSocketStatus,
   ) => {
@@ -474,6 +523,7 @@ export class EventState {
         this.reloadMatches();
         this.reloadStatuses();
         this.reloadAlliances();
+        this.reloadOprs();
         break;
       }
 
@@ -497,7 +547,7 @@ export class EventState {
   };
 
   private resetAuthoritativeTimer(
-    resource: "matches" | "statuses" | "alliances",
+    resource: "matches" | "statuses" | "alliances" | "oprs",
   ) {
     const existing =
       this.authoritativeTimers.get(resource);
@@ -536,6 +586,10 @@ export class EventState {
 
         case "alliances":
           void this.loadAlliances();
+          break;
+
+        case "oprs":
+          void this.loadOprs();
           break;
       }
     }, AUTHORITATIVE_REFETCH_DELAY);
@@ -582,15 +636,30 @@ export class EventState {
     }, ALLIANCE_POLL_INTERVAL);
   }
 
+  private scheduleOprsFallback() {
+    this.clearTimer("oprs");
+
+    this.oprTimer = window.setTimeout(() => {
+      this.oprTimer = null;
+      this.update((current) => ({
+        ...current,
+        websocketStale: true,
+      }));
+      void this.loadOprs();
+    }, STATUS_POLL_INTERVAL);
+  }
+
   private clearTimer(
-    kind: "match" | "status" | "alliance",
+    kind: "match" | "status" | "alliance" | "oprs",
   ) {
     const timer =
       kind === "match"
         ? this.matchTimer
         : kind === "status"
           ? this.statusTimer
-          : this.allianceTimer;
+          : kind === "alliance"
+            ? this.allianceTimer
+            : this.oprTimer;
 
     if (timer !== null) {
       window.clearTimeout(timer);
@@ -600,8 +669,10 @@ export class EventState {
       this.matchTimer = null;
     } else if (kind === "status") {
       this.statusTimer = null;
-    } else {
+    } else if (kind === "alliance") {
       this.allianceTimer = null;
+    } else {
+      this.oprTimer = null;
     }
   }
 }

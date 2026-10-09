@@ -30,6 +30,7 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   eventLastMatch: null,
   teamsStatuses: {},
   alliances: [],
+  oprs: null,
   loading: false,
   error: null,
   websocketStatus: "disconnected",

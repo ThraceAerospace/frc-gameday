@@ -112,6 +112,12 @@ Layouts are pure data in `src/lib/multiview/layouts.ts`.
 
 Do not restore old positional TeamPill modes.
 
+## Reusable event data panels
+
+`src/components/eventdata/EventDataPanel.tsx` is an event-scoped presentation component, not a tile-only implementation. It consumes the shared `useEventState` snapshot and can be rendered from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+
+Tile identity is distinct from event identity. `TileSurfaceState.streams` and `priority` contain stable tile IDs; `tileEvents` maps each tile to its event key, and `tileTypes` distinguishes `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event may be represented by both tile types.
+
 ## Event footer
 
 EventView footer configuration is independent from Multiview layout presentation.

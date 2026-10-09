@@ -115,7 +115,8 @@ export default function RemoteSession({
   useEffect(() => {
     if (role !== "display") return;
 
-    const unsubscribe = surfaceState.streams.map((eventKey) =>
+    const eventKeys = [...new Set(surfaceState.streams.map((tileId) => surfaceState.tileEvents[tileId] ?? tileId))];
+    const unsubscribe = eventKeys.map((eventKey) =>
       subscribeEventState(eventKey, (state) => {
         const next = {
           ...eventStatesRef.current,
@@ -132,7 +133,7 @@ export default function RemoteSession({
     );
 
     return () => unsubscribe.forEach((stop) => stop());
-  }, [role, surfaceState.streams]);
+  }, [role, surfaceState.streams, surfaceState.tileEvents]);
 
   const sendDisplayState = useMemo(
     () => () => {
