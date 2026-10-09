@@ -231,12 +231,8 @@ export class RemotePeer {
     channel.onopen = () => {
       this.options.onStatus?.("connected");
 
-      if (this.options.role === "controller") {
-        channel.send(JSON.stringify({ type: "requestState" } satisfies RemoteSessionMessage));
-      }
-
-      // The display is authoritative after a reconnect. Do not replay
-      // controller actions queued while the old peer was unavailable.
+      // The controller publishes the authoritative shared session state
+      // when this peer connects. Never replay stale queued UI actions.
       this.queuedActions = [];
     };
 
