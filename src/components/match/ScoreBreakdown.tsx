@@ -86,7 +86,11 @@ function compareFieldKeys(left: string, right: string): number {
   return leftParts.length - rightParts.length;
 }
 
-function getAllianceFields(\n  breakdown: unknown,\n  redScore: number,\n  blueScore: number,\n): FieldRow[] {
+function getAllianceFields(
+  breakdown: unknown,
+  redScore: number,
+  blueScore: number,
+): FieldRow[] {
   if (!breakdown || typeof breakdown !== "object") return [];
   const sides = breakdown as Record<string, unknown>;
   const red = sides.red;
@@ -99,6 +103,11 @@ function getAllianceFields(\n  breakdown: unknown,\n  redScore: number,\n  blueS
 
   return keys
     .filter((key) => !/threshold/i.test(key))
+    // Skip the root total when it duplicates the official match score.
+    .filter((key) => {
+      if (key.includes(".") || !/^total[_ ]?points$/i.test(key)) return true;
+      return redFields.get(key) !== redScore || blueFields.get(key) !== blueScore;
+    })
     .filter((key) => !isInactive(redFields.get(key)) || !isInactive(blueFields.get(key)))
     .sort(compareFieldKeys)
     .map((key) => ({
