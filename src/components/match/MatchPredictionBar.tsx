@@ -6,6 +6,25 @@ function exactNumber(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
 }
 
+function probabilityPercent(value: number, complement = false): string {
+  const source = String(value);
+  if (/[eE]/.test(source)) {
+    return String((complement ? 1 - value : value) * 100);
+  }
+
+  const [whole = "0", fraction = ""] = source.split(".");
+  const scale = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(whole) * scale + BigInt(fraction || "0");
+  const adjusted = complement ? scale - numerator : numerator;
+  const percentNumerator = adjusted * 100n;
+  const integerPart = percentNumerator / scale;
+  const remainder = percentNumerator % scale;
+  if (remainder === 0n) return String(integerPart);
+
+  const decimalPart = remainder.toString().padStart(fraction.length, "0").replace(/0+$/, "");
+  return String(integerPart) + "." + decimalPart;
+}
+
 const PREDICTED_RP_FIELDS = [
   ["energized_rp", "Energized RP"],
   ["supercharged_rp", "Supercharged RP"],
@@ -48,8 +67,8 @@ export default function MatchPredictionBar({
 }) {
   const redWinProbability = prediction.red_win_prob;
   const hasProbability = typeof redWinProbability === "number" && Number.isFinite(redWinProbability);
-  const redPercent = hasProbability ? redWinProbability * 100 : null;
-  const bluePercent = hasProbability ? (1 - redWinProbability) * 100 : null;
+  const redPercent = hasProbability ? probabilityPercent(redWinProbability) : null;
+  const bluePercent = hasProbability ? probabilityPercent(redWinProbability, true) : null;
   const redWidth = hasProbability ? Math.max(0, Math.min(1, redWinProbability)) * 100 : 50;
 
   return (
@@ -61,8 +80,8 @@ export default function MatchPredictionBar({
       {hasProbability ? (
         <div>
           <div className="mb-2 flex justify-between text-xs">
-            <span className="font-semibold text-red-300">Red {String(redPercent)}%</span>
-            <span className="font-semibold text-blue-300">Blue {String(bluePercent)}%</span>
+            <span className="font-semibold text-red-300">Red {redPercent}%</span>
+            <span className="font-semibold text-blue-300">Blue {bluePercent}%</span>
           </div>
           <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
             <div className="h-full bg-red-500 transition-[width]" style={{ width: String(redWidth) + "%" }} />
