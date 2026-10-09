@@ -65,7 +65,7 @@ export function useStatboticsMatch(
 
     if (
       !matchKey ||
-      !resultSignature ||
+      !resultSignature?.startsWith("final:") ||
       previous.matchKey !== matchKey ||
       !previous.signature ||
       previous.signature === resultSignature
