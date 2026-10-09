@@ -146,13 +146,15 @@ function AllianceCard({
 
 function ScoreBreakdown({
   match,
+  year,
 }: {
   match: TBAMatch;
+  year: number | undefined;
 }) {
   const breakdown = match.score_breakdown;
   if (!breakdown || !match.alliances || match.alliances.red.score < 0 || match.alliances.blue.score < 0) return null;
 
-  if (match.key.startsWith("2026") && "hubScore" in breakdown.red && "hubScore" in breakdown.blue) {
+  if (year === 2026 && "hubScore" in breakdown.red && "hubScore" in breakdown.blue) {
     const red = breakdown.red;
     const blue = breakdown.blue;
     return (
@@ -304,7 +306,7 @@ export default function EventInsightView({
             <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
             <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
           </div>
-          {isPostMatch ? <ScoreBreakdown match={displayMatch} /> : null}
+          {isPostMatch ? <ScoreBreakdown match={displayMatch} year={statboticsData?.year ?? Number(displayMatch.key.slice(0, 4))} /> : null}
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and year-specific score breakdowns are from TBA. Statbotics numeric values are formatted for readability, and alliance estimates are the sum of the individual team estimates.</p>
         </div>
       )}
