@@ -39,10 +39,6 @@ function AlliancePredictionBox({
 
   return (
     <div className={`h-full min-w-0 rounded-lg border px-4 py-3 ${colorStyles.border} ${colorStyles.background}`}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${colorStyles.label}`}>{color} alliance</div>
-        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${colorStyles.border} ${colorStyles.label}`}>Predicted</span>
-      </div>
       <div className="flex h-full items-center gap-5">
         <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-3 gap-y-2">
           <div className="min-w-0 shrink-0">
