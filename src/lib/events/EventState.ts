@@ -5,6 +5,7 @@ import {
   getNextMatch,
   sortMatches,
 } from "@/lib/tba/matchUtils";
+import type { StatboticsMatch } from "@/lib/statbotics/types";
 import type {
   TBAEliminationAlliance,
   TBAEvent,
@@ -34,6 +35,7 @@ export type EventStateSnapshot = {
   websocketStale: boolean;
   upcomingMatchKey: string | null;
   upcomingMatchTeamKeys: string[];
+  statboticsMatches: Record<string, { data: StatboticsMatch | null; status: "loading" | "ready" | "unavailable" }>;
 };
 
 type Listener = (snapshot: EventStateSnapshot) => void;
@@ -42,6 +44,7 @@ const MATCH_POLL_INTERVAL = 5 * 60_000;
 const STATUS_POLL_INTERVAL = 5 * 60_000;
 const ALLIANCE_POLL_INTERVAL = 15 * 60_000;
 const AUTHORITATIVE_REFETCH_DELAY = 65_000;
+const STATBOTICS_RESULT_REFRESH_DELAY = 3 * 60_000;
 
 export class EventState {
   readonly eventKey: string;
@@ -61,6 +64,7 @@ export class EventState {
     websocketStale: false,
     upcomingMatchKey: null,
     upcomingMatchTeamKeys: [],
+    statboticsMatches: {},
   };
 
   private readonly listeners = new Set<Listener>();
@@ -84,6 +88,9 @@ export class EventState {
   private oprsRequest = 0;
 
   private readonly authoritativeTimers = new Map<string, number>();
+  private readonly statboticsRequests = new Map<string, number>();
+  private readonly statboticsSignatures = new Map<string, string>();
+  private readonly statboticsRefreshTimers = new Map<string, number>();
 
   constructor(eventKey: string) {
     this.eventKey = eventKey;
@@ -170,6 +177,8 @@ export class EventState {
     }
 
     this.authoritativeTimers.clear();
+    for (const timer of this.statboticsRefreshTimers.values()) window.clearTimeout(timer);
+    this.statboticsRefreshTimers.clear();
   }
 
   reloadAll() {
@@ -199,6 +208,74 @@ export class EventState {
   reloadOprs() {
     void this.loadOprs();
     this.resetAuthoritativeTimer("oprs");
+  }
+
+  private ensureStatboticsMatch(matchKey: string, resultSignature: string) {
+    const previousSignature = this.statboticsSignatures.get(matchKey);
+    this.statboticsSignatures.set(matchKey, resultSignature);
+
+    const resultIsFinal = resultSignature.startsWith("final:");
+    if (previousSignature === undefined) {
+      void this.fetchStatboticsMatch(matchKey, resultIsFinal);
+      return;
+    }
+
+    if (previousSignature === resultSignature) return;
+
+    if (resultIsFinal) {
+      const existingTimer = this.statboticsRefreshTimers.get(matchKey);
+      if (existingTimer !== undefined) window.clearTimeout(existingTimer);
+      const timer = window.setTimeout(() => {
+        this.statboticsRefreshTimers.delete(matchKey);
+        void this.fetchStatboticsMatch(matchKey, true);
+      }, STATBOTICS_RESULT_REFRESH_DELAY);
+      this.statboticsRefreshTimers.set(matchKey, timer);
+    } else {
+      void this.fetchStatboticsMatch(matchKey, false);
+    }
+  }
+
+  private async fetchStatboticsMatch(matchKey: string, refresh: boolean) {
+    const request = (this.statboticsRequests.get(matchKey) ?? 0) + 1;
+    this.statboticsRequests.set(matchKey, request);
+    this.update((current) => ({
+      ...current,
+      statboticsMatches: {
+        ...current.statboticsMatches,
+        [matchKey]: {
+          data: current.statboticsMatches[matchKey]?.data ?? null,
+          status: current.statboticsMatches[matchKey]?.data ? "ready" : "loading",
+        },
+      },
+    }));
+
+    try {
+      const endpoint = "/api/statbotics/match/" + encodeURIComponent(matchKey) +
+        (refresh ? "?refresh=1" : "");
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Statbotics request failed: ${response.status}`);
+      const data = await response.json() as StatboticsMatch;
+      if (this.stopped || this.statboticsRequests.get(matchKey) !== request) return;
+      this.update((current) => ({
+        ...current,
+        statboticsMatches: {
+          ...current.statboticsMatches,
+          [matchKey]: { data, status: "ready" },
+        },
+      }));
+    } catch {
+      if (this.stopped || this.statboticsRequests.get(matchKey) !== request) return;
+      this.update((current) => ({
+        ...current,
+        statboticsMatches: {
+          ...current.statboticsMatches,
+          [matchKey]: {
+            data: current.statboticsMatches[matchKey]?.data ?? null,
+            status: current.statboticsMatches[matchKey]?.data ? "ready" : "unavailable",
+          },
+        },
+      }));
+    }
   }
 
   private update(
@@ -323,12 +400,27 @@ export class EventState {
         return;
       }
 
+      const eventNextMatch = getNextMatch(matches);
+      const eventLastMatch = getLastMatch(matches);
       this.update((current) => ({
         ...current,
         matches,
-        eventNextMatch: getNextMatch(matches),
-        eventLastMatch: getLastMatch(matches),
+        eventNextMatch,
+        eventLastMatch,
       }));
+
+      // Statbotics match data is event-domain state. Keep predictions for the
+      // current and most recently completed matches warm for every View.
+      for (const match of [eventNextMatch, eventLastMatch]) {
+        if (!match) continue;
+        const resultPosted =
+          typeof match.alliances.red.score === "number" &&
+          match.alliances.red.score >= 0 &&
+          typeof match.alliances.blue.score === "number" &&
+          match.alliances.blue.score >= 0;
+        const signature = `${resultPosted ? "final" : "pending"}:${match.alliances.red.score}:${match.alliances.blue.score}:${match.actual_time ?? ""}`;
+        this.ensureStatboticsMatch(match.key, signature);
+      }
 
       this.scheduleMatchFallback();
     } catch (error) {
