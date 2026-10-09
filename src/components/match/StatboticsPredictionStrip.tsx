@@ -4,6 +4,7 @@ import type { TBAMatch } from "@/lib/tba/types";
 import StatboticsMatchPredictionBar from "./StatboticsMatchPredictionBar";
 import StatboticsMatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 import { useStatboticsMatch } from "@/lib/statbotics/useStatboticsMatch";
+import { matchShortName } from "@/lib/tba/formatters";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -40,9 +41,13 @@ export default function StatboticsPredictionStrip({
   return (
     <div className="flex h-[52px] min-w-0 flex-col overflow-hidden border-t border-white/10 bg-neutral-950/95">
       <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden px-1">
+        <div>
+          <h5 className="text-xs font-semibold text-white pr-2">Statbotics Prediction</h5>
+          <h5 className="text-xs font-medium text-white">{matchShortName(match)}</h5>
+        </div>
         <StatboticsMatchPredictionMetrics prediction={prediction} compact={true} />
       </div>
-      <div className="h-1 w-full shrink-0">
+      <div className="h-1 w-[95%] shrink-0 mx-auto">
         <StatboticsMatchPredictionBar prediction={prediction} status={status} compact={true} />
       </div>
     </div>
