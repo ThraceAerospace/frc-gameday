@@ -11,7 +11,7 @@ export type TileSurfaceState = {
   eventConfigs: Record<string, EventViewConfig>;
   /** Stable tile identity -> event key. Multiple tile types may reference one event. */
   tileEvents: Record<string, string>;
-  tileTypes: Record<string, "eventView" | "dataPanel">;
+  tileTypes: Record<string, "eventView">;
   streams: string[];
   priority: string[];
   layoutKey: LayoutKey | null;
@@ -41,22 +41,18 @@ export type UpcomingMatchAlert =
 
 export function createInitialTileSurfaceState(
   events: string[],
-  panels: string[] = [],
 ): TileSurfaceState {
   const eventKeys = [...new Set(events.filter(Boolean).map(String))];
-  const panelKeys = [...new Set(panels.filter(Boolean).map(String))];
-  const streams = [...eventKeys, ...panelKeys.map((eventKey) => `data:${eventKey}`)];
+  const streams = eventKeys;
   const eventConfigs = Object.fromEntries(
     eventKeys.map((eventKey) => [eventKey, createEventViewConfig()])
   );
-  const tileEvents = Object.fromEntries([
-    ...eventKeys.map((eventKey) => [eventKey, eventKey] as const),
-    ...panelKeys.map((eventKey) => [`data:${eventKey}`, eventKey] as const),
-  ]);
-  const tileTypes = Object.fromEntries([
-    ...eventKeys.map((eventKey) => [eventKey, "eventView" as const]),
-    ...panelKeys.map((eventKey) => [`data:${eventKey}`, "dataPanel" as const]),
-  ]);
+  const tileEvents = Object.fromEntries(
+    eventKeys.map((eventKey) => [eventKey, eventKey] as const),
+  );
+  const tileTypes = Object.fromEntries(
+    eventKeys.map((eventKey) => [eventKey, "eventView" as const]),
+  );
 
   return {
     eventConfigs,
