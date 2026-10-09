@@ -75,31 +75,17 @@ The current component organization reflects the post-refactor architecture. Do n
 
 Tile surfaces support both EventView tiles (`event=<eventKey>`) and data-panel tiles (`panel=<eventKey>`). Their stable tile IDs are separate from event keys, so an event can appear as both a live EventView and a performance panel at once.
 
-## EventView
+## EventView and EventState
 
-EventView owns event-level data and presentation:
+`EventView` presents event information, webcast selection, tracked-team context, and footer content. It consumes the shared per-event `EventState`; it does not own a separate event-data acquisition lifecycle.
 
-- event metadata;
-- teams and team statuses;
-- canonical event matches;
-- playoff alliances;
-- tracked teams;
-- webcast selection;
-- WebSocket lifecycle;
-- fallback refreshes;
-- event footer content.
+`EventState` owns the current event snapshot and its TBA/Statbotics acquisition and synchronization lifecycle, including WebSocket update handling, freshness, reconciliation, and fallback refreshes. Multiple Views and Surfaces for the same event consume the same EventState rather than creating duplicate fetch or polling paths.
 
-The specialized hooks remain separate:
+Specialized presentation/derivation hooks remain separate where applicable:
 
-- `useEvent` — event data.
-- `useMatches` — canonical matches and derived next/last matches.
-- `useTeams` — event teams.
-- `useTeamsStatuses` — event team statuses.
-- `usePlayoffAlliances` — playoff alliances.
 - `useTrackedMatches` — tracked-team match derivation.
 - `useStreamController` — webcast normalization and selection.
-- `useWebSocket` — WSS lifecycle and reconnect.
-- `usePolling` — fallback scheduling.
+
 
 ## Match data
 
