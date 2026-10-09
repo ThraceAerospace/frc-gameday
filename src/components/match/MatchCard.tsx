@@ -2,7 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance } from "@/lib/tba/formatters";
+import { formatAlliance, formatAllianceName, matchCode } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 type PlayoffAlliance = {
@@ -19,56 +19,6 @@ type MatchCardProps = {
   playoffType?: number | null;
   eventTimezone?: string;
 };
-
-function compactMatchName(
-  match: TBAMatch,
-  playoffType: number | null
-): string {
-  const level = match.comp_level.toLowerCase();
-  const number = match.match_number;
-  const set = match.set_number;
-
-  switch (level) {
-    case "qm":
-      return `Qual ${number}`;
-
-    case "ef":
-      return set != null ? `EF${set}-${number}` : `EF${number}`;
-
-    case "qf":
-      return set != null ? `QF${set}-${number}` : `QF${number}`;
-
-    case "sf":
-      switch (playoffType) {
-        case 10:
-            return `Playoff ${set ?? number}`;
-        case 11:
-          return `Playoff ${set ?? number}`;
-
-        case 4:
-          return `Round Robin ${number}`;
-
-        default:
-          return set != null
-            ? `SF${set}-${number}`
-            : `SF${number}`;
-      }
-
-    case "f":
-      return `Final ${number}`;
-
-    default:
-      return `${level.toUpperCase()}${number}`;
-  }
-}
-
-function getAllianceName(
-  alliance: PlayoffAlliance | null
-): string {
-  if (!alliance?.name) return "";
-
-  return `${alliance.name.replace("Alliance ", "A")} `;
-}
 
 export default function MatchCard({
   match,
@@ -116,7 +66,7 @@ export default function MatchCard({
         ? "bg-blue-950/50"
         : "bg-zinc-800/80";
 
-  const matchName = compactMatchName(match, playoffType);
+  const matchName = matchCode(match.key);
 
   const time =
     isNext && (match.predicted_time != null || match.time != null) ? (
@@ -175,7 +125,7 @@ export default function MatchCard({
             trackedRed ? "font-bold" : "font-medium",
           ].join(" ")}
         >
-          {getAllianceName(redAlliance)}
+          {formatAllianceName(redAlliance?.name)}
           {formatAlliance(red, team)}
         </div>
 
@@ -198,7 +148,7 @@ export default function MatchCard({
             trackedBlue ? "font-bold" : "font-medium",
           ].join(" ")}
         >
-          {getAllianceName(blueAlliance)}
+          {formatAllianceName(blueAlliance?.name)}
           {formatAlliance(blue, team)}
         </div>
 
