@@ -86,7 +86,7 @@ function compareFieldKeys(left: string, right: string): number {
   return leftParts.length - rightParts.length;
 }
 
-function getAllianceFields(breakdown: unknown): FieldRow[] {
+function getAllianceFields(\n  breakdown: unknown,\n  redScore: number,\n  blueScore: number,\n): FieldRow[] {
   if (!breakdown || typeof breakdown !== "object") return [];
   const sides = breakdown as Record<string, unknown>;
   const red = sides.red;
@@ -103,7 +103,7 @@ function getAllianceFields(breakdown: unknown): FieldRow[] {
     .sort(compareFieldKeys)
     .map((key) => ({
       key,
-      label: key.split(".").map(formatLabel).join(" · "),
+      label: key.split(".").slice(key.includes(".") ? 1 : 0).map(formatLabel).join(" · "),
       red: redFields.get(key),
       blue: blueFields.get(key),
     }));
@@ -185,7 +185,7 @@ export default function ScoreBreakdown({ match, year }: ScoreBreakdownProps) {
 
   if (!breakdown || !scoresPosted) return null;
 
-  const sections = groupFields(getAllianceFields(breakdown));
+  const sections = groupFields(getAllianceFields(breakdown, redScore, blueScore));
   if (sections.length === 0) return null;
 
   return (
