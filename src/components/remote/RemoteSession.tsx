@@ -261,7 +261,6 @@ export default function RemoteSession({
           peerStatus={peerStatus}
           eventStates={eventStates}
           displayMode={displayMode}
-          insightsEventKey={insightsEventKey}
           onDisplayModeChange={(mode) => {
             setDisplayMode(mode);
             peer.sendMessage({ type: "displayModeSnapshot", mode });
