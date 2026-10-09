@@ -26,7 +26,6 @@ export default function MatchCard({
   isNext = false,
   isLast = false,
   playoffAlliances = [],
-  playoffType = null,
   eventTimezone,
 }: MatchCardProps) {
   const red = match.alliances.red.team_keys;
