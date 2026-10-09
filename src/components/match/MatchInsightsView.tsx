@@ -5,6 +5,7 @@ import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
+import { useStatboticsMatch } from "@/lib/statbotics/useStatboticsMatch";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
 import MatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
@@ -184,8 +185,6 @@ export function MatchInsightsContent({
   const { event, eventNextMatch, eventLastMatch, loading, error, oprs } = snapshot;
   const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(matchOverride?.key ?? eventNextMatch?.key ?? eventLastMatch?.key ?? null);
   const [resultMatchKey, setResultMatchKey] = useState<string | null>(null);
-  const [statboticsData, setStatboticsData] = useState<JsonRecord | null>(null);
-  const [statboticsStatus, setStatboticsStatus] = useState<"loading" | "ready" | "unavailable">("loading");
   const currentDisplayedMatch = matchOverride?.key === displayMatchKey
     ? matchOverride
     : snapshot.matches.find((item) => item.key === displayMatchKey) ?? null;
@@ -239,33 +238,20 @@ export function MatchInsightsContent({
     (eventNextMatch?.key === displayMatchKey ? eventNextMatch : null) ??
     (eventLastMatch?.key === displayMatchKey ? eventLastMatch : null);
 
-  useEffect(() => {
-    if (!displayMatch?.key) {
-      setStatboticsData(null);
-      setStatboticsStatus("unavailable");
-      return;
-    }
-
-    const abort = new AbortController();
-    setStatboticsData(null);
-    setStatboticsStatus("loading");
-
-    fetch("/api/statbotics/match/" + encodeURIComponent(displayMatch.key), {
-      cache: "no-store",
-      signal: abort.signal,
-    }).then(async (response) => {
-      if (!response.ok) throw new Error("Statbotics prediction unavailable");
-      return await response.json() as JsonRecord;
-    }).then((payload) => {
-      if (abort.signal.aborted) return;
-      setStatboticsData(payload);
-      setStatboticsStatus("ready");
-    }).catch(() => {
-      if (!abort.signal.aborted) setStatboticsStatus("unavailable");
-    });
-
-    return () => abort.abort();
-  }, [displayMatch?.key]);
+  const resultPostedForDisplay = Boolean(
+    displayMatch &&
+    typeof displayMatch.alliances.red.score === "number" &&
+    displayMatch.alliances.red.score >= 0 &&
+    typeof displayMatch.alliances.blue.score === "number" &&
+    displayMatch.alliances.blue.score >= 0
+  );
+  const statboticsResultSignature = displayMatch
+    ? `${resultPostedForDisplay ? "final" : "pending"}:${displayMatch.alliances.red.score}:${displayMatch.alliances.blue.score}:${displayMatch.actual_time ?? ""}`
+    : null;
+  const { data: statboticsData, status: statboticsStatus } = useStatboticsMatch(
+    displayMatch?.key,
+    statboticsResultSignature,
+  );
 
   const isPostMatch = Boolean(
     displayMatch &&
