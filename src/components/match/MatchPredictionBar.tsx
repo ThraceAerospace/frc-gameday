@@ -6,6 +6,39 @@ function exactNumber(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
 }
 
+const PREDICTED_RP_FIELDS = [
+  ["energized_rp", "Energized RP"],
+  ["supercharged_rp", "Supercharged RP"],
+  ["traversal_rp", "Traversal RP"],
+] as const;
+
+function AlliancePredictionBox({
+  color,
+  prediction,
+}: {
+  color: "red" | "blue";
+  prediction: JsonRecord;
+}) {
+  const colorStyles = color === "red"
+    ? { border: "border-red-400/15", background: "bg-red-950/15", label: "text-red-300/60", value: "text-red-300" }
+    : { border: "border-blue-400/15", background: "bg-blue-950/15", label: "text-blue-300/60", value: "text-blue-300" };
+
+  return (
+    <div className={`rounded-lg border px-4 py-3 ${colorStyles.border} ${colorStyles.background}`}>
+      <div className={`text-[10px] font-semibold uppercase tracking-widest ${colorStyles.label}`}>{color} predicted score</div>
+      <div className={`mt-1 text-3xl font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_score"])}</div>
+      <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+        {PREDICTED_RP_FIELDS.map(([suffix, label]) => (
+          <div key={suffix} className="min-w-0">
+            <div className="truncate text-[9px] uppercase tracking-wider text-neutral-500">{label}</div>
+            <div className={`mt-0.5 font-mono text-xs font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_" + suffix])}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MatchPredictionBar({
   prediction,
   status,
@@ -14,49 +47,30 @@ export default function MatchPredictionBar({
   status: "loading" | "ready" | "unavailable";
 }) {
   const redWinProbability = prediction.red_win_prob;
-  if (typeof redWinProbability !== "number" || !Number.isFinite(redWinProbability)) {
-    return (
-      <section className="mb-4 rounded-xl p-4 sm:p-5">
-        <div className="mb-4 grid grid-cols-2 gap-4">
-          <div className="rounded-lg border border-red-400/15 bg-red-950/15 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-red-300/60">Red predicted score</div>
-            <div className="mt-1 text-3xl font-semibold tabular-nums text-red-300">{exactNumber(prediction.red_score)}</div>
-          </div>
-          <div className="rounded-lg border border-blue-400/15 bg-blue-950/15 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Blue predicted score</div>
-            <div className="mt-1 text-3xl font-semibold tabular-nums text-blue-300">{exactNumber(prediction.blue_score)}</div>
-          </div>
-        </div>
-        <p className="text-xs text-neutral-500">{status === "loading" ? "Loading win probability…" : "Win probability unavailable."}</p>
-      </section>
-    );
-  }
-
-  const redPercent = redWinProbability * 100;
-  const bluePercent = (1 - redWinProbability) * 100;
-  const redWidth = Math.max(0, Math.min(1, redWinProbability)) * 100;
+  const hasProbability = typeof redWinProbability === "number" && Number.isFinite(redWinProbability);
+  const redPercent = hasProbability ? redWinProbability * 100 : null;
+  const bluePercent = hasProbability ? (1 - redWinProbability) * 100 : null;
+  const redWidth = hasProbability ? Math.max(0, Math.min(1, redWinProbability)) * 100 : 50;
 
   return (
     <section className="mb-4 rounded-xl p-4 sm:p-5">
-      <div className="mb-4 grid grid-cols-2 gap-4">
-        <div className="rounded-lg border border-red-400/15 bg-red-950/15 px-4 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-red-300/60">Red predicted score</div>
-          <div className="mt-1 text-3xl font-semibold tabular-nums text-red-300">{exactNumber(prediction.red_score)}</div>
-        </div>
-        <div className="rounded-lg border border-blue-400/15 bg-blue-950/15 px-4 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Blue predicted score</div>
-          <div className="mt-1 text-3xl font-semibold tabular-nums text-blue-300">{exactNumber(prediction.blue_score)}</div>
-        </div>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <AlliancePredictionBox color="red" prediction={prediction} />
+        <AlliancePredictionBox color="blue" prediction={prediction} />
       </div>
-      <div>
-        <div className="mb-2 flex justify-between text-xs">
-          <span className="font-semibold text-red-300">Red {String(redPercent)}%</span>
-          <span className="font-semibold text-blue-300">Blue {String(bluePercent)}%</span>
+      {hasProbability ? (
+        <div>
+          <div className="mb-2 flex justify-between text-xs">
+            <span className="font-semibold text-red-300">Red {String(redPercent)}%</span>
+            <span className="font-semibold text-blue-300">Blue {String(bluePercent)}%</span>
+          </div>
+          <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
+            <div className="h-full bg-red-500 transition-[width]" style={{ width: String(redWidth) + "%" }} />
+          </div>
         </div>
-        <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
-          <div className="h-full bg-red-500 transition-[width]" style={{ width: String(redWidth) + "%" }} />
-        </div>
-      </div>
+      ) : (
+        <p className="text-xs text-neutral-500">{status === "loading" ? "Loading win probability…" : "Win probability unavailable."}</p>
+      )}
     </section>
   );
 }
