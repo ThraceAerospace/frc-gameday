@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TBAEliminationAlliance, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
-import TeamMatch from "./TeamMatch";
+import MatchRow from "@/components/matches/MatchRow";
 
 export default function TeamEventMatches({
   event,
@@ -38,9 +38,10 @@ export default function TeamEventMatches({
         <div className="px-4 py-3 text-sm text-slate-500">No matches.</div>
       ) : (
         matches.map((match) => (
-          <TeamMatch
+          <MatchRow
             key={match.key}
-            event={event}
+            eventKey={event.key}
+            playoffType={event.playoff_type ?? null}
             match={match}
             highlightedTeamKeys={highlightedTeamKeys}
             playoffAlliances={playoffAlliances}
