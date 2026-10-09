@@ -30,7 +30,6 @@ export type TileSurfaceActions = {
   closeEventPicker(): void;
   setEventSearch(search: string): void;
   addEvent(event: TBAEvent): void;
-  addDataPanel(eventKey: string): void;
   removeEvent(tileId: string): void;
 
   registerLabel(eventKey: string, label: string): void;
