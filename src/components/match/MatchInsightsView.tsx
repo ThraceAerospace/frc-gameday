@@ -5,8 +5,8 @@ import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
-import MatchPredictionBar from "./MatchPredictionBar";
-import MatchPredictionMetrics from "./MatchPredictionMetrics";
+import MatchPredictionBar from "./StatboticsMatchPredictionBar";
+import MatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
 type AllianceColor = "red" | "blue";
 type JsonRecord = Record<string, unknown>;
