@@ -5,10 +5,12 @@ import type { TBAMatch } from "@/lib/tba/types";
 
 type NextMatchCountdownProps = {
   nextMatch: TBAMatch;
+  eventTimezone?: string | null;
 };
 
 export default function NextMatchCountdown({
   nextMatch,
+  eventTimezone,
 }: NextMatchCountdownProps) {
   const [, setNow] = useState(() => Date.now());
 
@@ -45,12 +47,13 @@ export default function NextMatchCountdown({
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
+        timeZone: eventTimezone ?? undefined,
       })
-    : seconds < 60
+    : "~" + (seconds < 60
       ? `${seconds}s`
       : seconds < 3600
         ? `${Math.ceil(seconds / 60)}m`
-        : `${Math.ceil(seconds / 3600)}h`;
+        : `${Math.ceil(seconds / 3600)}h`);
 
-  return <span className="tabular-nums">~{text}</span>;
+  return <span className="tabular-nums">{text}</span>;
 }

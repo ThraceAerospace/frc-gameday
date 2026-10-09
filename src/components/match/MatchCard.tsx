@@ -69,7 +69,7 @@ export default function MatchCard({
 
   const time =
     isNext && (match.predicted_time != null || match.time != null) ? (
-      <NextMatchCountdown nextMatch={match} />
+      <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
     ) : match.actual_time != null ? (
       formatMatchEventTime(match.actual_time, eventTimezone)
     ) : match.predicted_time != null ? (
