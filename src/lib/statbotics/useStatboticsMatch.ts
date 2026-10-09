@@ -33,7 +33,14 @@ export function useStatboticsMatch(
     let active = true;
     setState({ data: null, status: "loading" });
 
-    fetch("/api/statbotics/match/" + encodeURIComponent(matchKey), {
+    // A match already known to be final is an on-demand historical lookup;
+    // ask the shared service to refresh its cached record once, subject to its
+    // distributed refresh cooldown. Live transitions are handled by the delay below.
+    const refreshOnLoad = resultSignature?.startsWith("final:") === true;
+    const endpoint = "/api/statbotics/match/" + encodeURIComponent(matchKey) +
+      (refreshOnLoad ? "?refresh=1" : "");
+
+    fetch(endpoint, {
       cache: "no-store",
       signal: abort.signal,
     })
