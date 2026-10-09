@@ -241,4 +241,6 @@ Architecture boundaries:
 - `EventInsightsSurface` hosts the Insights experience for one supplied event key and subscribes to shared `EventState`.
 - `EventInsightView` renders the match insight presentation; it does not fetch event or Statbotics data.
 - `EventState` owns TBA and Statbotics match acquisition and refresh behavior. Remote displays receive these snapshots from the controller and do not start duplicate acquisition.
-- Numeric Statbotics values are rendered from the API response without application-side rounding, truncation, or derived alliance totals.
+- Statbotics fields are accessed directly from the typed API response. The underlying data is not modified; displayed metrics are formatted to at most one decimal place for readability.
+- The Insights alliance row sums each team’s OPR, DPR, CCWM, EPA, Auto EPA, Teleop EPA, and Endgame EPA. A total is shown only when all three team values for that metric are available.
+- When TBA has posted match scores and a score breakdown, the official, year-specific breakdown is shown below the alliance tables. The year comes from Statbotics match data when available, falling back to the year prefix in the TBA match key.
