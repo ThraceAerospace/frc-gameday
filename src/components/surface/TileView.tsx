@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type R
 import type { TBAMatch } from "@/lib/tba/types";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
-import EventDataPanel from "@/components/eventdata/EventDataPanel";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
 import { useEventState } from "@/lib/events";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
@@ -181,7 +180,7 @@ export default function TileView({
 
   return (
     <main className={`relative min-h-0 flex-1 ${className}`}>
-      {state.streams.filter((tileId) => state.tileTypes[tileId] !== "dataPanel").map((tileId) => {
+      {state.streams.map((tileId) => {
         const eventKey = state.tileEvents[tileId] ?? tileId;
         return (
           <SurfaceUpcomingMatchAlertSource
@@ -193,7 +192,7 @@ export default function TileView({
         );
       })}
 
-      {upcomingAlert && state.streams.some((tileId) => state.tileTypes[tileId] !== "dataPanel" && state.tileEvents[tileId] === upcomingAlert.eventKey) && (
+      {upcomingAlert && state.streams.some((tileId) => state.tileEvents[tileId] === upcomingAlert.eventKey) && (
         <ImminentMatchBanner
           key={upcomingAlert.eventKey + ":" + upcomingAlert.match.key}
           match={upcomingAlert.match}
@@ -248,9 +247,7 @@ export default function TileView({
               aria-hidden="true"
             />
 
-            {tileType === "dataPanel" ? (
-              <EventDataPanel eventKey={eventKey} />
-            ) : renderEventView ? (
+            {renderEventView ? (
               renderEventView({
                 eventKey,
                 controller,
