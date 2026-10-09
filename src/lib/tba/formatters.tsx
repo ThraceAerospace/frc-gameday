@@ -36,19 +36,33 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
     const setNum = match.set_number;
-    // console.log("matchShortName", {compLevel, matchNum, setNum, eventPlayoffType});
     switch (compLevel.toUpperCase()) {
       case "F":
+        if (matchNum > 3) {
+          return `Overtime ${matchNum - 3}`;
+        }
         return `Final ${matchNum}`;
       case "SF":
         if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          if ([1, 2, 3, 4, 7, 8, 11].includes(setNum)) {
-            return `Playoff ${setNum} [UB]`;
-          } else if ([5, 6, 9, 10, 12, 13].includes(setNum)) {
-            return `Playoff ${setNum} [LB]`;
-          } else {
-            return `Playoff ${setNum}`;
-          }
+          const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
+            ? "Upper"
+            : [5, 6, 9, 10, 12, 13].includes(setNum)
+              ? "Lower"
+              : null;
+          const round = setNum <= 4
+            ? 1
+            : setNum <= 8
+              ? 2
+              : setNum <= 10
+                ? 3
+                : setNum <= 12
+                  ? 4
+                  : setNum === 13
+                    ? 5
+                    : null;
+          return bracket && round
+            ? `${bracket} Bracket - Round ${round} - Match ${setNum}`
+            : `Playoff ${setNum}`;
         } else if (eventPlayoffType === 5) {
           return `Playoff ${setNum}`;
         } else {
@@ -60,6 +74,8 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
         return `Eighthfinal ${setNum} Match ${matchNum}`;
       case "QM":
          return `Qualification ${matchNum}`;
+      case "PM":
+        return `Practice ${matchNum}`;
       default:
         return `Match ${matchNum}`;
     }
@@ -78,16 +94,8 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
       case "F":
         return `Final ${matchNum}`;
       case "SF":
-        if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          if ([1, 2, 3, 4, 7, 8, 11].includes(setNum)) {
-            return `Playoff ${setNum} [UB]`;
-          } else if ([5, 6, 9, 10, 12, 13].includes(setNum)) {
-            return `Playoff ${setNum} [LB]`;
-          } else {
+        if (eventPlayoffType === 10 || eventPlayoffType === 11 || eventPlayoffType === 5) {
             return `Playoff ${setNum}`;
-          }
-        } else if (eventPlayoffType === 5) {
-          return `Playoff ${setNum}`;
         } else {
           return `Semis ${setNum}-${matchNum}`;
         }
