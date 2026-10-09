@@ -30,7 +30,6 @@ function allianceLabel(
 
 function matchLabel(
   match: TBAMatch | null | undefined,
-  playoffType: number | null,
 ) {
   if (!match) {
     return null;
@@ -44,7 +43,6 @@ export default function TeamPill({
   status,
   nextMatch,
   playoffAlliances = [],
-  playoffType = null,
 }: {
   team: string;
   status: TBATeamEventStatus | null | undefined;
@@ -54,10 +52,6 @@ export default function TeamPill({
 }) {
   const record = status?.qual?.ranking?.record;
   const teamNumber = formatTeamNumber(team);
-
-  const wins = record?.wins ?? 0;
-  const losses = record?.losses ?? 0;
-  const ties = record?.ties ?? 0;
 
   const recordLabel = formatRecord(record);
 
@@ -72,10 +66,7 @@ export default function TeamPill({
       ? `#${status.qual.ranking.rank}`
       : "—";
 
-  const nextMatchLabel = matchLabel(
-    nextMatch,
-    playoffType,
-  );
+  const nextMatchLabel = matchLabel(nextMatch);
 
   return (
     <div className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-neutral-950/90 px-2 shadow-lg backdrop-blur">
