@@ -241,9 +241,7 @@ export class RemotePeer {
         const message = JSON.parse(String(event.data)) as RemoteSessionMessage;
 
         if (message.type === "action") {
-          if (this.options.role === "display") {
-            this.options.onAction?.(message.action);
-          }
+          this.options.onAction?.(message.action);
           return;
         }
 
