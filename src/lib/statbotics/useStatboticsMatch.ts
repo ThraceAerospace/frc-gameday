@@ -22,6 +22,11 @@ export function useStatboticsMatch(
     matchKey: string | null;
     signature: string | null;
   }>({ matchKey: null, signature: null });
+  const resultSignatureRef = useRef(resultSignature);
+
+  useEffect(() => {
+    resultSignatureRef.current = resultSignature;
+  }, [resultSignature]);
 
   useEffect(() => {
     if (!matchKey) {
@@ -36,7 +41,7 @@ export function useStatboticsMatch(
     // A match already known to be final is an on-demand historical lookup;
     // ask the shared service to refresh its cached record once, subject to its
     // distributed refresh cooldown. Live transitions are handled by the delay below.
-    const refreshOnLoad = resultSignature?.startsWith("final:") === true;
+    const refreshOnLoad = resultSignatureRef.current?.startsWith("final:") === true;
     const endpoint = "/api/statbotics/match/" + encodeURIComponent(matchKey) +
       (refreshOnLoad ? "?refresh=1" : "");
 
