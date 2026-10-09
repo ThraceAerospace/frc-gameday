@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TBA } from "@/lib/tba/service";
 import SiteShell from "@/components/navigation/SiteShell";
+import { formatTeamNumber } from "@/lib/tba/formatters";
 
 export default async function TeamsPage() {
   const year = new Date().getFullYear();
@@ -31,7 +32,7 @@ export default async function TeamsPage() {
               className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40"
             >
               <p className="font-mono text-lg font-bold text-slate-900">
-                {team.key.replace(/^frc/, "")}
+                {formatTeamNumber(team.key)}
               </p>
               <p className="mt-1 truncate text-sm font-semibold text-slate-700">
                 {team.nickname || team.name || "Team"}
