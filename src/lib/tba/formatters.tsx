@@ -177,3 +177,25 @@ export function formatPlayoffLevel(
   if (playoffType === 10) return status.double_elim_round ?? "—";
   return status.level ?? "—";
 }
+
+
+/** Human-readable name for a TBA competition level. */
+export function formatMatchType(compLevel: string | null | undefined): string {
+  switch (compLevel?.toLowerCase()) {
+    case "qm": return "Qualification Match";
+    case "ef": return "Eighthfinal Match";
+    case "qf": return "Quarterfinal Match";
+    case "sf": return "Semifinal Match";
+    case "f": return "Final Match";
+    default: return "Competition Match";
+  }
+}
+
+/** Local-time display used by the event schedule, with a consistent missing-time label. */
+export function formatMatchTime(timestampSeconds: number | null | undefined): string {
+  if (timestampSeconds == null) return "—";
+  return new Date(timestampSeconds * 1000).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
