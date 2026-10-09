@@ -30,6 +30,7 @@ type Props = {
   onStatus?: (status: RemotePeerStatus) => void;
   onSignalingStatus?: (status: RemoteSignalingStatus) => void;
   hidden?: boolean;
+  controller?: TileSurfaceController;
 };
 
 export default function RemoteSession({
@@ -39,8 +40,9 @@ export default function RemoteSession({
   onStatus,
   onSignalingStatus,
   hidden = false,
+  controller: sharedController,
 }: Props) {
-  const localController = useTileSurfaceController({ events });
+  const localController = useTileSurfaceController({ events, controller: sharedController });
   const localControllerRef = useRef(localController);
   localControllerRef.current = localController;
   const peerRef = useRef<RemotePeer | null>(null);
@@ -53,6 +55,51 @@ export default function RemoteSession({
   displayModeRef.current = displayMode;
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
+  const sendControllerState = useMemo(
+    () => (includeEventStates = false) => {
+      if (role !== "controller") return;
+      const state = localControllerRef.current.getState();
+      const {
+        eventPickerOpen,
+        eventSearch,
+        availableEvents,
+        eventsLoading,
+        controlsVisible,
+        priorityEditKey,
+        ...surfaceState
+      } = state;
+      void eventPickerOpen;
+      void eventSearch;
+      void availableEvents;
+      void eventsLoading;
+      void controlsVisible;
+      void priorityEditKey;
+      const snapshot: RemoteSurfaceState = {
+        ...surfaceState,
+        eventConfigs: Object.fromEntries(
+          Object.entries(surfaceState.eventConfigs).map(([eventKey, config]) => [
+            eventKey,
+            { ...config, command: null },
+          ]),
+        ),
+      };
+      peerRef.current?.sendMessage({ type: "stateSnapshot", state: snapshot });
+      peerRef.current?.sendMessage({
+        type: "displayModeSnapshot",
+        mode: displayModeRef.current,
+      });
+      if (includeEventStates) {
+        for (const [eventKey, eventState] of Object.entries(eventStatesRef.current)) {
+          peerRef.current?.sendMessage({
+            type: "eventStateSnapshot",
+            eventKey,
+            state: eventState,
+          });
+        }
+      }
+    },
+    [role],
+  );
 
   const surfaceState = useSyncExternalStore(
     localController.subscribe,
@@ -63,6 +110,9 @@ export default function RemoteSession({
   const handleStatus = (status: RemotePeerStatus) => {
     setPeerStatus(status);
     onStatus?.(status);
+    if (status === "connected" && role === "controller") {
+      sendControllerState(true);
+    }
   };
 
   const [peer] = useState(
@@ -73,27 +123,9 @@ export default function RemoteSession({
         onStatus: handleStatus,
         onSignalingStatus,
         onAction: (action) => {
-          if (role === "display") {
-            applyRemoteSessionAction(localControllerRef.current, action);
-          }
+          applyRemoteSessionAction(localControllerRef.current, action);
         },
         onMessage: (message: RemoteSessionMessage) => {
-          if (message.type === "requestState" && role === "display") {
-            sendDisplayState();
-            peerRef.current?.sendMessage({
-              type: "displayModeSnapshot",
-              mode: displayModeRef.current,
-            });
-            for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
-              peerRef.current?.sendMessage({
-                type: "eventStateSnapshot",
-                eventKey,
-                state,
-              });
-            }
-            return;
-          }
-
           if (message.type === "displayModeSnapshot") {
             setDisplayMode(message.mode);
             return;
@@ -111,9 +143,8 @@ export default function RemoteSession({
             return;
           }
 
-          if (message.type === "stateSnapshot" && role === "controller") {
+          if (message.type === "stateSnapshot" && role === "display") {
             const current = localControllerRef.current.getState();
-
             localControllerRef.current.replaceState({
               ...message.state,
               eventPickerOpen: current.eventPickerOpen,
@@ -123,16 +154,6 @@ export default function RemoteSession({
               controlsVisible: current.controlsVisible,
               priorityEditKey: current.priorityEditKey,
             });
-
-            // The display reports its authoritative surface config on every
-            // connection. Follow it with the controller's current domain snapshots.
-            for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
-              peerRef.current?.sendMessage({
-                type: "eventStateSnapshot",
-                eventKey,
-                state,
-              });
-            }
           }
         },
       }),
@@ -190,46 +211,7 @@ export default function RemoteSession({
     eventSubscriptionsRef.current.clear();
   }, []);
 
-  const sendDisplayState = useMemo(
-    () => () => {
-      if (role !== "display") return;
 
-      const state = localControllerRef.current.getState();
-
-      const {
-        eventPickerOpen,
-        eventSearch,
-        availableEvents,
-        eventsLoading,
-        controlsVisible,
-        priorityEditKey,
-        ...surfaceState
-      } = state;
-
-      void eventPickerOpen;
-      void eventSearch;
-      void availableEvents;
-      void eventsLoading;
-      void controlsVisible;
-      void priorityEditKey;
-
-      const snapshot: RemoteSurfaceState = {
-        ...surfaceState,
-        eventConfigs: Object.fromEntries(
-          Object.entries(surfaceState.eventConfigs).map(([eventKey, config]) => [
-            eventKey,
-            { ...config, command: null },
-          ]),
-        ),
-      };
-
-      peerRef.current?.sendMessage({
-        type: "stateSnapshot",
-        state: snapshot,
-      });
-    },
-    [role],
-  );
 
   useEffect(() => {
     peer.start();
@@ -237,22 +219,18 @@ export default function RemoteSession({
   }, [peer]);
 
   useEffect(() => {
-    if (role !== "display") return;
-
-    return localController.subscribe(() => {
-      sendDisplayState();
-    });
-  }, [localController, role, sendDisplayState]);
+    if (role !== "controller") return;
+    return localController.subscribe(() => sendControllerState());
+  }, [localController, role, sendControllerState]);
 
   const controller = useMemo<TileSurfaceController>(() => ({
     getState: localController.getState,
     replaceState: localController.replaceState,
     subscribe: localController.subscribe,
-    actions: createRemoteSessionActions(
-      localController,
-      (action) => peer.sendAction(action),
-    ),
-  }), [localController, peer]);
+    actions: role === "display"
+      ? createRemoteSessionActions(localController, (action) => peer.sendAction(action))
+      : localController.actions,
+  }), [localController, peer, role]);
 
   if (role === "controller") {
     return (
