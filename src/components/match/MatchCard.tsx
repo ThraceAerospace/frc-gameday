@@ -98,19 +98,14 @@ export default function MatchCard({
       <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
         {/* Match name */}
         <div className="row-span-2 flex h-full flex-col justify-center">
-          <button
-            type="button"
-            onClick={onOpenInsights}
-            disabled={!onOpenInsights}
-            title={onOpenInsights ? "Open Match Insights for this event" : undefined}
+          <span
             className={[
-              "text-left text-[10px] font-bold uppercase tracking-wide",
+              "text-[10px] font-bold uppercase tracking-wide",
               isNext ? "text-white" : "text-zinc-300",
-              onOpenInsights ? "cursor-pointer hover:text-amber-200 focus-visible:outline-none focus-visible:text-amber-200" : "cursor-default",
             ].join(" ")}
           >
             {matchName}
-          </button>
+          </span>
 
           <span
             className={[
