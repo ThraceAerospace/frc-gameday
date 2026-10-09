@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
@@ -92,9 +92,59 @@ export function MatchInsightsContent({
   trackedTeams?: string[];
 }) {
   const { event, eventNextMatch, eventLastMatch, loading, error, oprs } = snapshot;
-  const match = eventNextMatch;
-  const isPostMatch = Boolean(!match && eventLastMatch && eventLastMatch.alliances.red.score >= 0 && eventLastMatch.alliances.blue.score >= 0);
-  const displayMatch = match ?? (isPostMatch ? eventLastMatch : null);
+  const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(eventNextMatch?.key ?? eventLastMatch?.key ?? null);
+  const [resultMatchKey, setResultMatchKey] = useState<string | null>(null);
+  const currentDisplayedMatch = snapshot.matches.find((item) => item.key === displayMatchKey) ?? null;
+  const currentResultPosted = Boolean(
+    currentDisplayedMatch &&
+    typeof currentDisplayedMatch.alliances.red.score === "number" &&
+    currentDisplayedMatch.alliances.red.score >= 0 &&
+    typeof currentDisplayedMatch.alliances.blue.score === "number" &&
+    currentDisplayedMatch.alliances.blue.score >= 0
+  );
+
+  useEffect(() => {
+    const nextMatch = snapshot.eventNextMatch;
+    if (!nextMatch) {
+      if (snapshot.eventLastMatch) {
+        setDisplayMatchKey(snapshot.eventLastMatch.key);
+        if (currentResultPosted) setResultMatchKey(snapshot.eventLastMatch.key);
+      }
+      return;
+    }
+
+    if (!displayMatchKey) {
+      setDisplayMatchKey(nextMatch.key);
+      return;
+    }
+
+    if (displayMatchKey === nextMatch.key) return;
+
+    if (currentResultPosted) {
+      setResultMatchKey(displayMatchKey);
+      const timeout = window.setTimeout(() => {
+        setDisplayMatchKey(nextMatch.key);
+        setResultMatchKey(null);
+      }, 5000);
+      return () => window.clearTimeout(timeout);
+    }
+
+    setDisplayMatchKey(nextMatch.key);
+    setResultMatchKey(null);
+  }, [snapshot.eventNextMatch?.key, snapshot.eventLastMatch?.key, displayMatchKey, currentResultPosted]);
+
+  const displayMatch =
+    snapshot.matches.find((item) => item.key === displayMatchKey) ??
+    (eventNextMatch?.key === displayMatchKey ? eventNextMatch : null) ??
+    (eventLastMatch?.key === displayMatchKey ? eventLastMatch : null);
+  const isPostMatch = Boolean(
+    displayMatch &&
+    typeof displayMatch.alliances.red.score === "number" &&
+    displayMatch.alliances.red.score >= 0 &&
+    typeof displayMatch.alliances.blue.score === "number" &&
+    displayMatch.alliances.blue.score >= 0
+  );
+  const isShowingTransitionResult = Boolean(resultMatchKey && resultMatchKey === displayMatch?.key);
   const eventTitle = event?.short_name || event?.name || eventKey;
 
   const statistics = useMemo(() => {
@@ -129,7 +179,7 @@ export function MatchInsightsContent({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
-          {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">Official result available</div> : null}
+          {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} />
             <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} />
