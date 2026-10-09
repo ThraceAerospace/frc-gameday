@@ -30,43 +30,11 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
-function sumExact(values: number[]): string {
-  const strings = values.map(String);
-  if (strings.some((value) => /[eE]/.test(value))) {
-    return String(values.reduce((sum, value) => sum + value, 0));
-  }
-
-  const precision = Math.max(0, ...strings.map((value) => value.split(".")[1]?.length ?? 0));
-  const scale = 10 ** precision;
-  const total = strings.reduce((sum, value) => sum + Math.round(Number(value) * scale), 0);
-  if (!Number.isSafeInteger(total)) {
-    return String(values.reduce((sum, value) => sum + value, 0));
-  }
-
-  const negative = total < 0;
-  const absolute = Math.abs(total);
-  const whole = Math.floor(absolute / scale);
-  const remainder = absolute % scale;
-  if (remainder === 0) return (negative ? "-" : "") + String(whole);
-  const fraction = String(remainder).padStart(precision, "0").replace(/0+$/, "");
-  return (negative ? "-" : "") + String(whole) + "." + fraction;
-}
-
 const PRE_EPA_FIELDS = [
   ["epa", "EPA"],
   ["auto_epa", "Auto EPA"],
   ["teleop_epa", "Teleop EPA"],
   ["endgame_epa", "Endgame EPA"],
-] as const;
-
-const ALLIANCE_METRICS = [
-  { key: "opr", label: "OPR" },
-  { key: "dpr", label: "DPR" },
-  { key: "ccwm", label: "CCWM" },
-  { key: "epa", label: "EPA" },
-  { key: "auto_epa", label: "Auto" },
-  { key: "teleop_epa", label: "Teleop" },
-  { key: "endgame_epa", label: "Endgame" },
 ] as const;
 
 function AllianceCard({
@@ -95,35 +63,14 @@ function AllianceCard({
     ? { border: "border-red-400/30", header: "border-red-400/20", text: "text-red-300", tint: "bg-red-950/20", sticky: "bg-[#1a0b0d]" }
     : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[#091321]" };
 
-  const totals = useMemo(() => {
-    const values: Record<string, string | undefined> = {};
-    for (const metric of ALLIANCE_METRICS) {
-      const teamValues = allianceTeams.map((teamKey) => {
-        const team = estimates[teamKey];
-        if (metric.key === "opr" || metric.key === "dpr" || metric.key === "ccwm") {
-          return team?.[metric.key];
-        }
-        return team?.preEpa?.[metric.key] as number | undefined;
-      });
-      values[metric.key] = teamValues.length > 0 && teamValues.every((value) => typeof value === "number" && Number.isFinite(value))
-        ? sumExact(teamValues as number[])
-        : undefined;
-    }
-    return values;
-  }, [allianceTeams, estimates]);
+
 
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
       <header className={`border-b px-4 py-3 ${colorClasses.header}`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {ALLIANCE_METRICS.map((metric) => (
-              <span key={metric.key} className="whitespace-nowrap text-[15px] text-neutral-400">
-                {metric.label}: <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
-              </span>
-            ))}
-          </div>
+          <span className="text-xs text-neutral-500">Team performance estimates</span>
           <span className="ml-auto text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
         </div>
       </header>
