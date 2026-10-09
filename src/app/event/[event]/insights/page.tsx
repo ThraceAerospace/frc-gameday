@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import MatchInsightsView from "@/components/match/MatchInsightsView";
+import EventInsightsSurface from "@/components/surface/EventInsightsSurface";
 
 export default function MatchInsightsPage({
   params,
@@ -9,10 +9,5 @@ export default function MatchInsightsPage({
   params: Promise<{ event: string }>;
 }) {
   const { event } = use(params);
-
-  return (
-    <main className="h-screen overflow-hidden bg-black text-white">
-      <MatchInsightsView eventKey={event} />
-    </main>
-  );
+  return <EventInsightsSurface eventKey={event} />;
 }
