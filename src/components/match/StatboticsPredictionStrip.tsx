@@ -49,7 +49,7 @@ export default function StatboticsPredictionStrip({
       <div className="h-1 w-full shrink-0">
         <StatboticsMatchPredictionBar prediction={prediction} status={status} compact={true} />
       </div>
-      <div className="flex min-h-0 min-w-max flex-1 items-center gap-1.5 overflow-hidden px-2">
+      <div className="flex min-h-0 min-w-max flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden px-2 no-scrollbar">
         <MatchCard
           match={match}
           team={team}
