@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatTeamNumber, matchLongName, matchShortName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
+import MatchPredictionBar from "./MatchPredictionBar";
 
 type AllianceColor = "red" | "blue";
 type JsonRecord = Record<string, unknown>;
@@ -29,13 +30,21 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
-
-
 const PRE_EPA_FIELDS = [
   ["epa", "EPA"],
   ["auto_epa", "Auto EPA"],
   ["teleop_epa", "Teleop EPA"],
   ["endgame_epa", "Endgame EPA"],
+] as const;
+
+const ALLIANCE_METRICS = [
+  { key: "opr", label: "OPR" },
+  { key: "dpr", label: "DPR" },
+  { key: "ccwm", label: "CCWM" },
+  { key: "epa", label: "EPA" },
+  { key: "auto_epa", label: "Auto" },
+  { key: "teleop_epa", label: "Teleop" },
+  { key: "endgame_epa", label: "Endgame" },
 ] as const;
 
 function AllianceCard({
@@ -44,14 +53,17 @@ function AllianceCard({
   snapshot,
   trackedTeams,
   estimates,
+  prediction,
 }: {
   color: AllianceColor;
   match: TBAMatch;
   snapshot: EventStateSnapshot;
   trackedTeams: string[];
   estimates: Record<string, TeamEstimates>;
+  prediction: JsonRecord;
 }) {
   const alliance = match.alliances[color];
+  const allianceTeams = alliance.team_keys ?? [];
   const teamNames = useMemo(
     () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
     [snapshot.teams],
@@ -59,18 +71,67 @@ function AllianceCard({
   const scorePosted = typeof alliance.score === "number" && alliance.score >= 0;
   const winner = match.winning_alliance === color;
   const tied = match.winning_alliance === "";
+  const colorClasses = color === "red"
+    ? { border: "border-red-400/30", header: "border-red-400/20", text: "text-red-300", tint: "bg-red-950/20", sticky: "bg-[#1a0b0d]" }
+    : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[#091321]" };
+
+  const totals = useMemo(() => {
+    const values: Record<string, number | undefined> = {};
+    for (const metric of ALLIANCE_METRICS) {
+      const teamValues = allianceTeams.map((teamKey) => {
+        const team = estimates[teamKey];
+        if (metric.key === "opr" || metric.key === "dpr" || metric.key === "ccwm") {
+          return team?.[metric.key];
+        }
+        return team?.preEpa?.[metric.key] as number | undefined;
+      });
+      values[metric.key] = teamValues.length > 0 && teamValues.every((value) => typeof value === "number" && Number.isFinite(value))
+        ? teamValues.reduce((sum, value) => sum + (value as number), 0)
+        : undefined;
+    }
+    return values;
+  }, [allianceTeams, estimates]);
+
+  const predictedScore = prediction[color + "_score"];
+  const predictedRpFields = [
+    ["energized_rp", "Energized RP"],
+    ["supercharged_rp", "Supercharged RP"],
+    ["traversal_rp", "Traversal RP"],
+  ] as const;
 
   return (
-    <section className={`min-w-0 overflow-hidden rounded-2xl border ${color === "red" ? "border-red-400/30 bg-red-950/20" : "border-blue-400/30 bg-blue-950/20"}`}>
-      <header className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${color === "red" ? "border-red-400/20" : "border-blue-400/20"}`}>
-        <span className={`text-xs font-bold uppercase tracking-[0.18em] ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</span>
-        <span className="text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
+    <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
+      <header className={`border-b px-4 py-3 ${colorClasses.header}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
+            <span className={`text-2xl font-semibold tabular-nums ${colorClasses.text}`}>{exactNumber(predictedScore)}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Predicted score</span>
+          </div>
+          <span className="text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+          {predictedRpFields.map(([suffix, label]) => (
+            <div key={suffix} className="flex items-baseline gap-1.5">
+              <span className="text-[9px] uppercase tracking-wider text-neutral-500">Pred. {label}</span>
+              <span className={`font-mono text-xs font-semibold tabular-nums ${colorClasses.text}`}>{exactNumber(prediction[color + "_" + suffix])}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Alliance total</span>
+          {ALLIANCE_METRICS.map((metric) => (
+            <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
+              {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{exactNumber(totals[metric.key])}</strong>
+            </span>
+          ))}
+        </div>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max border-collapse text-left text-xs">
           <thead className="bg-black/20 text-[10px] uppercase tracking-wider text-neutral-500">
             <tr>
-              <th className={`sticky left-0 z-10 px-3 py-2`}>Team</th>
+              <th className="sticky left-0 z-10 bg-neutral-950/95 px-3 py-2">Team</th>
               <th className="px-2 py-2 text-right">OPR</th>
               <th className="px-2 py-2 text-right">DPR</th>
               <th className="px-2 py-2 text-right">CCWM</th>
@@ -78,20 +139,20 @@ function AllianceCard({
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {(alliance.team_keys ?? []).map((teamKey) => {
+            {allianceTeams.map((teamKey) => {
               const tracked = trackedTeams.includes(teamKey);
               const teamEstimates = estimates[teamKey];
               return (
-                <tr key={teamKey}>
-                  <th scope="row" className={`sticky left-0 z-10 min-w-32 bg-${color ? color : "neutral-950/95"} px-3 py-3 text-left font-normal`}>
+                <tr key={teamKey} className={tracked ? "bg-amber-300/[0.08]" : ""}>
+                  <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.sticky} px-3 py-3 text-left font-normal`}>
                     <div className={`font-mono text-xl font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
-                    <div className="mt-1 font-mono text-md font-bold text-gray-100/60 tabular-nums">{teamNames.get(teamKey) ?? teamKey}</div>
+                    <div className="mt-1 max-w-40 truncate text-[10px] text-neutral-400">{teamNames.get(teamKey) ?? teamKey}</div>
                   </th>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.opr)}</td>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.dpr)}</td>
-                  <td className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.ccwm)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.opr)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.dpr)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.ccwm)}</td>
                   {PRE_EPA_FIELDS.map(([key]) => (
-                    <td key={key} className="px-2 py-3 text-right font-mono tabular-nums text-neutral-300 font-bold text-lg">{exactNumber(teamEstimates?.preEpa?.[key])}</td>
+                    <td key={key} className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.preEpa?.[key])}</td>
                   ))}
                 </tr>
               );
@@ -112,17 +173,21 @@ export function MatchInsightsContent({
   eventKey,
   snapshot,
   trackedTeams = [],
+  matchOverride = null,
 }: {
   eventKey: string;
   snapshot: EventStateSnapshot;
   trackedTeams?: string[];
+  matchOverride?: TBAMatch | null;
 }) {
   const { event, eventNextMatch, eventLastMatch, loading, error, oprs } = snapshot;
-  const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(eventNextMatch?.key ?? eventLastMatch?.key ?? null);
+  const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(matchOverride?.key ?? eventNextMatch?.key ?? eventLastMatch?.key ?? null);
   const [resultMatchKey, setResultMatchKey] = useState<string | null>(null);
   const [statboticsData, setStatboticsData] = useState<JsonRecord | null>(null);
   const [statboticsStatus, setStatboticsStatus] = useState<"loading" | "ready" | "unavailable">("loading");
-  const currentDisplayedMatch = snapshot.matches.find((item) => item.key === displayMatchKey) ?? null;
+  const currentDisplayedMatch = matchOverride?.key === displayMatchKey
+    ? matchOverride
+    : snapshot.matches.find((item) => item.key === displayMatchKey) ?? null;
   const currentResultPosted = Boolean(
     currentDisplayedMatch &&
     typeof currentDisplayedMatch.alliances.red.score === "number" &&
@@ -132,6 +197,12 @@ export function MatchInsightsContent({
   );
 
   useEffect(() => {
+    if (matchOverride) {
+      setDisplayMatchKey(matchOverride.key);
+      setResultMatchKey(null);
+      return;
+    }
+
     const nextMatch = snapshot.eventNextMatch;
     if (!nextMatch) {
       if (snapshot.eventLastMatch) {
@@ -159,9 +230,10 @@ export function MatchInsightsContent({
 
     setDisplayMatchKey(nextMatch.key);
     setResultMatchKey(null);
-  }, [snapshot.eventNextMatch?.key, snapshot.eventLastMatch?.key, displayMatchKey, currentResultPosted]);
+  }, [matchOverride?.key, snapshot.eventNextMatch?.key, snapshot.eventLastMatch?.key, displayMatchKey, currentResultPosted]);
 
   const displayMatch =
+    (matchOverride?.key === displayMatchKey ? matchOverride : null) ??
     snapshot.matches.find((item) => item.key === displayMatchKey) ??
     (eventNextMatch?.key === displayMatchKey ? eventNextMatch : null) ??
     (eventLastMatch?.key === displayMatchKey ? eventLastMatch : null);
@@ -230,7 +302,8 @@ export function MatchInsightsContent({
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
         <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">
           <h1 className="min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{eventTitle}</h1>
-          <h1 className="text-center min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{displayMatch ? matchLongName(displayMatch) : "No match selected"}</h1>
+          <h1 className="min-w-0 truncate text-center text-sm font-semibold text-neutral-200">{displayMatch ? matchLongName(displayMatch) : "No match selected"}</h1>
+          <span className="text-right text-xs text-neutral-500">{displayMatch ? displayMatch.key : ""}</span>
         </div>
       </header>
 
@@ -240,40 +313,16 @@ export function MatchInsightsContent({
         <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center">
           <div>
             <div className="text-base font-semibold text-neutral-200">{loading ? "Loading event and match data…" : "No upcoming match"}</div>
-            <p className="mt-2 max-w-md text-sm leading-6 text-neutral-500">Match Insights follows the event schedule, not the tracked-team list. It will update when EventState identifies the next match.</p>
+            <p className="mt-2 max-w-md text-sm leading-6 text-neutral-500">Match Insights follows the event schedule, unless a match is explicitly selected from the match strip.</p>
           </div>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
           {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
-          <section className="mb-4 rounded-xl p-4 sm:p-5">
-            <div className="mb-4 grid grid-cols-2 gap-4">
-              <div className="rounded-lg border border-red-400/15 bg-red-950/15 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-red-300/60">Red predicted score</div>
-                <div className="mt-1 text-3xl font-semibold tabular-nums text-red-300">{exactNumber(prediction.red_score)}</div>
-              </div>
-              <div className="rounded-lg border border-blue-400/15 bg-blue-950/15 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Blue predicted score</div>
-                <div className="mt-1 text-3xl font-semibold tabular-nums text-blue-300">{exactNumber(prediction.blue_score)}</div>
-              </div>
-            </div>
-            {typeof redWinProbability === "number" ? (
-              <div>
-                <div className="mb-2 flex justify-between text-xs">
-                  <span className="font-semibold text-red-300">Red {String(redWinProbability * 100)}%</span>
-                  <span className="font-semibold text-blue-300">Blue {String((1 - redWinProbability) * 100)}%</span>
-                </div>
-                <div className="flex h-3 overflow-hidden rounded-full bg-blue-400/80" role="img" aria-label={`Red win probability ${String(redWinProbability * 100)} percent; Blue win probability ${String((1 - redWinProbability) * 100)} percent`}>
-                  <div className="h-full bg-red-500 transition-[width]" style={{ width: String(Math.max(0, Math.min(1, redWinProbability)) * 100) + "%" }} />
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-neutral-500">{statboticsStatus === "loading" ? "Loading win probability…" : "Win probability unavailable."}</p>
-            )}
-          </section>
+          <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
-            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
+            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} prediction={prediction} />
+            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} prediction={prediction} />
           </div>
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and breakdowns are shown only when published by TBA. Numeric Statbotics values are displayed without application-side rounding or truncation.</p>
         </div>
@@ -286,10 +335,12 @@ export default function MatchInsightsView({
   eventKey,
   trackedTeams = [],
   onClose,
+  matchOverride = null,
 }: {
   eventKey: string;
   trackedTeams?: string[];
   onClose?: () => void;
+  matchOverride?: TBAMatch | null;
 }) {
   const snapshot = useEventState(eventKey);
 
@@ -307,5 +358,5 @@ export default function MatchInsightsView({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  return <MatchInsightsContent eventKey={eventKey} snapshot={snapshot} trackedTeams={trackedTeams} />;
+  return <MatchInsightsContent eventKey={eventKey} snapshot={snapshot} trackedTeams={trackedTeams} matchOverride={matchOverride} />;
 }
