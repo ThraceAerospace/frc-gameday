@@ -40,15 +40,15 @@ function AlliancePredictionBox({
   return (
     <div className={`h-full min-w-0 rounded-lg border px-4 py-3 ${colorStyles.border} ${colorStyles.background}`}>
       <div className="flex h-full items-center gap-5">
-        <div className="min-w-0 shrink-0">
-          <div className={`text-[10px] font-semibold uppercase tracking-widest ${colorStyles.label}`}>{color} predicted score</div>
-          <div className={`mt-1 text-3xl font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_score"])}</div>
-        </div>
-        <div className="grid min-w-0 flex-1 grid-cols-3 gap-x-3 gap-y-2">
+        <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-3 gap-y-2">
+          <div className="min-w-0 shrink-0">
+            <div className={`text-[10px] font-semibold uppercase tracking-widest ${colorStyles.label}`}>score</div>
+            <div className={`mt-1 text-3xl font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_score"])}</div>
+          </div>
           {predictedRpFields.map(({ key, label, value }) => (
             <div key={key} className="min-w-0">
-              <div className={`truncate text-[9px] uppercase tracking-wider ${colorStyles.label}`}>{label}</div>
-              <div className={`mt-0.5 font-mono text-xs font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(value)}</div>
+              <div className={`text-[10px] font-semibold uppercase tracking-widest ${colorStyles.label}`}>{label}</div>
+              <div className={`mt-1 text-3xl font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(value)}</div>
             </div>
           ))}
         </div>
