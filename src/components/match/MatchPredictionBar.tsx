@@ -25,11 +25,12 @@ function probabilityPercent(value: number, complement = false): string {
   return String(integerPart) + "." + decimalPart;
 }
 
-const PREDICTED_RP_FIELDS = [
-  ["energized_rp", "Energized RP"],
-  ["supercharged_rp", "Supercharged RP"],
-  ["traversal_rp", "Traversal RP"],
-] as const;
+function formatPredictionLabel(key: string): string {
+  return key
+    .replace(/_rp$/, " RP")
+    .replace(/_/g, " ")
+    .replace(/\\b[a-z]/g, (character) => character.toUpperCase());
+}
 
 function AlliancePredictionBox({
   color,
@@ -38,6 +39,19 @@ function AlliancePredictionBox({
   color: "red" | "blue";
   prediction: JsonRecord;
 }) {
+  const predictedRpFields = Object.entries(prediction)
+    .filter(([key, value]) =>
+      key.startsWith(color + "_") &&
+      key.endsWith("_rp") &&
+      !new RegExp("^" + color + "_rp_\\d+$").test(key) &&
+      typeof value === "number" &&
+      Number.isFinite(value)
+    )
+    .map(([key, value]) => ({
+      key,
+      label: formatPredictionLabel(key.slice(color.length + 1)),
+      value,
+    }));
   const colorStyles = color === "red"
     ? { border: "border-red-400/15", background: "bg-red-950/15", label: "text-red-300/60", value: "text-red-300" }
     : { border: "border-blue-400/15", background: "bg-blue-950/15", label: "text-blue-300/60", value: "text-blue-300" };
@@ -47,10 +61,10 @@ function AlliancePredictionBox({
       <div className={`text-[10px] font-semibold uppercase tracking-widest ${colorStyles.label}`}>{color} predicted score</div>
       <div className={`mt-1 text-3xl font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_score"])}</div>
       <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
-        {PREDICTED_RP_FIELDS.map(([suffix, label]) => (
-          <div key={suffix} className="min-w-0">
+        {predictedRpFields.map(({ key, label, value }) => (
+          <div key={key} className="min-w-0">
             <div className="truncate text-[9px] uppercase tracking-wider text-neutral-500">{label}</div>
-            <div className={`mt-0.5 font-mono text-xs font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(prediction[color + "_" + suffix])}</div>
+            <div className={`mt-0.5 font-mono text-xs font-semibold tabular-nums ${colorStyles.value}`}>{exactNumber(value)}</div>
           </div>
         ))}
       </div>
