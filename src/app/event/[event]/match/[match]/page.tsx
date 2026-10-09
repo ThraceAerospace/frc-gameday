@@ -2,8 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
-import { formatEventTime } from "@/lib/time";
+import { formatMatchEventTime, formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
 export default async function MatchPage({
   params,
@@ -105,7 +104,7 @@ export default async function MatchPage({
           <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-white/10 sm:grid-cols-3">
             <InfoItem
               label="Actual"
-              value={formatTime(match.actual_time, event.timezone)}
+              value={formatMatchEventTime(match.actual_time, event.timezone)}
             />
           </div>
         </section>
