@@ -1,16 +1,11 @@
 "use client";
 
 import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatches";
-import { compactMatchLabel } from "@/lib/tba/matchUtils";
-import { matchLongName } from "@/lib/tba/formatters";
+import { formatEventName, formatTeamNumber, matchCode, matchLongName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import NextMatchCountdown from "../match/NextMatchCountdown";
-
-function teamNumber(teamKey: string) {
-  return teamKey.replace(/^frc/, "");
-}
 
 type Props = {
   eventKey: string;
@@ -102,7 +97,7 @@ export default function RemoteEventCard({
                 }
               />
               <span className="truncate">
-                {event?.name?.replace(" - FIRST Robotics Competition", "") ?? eventKey}
+                {formatEventName(event?.name, eventKey)}
               </span>
             </span>
           </div>
@@ -150,7 +145,7 @@ export default function RemoteEventCard({
                             : "border-blue-800 bg-blue-950 text-blue-200"
                         } ${trackedTeams.includes(team) ? "font-bold ring-1 ring-white/70" : "font-semibold"}`}
                       >
-                        {teamNumber(team)}
+                        {formatTeamNumber(team)}
                       </span>
                     ))}
                   </div>
@@ -179,7 +174,7 @@ export default function RemoteEventCard({
                   {teamNumber(team)}
                   {next ? (
                     <span className="text-[10px] font-normal text-neutral-500">
-                      {compactMatchLabel(next)}
+                      {matchCode(next.key)}
                     </span>
                   ) : null}
                 </span>
