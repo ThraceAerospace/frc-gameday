@@ -3,6 +3,7 @@
 import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
+  TBAMatch,
 } from "@/lib/tba/types";
 import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
@@ -31,7 +32,7 @@ type EventFooterProps = {
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
-  onOpenMatchInsights?: () => void;
+  onOpenMatchInsights?: (match: TBAMatch) => void;
 };
 
 export default function EventFooter({
