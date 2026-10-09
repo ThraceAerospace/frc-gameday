@@ -14,7 +14,6 @@ export default function MatchStrip({
   playoffAlliances = [],
   playoffType = null,
   multiview = {},
-  onOpenInsights,
 }: {
   matches?: TBAMatch[];
   team?: string[];
@@ -24,7 +23,6 @@ export default function MatchStrip({
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
   multiview?: Record<string, unknown>;
-  onOpenInsights?: (match: TBAMatch) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -112,22 +110,7 @@ export default function MatchStrip({
                 <div
                   key={match.key}
                   data-match-key={match.key}
-                  className={[
-                    "shrink-0",
-                    onOpenInsights ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300 rounded-md" : "",
-                  ].join(" ")}
-                  onClick={() => onOpenInsights?.(match)}
-                  onKeyDown={(event) => {
-                    if (!onOpenInsights || (event.key !== "Enter" && event.key !== " ")) {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    onOpenInsights(match);
-                  }}
-                  role={onOpenInsights ? "button" : undefined}
-                  tabIndex={onOpenInsights ? 0 : undefined}
-                  aria-label={onOpenInsights ? `Open Match Insights for ${match.key}` : undefined}
+                  className="shrink-0"
                 >
                   <MatchCard
                     match={match}
