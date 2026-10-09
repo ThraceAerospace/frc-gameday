@@ -3,7 +3,7 @@ import type {
   TBAEliminationAlliance,
   TBAMatch,
 } from "@/lib/tba/types";
-import { matchLongName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
 type MatchRowProps = {
   eventKey: string;
@@ -12,10 +12,6 @@ type MatchRowProps = {
   playoffAlliances?: TBAEliminationAlliance[] | null;
   highlightedTeamKeys?: string[];
 };
-
-function teamNumber(teamKey: string): string {
-  return teamKey.replace(/^frc/i, "");
-}
 
 function allianceClasses(alliance: "red" | "blue") {
   return alliance === "red"
