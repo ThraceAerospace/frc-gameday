@@ -3,7 +3,7 @@
 import type { TBAMatch } from "@/lib/tba/types";
 import StatboticsMatchPredictionBar from "./StatboticsMatchPredictionBar";
 import StatboticsMatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
-import { useStatboticsMatch } from "@/lib/statbotics/useStatboticsMatch";
+import { useEventState } from "@/lib/events";
 import { matchShortName } from "@/lib/tba/formatters";
 
 type JsonRecord = Record<string, unknown>;
@@ -13,17 +13,11 @@ export default function StatboticsPredictionStrip({
 }: {
   match: TBAMatch | null;
 }) {
-  const resultPosted = Boolean(
-    match &&
-    typeof match.alliances.red.score === "number" &&
-    match.alliances.red.score >= 0 &&
-    typeof match.alliances.blue.score === "number" &&
-    match.alliances.blue.score >= 0
-  );
-  const resultSignature = match
-    ? `${resultPosted ? "final" : "pending"}:${match.alliances.red.score}:${match.alliances.blue.score}:${match.actual_time ?? ""}`
-    : null;
-  const { data, status } = useStatboticsMatch(match?.key, resultSignature);
+  const eventKey = match?.key.split("_")[0] ?? "";
+  const eventState = useEventState(eventKey);
+  const statboticsState = match ? eventState.statboticsMatches[match.key] : undefined;
+  const data = statboticsState?.data ?? null;
+  const status = statboticsState?.status ?? "loading";
   const prediction: JsonRecord = data?.pred && typeof data.pred === "object"
     ? data.pred
     : data?.prediction && typeof data.prediction === "object"
