@@ -3,9 +3,9 @@ import { redis } from "@/lib/cache/redis";
 import type { StatboticsMatch } from "./types";
 
 const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
-const MATCH_CACHE_TTL_SECONDS = 6 * 60 * 60;
-const NOT_FOUND_CACHE_TTL_SECONDS = 30 * 60;
-const MATCH_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
+const MATCH_CACHE_TTL_SECONDS = 4 * 60;
+const NOT_FOUND_CACHE_TTL_SECONDS = 4 * 60;
+const MATCH_REFRESH_COOLDOWN_MS = 3 * 60 * 1000;
 const REQUEST_LOCK_SECONDS = 20;
 const CACHE_PREFIX = "cache:statbotics:match:";
 const LOCK_PREFIX = "lock:statbotics:match:";
@@ -122,7 +122,7 @@ export class StatboticsClient {
       if (response.status === 404) {
         const entry: CachedMatch = {
           fetchedAt: Date.now(),
-          lastRefreshAt: options.refresh ? Date.now() : latest?.lastRefreshAt,
+          lastRefreshAt: Date.now(),
           data: null,
         };
         await redis.set(
@@ -141,7 +141,7 @@ export class StatboticsClient {
       const data = await response.json() as StatboticsMatch;
       const entry: CachedMatch = {
         fetchedAt: Date.now(),
-        lastRefreshAt: options.refresh ? Date.now() : latest?.lastRefreshAt,
+        lastRefreshAt: Date.now(),
         data,
       };
       await redis.set(
