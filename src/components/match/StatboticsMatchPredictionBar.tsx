@@ -37,7 +37,7 @@ export default function MatchPredictionBar({
   const redWidth = hasProbability ? Math.max(0, Math.min(1, redWinProbability)) * 100 : 50;
 
   return (
-    <section className={compact ? "rounded-lg px-2 py-2" : "mb-4 rounded-xl p-4 sm:p-5"}>
+    <section className={compact ? "rounded-lg px-1 py-1" : "mb-4 rounded-xl p-4 sm:p-5"}>
       {hasProbability ? (
         <div>
           <div className="mb-1 flex justify-between text-xs">
