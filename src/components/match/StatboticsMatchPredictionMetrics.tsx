@@ -14,6 +14,28 @@ function formatNumber(value: number | undefined): string {
     : "—";
 }
 
+function getAllianceValue(
+  prediction: StatboticsPrediction | undefined,
+  color: "red" | "blue",
+  field: "score" | "energized_rp" | "supercharged_rp" | "traversal_rp",
+): number | undefined {
+  if (!prediction) return undefined;
+  if (color === "red") {
+    switch (field) {
+      case "score": return prediction.red_score;
+      case "energized_rp": return prediction.red_energized_rp;
+      case "supercharged_rp": return prediction.red_supercharged_rp;
+      case "traversal_rp": return prediction.red_traversal_rp;
+    }
+  }
+  switch (field) {
+    case "score": return prediction.blue_score;
+    case "energized_rp": return prediction.blue_energized_rp;
+    case "supercharged_rp": return prediction.blue_supercharged_rp;
+    case "traversal_rp": return prediction.blue_traversal_rp;
+  }
+}
+
 function AlliancePredictionBox({
   color,
   prediction,
@@ -32,12 +54,12 @@ function AlliancePredictionBox({
       <div className={`grid min-w-0 grid-cols-4 ${compact ? "gap-x-2" : "gap-x-3 gap-y-2"}`}>
         <div className="min-w-0">
           <div className={`font-semibold uppercase ${compact ? "text-[8px] tracking-wide" : "text-[10px] tracking-widest"} ${styles.label}`}>Score</div>
-          <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(prediction?.[`${color}_score`])}</div>
+          <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(getAllianceValue(prediction, color, "score"))}</div>
         </div>
         {REWARD_FIELDS.map(([field, label]) => (
           <div key={field} className="min-w-0">
             <div className={`font-semibold uppercase ${compact ? "text-[8px] tracking-wide" : "text-[10px] tracking-widest"} ${styles.label}`}>{label}</div>
-            <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(prediction?.[`${color}_${field}`])}</div>
+            <div className={`tabular-nums font-semibold ${compact ? "text-sm" : "mt-1 text-3xl"} ${styles.value}`}>{formatNumber(getAllianceValue(prediction, color, field))}</div>
           </div>
         ))}
       </div>
