@@ -37,20 +37,46 @@ export default function MatchPredictionBar({
   const redWidth = hasProbability ? Math.max(0, Math.min(1, redWinProbability)) * 100 : 50;
 
   return (
-    <section className={compact ? "rounded-lg px-1 py-1" : "mb-4 rounded-xl p-4 sm:p-5"}>
-      {hasProbability ? (
-        <div>
+    <section
+      className={
+        compact
+          ? "w-24 shrink-0 rounded-lg px-1 py-1"
+          : "mb-4 rounded-xl p-4 sm:p-5"
+      }
+    >
+    {hasProbability ? (
+      <div>
+        {!compact && (
           <div className="mb-1 flex justify-between text-xs">
-            <span className="font-semibold text-red-300">Red {redPercent}%</span>
-            <span className="font-semibold text-blue-300">Blue {bluePercent}%</span>
+            <span className="font-semibold text-red-300">
+              Red {redPercent}%
+            </span>
+            <span className="font-semibold text-blue-300">
+              Blue {bluePercent}%
+            </span>
           </div>
-          <div className={`flex overflow-hidden rounded-full bg-blue-400/80 ${compact ? "h-2" : "h-3"}`} role="img" aria-label={`Red win probability ${String(redPercent)} percent; Blue win probability ${String(bluePercent)} percent`}>
-            <div className="h-full bg-red-500 transition-[width]" style={{ width: String(redWidth) + "%" }} />
-          </div>
+        )}
+
+        <div
+          className={`flex w-full overflow-hidden rounded-full bg-blue-400/80 ${
+            compact ? "h-2" : "h-3"
+          }`}
+          role="img"
+          aria-label={`Red win probability ${String(redPercent)} percent; Blue ${String(bluePercent)} percent`}
+        >
+          <div
+            className="h-full bg-red-500 transition-[width]"
+            style={{ width: `${redWidth}%` }}
+          />
         </div>
-      ) : (
-        <p className="text-xs text-neutral-500">{status === "loading" ? "Loading win probability…" : "Win probability unavailable."}</p>
-      )}
+      </div>
+    ) : (
+      <p className="text-xs text-neutral-500">
+        {status === "loading"
+          ? "Loading win probability…"
+          : "Win probability unavailable."}
+      </p>
+    )}
     </section>
   );
 }
