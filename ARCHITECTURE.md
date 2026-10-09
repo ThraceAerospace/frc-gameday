@@ -298,26 +298,21 @@ The existing WebRTC implementation is therefore treated as a transport implement
 
 The **event-data WebSocket** described in Section 6 is an explicit shared client infrastructure component. Its single-connection requirement is an implementation invariant of the event-data architecture, not a requirement that all application transports use WebSocket.
 
-## 11. Sessions and Multiple Surfaces
+## 11. Sessions and Multiple Displays
 
-A future viewing session may contain multiple Surfaces.
+A viewing session has one shared event configuration and may drive many displays.
 
-```text
-ViewingSession
- ├── TileSurface
- │    ├── EventStreamView
- │    └── EventDataPanelView
- │
- ├── TileSurface
- │    └── MatchView
- │
- └── dedicated Surface
-      └── StatboticsView
-```
+The product invariant is:
 
-A session should not become a giant universal context simply because multiple Surfaces exist. The session abstraction should be introduced around actual multi-Surface requirements.
+> **One session → one set of event states → many displays.**
 
-For now, Surface + SurfaceController is the fundamental boundary.
+The session configures the event list, tracked teams, stream selection, and Tile View priority/highlight once. Connected displays consume the same session state and the same event snapshots; users must not configure those domain/event choices independently on each display.
+
+Display presentation mode may vary per display (for example, Gameday or Match Insights), but it does not create an independent event selection or duplicate domain state. Match Insights follows the active event from the shared Tile View selection: use the highlighted tile when it is valid, otherwise use the first tile in priority order. Resolve stable tile identity to its event key through `tileEvents`.
+
+A standalone local surface such as `/event/<event>/insights` is the intentional exception: it has no Tile View selection to follow, so its URL supplies the one event key. It still consumes the same per-event EventState lifecycle and shared event-data WebSocket manager.
+
+Do not introduce per-display copies of event configuration or event acquisition merely because multiple displays are connected. Remote transport is per peer; session state and EventState ownership are shared.
 
 ## 12. What Does Not Belong in These Types
 
@@ -476,8 +471,10 @@ A standalone local surface (including /event/[event]/insights) can host its own 
 
 ## 10. Multiple remote displays and display modes
 
-The controller can manage multiple physical displays by connecting to each display's unique six-digit pairing code. Each code remains a one-controller/one-display signaling session; multiple displays are represented as multiple peer connections in the controller browser. Every peer has its own surface controller and configuration, while event acquisition is shared through the controller browser's per-event EventState registry.
+The controller may connect to multiple physical displays, each through its own six-digit pairing code and peer connection. Peer connections are transport endpoints, not separate product sessions or separate owners of event configuration.
 
-The controller keeps inactive display sessions mounted and hides their presentation instead of disconnecting them. This preserves each session's runtime configuration and peer connection while the operator switches between display tabs. Removing a display unmounts its session and releases its event subscriptions normally.
+All connected displays in one viewing session consume the same session-level Tile View state and controller-published EventState snapshots. Configure events, tracked teams, streams, priority, and highlight once; changes propagate to every connected display. Do not accept each display's configuration as an independent authority or maintain a different event list per peer.
 
-Each display has its own presentation mode (`gameday` or `insights`) and, for Match Insights, a selected event key. The display reports its current mode alongside its surface snapshot after connection/reconnection; the controller then owns subsequent changes and sends mode updates to that display. The Gameday surface and Match Insights view remain mounted on the display, with one hidden, to avoid reloading stream iframes when switching modes.
+A display may select its presentation mode (`gameday` or `insights`), but Match Insights always resolves its one event from the shared Tile View selection. It does not maintain its own event key. Switching modes changes presentation only and must not create duplicate EventState instances or network acquisition.
+
+The controller can keep inactive display peers mounted and hide their presentation while the operator switches between display tabs. Removing a display releases only that peer connection; it must not reset shared session configuration or tear down EventStates still used by other displays.
