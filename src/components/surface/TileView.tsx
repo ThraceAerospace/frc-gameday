@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
@@ -10,35 +10,60 @@ import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
 
-function SurfaceUpcomingMatchBanner({
+type SurfaceUpcomingMatchAlert = {
+  eventKey: string;
+  match: import("@/lib/tba/types").TBAMatch;
+  teams: string[];
+  eventName: string;
+  eventTimezone: string | null;
+};
+
+function SurfaceUpcomingMatchAlertSource({
   eventKey,
   config,
+  onAlert,
 }: {
   eventKey: string;
   config: TileSurfaceState["eventConfigs"][string] | undefined;
+  onAlert: (alert: SurfaceUpcomingMatchAlert) => void;
 }) {
-  const { event, matches, upcomingMatchKey } = useEventState(eventKey);
-  if (!config?.matchNotifications || !upcomingMatchKey) return null;
+  const { event, matches, upcomingMatchKey, upcomingMatchTeamKeys } = useEventState(eventKey);
   const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;
-  if (!upcomingMatch) return null;
+  const upcomingTeams = config?.matchNotifications && upcomingMatch
+    ? config.trackedTeams.filter((team) =>
+        [
+          ...(upcomingMatch.alliances.red.team_keys ?? []),
+          ...(upcomingMatch.alliances.blue.team_keys ?? []),
+        ].includes(team),
+      )
+    : [];
 
-  const upcomingTeams = config.trackedTeams.filter((team) => 
-    [
-      ...(upcomingMatch.alliances.red.team_keys ?? []),
-      ...(upcomingMatch.alliances.blue.team_keys ?? []),
-    ].includes(team),
-  );
+  useEffect(() => {
+    if (!config?.matchNotifications || !upcomingMatch || upcomingTeams.length === 0) {
+      return;
+    }
 
-  if (upcomingTeams.length === 0) return null;
+    onAlert({
+      eventKey,
+      match: upcomingMatch,
+      teams: upcomingTeams,
+      eventName: event?.short_name || event?.name || eventKey,
+      eventTimezone: event?.timezone ?? null,
+    });
+  }, [
+    config?.matchNotifications,
+    event?.name,
+    event?.short_name,
+    event?.timezone,
+    eventKey,
+    onAlert,
+    upcomingMatch,
+    upcomingMatchKey,
+    upcomingMatchTeamKeys,
+    upcomingTeams,
+  ]);
 
-  return (
-    <ImminentMatchBanner
-      key={eventKey + ":" + upcomingMatch.key}
-      match={upcomingMatch}
-      teams={upcomingTeams}
-      eventName={event?.short_name || event?.name || eventKey}
-    />
-  );
+  return null;
 }
 
 type TileViewProps = {
@@ -77,6 +102,15 @@ export default function TileView({
   );
 
   const [controlHeld, setControlHeld] = useState(false);
+  const [upcomingAlert, setUpcomingAlert] = useState<SurfaceUpcomingMatchAlert | null>(null);
+
+  const handleUpcomingAlert = useCallback((alert: SurfaceUpcomingMatchAlert) => {
+    setUpcomingAlert((current) =>
+      current?.eventKey === alert.eventKey && current.match.key === alert.match.key
+        ? current
+        : alert,
+    );
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -127,12 +161,23 @@ export default function TileView({
   return (
     <main className={`relative min-h-0 flex-1 ${className}`}>
       {state.streams.map((eventKey) => (
-        <SurfaceUpcomingMatchBanner
-          key={"banner-" + eventKey}
+        <SurfaceUpcomingMatchAlertSource
+          key={"alert-source-" + eventKey}
           eventKey={eventKey}
           config={state.eventConfigs[eventKey]}
+          onAlert={handleUpcomingAlert}
         />
       ))}
+
+      {upcomingAlert && state.streams.includes(upcomingAlert.eventKey) && (
+        <ImminentMatchBanner
+          key={upcomingAlert.eventKey + ":" + upcomingAlert.match.key}
+          match={upcomingAlert.match}
+          teams={upcomingAlert.teams}
+          eventName={upcomingAlert.eventName}
+          eventTimezone={upcomingAlert.eventTimezone}
+        />
+      )}
 
       {state.streams.map((eventKey) => {
         const slotIndex = slotOrder.indexOf(eventKey);
