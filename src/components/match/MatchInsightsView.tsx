@@ -37,22 +37,18 @@ function sumExact(values: number[]): string {
   }
 
   const precision = Math.max(0, ...strings.map((value) => value.split(".")[1]?.length ?? 0));
-  const scale = 10n ** BigInt(precision);
-  const total = strings.reduce((sum, value) => {
-    const negative = value.startsWith("-");
-    const unsigned = negative ? value.slice(1) : value;
-    const [whole = "0", fraction = ""] = unsigned.split(".");
-    const digits = fraction.padEnd(precision, "0");
-    const integer = BigInt(whole) * scale + BigInt(digits || "0");
-    return sum + (negative ? -integer : integer);
-  }, 0n);
+  const scale = 10 ** precision;
+  const total = strings.reduce((sum, value) => sum + Math.round(Number(value) * scale), 0);
+  if (!Number.isSafeInteger(total)) {
+    return String(values.reduce((sum, value) => sum + value, 0));
+  }
 
-  const negative = total < 0n;
-  const absolute = negative ? -total : total;
-  const whole = absolute / scale;
+  const negative = total < 0;
+  const absolute = Math.abs(total);
+  const whole = Math.floor(absolute / scale);
   const remainder = absolute % scale;
-  if (remainder === 0n) return (negative ? "-" : "") + String(whole);
-  const fraction = remainder.toString().padStart(precision, "0").replace(/0+$/, "");
+  if (remainder === 0) return (negative ? "-" : "") + String(whole);
+  const fraction = String(remainder).padStart(precision, "0").replace(/0+$/, "");
   return (negative ? "-" : "") + String(whole) + "." + fraction;
 }
 
