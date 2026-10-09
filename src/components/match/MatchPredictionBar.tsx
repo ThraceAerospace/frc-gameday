@@ -13,15 +13,15 @@ function probabilityPercent(value: number, complement = false): string {
   }
 
   const [whole = "0", fraction = ""] = source.split(".");
-  const scale = 10n ** BigInt(fraction.length);
-  const numerator = BigInt(whole) * scale + BigInt(fraction || "0");
+  const scale = 10 ** fraction.length;
+  const numerator = Number(whole) * scale + Number(fraction || "0");
   const adjusted = complement ? scale - numerator : numerator;
-  const percentNumerator = adjusted * 100n;
-  const integerPart = percentNumerator / scale;
-  const remainder = percentNumerator % scale;
-  if (remainder === 0n) return String(integerPart);
+  const percentNumerator = adjusted * 100;
+  const integerPart = Math.floor(percentNumerator / scale);
+  const remainder = Math.round(percentNumerator % scale);
+  if (remainder === 0) return String(integerPart);
 
-  const decimalPart = remainder.toString().padStart(fraction.length, "0").replace(/0+$/, "");
+  const decimalPart = String(remainder).padStart(fraction.length, "0").replace(/0+$/, "");
   return String(integerPart) + "." + decimalPart;
 }
 
