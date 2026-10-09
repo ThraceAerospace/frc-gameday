@@ -179,6 +179,21 @@ export class EventState {
     this.authoritativeTimers.clear();
     for (const timer of this.statboticsRefreshTimers.values()) window.clearTimeout(timer);
     this.statboticsRefreshTimers.clear();
+
+    for (const [matchKey, request] of this.statboticsRequests) {
+      this.statboticsRequests.set(matchKey, request + 1);
+    }
+    this.update((current) => ({
+      ...current,
+      statboticsMatches: Object.fromEntries(
+        Object.entries(current.statboticsMatches).map(([matchKey, value]) => [
+          matchKey,
+          !value.data && value.status === "loading"
+            ? { data: null, status: "unavailable" as const }
+            : value,
+        ]),
+      ),
+    }));
   }
 
   reloadAll() {
@@ -220,7 +235,13 @@ export class EventState {
       return;
     }
 
-    if (previousSignature === resultSignature) return;
+    if (previousSignature === resultSignature) {
+      const existing = this.snapshot.statboticsMatches[matchKey];
+      if (!existing || (existing.status === "unavailable" && !existing.data)) {
+        void this.fetchStatboticsMatch(matchKey, resultIsFinal);
+      }
+      return;
+    }
 
     if (resultIsFinal) {
       const existingTimer = this.statboticsRefreshTimers.get(matchKey);
