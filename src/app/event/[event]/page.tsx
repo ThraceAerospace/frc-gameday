@@ -2,6 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import { TBAMatchSimple } from "@/lib/tba/types";
+import { compLevelShortName, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
 
 export default async function EventPage({
   params,
@@ -146,15 +147,9 @@ export default async function EventPage({
                       className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 bg-white px-5 py-4"
                     >
                       <div className="min-w-20">
-                        <p className="font-mono text-sm font-medium">{formatMatchName(match)}</p>
+                        <p className="font-mono text-sm font-medium">{matchCode(match.key)}</p>
                         <p className="mt-0.5 text-xs text-slate-400">
-                          {match.comp_level === "qm"
-                            ? "Qualification"
-                            : match.comp_level === "sf"
-                              ? "Semifinal"
-                              : match.comp_level === "f"
-                                ? "Final"
-                                : match.comp_level}
+                          {compLevelShortName(match.comp_level)}
                         </p>
                       </div>
                       <div className="grid min-w-0 grid-cols-2 gap-6 text-sm sm:grid-cols-4">
@@ -162,7 +157,7 @@ export default async function EventPage({
                         <Alliance label="Blue" teams={match.alliances?.blue?.team_keys} />
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-slate-600">{formatMatchTime(match.time)}</p>
+                        <p className="text-sm text-slate-600">{match.time == null ? "—" : new Date(match.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
                         {match.actual_time != null && (
                           <p className="mt-0.5 text-xs text-slate-400">Played</p>
                         )}
@@ -206,33 +201,9 @@ function Alliance({ label, teams }: { label: string; teams?: string[] }) {
     <div className="min-w-0">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-1 truncate font-mono text-xs text-slate-600">
-        {teams?.length ? teams.map((team) => team.replace(/^frc/, "")).join(" · ") : "—"}
+        {teams?.length ? teams.map((team) => formatTeamNumber(team)).join(" · ") : "—"}
       </p>
     </div>
   );
 }
 
-function formatMatchName(match: {
-  comp_level?: string;
-  set_number?: number;
-  match_number?: number;
-}) {
-  if (match.comp_level === "qm") return `Q${match.match_number ?? "—"}`;
-  if (match.comp_level === "sf") {
-    return `SF${match.set_number ?? "—"}-${match.match_number ?? "—"}`;
-  }
-  if (match.comp_level === "f") return `F${match.match_number ?? "—"}`;
-
-  return [match.comp_level?.toUpperCase(), match.set_number, match.match_number]
-    .filter((value) => value != null)
-    .join("-");
-}
-
-function formatMatchTime(time?: number | null) {
-  if (time == null) return "—";
-
-  return new Date(time * 1000).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
