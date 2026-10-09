@@ -16,7 +16,7 @@ Existing components should be migrated into this model rather than preserving th
 
 Anything whose primary responsibility is displaying event or application data to the user ends in `View`.
 
-Examples: `EventStreamView`, `EventDataPanelView`, `MatchView`, `ScheduleView`, `TeamView`, `StatboticsView`.
+Examples: `EventStreamView`, `EventDataPanelView`, `EventInsightView`, `MatchView`, `ScheduleView`, `TeamView`.
 
 A View is presentation. It receives the State it needs, renders that State, and may expose user interactions. It does not own shared domain data, networking, polling, or remote transport.
 
@@ -50,7 +50,7 @@ All event data needed by Views for a given event belongs to that event's EventSt
 
 Every UI parent/container that hosts one or more Views is a `Surface`.
 
-Examples include `TileViewSurface` and future dedicated display surfaces.
+Examples include `TileViewSurface` and `EventInsightsSurface`.
 
 The existing Multiview stage is therefore redefined as a `TileViewSurface`.
 
