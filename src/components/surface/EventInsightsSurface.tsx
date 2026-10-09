@@ -49,6 +49,6 @@ export default function EventInsightsSurface({
         trackedTeams={trackedTeams}
         matchOverride={matchOverride}
       />
-    </main>
+    </div>
   );
 }
