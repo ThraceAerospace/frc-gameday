@@ -20,6 +20,7 @@ export type RemoteSurfaceState = Omit<
 export type RemoteSessionMessage =
   | { type: "action"; action: RemoteSessionAction }
   | { type: "requestState" }
+  | { type: "displayModeSnapshot"; mode: "gameday" | "insights"; eventKey: string | null }
   | { type: "eventStateSnapshot"; eventKey: string; state: EventStateSnapshot }
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
