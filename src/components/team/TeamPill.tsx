@@ -6,7 +6,7 @@ import type {
   TBATeamEventStatus,
 } from "@/lib/tba/types";
 
-import { compactMatchLabel } from "@/lib/tba/matchUtils";
+import { formatAllianceName, formatRecord, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(
@@ -25,7 +25,7 @@ function allianceLabel(
     return null;
   }
 
-  return alliance.name.replace("Alliance ", "A");
+  return formatAllianceName(alliance.name);
 }
 
 function matchLabel(
@@ -36,13 +36,7 @@ function matchLabel(
     return null;
   }
 
-  if (playoffType === 10) {
-    return match.match_number != null
-      ? `M${match.match_number}`
-      : null;
-  }
-
-  return compactMatchLabel(match);
+  return matchCode(match.key);
 }
 
 export default function TeamPill({
@@ -59,17 +53,13 @@ export default function TeamPill({
   playoffType?: number | null;
 }) {
   const record = status?.qual?.ranking?.record;
-  const teamNumber = String(team).replace(/^frc/i, "");
+  const teamNumber = formatTeamNumber(team);
 
   const wins = record?.wins ?? 0;
   const losses = record?.losses ?? 0;
   const ties = record?.ties ?? 0;
 
-  const recordLabel = record
-    ? ties > 0
-      ? `${wins}-${losses}-${ties}`
-      : `${wins}-${losses}`
-    : "—";
+  const recordLabel = formatRecord(record);
 
   const alliance = allianceLabel(
     team,
