@@ -42,7 +42,7 @@ export default function EventInsightsSurface({
   }, [onClose]);
 
   return (
-    <main className={`${embedded ? "h-full" : "h-screen"} overflow-hidden bg-black text-white`}>
+    <div className={`${embedded ? "h-full" : "h-screen"} overflow-hidden bg-black text-white`}>
       <EventInsightView
         eventKey={eventKey}
         snapshot={snapshot}
