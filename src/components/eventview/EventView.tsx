@@ -38,6 +38,7 @@ type EventViewProps = {
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
+  onOpenMatchInsights?: () => void;
 };
 
 export default function EventView({
@@ -51,6 +52,7 @@ export default function EventView({
   onToggleActive,
   slotNumber,
   controlHeld = false,
+  onOpenMatchInsights,
 }: EventViewProps) {
   const {
     state: eventState,
@@ -332,6 +334,7 @@ export default function EventView({
         onToggleActive={onToggleActive}
         slotNumber={slotNumber}
         controlHeld={controlHeld}
+        onOpenMatchInsights={onOpenMatchInsights}
       />
 
       <StreamModal
