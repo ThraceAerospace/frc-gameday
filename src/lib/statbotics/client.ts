@@ -3,8 +3,8 @@ import { redis } from "@/lib/cache/redis";
 import type { StatboticsMatch } from "./types";
 
 const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
-const MATCH_CACHE_TTL_SECONDS = 30 * 60;
-const NOT_FOUND_CACHE_TTL_SECONDS = 5 * 60;
+const MATCH_CACHE_TTL_SECONDS = 6 * 60 * 60;
+const NOT_FOUND_CACHE_TTL_SECONDS = 30 * 60;
 const MATCH_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 const REQUEST_LOCK_SECONDS = 20;
 const CACHE_PREFIX = "cache:statbotics:match:";
