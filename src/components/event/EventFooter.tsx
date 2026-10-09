@@ -31,6 +31,7 @@ type EventFooterProps = {
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
+  onOpenMatchInsights?: () => void;
 };
 
 export default function EventFooter({
@@ -54,6 +55,7 @@ export default function EventFooter({
   onToggleActive,
   slotNumber,
   controlHeld = false,
+  onOpenMatchInsights,
 }: EventFooterProps) {
   const contentHidden = mode === "hidden" || multiviewHidden;
 
@@ -146,6 +148,7 @@ export default function EventFooter({
                     playoffAlliances={playoffAlliances}
                     playoffType={playoffType}
                     multiview={multiview}
+                    onOpenInsights={onOpenMatchInsights}
                   />
                 </div>
                 <div className="min-w-0">
@@ -167,6 +170,7 @@ export default function EventFooter({
                 playoffAlliances={playoffAlliances}
                 playoffType={playoffType}
                 multiview={multiview}
+                onOpenInsights={onOpenMatchInsights}
               />
             )}
           </div>
