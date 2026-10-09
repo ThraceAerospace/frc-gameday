@@ -2,33 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
+import type { StatboticsEPA, StatboticsMatch, StatboticsPrediction } from "@/lib/statbotics/types";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
 import MatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
 type AllianceColor = "red" | "blue";
-type JsonRecord = Record<string, unknown>;
-type TeamEstimates = {
-  opr?: number;
-  dpr?: number;
-  ccwm?: number;
-  preEpa?: JsonRecord;
+type AllianceEstimates = {
+  opr: number;
+  dpr: number;
+  ccwm: number;
+  epa: number;
+  autoEpa: number;
+  teleopEpa: number;
+  endgameEpa: number;
 };
-
-function asRecord(value: unknown): JsonRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as JsonRecord
-    : {};
-}
-
-function exactNumber(value: unknown): string {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
-}
-
-function teamNumberKey(teamKey: string): string {
-  return teamKey.replace(/^frc/i, "");
-}
 
 const PRE_EPA_FIELDS = [
   ["epa", "EPA"],
@@ -37,18 +26,48 @@ const PRE_EPA_FIELDS = [
   ["endgame_epa", "Endgame EPA"],
 ] as const;
 
+function formatMetric(value: number | undefined): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)
+    : "—";
+}
+
+function teamNumberKey(teamKey: string): string {
+  return teamKey.replace(/^frc/i, "");
+}
+
+function sumAllianceEstimates(
+  teamKeys: string[],
+  oprs: EventStateSnapshot["oprs"],
+  preEpas: StatboticsMatch["pre_epas"],
+): AllianceEstimates {
+  return teamKeys.reduce<AllianceEstimates>((total, teamKey) => {
+    const numericKey = teamNumberKey(teamKey);
+    const epa = preEpas?.[numericKey];
+    return {
+      opr: total.opr + (oprs?.oprs?.[teamKey] ?? 0),
+      dpr: total.dpr + (oprs?.dprs?.[teamKey] ?? 0),
+      ccwm: total.ccwm + (oprs?.ccwms?.[teamKey] ?? 0),
+      epa: total.epa + (epa?.epa ?? 0),
+      autoEpa: total.autoEpa + (epa?.auto_epa ?? 0),
+      teleopEpa: total.teleopEpa + (epa?.teleop_epa ?? 0),
+      endgameEpa: total.endgameEpa + (epa?.endgame_epa ?? 0),
+    };
+  }, { opr: 0, dpr: 0, ccwm: 0, epa: 0, autoEpa: 0, teleopEpa: 0, endgameEpa: 0 });
+}
+
 function AllianceCard({
   color,
   match,
   snapshot,
   trackedTeams,
-  estimates,
+  preEpas,
 }: {
   color: AllianceColor;
   match: TBAMatch;
   snapshot: EventStateSnapshot;
   trackedTeams: string[];
-  estimates: Record<string, TeamEstimates>;
+  preEpas: StatboticsMatch["pre_epas"];
 }) {
   const alliance = match.alliances[color];
   const allianceTeams = alliance.team_keys ?? [];
@@ -56,6 +75,7 @@ function AllianceCard({
     () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
     [snapshot.teams],
   );
+  const totals = sumAllianceEstimates(allianceTeams, snapshot.oprs, preEpas);
   const scorePosted = typeof alliance.score === "number" && alliance.score >= 0;
   const winner = match.winning_alliance === color;
   const tied = match.winning_alliance === "";
@@ -63,14 +83,12 @@ function AllianceCard({
     ? { border: "border-red-400/30", header: "border-red-400/20", text: "text-red-300", tint: "bg-red-950/20", sticky: "bg-[#1a0b0d]" }
     : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[#091321]" };
 
-
-
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
       <header className={`border-b px-4 py-3 ${colorClasses.header}`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
-          <span className="text-xs text-neutral-500">Team performance estimates</span>
+          <span className="text-xs text-neutral-500">Team estimates · alliance total</span>
           <span className="ml-auto text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
         </div>
       </header>
@@ -88,22 +106,32 @@ function AllianceCard({
           <tbody className="divide-y divide-white/5">
             {allianceTeams.map((teamKey) => {
               const tracked = trackedTeams.includes(teamKey);
-              const teamEstimates = estimates[teamKey];
+              const teamEpa = preEpas?.[teamNumberKey(teamKey)];
               return (
                 <tr key={teamKey} className={tracked ? "bg-amber-300/[0.08]" : ""}>
-                  <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.header} px-3 py-3 text-left font-normal`}>
+                  <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.sticky} px-3 py-3 text-left font-normal`}>
                     <div className={`font-mono text-xl font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
                     <div className="mt-1 max-w-40 truncate text-md text-neutral-400">{teamNames.get(teamKey) ?? teamKey}</div>
                   </th>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.opr)}</td>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.dpr)}</td>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.ccwm)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.oprs?.[teamKey])}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.dprs?.[teamKey])}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.ccwms?.[teamKey])}</td>
                   {PRE_EPA_FIELDS.map(([key]) => (
-                    <td key={key} className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{exactNumber(teamEstimates?.preEpa?.[key])}</td>
+                    <td key={key} className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(teamEpa?.[key])}</td>
                   ))}
                 </tr>
               );
             })}
+            <tr className="border-t border-white/15 bg-white/[0.04]">
+              <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.sticky} px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-white`}>Alliance total</th>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.opr)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.dpr)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.ccwm)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.epa)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.autoEpa)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.teleopEpa)}</td>
+              <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-white">{formatMetric(totals.endgameEpa)}</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -112,6 +140,59 @@ function AllianceCard({
           {tied ? "Official result: tie" : winner ? "Official winner" : "Final score"}
         </footer>
       ) : null}
+    </section>
+  );
+}
+
+function ScoreBreakdown({
+  match,
+}: {
+  match: TBAMatch;
+}) {
+  const breakdown = match.score_breakdown;
+  if (!breakdown || !match.alliances || match.alliances.red.score < 0 || match.alliances.blue.score < 0) return null;
+
+  if (match.key.startsWith("2026") && "red" in breakdown && "blue" in breakdown) {
+    const red = breakdown.red;
+    const blue = breakdown.blue;
+    return (
+      <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown · 2026</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {(["red", "blue"] as const).map((color) => {
+            const side = color === "red" ? red : blue;
+            const styles = color === "red" ? "border-red-400/20 bg-red-950/10" : "border-blue-400/20 bg-blue-950/10";
+            return (
+              <div key={color} className={`rounded-lg border p-3 ${styles}`}>
+                <h3 className={`mb-2 text-xs font-bold uppercase ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</h3>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-neutral-400">Auto points</dt><dd className="text-right tabular-nums">{side.totalAutoPoints}</dd>
+                  <dt className="text-neutral-400">Teleop points</dt><dd className="text-right tabular-nums">{side.totalTeleopPoints}</dd>
+                  <dt className="text-neutral-400">Tower points</dt><dd className="text-right tabular-nums">{side.totalTowerPoints}</dd>
+                  <dt className="text-neutral-400">Hub auto</dt><dd className="text-right tabular-nums">{side.hubScore.autoPoints} ({side.hubScore.autoCount} fuel)</dd>
+                  <dt className="text-neutral-400">Hub transition</dt><dd className="text-right tabular-nums">{side.hubScore.transitionPoints} ({side.hubScore.transitionCount} fuel)</dd>
+                  <dt className="text-neutral-400">Hub shift 1</dt><dd className="text-right tabular-nums">{side.hubScore.shift1Points} ({side.hubScore.shift1Count} fuel)</dd>
+                  <dt className="text-neutral-400">Hub shift 2</dt><dd className="text-right tabular-nums">{side.hubScore.shift2Points} ({side.hubScore.shift2Count} fuel)</dd>
+                  <dt className="text-neutral-400">Hub shift 3</dt><dd className="text-right tabular-nums">{side.hubScore.shift3Points} ({side.hubScore.shift3Count} fuel)</dd>
+                  <dt className="text-neutral-400">Hub shift 4</dt><dd className="text-right tabular-nums">{side.hubScore.shift4Points} ({side.hubScore.shift4Count} fuel)</dd>
+                  <dt className="text-neutral-400">Hub endgame</dt><dd className="text-right tabular-nums">{side.hubScore.endgamePoints} ({side.hubScore.endgameCount} fuel)</dd>
+                  <dt className="text-neutral-400">Auto tower</dt><dd className="text-right tabular-nums">{side.autoTowerPoints}</dd>
+                  <dt className="text-neutral-400">Endgame tower</dt><dd className="text-right tabular-nums">{side.endGameTowerPoints}</dd>
+                  <dt className="text-neutral-400">Foul points</dt><dd className="text-right tabular-nums">{side.foulPoints}</dd>
+                  <dt className="text-neutral-400">RP earned</dt><dd className="text-right tabular-nums">{side.rp}</dd>
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown</h2>
+      <p className="text-sm text-neutral-500">A detailed breakdown is available for this match, but this year’s fields are not yet presented in Insights.</p>
     </section>
   );
 }
@@ -127,7 +208,7 @@ export default function EventInsightView({
   trackedTeams?: string[];
   matchOverride?: TBAMatch | null;
 }) {
-  const { event, eventNextMatch, eventLastMatch, loading, error, oprs } = snapshot;
+  const { event, eventNextMatch, eventLastMatch, loading, error } = snapshot;
   const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(matchOverride?.key ?? eventNextMatch?.key ?? eventLastMatch?.key ?? null);
   const [resultMatchKey, setResultMatchKey] = useState<string | null>(null);
   const currentDisplayedMatch = matchOverride?.key === displayMatchKey
@@ -147,7 +228,6 @@ export default function EventInsightView({
       setResultMatchKey(null);
       return;
     }
-
     const nextMatch = snapshot.eventNextMatch;
     if (!nextMatch) {
       if (snapshot.eventLastMatch) {
@@ -156,14 +236,11 @@ export default function EventInsightView({
       }
       return;
     }
-
     if (!displayMatchKey) {
       setDisplayMatchKey(nextMatch.key);
       return;
     }
-
     if (displayMatchKey === nextMatch.key) return;
-
     if (currentResultPosted) {
       setResultMatchKey(displayMatchKey);
       const timeout = window.setTimeout(() => {
@@ -172,7 +249,6 @@ export default function EventInsightView({
       }, 5000);
       return () => window.clearTimeout(timeout);
     }
-
     setDisplayMatchKey(nextMatch.key);
     setResultMatchKey(null);
   }, [matchOverride?.key, snapshot.eventNextMatch?.key, snapshot.eventLastMatch?.key, displayMatchKey, currentResultPosted]);
@@ -183,11 +259,11 @@ export default function EventInsightView({
     (eventNextMatch?.key === displayMatchKey ? eventNextMatch : null) ??
     (eventLastMatch?.key === displayMatchKey ? eventLastMatch : null);
 
-  const statboticsState = displayMatch
-    ? snapshot.statboticsMatches[displayMatch.key]
-    : undefined;
+  const statboticsState = displayMatch ? snapshot.statboticsMatches[displayMatch.key] : undefined;
   const statboticsData = statboticsState?.data ?? null;
   const statboticsStatus = statboticsState?.status ?? "loading";
+  const prediction: StatboticsPrediction | undefined = statboticsData?.pred ?? statboticsData?.prediction;
+  const preEpas = statboticsData?.pre_epas;
 
   const isPostMatch = Boolean(
     displayMatch &&
@@ -198,25 +274,6 @@ export default function EventInsightView({
   );
   const isShowingTransitionResult = Boolean(resultMatchKey && resultMatchKey === displayMatch?.key);
   const eventTitle = event?.short_name || event?.name || eventKey;
-  const prediction = asRecord(statboticsData?.pred ?? statboticsData?.prediction);
-  const preEpas = asRecord(statboticsData?.pre_epas);
-  const estimates = useMemo(() => {
-    const result: Record<string, TeamEstimates> = {};
-    if (displayMatch) {
-      for (const color of ["red", "blue"] as const) {
-        for (const teamKey of displayMatch.alliances[color].team_keys ?? []) {
-          const numericKey = teamNumberKey(teamKey);
-          result[teamKey] = {
-            opr: oprs?.oprs?.[teamKey],
-            dpr: oprs?.dprs?.[teamKey],
-            ccwm: oprs?.ccwms?.[teamKey],
-            preEpa: asRecord(preEpas[numericKey]),
-          };
-        }
-      }
-    }
-    return result;
-  }, [displayMatch, oprs, preEpas]);
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[#07090d] text-white">
@@ -244,13 +301,13 @@ export default function EventInsightView({
           <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <MatchPredictionMetrics prediction={prediction} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
-            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
+            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
+            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
           </div>
-          <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and breakdowns are shown only when published by TBA. Numeric Statbotics values are displayed without application-side rounding or truncation.</p>
+          {isPostMatch ? <ScoreBreakdown match={displayMatch} /> : null}
+          <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and year-specific score breakdowns are from TBA. Statbotics numeric values are formatted for readability, and alliance estimates are the sum of the individual team estimates.</p>
         </div>
       )}
     </main>
   );
 }
-
