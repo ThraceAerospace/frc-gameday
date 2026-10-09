@@ -107,6 +107,16 @@ export default function RemoteSession({
               controlsVisible: current.controlsVisible,
               priorityEditKey: current.priorityEditKey,
             });
+
+            // The display reports its authoritative surface config on every
+            // connection. Follow it with the controller's current domain snapshots.
+            for (const [eventKey, state] of Object.entries(eventStatesRef.current)) {
+              peerRef.current?.sendMessage({
+                type: "eventStateSnapshot",
+                eventKey,
+                state,
+              });
+            }
           }
         },
       }),
