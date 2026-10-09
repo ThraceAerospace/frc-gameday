@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignalIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
@@ -31,6 +31,10 @@ export default function RemoteSurface({
     controller.getState,
     controller.getState,
   );
+
+  useEffect(() => {
+    if (state.eventPickerOpen) setSettingsOpen(true);
+  }, [state.eventPickerOpen]);
 
   useTileSurfaceKeyboard(state, controller.actions, () => setSettingsOpen((open) => !open));
 
