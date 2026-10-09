@@ -32,7 +32,7 @@ function AllianceCard({
 }) {
   const alliance = match.alliances[color];
   const teamNames = useMemo(
-    () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key])),
+    () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
     [snapshot.teams],
   );
   const scorePosted = typeof alliance.score === "number" && alliance.score >= 0;
