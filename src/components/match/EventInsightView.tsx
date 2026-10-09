@@ -6,6 +6,7 @@ import type { StatboticsMatch, StatboticsPrediction } from "@/lib/statbotics/typ
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
+import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
 type AllianceColor = "red" | "blue";
@@ -148,99 +149,6 @@ function AllianceCard({
   );
 }
 
-function ScoreBreakdown({
-  match,
-  year,
-}: {
-  match: TBAMatch;
-  year: number | undefined;
-}) {
-  const breakdown = match.score_breakdown;
-  if (!breakdown || !match.alliances || match.alliances.red.score < 0 || match.alliances.blue.score < 0) return null;
-
-  if (year === 2026 && "hubScore" in breakdown.red && "hubScore" in breakdown.blue) {
-    const red = breakdown.red;
-    const blue = breakdown.blue;
-    return (
-      <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown · 2026</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {(["red", "blue"] as const).map((color) => {
-            const side = color === "red" ? red : blue;
-            const styles = color === "red" ? "border-red-400/20 bg-red-950/10" : "border-blue-400/20 bg-blue-950/10";
-            return (
-              <div key={color} className={`rounded-lg border p-3 ${styles}`}>
-                <h3 className={`mb-2 text-xs font-bold uppercase ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</h3>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <dt className="text-neutral-400">Auto points</dt><dd className="text-right tabular-nums">{side.totalAutoPoints}</dd>
-                  <dt className="text-neutral-400">Teleop points</dt><dd className="text-right tabular-nums">{side.totalTeleopPoints}</dd>
-                  <dt className="text-neutral-400">Tower points</dt><dd className="text-right tabular-nums">{side.totalTowerPoints}</dd>
-                  <dt className="text-neutral-400">Hub auto</dt><dd className="text-right tabular-nums">{side.hubScore.autoPoints} ({side.hubScore.autoCount} fuel)</dd>
-                  <dt className="text-neutral-400">Hub transition</dt><dd className="text-right tabular-nums">{side.hubScore.transitionPoints} ({side.hubScore.transitionCount} fuel)</dd>
-                  <dt className="text-neutral-400">Hub shift 1</dt><dd className="text-right tabular-nums">{side.hubScore.shift1Points} ({side.hubScore.shift1Count} fuel)</dd>
-                  <dt className="text-neutral-400">Hub shift 2</dt><dd className="text-right tabular-nums">{side.hubScore.shift2Points} ({side.hubScore.shift2Count} fuel)</dd>
-                  <dt className="text-neutral-400">Hub shift 3</dt><dd className="text-right tabular-nums">{side.hubScore.shift3Points} ({side.hubScore.shift3Count} fuel)</dd>
-                  <dt className="text-neutral-400">Hub shift 4</dt><dd className="text-right tabular-nums">{side.hubScore.shift4Points} ({side.hubScore.shift4Count} fuel)</dd>
-                  <dt className="text-neutral-400">Hub endgame</dt><dd className="text-right tabular-nums">{side.hubScore.endgamePoints} ({side.hubScore.endgameCount} fuel)</dd>
-                  <dt className="text-neutral-400">Auto tower</dt><dd className="text-right tabular-nums">{side.autoTowerPoints}</dd>
-                  <dt className="text-neutral-400">Endgame tower</dt><dd className="text-right tabular-nums">{side.endGameTowerPoints}</dd>
-                  <dt className="text-neutral-400">Foul points</dt><dd className="text-right tabular-nums">{side.foulPoints}</dd>
-                  <dt className="text-neutral-400">RP earned</dt><dd className="text-right tabular-nums">{side.rp}</dd>
-                </dl>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    );
-  }
-
-  const formatLabel = (key: string) => key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-
-  const renderEntries = (value: object, prefix = "") =>
-    Object.entries(value).map(([key, fieldValue]) => {
-      const label = formatLabel(key);
-      const nested = typeof fieldValue === "object" && fieldValue !== null && !Array.isArray(fieldValue);
-      if (nested) {
-        return (
-          <div key={prefix + key} className="col-span-full rounded-md bg-black/15 p-2">
-            <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{label}</h4>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-              {Object.entries(fieldValue).map(([childKey, childValue]) => (
-                <div key={childKey} className="flex flex-col gap-0.5">
-                  <dt className="text-xs text-neutral-500">{formatLabel(childKey)}</dt>
-                  <dd className="text-sm tabular-nums text-neutral-200">{String(childValue)}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        );
-      }
-      return (
-        <div key={prefix + key} className="flex flex-col gap-0.5">
-          <dt className="text-xs text-neutral-500">{label}</dt>
-          <dd className="text-sm tabular-nums text-neutral-200">{fieldValue == null ? "—" : String(fieldValue)}</dd>
-        </div>
-      );
-    });
-
-  return (
-    <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-300">Official score breakdown · {year ?? "match year"}</h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(["red", "blue"] as const).map((color) => (
-          <div key={color} className={`rounded-lg border p-3 ${color === "red" ? "border-red-400/20 bg-red-950/10" : "border-blue-400/20 bg-blue-950/10"}`}>
-            <h3 className={`mb-2 text-xs font-bold uppercase ${color === "red" ? "text-red-300" : "text-blue-300"}`}>{color} alliance</h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">{renderEntries(breakdown[color], color)}</dl>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 export default function EventInsightView({
   eventKey,
