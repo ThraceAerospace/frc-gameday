@@ -68,7 +68,7 @@ function AllianceTeams({
           href={`/team/${teamKey}`}
           className={`rounded-md border px-2 py-1 font-mono text-xs font-bold transition ${allianceClasses(alliance)} ${highlighted.has(teamKey.toLowerCase()) ? "ring-2 ring-slate-400 ring-offset-1" : ""}`}
         >
-          {teamNumber(teamKey)}
+          {formatTeamNumber(teamKey)}
         </Link>
       ))}
     </div>

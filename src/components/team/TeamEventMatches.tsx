@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TBAEliminationAlliance, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
-import MatchRow from "@/components/matches/MatchRow";
+import MatchRow from "@/components/match/MatchRow";
 
 export default function TeamEventMatches({
   event,

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
-import { TBAMatchSimple } from "@/lib/tba/types";
+import { TBAMatch, TBAMatchSimple } from "@/lib/tba/types";
 import { compLevelShortName, formatMatchTime, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
+import MatchRow from "@/components/match/MatchRow";
 
 export default async function EventPage({
   params,
@@ -23,12 +24,14 @@ export default async function EventPage({
 
   let event;
   let matches;
+  let alliances;
   let navigationEvents;
 
   try {
-    [event, matches, navigationEvents] = await Promise.all([
+    [event, matches, alliances, navigationEvents] = await Promise.all([
       TBA.getEvent(eventKey),
-      TBA.getEventMatchesSimple(eventKey),
+      TBA.getEventMatches(eventKey),
+      TBA.getEventPlayoffAlliances(eventKey),
       TBA.getEvents(new Date().getFullYear()),
     ]);
   } catch {
@@ -141,28 +144,15 @@ export default async function EventPage({
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {matches.map((match: TBAMatchSimple) => (
-                    <div
+                  {matches.map((match: TBAMatch) => (
+                    <MatchRow 
+                      eventKey={event.key}
                       key={match.key}
-                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 bg-white px-5 py-4"
-                    >
-                      <div className="min-w-20">
-                        <p className="font-mono text-sm font-medium">{matchCode(match.key)}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {compLevelShortName(match.comp_level)}
-                        </p>
-                      </div>
-                      <div className="grid min-w-0 grid-cols-2 gap-6 text-sm sm:grid-cols-4">
-                        <Alliance label="Red" teams={match.alliances?.red?.team_keys} />
-                        <Alliance label="Blue" teams={match.alliances?.blue?.team_keys} />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-slate-600">{formatMatchTime(match.time)}</p>
-                        {match.actual_time != null && (
-                          <p className="mt-0.5 text-xs text-slate-400">Played</p>
-                        )}
-                      </div>
-                    </div>
+                      match={match}
+                      playoffType={event.playoff_type ?? null}
+                      highlightedTeamKeys={[]}
+                      playoffAlliances={alliances ?? null}
+                    />
                   ))}
                 </div>
               )}
