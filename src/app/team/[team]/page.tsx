@@ -4,7 +4,7 @@ import TeamAvatar from "@/components/team/TeamAvatar";
 import TeamEventMatches from "@/components/team/TeamEventMatches";
 import TeamSeasonSelector from "@/components/team/TeamSeasonSelector";
 import { TBA } from "@/lib/tba/service";
-import type { TBAEventSimple, TBAMatch } from "@/lib/tba/types";
+import type { TBAEliminationAlliance, TBAEvent, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
 
 function normalizeTeamKey(value: string): string {
   return value.startsWith("frc") ? value : `frc${value}`;
@@ -76,10 +76,19 @@ export default async function TeamPage({
   const sortedEvents = [...events].sort(sortEvents);
 
   const eventMatches = await Promise.all(
-    sortedEvents.map(async (event) => ({
-      event,
-      matches: (await TBA.getTeamMatches(teamKey, event.key)).sort(sortMatches),
-    })),
+    sortedEvents.map(async (event) => {
+      const [fullEvent, matches, playoffAlliances] = await Promise.all([
+        TBA.getEvent(event.key),
+        TBA.getTeamMatches(teamKey, event.key),
+        TBA.getEventPlayoffAlliances(event.key),
+      ]);
+
+      return {
+        event: { ...event, playoff_type: fullEvent.playoff_type },
+        matches: matches.sort(sortMatches),
+        playoffAlliances,
+      };
+    }),
   );
 
   const matches = eventMatches.flatMap(({ event, matches }) =>
@@ -188,12 +197,13 @@ export default async function TeamPage({
                 No events found for {year}.
               </p>
             ) : (
-              eventMatches.map(({ event, matches: eventTeamMatches }) => (
+              eventMatches.map(({ event, matches: eventTeamMatches, playoffAlliances }) => (
                 <TeamEventMatches
                   key={event.key}
                   event={event}
                   matches={eventTeamMatches}
-                  teamKey={teamKey}
+                  highlightedTeamKeys={[teamKey]}
+                  playoffAlliances={playoffAlliances}
                 />
               ))
             )}
