@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
-import type { StatboticsEPA, StatboticsMatch, StatboticsPrediction } from "@/lib/statbotics/types";
+import type { StatboticsMatch, StatboticsPrediction } from "@/lib/statbotics/types";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
@@ -152,7 +152,7 @@ function ScoreBreakdown({
   const breakdown = match.score_breakdown;
   if (!breakdown || !match.alliances || match.alliances.red.score < 0 || match.alliances.blue.score < 0) return null;
 
-  if (match.key.startsWith("2026") && "red" in breakdown && "blue" in breakdown) {
+  if (match.key.startsWith("2026") && "hubScore" in breakdown.red && "hubScore" in breakdown.blue) {
     const red = breakdown.red;
     const blue = breakdown.blue;
     return (
