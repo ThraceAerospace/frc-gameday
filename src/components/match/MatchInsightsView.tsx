@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEventState } from "@/lib/events";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import type { TBAMatch } from "@/lib/tba/types";
-import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./MatchPredictionBar";
 
 type AllianceColor = "red" | "blue";
@@ -281,7 +281,7 @@ export function MatchInsightsContent({
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
         <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">
           <h1 className="min-w-0 truncate text-left text-lg font-semibold sm:text-xl">{eventTitle}</h1>
-          <h1 className="min-w-0 truncate text-center text-sm font-semibold text-neutral-200">{displayMatch ? matchLongName(displayMatch) : "No match selected"}</h1>
+          <h1 className="min-w-0 truncate text-center text-sm font-semibold text-neutral-200">{displayMatch ? matchShortName(displayMatch, event?.playoff_type ?? null) : "No match selected"}</h1>
           <span className="text-right text-xs text-neutral-500">{displayMatch ? displayMatch.key : ""}</span>
         </div>
       </header>
