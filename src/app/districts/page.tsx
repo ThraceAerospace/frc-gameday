@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
+import { formatTeamNumber } from "@/lib/tba/formatters";
 import { TBA } from "@/lib/tba/service";
 
 export default async function DistrictsPage() {
@@ -45,7 +46,7 @@ export default async function DistrictsPage() {
                 </div>
                 <p className="mb-2 mt-4 text-[11px] font-bold uppercase tracking-wider text-slate-400">Top district points</p>
                 <div className="space-y-1">
-                  {district.rankings.slice(0, 5).map((ranking: any, index: number) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-2 py-2 text-xs"><span className="truncate font-mono text-slate-700">{ranking.team_key?.replace(/^frc/, "") ?? "—"}</span><span className="shrink-0 font-semibold text-slate-900">{ranking.point_total ?? ranking.total_points ?? "—"} pts</span></div>)}
+                  {district.rankings.slice(0, 5).map((ranking: any, index: number) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-2 py-2 text-xs"><span className="truncate font-mono text-slate-700">{ranking.team_key ? formatTeamNumber(ranking.team_key) : "—"}</span><span className="shrink-0 font-semibold text-slate-900">{ranking.point_total ?? ranking.total_points ?? "—"} pts</span></div>)}
                 </div>
               </div>
             </section>
