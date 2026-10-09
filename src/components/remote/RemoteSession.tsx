@@ -265,7 +265,8 @@ export default function RemoteSession({
           insightsEventKey={insightsEventKey}
           onDisplayModeChange={(mode) => {
             setDisplayMode(mode);
-            const nextEventKey = insightsEventKey ?? localController.getState().streams[0] ?? null;
+            const currentSurface = localController.getState();
+            const nextEventKey = insightsEventKey ?? (currentSurface.streams[0] ? currentSurface.tileEvents[currentSurface.streams[0]] ?? currentSurface.streams[0] : null);
             setInsightsEventKey(nextEventKey);
             peer.sendMessage({ type: "displayModeSnapshot", mode, eventKey: nextEventKey });
           }}
