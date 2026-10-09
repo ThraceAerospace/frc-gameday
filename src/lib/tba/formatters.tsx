@@ -210,3 +210,40 @@ export function formatMatchEventTime(
   if (timestampSeconds == null) return "—";
   return formatEventTime(timestampSeconds, eventTimeZone ?? undefined);
 }
+
+
+/** Whether a TBA competition level is an elimination round. */
+export function isEliminationMatch(compLevel: string | null | undefined): boolean {
+  return ["ef", "qf", "sf", "f"].includes(compLevel?.toLowerCase() ?? "");
+}
+
+/**
+ * Find the playoff alliance represented by a match alliance's team keys.
+ * Require at least two overlapping teams to avoid false matches from one team.
+ */
+export function formatPlayoffAllianceName(
+  teamKeys: string[],
+  playoffAlliances: TBAEliminationAlliance[] | null | undefined,
+): string | null {
+  if (!playoffAlliances?.length || !teamKeys.length) return null;
+
+  let bestMatch: { name: string; overlap: number } | null = null;
+
+  for (const alliance of playoffAlliances) {
+    if (!alliance.name) continue;
+
+    const allianceTeamKeys = new Set([
+      ...alliance.picks,
+      ...(alliance.backup ? [alliance.backup.in] : []),
+    ].map((key) => key.toLowerCase()));
+    const overlap = teamKeys.filter((key) =>
+      allianceTeamKeys.has(key.toLowerCase()),
+    ).length;
+
+    if (overlap > (bestMatch?.overlap ?? 0)) {
+      bestMatch = { name: alliance.name, overlap };
+    }
+  }
+
+  return bestMatch && bestMatch.overlap >= 2 ? bestMatch.name : null;
+}
