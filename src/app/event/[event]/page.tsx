@@ -2,7 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import { TBAMatchSimple } from "@/lib/tba/types";
-import { compLevelShortName, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
+import { compLevelShortName, formatMatchTime, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
 
 export default async function EventPage({
   params,
@@ -157,7 +157,7 @@ export default async function EventPage({
                         <Alliance label="Blue" teams={match.alliances?.blue?.team_keys} />
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-slate-600">{match.time == null ? "—" : new Date(match.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
+                        <p className="text-sm text-slate-600">{formatMatchTime(match.time)}</p>
                         {match.actual_time != null && (
                           <p className="mt-0.5 text-xs text-slate-400">Played</p>
                         )}
