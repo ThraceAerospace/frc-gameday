@@ -127,6 +127,7 @@ Valid footer modes are:
 - `matchStrip`
 - `rankings`
 - `split`
+- `statbotics` — shows the regular match strip beside Statbotics prediction metrics.
 - `hidden`
 
 Multiview may temporarily hide the footer bar through `footerHidden`, but it must not select or override the EventView's configured footer content mode.
