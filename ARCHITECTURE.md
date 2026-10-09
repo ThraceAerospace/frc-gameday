@@ -472,3 +472,12 @@ For a connected remote session, the controller is the owner of live event acquis
 The display remains authoritative for its surface configuration at connection and reconnect: it sends a state snapshot to the controller, after which controller actions update that configuration. The controller then sends the current event snapshots back to the display. Event snapshots and surface configuration remain separate message types.
 
 A standalone local surface (including /event/[event]/insights) can host its own EventState in its browser runtime. It does not persist that runtime across refreshes. The stop-on-zero-subscribers lifecycle remains in effect; retained subscribers should not be torn down and recreated merely because another event is added to a surface.
+
+
+## 10. Multiple remote displays and display modes
+
+The controller can manage multiple physical displays by connecting to each display's unique six-digit pairing code. Each code remains a one-controller/one-display signaling session; multiple displays are represented as multiple peer connections in the controller browser. Every peer has its own surface controller and configuration, while event acquisition is shared through the controller browser's per-event EventState registry.
+
+The controller keeps inactive display sessions mounted and hides their presentation instead of disconnecting them. This preserves each session's runtime configuration and peer connection while the operator switches between display tabs. Removing a display unmounts its session and releases its event subscriptions normally.
+
+Each display has its own presentation mode (`gameday` or `insights`) and, for Match Insights, a selected event key. The display reports its current mode alongside its surface snapshot after connection/reconnection; the controller then owns subsequent changes and sends mode updates to that display. The Gameday surface and Match Insights view remain mounted on the display, with one hidden, to avoid reloading stream iframes when switching modes.
