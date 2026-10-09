@@ -30,6 +30,32 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
+function sumExact(values: number[]): string {
+  const strings = values.map(String);
+  if (strings.some((value) => /[eE]/.test(value))) {
+    return String(values.reduce((sum, value) => sum + value, 0));
+  }
+
+  const precision = Math.max(0, ...strings.map((value) => value.split(".")[1]?.length ?? 0));
+  const scale = 10n ** BigInt(precision);
+  const total = strings.reduce((sum, value) => {
+    const negative = value.startsWith("-");
+    const unsigned = negative ? value.slice(1) : value;
+    const [whole = "0", fraction = ""] = unsigned.split(".");
+    const digits = fraction.padEnd(precision, "0");
+    const integer = BigInt(whole) * scale + BigInt(digits || "0");
+    return sum + (negative ? -integer : integer);
+  }, 0n);
+
+  const negative = total < 0n;
+  const absolute = negative ? -total : total;
+  const whole = absolute / scale;
+  const remainder = absolute % scale;
+  if (remainder === 0n) return (negative ? "-" : "") + String(whole);
+  const fraction = remainder.toString().padStart(precision, "0").replace(/0+$/, "");
+  return (negative ? "-" : "") + String(whole) + "." + fraction;
+}
+
 const PRE_EPA_FIELDS = [
   ["epa", "EPA"],
   ["auto_epa", "Auto EPA"],
@@ -74,7 +100,7 @@ function AllianceCard({
     : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[#091321]" };
 
   const totals = useMemo(() => {
-    const values: Record<string, number | undefined> = {};
+    const values: Record<string, string | undefined> = {};
     for (const metric of ALLIANCE_METRICS) {
       const teamValues = allianceTeams.map((teamKey) => {
         const team = estimates[teamKey];
@@ -84,7 +110,7 @@ function AllianceCard({
         return team?.preEpa?.[metric.key] as number | undefined;
       });
       values[metric.key] = teamValues.length > 0 && teamValues.every((value) => typeof value === "number" && Number.isFinite(value))
-        ? teamValues.reduce((sum, value) => sum + (value as number), 0)
+        ? sumExact(teamValues as number[])
         : undefined;
     }
     return values;
@@ -101,7 +127,7 @@ function AllianceCard({
           <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Combined</span>
           {ALLIANCE_METRICS.map((metric) => (
             <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
-              {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{exactNumber(totals[metric.key])}</strong>
+              {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{totals[metric.key] ?? "—"}</strong>
             </span>
           ))}
         </div>
