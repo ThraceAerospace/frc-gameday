@@ -14,9 +14,7 @@ type Props = {
   peerStatus: RemotePeerStatus;
   eventStates: Record<string, EventStateSnapshot>;
   displayMode: "gameday" | "insights";
-  insightsEventKey: string | null;
   onDisplayModeChange: (mode: "gameday" | "insights") => void;
-  onInsightsEventKeyChange: (eventKey: string | null) => void;
 };
 
 export default function RemoteSurface({
@@ -24,9 +22,7 @@ export default function RemoteSurface({
   peerStatus,
   eventStates,
   displayMode,
-  insightsEventKey,
   onDisplayModeChange,
-  onInsightsEventKeyChange,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -70,22 +66,6 @@ export default function RemoteSurface({
                 <option value="insights">Match Insights</option>
               </select>
             </label>
-            {displayMode === "insights" ? (
-              <label className="flex items-center gap-2 text-xs text-neutral-500">
-                <span>Event</span>
-                <select
-                  value={insightsEventKey ?? ""}
-                  onChange={(event) => onInsightsEventKeyChange(event.target.value || null)}
-                  className="max-w-44 rounded-lg border border-white/10 bg-neutral-950 px-2 py-2 text-sm text-white outline-none"
-                  aria-label="Match Insights event"
-                >
-                  <option value="">Choose event</option>
-                  {[...new Set(state.streams.map((tileId) => state.tileEvents[tileId] ?? tileId))].map((eventKey) => (
-                    <option key={eventKey} value={eventKey}>{state.labels[eventKey] ?? eventKey}</option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
             <button className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm font-medium text-white/80 hover:border-white/20 hover:bg-white/[0.04]" onClick={() => setSettingsOpen(true)}>
               <Cog6ToothIcon className="h-5 w-5" />
             </button>
