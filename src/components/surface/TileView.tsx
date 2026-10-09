@@ -83,6 +83,7 @@ type TileViewProps = {
   controller: TileSurfaceController;
   isDivisional?: boolean;
   className?: string;
+  onOpenMatchInsights?: (eventKey: string) => void;
   renderEventView?: (args: {
     eventKey: string;
     controller: TileSurfaceController;
@@ -106,6 +107,7 @@ export default function TileView({
   controller,
   isDivisional = false,
   className = "",
+  onOpenMatchInsights,
   renderEventView,
 }: TileViewProps) {
   const state = useSyncExternalStore(
@@ -267,6 +269,7 @@ export default function TileView({
                 controlHeld={controlHeld}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}
+                onOpenMatchInsights={() => onOpenMatchInsights?.(eventKey)}
               />
             )}
           </div>
