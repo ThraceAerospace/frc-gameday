@@ -53,14 +53,12 @@ function AllianceCard({
   snapshot,
   trackedTeams,
   estimates,
-  prediction,
 }: {
   color: AllianceColor;
   match: TBAMatch;
   snapshot: EventStateSnapshot;
   trackedTeams: string[];
   estimates: Record<string, TeamEstimates>;
-  prediction: JsonRecord;
 }) {
   const alliance = match.alliances[color];
   const allianceTeams = alliance.team_keys ?? [];
@@ -92,34 +90,15 @@ function AllianceCard({
     return values;
   }, [allianceTeams, estimates]);
 
-  const predictedScore = prediction[color + "_score"];
-  const predictedRpFields = [
-    ["energized_rp", "Energized RP"],
-    ["supercharged_rp", "Supercharged RP"],
-    ["traversal_rp", "Traversal RP"],
-  ] as const;
-
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
       <header className={`border-b px-4 py-3 ${colorClasses.header}`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
-            <span className={`text-2xl font-semibold tabular-nums ${colorClasses.text}`}>{exactNumber(predictedScore)}</span>
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Predicted score</span>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <span className={`text-xs font-bold uppercase tracking-[0.18em] ${colorClasses.text}`}>{color} alliance</span>
           <span className="text-2xl font-semibold tabular-nums text-white">{scorePosted ? alliance.score : "—"}</span>
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-          {predictedRpFields.map(([suffix, label]) => (
-            <div key={suffix} className="flex items-baseline gap-1.5">
-              <span className="text-[9px] uppercase tracking-wider text-neutral-500">Pred. {label}</span>
-              <span className={`font-mono text-xs font-semibold tabular-nums ${colorClasses.text}`}>{exactNumber(prediction[color + "_" + suffix])}</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/10 pt-2">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Alliance total</span>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">Combined</span>
           {ALLIANCE_METRICS.map((metric) => (
             <span key={metric.key} className="whitespace-nowrap text-[10px] text-neutral-400">
               {metric.label} <strong className="font-mono font-semibold tabular-nums text-neutral-200">{exactNumber(totals[metric.key])}</strong>
@@ -321,7 +300,7 @@ export function MatchInsightsContent({
           {isPostMatch ? <div className="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-200">{isShowingTransitionResult ? "Official result · next match loading" : "Official result available"}</div> : null}
           <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} prediction={prediction} />
+            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} />
             <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} estimates={estimates} prediction={prediction} />
           </div>
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and breakdowns are shown only when published by TBA. Numeric Statbotics values are displayed without application-side rounding or truncation.</p>
