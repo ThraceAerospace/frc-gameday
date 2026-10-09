@@ -99,7 +99,7 @@ These are intentionally separate.
 
 ### Domain State
 
-Domain State describes the information being displayed: event data, matches, teams, alliances, webcast metadata, and future Statbotics data.
+Domain State describes the information being displayed: event data, matches, teams, alliances, webcast metadata, and Statbotics match predictions and EPA estimates.
 
 Domain State can be consumed by many Views and many Surfaces. There must not be a separate copy merely because Views are rendered in different places.
 
