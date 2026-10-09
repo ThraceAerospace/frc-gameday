@@ -39,6 +39,7 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   websocketStale: false,
   upcomingMatchKey: null,
   upcomingMatchTeamKeys: [],
+  statboticsMatches: {},
 };
 
 export function subscribeEventState(
