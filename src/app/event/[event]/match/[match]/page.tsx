@@ -2,7 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 import type { TBAMatch } from "@/lib/tba/types";
-import { matchLongName } from "@/lib/tba/formatters";
+import { formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import { formatEventTime } from "@/lib/time";
 
 export default async function MatchPage({
@@ -281,7 +281,7 @@ function AlliancePanel({
             href={`/team/${team}`}
             className="rounded-lg border border-slate-200 bg-white px-3 py-3 font-mono text-sm text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
           >
-            {team.replace(/^frc/i, "")}
+            {formatTeamNumber(team)}
           </Link>
         ))}
       </div>
@@ -419,7 +419,7 @@ function ScoreBreakdownPanel({
             className="flex items-center justify-between gap-4 px-5 py-2.5"
           >
             <dt className="text-sm text-slate-600">
-              {formatBreakdownLabel(key)}
+              {formatScoreBreakdownLabel(key)}
             </dt>
             <dd className="font-mono text-sm font-semibold text-slate-900">
               {String(value)}
@@ -429,12 +429,6 @@ function ScoreBreakdownPanel({
       </dl>
     </div>
   );
-}
-
-function formatBreakdownLabel(key: string) {
-  return key
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function formatMatchType(match: TBAMatch) {
@@ -465,10 +459,3 @@ function formatTime(
   return formatEventTime(timestamp, timezone ?? undefined);
 }
 
-function formatScore(score: number | null | undefined) {
-  if (score == null || score < 0) {
-    return "—";
-  }
-
-  return score;
-}
