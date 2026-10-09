@@ -149,7 +149,6 @@ export default function MatchStrip({
                     eventTimezone={
                       eventTimezone ?? undefined
                     }
-                    onOpenInsights={onOpenInsights}
                   />
                 </div>
               ))}
