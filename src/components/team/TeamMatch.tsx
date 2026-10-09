@@ -41,7 +41,7 @@ export default function TeamMatch({
   match,
   teamKey,
 }: {
-  event: TBAEventSimple;
+  event: TBAEventSimple & { playoff_type?: number | null };
   match: TBAMatch;
   teamKey: string;
 }) {
