@@ -154,6 +154,9 @@ export default function EventView({
       playoffAlliances={alliances}
       eventTimezone={eventData?.timezone}
       playoffType={eventData?.playoff_type}
+      priorityEditing={priorityEditing}
+      activeHighlighted={activeHighlighted}
+      imminentMatch={imminentMatch}
     />
   ));
 
