@@ -104,6 +104,15 @@ export function useUpcomingMatchAlert({
     const activeMatchKey = activeMatchHighlightRef.current;
 
     if (activeMatchKey && activeMatchKey !== imminentMatchKey) {
+      if (imminentMatchKey) {
+        // Register the replacement before releasing the old key so the
+        // controller keeps the event's original highlight snapshot.
+        actions.highlightMatch(eventKey, imminentMatchKey);
+        activeMatchHighlightRef.current = imminentMatchKey;
+        actions.releaseMatchHighlight(eventKey, activeMatchKey);
+        return;
+      }
+
       actions.releaseMatchHighlight(eventKey, activeMatchKey);
       activeMatchHighlightRef.current = null;
     }
