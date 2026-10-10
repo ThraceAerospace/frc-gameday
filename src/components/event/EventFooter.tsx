@@ -75,7 +75,7 @@ export default function EventFooter({
           className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
             contentHidden
               ? "bottom-0 left-0"
-              : "bottom-full left-0 translate-y-px"
+              : "bottom-full left-0"
           }`}
         >
           <button
