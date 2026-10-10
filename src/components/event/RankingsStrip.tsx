@@ -332,7 +332,7 @@ export default function RankingsStrip({
                   className={[
                     "flex h-[34px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3",
                     isTracked
-                      ? "border-b-2 border-b-white"
+                      ? "border-b-2 border-b-yellow-400"
                       : "",
                   ].join(" ")}
                 >
@@ -347,11 +347,10 @@ export default function RankingsStrip({
 
                   <span className="h-5 w-px bg-white/10" />
 
-                  <span className="font-mono text-[10px] text-neutral-400">
-                    {sortOrderName}{" "}
+                  {/* <span className="font-mono text-[10px] text-neutral-400">
                     {entry.status!.qual!.ranking!
                       .sort_orders?.[0] ?? "—"}
-                  </span>
+                  </span> */}
 
                   <span className="font-mono text-[10px] text-neutral-500">
                     {formatRecord(entry.status!.qual!.ranking!.record)}
