@@ -93,7 +93,7 @@ export default function TeamPill({
   const nextMatchLabel = nextMatch ? matchAbbreviationName(nextMatch, playoffType) : null;
 
   return (
-    <div className={`relative z-30 box-border -mb-px flex h-6 items-center gap-1.5 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg backdrop-blur`}>
+    <div className={`relative z-30 box-border flex h-6 items-center gap-1.5 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg backdrop-blur`}>
       <span className="font-mono text-[11px] font-bold text-neutral-100">
         {teamNumber}
       </span>
