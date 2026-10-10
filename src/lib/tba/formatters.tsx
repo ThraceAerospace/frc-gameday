@@ -121,7 +121,7 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
 }
 
 /** Compact next-match label used by TeamPill, following TBA's mobile convention. */
-export function teamPillMatchName(
+export function matchAbbreviationName(
   match: TBAMatch,
   eventPlayoffType: number | null = null,
 ): string {
