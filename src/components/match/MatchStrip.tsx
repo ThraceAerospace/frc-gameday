@@ -59,43 +59,44 @@ export default function MatchStrip({
   const hideMatchCards =
     presentation.matchInfo === "hidden";
   /*
-   * Scroll only when the furthest scored match changes.
+   * Keep the upcoming match at the left edge of the visible match bar.
+   * Use viewport-relative geometry rather than offsetLeft: the card is
+   * nested inside the flex content row, so offsetLeft can be relative to
+   * that row instead of the scrolling container.
    *
-   * We deliberately do not use nextMatch as the scroll target. An
-   * aborted/E-Stopped match can remain unscored in TBA for a long time,
-   * so waiting for it would leave the strip stuck. Instead, find the last
-   * match with both alliance scores posted and bring that card to the
-   * left edge. Upcoming matches remain visible to its right.
+   * Fall back to the furthest scored match when there is no next match,
+   * so the strip still follows completed match data after an event ends.
    */
   const furthestScoredMatch = [...cards]
     .reverse()
-    .find(
-      hasPostedScore,
-    );
+    .find(hasPostedScore);
+  const scrollTarget = nextMatch ?? furthestScoredMatch;
 
   useEffect(() => {
-    if (
-      hideMatchCards ||
-      !furthestScoredMatch?.key ||
-      !scrollRef.current
-    ) {
-      return;
-    }
-
     const container = scrollRef.current;
-    const scoredElement = container.querySelector(
-      '[data-match-key="' + furthestScoredMatch.key + '"]',
-    ) as HTMLElement | null;
 
-    if (!scoredElement) {
+    if (hideMatchCards || !scrollTarget?.key || !container) {
       return;
     }
+
+    const targetElement = container.querySelector<HTMLElement>(
+      '[data-match-key="' + scrollTarget.key + '"]',
+    );
+
+    if (!targetElement) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = targetElement.getBoundingClientRect();
+    const targetLeft =
+      container.scrollLeft + targetRect.left - containerRect.left;
 
     container.scrollTo({
-      left: Math.max(0, scoredElement.offsetLeft - 8),
+      left: Math.max(0, targetLeft - 8),
       behavior: "smooth",
     });
-  }, [furthestScoredMatch?.key, hideMatchCards]);
+  }, [scrollTarget?.key, hideMatchCards]);
 
   return (
     <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
