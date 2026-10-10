@@ -123,23 +123,22 @@ export default function TileView({
     eventKey: string,
     alert: SurfaceUpcomingMatchAlert | null,
   ) => {
-    setUpcomingAlert((current) => {
-      if (!alert) {
-        return current?.eventKey === eventKey ? null : current;
-      }
+    if (!alert) {
+      setUpcomingAlert((current) =>
+        current?.eventKey === eventKey ? null : current
+      );
+      return;
+    }
 
-      const alertKey = `${alert.eventKey}:${alert.match.key}`;
-      if (seenAlertKeysRef.current.has(alertKey)) {
-        // The same event/match may be re-published after a clear or a data
-        // refresh. It is one notification, not a new imminent-match alert.
-        return current?.eventKey === alert.eventKey && current.match.key === alert.match.key
-          ? alert
-          : current;
-      }
+    const alertKey = `${alert.eventKey}:${alert.match.key}`;
+    if (seenAlertKeysRef.current.has(alertKey)) {
+      return;
+    }
 
-      seenAlertKeysRef.current.add(alertKey);
-      return alert;
-    });
+    // Keep this side effect outside the state updater: React may invoke
+    // updater functions more than once in development Strict Mode.
+    seenAlertKeysRef.current.add(alertKey);
+    setUpcomingAlert(alert);
   }, []);
 
   useEffect(() => {
