@@ -14,6 +14,7 @@ export function formatEventTime(timestampSeconds: number | null | undefined, eve
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
+    timeZoneName: "short",
   });
 
   const parts = Object.fromEntries(
@@ -29,7 +30,7 @@ export function formatEventTime(timestampSeconds: number | null | undefined, eve
     parts.month === nowParts.month &&
     parts.day === nowParts.day;
 
-  const time = `${parts.hour}:${parts.minute}`;
+  const time = `${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
 
   return sameDay ? time : `${parts.weekday} ${time}`;
 }
