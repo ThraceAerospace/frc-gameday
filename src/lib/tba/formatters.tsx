@@ -159,12 +159,29 @@ export function formatScoreBreakdownLabel(key: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
-/** Consistent W-L-T display for TBA ranking and alliance records. */
+/** Consistent, color-coded W-L-T display for TBA ranking and alliance records. */
 export function formatRecord(
   record: { wins?: number | null; losses?: number | null; ties?: number | null } | null | undefined,
-): string {
+): ReactNode {
   if (!record) return "—";
-  return `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}`;
+
+  const wins = record.wins ?? 0;
+  const losses = record.losses ?? 0;
+  const ties = record.ties ?? 0;
+
+  return (
+    <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+      <span className="text-green-400">{wins}</span>
+      <span className="text-neutral-400">-</span>
+      <span className="text-red-400">{losses}</span>
+      {ties > 0 && (
+        <>
+          <span className="text-neutral-400">-</span>
+          <span className="text-neutral-300">{ties}</span>
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Use compact alliance labels (A1, A2) while retaining unknown/custom names. */
