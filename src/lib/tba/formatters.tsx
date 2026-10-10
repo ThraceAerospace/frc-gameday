@@ -31,6 +31,28 @@ export function matchCode(matchKey: string): string {
   }
 }
 
+/** Map TBA's playoff set numbers to their double-elimination bracket and round. */
+function doubleEliminationBracketInfo(setNum: number): { bracket: "Upper" | "Lower"; round: number } | null {
+  const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
+    ? "Upper"
+    : [5, 6, 9, 10, 12, 13].includes(setNum)
+      ? "Lower"
+      : null;
+  const round = setNum <= 4
+    ? 1
+    : setNum <= 8
+      ? 2
+      : setNum <= 10
+        ? 3
+        : setNum <= 12
+          ? 4
+          : setNum === 13
+            ? 5
+            : null;
+
+  return bracket && round ? { bracket, round } : null;
+}
+
 export function matchLongName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
@@ -44,24 +66,9 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
         return `Final ${matchNum}`;
       case "SF":
         if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
-            ? "Upper"
-            : [5, 6, 9, 10, 12, 13].includes(setNum)
-              ? "Lower"
-              : null;
-          const round = setNum <= 4
-            ? 1
-            : setNum <= 8
-              ? 2
-              : setNum <= 10
-                ? 3
-                : setNum <= 12
-                  ? 4
-                  : setNum === 13
-                    ? 5
-                    : null;
-          return bracket && round
-            ? `${bracket} Bracket - Round ${round} - Match ${setNum}`
+          const bracketInfo = doubleEliminationBracketInfo(setNum);
+          return bracketInfo
+            ? `${bracketInfo.bracket} Bracket - Round ${bracketInfo.round} - Match ${setNum}`
             : `Playoff ${setNum}`;
         } else if (eventPlayoffType === 5) {
           return `Playoff ${setNum}`;
@@ -84,14 +91,9 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
   }
 }
 
-/** Resolve the double-elimination round from TBA's playoff set number. */
+/** Resolve the double-elimination round from the shared bracket mapping. */
 function doubleEliminationRound(setNum: number): number | null {
-  if ([1, 2, 3, 4].includes(setNum)) return 1;
-  if ([5, 6, 7, 8].includes(setNum)) return 2;
-  if ([9, 10].includes(setNum)) return 3;
-  if ([11, 12].includes(setNum)) return 4;
-  if (setNum === 13) return 5;
-  return null;
+  return doubleEliminationBracketInfo(setNum)?.round ?? null;
 }
 
 export function matchShortName(match: TBAMatch, eventPlayoffType: number | null = null): string {
