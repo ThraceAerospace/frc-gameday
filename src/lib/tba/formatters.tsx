@@ -10,7 +10,7 @@ export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): Rea
       ? trackedTeams.includes(teamKey)
       : trackedTeams === teamKey;
 
-  const className = isTracked ? "p-1 font-bold text-amber-400" : "p-1";
+  const className = isTracked ? "p-1 font-bold tracked-accent-text" : "p-1";
 
   return (
     <span key={teamKey} className={className}>
