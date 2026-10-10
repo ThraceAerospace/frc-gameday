@@ -111,14 +111,7 @@ export default function MatchStrip({
                   key={match.key}
                     match={match}
                     team={team}
-                    isNext={
-                      match.key ===
-                      nextMatch?.key
-                    }
-                    isLast={
-                      match.key ===
-                      lastMatch?.key
-                    }
+                    isNext={match.key === nextMatch?.key}
                     playoffAlliances={
                       playoffAlliances
                     }
