@@ -93,7 +93,7 @@ export default function MatchCard({
           "px-2 py-1",
           "transition-colors",
           hasTrackedTeam
-            ? `border-amber-400 ${resultBackground ?? "bg-zinc-950"}`
+            ? `tracked-accent-border ${resultBackground ?? "bg-zinc-950"}`
             : isNext
               ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
               : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
