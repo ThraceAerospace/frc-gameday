@@ -46,6 +46,14 @@ export default function TeamPill({
   const record = status?.qual?.ranking?.record;
   const playoff = status?.playoff;
   const teamNumber = formatTeamNumber(team);
+  const teamKey = String(team).toLowerCase();
+  const isEliminated =
+    playoff?.status === "eliminated" ||
+    playoffAlliances.some(
+      (entry) =>
+        entry.status?.status === "eliminated" &&
+        entry.picks.some((pick) => String(pick).toLowerCase() === teamKey),
+    );
 
   const alliance = allianceLabel(
     team,
@@ -80,11 +88,11 @@ export default function TeamPill({
 
   return (
     <div className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-neutral-950/90 px-2 shadow-lg backdrop-blur">
-      <span className="font-mono text-[11px] font-bold">
+      <span className="font-mono text-[11px] font-bold text-neutral-100">
         {teamNumber}
       </span>
 
-      <span className="font-mono text-xs font-semibold text-neutral-100">
+      <span className={`font-mono text-[11px] font-semibold ${isEliminated ? "text-red-400" : "text-neutral-100"}`}>
         {recordLabel}
       </span>
 
@@ -96,12 +104,12 @@ export default function TeamPill({
         <>
           <span className="h-3 w-px bg-white/10" />
 
-          <span className="font-mono text-[10px] font-bold">
+          <span className="font-mono text-[11px] font-bold text-neutral-200">
             {nextMatchLabel}
           </span>
 
           {nextMatch?.predicted_time != null && (
-            <span className="font-mono text-[11px] text-neutral-400">
+            <span className="font-mono text-[11px] text-neutral-200">
               <NextMatchCountdown nextMatch={nextMatch} eventTimezone={eventTimezone} />
             </span>
           )}
