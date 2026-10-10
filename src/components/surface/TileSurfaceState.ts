@@ -18,6 +18,8 @@ export type TileSurfaceState = {
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
   upcomingMatchKeys: Record<string, string>;
+  /** Events currently holding an imminent-match auto-highlight. */
+  imminentMatchKeys: Record<string, string>;
   eventPickerOpen: boolean;
   eventSearch: string;
   availableEvents: TBAEvent[];
@@ -64,6 +66,7 @@ export function createInitialTileSurfaceState(
     activeKey: null,
     highlightLayoutKey: null,
     upcomingMatchKeys: {},
+    imminentMatchKeys: {},
     eventPickerOpen: false,
     eventSearch: "",
     availableEvents: [],
