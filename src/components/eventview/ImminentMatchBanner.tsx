@@ -10,6 +10,7 @@ type ImminentMatchBannerProps = {
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
+  playoffType: number | null;
 };
 
 export default function ImminentMatchBanner({
@@ -17,11 +18,12 @@ export default function ImminentMatchBanner({
   teams,
   eventName,
   eventTimezone,
+  playoffType,
 }: ImminentMatchBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(true);
 
-  const matchLabel = matchLongName(match) ?? match.key;
+  const matchLabel = matchLongName(match, playoffType) ?? match.key;
   const teamLabel = useMemo(
     () =>
       teams
