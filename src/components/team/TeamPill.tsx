@@ -33,12 +33,14 @@ export default function TeamPill({
   status,
   nextMatch,
   playoffAlliances = [],
+  eventTimezone,
 }: {
   team: string;
   status: TBATeamEventStatus | null | undefined;
   nextMatch: TBAMatch | null | undefined;
   playoffAlliances?: TBAEliminationAlliance[];
   playoffType?: number | null;
+  eventTimezone?: string | null;
 }) {
   const record = status?.qual?.ranking?.record;
   const teamNumber = formatTeamNumber(team);
@@ -82,7 +84,7 @@ export default function TeamPill({
 
           {nextMatch?.predicted_time != null && (
             <span className="font-mono text-[11px] text-neutral-400">
-              <NextMatchCountdown nextMatch={nextMatch} />
+              <NextMatchCountdown nextMatch={nextMatch} eventTimezone={eventTimezone} />
             </span>
           )}
         </>
