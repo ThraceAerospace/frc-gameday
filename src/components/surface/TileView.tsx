@@ -235,10 +235,10 @@ export default function TileView({
           >
             <div
               className={[
-                "pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90",
+                "pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 tracked-accent-glow",
                 "transition-[opacity,box-shadow] duration-500 ease-out",
                 Boolean(state.upcomingMatchKeys?.[eventKey])
-                  ? "opacity-100 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
+                  ? "opacity-100"
                   : "opacity-0 shadow-none",
               ].join(" ")}
               aria-hidden="true"
