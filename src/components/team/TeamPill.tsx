@@ -39,18 +39,34 @@ export default function TeamPill({
   status: TBATeamEventStatus | null | undefined;
   nextMatch: TBAMatch | null | undefined;
   playoffAlliances?: TBAEliminationAlliance[];
-  playoffType?: number | null;
   eventTimezone?: string | null;
 }) {
   const record = status?.qual?.ranking?.record;
+  const playoff = status?.playoff;
   const teamNumber = formatTeamNumber(team);
-
-  const recordLabel = formatRecord(record);
 
   const alliance = allianceLabel(
     team,
     playoffAlliances,
   );
+
+  // Once a team has been picked into a playoff alliance, show its playoff
+  // progress instead of its qualification record. The team status already
+  // carries the bracket-specific fields, so no event-level playoff_type is
+  // needed here.
+  const playoffLevel = playoff?.double_elim_round
+    ? playoff.double_elim_round
+    : playoff?.level?.toUpperCase();
+  const recordLabel = alliance && playoff
+    ? playoff.double_elim_round
+      ? playoffLevel ?? "—"
+      : (
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <span>{playoffLevel ?? "—"}</span>
+            {formatRecord(playoff.current_level_record)}
+          </span>
+        )
+    : formatRecord(record);
 
   const rankLabel = alliance
     ? alliance
