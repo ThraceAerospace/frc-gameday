@@ -126,18 +126,7 @@ export default function EventView({
     selectedStreamKey,
   );
 
-  const {
-    trackedMatches,
-    trackedNextMatch,
-    trackedLastMatch,
-    trackedNextMatches,
-  } = useTrackedMatches(
-    matches,
-    trackedTeams,
-  );
-
-  const teamMode =
-    trackedTeams.length > 0;
+  const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
 
   // Team tracking highlights relevant matches but never hides the event schedule.
   const nextMatch = eventNextMatch;
