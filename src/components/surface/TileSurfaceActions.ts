@@ -15,6 +15,8 @@ export type TileSurfaceActions = {
 
   setUpcomingMatchAlert(signal: UpcomingMatchAlert): void;
   highlightEvent(eventKey: string): void;
+  highlightMatch(eventKey: string, matchKey: string): void;
+  releaseMatchHighlight(eventKey: string, matchKey: string): void;
 
   toggleActive(eventKey: string): void;
   clearActive(): void;
