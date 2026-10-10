@@ -34,6 +34,8 @@ type EventViewProps = {
     footerHidden?: boolean;
   };
   priorityEditing?: boolean;
+  activeHighlighted?: boolean;
+  imminentMatch?: boolean;
   upcomingMatchKey?: string | null;
   onToggleActive?: () => void;
   slotNumber?: number;
@@ -47,6 +49,8 @@ export default function EventView({
   isDivisional = false,
   slotPresentation,
   priorityEditing = false,
+  activeHighlighted = false,
+  imminentMatch = false,
   upcomingMatchKey = null,
   onToggleActive,
   slotNumber,
@@ -312,6 +316,8 @@ export default function EventView({
         teamPills={teamPills}
         multiview={{ presentation }}
         priorityEditing={priorityEditing}
+        activeHighlighted={activeHighlighted}
+        imminentMatch={imminentMatch}
         onToggleActive={onToggleActive}
         slotNumber={slotNumber}
         controlHeld={controlHeld}
