@@ -230,7 +230,7 @@ export default function RankingsStrip({
                     className={[
                       "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
                       isTracked
-                        ? "border-b-2 border-b-white"
+                        ? "tracked-accent-underline"
                         : "",
                       status?.status === "playing"
                         ? "border-white/20 bg-white/[0.08]"
@@ -332,7 +332,7 @@ export default function RankingsStrip({
                   className={[
                     "flex h-[34px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3",
                     isTracked
-                      ? "border-b-2 border-b-yellow-400"
+                      ? "tracked-accent-underline"
                       : "",
                   ].join(" ")}
                 >
