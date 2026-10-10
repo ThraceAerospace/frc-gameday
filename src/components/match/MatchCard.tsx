@@ -13,7 +13,6 @@ type MatchCardProps = {
   match: TBAMatch;
   team?: string[];
   isNext?: boolean;
-  isLast?: boolean;
   playoffAlliances?: PlayoffAlliance[];
   playoffType?: number | null;
   eventTimezone?: string;
@@ -24,7 +23,6 @@ export default function MatchCard({
   match,
   team = [],
   isNext = false,
-  isLast = false,
   playoffAlliances = [],
   playoffType = null,
   eventTimezone,
@@ -35,6 +33,7 @@ export default function MatchCard({
 
   const trackedRed = red.some((key) => team.includes(key));
   const trackedBlue = blue.some((key) => team.includes(key));
+  const hasTrackedTeam = trackedRed || trackedBlue;
 
   const isElimination = match.comp_level !== "qm";
 
@@ -93,10 +92,10 @@ export default function MatchCard({
           "border",
           "px-2 py-1",
           "transition-colors",
-          isNext
-            ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
-            : isLast
-              ? `border-zinc-700 ${resultBackground ?? "bg-zinc-900/80"}`
+          hasTrackedTeam
+            ? `border-amber-400 ${resultBackground ?? "bg-zinc-950"}`
+            : isNext
+              ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
               : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
         ].join(" ")}
       >
