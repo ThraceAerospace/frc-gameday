@@ -177,7 +177,7 @@ export default function TileView({
   );
 
   return (
-    <main className={`relative min-h-0 flex-1 ${className}`}>
+    <main className={`relative h-full min-h-0 w-full flex-1 ${className}`}>
       {state.streams.map((tileId) => {
         const eventKey = state.tileEvents[tileId] ?? tileId;
         return (
