@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSharedSecondClock } from "@/lib/time/sharedSecondClock";
 import type { TBAMatch } from "@/lib/tba/types";
 
 type NextMatchCountdownProps = {
@@ -12,22 +12,13 @@ export default function NextMatchCountdown({
   nextMatch,
   eventTimezone,
 }: NextMatchCountdownProps) {
-  const [, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setNow(Date.now());
-    }, 1_000);
-
-    return () => window.clearInterval(id);
-  }, []);
+  const now = useSharedSecondClock();
 
   const matchTime = nextMatch.predicted_time ?? nextMatch.time;
   if (matchTime == null) {
     return null;
   }
 
-  const now = Date.now();
   const target = matchTime * 1_000;
 
   const seconds = Math.max(
