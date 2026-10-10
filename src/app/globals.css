@@ -222,3 +222,17 @@ button:disabled {
 .site-theme-dark .dark-surface {
   color-scheme: dark;
 }
+
+
+/* Match-imminence accents follow the same configurable color as tracked teams. */
+.tracked-accent-glow {
+  border-color: var(--tracked-accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tracked-accent) 30%, transparent),
+    0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
+}
+
+.tracked-accent-banner {
+  border-color: color-mix(in srgb, var(--tracked-accent) 80%, transparent);
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--tracked-accent) 20%, transparent);
+}
