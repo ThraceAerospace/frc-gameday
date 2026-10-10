@@ -6,7 +6,7 @@ import type {
   TBATeamEventStatus,
 } from "@/lib/tba/types";
 
-import { formatAllianceShortName, formatRecord, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
+import { formatAllianceShortName, formatRecord, formatTeamNumber, teamPillMatchName } from "@/lib/tba/formatters";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(
@@ -34,12 +34,14 @@ export default function TeamPill({
   nextMatch,
   playoffAlliances = [],
   eventTimezone,
+  playoffType = null,
 }: {
   team: string;
   status: TBATeamEventStatus | null | undefined;
   nextMatch: TBAMatch | null | undefined;
   playoffAlliances?: TBAEliminationAlliance[];
   eventTimezone?: string | null;
+  playoffType?: number | null;
 }) {
   const record = status?.qual?.ranking?.record;
   const playoff = status?.playoff;
@@ -74,7 +76,7 @@ export default function TeamPill({
       ? `#${status.qual.ranking.rank}`
       : "—";
 
-  const nextMatchLabel = nextMatch ? matchCode(nextMatch.key) : null;
+  const nextMatchLabel = nextMatch ? teamPillMatchName(nextMatch, playoffType) : null;
 
   return (
     <div className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-neutral-950/90 px-2 shadow-lg backdrop-blur">
