@@ -199,7 +199,9 @@ export class EventState {
   }
 
   reloadAll() {
-    void this.loadEvent();
+    // Event metadata (including webcasts) is stable across ordinary data
+    // refreshes. Reloading it can churn stream configuration and interrupt
+    // playback, so refresh only the event's changing data here.
     void this.loadTeams();
     this.reloadMatches();
     this.reloadStatuses();
@@ -318,11 +320,8 @@ export class EventState {
 
     this.update((current) => ({
       ...current,
-      // Keep an already-loaded event mounted while refreshing its metadata.
-      // EventView uses this state to decide whether to render StreamView;
-      // switching back to the loading placeholder would unmount the player.
-      loading: current.event ? current.loading : true,
-      error: current.event ? current.error : null,
+      loading: true,
+      error: null,
     }));
 
     try {
@@ -356,13 +355,10 @@ export class EventState {
 
       this.update((current) => ({
         ...current,
-        // If this was a background refresh, retain the last good event
-        // payload. A transient request failure must not tear down playback.
-        event: current.event,
+        event: null,
         loading: false,
-        error: current.event
-          ? null
-          : error instanceof Error
+        error:
+          error instanceof Error
             ? error
             : new Error("Event request failed"),
       }));
@@ -660,15 +656,6 @@ export class EventState {
 
       case "match_video":
         this.reloadMatches();
-        break;
-
-      case "schedule_updated":
-        // A schedule change can alter match order and team next-match
-        // statuses, but it does not change event metadata or webcasts.
-        // Avoid reloadAll() here: reloading event metadata can churn the
-        // stream configuration and interrupt otherwise-stable playback.
-        this.reloadMatches();
-        this.reloadStatuses();
         break;
 
       case "alliance_selection":
