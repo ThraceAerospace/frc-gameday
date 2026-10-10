@@ -225,8 +225,9 @@ button:disabled {
 
 
 /* Match-imminence accents follow the same configurable color as tracked teams. */
-.tracked-accent-glow {
-  border-color: var(--tracked-accent);
+.tracked-accent-glow,
+.tracked-accent-glow:hover {
+  border-color: var(--tracked-accent) !important;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--tracked-accent) 30%, transparent),
     0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
