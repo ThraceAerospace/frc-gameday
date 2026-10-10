@@ -82,7 +82,7 @@ export default function EventFooter({
             type="button"
             onClick={onToggleActive}
             disabled={!onToggleActive}
-            className={`relative z-30 box-border h-6 shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
+            className={`relative z-30 box-border flex h-6 shrink-0 items-end pb-0 pt-px rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
               onToggleActive
                 ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 : "cursor-default"
@@ -113,7 +113,7 @@ export default function EventFooter({
               ) : null}
               <span className="truncate">{eventName || "Event"}</span>
                   {eventTimezone && !isDivisional ? (
-                    <span className="mt-0.5 text-[9px] text-neutral-500">
+                    <span className="text-[9px] leading-none text-neutral-500">
                       <EventLocalTime timezone={eventTimezone} />
                     </span>
               ) : null}
