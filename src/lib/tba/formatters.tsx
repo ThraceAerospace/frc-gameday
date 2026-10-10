@@ -185,13 +185,22 @@ export function formatRecord(
 }
 
 /** Use compact alliance labels (A1, A2) while retaining unknown/custom names. */
-export function formatAllianceName(
+export function formatAllianceShortName(
   name: string | null | undefined,
   fallbackIndex?: number,
 ): string {
   if (!name) return fallbackIndex == null ? "" : `A${fallbackIndex + 1}`;
   return name.replace(/^Alliance\s+/i, "A");
 }
+
+export function formatAllianceLongName(
+  name: string | null | undefined,
+  fallbackIndex?: number,
+): string {
+  if (!name) return "Alliance";
+  return name;
+}
+
 
 /** Format the TBA playoff status according to the event's bracket type. */
 export function formatPlayoffLevel(

@@ -2,7 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance, formatAllianceName, matchCode, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
+import { formatAlliance, formatAllianceShortName, matchCode, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
 type PlayoffAlliance = {
   name?: string;
@@ -130,7 +130,7 @@ export default function MatchCard({
               trackedRed ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            {formatAllianceName(redAlliance?.name)}
+            {formatAllianceShortName(redAlliance?.name)}
             {formatAlliance(red, team)}
           </div>
 
@@ -153,7 +153,7 @@ export default function MatchCard({
               trackedBlue ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            {formatAllianceName(blueAlliance?.name)}
+            {formatAllianceShortName(blueAlliance?.name)}
             {formatAlliance(blue, team)}
           </div>
 

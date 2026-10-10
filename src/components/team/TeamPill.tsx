@@ -6,7 +6,7 @@ import type {
   TBATeamEventStatus,
 } from "@/lib/tba/types";
 
-import { formatAllianceName, formatRecord, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
+import { formatAllianceShortName, formatRecord, formatTeamNumber, matchCode } from "@/lib/tba/formatters";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(
@@ -25,7 +25,7 @@ function allianceLabel(
     return null;
   }
 
-  return formatAllianceName(alliance.name);
+  return formatAllianceShortName(alliance.name);
 }
 
 export default function TeamPill({

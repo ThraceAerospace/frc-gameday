@@ -5,7 +5,7 @@ import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
 } from "@/lib/tba/types";
-import { formatAllianceName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
+import { formatAllianceLongName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
 
 type RankingsStripProps = {
   teamsStatuses: TBAEventTeamStatuses;
@@ -239,7 +239,7 @@ export default function RankingsStrip({
                   >
                     <div className="flex flex-col justify-center">
                       <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
-                        {formatAllianceName(alliance.name, index)}
+                        {formatAllianceLongName(alliance.name, index)}
                       </span>
 
                       <span className="mt-0.5 text-[10px] font-semibold text-white">
