@@ -84,27 +84,40 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
   }
 }
 
+/** Resolve the double-elimination round from TBA's playoff set number. */
+function doubleEliminationRound(setNum: number): number | null {
+  if ([1, 2, 3, 4].includes(setNum)) return 1;
+  if ([5, 6, 7, 8].includes(setNum)) return 2;
+  if ([9, 10].includes(setNum)) return 3;
+  if ([11, 12].includes(setNum)) return 4;
+  if (setNum === 13) return 5;
+  return null;
+}
+
 export function matchShortName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
     const setNum = match.set_number;
-    // console.log("matchShortName", {compLevel, matchNum, setNum, eventPlayoffType});
+
     switch (compLevel.toUpperCase()) {
       case "F":
         return `Final ${matchNum}`;
       case "SF":
-        if (eventPlayoffType === 10 || eventPlayoffType === 11 || eventPlayoffType === 5) {
-            return `Playoff ${setNum}`;
-        } else {
-          return `Semis ${setNum}-${matchNum}`;
+        if (eventPlayoffType === 10) {
+          const round = doubleEliminationRound(setNum);
+          return round == null ? `R?${matchNum}` : `R${round}-${matchNum}`;
         }
+        if (eventPlayoffType === 11 || eventPlayoffType === 5) {
+          return `Playoff ${setNum}`;
+        }
+        return `SF${setNum}-${matchNum}`;
       case "QF":
         return `Quarters ${matchNum}`;
       case "EF":
         return `Eights ${matchNum}`;
       case "QM":
-         return `Qual ${matchNum}`;
+        return `Qual ${matchNum}`;
       default:
         return `Match ${matchNum}`;
     }
