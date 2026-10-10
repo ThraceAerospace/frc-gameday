@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
@@ -117,6 +117,7 @@ export default function TileView({
 
   const [controlHeld, setControlHeld] = useState(false);
   const [upcomingAlert, setUpcomingAlert] = useState<SurfaceUpcomingMatchAlert | null>(null);
+  const seenAlertKeysRef = useRef(new Set<string>());
 
   const handleUpcomingAlert = useCallback((
     eventKey: string,
@@ -127,7 +128,16 @@ export default function TileView({
         return current?.eventKey === eventKey ? null : current;
       }
 
-      // Always accept fresh webhook-derived data, even for the same match key.
+      const alertKey = `${alert.eventKey}:${alert.match.key}`;
+      if (seenAlertKeysRef.current.has(alertKey)) {
+        // The same event/match may be re-published after a clear or a data
+        // refresh. It is one notification, not a new imminent-match alert.
+        return current?.eventKey === alert.eventKey && current.match.key === alert.match.key
+          ? alert
+          : current;
+      }
+
+      seenAlertKeysRef.current.add(alertKey);
       return alert;
     });
   }, []);
