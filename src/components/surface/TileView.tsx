@@ -257,7 +257,7 @@ export default function TileView({
                 event={eventKey}
                 priorityEditing={state.priorityEditKey === tileId}
                 activeHighlighted={state.activeKey === tileId}
-                imminentMatch={Boolean(state.upcomingMatchKeys?.[eventKey])}
+                imminentMatch={Boolean(state.imminentMatchKeys?.[eventKey] || state.upcomingMatchKeys?.[eventKey])}
                 upcomingMatchKey={state.upcomingMatchKeys?.[eventKey] ?? null}
                 isDivisional={isDivisional}
                 controller={controller}
