@@ -92,10 +92,10 @@ export default function MatchCard({
           "border",
           "px-2 py-1",
           "transition-colors",
-          hasTrackedTeam
-            ? `tracked-accent-border ${resultBackground ?? "bg-zinc-950"}`
-            : isNext
-              ? `border-zinc-500 ${resultBackground ?? "bg-zinc-900"}`
+          isNext
+            ? `border-zinc-400 ring-1 ring-white/20 ${resultBackground ?? "bg-zinc-900"}`
+            : hasTrackedTeam
+              ? `tracked-accent-border ${resultBackground ?? "bg-zinc-950"}`
               : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
         ].join(" ")}
       >
