@@ -72,7 +72,7 @@ export default function EventFooter({
     >
       <div className={`relative ${contentHidden ? "h-0" : ""}`}>
         <div
-          className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+          className={`pointer-events-auto absolute z-30 flex h-3 max-w-[calc(100%-0.5rem)] items-end gap-1 ${
             contentHidden
               ? "bottom-0 left-0 translate-y-[2px]"
               : "bottom-full left-0 translate-y-[2px]"
@@ -82,7 +82,7 @@ export default function EventFooter({
             type="button"
             onClick={onToggleActive}
             disabled={!onToggleActive}
-            className={`relative z-30 box-border flex h-6 shrink-0 items-end pb-0 pt-px rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
+            className={`relative z-30 box-border flex h-3 shrink-0 items-end pb-0 pt-px rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
               onToggleActive
                 ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 : "cursor-default"
