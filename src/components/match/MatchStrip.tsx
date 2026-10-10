@@ -59,18 +59,15 @@ export default function MatchStrip({
   const hideMatchCards =
     presentation.matchInfo === "hidden";
   /*
-   * Keep the upcoming match at the left edge of the visible match bar.
-   * Use viewport-relative geometry rather than offsetLeft: the card is
-   * nested inside the flex content row, so offsetLeft can be relative to
-   * that row instead of the scrolling container.
-   *
-   * Fall back to the furthest scored match when there is no next match,
-   * so the strip still follows completed match data after an event ends.
+   * Keep the most recently scored match at the left edge of the visible
+   * match bar so its score remains visible alongside upcoming matches.
+   * Use viewport-relative geometry rather than offsetLeft because the card
+   * is nested inside a flex content row.
    */
   const furthestScoredMatch = [...cards]
     .reverse()
     .find(hasPostedScore);
-  const scrollTarget = nextMatch ?? furthestScoredMatch;
+  const scrollTarget = furthestScoredMatch;
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -96,7 +93,7 @@ export default function MatchStrip({
       left: Math.max(0, targetLeft - 8),
       behavior: "smooth",
     });
-  }, [scrollTarget?.key, hideMatchCards]);
+  }, [scrollTarget?.key, hideMatchCards, cards.length]);
 
   return (
     <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
