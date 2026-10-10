@@ -28,7 +28,7 @@ export default function RemoteDisplayPage() {
   return (
     <>
       {code && !hasConnected && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black text-white">
           <div className="text-center">
             <p className="text-sm uppercase tracking-[0.3em] text-neutral-500">
               FieldView Remote
