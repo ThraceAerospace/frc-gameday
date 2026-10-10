@@ -2,6 +2,21 @@
 
 :root {
   color-scheme: light;
+
+  /* One shared accent for tracked-team and tracked-match indicators. */
+  --tracked-accent: #c084fc;
+}
+
+.tracked-accent-text {
+  color: var(--tracked-accent);
+}
+
+.tracked-accent-border {
+  border-color: var(--tracked-accent);
+}
+
+.tracked-accent-underline {
+  border-bottom: 2px solid var(--tracked-accent);
 }
 
 html,
