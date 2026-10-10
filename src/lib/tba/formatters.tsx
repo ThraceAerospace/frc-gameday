@@ -141,7 +141,7 @@ export function matchAbbreviationName(
       return `SF${setNum}-${matchNum}`;
     }
 
-    if (compLevel === "F") return `F-${matchNum}`;
+    if (compLevel === "F") return `F${matchNum}`;
     if (compLevel === "QF") return `QF${setNum}-${matchNum}`;
     if (compLevel === "EF") return `EF${setNum}-${matchNum}`;
     if (compLevel === "QM") return `QM${matchNum}`;
