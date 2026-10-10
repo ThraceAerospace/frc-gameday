@@ -107,7 +107,8 @@ export default function MatchStrip({
           {cards.length > 0 ? (
             <div className="flex h-full min-w-max items-center gap-1.5 px-2">
               {cards.map((match) => (
-                  <MatchCard
+                <MatchCard
+                  key={match.key}
                     match={match}
                     team={team}
                     isNext={
