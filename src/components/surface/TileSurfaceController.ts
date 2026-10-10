@@ -52,13 +52,12 @@ export function useTileSurfaceController({
 
   const stateRef = useRef(state);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const matchHighlightSnapshotsRef = useRef(
-    new Map<string, {
-      eventKey: string;
-      activeKey: string | null;
-      highlightLayoutKey: TileSurfaceState["highlightLayoutKey"];
-    }>(),
-  );
+  const activeMatchHighlightsRef = useRef(new Map<string, string>());
+  const matchHighlightSnapshotRef = useRef<{
+    activeKey: string | null;
+    highlightLayoutKey: TileSurfaceState["highlightLayoutKey"];
+  } | null>(null);
+  const lastAutoHighlightEventRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -339,46 +338,79 @@ export function useTileSurfaceController({
       const current = stateRef.current;
       if (!current.streams.includes(eventKey)) return;
 
-      const snapshotKey = `${eventKey}:${matchKey}`;
-      if (!matchHighlightSnapshotsRef.current.has(snapshotKey)) {
-        matchHighlightSnapshotsRef.current.set(snapshotKey, {
-          eventKey,
+      if (activeMatchHighlightsRef.current.size === 0) {
+        matchHighlightSnapshotRef.current = {
           activeKey: current.activeKey,
           highlightLayoutKey: current.highlightLayoutKey,
-        });
+        };
       }
 
-      highlightEvent(eventKey);
+      activeMatchHighlightsRef.current.set(eventKey, matchKey);
+
+      // Priority is the arbitration order: the first event with an active
+      // imminent match wins, regardless of which event reported it last.
+      const winner = current.priority.find((key) =>
+        activeMatchHighlightsRef.current.has(key) && current.streams.includes(key)
+      );
+      if (!winner) return;
+
+      if (
+        lastAutoHighlightEventRef.current === winner &&
+        current.activeKey === winner
+      ) {
+        return;
+      }
+
+      lastAutoHighlightEventRef.current = winner;
+      highlightEvent(winner);
     },
     [highlightEvent],
   );
 
   const releaseMatchHighlight = useCallback(
     (eventKey: string, matchKey: string) => {
-      const snapshotKey = `${eventKey}:${matchKey}`;
-      const snapshot = matchHighlightSnapshotsRef.current.get(snapshotKey);
-      if (!snapshot || snapshot.eventKey !== eventKey) return;
+      // A newer imminent match for this same event supersedes the old key.
+      if (activeMatchHighlightsRef.current.get(eventKey) !== matchKey) return;
+      activeMatchHighlightsRef.current.delete(eventKey);
 
-      matchHighlightSnapshotsRef.current.delete(snapshotKey);
+      const current = stateRef.current;
+      const winner = current.priority.find((key) =>
+        activeMatchHighlightsRef.current.has(key) && current.streams.includes(key)
+      );
 
-      update((current) => {
-        // If the user changed the active tile/layout during the temporary
-        // highlight, preserve that newer manual choice.
+      if (winner) {
+        lastAutoHighlightEventRef.current = winner;
+        if (current.activeKey !== winner || current.highlightLayoutKey === null) {
+          highlightEvent(winner);
+        }
+        return;
+      }
+
+      const previousWinner = lastAutoHighlightEventRef.current;
+      const snapshot = matchHighlightSnapshotRef.current;
+      lastAutoHighlightEventRef.current = null;
+      matchHighlightSnapshotRef.current = null;
+
+      if (!snapshot) return;
+
+      update((latest) => {
+        // Don't override a manual selection made while the automatic
+        // highlight was active.
         if (
-          current.activeKey !== eventKey ||
-          current.highlightLayoutKey === null
+          latest.activeKey !== previousWinner ||
+          latest.highlightLayoutKey === null
         ) {
-          return current;
+          return latest;
         }
 
         return {
-          ...current,
+          ...latest,
           activeKey: snapshot.activeKey,
           highlightLayoutKey: snapshot.highlightLayoutKey,
         };
       });
     },
-    [update],
+    [highlightEvent, update],
   );
 
   const actions = useMemo<TileSurfaceActions>(
