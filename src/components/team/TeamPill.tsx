@@ -73,10 +73,10 @@ export default function TeamPill({
       : (
           <span className="inline-flex items-center gap-1 whitespace-nowrap">
             <span>{playoffLevel ?? "—"}</span>
-            {formatRecord(playoff.current_level_record)}
+            {formatRecord(playoff.current_level_record, { eliminated: isEliminated })}
           </span>
         )
-    : formatRecord(record);
+    : formatRecord(record, { eliminated: isEliminated });
 
   const rankLabel = alliance
     ? alliance
