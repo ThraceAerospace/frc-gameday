@@ -232,9 +232,7 @@ export default function RankingsStrip({
                       isTracked
                         ? "tracked-accent-underline"
                         : "",
-                      status?.status === "playing"
-                        ? "border-white/20 bg-white/[0.08]"
-                        : "border-zinc-800 bg-zinc-950",
+                      "border-zinc-800 bg-zinc-950",
                     ].join(" ")}
                   >
                     <div className="flex flex-col justify-center">
