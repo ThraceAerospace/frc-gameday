@@ -34,8 +34,6 @@ export function useUpcomingMatchAlert({
   actions,
 }: Options) {
   const previousUpcomingMatchRef = useRef<string | null>(null);
-  const previousNextMatchRef = useRef<string | null>(null);
-  const nextMatchInitializedRef = useRef(false);
 
   useEffect(() => {
     const upcomingMatchKey = eventState?.upcomingMatchKey ?? null;
