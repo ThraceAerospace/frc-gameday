@@ -144,8 +144,8 @@ export function matchAbbreviationName(
     if (compLevel === "F") return `F-${matchNum}`;
     if (compLevel === "QF") return `QF${setNum}-${matchNum}`;
     if (compLevel === "EF") return `EF${setNum}-${matchNum}`;
-    if (compLevel === "QM") return `Q${matchNum}`;
-    if (compLevel === "PM") return `P${matchNum}`;
+    if (compLevel === "QM") return `QM${matchNum}`;
+    if (compLevel === "PM") return `PM${matchNum}`;
     return `M${matchNum}`;
   } catch {
     return "UN";
