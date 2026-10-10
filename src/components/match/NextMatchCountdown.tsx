@@ -38,8 +38,14 @@ export default function NextMatchCountdown({
   const nowDate = new Date(now);
   const targetDate = new Date(target);
 
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: eventTimezone ?? undefined,
+  });
   const sameDay =
-    nowDate.toDateString() === targetDate.toDateString();
+    dateFormatter.format(nowDate) === dateFormatter.format(targetDate);
 
   const text = !sameDay
     ? targetDate.toLocaleString("en-US", {
