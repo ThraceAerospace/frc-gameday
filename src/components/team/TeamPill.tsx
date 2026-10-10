@@ -66,7 +66,7 @@ export default function TeamPill({
         {teamNumber}
       </span>
 
-      <span className="font-mono text-[11px] text-neutral-300">
+      <span className="font-mono text-xs font-semibold text-neutral-100">
         {recordLabel}
       </span>
 
