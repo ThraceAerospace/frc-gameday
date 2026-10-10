@@ -139,17 +139,10 @@ export default function EventView({
   const teamMode =
     trackedTeams.length > 0;
 
-  const nextMatch = teamMode
-    ? trackedNextMatch
-    : eventNextMatch;
-
-  const lastMatch = teamMode
-    ? trackedLastMatch
-    : eventLastMatch;
-
-  const displayMatches = teamMode
-    ? trackedMatches
-    : matches;
+  // Team tracking highlights relevant matches but never hides the event schedule.
+  const nextMatch = eventNextMatch;
+  const lastMatch = eventLastMatch;
+  const displayMatches = matches;
 
   useUpcomingMatchAlert({
     eventKey: event,
