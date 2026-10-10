@@ -201,12 +201,21 @@ export function formatScoreBreakdownLabel(key: string): string {
 /** Consistent, color-coded W-L-T display for TBA ranking and alliance records. */
 export function formatRecord(
   record: { wins?: number | null; losses?: number | null; ties?: number | null } | null | undefined,
+  options: { eliminated?: boolean } = {},
 ): ReactNode {
   if (!record) return "—";
 
   const wins = record.wins ?? 0;
   const losses = record.losses ?? 0;
   const ties = record.ties ?? 0;
+
+  if (options.eliminated) {
+    return (
+      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-red-300">
+        {wins}-{losses}{ties > 0 ? `-${ties}` : ""}
+      </span>
+    );
+  }
 
   return (
     <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
