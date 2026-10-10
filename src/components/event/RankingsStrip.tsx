@@ -232,7 +232,9 @@ export default function RankingsStrip({
                       isTracked
                         ? "tracked-accent-underline"
                         : "",
-                      "border-zinc-800 bg-zinc-950",
+                      status?.status === "eliminated"
+                        ? "border-red-500/40 bg-red-950/40"
+                        : "border-zinc-800 bg-zinc-950",
                     ].join(" ")}
                   >
                     <div className="flex flex-col justify-center">
@@ -252,11 +254,11 @@ export default function RankingsStrip({
                     <div className="h-6 w-px bg-white/10" />
 
                     <div className="flex flex-col justify-center text-right">
-                      <span className="font-mono text-[10px] text-neutral-300">
+                      <span className={`font-mono text-[10px] ${status?.status === "eliminated" ? "text-red-300" : "text-neutral-300"}`}>
                         {formatPlayoffLevel(alliance, playoffType)}
                       </span>
 
-                      <span className="font-mono text-xs font-semibold text-neutral-100">
+                      <span className={`font-mono text-xs font-semibold ${status?.status === "eliminated" ? "text-red-200" : "text-neutral-100"}`}>
                         {formatRecord(status?.record)}
                       </span>
                     </div>
