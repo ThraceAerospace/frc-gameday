@@ -29,6 +29,8 @@ type EventFooterProps = {
   teamsStatuses: TBAEventTeamStatuses;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
   priorityEditing?: boolean;
+  activeHighlighted?: boolean;
+  imminentMatch?: boolean;
   onToggleActive?: () => void;
   slotNumber?: number;
   controlHeld?: boolean;
@@ -52,6 +54,8 @@ export default function EventFooter({
   teamsStatuses,
   multiview = {},
   priorityEditing = false,
+  activeHighlighted = false,
+  imminentMatch = false,
   onToggleActive,
   slotNumber,
   controlHeld = false,
@@ -78,7 +82,7 @@ export default function EventFooter({
             type="button"
             onClick={onToggleActive}
             disabled={!onToggleActive}
-            className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg ${
+            className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : imminentMatch ? "tracked-accent-border tracked-accent-glow" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg ${
               onToggleActive
                 ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 : "cursor-default"
@@ -121,7 +125,7 @@ export default function EventFooter({
         </div>
 
         <div
-          className={`pointer-events-auto ${priorityEditing ? "border-t border-blue-500/80" : ""} ${
+          className={`pointer-events-auto ${priorityEditing ? "border-t border-blue-500/80" : activeHighlighted ? "border-t border-white shadow-[0_-1px_0_rgba(255,255,255,0.35)]" : imminentMatch ? "border-t tracked-accent-border tracked-accent-glow" : ""} ${
             contentHidden
               ? "absolute inset-x-0 bottom-0 translate-y-full"
               : "relative translate-y-0"
