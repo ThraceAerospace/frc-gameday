@@ -14,6 +14,7 @@ import type {
   TBAMatch,
   TBATeam,
 } from "@/lib/tba/types";
+import { scheduleSharedTimeout } from "@/lib/time/sharedSecondClock";
 import {
   eventWebSocket,
   type EventWebSocketMessage,
@@ -75,10 +76,10 @@ export class EventState {
   private unsubscribeWebSocket: (() => void) | null = null;
   private unsubscribeWebSocketStatus: (() => void) | null = null;
 
-  private matchTimer: number | null = null;
-  private statusTimer: number | null = null;
-  private allianceTimer: number | null = null;
-  private oprTimer: number | null = null;
+  private matchTimer: (() => void) | null = null;
+  private statusTimer: (() => void) | null = null;
+  private allianceTimer: (() => void) | null = null;
+  private oprTimer: (() => void) | null = null;
 
   private eventRequest = 0;
   private teamsRequest = 0;
@@ -87,10 +88,10 @@ export class EventState {
   private alliancesRequest = 0;
   private oprsRequest = 0;
 
-  private readonly authoritativeTimers = new Map<string, number>();
+  private readonly authoritativeTimers = new Map<string, () => void>();
   private readonly statboticsRequests = new Map<string, number>();
   private readonly statboticsSignatures = new Map<string, string>();
-  private readonly statboticsRefreshTimers = new Map<string, number>();
+  private readonly statboticsRefreshTimers = new Map<string, () => void>();
 
   constructor(eventKey: string) {
     this.eventKey = eventKey;
@@ -172,12 +173,12 @@ export class EventState {
     this.clearTimer("alliance");
     this.clearTimer("oprs");
 
-    for (const timer of this.authoritativeTimers.values()) {
-      window.clearTimeout(timer);
+    for (const cancel of this.authoritativeTimers.values()) {
+      cancel();
     }
 
     this.authoritativeTimers.clear();
-    for (const timer of this.statboticsRefreshTimers.values()) window.clearTimeout(timer);
+    for (const cancel of this.statboticsRefreshTimers.values()) cancel();
     this.statboticsRefreshTimers.clear();
     // Re-evaluate the current and last match when this EventState starts again.
     this.statboticsSignatures.clear();
@@ -197,7 +198,6 @@ export class EventState {
       ),
     }));
   }
-
   reloadAll() {
     // Event metadata (including webcasts) is stable across ordinary data
     // refreshes. Reloading it can churn stream configuration and interrupt
@@ -249,8 +249,8 @@ export class EventState {
 
     if (resultIsFinal) {
       const existingTimer = this.statboticsRefreshTimers.get(matchKey);
-      if (existingTimer !== undefined) window.clearTimeout(existingTimer);
-      const timer = window.setTimeout(() => {
+      if (existingTimer !== undefined) existingTimer();
+      const timer = scheduleSharedTimeout(() => {
         this.statboticsRefreshTimers.delete(matchKey);
         void this.fetchStatboticsMatch(matchKey, true);
       }, STATBOTICS_RESULT_REFRESH_DELAY);
@@ -398,7 +398,6 @@ export class EventState {
       if (request !== this.teamsRequest || this.stopped) {
         return;
       }
-
       console.error("[EventState] teams request failed", error);
     }
   }
@@ -597,8 +596,7 @@ export class EventState {
       message.type !== "tba-update" ||
       message.eventKey !== this.eventKey
     ) {
-      return;
-    }
+      return;    }
 
     this.update((current) =>
       current.websocketStale
@@ -680,10 +678,10 @@ export class EventState {
       this.authoritativeTimers.get(resource);
 
     if (existing !== undefined) {
-      window.clearTimeout(existing);
+      existing();
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = scheduleSharedTimeout(() => {
       this.authoritativeTimers.delete(resource);
 
       if (this.stopped) {
@@ -727,7 +725,7 @@ export class EventState {
   private scheduleMatchFallback() {
     this.clearTimer("match");
 
-    this.matchTimer = window.setTimeout(() => {
+    this.matchTimer = scheduleSharedTimeout(() => {
       this.matchTimer = null;
       this.update((current) => ({
         ...current,
@@ -740,7 +738,7 @@ export class EventState {
   private scheduleStatusFallback() {
     this.clearTimer("status");
 
-    this.statusTimer = window.setTimeout(() => {
+    this.statusTimer = scheduleSharedTimeout(() => {
       this.statusTimer = null;
       this.update((current) => ({
         ...current,
@@ -753,7 +751,7 @@ export class EventState {
   private scheduleAllianceFallback() {
     this.clearTimer("alliance");
 
-    this.allianceTimer = window.setTimeout(() => {
+    this.allianceTimer = scheduleSharedTimeout(() => {
       this.allianceTimer = null;
       this.update((current) => ({
         ...current,
@@ -766,7 +764,7 @@ export class EventState {
   private scheduleOprsFallback() {
     this.clearTimer("oprs");
 
-    this.oprTimer = window.setTimeout(() => {
+    this.oprTimer = scheduleSharedTimeout(() => {
       this.oprTimer = null;
       this.update((current) => ({
         ...current,
@@ -789,7 +787,7 @@ export class EventState {
             : this.oprTimer;
 
     if (timer !== null) {
-      window.clearTimeout(timer);
+      timer();
     }
 
     if (kind === "match") {
