@@ -258,7 +258,7 @@ export default function RankingsStrip({
                         {formatPlayoffLevel(alliance, playoffType)}
                       </span>
 
-                      <span className="font-mono text-[10px] text-neutral-300">
+                      <span className="font-mono text-xs font-semibold text-neutral-100">
                         {formatRecord(status?.record)}
                       </span>
                     </div>
@@ -352,7 +352,7 @@ export default function RankingsStrip({
                       .sort_orders?.[0] ?? "—"}
                   </span> */}
 
-                  <span className="font-mono text-[10px] text-neutral-500">
+                  <span className="font-mono text-xs font-semibold text-neutral-100">
                     {formatRecord(entry.status!.qual!.ranking!.record)}
                   </span>
                 </article>
