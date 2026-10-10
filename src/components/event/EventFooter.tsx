@@ -74,8 +74,8 @@ export default function EventFooter({
         <div
           className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
             contentHidden
-              ? "bottom-0 left-0 translate-y-px"
-              : "bottom-full left-0 translate-y-px"
+              ? "bottom-0 left-0 translate-y-[2px]"
+              : "bottom-full left-0 translate-y-[2px]"
           }`}
         >
           <button
@@ -113,7 +113,7 @@ export default function EventFooter({
               ) : null}
               <span className="truncate">{eventName || "Event"}</span>
                   {eventTimezone && !isDivisional ? (
-                    <span className="text-[9px] leading-none text-neutral-500">
+                    <span className="mt-0.5 text-[9px] text-neutral-500">
                       <EventLocalTime timezone={eventTimezone} />
                     </span>
               ) : null}
