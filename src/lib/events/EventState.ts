@@ -318,8 +318,11 @@ export class EventState {
 
     this.update((current) => ({
       ...current,
-      loading: true,
-      error: null,
+      // Keep an already-loaded event mounted while refreshing its metadata.
+      // EventView uses this state to decide whether to render StreamView;
+      // switching back to the loading placeholder would unmount the player.
+      loading: current.event ? current.loading : true,
+      error: current.event ? current.error : null,
     }));
 
     try {
@@ -353,10 +356,13 @@ export class EventState {
 
       this.update((current) => ({
         ...current,
-        event: null,
+        // If this was a background refresh, retain the last good event
+        // payload. A transient request failure must not tear down playback.
+        event: current.event,
         loading: false,
-        error:
-          error instanceof Error
+        error: current.event
+          ? null
+          : error instanceof Error
             ? error
             : new Error("Event request failed"),
       }));
