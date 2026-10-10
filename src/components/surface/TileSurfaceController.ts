@@ -346,6 +346,13 @@ export function useTileSurfaceController({
       }
 
       activeMatchHighlightsRef.current.set(eventKey, matchKey);
+      update((latest) => ({
+        ...latest,
+        imminentMatchKeys: {
+          ...latest.imminentMatchKeys,
+          [eventKey]: matchKey,
+        },
+      }));
 
       // Priority is the arbitration order: the first event with an active
       // imminent match wins, regardless of which event reported it last.
@@ -372,6 +379,12 @@ export function useTileSurfaceController({
       // A newer imminent match for this same event supersedes the old key.
       if (activeMatchHighlightsRef.current.get(eventKey) !== matchKey) return;
       activeMatchHighlightsRef.current.delete(eventKey);
+      update((latest) => {
+        if (latest.imminentMatchKeys[eventKey] !== matchKey) return latest;
+        const imminentMatchKeys = { ...latest.imminentMatchKeys };
+        delete imminentMatchKeys[eventKey];
+        return { ...latest, imminentMatchKeys };
+      });
 
       const current = stateRef.current;
       const winner = current.priority.find((key) =>
@@ -587,6 +600,9 @@ export function useTileSurfaceController({
           activeKey: next.activeKey === tileId ? null : next.activeKey,
           highlightLayoutKey: next.activeKey === tileId ? null : next.highlightLayoutKey,
           priorityEditKey: next.priorityEditKey === tileId ? null : next.priorityEditKey,
+          imminentMatchKeys: Object.fromEntries(
+            Object.entries(next.imminentMatchKeys).filter(([key]) => key !== (removedEventKey ?? tileId)),
+          ),
           tileEvents: nextTileEvents,
           tileTypes: nextTileTypes,
           eventConfigs: !stillHasEventView && nextTileTypes[removedEventKey ?? ""] !== "eventView"
