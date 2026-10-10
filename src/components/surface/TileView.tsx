@@ -17,6 +17,7 @@ type SurfaceUpcomingMatchAlert = {
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
+  playoffType: number | null;
 };
 
 function SurfaceUpcomingMatchAlertSource({
@@ -62,6 +63,7 @@ function SurfaceUpcomingMatchAlertSource({
       teams: upcomingTeams,
       eventName: event?.short_name || event?.name || eventKey,
       eventTimezone: event?.timezone ?? null,
+      playoffType: event?.playoff_type ?? null,
     });
   }, [
     config?.matchNotifications,
@@ -197,6 +199,7 @@ export default function TileView({
           teams={upcomingAlert.teams}
           eventName={upcomingAlert.eventName}
           eventTimezone={upcomingAlert.eventTimezone}
+          playoffType={upcomingAlert.playoffType}
         />
       )}
 
