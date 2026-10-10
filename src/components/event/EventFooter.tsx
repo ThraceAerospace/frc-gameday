@@ -72,7 +72,7 @@ export default function EventFooter({
     >
       <div className={`relative ${contentHidden ? "h-0" : ""}`}>
         <div
-          className={`pointer-events-auto absolute z-30 flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
+          className={`pointer-events-auto absolute z-30 -mb-px flex max-w-[calc(100%-0.5rem)] items-end gap-1 ${
             contentHidden
               ? "bottom-0 left-0"
               : "bottom-full left-0"
@@ -82,7 +82,7 @@ export default function EventFooter({
             type="button"
             onClick={onToggleActive}
             disabled={!onToggleActive}
-            className={`shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "tracked-accent-border tracked-accent-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 ${contentHidden ? "py-1" : "py-0 pt-1"} shadow-lg ${
+            className={`box-border h-7 shrink-0 rounded-t-lg border-x border-t ${priorityEditing ? "border-blue-500/90 shadow-[0_0_12px_rgba(59,130,246,0.12)]" : imminentMatch ? "tracked-accent-border tracked-accent-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
               onToggleActive
                 ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 : "cursor-default"
@@ -125,7 +125,7 @@ export default function EventFooter({
         </div>
 
         <div
-          className={`pointer-events-auto ${priorityEditing ? "border-x border-t border-blue-500/80" : imminentMatch ? "border-x border-t tracked-accent-border tracked-accent-glow" : activeHighlighted ? "border-x border-t border-white shadow-[0_-1px_0_rgba(255,255,255,0.35)]" : ""} ${
+          className={`pointer-events-auto border-x border-t ${priorityEditing ? "border-blue-500/80" : imminentMatch ? "tracked-accent-border tracked-accent-glow" : activeHighlighted ? "border-white shadow-[0_-1px_0_rgba(255,255,255,0.35)]" : "border-white/10"} ${
             contentHidden
               ? "absolute inset-x-0 bottom-0 translate-y-full"
               : "relative translate-y-0"
