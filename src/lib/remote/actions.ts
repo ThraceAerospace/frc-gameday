@@ -26,6 +26,8 @@ export type RemoteSessionMessage =
 export type RemoteSessionAction =
   | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
   | { type: "highlightEvent"; eventKey: string }
+  | { type: "highlightMatch"; eventKey: string; matchKey: string }
+  | { type: "releaseMatchHighlight"; eventKey: string; matchKey: string }
   | { type: "toggleActive"; eventKey: string }
   | { type: "clearActive" }
   | { type: "setLayout"; layoutKey: TileSurfaceState["layoutKey"] }
@@ -54,6 +56,8 @@ export function createRemoteSessionActions(
     hideControls() { local.hideControls(); },
     setUpcomingMatchAlert(signal) { local.setUpcomingMatchAlert(signal); send({ type: "setUpcomingMatchAlert", signal }); },
     highlightEvent(eventKey) { local.highlightEvent(eventKey); send({ type: "highlightEvent", eventKey }); },
+    highlightMatch(eventKey, matchKey) { local.highlightMatch(eventKey, matchKey); send({ type: "highlightMatch", eventKey, matchKey }); },
+    releaseMatchHighlight(eventKey, matchKey) { local.releaseMatchHighlight(eventKey, matchKey); send({ type: "releaseMatchHighlight", eventKey, matchKey }); },
     toggleActive(eventKey) { local.toggleActive(eventKey); send({ type: "toggleActive", eventKey }); },
     clearActive() { local.clearActive(); send({ type: "clearActive" }); },
     setLayout(layoutKey) { local.setLayout(layoutKey); send({ type: "setLayout", layoutKey }); },
@@ -85,6 +89,8 @@ export function applyRemoteSessionAction(
   switch (action.type) {
     case "setUpcomingMatchAlert": actions.setUpcomingMatchAlert(action.signal); break;
     case "highlightEvent": actions.highlightEvent(action.eventKey); break;
+    case "highlightMatch": actions.highlightMatch(action.eventKey, action.matchKey); break;
+    case "releaseMatchHighlight": actions.releaseMatchHighlight(action.eventKey, action.matchKey); break;
     case "toggleActive": actions.toggleActive(action.eventKey); break;
     case "clearActive": actions.clearActive(); break;
     case "setLayout": actions.setLayout(action.layoutKey); break;

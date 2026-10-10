@@ -92,33 +92,42 @@ export function useUpcomingMatchAlert({
     trackedTeams,
   ]);
 
+  const activeMatchHighlightRef = useRef<string | null>(null);
+
   useEffect(() => {
     const nextMatchKey = eventState?.eventNextMatch?.key ?? null;
-    const previous = previousNextMatchRef.current;
+    const statuses = eventState?.teamsStatuses ?? {};
+    const imminentMatchKey =
+      autoHighlight && nextMatchKey && trackedTeams.some((team) =>
+        statuses[normalizeTeamKey(team)]?.next_match_key === nextMatchKey
+      )
+        ? nextMatchKey
+        : null;
+    const activeMatchKey = activeMatchHighlightRef.current;
 
-    if (nextMatchInitializedRef.current && nextMatchKey !== previous) {
-      const nextMatch = eventState?.eventNextMatch;
-      const teamKeys = [
-        ...(nextMatch?.alliances.red.team_keys ?? []),
-        ...(nextMatch?.alliances.blue.team_keys ?? []),
-      ];
-
-      if (
-        nextMatch &&
-        autoHighlight &&
-        hasTrackedTeam(teamKeys, trackedTeams)
-      ) {
-        actions.highlightEvent(eventKey);
-      }
+    if (activeMatchKey && activeMatchKey !== imminentMatchKey) {
+      actions.releaseMatchHighlight(eventKey, activeMatchKey);
+      activeMatchHighlightRef.current = null;
     }
 
-    previousNextMatchRef.current = nextMatchKey;
-    nextMatchInitializedRef.current = true;
+    if (imminentMatchKey && activeMatchHighlightRef.current !== imminentMatchKey) {
+      actions.highlightMatch(eventKey, imminentMatchKey);
+      activeMatchHighlightRef.current = imminentMatchKey;
+    }
   }, [
     actions,
     autoHighlight,
     eventKey,
-    eventState?.eventNextMatch,
+    eventState?.eventNextMatch?.key,
+    eventState?.teamsStatuses,
     trackedTeams,
   ]);
+
+  useEffect(() => () => {
+    const matchKey = activeMatchHighlightRef.current;
+    if (matchKey) {
+      actions.releaseMatchHighlight(eventKey, matchKey);
+      activeMatchHighlightRef.current = null;
+    }
+  }, [actions, eventKey]);
 }

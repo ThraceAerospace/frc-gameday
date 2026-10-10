@@ -52,6 +52,13 @@ export function useTileSurfaceController({
 
   const stateRef = useRef(state);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matchHighlightSnapshotsRef = useRef(
+    new Map<string, {
+      eventKey: string;
+      activeKey: string | null;
+      highlightLayoutKey: TileSurfaceState["highlightLayoutKey"];
+    }>(),
+  );
 
   useEffect(() => {
     stateRef.current = state;
@@ -327,6 +334,53 @@ export function useTileSurfaceController({
     [showControls, update],
   );
 
+  const highlightMatch = useCallback(
+    (eventKey: string, matchKey: string) => {
+      const current = stateRef.current;
+      if (!current.streams.includes(eventKey)) return;
+
+      const snapshotKey = `${eventKey}:${matchKey}`;
+      if (!matchHighlightSnapshotsRef.current.has(snapshotKey)) {
+        matchHighlightSnapshotsRef.current.set(snapshotKey, {
+          eventKey,
+          activeKey: current.activeKey,
+          highlightLayoutKey: current.highlightLayoutKey,
+        });
+      }
+
+      highlightEvent(eventKey);
+    },
+    [highlightEvent],
+  );
+
+  const releaseMatchHighlight = useCallback(
+    (eventKey: string, matchKey: string) => {
+      const snapshotKey = `${eventKey}:${matchKey}`;
+      const snapshot = matchHighlightSnapshotsRef.current.get(snapshotKey);
+      if (!snapshot || snapshot.eventKey !== eventKey) return;
+
+      matchHighlightSnapshotsRef.current.delete(snapshotKey);
+
+      update((current) => {
+        // If the user changed the active tile/layout during the temporary
+        // highlight, preserve that newer manual choice.
+        if (
+          current.activeKey !== eventKey ||
+          current.highlightLayoutKey === null
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          activeKey: snapshot.activeKey,
+          highlightLayoutKey: snapshot.highlightLayoutKey,
+        };
+      });
+    },
+    [update],
+  );
+
   const actions = useMemo<TileSurfaceActions>(
     () => ({
       showControls,
@@ -334,6 +388,8 @@ export function useTileSurfaceController({
 
       setUpcomingMatchAlert,
       highlightEvent,
+      highlightMatch,
+      releaseMatchHighlight,
 
       toggleActive,
 
@@ -651,6 +707,8 @@ export function useTileSurfaceController({
     [
       setUpcomingMatchAlert,
       highlightEvent,
+      highlightMatch,
+      releaseMatchHighlight,
       hideControls,
       showControls,
       toggleActive,
