@@ -233,6 +233,14 @@ button:disabled {
     0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
 }
 
+.tracked-accent-pill-glow,
+.tracked-accent-pill-glow:hover {
+  border-color: var(--tracked-accent) !important;
+  /* Keep the accent glow, but omit the 1px all-sides outline that draws
+     an unwanted bottom seam where the pill overlaps the footer bar. */
+  box-shadow: 0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
+}
+
 .tracked-accent-banner {
   border-color: color-mix(in srgb, var(--tracked-accent) 80%, transparent);
   box-shadow: 0 8px 30px color-mix(in srgb, var(--tracked-accent) 20%, transparent);
