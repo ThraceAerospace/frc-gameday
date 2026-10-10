@@ -89,7 +89,7 @@ export default function EventFooter({
             }`}
             aria-label={onToggleActive ? `Activate ${eventName || "event"}` : undefined}
           >
-            <span className="relative top-px flex items-center gap-1.5 whitespace-nowrap leading-none text-[11px] font-bold text-white">
+            <span className="relative top-[6px] flex items-center gap-1.5 whitespace-nowrap leading-none text-[11px] font-bold text-white">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                   !wssConnected
