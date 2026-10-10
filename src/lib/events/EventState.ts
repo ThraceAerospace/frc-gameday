@@ -656,6 +656,15 @@ export class EventState {
         this.reloadMatches();
         break;
 
+      case "schedule_updated":
+        // A schedule change can alter match order and team next-match
+        // statuses, but it does not change event metadata or webcasts.
+        // Avoid reloadAll() here: reloading event metadata can churn the
+        // stream configuration and interrupt otherwise-stable playback.
+        this.reloadMatches();
+        this.reloadStatuses();
+        break;
+
       case "alliance_selection":
         this.reloadAlliances();
         break;
