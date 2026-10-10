@@ -148,7 +148,6 @@ export default function EventView({
       status={teamsStatuses[team]}
       nextMatch={trackedNextMatches[team]}
       playoffAlliances={alliances}
-      playoffType={eventData?.playoff_type}
       eventTimezone={eventData?.timezone}
     />
   ));
