@@ -56,7 +56,9 @@ Mutate the relevant existing Redis cache after authentication/parsing, then broa
 
 ## Client realtime behavior
 
-The shared event WebSocket manager connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff. Each `EventState` handles event-scoped TBA invalidations, refreshes its own resources, and owns its fallback/reconciliation lifecycle. Views consume the resulting snapshots; they must not start duplicate refresh loops. Keep the manual `r` refresh behavior unless explicitly changed.
+Live route layouts under `src/app/gameday`, `src/app/event`, and `src/app/insights` register a shared live-runtime lease. One origin-wide SharedWorker owns the physical WebSocket at `/api/ws`, its event-key subscriptions, the EventState map, and all event acquisition. Tabs receive EventState snapshots over MessagePorts; a tab must not create its own EventState or per-tab WebSocket when SharedWorker is available.
+
+The worker sends `subscribe`/`unsubscribe` messages for event keys, reconnects with exponential backoff, and resubscribes active keys after reconnect. EventState still owns the per-event refresh and reconciliation policy, but its instances live in the worker. WSS messages remain invalidation signals. Preserve the 65-second authoritative refetch delay, request-race protection, tag invalidation, ETag/304 behavior, and the manual `r` refresh behavior. Remote displays consuming EventStateSnapshotsProvider remain read-only and must not subscribe to worker event acquisition. When all live clients leave, close the socket and stop event timers; do not keep an idle worker connection open.
 
 ## Polling
 
