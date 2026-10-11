@@ -14,7 +14,7 @@ import type {
   TBAMatch,
   TBATeam,
 } from "@/lib/tba/types";
-import { scheduleSharedTimeout } from "@/lib/time/sharedSecondClock";
+import { scheduleSharedTimeout } from "@/lib/time/sharedTimeout";
 import {
   eventWebSocket,
   type EventWebSocketMessage,
