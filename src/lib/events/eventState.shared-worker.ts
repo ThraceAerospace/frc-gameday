@@ -2,6 +2,7 @@
 
 import { EventState } from "./EventState";
 import type { EventStateSnapshot } from "./EventState";
+import { workerEventWebSocket } from "./workerRealtime";
 
 type ClientMessage =
   | { type: "subscribe"; eventKey: string }
@@ -45,7 +46,7 @@ function subscribe(port: MessagePort, eventKey: string) {
 
   let record = events.get(eventKey);
   if (!record) {
-    record = { state: new EventState(eventKey), clients: new Map() };
+    record = { state: new EventState(eventKey, workerEventWebSocket), clients: new Map() };
     events.set(eventKey, record);
   }
 
