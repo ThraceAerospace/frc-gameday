@@ -12,7 +12,8 @@ type ClientMessage =
       eventKey: string;
       resource: "all" | "matches" | "statuses" | "alliances" | "oprs";
     }
-  | { type: "close" };
+  | { type: "close" }
+  | { type: "ping"; nonce: number };
 
 type EventRecord = {
   state: EventState;
@@ -113,6 +114,9 @@ function handleMessage(port: MessagePort, message: ClientMessage) {
       }
       break;
     }
+    case "ping":
+      port.postMessage({ type: "pong", nonce: message.nonce });
+      break;
     case "close":
       closePort(port);
       break;
