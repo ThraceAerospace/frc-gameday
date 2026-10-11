@@ -51,8 +51,12 @@ function connect() {
   worker = nextWorker;
   port = nextPort;
   nextPort.onmessage = handleWorkerMessage;
-  nextPort.onmessageerror = recover;
-  nextWorker.addEventListener("error", recover);
+  nextPort.onmessageerror = () => {
+    if (port === nextPort) recover();
+  };
+  nextWorker.addEventListener("error", () => {
+    if (port === nextPort) recover();
+  });
   nextPort.start();
   lastPongAt = Date.now();
   if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
@@ -84,7 +88,7 @@ function recover() {
     // The worker may already have been terminated.
   }
   oldPort?.close();
-  if (listeners.size > 0) connect();
+  if (listeners.size > 0 || liveRuntimeRefs > 0) connect();
 }
 
 export function getEventStateSnapshot(eventKey: string): EventStateSnapshot | undefined {
