@@ -3711,6 +3711,10 @@ export interface components {
         };
         /** @description Playoff status for this team, may be null if the team did not make playoffs, or playoffs have not begun. */
         Team_Event_Status_playoff: null | {
+            /** @description Playoff bracket format, or null if unavailable. */
+            playoff_type?: components["schemas"]["PlayoffType"] | null;
+            /** @description Current double elimination round, if applicable. */
+            double_elim_round?: components["schemas"]["Double_Elim_Round"];
             level?: components["schemas"]["Comp_Level"];
             current_level_record?: components["schemas"]["WLT_Record"] | null;
             record?: components["schemas"]["WLT_Record"] | null;

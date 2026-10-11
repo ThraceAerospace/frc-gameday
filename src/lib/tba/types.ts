@@ -16,12 +16,8 @@ type TBATeamEventPlayoffStatus = NonNullable<
   double_elim_round?: components["schemas"]["Double_Elim_Round"];
 };
 
-export type TBATeamEventStatus = Omit<
-  components["schemas"]["Team_Event_Status"],
-  "playoff"
-> & {
-  playoff?: TBATeamEventPlayoffStatus | null;
-};
+export type TBATeamEventStatus = components["schemas"]["Team_Event_Status"];
+
 
 export type TBAAward = components["schemas"]["Award"];
 export type TBAMatch = components["schemas"]["Match"];
