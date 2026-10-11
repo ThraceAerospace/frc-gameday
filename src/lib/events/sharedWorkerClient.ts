@@ -9,6 +9,9 @@ const snapshots = new Map<string, EventStateSnapshot>();
 const listeners = new Map<string, Set<SnapshotListener>>();
 let worker: SharedWorker | null = null;
 let port: MessagePort | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let lastPongAt = 0;
+let heartbeatNonce = 0;
 
 function post(message: unknown) {
   if (!port) connect();
@@ -22,6 +25,10 @@ function handleWorkerMessage(event: MessageEvent) {
     snapshot?: EventStateSnapshot;
   };
 
+  if (message.type === "pong") {
+    lastPongAt = Date.now();
+    return;
+  }
   if (message.type !== "snapshot" || !message.eventKey || !message.snapshot) {
     return;
   }
@@ -46,6 +53,16 @@ function connect() {
   nextPort.onmessageerror = recover;
   nextWorker.addEventListener("error", recover);
   nextPort.start();
+  lastPongAt = Date.now();
+  if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => {
+    if (!port) return;
+    if (Date.now() - lastPongAt > 120_000) {
+      recover();
+      return;
+    }
+    port.postMessage({ type: "ping", nonce: ++heartbeatNonce });
+  }, 30_000);
 
   for (const [eventKey, eventListeners] of listeners) {
     if (eventListeners.size > 0) {
@@ -58,8 +75,15 @@ function recover() {
   const oldPort = port;
   port = null;
   worker = null;
+  if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+  try {
+    oldPort?.postMessage({ type: "close" });
+  } catch {
+    // The worker may already have been terminated.
+  }
   oldPort?.close();
-  connect();
+  if (listeners.size > 0) connect();
 }
 
 export function getEventStateSnapshot(eventKey: string): EventStateSnapshot | undefined {
@@ -95,6 +119,8 @@ export function subscribeSharedEventState(
     }
     if (listeners.size === 0 && port) {
       port.postMessage({ type: "close" });
+      if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
       port.close();
       port = null;
       worker = null;
