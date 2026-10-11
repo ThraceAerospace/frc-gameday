@@ -59,43 +59,41 @@ export default function MatchStrip({
   const hideMatchCards =
     presentation.matchInfo === "hidden";
   /*
-   * Scroll only when the furthest scored match changes.
-   *
-   * We deliberately do not use nextMatch as the scroll target. An
-   * aborted/E-Stopped match can remain unscored in TBA for a long time,
-   * so waiting for it would leave the strip stuck. Instead, find the last
-   * match with both alliance scores posted and bring that card to the
-   * left edge. Upcoming matches remain visible to its right.
+   * Keep the most recently scored match at the left edge of the visible
+   * match bar so its score remains visible alongside upcoming matches.
+   * Use viewport-relative geometry rather than offsetLeft because the card
+   * is nested inside a flex content row.
    */
   const furthestScoredMatch = [...cards]
     .reverse()
-    .find(
-      hasPostedScore,
-    );
+    .find(hasPostedScore);
+  const scrollTarget = furthestScoredMatch;
 
   useEffect(() => {
-    if (
-      hideMatchCards ||
-      !furthestScoredMatch?.key ||
-      !scrollRef.current
-    ) {
-      return;
-    }
-
     const container = scrollRef.current;
-    const scoredElement = container.querySelector(
-      '[data-match-key="' + furthestScoredMatch.key + '"]',
-    ) as HTMLElement | null;
 
-    if (!scoredElement) {
+    if (hideMatchCards || !scrollTarget?.key || !container) {
       return;
     }
+
+    const targetElement = container.querySelector<HTMLElement>(
+      '[data-match-key="' + scrollTarget.key + '"]',
+    );
+
+    if (!targetElement) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = targetElement.getBoundingClientRect();
+    const targetLeft =
+      container.scrollLeft + targetRect.left - containerRect.left;
 
     container.scrollTo({
-      left: Math.max(0, scoredElement.offsetLeft - 8),
+      left: Math.max(0, targetLeft - 8),
       behavior: "smooth",
     });
-  }, [furthestScoredMatch?.key, hideMatchCards]);
+  }, [scrollTarget?.key, hideMatchCards, cards.length]);
 
   return (
     <div className="relative border-l border-t border-white/10 bg-neutral-950/95">
@@ -107,22 +105,11 @@ export default function MatchStrip({
           {cards.length > 0 ? (
             <div className="flex h-full min-w-max items-center gap-1.5 px-2">
               {cards.map((match) => (
-                <div
+                <MatchCard
                   key={match.key}
-                  data-match-key={match.key}
-                  className="shrink-0"
-                >
-                  <MatchCard
                     match={match}
                     team={team}
-                    isNext={
-                      match.key ===
-                      nextMatch?.key
-                    }
-                    isLast={
-                      match.key ===
-                      lastMatch?.key
-                    }
+                    isNext={match.key === nextMatch?.key}
                     playoffAlliances={
                       playoffAlliances
                     }
@@ -133,7 +120,6 @@ export default function MatchStrip({
                       eventTimezone ?? undefined
                     }
                   />
-                </div>
               ))}
             </div>
           ) : (

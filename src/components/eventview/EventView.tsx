@@ -34,6 +34,8 @@ type EventViewProps = {
     footerHidden?: boolean;
   };
   priorityEditing?: boolean;
+  activeHighlighted?: boolean;
+  imminentMatch?: boolean;
   upcomingMatchKey?: string | null;
   onToggleActive?: () => void;
   slotNumber?: number;
@@ -47,6 +49,8 @@ export default function EventView({
   isDivisional = false,
   slotPresentation,
   priorityEditing = false,
+  activeHighlighted = false,
+  imminentMatch = false,
   upcomingMatchKey = null,
   onToggleActive,
   slotNumber,
@@ -126,30 +130,12 @@ export default function EventView({
     selectedStreamKey,
   );
 
-  const {
-    trackedMatches,
-    trackedNextMatch,
-    trackedLastMatch,
-    trackedNextMatches,
-  } = useTrackedMatches(
-    matches,
-    trackedTeams,
-  );
+  const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
 
-  const teamMode =
-    trackedTeams.length > 0;
-
-  const nextMatch = teamMode
-    ? trackedNextMatch
-    : eventNextMatch;
-
-  const lastMatch = teamMode
-    ? trackedLastMatch
-    : eventLastMatch;
-
-  const displayMatches = teamMode
-    ? trackedMatches
-    : matches;
+  // Team tracking highlights relevant matches but never hides the event schedule.
+  const nextMatch = eventNextMatch;
+  const lastMatch = eventLastMatch;
+  const displayMatches = matches;
 
   useUpcomingMatchAlert({
     eventKey: event,
@@ -166,7 +152,11 @@ export default function EventView({
       status={teamsStatuses[team]}
       nextMatch={trackedNextMatches[team]}
       playoffAlliances={alliances}
+      eventTimezone={eventData?.timezone}
       playoffType={eventData?.playoff_type}
+      priorityEditing={priorityEditing}
+      activeHighlighted={activeHighlighted}
+      imminentMatch={imminentMatch}
     />
   ));
 
@@ -329,6 +319,8 @@ export default function EventView({
         teamPills={teamPills}
         multiview={{ presentation }}
         priorityEditing={priorityEditing}
+        activeHighlighted={activeHighlighted}
+        imminentMatch={imminentMatch}
         onToggleActive={onToggleActive}
         slotNumber={slotNumber}
         controlHeld={controlHeld}

@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
@@ -10,6 +9,7 @@ import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
+import { TBAMatch } from "@/lib/tba/types";
 
 type SurfaceUpcomingMatchAlert = {
   eventKey: string;
@@ -17,6 +17,7 @@ type SurfaceUpcomingMatchAlert = {
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
+  playoffType: number | null;
 };
 
 function SurfaceUpcomingMatchAlertSource({
@@ -62,6 +63,7 @@ function SurfaceUpcomingMatchAlertSource({
       teams: upcomingTeams,
       eventName: event?.short_name || event?.name || eventKey,
       eventTimezone: event?.timezone ?? null,
+      playoffType: event?.playoff_type ?? null,
     });
   }, [
     config?.matchNotifications,
@@ -115,19 +117,28 @@ export default function TileView({
 
   const [controlHeld, setControlHeld] = useState(false);
   const [upcomingAlert, setUpcomingAlert] = useState<SurfaceUpcomingMatchAlert | null>(null);
+  const seenAlertKeysRef = useRef(new Set<string>());
 
   const handleUpcomingAlert = useCallback((
     eventKey: string,
     alert: SurfaceUpcomingMatchAlert | null,
   ) => {
-    setUpcomingAlert((current) => {
-      if (!alert) {
-        return current?.eventKey === eventKey ? null : current;
-      }
+    if (!alert) {
+      setUpcomingAlert((current) =>
+        current?.eventKey === eventKey ? null : current
+      );
+      return;
+    }
 
-      // Always accept fresh webhook-derived data, even for the same match key.
-      return alert;
-    });
+    const alertKey = `${alert.eventKey}:${alert.match.key}`;
+    if (seenAlertKeysRef.current.has(alertKey)) {
+      return;
+    }
+
+    // Keep this side effect outside the state updater: React may invoke
+    // updater functions more than once in development Strict Mode.
+    seenAlertKeysRef.current.add(alertKey);
+    setUpcomingAlert(alert);
   }, []);
 
   useEffect(() => {
@@ -177,38 +188,43 @@ export default function TileView({
   );
 
   return (
-    <main className={`relative min-h-0 flex-1 ${className}`}>
-      {state.streams.map((eventKey) => (
-        <SurfaceUpcomingMatchAlertSource
-          key={"alert-source-" + eventKey}
-          eventKey={eventKey}
-          config={state.eventConfigs[eventKey]}
-          onAlert={handleUpcomingAlert}
-        />
-      ))}
+    <main className={`relative h-full min-h-0 w-full flex-1 ${className}`}>
+      {state.streams.map((tileId) => {
+        const eventKey = state.tileEvents[tileId] ?? tileId;
+        return (
+          <SurfaceUpcomingMatchAlertSource
+            key={"alert-source-" + tileId}
+            eventKey={eventKey}
+            config={state.eventConfigs[eventKey]}
+            onAlert={handleUpcomingAlert}
+          />
+        );
+      })}
 
-      {upcomingAlert && state.streams.includes(upcomingAlert.eventKey) && (
+      {upcomingAlert && state.streams.some((tileId) => state.tileEvents[tileId] === upcomingAlert.eventKey) && (
         <ImminentMatchBanner
           key={upcomingAlert.eventKey + ":" + upcomingAlert.match.key}
           match={upcomingAlert.match}
           teams={upcomingAlert.teams}
           eventName={upcomingAlert.eventName}
           eventTimezone={upcomingAlert.eventTimezone}
+          playoffType={upcomingAlert.playoffType}
         />
       )}
 
-      {state.streams.map((eventKey) => {
-        const slotIndex = slotOrder.indexOf(eventKey);
+      {state.streams.map((tileId) => {
+        const eventKey = state.tileEvents[tileId] ?? tileId;
+        const slotIndex = slotOrder.indexOf(tileId);
         const geometry = layout.slots[slotIndex];
         const slotPresentation = getSlotPresentation(geometry);
         const visible = Boolean(geometry);
 
         return (
           <div
-            key={eventKey}
+            key={tileId}
             className={[
               visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
-              state.priorityEditKey === eventKey
+              state.priorityEditKey === tileId
                 ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
                 : "border border-transparent",
             ].join(" ")}
@@ -229,17 +245,6 @@ export default function TileView({
                   }
             }
           >
-            <div
-              className={[
-                "pointer-events-none absolute inset-0 z-30 rounded-[inherit] border-2 border-amber-400/90",
-                "transition-[opacity,box-shadow] duration-500 ease-out",
-                Boolean(state.upcomingMatchKeys?.[eventKey])
-                  ? "opacity-100 shadow-[0_0_0_1px_rgba(251,191,36,0.3),0_0_28px_rgba(251,191,36,0.16)]"
-                  : "opacity-0 shadow-none",
-              ].join(" ")}
-              aria-hidden="true"
-            />
-
             {renderEventView ? (
               renderEventView({
                 eventKey,
@@ -250,12 +255,14 @@ export default function TileView({
             ) : (
               <EventView
                 event={eventKey}
-                priorityEditing={state.priorityEditKey === eventKey}
+                priorityEditing={state.priorityEditKey === tileId}
+                activeHighlighted={state.activeKey === tileId}
+                imminentMatch={Boolean(state.imminentMatchKeys?.[eventKey])}
                 upcomingMatchKey={state.upcomingMatchKeys?.[eventKey] ?? null}
                 isDivisional={isDivisional}
                 controller={controller}
-                onToggleActive={() => controller.actions.toggleActive(eventKey)}
-                slotNumber={state.streams.indexOf(eventKey) + 1}
+                onToggleActive={() => controller.actions.toggleActive(tileId)}
+                slotNumber={state.streams.indexOf(tileId) + 1}
                 controlHeld={controlHeld}
                 config={state.eventConfigs[eventKey]}
                 slotPresentation={slotPresentation}

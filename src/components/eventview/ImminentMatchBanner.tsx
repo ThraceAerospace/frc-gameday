@@ -10,6 +10,7 @@ type ImminentMatchBannerProps = {
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
+  playoffType: number | null;
 };
 
 export default function ImminentMatchBanner({
@@ -17,11 +18,12 @@ export default function ImminentMatchBanner({
   teams,
   eventName,
   eventTimezone,
+  playoffType,
 }: ImminentMatchBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(true);
 
-  const matchLabel = matchLongName(match) ?? match.key;
+  const matchLabel = matchLongName(match, playoffType) ?? match.key;
   const teamLabel = useMemo(
     () =>
       teams
@@ -64,12 +66,12 @@ export default function ImminentMatchBanner({
           : "max-h-0 -translate-y-3 opacity-0",
       ].join(" ")}
     >
-      <div className="border-b border-amber-400/80 bg-amber-950/95 px-4 py-3 shadow-[0_8px_30px_rgba(245,158,11,0.2)] backdrop-blur-md">
-        <div className="mx-auto flex min-w-0 items-center justify-center gap-2 text-center text-sm font-semibold text-amber-50">
+      <div className="tracked-accent-banner border-b bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
+        <div className="mx-auto flex min-w-0 items-center justify-center gap-2 text-center text-sm font-semibold text-white">
           <span className="truncate">
             Team {teamLabel} is playing in {matchLabel} at {eventName}
           </span>
-          <span className="shrink-0 font-mono text-amber-200">
+          <span className="shrink-0 font-mono text-neutral-200">
             <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
           </span>
         </div>

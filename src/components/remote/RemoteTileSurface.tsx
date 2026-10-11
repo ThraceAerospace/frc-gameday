@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignalIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
@@ -13,12 +13,16 @@ type Props = {
   controller: TileSurfaceController;
   peerStatus: RemotePeerStatus;
   eventStates: Record<string, EventStateSnapshot>;
+  displayMode: "gameday" | "insights";
+  onDisplayModeChange: (mode: "gameday" | "insights") => void;
 };
 
 export default function RemoteSurface({
   controller,
   peerStatus,
   eventStates,
+  displayMode,
+  onDisplayModeChange,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -27,6 +31,10 @@ export default function RemoteSurface({
     controller.getState,
     controller.getState,
   );
+
+  useEffect(() => {
+    if (state.eventPickerOpen) setSettingsOpen(true);
+  }, [state.eventPickerOpen]);
 
   useTileSurfaceKeyboard(state, controller.actions, () => setSettingsOpen((open) => !open));
 
@@ -43,13 +51,25 @@ export default function RemoteSurface({
       <header className="sticky top-0 z-40 border-b border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-base font-semibold">FieldView Remote</div>
+            <div className="text-base font-semibold">FieldView Session</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
               <SignalIcon className={`h-3.5 w-3.5 ${peerStatus === "connected" ? "text-green-400" : "text-yellow-400"}`} />
               {peerStatus === "connected" ? "Connected" : "Connecting…"}
             </div>
           </div>
-          <div className="shrink-0">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <label className="flex items-center gap-2 text-xs text-neutral-500">
+              <span>Display mode</span>
+              <select
+                value={displayMode}
+                onChange={(event) => onDisplayModeChange(event.target.value as "gameday" | "insights")}
+                className="max-w-36 rounded-lg border border-white/10 bg-neutral-950 px-2 py-2 text-sm text-white outline-none"
+                aria-label="Display mode"
+              >
+                <option value="gameday">Gameday</option>
+                <option value="insights">Match Insights</option>
+              </select>
+            </label>
             <button className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm font-medium text-white/80 hover:border-white/20 hover:bg-white/[0.04]" onClick={() => setSettingsOpen(true)}>
               <Cog6ToothIcon className="h-5 w-5" />
             </button>
@@ -70,16 +90,21 @@ export default function RemoteSurface({
           </button>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {state.priority.map((eventKey, position) => (
-              <RemoteEventCard
-                key={eventKey}
-                eventKey={eventKey}
-                position={position}
-                state={state}
-                actions={controller.actions}
-                eventState={eventStates[eventKey]}
-              />
-            ))}
+            {state.priority.map((tileId, position) => {
+              const eventKey = state.tileEvents[tileId] ?? tileId;
+              const eventState = eventStates[eventKey];
+
+              return (
+                <RemoteEventCard
+                  key={tileId}
+                  eventKey={eventKey}
+                  position={position}
+                  state={state}
+                  actions={controller.actions}
+                  eventState={eventState}
+                />
+              );
+            })}
           </div>
         )}
       </div>

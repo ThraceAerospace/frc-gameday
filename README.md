@@ -13,18 +13,18 @@ TBA REST / webhooks
         ↓
      WebSocket
         ↓
-    EventView
-   ┌────┼──────────────┐
-matches teams/statuses playoff alliances
-        │
-     webcast UI
+    EventState
+        ↓
+       Views
+        ↓
+     Surfaces
 
-Polling is fallback reconciliation for missed or incomplete updates.
+Polling is fallback reconciliation owned by EventState for missed or incomplete updates.
 ```
 
 The Blue Alliance is the authoritative data source. Redis is the server-side cache, TBA webhooks mutate existing Redis cache entries and then publish event-scoped invalidations through Redis Pub/Sub to WebSocket clients.
 
-WebSocket messages are intentionally small invalidation signals. EventView immediately refetches the webhook-mutated Redis cache. Those webhook-mutated match entries defer their next TBA refresh for 65 seconds, giving upstream TBA time to catch up before ETag/304 validation. Polling remains the reconciliation path for missed or incomplete updates.
+WebSocket messages are intentionally small invalidation signals. EventState immediately refetches the webhook-mutated Redis cache. Those webhook-mutated match entries defer their next TBA refresh for 65 seconds, giving upstream TBA time to catch up before ETag/304 validation. Polling remains the reconciliation path for missed or incomplete updates.
 
 ## Repository structure
 
@@ -69,31 +69,23 @@ The current component organization reflects the post-refactor architecture. Do n
 - If the tracked-team amber is ever changed, update every tracked-team indicator across the application together. Centralize the color token/helper where practical rather than duplicating amber values in individual components.
 - Keep tracked status visually distinct from alliance identity: red and blue continue to identify match alliances; amber identifies tracked teams.
 
-## EventView
+## Reusable event data panels
 
-EventView owns event-level data and presentation:
+`src/components/eventdata/EventDataPanel.tsx` is a reusable event-scoped performance panel. It consumes `useEventState`, not its own network/cache path, and currently presents The Blue Alliance OPR, DPR, and CCWM values when available. The same component can be rendered inside TileView or independently at `/event/<event>/data`. OPR values are fetched through `/api/event/<event>/oprs` and share the event-state lifecycle; Statbotics is not required.
 
-- event metadata;
-- teams and team statuses;
-- canonical event matches;
-- playoff alliances;
-- tracked teams;
-- webcast selection;
-- WebSocket lifecycle;
-- fallback refreshes;
-- event footer content.
+Tile surfaces support both EventView tiles (`event=<eventKey>`) and data-panel tiles (`panel=<eventKey>`). Their stable tile IDs are separate from event keys, so an event can appear as both a live EventView and a performance panel at once.
 
-The specialized hooks remain separate:
+## EventView and EventState
 
-- `useEvent` — event data.
-- `useMatches` — canonical matches and derived next/last matches.
-- `useTeams` — event teams.
-- `useTeamsStatuses` — event team statuses.
-- `usePlayoffAlliances` — playoff alliances.
+`EventView` presents event information, webcast selection, tracked-team context, and footer content. It consumes the shared per-event `EventState`; it does not own a separate event-data acquisition lifecycle.
+
+`EventState` owns the current event snapshot and its TBA/Statbotics acquisition and synchronization lifecycle, including WebSocket update handling, freshness, reconciliation, and fallback refreshes. Multiple Views and Surfaces for the same event consume the same EventState rather than creating duplicate fetch or polling paths.
+
+Specialized presentation/derivation hooks remain separate where applicable:
+
 - `useTrackedMatches` — tracked-team match derivation.
 - `useStreamController` — webcast normalization and selection.
-- `useWebSocket` — WSS lifecycle and reconnect.
-- `usePolling` — fallback scheduling.
+
 
 ## Match data
 
@@ -236,3 +228,19 @@ npm run build
 TBA types are regenerated automatically by `predev` and `prebuild`.
 
 Do not commit secrets. The TBA webhook requires `TBA_WEBHOOK_TOKEN`; stream URL construction may use `NEXT_PUBLIC_DOMAIN`.
+
+
+## Match Insights and multi-display sessions
+
+FieldView follows one-session/one-state ownership: **one session → one set of event states → many displays**. Configure the event list, tracked teams, and streams once; connected displays consume the same session configuration and event snapshots. Presentation mode can vary by display, but a display must not have its own event selection.
+
+The integrated Match Insights display follows the Tile View's valid highlighted tile, falling back to the first tile in priority order. Tile IDs are resolved to event keys through `tileEvents`. The standalone local route `/event/<event>/insights` uses the URL event when no Tile View surface is present.
+
+Architecture boundaries:
+
+- `EventInsightsSurface` hosts the Insights experience for one supplied event key and subscribes to shared `EventState`.
+- `EventInsightView` renders the match insight presentation; it does not fetch event or Statbotics data.
+- `EventState` owns TBA and Statbotics match acquisition and refresh behavior. Remote displays receive these snapshots from the controller and do not start duplicate acquisition.
+- Statbotics fields are accessed directly from the typed API response. The underlying data is not modified; displayed metrics are formatted to at most one decimal place for readability.
+- The Insights alliance row sums each team’s OPR, DPR, CCWM, EPA, Auto EPA, Teleop EPA, and Endgame EPA. A total is shown only when all three team values for that metric are available.
+- When TBA has posted match scores and a score breakdown, the official, year-specific breakdown is shown below the alliance tables. The year comes from Statbotics match data when available, falling back to the year prefix in the TBA match key.

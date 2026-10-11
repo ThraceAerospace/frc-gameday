@@ -5,13 +5,16 @@ import {
   getNextMatch,
   sortMatches,
 } from "@/lib/tba/matchUtils";
+import type { StatboticsMatch } from "@/lib/statbotics/types";
 import type {
   TBAEliminationAlliance,
   TBAEvent,
   TBAEventTeamStatuses,
+  TBAEventOPRs,
   TBAMatch,
   TBATeam,
 } from "@/lib/tba/types";
+import { scheduleSharedTimeout } from "@/lib/time/sharedSecondClock";
 import {
   eventWebSocket,
   type EventWebSocketMessage,
@@ -26,12 +29,14 @@ export type EventStateSnapshot = {
   eventLastMatch: TBAMatch | null;
   teamsStatuses: TBAEventTeamStatuses;
   alliances: TBAEliminationAlliance[];
+  oprs: TBAEventOPRs | null;
   loading: boolean;
   error: Error | null;
   websocketStatus: EventWebSocketStatus;
   websocketStale: boolean;
   upcomingMatchKey: string | null;
   upcomingMatchTeamKeys: string[];
+  statboticsMatches: Record<string, { data: StatboticsMatch | null; status: "loading" | "ready" | "unavailable" }>;
 };
 
 type Listener = (snapshot: EventStateSnapshot) => void;
@@ -40,6 +45,7 @@ const MATCH_POLL_INTERVAL = 5 * 60_000;
 const STATUS_POLL_INTERVAL = 5 * 60_000;
 const ALLIANCE_POLL_INTERVAL = 15 * 60_000;
 const AUTHORITATIVE_REFETCH_DELAY = 65_000;
+const STATBOTICS_RESULT_REFRESH_DELAY = 3 * 60_000;
 
 export class EventState {
   readonly eventKey: string;
@@ -52,12 +58,14 @@ export class EventState {
     eventLastMatch: null,
     teamsStatuses: {},
     alliances: [],
+    oprs: null,
     loading: true,
     error: null,
     websocketStatus: "disconnected",
     websocketStale: false,
     upcomingMatchKey: null,
     upcomingMatchTeamKeys: [],
+    statboticsMatches: {},
   };
 
   private readonly listeners = new Set<Listener>();
@@ -68,17 +76,22 @@ export class EventState {
   private unsubscribeWebSocket: (() => void) | null = null;
   private unsubscribeWebSocketStatus: (() => void) | null = null;
 
-  private matchTimer: number | null = null;
-  private statusTimer: number | null = null;
-  private allianceTimer: number | null = null;
+  private matchTimer: (() => void) | null = null;
+  private statusTimer: (() => void) | null = null;
+  private allianceTimer: (() => void) | null = null;
+  private oprTimer: (() => void) | null = null;
 
   private eventRequest = 0;
   private teamsRequest = 0;
   private matchesRequest = 0;
   private statusesRequest = 0;
   private alliancesRequest = 0;
+  private oprsRequest = 0;
 
-  private readonly authoritativeTimers = new Map<string, number>();
+  private readonly authoritativeTimers = new Map<string, () => void>();
+  private readonly statboticsRequests = new Map<string, number>();
+  private readonly statboticsSignatures = new Map<string, string>();
+  private readonly statboticsRefreshTimers = new Map<string, () => void>();
 
   constructor(eventKey: string) {
     this.eventKey = eventKey;
@@ -136,10 +149,12 @@ export class EventState {
     void this.loadMatches();
     void this.loadStatuses();
     void this.loadAlliances();
+    void this.loadOprs();
 
     this.scheduleMatchFallback();
     this.scheduleStatusFallback();
     this.scheduleAllianceFallback();
+    this.scheduleOprsFallback();
   }
 
   stop() {
@@ -156,20 +171,42 @@ export class EventState {
     this.clearTimer("match");
     this.clearTimer("status");
     this.clearTimer("alliance");
+    this.clearTimer("oprs");
 
-    for (const timer of this.authoritativeTimers.values()) {
-      window.clearTimeout(timer);
+    for (const cancel of this.authoritativeTimers.values()) {
+      cancel();
     }
 
     this.authoritativeTimers.clear();
-  }
+    for (const cancel of this.statboticsRefreshTimers.values()) cancel();
+    this.statboticsRefreshTimers.clear();
+    // Re-evaluate the current and last match when this EventState starts again.
+    this.statboticsSignatures.clear();
 
+    for (const [matchKey, request] of this.statboticsRequests) {
+      this.statboticsRequests.set(matchKey, request + 1);
+    }
+    this.update((current) => ({
+      ...current,
+      statboticsMatches: Object.fromEntries(
+        Object.entries(current.statboticsMatches).map(([matchKey, value]) => [
+          matchKey,
+          !value.data && value.status === "loading"
+            ? { data: null, status: "unavailable" as const }
+            : value,
+        ]),
+      ),
+    }));
+  }
   reloadAll() {
-    void this.loadEvent();
+    // Event metadata (including webcasts) is stable across ordinary data
+    // refreshes. Reloading it can churn stream configuration and interrupt
+    // playback, so refresh only the event's changing data here.
     void this.loadTeams();
     this.reloadMatches();
     this.reloadStatuses();
     this.reloadAlliances();
+    this.reloadOprs();
   }
 
   reloadMatches() {
@@ -185,6 +222,85 @@ export class EventState {
   reloadAlliances() {
     void this.loadAlliances();
     this.resetAuthoritativeTimer("alliances");
+  }
+
+  reloadOprs() {
+    void this.loadOprs();
+    this.resetAuthoritativeTimer("oprs");
+  }
+
+  private ensureStatboticsMatch(matchKey: string, resultSignature: string) {
+    const previousSignature = this.statboticsSignatures.get(matchKey);
+    this.statboticsSignatures.set(matchKey, resultSignature);
+
+    const resultIsFinal = resultSignature.startsWith("final:");
+    if (previousSignature === undefined) {
+      void this.fetchStatboticsMatch(matchKey, resultIsFinal);
+      return;
+    }
+
+    if (previousSignature === resultSignature) {
+      const existing = this.snapshot.statboticsMatches[matchKey];
+      if (!existing || (existing.status === "unavailable" && !existing.data)) {
+        void this.fetchStatboticsMatch(matchKey, resultIsFinal);
+      }
+      return;
+    }
+
+    if (resultIsFinal) {
+      const existingTimer = this.statboticsRefreshTimers.get(matchKey);
+      if (existingTimer !== undefined) existingTimer();
+      const timer = scheduleSharedTimeout(() => {
+        this.statboticsRefreshTimers.delete(matchKey);
+        void this.fetchStatboticsMatch(matchKey, true);
+      }, STATBOTICS_RESULT_REFRESH_DELAY);
+      this.statboticsRefreshTimers.set(matchKey, timer);
+    } else {
+      void this.fetchStatboticsMatch(matchKey, false);
+    }
+  }
+
+  private async fetchStatboticsMatch(matchKey: string, refresh: boolean) {
+    const request = (this.statboticsRequests.get(matchKey) ?? 0) + 1;
+    this.statboticsRequests.set(matchKey, request);
+    this.update((current) => ({
+      ...current,
+      statboticsMatches: {
+        ...current.statboticsMatches,
+        [matchKey]: {
+          data: current.statboticsMatches[matchKey]?.data ?? null,
+          status: current.statboticsMatches[matchKey]?.data ? "ready" : "loading",
+        },
+      },
+    }));
+
+    try {
+      const endpoint = "/api/statbotics/match/" + encodeURIComponent(matchKey) +
+        (refresh ? "?refresh=1" : "");
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Statbotics request failed: ${response.status}`);
+      const data: StatboticsMatch = await response.json();
+      if (this.stopped || this.statboticsRequests.get(matchKey) !== request) return;
+      this.update((current) => ({
+        ...current,
+        statboticsMatches: {
+          ...current.statboticsMatches,
+          [matchKey]: { data, status: "ready" },
+        },
+      }));
+    } catch {
+      if (this.stopped || this.statboticsRequests.get(matchKey) !== request) return;
+      this.update((current) => ({
+        ...current,
+        statboticsMatches: {
+          ...current.statboticsMatches,
+          [matchKey]: {
+            data: current.statboticsMatches[matchKey]?.data ?? null,
+            status: current.statboticsMatches[matchKey]?.data ? "ready" : "unavailable",
+          },
+        },
+      }));
+    }
   }
 
   private update(
@@ -282,7 +398,6 @@ export class EventState {
       if (request !== this.teamsRequest || this.stopped) {
         return;
       }
-
       console.error("[EventState] teams request failed", error);
     }
   }
@@ -309,12 +424,37 @@ export class EventState {
         return;
       }
 
+      const eventNextMatch = getNextMatch(matches);
+      const eventLastMatch = getLastMatch(matches);
+      const relevantStatboticsKeys = new Set(
+        [eventNextMatch?.key, eventLastMatch?.key].filter(
+          (key): key is string => Boolean(key),
+        ),
+      );
       this.update((current) => ({
         ...current,
         matches,
-        eventNextMatch: getNextMatch(matches),
-        eventLastMatch: getLastMatch(matches),
+        eventNextMatch,
+        eventLastMatch,
+        statboticsMatches: Object.fromEntries(
+          Object.entries(current.statboticsMatches).filter(([key]) =>
+            relevantStatboticsKeys.has(key),
+          ),
+        ),
       }));
+
+      // Statbotics match data is event-domain state. Keep predictions for the
+      // current and most recently completed matches warm for every View.
+      for (const match of [eventNextMatch, eventLastMatch]) {
+        if (!match) continue;
+        const resultPosted =
+          typeof match.alliances.red.score === "number" &&
+          match.alliances.red.score >= 0 &&
+          typeof match.alliances.blue.score === "number" &&
+          match.alliances.blue.score >= 0;
+        const signature = `${resultPosted ? "final" : "pending"}:${match.alliances.red.score}:${match.alliances.blue.score}:${match.actual_time ?? ""}`;
+        this.ensureStatboticsMatch(match.key, signature);
+      }
 
       this.scheduleMatchFallback();
     } catch (error) {
@@ -400,6 +540,41 @@ export class EventState {
     }
   }
 
+  private async loadOprs() {
+    const request = ++this.oprsRequest;
+
+    try {
+      const response = await fetch(
+        `/api/event/${encodeURIComponent(this.eventKey)}/oprs`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (request !== this.oprsRequest || this.stopped) {
+        return;
+      }
+
+      this.update((current) => ({
+        ...current,
+        oprs: data && typeof data === "object" ? (data as TBAEventOPRs) : null,
+      }));
+
+      this.scheduleOprsFallback();
+    } catch (error) {
+      if (request !== this.oprsRequest || this.stopped) {
+        return;
+      }
+
+      console.error("[EventState] OPRs request failed", error);
+      this.scheduleOprsFallback();
+    }
+  }
+
   private handleWebSocketStatus = (
     status: EventWebSocketStatus,
   ) => {
@@ -421,8 +596,7 @@ export class EventState {
       message.type !== "tba-update" ||
       message.eventKey !== this.eventKey
     ) {
-      return;
-    }
+      return;    }
 
     this.update((current) =>
       current.websocketStale
@@ -474,6 +648,7 @@ export class EventState {
         this.reloadMatches();
         this.reloadStatuses();
         this.reloadAlliances();
+        this.reloadOprs();
         break;
       }
 
@@ -497,16 +672,16 @@ export class EventState {
   };
 
   private resetAuthoritativeTimer(
-    resource: "matches" | "statuses" | "alliances",
+    resource: "matches" | "statuses" | "alliances" | "oprs",
   ) {
     const existing =
       this.authoritativeTimers.get(resource);
 
     if (existing !== undefined) {
-      window.clearTimeout(existing);
+      existing();
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = scheduleSharedTimeout(() => {
       this.authoritativeTimers.delete(resource);
 
       if (this.stopped) {
@@ -537,6 +712,10 @@ export class EventState {
         case "alliances":
           void this.loadAlliances();
           break;
+
+        case "oprs":
+          void this.loadOprs();
+          break;
       }
     }, AUTHORITATIVE_REFETCH_DELAY);
 
@@ -546,7 +725,7 @@ export class EventState {
   private scheduleMatchFallback() {
     this.clearTimer("match");
 
-    this.matchTimer = window.setTimeout(() => {
+    this.matchTimer = scheduleSharedTimeout(() => {
       this.matchTimer = null;
       this.update((current) => ({
         ...current,
@@ -559,7 +738,7 @@ export class EventState {
   private scheduleStatusFallback() {
     this.clearTimer("status");
 
-    this.statusTimer = window.setTimeout(() => {
+    this.statusTimer = scheduleSharedTimeout(() => {
       this.statusTimer = null;
       this.update((current) => ({
         ...current,
@@ -572,7 +751,7 @@ export class EventState {
   private scheduleAllianceFallback() {
     this.clearTimer("alliance");
 
-    this.allianceTimer = window.setTimeout(() => {
+    this.allianceTimer = scheduleSharedTimeout(() => {
       this.allianceTimer = null;
       this.update((current) => ({
         ...current,
@@ -582,26 +761,43 @@ export class EventState {
     }, ALLIANCE_POLL_INTERVAL);
   }
 
+  private scheduleOprsFallback() {
+    this.clearTimer("oprs");
+
+    this.oprTimer = scheduleSharedTimeout(() => {
+      this.oprTimer = null;
+      this.update((current) => ({
+        ...current,
+        websocketStale: true,
+      }));
+      void this.loadOprs();
+    }, STATUS_POLL_INTERVAL);
+  }
+
   private clearTimer(
-    kind: "match" | "status" | "alliance",
+    kind: "match" | "status" | "alliance" | "oprs",
   ) {
     const timer =
       kind === "match"
         ? this.matchTimer
         : kind === "status"
           ? this.statusTimer
-          : this.allianceTimer;
+          : kind === "alliance"
+            ? this.allianceTimer
+            : this.oprTimer;
 
     if (timer !== null) {
-      window.clearTimeout(timer);
+      timer();
     }
 
     if (kind === "match") {
       this.matchTimer = null;
     } else if (kind === "status") {
       this.statusTimer = null;
-    } else {
+    } else if (kind === "alliance") {
       this.allianceTimer = null;
+    } else {
+      this.oprTimer = null;
     }
   }
 }

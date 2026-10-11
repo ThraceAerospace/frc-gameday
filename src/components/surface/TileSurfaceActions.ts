@@ -15,6 +15,8 @@ export type TileSurfaceActions = {
 
   setUpcomingMatchAlert(signal: UpcomingMatchAlert): void;
   highlightEvent(eventKey: string): void;
+  highlightMatch(eventKey: string, matchKey: string): void;
+  releaseMatchHighlight(eventKey: string, matchKey: string): void;
 
   toggleActive(eventKey: string): void;
   clearActive(): void;
@@ -30,7 +32,7 @@ export type TileSurfaceActions = {
   closeEventPicker(): void;
   setEventSearch(search: string): void;
   addEvent(event: TBAEvent): void;
-  removeEvent(eventKey: string): void;
+  removeEvent(tileId: string): void;
 
   registerLabel(eventKey: string, label: string): void;
 

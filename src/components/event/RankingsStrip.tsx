@@ -5,7 +5,7 @@ import type {
   TBAEliminationAlliance,
   TBAEventTeamStatuses,
 } from "@/lib/tba/types";
-import { formatAllianceName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
+import { formatAllianceLongName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
 
 type RankingsStripProps = {
   teamsStatuses: TBAEventTeamStatuses;
@@ -230,16 +230,16 @@ export default function RankingsStrip({
                     className={[
                       "flex h-[34px] shrink-0 items-center gap-3 rounded-md border px-3",
                       isTracked
-                        ? "border-b-2 border-b-white"
+                        ? "tracked-accent-underline"
                         : "",
-                      status?.status === "playing"
-                        ? "border-white/20 bg-white/[0.08]"
+                      status?.status === "eliminated"
+                        ? "border-red-500/40 bg-red-950/40"
                         : "border-zinc-800 bg-zinc-950",
                     ].join(" ")}
                   >
                     <div className="flex flex-col justify-center">
                       <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
-                        {formatAllianceName(alliance.name, index)}
+                        {formatAllianceLongName(alliance.name, index)}
                       </span>
 
                       <span className="mt-0.5 text-[10px] font-semibold text-white">
@@ -254,11 +254,11 @@ export default function RankingsStrip({
                     <div className="h-6 w-px bg-white/10" />
 
                     <div className="flex flex-col justify-center text-right">
-                      <span className="font-mono text-[10px] text-neutral-300">
+                      <span className={`font-mono text-[10px] ${status?.status === "eliminated" ? "text-red-300" : "text-neutral-300"}`}>
                         {formatPlayoffLevel(alliance, playoffType)}
                       </span>
 
-                      <span className="font-mono text-[10px] text-neutral-300">
+                      <span className={`font-mono text-xs font-semibold ${status?.status === "eliminated" ? "text-red-200" : "text-neutral-100"}`}>
                         {formatRecord(status?.record)}
                       </span>
                     </div>
@@ -332,7 +332,7 @@ export default function RankingsStrip({
                   className={[
                     "flex h-[34px] shrink-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-3",
                     isTracked
-                      ? "border-b-2 border-b-yellow-400"
+                      ? "tracked-accent-underline"
                       : "",
                   ].join(" ")}
                 >
@@ -352,7 +352,7 @@ export default function RankingsStrip({
                       .sort_orders?.[0] ?? "—"}
                   </span> */}
 
-                  <span className="font-mono text-[10px] text-neutral-500">
+                  <span className="font-mono text-xs font-semibold text-neutral-100">
                     {formatRecord(entry.status!.qual!.ranking!.record)}
                   </span>
                 </article>

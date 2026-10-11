@@ -52,6 +52,12 @@ export function useTileSurfaceController({
 
   const stateRef = useRef(state);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeMatchHighlightsRef = useRef(new Map<string, string>());
+  const matchHighlightSnapshotRef = useRef<{
+    activeKey: string | null;
+    highlightLayoutKey: TileSurfaceState["highlightLayoutKey"];
+  } | null>(null);
+  const lastAutoHighlightEventRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -135,14 +141,21 @@ export function useTileSurfaceController({
   useEffect(() => {
     const handlePopState = () => {
       const url = new URL(window.location.href);
-      const eventKeys = [
-        ...new Set(url.searchParams.getAll("event").filter(Boolean)),
-      ];
+      const eventKeys = [...new Set(url.searchParams.getAll("event").filter(Boolean))];
+      const tileEvents = Object.fromEntries(
+        eventKeys.map((eventKey) => [eventKey, eventKey] as const),
+      );
+      const tileTypes = Object.fromEntries(
+        eventKeys.map((eventKey) => [eventKey, "eventView"] as const),
+      );
+      const tileIds = eventKeys;
 
       update((current) => ({
         ...current,
-        streams: eventKeys,
-        priority: eventKeys,
+        streams: tileIds,
+        priority: tileIds,
+        tileEvents,
+        tileTypes,
         eventConfigs: Object.fromEntries(
           eventKeys.map((eventKey) => [
             eventKey,
@@ -211,11 +224,13 @@ export function useTileSurfaceController({
     };
   }, [state.eventPickerOpen, update]);
 
-  const updateUrl = useCallback((eventKeys: string[]) => {
+  const updateUrl = useCallback((tileIds: string[], tileEvents: Record<string, string>) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("event");
 
-    for (const eventKey of eventKeys) {
+    for (const tileId of tileIds) {
+      const eventKey = tileEvents[tileId];
+      if (!eventKey) continue;
       url.searchParams.append("event", eventKey);
     }
 
@@ -318,6 +333,99 @@ export function useTileSurfaceController({
     [showControls, update],
   );
 
+  const highlightMatch = useCallback(
+    (eventKey: string, matchKey: string) => {
+      const current = stateRef.current;
+      if (!current.streams.includes(eventKey)) return;
+
+      if (activeMatchHighlightsRef.current.size === 0) {
+        matchHighlightSnapshotRef.current = {
+          activeKey: current.activeKey,
+          highlightLayoutKey: current.highlightLayoutKey,
+        };
+      }
+
+      activeMatchHighlightsRef.current.set(eventKey, matchKey);
+      update((latest) => ({
+        ...latest,
+        imminentMatchKeys: {
+          ...latest.imminentMatchKeys,
+          [eventKey]: matchKey,
+        },
+      }));
+
+      // Priority is the arbitration order: the first event with an active
+      // imminent match wins, regardless of which event reported it last.
+      const winner = current.priority.find((key) =>
+        activeMatchHighlightsRef.current.has(key) && current.streams.includes(key)
+      );
+      if (!winner) return;
+
+      if (
+        lastAutoHighlightEventRef.current === winner &&
+        current.activeKey === winner
+      ) {
+        return;
+      }
+
+      lastAutoHighlightEventRef.current = winner;
+      highlightEvent(winner);
+    },
+    [highlightEvent],
+  );
+
+  const releaseMatchHighlight = useCallback(
+    (eventKey: string, matchKey: string) => {
+      // A newer imminent match for this same event supersedes the old key.
+      if (activeMatchHighlightsRef.current.get(eventKey) !== matchKey) return;
+      activeMatchHighlightsRef.current.delete(eventKey);
+      update((latest) => {
+        if (latest.imminentMatchKeys[eventKey] !== matchKey) return latest;
+        const imminentMatchKeys = { ...latest.imminentMatchKeys };
+        delete imminentMatchKeys[eventKey];
+        return { ...latest, imminentMatchKeys };
+      });
+
+      const current = stateRef.current;
+      const winner = current.priority.find((key) =>
+        activeMatchHighlightsRef.current.has(key) && current.streams.includes(key)
+      );
+
+      if (winner) {
+        lastAutoHighlightEventRef.current = winner;
+        if (current.activeKey !== winner || current.highlightLayoutKey === null) {
+          highlightEvent(winner);
+        }
+        return;
+      }
+
+      const previousWinner = lastAutoHighlightEventRef.current;
+      const snapshot = matchHighlightSnapshotRef.current;
+      lastAutoHighlightEventRef.current = null;
+      matchHighlightSnapshotRef.current = null;
+
+      if (!snapshot) return;
+
+      update((latest) => {
+        // Don't override a manual selection made while the automatic
+        // highlight was active.
+        if (
+          latest.activeKey !== previousWinner ||
+          latest.highlightLayoutKey === null
+        ) {
+          return latest;
+        }
+
+        return {
+          ...latest,
+          activeKey: snapshot.activeKey,
+          highlightLayoutKey: snapshot.highlightLayoutKey,
+        };
+      });
+    },
+    [highlightEvent, update],
+  );
+
   const actions = useMemo<TileSurfaceActions>(
     () => ({
       showControls,
@@ -325,6 +433,8 @@ export function useTileSurfaceController({
 
       setUpcomingMatchAlert,
       highlightEvent,
+      highlightMatch,
+      releaseMatchHighlight,
 
       toggleActive,
 
@@ -450,57 +560,57 @@ export function useTileSurfaceController({
         const eventKey = String(event.key);
         const current = stateRef.current;
 
-        if (current.streams.includes(eventKey)) {
+        if (current.streams.some((tileId) => current.tileEvents[tileId] === eventKey)) {
           return;
         }
 
         const nextStreams = [...current.streams, eventKey];
+        const nextTileEvents = { ...current.tileEvents, [eventKey]: eventKey };
+        const nextTileTypes = { ...current.tileTypes, [eventKey]: "eventView" as const };
 
         update((next) => ({
           ...next,
           streams: nextStreams,
           priority: [...next.priority, eventKey],
+          tileEvents: nextTileEvents,
+          tileTypes: nextTileTypes,
           eventConfigs: {
             ...next.eventConfigs,
-            [eventKey]: createEventViewConfig(),
+            [eventKey]: next.eventConfigs[eventKey] ?? createEventViewConfig(),
           },
         }));
 
-        updateUrl(nextStreams);
+        updateUrl(nextStreams, nextTileEvents);
         showControls();
       },
 
-      removeEvent: (eventKey) => {
+      removeEvent: (tileId) => {
         const current = stateRef.current;
-        const nextStreams = current.streams.filter(
-          (key) => key !== eventKey
-        );
-
+        const nextStreams = current.streams.filter((key) => key !== tileId);
+        const nextTileEvents = { ...current.tileEvents };
+        const nextTileTypes = { ...current.tileTypes };
+        delete nextTileEvents[tileId];
+        delete nextTileTypes[tileId];
+        const removedEventKey = current.tileEvents[tileId];
+        const stillHasEventView = nextStreams.some((key) => nextTileTypes[key] === "eventView" && nextTileEvents[key] === removedEventKey);
         update((next) => ({
           ...next,
           streams: nextStreams,
-          priority: next.priority.filter(
-            (key) => key !== eventKey
+          priority: next.priority.filter((key) => key !== tileId),
+          activeKey: next.activeKey === tileId ? null : next.activeKey,
+          highlightLayoutKey: next.activeKey === tileId ? null : next.highlightLayoutKey,
+          priorityEditKey: next.priorityEditKey === tileId ? null : next.priorityEditKey,
+          imminentMatchKeys: Object.fromEntries(
+            Object.entries(next.imminentMatchKeys).filter(([key]) => key !== (removedEventKey ?? tileId)),
           ),
-          activeKey:
-            next.activeKey === eventKey
-              ? null
-              : next.activeKey,
-          highlightLayoutKey:
-            next.activeKey === eventKey
-              ? null
-              : next.highlightLayoutKey,
-          eventConfigs: Object.fromEntries(
-            Object.entries(next.eventConfigs).filter(([key]) => key !== eventKey)
-          ),
-          labels: Object.fromEntries(
-            Object.entries(next.labels).filter(
-              ([key]) => key !== eventKey
-            )
-          ),
+          tileEvents: nextTileEvents,
+          tileTypes: nextTileTypes,
+          eventConfigs: !stillHasEventView && nextTileTypes[removedEventKey ?? ""] !== "eventView"
+            ? Object.fromEntries(Object.entries(next.eventConfigs).filter(([key]) => key !== removedEventKey))
+            : next.eventConfigs,
+          labels: Object.fromEntries(Object.entries(next.labels).filter(([key]) => key !== tileId)),
         }));
-
-        updateUrl(nextStreams);
+        updateUrl(nextStreams, nextTileEvents);
         showControls();
       },
 
@@ -645,6 +755,8 @@ export function useTileSurfaceController({
     [
       setUpcomingMatchAlert,
       highlightEvent,
+      highlightMatch,
+      releaseMatchHighlight,
       hideControls,
       showControls,
       toggleActive,

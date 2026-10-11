@@ -2,6 +2,21 @@
 
 :root {
   color-scheme: light;
+
+  /* One shared accent for tracked-team and tracked-match indicators. */
+  --tracked-accent: #c084fc;
+}
+
+.tracked-accent-text {
+  color: var(--tracked-accent);
+}
+
+.tracked-accent-border {
+  border-color: var(--tracked-accent);
+}
+
+.tracked-accent-underline {
+  border-bottom: 2px solid var(--tracked-accent);
 }
 
 html,
@@ -206,4 +221,27 @@ button:disabled {
 .site-theme-dark .site-theme-light,
 .site-theme-dark .dark-surface {
   color-scheme: dark;
+}
+
+
+/* Match-imminence accents follow the same configurable color as tracked teams. */
+.tracked-accent-glow,
+.tracked-accent-glow:hover {
+  border-color: var(--tracked-accent) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tracked-accent) 30%, transparent),
+    0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
+}
+
+.tracked-accent-pill-glow,
+.tracked-accent-pill-glow:hover {
+  border-color: var(--tracked-accent) !important;
+  /* Keep the accent glow, but omit the 1px all-sides outline that draws
+     an unwanted bottom seam where the pill overlaps the footer bar. */
+  box-shadow: 0 0 28px color-mix(in srgb, var(--tracked-accent) 16%, transparent);
+}
+
+.tracked-accent-banner {
+  border-color: color-mix(in srgb, var(--tracked-accent) 80%, transparent);
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--tracked-accent) 20%, transparent);
 }

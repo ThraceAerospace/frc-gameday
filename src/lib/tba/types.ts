@@ -4,7 +4,21 @@ export type TBAEvent = components["schemas"]["Event"];
 export type TBAEventSimple = components["schemas"]["Event_Simple"];
 export type TBATeam = components["schemas"]["Team"];
 export type TBATeamSimple = components["schemas"]["Team_Simple"];
+
+// The live Team Event Status response includes these year/bracket-specific
+// playoff fields, although they are not currently described in TBA's OpenAPI
+// schema. Keep the generated file untouched and extend the application-facing
+// type until the upstream schema catches up.
+type TBATeamEventPlayoffStatus = NonNullable<
+  components["schemas"]["Team_Event_Status"]["playoff"]
+> & {
+  playoff_type?: components["schemas"]["PlayoffType"] | null;
+  double_elim_round?: components["schemas"]["Double_Elim_Round"];
+};
+
 export type TBATeamEventStatus = components["schemas"]["Team_Event_Status"];
+
+
 export type TBAAward = components["schemas"]["Award"];
 export type TBAMatch = components["schemas"]["Match"];
 export type TBAMatchSimple = components["schemas"]["Match_Simple"];

@@ -16,7 +16,7 @@ Existing components should be migrated into this model rather than preserving th
 
 Anything whose primary responsibility is displaying event or application data to the user ends in `View`.
 
-Examples: `EventStreamView`, `EventDataPanelView`, `MatchView`, `ScheduleView`, `TeamView`, `StatboticsView`.
+Examples: `EventStreamView`, `EventDataPanelView`, `EventInsightView`, `MatchView`, `ScheduleView`, `TeamView`.
 
 A View is presentation. It receives the State it needs, renders that State, and may expose user interactions. It does not own shared domain data, networking, polling, or remote transport.
 
@@ -50,7 +50,7 @@ All event data needed by Views for a given event belongs to that event's EventSt
 
 Every UI parent/container that hosts one or more Views is a `Surface`.
 
-Examples include `TileViewSurface` and future dedicated display surfaces.
+Examples include `TileViewSurface` and `EventInsightsSurface`.
 
 The existing Multiview stage is therefore redefined as a `TileViewSurface`.
 
@@ -99,7 +99,7 @@ These are intentionally separate.
 
 ### Domain State
 
-Domain State describes the information being displayed: event data, matches, teams, alliances, webcast metadata, and future Statbotics data.
+Domain State describes the information being displayed: event data, matches, teams, alliances, webcast metadata, and Statbotics match predictions and EPA estimates.
 
 Domain State can be consumed by many Views and many Surfaces. There must not be a separate copy merely because Views are rendered in different places.
 
@@ -286,7 +286,7 @@ TileSurface
 
 The display should not have two competing independent state owners.
 
-When authoritative Surface state changes, the remote side may receive a state snapshot or state-change notification as appropriate. This preserves the existing remote Multiview principle that the display remains authoritative for its display state.
+When authoritative session Surface state changes, every connected display receives a state snapshot or state-change notification as appropriate. Displays are replicas of the shared session configuration; they do not independently author event or Tile View configuration.
 
 ## 10. Transport Is Not Architecture
 
@@ -298,26 +298,21 @@ The existing WebRTC implementation is therefore treated as a transport implement
 
 The **event-data WebSocket** described in Section 6 is an explicit shared client infrastructure component. Its single-connection requirement is an implementation invariant of the event-data architecture, not a requirement that all application transports use WebSocket.
 
-## 11. Sessions and Multiple Surfaces
+## 11. Sessions and Multiple Displays
 
-A future viewing session may contain multiple Surfaces.
+A viewing session has one shared event configuration and may drive many displays.
 
-```text
-ViewingSession
- ├── TileSurface
- │    ├── EventStreamView
- │    └── EventDataPanelView
- │
- ├── TileSurface
- │    └── MatchView
- │
- └── dedicated Surface
-      └── StatboticsView
-```
+The product invariant is:
 
-A session should not become a giant universal context simply because multiple Surfaces exist. The session abstraction should be introduced around actual multi-Surface requirements.
+> **One session → one set of event states → many displays.**
 
-For now, Surface + SurfaceController is the fundamental boundary.
+The session configures the event list, tracked teams, stream selection, and Tile View priority/highlight once. Connected displays consume the same session state and the same event snapshots; users must not configure those domain/event choices independently on each display.
+
+Display presentation mode may vary per display (for example, Gameday or Match Insights), but it does not create an independent event selection or duplicate domain state. Match Insights follows the active event from the shared Tile View selection: use the highlighted tile when it is valid, otherwise use the first tile in priority order. Resolve stable tile identity to its event key through `tileEvents`.
+
+A standalone local surface such as `/event/<event>/insights` is the intentional exception: it has no Tile View selection to follow, so its URL supplies the one event key. It still consumes the same per-event EventState lifecycle and shared event-data WebSocket manager.
+
+Do not introduce per-display copies of event configuration or event acquisition merely because multiple displays are connected. Remote transport is per peer; session state and EventState ownership are shared.
 
 ## 12. What Does Not Belong in These Types
 
@@ -463,3 +458,23 @@ The important ownership boundaries are:
 - **Surface:** UI containment and presentation environment.
 - **SurfaceController:** user-facing Surface actions and configuration.
 - **Remote transport:** transport of controller actions/state synchronization, never direct React manipulation.
+
+
+## 9. Remote event-data ownership
+
+For a connected remote session, the controller is the owner of live event acquisition. It subscribes to the shared local EventState instances and publishes their snapshots over the remote data channel. A remote display consumes those snapshots through EventStateSnapshotsProvider; its useEventState calls are read-only and must not create EventState instances or start duplicate TBA polling/WebSocket subscriptions.
+
+The controller/session is authoritative for shared Tile View configuration at connection and reconnect. It sends the current surface snapshot and EventState snapshots to each display; displays report user actions as controller requests and never replace the shared configuration with a per-display snapshot. Event snapshots and surface configuration remain separate message types.
+
+A standalone local surface (including /event/[event]/insights) can host its own EventState in its browser runtime. It does not persist that runtime across refreshes. The stop-on-zero-subscribers lifecycle remains in effect; retained subscribers should not be torn down and recreated merely because another event is added to a surface.
+
+
+## 10. Multiple remote displays and display modes
+
+The controller may connect to multiple physical displays, each through its own six-digit pairing code and peer connection. Peer connections are transport endpoints, not separate product sessions or separate owners of event configuration.
+
+All connected displays in one viewing session consume the same session-level Tile View state and controller-published EventState snapshots. Configure events, tracked teams, streams, priority, and highlight once; changes propagate to every connected display. Do not accept each display's configuration as an independent authority or maintain a different event list per peer.
+
+A display may select its presentation mode (`gameday` or `insights`), but Match Insights always resolves its one event from the shared Tile View selection. It does not maintain its own event key. Switching modes changes presentation only and must not create duplicate EventState instances or network acquisition.
+
+The controller can keep inactive display peers mounted and hide their presentation while the operator switches between display tabs. Removing a display releases only that peer connection; it must not reset shared session configuration or tear down EventStates still used by other displays.

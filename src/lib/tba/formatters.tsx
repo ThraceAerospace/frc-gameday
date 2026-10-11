@@ -10,7 +10,7 @@ export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): Rea
       ? trackedTeams.includes(teamKey)
       : trackedTeams === teamKey;
 
-  const className = isTracked ? "font-bold underline p-1" : "p-1";
+  const className = isTracked ? "p-1 font-bold tracked-accent-text" : "p-1";
 
   return (
     <span key={teamKey} className={className}>
@@ -31,6 +31,28 @@ export function matchCode(matchKey: string): string {
   }
 }
 
+/** Map TBA's playoff set numbers to their double-elimination bracket and round. */
+function doubleEliminationBracketInfo(setNum: number): { bracket: "Upper" | "Lower"; round: number } | null {
+  const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
+    ? "Upper"
+    : [5, 6, 9, 10, 12, 13].includes(setNum)
+      ? "Lower"
+      : null;
+  const round = setNum <= 4
+    ? 1
+    : setNum <= 8
+      ? 2
+      : setNum <= 10
+        ? 3
+        : setNum <= 12
+          ? 4
+          : setNum === 13
+            ? 5
+            : null;
+
+  return bracket && round ? { bracket, round } : null;
+}
+
 export function matchLongName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
@@ -44,24 +66,9 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
         return `Final ${matchNum}`;
       case "SF":
         if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
-            ? "Upper"
-            : [5, 6, 9, 10, 12, 13].includes(setNum)
-              ? "Lower"
-              : null;
-          const round = setNum <= 4
-            ? 1
-            : setNum <= 8
-              ? 2
-              : setNum <= 10
-                ? 3
-                : setNum <= 12
-                  ? 4
-                  : setNum === 13
-                    ? 5
-                    : null;
-          return bracket && round
-            ? `${bracket} Bracket - Round ${round} - Match ${setNum}`
+          const bracketInfo = doubleEliminationBracketInfo(setNum);
+          return bracketInfo
+            ? `${bracketInfo.bracket} Bracket - Round ${bracketInfo.round} - Match ${setNum}`
             : `Playoff ${setNum}`;
         } else if (eventPlayoffType === 5) {
           return `Playoff ${setNum}`;
@@ -113,6 +120,38 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
   }
 }
 
+/** Compact next-match label used by TeamPill, following TBA's mobile convention. */
+export function matchAbbreviationName(
+  match: TBAMatch,
+  eventPlayoffType: number | null = null,
+): string {
+  try {
+    const compLevel = match.comp_level.toUpperCase();
+    const matchNum = match.match_number;
+    const setNum = match.set_number;
+
+    if (compLevel === "SF") {
+      if (eventPlayoffType === 10) {
+        const round = doubleEliminationBracketInfo(setNum)?.round;
+        return round == null ? `R?-${matchNum}` : `R${round}-${matchNum}`;
+      }
+      if (eventPlayoffType === 11 || eventPlayoffType === 5) {
+        return `Playoff ${setNum}`;
+      }
+      return `SF${setNum}-${matchNum}`;
+    }
+
+    if (compLevel === "F") return `F${matchNum}`;
+    if (compLevel === "QF") return `QF${setNum}-${matchNum}`;
+    if (compLevel === "EF") return `EF${setNum}-${matchNum}`;
+    if (compLevel === "QM") return `QM${matchNum}`;
+    if (compLevel === "PM") return `PM${matchNum}`;
+    return `M${matchNum}`;
+  } catch {
+    return "UN";
+  }
+}
+
 export function compLevelShortName(compLevel: string): string {
   switch (compLevel.toUpperCase()) {
     case "F":
@@ -159,22 +198,57 @@ export function formatScoreBreakdownLabel(key: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
-/** Consistent W-L-T display for TBA ranking and alliance records. */
+/** Consistent, color-coded W-L-T display for TBA ranking and alliance records. */
 export function formatRecord(
   record: { wins?: number | null; losses?: number | null; ties?: number | null } | null | undefined,
-): string {
+  options: { eliminated?: boolean } = {},
+): ReactNode {
   if (!record) return "—";
-  return `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}`;
+
+  const wins = record.wins ?? 0;
+  const losses = record.losses ?? 0;
+  const ties = record.ties ?? 0;
+
+  if (options.eliminated) {
+    return (
+      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-red-300">
+        {wins}-{losses}{ties > 0 ? `-${ties}` : ""}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+      <span className="text-green-400">{wins}</span>
+      <span className="text-neutral-400">-</span>
+      <span className="text-red-400">{losses}</span>
+      {ties > 0 && (
+        <>
+          <span className="text-neutral-400">-</span>
+          <span className="text-neutral-300">{ties}</span>
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Use compact alliance labels (A1, A2) while retaining unknown/custom names. */
-export function formatAllianceName(
+export function formatAllianceShortName(
   name: string | null | undefined,
   fallbackIndex?: number,
 ): string {
   if (!name) return fallbackIndex == null ? "" : `A${fallbackIndex + 1}`;
   return name.replace(/^Alliance\s+/i, "A");
 }
+
+export function formatAllianceLongName(
+  name: string | null | undefined,
+  fallbackIndex?: number,
+): string {
+  if (!name) return "Alliance";
+  return name;
+}
+
 
 /** Format the TBA playoff status according to the event's bracket type. */
 export function formatPlayoffLevel(

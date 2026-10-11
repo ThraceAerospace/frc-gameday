@@ -2,12 +2,14 @@
 
 import {
   useCallback,
+  useContext,
   useSyncExternalStore,
 } from "react";
 import {
   EventState,
   type EventStateSnapshot,
 } from "./EventState";
+import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
 
 const eventStates = new Map<string, EventState>();
 
@@ -30,12 +32,14 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   eventLastMatch: null,
   teamsStatuses: {},
   alliances: [],
+  oprs: null,
   loading: false,
   error: null,
   websocketStatus: "disconnected",
   websocketStale: false,
   upcomingMatchKey: null,
   upcomingMatchTeamKeys: [],
+  statboticsMatches: {},
 };
 
 export function subscribeEventState(
@@ -51,7 +55,10 @@ export function subscribeEventState(
 }
 
 export function useEventState(eventKey: string) {
-  const state = eventKey
+  const remoteSnapshots = useContext(EventStateSnapshotsContext);
+  // Remote displays consume controller-published snapshots and must not start
+  // their own TBA polling or WebSocket subscriptions.
+  const state = remoteSnapshots === null && eventKey
     ? getEventState(eventKey)
     : null;
 
@@ -76,6 +83,13 @@ export function useEventState(eventKey: string) {
     getSnapshot,
     () => EMPTY_SNAPSHOT,
   );
+
+  if (remoteSnapshots !== null) {
+    return {
+      state: null,
+      ...(eventKey ? remoteSnapshots[eventKey] ?? EMPTY_SNAPSHOT : EMPTY_SNAPSHOT),
+    };
+  }
 
   return {
     state,

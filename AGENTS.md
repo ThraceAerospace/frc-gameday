@@ -23,7 +23,9 @@ TBA REST / webhooks
        ↓
  WebSocket
        ↓
- EventView
+ EventState
+       ↓
+ Views
 ```
 
 Rules:
@@ -31,7 +33,7 @@ Rules:
 1. Redis is the server-side cache.
 2. TBA webhooks are the preferred realtime invalidation path.
 3. TBA webhooks mutate existing Redis cache entries first, then broadcast an event-scoped WSS invalidation.
-4. EventView refetches Redis immediately after the webhook mutation. Webhook-mutated match caches keep the new data available to the UI while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before ETag/304 validation.
+4. EventState refetches Redis immediately after the webhook mutation. Webhook-mutated match caches keep the new data available to the UI while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before ETag/304 validation.
 5. WSS messages are invalidation signals, not data payloads.
 6. Polling reconciles missed webhooks and every explicit reload restarts the polling generation.
 7. Do not introduce another cache layer to support webhooks.
@@ -54,9 +56,7 @@ Mutate the relevant existing Redis cache after authentication/parsing, then broa
 
 ## Client realtime behavior
 
-`useWebSocket` connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff.
-
-EventView handles TBA update messages by refreshing the relevant hooks. Keep the manual `r` refresh behavior unless explicitly changed.
+The shared event WebSocket manager connects to `/api/ws?event=<eventKey>` and reconnects with exponential backoff. Each `EventState` handles event-scoped TBA invalidations, refreshes its own resources, and owns its fallback/reconciliation lifecycle. Views consume the resulting snapshots; they must not start duplicate refresh loops. Keep the manual `r` refresh behavior unless explicitly changed.
 
 ## Polling
 
@@ -112,6 +112,21 @@ Layouts are pure data in `src/lib/multiview/layouts.ts`.
 
 Do not restore old positional TeamPill modes.
 
+## Reusable event data panels
+
+`src/components/eventdata/EventDataPanel.tsx` is an event-scoped presentation component, not a tile-only implementation. It consumes the shared `useEventState` snapshot and can be rendered from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+
+Tile identity is distinct from event identity. `TileSurfaceState.streams` and `priority` contain stable tile IDs; `tileEvents` maps each tile to its event key, and `tileTypes` distinguishes `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event may be represented by both tile types. All displays connected to one session share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
+
+## Match Insights surfaces
+
+- `EventInsightsSurface` is the Surface/container for one event's Insights experience.
+- `EventInsightView` is presentation only. It consumes the supplied `EventStateSnapshot`; it must not fetch Statbotics data or create event-data subscriptions.
+- `EventState` owns Statbotics match acquisition alongside TBA event data. It keeps the current next/last match data available to all Views, refreshes completed matches after the existing delay, and exposes results in `statboticsMatches`.
+- Use `resolveActiveEventKey` for the integrated Insights display: valid highlighted tile first, otherwise the first tile in priority order; resolve tile ID through `tileEvents`.
+- The local Tile View can switch to Insights using the same active-event rule. The standalone `/event/<event>/insights` route supplies its event key directly and uses the same `EventState` lifecycle.
+- Read Statbotics values directly from the typed response object; do not coerce/cast individual values to another numeric type. Format displayed metrics to at most one decimal place for readability, without modifying the underlying response. Show alliance totals by summing all three teams’ estimates; show `—` until every team value for that metric is available.
+
 ## Event footer
 
 EventView footer configuration is independent from Multiview layout presentation.
@@ -121,6 +136,7 @@ Valid footer modes are:
 - `matchStrip`
 - `rankings`
 - `split`
+- `statbotics` — shows the regular match strip beside Statbotics prediction metrics.
 - `hidden`
 
 Multiview may temporarily hide the footer bar through `footerHidden`, but it must not select or override the EventView's configured footer content mode.

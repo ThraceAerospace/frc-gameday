@@ -9,12 +9,17 @@ type LayoutKey = keyof typeof LAYOUTS;
 
 export type TileSurfaceState = {
   eventConfigs: Record<string, EventViewConfig>;
+  /** Stable tile identity -> event key. Multiple tile types may reference one event. */
+  tileEvents: Record<string, string>;
+  tileTypes: Record<string, "eventView">;
   streams: string[];
   priority: string[];
   layoutKey: LayoutKey | null;
   activeKey: string | null;
   highlightLayoutKey: LayoutKey | null;
   upcomingMatchKeys: Record<string, string>;
+  /** Events currently holding an imminent-match auto-highlight. */
+  imminentMatchKeys: Record<string, string>;
   eventPickerOpen: boolean;
   eventSearch: string;
   availableEvents: TBAEvent[];
@@ -37,21 +42,31 @@ export type UpcomingMatchAlert =
     };
 
 export function createInitialTileSurfaceState(
-  events: string[]
+  events: string[],
 ): TileSurfaceState {
-  const streams = [...new Set(events.filter(Boolean).map(String))];
+  const eventKeys = [...new Set(events.filter(Boolean).map(String))];
+  const streams = eventKeys;
   const eventConfigs = Object.fromEntries(
-    streams.map((eventKey) => [eventKey, createEventViewConfig()])
+    eventKeys.map((eventKey) => [eventKey, createEventViewConfig()])
+  );
+  const tileEvents = Object.fromEntries(
+    eventKeys.map((eventKey) => [eventKey, eventKey] as const),
+  );
+  const tileTypes = Object.fromEntries(
+    eventKeys.map((eventKey) => [eventKey, "eventView" as const]),
   );
 
   return {
     eventConfigs,
+    tileEvents,
+    tileTypes,
     streams,
     priority: streams,
     layoutKey: null,
     activeKey: null,
     highlightLayoutKey: null,
     upcomingMatchKeys: {},
+    imminentMatchKeys: {},
     eventPickerOpen: false,
     eventSearch: "",
     availableEvents: [],
