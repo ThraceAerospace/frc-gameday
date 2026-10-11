@@ -19,6 +19,18 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   private readonly statusHandlers = new Set<StatusHandler>();
   private status: EventWebSocketStatus = "disconnected";
   private disposed = false;
+  private leases = 0;
+
+  retain(): void {
+    this.leases += 1;
+    this.disposed = false;
+    this.ensureConnected();
+  }
+
+  release(): void {
+    this.leases = Math.max(0, this.leases - 1);
+    this.stopIfIdle();
+  }
 
   subscribe(eventKey: string, handler: MessageHandler): () => void {
     if (!eventKey) return () => {};
@@ -41,7 +53,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         this.handlers.delete(eventKey);
         this.send({ type: "unsubscribe", eventKey });
       }
-      if (this.handlers.size === 0) this.stop();
+      this.stopIfIdle();
     };
   }
 
@@ -122,6 +134,11 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     if (this.status === status) return;
     this.status = status;
     for (const handler of this.statusHandlers) handler(status);
+  }
+
+  private stopIfIdle() {
+    if (this.leases > 0 || this.handlers.size > 0) return;
+    this.stop();
   }
 
   private stop() {
