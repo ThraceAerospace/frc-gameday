@@ -24,6 +24,21 @@ const events = new Map<string, EventRecord>();
 const portSubscriptions = new Map<MessagePort, Set<string>>();
 const portLastSeen = new Map<MessagePort, number>();
 const PORT_IDLE_TIMEOUT = 120_000;
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureWatchdog() {
+  if (watchdogTimer !== null) return;
+  watchdogTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [port, lastSeen] of portLastSeen) {
+      if (now - lastSeen > PORT_IDLE_TIMEOUT) closePort(port);
+    }
+    if (portLastSeen.size === 0 && watchdogTimer !== null) {
+      clearInterval(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }, 30_000);
+}
 
 function postSnapshot(
   port: MessagePort,
@@ -87,6 +102,10 @@ function closePort(port: MessagePort) {
   }
   portSubscriptions.delete(port);
   port.close();
+  if (portLastSeen.size === 0 && watchdogTimer !== null) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
 }
 
 function handleMessage(port: MessagePort, message: ClientMessage) {
@@ -134,19 +153,13 @@ const sharedWorkerScope = globalThis as typeof globalThis & {
   onconnect?: (event: { ports: MessagePort[] }) => void;
 };
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [port, lastSeen] of portLastSeen) {
-    if (now - lastSeen > PORT_IDLE_TIMEOUT) closePort(port);
-  }
-}, 30_000);
-
 sharedWorkerScope.onconnect = (event) => {
   const port = event.ports[0];
   if (!port) return;
 
   portSubscriptions.set(port, new Set());
   portLastSeen.set(port, Date.now());
+  ensureWatchdog();
   workerEventWebSocket.retain();
   port.onmessage = (messageEvent: MessageEvent<ClientMessage>) => {
     handleMessage(port, messageEvent.data);
