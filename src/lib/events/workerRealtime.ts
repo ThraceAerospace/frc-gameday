@@ -114,7 +114,11 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (this.socket !== socket) return;
       this.socket = null;
       this.setStatus("disconnected");
-      if (this.disposed || this.handlers.size === 0 || this.reconnectTimer !== null) return;
+      if (
+        this.disposed ||
+        (this.leases === 0 && this.handlers.size === 0) ||
+        this.reconnectTimer !== null
+      ) return;
       const delay = this.reconnectDelay;
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
