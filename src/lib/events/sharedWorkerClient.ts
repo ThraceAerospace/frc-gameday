@@ -104,8 +104,13 @@ export function subscribeSharedEventState(
   }
   eventListeners.add(listener);
 
+  const existingPort = port;
   connect();
-  if (isFirst) post({ type: "subscribe", eventKey });
+  // A newly opened port replays all current subscriptions inside connect().
+  // Send an explicit subscribe only when this port was already established.
+  if (isFirst && existingPort && port === existingPort) {
+    post({ type: "subscribe", eventKey });
+  }
   listener();
 
   return () => {
