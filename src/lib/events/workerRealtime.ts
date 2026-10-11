@@ -59,7 +59,9 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       (this.socket.readyState === WebSocket.OPEN ||
         this.socket.readyState === WebSocket.CONNECTING)) return;
 
-    const scope = globalThis as typeof globalThis & { location?: Location };
+    const scope = globalThis as typeof globalThis & {
+      location?: { protocol: string; host: string };
+    };
     const location = scope.location;
     if (!location) return;
 
