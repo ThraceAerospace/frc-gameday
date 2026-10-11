@@ -21,6 +21,16 @@ import {
   type EventWebSocketStatus,
 } from "@/lib/realtime/client";
 
+export type EventRealtimeTransport = {
+  subscribe: (
+    eventKey: string,
+    handler: (message: EventWebSocketMessage) => void,
+  ) => () => void;
+  subscribeStatus: (
+    handler: (status: EventWebSocketStatus) => void,
+  ) => () => void;
+};
+
 export type EventStateSnapshot = {
   event: TBAEvent | null;
   teams: TBATeam[];
@@ -93,7 +103,10 @@ export class EventState {
   private readonly statboticsSignatures = new Map<string, string>();
   private readonly statboticsRefreshTimers = new Map<string, () => void>();
 
-  constructor(eventKey: string) {
+  constructor(
+    eventKey: string,
+    private readonly realtime: EventRealtimeTransport = eventWebSocket,
+  ) {
     this.eventKey = eventKey;
   }
 
@@ -134,13 +147,13 @@ export class EventState {
     this.started = true;
 
     this.unsubscribeWebSocket =
-      eventWebSocket.subscribe(
+      this.realtime.subscribe(
         this.eventKey,
         this.handleWebSocketMessage,
       );
 
     this.unsubscribeWebSocketStatus =
-      eventWebSocket.subscribeStatus(
+      this.realtime.subscribeStatus(
         this.handleWebSocketStatus,
       );
 
