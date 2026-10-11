@@ -22,6 +22,8 @@ type EventRecord = {
 
 const events = new Map<string, EventRecord>();
 const portSubscriptions = new Map<MessagePort, Set<string>>();
+const portLastSeen = new Map<MessagePort, number>();
+const PORT_IDLE_TIMEOUT = 120_000;
 
 function postSnapshot(
   port: MessagePort,
@@ -77,6 +79,9 @@ function unsubscribe(port: MessagePort, eventKey: string) {
 }
 
 function closePort(port: MessagePort) {
+  if (!portLastSeen.has(port)) return;
+  portLastSeen.delete(port);
+  workerEventWebSocket.release();
   for (const eventKey of [...(portSubscriptions.get(port) ?? [])]) {
     unsubscribe(port, eventKey);
   }
@@ -85,6 +90,8 @@ function closePort(port: MessagePort) {
 }
 
 function handleMessage(port: MessagePort, message: ClientMessage) {
+  if (!portLastSeen.has(port)) return;
+  portLastSeen.set(port, Date.now());
   switch (message.type) {
     case "subscribe":
       subscribe(port, message.eventKey);
@@ -127,11 +134,20 @@ const sharedWorkerScope = globalThis as typeof globalThis & {
   onconnect?: (event: { ports: MessagePort[] }) => void;
 };
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [port, lastSeen] of portLastSeen) {
+    if (now - lastSeen > PORT_IDLE_TIMEOUT) closePort(port);
+  }
+}, 30_000);
+
 sharedWorkerScope.onconnect = (event) => {
   const port = event.ports[0];
   if (!port) return;
 
   portSubscriptions.set(port, new Set());
+  portLastSeen.set(port, Date.now());
+  workerEventWebSocket.retain();
   port.onmessage = (messageEvent: MessageEvent<ClientMessage>) => {
     handleMessage(port, messageEvent.data);
   };
