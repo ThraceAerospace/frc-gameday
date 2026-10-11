@@ -1,6 +1,7 @@
 "use client";
 
-import type { EventStateSnapshot } from "./EventState";
+import { EventState, type EventStateSnapshot } from "./EventState";
+import { eventWebSocket } from "@/lib/realtime/client";
 
 type SnapshotListener = () => void;
 type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
@@ -13,6 +14,9 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let lastPongAt = 0;
 let heartbeatNonce = 0;
 let liveRuntimeRefs = 0;
+let fallbackMode = false;
+let fallbackRuntimeUnsubscribe: (() => void) | null = null;
+const fallbackStates = new Map<string, EventState>();
 
 function post(message: unknown) {
   if (!port) connect();
@@ -41,12 +45,23 @@ function handleWorkerMessage(event: MessageEvent) {
 }
 
 function connect() {
-  if (port || typeof SharedWorker === "undefined") return;
+  if (port || fallbackMode) return;
+  if (typeof SharedWorker === "undefined") {
+    fallbackMode = true;
+    return;
+  }
 
-  const nextWorker = new SharedWorker(
-    new URL("./eventState.shared-worker.ts", import.meta.url),
-    { name: "fieldview-live-runtime", type: "module" },
-  );
+  let nextWorker: SharedWorker;
+  try {
+    nextWorker = new SharedWorker(
+      new URL("./eventState.shared-worker.ts", import.meta.url),
+      { name: "fieldview-live-runtime", type: "module" },
+    );
+  } catch (error) {
+    console.warn("[SharedEventState] SharedWorker unavailable; using per-tab fallback", error);
+    fallbackMode = true;
+    return;
+  }
   const nextPort = nextWorker.port;
   worker = nextWorker;
   port = nextPort;
@@ -91,8 +106,19 @@ function recover() {
   if (listeners.size > 0 || liveRuntimeRefs > 0) connect();
 }
 
+function getFallbackState(eventKey: string): EventState {
+  let state = fallbackStates.get(eventKey);
+  if (!state) {
+    state = new EventState(eventKey);
+    fallbackStates.set(eventKey, state);
+  }
+  return state;
+}
+
 export function getEventStateSnapshot(eventKey: string): EventStateSnapshot | undefined {
-  return snapshots.get(eventKey);
+  return fallbackMode
+    ? fallbackStates.get(eventKey)?.getSnapshot()
+    : snapshots.get(eventKey);
 }
 
 export function subscribeSharedEventState(
@@ -111,6 +137,21 @@ export function subscribeSharedEventState(
 
   const existingPort = port;
   connect();
+  if (fallbackMode) {
+    const fallbackState = getFallbackState(eventKey);
+    const unsubscribeFallback = fallbackState.subscribe(() => listener());
+    listener();
+    return () => {
+      unsubscribeFallback();
+      const current = listeners.get(eventKey);
+      current?.delete(listener);
+      if (current?.size === 0) {
+        listeners.delete(eventKey);
+        fallbackStates.delete(eventKey);
+      }
+      closePortIfIdle();
+    };
+  }
   // A newly opened port replays all current subscriptions inside connect().
   // Send an explicit subscribe only when this port was already established.
   if (isFirst && existingPort && port === existingPort) {
@@ -134,8 +175,15 @@ export function subscribeSharedEventState(
 export function registerSharedLiveRuntime(): () => void {
   liveRuntimeRefs += 1;
   connect();
+  if (fallbackMode && !fallbackRuntimeUnsubscribe) {
+    fallbackRuntimeUnsubscribe = eventWebSocket.subscribeStatus(() => {});
+  }
   return () => {
     liveRuntimeRefs = Math.max(0, liveRuntimeRefs - 1);
+    if (liveRuntimeRefs === 0 && fallbackRuntimeUnsubscribe) {
+      fallbackRuntimeUnsubscribe();
+      fallbackRuntimeUnsubscribe = null;
+    }
     closePortIfIdle();
   };
 }
@@ -156,6 +204,18 @@ export function reloadSharedEventState(
   resource: ReloadResource,
 ) {
   if (!eventKey) return;
+  if (fallbackMode) {
+    const state = fallbackStates.get(eventKey);
+    if (!state) return;
+    switch (resource) {
+      case "all": state.reloadAll(); break;
+      case "matches": state.reloadMatches(); break;
+      case "statuses": state.reloadStatuses(); break;
+      case "alliances": state.reloadAlliances(); break;
+      case "oprs": state.reloadOprs(); break;
+    }
+    return;
+  }
   post({ type: "reload", eventKey, resource });
 }
 
@@ -174,7 +234,7 @@ export function getEventStateController(eventKey: string): EventStateController 
   let controller = controllers.get(eventKey);
   if (!controller) {
     controller = {
-      getSnapshot: () => snapshots.get(eventKey) ?? EMPTY_SNAPSHOT,
+      getSnapshot: () => getEventStateSnapshot(eventKey) ?? EMPTY_SNAPSHOT,
       reloadAll: () => reloadSharedEventState(eventKey, "all"),
       reloadMatches: () => reloadSharedEventState(eventKey, "matches"),
       reloadStatuses: () => reloadSharedEventState(eventKey, "statuses"),
