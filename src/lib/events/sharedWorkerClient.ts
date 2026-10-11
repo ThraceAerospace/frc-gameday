@@ -12,6 +12,7 @@ let port: MessagePort | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let lastPongAt = 0;
 let heartbeatNonce = 0;
+let liveRuntimeRefs = 0;
 
 function post(message: unknown) {
   if (!port) connect();
@@ -122,7 +123,21 @@ export function subscribeSharedEventState(
       post({ type: "unsubscribe", eventKey });
       snapshots.delete(eventKey);
     }
-    if (listeners.size === 0 && port) {
+    closePortIfIdle();
+  };
+}
+
+export function registerSharedLiveRuntime(): () => void {
+  liveRuntimeRefs += 1;
+  connect();
+  return () => {
+    liveRuntimeRefs = Math.max(0, liveRuntimeRefs - 1);
+    closePortIfIdle();
+  };
+}
+
+function closePortIfIdle() {
+  if (listeners.size === 0 && liveRuntimeRefs === 0 && port) {
       port.postMessage({ type: "close" });
       if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
@@ -130,7 +145,6 @@ export function subscribeSharedEventState(
       port = null;
       worker = null;
     }
-  };
 }
 
 export function reloadSharedEventState(
