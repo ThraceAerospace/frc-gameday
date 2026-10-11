@@ -219,12 +219,14 @@ Server data/cache layer
  ↓
 Server realtime layer
  ↓
-ONE client WebSocket
+ONE origin-wide SharedWorker WebSocket
  ↓
-EventWebSocketManager
- ├── routes Event A → EventState A
- ├── routes Event B → EventState B
- └── routes Event C → EventState C
+Worker-owned EventState map
+ ├── EventState A → API/reconciliation
+ ├── EventState B → API/reconciliation
+ └── EventState C → API/reconciliation
+ ↓
+Snapshots over MessagePorts → per-tab Views
 ```
 
 Redis remains infrastructure rather than UI state. The client EventState is not a substitute for Redis: Redis is server-side cache/fan-out infrastructure, while EventState is the active client-side owner of the event data lifecycle consumed by the UI.
@@ -427,7 +429,7 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
 
 The architecture is deliberately layered:
 
-**Server data → Shared client transport → EventState → View → Surface → SurfaceController → User/Remote Control**
+**Server data → SharedWorker transport and EventState → MessagePort snapshots → View → Surface → SurfaceController → User/Remote Control**
 
 The important ownership boundaries are:
 
