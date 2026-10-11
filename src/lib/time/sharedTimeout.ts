@@ -1,4 +1,4 @@
-"type ScheduledTask = {
+type ScheduledTask = {
   id: number;
   dueAt: number;
   callback: () => void;
