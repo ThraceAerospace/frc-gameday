@@ -89,7 +89,6 @@ export class EventState {
   private matchTimer: (() => void) | null = null;
   private statusTimer: (() => void) | null = null;
   private allianceTimer: (() => void) | null = null;
-  private allianceAuthoritativeTimer: (() => void) | null = null;
   private oprTimer: (() => void) | null = null;
 
   private eventRequest = 0;
@@ -167,6 +166,7 @@ export class EventState {
 
     this.scheduleMatchFallback();
     this.scheduleStatusFallback();
+    this.scheduleAllianceFallback();
     this.scheduleOprsFallback();
   }
 
@@ -184,8 +184,6 @@ export class EventState {
     this.clearTimer("match");
     this.clearTimer("status");
     this.clearTimer("alliance");
-    this.allianceAuthoritativeTimer?.();
-    this.allianceAuthoritativeTimer = null;
     this.clearTimer("oprs");
 
     for (const cancel of this.authoritativeTimers.values()) {
@@ -213,34 +211,39 @@ export class EventState {
       ),
     }));
   }
-  reloadAll() {
+  reloadAll(reconcile = false) {
     // Event metadata (including webcasts) is stable across ordinary data
     // refreshes. Reloading it can churn stream configuration and interrupt
     // playback, so refresh only the event's changing data here.
     void this.loadTeams();
-    this.reloadMatches();
-    this.reloadStatuses();
-    this.reloadAlliances();
-    this.reloadOprs();
+    this.reloadMatches(reconcile);
+    this.reloadStatuses(reconcile);
+    this.reloadAlliances(reconcile);
+    this.reloadOprs(reconcile);
   }
 
-  reloadMatches() {
+  reloadMatches(reconcile = false) {
     void this.loadMatches();
-    this.resetAuthoritativeTimer("matches");
+    this.scheduleMatchFallback();
+    if (reconcile) this.resetAuthoritativeTimer("matches");
   }
 
-  reloadStatuses() {
+  reloadStatuses(reconcile = false) {
     void this.loadStatuses();
-    this.resetAuthoritativeTimer("statuses");
+    this.scheduleStatusFallback();
+    if (reconcile) this.resetAuthoritativeTimer("statuses");
   }
 
-  reloadAlliances() {
+  reloadAlliances(reconcile = false) {
     void this.loadAlliances();
+    this.scheduleAllianceFallback();
+    if (reconcile) this.resetAuthoritativeTimer("alliances");
   }
 
-  reloadOprs() {
+  reloadOprs(reconcile = false) {
     void this.loadOprs();
-    this.resetAuthoritativeTimer("oprs");
+    this.scheduleOprsFallback();
+    if (reconcile) this.resetAuthoritativeTimer("oprs");
   }
 
   private ensureStatboticsMatch(matchKey: string, resultSignature: string) {
@@ -470,14 +473,12 @@ export class EventState {
         this.ensureStatboticsMatch(match.key, signature);
       }
 
-      this.scheduleMatchFallback();
     } catch (error) {
       if (request !== this.matchesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] matches request failed", error);
-      this.scheduleMatchFallback();
     }
   }
 
@@ -506,14 +507,12 @@ export class EventState {
         teamsStatuses: data ?? {},
       }));
 
-      this.scheduleStatusFallback();
     } catch (error) {
       if (request !== this.statusesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] statuses request failed", error);
-      this.scheduleStatusFallback();
     }
   }
 
@@ -545,24 +544,15 @@ export class EventState {
         alliances,
       }));
 
-      if (alliances.length > 0) {
-        this.scheduleAllianceFallback();
-      } else {
-        // Before alliance selection, score-posted webhooks and the
-        // delayed alliance-selection refetch are our signals to check again.
-        this.clearTimer("alliance");
-      }
+      // Alliance polling remains active even before selection. This can
+      // produce a few unnecessary 304s during qualifications, which is fine.
     } catch (error) {
       if (request !== this.alliancesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] alliances request failed", error);
-      if (this.snapshot.alliances.length > 0) {
-        this.scheduleAllianceFallback();
-      } else {
-        this.clearTimer("alliance");
-      }
+      // Keep the fallback active even if alliances have not been selected yet.
     }
   }
 
@@ -590,14 +580,12 @@ export class EventState {
         oprs: data && typeof data === "object" ? (data as TBAEventOPRs) : null,
       }));
 
-      this.scheduleOprsFallback();
     } catch (error) {
       if (request !== this.oprsRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] OPRs request failed", error);
-      this.scheduleOprsFallback();
     }
   }
 
@@ -651,7 +639,7 @@ export class EventState {
           upcomingMatchTeamKeys: teamKeys,
         }));
 
-        this.reloadMatches();
+        this.reloadMatches(true);
         break;
       }
 
@@ -671,35 +659,35 @@ export class EventState {
               }
             : current,
         );
-        this.reloadMatches();
-        this.reloadStatuses();
-        this.reloadAlliances();
-        this.reloadOprs();
+        this.reloadMatches(true);
+        this.reloadStatuses(true);
+        this.reloadAlliances(true);
+        this.reloadOprs(true);
         break;
       }
 
       case "match_video":
-        this.reloadMatches();
+        this.reloadMatches(true);
         break;
 
       case "alliance_selection":
-        this.reloadAlliances();
-        this.scheduleAllianceAuthoritativeRefetch();
+        this.reloadAlliances(true);
         break;
 
       default:
         /*
          * Full-refresh webhook types and unknown future types
          * intentionally go through reloadAll(). Each independent
-         * reload resets its own authoritative timer.
+         * reload restarts its fallback and schedules one authoritative
+         * reconciliation, without creating a recurring 65-second loop.
          */
-        this.reloadAll();
+        this.reloadAll(true);
         break;
     }
   };
 
   private resetAuthoritativeTimer(
-    resource: "matches" | "statuses" | "oprs",
+    resource: "matches" | "statuses" | "alliances" | "oprs",
   ) {
     const existing =
       this.authoritativeTimers.get(resource);
@@ -715,18 +703,8 @@ export class EventState {
         return;
       }
 
-      /*
-       * Keep the watchdog alive. A webhook-triggered reload
-       * will replace this timer and restart its 65s countdown.
-       */
-      this.resetAuthoritativeTimer(resource);
-
-      /*
-       * Use the underlying load directly so the authoritative
-       * reconciliation does not itself reset the watchdog.
-       * The normal TBA client/cache path determines whether
-       * this reaches Redis or upstream.
-       */
+      // This is deliberately one-shot. Only five-minute fallback timers
+      // schedule another refresh cycle.
       switch (resource) {
         case "matches":
           void this.loadMatches();
@@ -734,6 +712,10 @@ export class EventState {
 
         case "statuses":
           void this.loadStatuses();
+          break;
+
+        case "alliances":
+          void this.loadAlliances();
           break;
 
         case "oprs":
@@ -754,7 +736,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadMatches();
+      this.reloadMatches(true);
     }, MATCH_POLL_INTERVAL);
   }
 
@@ -767,17 +749,8 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadStatuses();
+      this.reloadStatuses(true);
     }, STATUS_POLL_INTERVAL);
-  }
-
-  private scheduleAllianceAuthoritativeRefetch() {
-    this.allianceAuthoritativeTimer?.();
-    this.allianceAuthoritativeTimer = scheduleSharedTimeout(() => {
-      this.allianceAuthoritativeTimer = null;
-      if (this.stopped) return;
-      void this.loadAlliances();
-    }, AUTHORITATIVE_REFETCH_DELAY);
   }
 
   private scheduleAllianceFallback() {
@@ -789,7 +762,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadAlliances();
+      this.reloadAlliances(true);
     }, ALLIANCE_POLL_INTERVAL);
   }
 
@@ -802,7 +775,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadOprs();
+      this.reloadOprs(true);
     }, STATUS_POLL_INTERVAL);
   }
 
