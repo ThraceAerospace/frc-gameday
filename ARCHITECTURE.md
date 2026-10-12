@@ -156,71 +156,52 @@ Views subscribe to State. They do not create independent polling loops, WebSocke
 
 ## 6. Client Event Data Architecture
 
-The browser maintains one shared physical event-data WebSocket for the lifetime of the client runtime.
-
-The WebSocket connection is shared by every EventState in that client:
+The browser uses one **SharedWorker per origin** as the owner of live event data. Every live tab connects to that worker; the worker owns the one physical event-data WebSocket and one EventState per actively requested event.
 
 ```text
-                    ONE physical WebSocket
-                           │
-                           ▼
-                EventWebSocketManager
-                  /         |         \
-                 /          |          \
-                ▼           ▼           ▼
-          EventState A  EventState B  EventState C
-                │           │           │
-                ▼           ▼           ▼
-              Views       Views       Views
+Tab A ──┐
+Tab B ──┼── MessagePorts ── SharedWorker
+Tab C ──┘                      │
+                               ├── one physical WebSocket
+                               ├── EventState A
+                               ├── EventState B
+                               └── EventState C
 ```
 
-There is **exactly one physical event-data WebSocket per browser/client runtime**. It is not created per View, per hook, or per EventState.
+The worker owns the WebSocket, event-key routing, EventState map, all event API acquisition, request-race protection, fallback/reconciliation timers, and Statbotics result refreshes. A tab adapter owns only its MessagePort, local React subscriptions, and the latest snapshots received from the worker.
 
-The shared `EventWebSocketManager` owns only the transport connection and routing of messages to the appropriate EventState. It does not own event data, freshness, refetching, or fallback logic.
+This distinction matters: moving only the WebSocket into a worker would still duplicate requests and polling in every tab. EventState itself must be owned by the worker.
 
-Each EventState subscribes to the shared connection for its event and remains responsible for its complete event lifecycle:
+### Live route leases and demand
 
-- handling realtime messages for its event
+Live route layouts register a live-runtime lease. A lease keeps the worker connection and its WebSocket alive even before that page asks for a particular event. Event subscriptions are separate and demand-driven: the first consumer for an event registers that event with the worker, and additional consumers/tabs share the same EventState. Removing one consumer does not stop an EventState still used by another port.
+
+The current live layouts are under `src/app/gameday`, `src/app/event`, and `src/app/insights`. Other pages can activate live acquisition through `useEventState`; remote displays that receive controller-published snapshots remain read-only and do not subscribe to event acquisition.
+
+When the final live route lease and event subscription disappear, the tab closes its MessagePort. The worker stops the socket and event timers when no connected live clients or event subscriptions remain. Abandoned ports are expired after a conservative liveness timeout; client ports send heartbeats so a killed tab does not keep the runtime alive indefinitely.
+
+### Event lifecycle and reconnect
+
+Each worker-owned EventState subscribes to the shared connection for its event and remains responsible for:
+
+- handling realtime invalidations for its event
 - updating its event data
 - tracking freshness
-- maintaining its own fallback timer
-- refetching its own event data upstream when necessary
-- reconciling after missed or stale realtime updates
+- maintaining its fallback and authoritative reconciliation timers
+- refetching its own event data through the existing API routes
+- refreshing current/last-match Statbotics data
 
-```text
-WebSocket update for Event A
-            ↓
-EventWebSocketManager
-            ↓
-EventState A
-            ├── update data
-            ├── update freshness
-            └── reset Event A fallback timer
+WebSocket messages remain invalidation signals, not authoritative data payloads. Existing Redis cache behavior, ETag/304 handling, tag invalidation, the 65-second authoritative refetch delay, and API routes are unchanged.
 
-No update for Event A for too long
-            ↓
-EventState A fallback timer
-            ↓
-EventState A refetches Event A upstream
-```
+When the socket reconnects, the worker resubscribes every active event key. If the worker itself becomes unavailable, each tab detects missing heartbeat responses, reconnects to the named SharedWorker, and re-registers its active event subscriptions. EventState is reconstructed from the existing APIs, so worker memory is not treated as durable storage.
 
-Event A becoming stale does not cause Event B or Event C to refetch.
+Event A becoming stale does not cause Event B to refetch. Static pages that do not mount a live route or call `useEventState` do not open the worker.
 
-### WebSocket lifetime
+The invariant is:
 
-The shared WebSocket is intentionally **not closed when the last EventState unsubscribes**.
+> **One origin → one SharedWorker-owned event WebSocket → any number of live pages and event subscriptions.**
 
-Once the client runtime establishes the connection, it remains open for the lifetime of that runtime. There is no reference-counted idle shutdown and no connection churn caused by EventState mounting/unmounting.
-
-If the physical connection fails, the shared WebSocket manager reconnects it. Existing EventStates remain subscribed to the manager and do not independently create replacement connections.
-
-When the browser/client runtime itself disappears, the runtime naturally terminates the connection.
-
-This gives the architecture a simple invariant:
-
-> **EventStates subscribe and unsubscribe from event routing, but they never create or destroy the physical event-data WebSocket.**
-
-The WebSocket manager is shared transport infrastructure. EventState remains the owner of event data acquisition.
+EventState remains the owner of event data acquisition; it does not own the physical WebSocket.
 
 ## 7. Data Infrastructure
 
@@ -238,12 +219,14 @@ Server data/cache layer
  ↓
 Server realtime layer
  ↓
-ONE client WebSocket
+ONE origin-wide SharedWorker WebSocket
  ↓
-EventWebSocketManager
- ├── routes Event A → EventState A
- ├── routes Event B → EventState B
- └── routes Event C → EventState C
+Worker-owned EventState map
+ ├── EventState A → API/reconciliation
+ ├── EventState B → API/reconciliation
+ └── EventState C → API/reconciliation
+ ↓
+Snapshots over MessagePorts → per-tab Views
 ```
 
 Redis remains infrastructure rather than UI state. The client EventState is not a substitute for Redis: Redis is server-side cache/fan-out infrastructure, while EventState is the active client-side owner of the event data lifecycle consumed by the UI.
@@ -391,17 +374,18 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
 8. **Remote actions use the same action path as local actions.**
 9. **Remote transport never directly manipulates Surface React state.**
 10. **Domain State is independent of Surface configuration.**
-11. **One client maintains exactly one physical event-data WebSocket.**
-12. **The shared event-data WebSocket remains open for the lifetime of the client runtime.**
-13. **EventStates subscribe to shared WebSocket routing; they do not create or destroy the physical connection.**
-14. **The shared WebSocket manager owns transport and routing only, not event data or acquisition policy.**
-15. **Each EventState owns its own freshness and fallback timer.**
-16. **A stale EventState refetches only its own event upstream.**
-17. **Redis is server-side infrastructure, not the UI's State.**
-18. **Transport implementations remain replaceable.**
-19. **Settings for a Surface operate through that Surface's controller.**
-20. **A Surface has one authoritative state/controller path.**
-21. **Generic abstractions should be introduced only when real product requirements justify them.**
+11. **One origin has one SharedWorker-owned physical event-data WebSocket.**
+12. **Every live page may hold a worker lease; event-key subscriptions are demand-driven and shared across tabs.**
+13. **The worker closes the WebSocket and stops event work when no live clients or event subscriptions remain.**
+14. **EventStates subscribe to worker-owned WebSocket routing; they do not create or destroy the physical connection.**
+15. **The worker owns the EventState map and all event acquisition/polling; tabs are snapshot consumers.**
+16. **Each EventState owns its own freshness and fallback timer.**
+17. **A stale EventState refetches only its own event upstream.**
+18. **Redis is server-side infrastructure, not the UI's State.**
+19. **Transport implementations remain replaceable.**
+20. **Settings for a Surface operate through that Surface's controller.**
+21. **A Surface has one authoritative state/controller path.**
+22. **Generic abstractions should be introduced only when real product requirements justify them.**
 
 ## 16. Target Architecture
 
@@ -414,9 +398,7 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
                           ↓
                     Server WebSocket
                           ↓
-                ONE client WebSocket
-                          ↓
-             EventWebSocketManager
+             SharedWorker WebSocket
                     /      |      \
                    /       |       \
                   ▼        ▼        ▼
@@ -447,13 +429,14 @@ The goal is not to preserve Multiview-specific architecture. The goal is to gene
 
 The architecture is deliberately layered:
 
-**Server data → Shared client transport → EventState → View → Surface → SurfaceController → User/Remote Control**
+**Server data → SharedWorker transport and EventState → MessagePort snapshots → View → Surface → SurfaceController → User/Remote Control**
 
 The important ownership boundaries are:
 
 - **Server data/cache layer:** server-side cache and upstream integration.
-- **Shared client WebSocket manager:** one physical connection and message routing.
-- **EventState:** all acquisition, synchronization, freshness, fallback, and event data for one event.
+- **SharedWorker:** one physical connection, event routing, worker-owned EventState map, and all live acquisition.
+- **Per-tab adapter:** MessagePort, React subscriptions, and snapshot delivery only.
+- **EventState:** all synchronization, freshness, fallback, and event data for one event.
 - **View:** presentation.
 - **Surface:** UI containment and presentation environment.
 - **SurfaceController:** user-facing Surface actions and configuration.

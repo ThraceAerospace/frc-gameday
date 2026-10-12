@@ -14,12 +14,22 @@ import type {
   TBAMatch,
   TBATeam,
 } from "@/lib/tba/types";
-import { scheduleSharedTimeout } from "@/lib/time/sharedSecondClock";
+import { scheduleSharedTimeout } from "@/lib/time/sharedTimeout";
 import {
   eventWebSocket,
   type EventWebSocketMessage,
   type EventWebSocketStatus,
 } from "@/lib/realtime/client";
+
+export type EventRealtimeTransport = {
+  subscribe: (
+    eventKey: string,
+    handler: (message: EventWebSocketMessage) => void,
+  ) => () => void;
+  subscribeStatus: (
+    handler: (status: EventWebSocketStatus) => void,
+  ) => () => void;
+};
 
 export type EventStateSnapshot = {
   event: TBAEvent | null;
@@ -43,7 +53,7 @@ type Listener = (snapshot: EventStateSnapshot) => void;
 
 const MATCH_POLL_INTERVAL = 5 * 60_000;
 const STATUS_POLL_INTERVAL = 5 * 60_000;
-const ALLIANCE_POLL_INTERVAL = 15 * 60_000;
+const ALLIANCE_POLL_INTERVAL = 5 * 60_000;
 const AUTHORITATIVE_REFETCH_DELAY = 65_000;
 const STATBOTICS_RESULT_REFRESH_DELAY = 3 * 60_000;
 
@@ -93,7 +103,10 @@ export class EventState {
   private readonly statboticsSignatures = new Map<string, string>();
   private readonly statboticsRefreshTimers = new Map<string, () => void>();
 
-  constructor(eventKey: string) {
+  constructor(
+    eventKey: string,
+    private readonly realtime: EventRealtimeTransport = eventWebSocket,
+  ) {
     this.eventKey = eventKey;
   }
 
@@ -134,13 +147,13 @@ export class EventState {
     this.started = true;
 
     this.unsubscribeWebSocket =
-      eventWebSocket.subscribe(
+      this.realtime.subscribe(
         this.eventKey,
         this.handleWebSocketMessage,
       );
 
     this.unsubscribeWebSocketStatus =
-      eventWebSocket.subscribeStatus(
+      this.realtime.subscribeStatus(
         this.handleWebSocketStatus,
       );
 
@@ -198,35 +211,39 @@ export class EventState {
       ),
     }));
   }
-  reloadAll() {
+  reloadAll(reconcile = false) {
     // Event metadata (including webcasts) is stable across ordinary data
     // refreshes. Reloading it can churn stream configuration and interrupt
     // playback, so refresh only the event's changing data here.
     void this.loadTeams();
-    this.reloadMatches();
-    this.reloadStatuses();
-    this.reloadAlliances();
-    this.reloadOprs();
+    this.reloadMatches(reconcile);
+    this.reloadStatuses(reconcile);
+    this.reloadAlliances(reconcile);
+    this.reloadOprs(reconcile);
   }
 
-  reloadMatches() {
+  reloadMatches(reconcile = false) {
     void this.loadMatches();
-    this.resetAuthoritativeTimer("matches");
+    this.scheduleMatchFallback();
+    if (reconcile) this.resetAuthoritativeTimer("matches");
   }
 
-  reloadStatuses() {
+  reloadStatuses(reconcile = false) {
     void this.loadStatuses();
-    this.resetAuthoritativeTimer("statuses");
+    this.scheduleStatusFallback();
+    if (reconcile) this.resetAuthoritativeTimer("statuses");
   }
 
-  reloadAlliances() {
+  reloadAlliances(reconcile = false) {
     void this.loadAlliances();
-    this.resetAuthoritativeTimer("alliances");
+    this.scheduleAllianceFallback();
+    if (reconcile) this.resetAuthoritativeTimer("alliances");
   }
 
-  reloadOprs() {
+  reloadOprs(reconcile = false) {
     void this.loadOprs();
-    this.resetAuthoritativeTimer("oprs");
+    this.scheduleOprsFallback();
+    if (reconcile) this.resetAuthoritativeTimer("oprs");
   }
 
   private ensureStatboticsMatch(matchKey: string, resultSignature: string) {
@@ -456,14 +473,12 @@ export class EventState {
         this.ensureStatboticsMatch(match.key, signature);
       }
 
-      this.scheduleMatchFallback();
     } catch (error) {
       if (request !== this.matchesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] matches request failed", error);
-      this.scheduleMatchFallback();
     }
   }
 
@@ -492,14 +507,12 @@ export class EventState {
         teamsStatuses: data ?? {},
       }));
 
-      this.scheduleStatusFallback();
     } catch (error) {
       if (request !== this.statusesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] statuses request failed", error);
-      this.scheduleStatusFallback();
     }
   }
 
@@ -522,21 +535,24 @@ export class EventState {
         return;
       }
 
+      const alliances = Array.isArray(data)
+        ? (data as TBAEliminationAlliance[])
+        : [];
+
       this.update((current) => ({
         ...current,
-        alliances: Array.isArray(data)
-          ? (data as TBAEliminationAlliance[])
-          : [],
+        alliances,
       }));
 
-      this.scheduleAllianceFallback();
+      // Alliance polling remains active even before selection. This can
+      // produce a few unnecessary 304s during qualifications, which is fine.
     } catch (error) {
       if (request !== this.alliancesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] alliances request failed", error);
-      this.scheduleAllianceFallback();
+      // Keep the fallback active even if alliances have not been selected yet.
     }
   }
 
@@ -564,14 +580,12 @@ export class EventState {
         oprs: data && typeof data === "object" ? (data as TBAEventOPRs) : null,
       }));
 
-      this.scheduleOprsFallback();
     } catch (error) {
       if (request !== this.oprsRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] OPRs request failed", error);
-      this.scheduleOprsFallback();
     }
   }
 
@@ -625,7 +639,7 @@ export class EventState {
           upcomingMatchTeamKeys: teamKeys,
         }));
 
-        this.reloadMatches();
+        this.reloadMatches(true);
         break;
       }
 
@@ -645,28 +659,29 @@ export class EventState {
               }
             : current,
         );
-        this.reloadMatches();
-        this.reloadStatuses();
-        this.reloadAlliances();
-        this.reloadOprs();
+        this.reloadMatches(true);
+        this.reloadStatuses(true);
+        this.reloadAlliances(true);
+        this.reloadOprs(true);
         break;
       }
 
       case "match_video":
-        this.reloadMatches();
+        this.reloadMatches(true);
         break;
 
       case "alliance_selection":
-        this.reloadAlliances();
+        this.reloadAlliances(true);
         break;
 
       default:
         /*
          * Full-refresh webhook types and unknown future types
          * intentionally go through reloadAll(). Each independent
-         * reload resets its own authoritative timer.
+         * reload restarts its fallback and schedules one authoritative
+         * reconciliation, without creating a recurring 65-second loop.
          */
-        this.reloadAll();
+        this.reloadAll(true);
         break;
     }
   };
@@ -688,18 +703,8 @@ export class EventState {
         return;
       }
 
-      /*
-       * Keep the watchdog alive. A webhook-triggered reload
-       * will replace this timer and restart its 65s countdown.
-       */
-      this.resetAuthoritativeTimer(resource);
-
-      /*
-       * Use the underlying load directly so the authoritative
-       * reconciliation does not itself reset the watchdog.
-       * The normal TBA client/cache path determines whether
-       * this reaches Redis or upstream.
-       */
+      // This is deliberately one-shot. Only five-minute fallback timers
+      // schedule another refresh cycle.
       switch (resource) {
         case "matches":
           void this.loadMatches();
@@ -731,7 +736,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadMatches();
+      this.reloadMatches(true);
     }, MATCH_POLL_INTERVAL);
   }
 
@@ -744,7 +749,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadStatuses();
+      this.reloadStatuses(true);
     }, STATUS_POLL_INTERVAL);
   }
 
@@ -757,7 +762,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadAlliances();
+      this.reloadAlliances(true);
     }, ALLIANCE_POLL_INTERVAL);
   }
 
@@ -770,7 +775,7 @@ export class EventState {
         ...current,
         websocketStale: true,
       }));
-      void this.loadOprs();
+      this.reloadOprs(true);
     }, STATUS_POLL_INTERVAL);
   }
 

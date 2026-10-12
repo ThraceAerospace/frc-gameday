@@ -5,24 +5,13 @@ import {
   useContext,
   useSyncExternalStore,
 } from "react";
-import {
-  EventState,
-  type EventStateSnapshot,
-} from "./EventState";
+import type { EventStateSnapshot } from "./EventState";
 import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
-
-const eventStates = new Map<string, EventState>();
-
-function getEventState(eventKey: string) {
-  let state = eventStates.get(eventKey);
-
-  if (!state) {
-    state = new EventState(eventKey);
-    eventStates.set(eventKey, state);
-  }
-
-  return state;
-}
+import {
+  getEventStateController,
+  getEventStateSnapshot,
+  subscribeSharedEventState,
+} from "./sharedWorkerClient";
 
 const EMPTY_SNAPSHOT: EventStateSnapshot = {
   event: null,
@@ -42,39 +31,39 @@ const EMPTY_SNAPSHOT: EventStateSnapshot = {
   statboticsMatches: {},
 };
 
+/**
+ * Subscribe to the shared event lifecycle. The SharedWorker is the only owner
+ * of EventState acquisition; each tab receives snapshots through its own port.
+ */
 export function subscribeEventState(
   eventKey: string,
   listener: (snapshot: EventStateSnapshot) => void,
 ) {
-  const state = getEventState(eventKey);
-  const unsubscribe = state.subscribe(listener);
-
-  listener(state.getSnapshot());
-
-  return unsubscribe;
+  return subscribeSharedEventState(eventKey, () => {
+    listener(getEventStateSnapshot(eventKey) ?? EMPTY_SNAPSHOT);
+  });
 }
 
 export function useEventState(eventKey: string) {
   const remoteSnapshots = useContext(EventStateSnapshotsContext);
-  // Remote displays consume controller-published snapshots and must not start
-  // their own TBA polling or WebSocket subscriptions.
+  // Remote displays consume controller-published snapshots and must not create
+  // a SharedWorker subscription or acquire their own event data.
   const state = remoteSnapshots === null && eventKey
-    ? getEventState(eventKey)
+    ? getEventStateController(eventKey)
     : null;
 
   const subscribe = useCallback(
     (listener: () => void) =>
       state
-        ? state.subscribe(listener)
+        ? subscribeSharedEventState(eventKey, listener)
         : () => {},
-    [state],
+    [eventKey, state],
   );
 
   const getSnapshot = useCallback(
-    () =>
-      state
-        ? state.getSnapshot()
-        : EMPTY_SNAPSHOT,
+    () => state
+      ? state.getSnapshot()
+      : EMPTY_SNAPSHOT,
     [state],
   );
 
