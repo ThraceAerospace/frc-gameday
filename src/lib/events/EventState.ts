@@ -53,7 +53,7 @@ type Listener = (snapshot: EventStateSnapshot) => void;
 
 const MATCH_POLL_INTERVAL = 5 * 60_000;
 const STATUS_POLL_INTERVAL = 5 * 60_000;
-const ALLIANCE_POLL_INTERVAL = 15 * 60_000;
+const ALLIANCE_POLL_INTERVAL = 5 * 60_000;
 const AUTHORITATIVE_REFETCH_DELAY = 65_000;
 const STATBOTICS_RESULT_REFRESH_DELAY = 3 * 60_000;
 
@@ -89,6 +89,7 @@ export class EventState {
   private matchTimer: (() => void) | null = null;
   private statusTimer: (() => void) | null = null;
   private allianceTimer: (() => void) | null = null;
+  private allianceAuthoritativeTimer: (() => void) | null = null;
   private oprTimer: (() => void) | null = null;
 
   private eventRequest = 0;
@@ -166,7 +167,6 @@ export class EventState {
 
     this.scheduleMatchFallback();
     this.scheduleStatusFallback();
-    this.scheduleAllianceFallback();
     this.scheduleOprsFallback();
   }
 
@@ -184,6 +184,8 @@ export class EventState {
     this.clearTimer("match");
     this.clearTimer("status");
     this.clearTimer("alliance");
+    this.allianceAuthoritativeTimer?.();
+    this.allianceAuthoritativeTimer = null;
     this.clearTimer("oprs");
 
     for (const cancel of this.authoritativeTimers.values()) {
@@ -234,7 +236,6 @@ export class EventState {
 
   reloadAlliances() {
     void this.loadAlliances();
-    this.resetAuthoritativeTimer("alliances");
   }
 
   reloadOprs() {
@@ -535,21 +536,33 @@ export class EventState {
         return;
       }
 
+      const alliances = Array.isArray(data)
+        ? (data as TBAEliminationAlliance[])
+        : [];
+
       this.update((current) => ({
         ...current,
-        alliances: Array.isArray(data)
-          ? (data as TBAEliminationAlliance[])
-          : [],
+        alliances,
       }));
 
-      this.scheduleAllianceFallback();
+      if (alliances.length > 0) {
+        this.scheduleAllianceFallback();
+      } else {
+        // Before alliance selection, score-posted webhooks and the
+        // delayed alliance-selection refetch are our signals to check again.
+        this.clearTimer("alliance");
+      }
     } catch (error) {
       if (request !== this.alliancesRequest || this.stopped) {
         return;
       }
 
       console.error("[EventState] alliances request failed", error);
-      this.scheduleAllianceFallback();
+      if (this.snapshot.alliances.length > 0) {
+        this.scheduleAllianceFallback();
+      } else {
+        this.clearTimer("alliance");
+      }
     }
   }
 
@@ -671,6 +684,7 @@ export class EventState {
 
       case "alliance_selection":
         this.reloadAlliances();
+        this.scheduleAllianceAuthoritativeRefetch();
         break;
 
       default:
@@ -685,7 +699,7 @@ export class EventState {
   };
 
   private resetAuthoritativeTimer(
-    resource: "matches" | "statuses" | "alliances" | "oprs",
+    resource: "matches" | "statuses" | "oprs",
   ) {
     const existing =
       this.authoritativeTimers.get(resource);
@@ -722,10 +736,6 @@ export class EventState {
           void this.loadStatuses();
           break;
 
-        case "alliances":
-          void this.loadAlliances();
-          break;
-
         case "oprs":
           void this.loadOprs();
           break;
@@ -759,6 +769,15 @@ export class EventState {
       }));
       void this.loadStatuses();
     }, STATUS_POLL_INTERVAL);
+  }
+
+  private scheduleAllianceAuthoritativeRefetch() {
+    this.allianceAuthoritativeTimer?.();
+    this.allianceAuthoritativeTimer = scheduleSharedTimeout(() => {
+      this.allianceAuthoritativeTimer = null;
+      if (this.stopped) return;
+      void this.loadAlliances();
+    }, AUTHORITATIVE_REFETCH_DELAY);
   }
 
   private scheduleAllianceFallback() {
