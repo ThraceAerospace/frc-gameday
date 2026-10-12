@@ -166,6 +166,7 @@ export default function EventView({
     eventState?.reloadAlliances();
     eventState?.reloadMatches();
     eventState?.reloadStatuses();
+    eventState?.reloadOprs();
   }, [eventState]);
 
   const wssConnected = websocketStatus === "connected";
