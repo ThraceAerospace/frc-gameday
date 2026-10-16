@@ -56,7 +56,6 @@ export default function StreamView({
     if (!stream?.url || stream.type !== "youtube" || !iframeRef.current) return;
 
     const iframe = iframeRef.current;
-
     const applyAudio = () => {
       sendYouTubeCommand(iframe, "setVolume", [volume]);
       sendYouTubeCommand(iframe, muted ? "mute" : "unMute");
@@ -64,7 +63,6 @@ export default function StreamView({
 
     iframe.addEventListener("load", applyAudio);
     const timer = window.setTimeout(applyAudio, 500);
-
     return () => {
       iframe.removeEventListener("load", applyAudio);
       window.clearTimeout(timer);
@@ -72,21 +70,14 @@ export default function StreamView({
   }, [stream?.url, reloadKey, muted, volume]);
 
   useEffect(() => {
-    if (!stream?.url || stream.type !== "twitch" || !twitchContainerRef.current) {
-      return;
-    }
+    if (!stream?.url || stream.type !== "twitch" || !twitchContainerRef.current) return;
 
     const container = twitchContainerRef.current;
     container.replaceChildren();
-
     const initialize = () => {
       if (!window.Twitch?.Player || !twitchContainerRef.current) return;
-
       const url = new URL(stream.url!, window.location.href);
-      const channel =
-        url.searchParams.get("channel") ||
-        url.pathname.split("/").filter(Boolean).pop();
-
+      const channel = url.searchParams.get("channel") || url.pathname.split("/").filter(Boolean).pop();
       if (!channel) return;
 
       const player = new window.Twitch.Player(container, {
@@ -97,20 +88,15 @@ export default function StreamView({
         width: "100%",
         height: "100%",
       });
-
       twitchPlayerRef.current = player;
       player.setVolume(volume / 100);
       player.setMuted(muted);
     };
 
     const scriptSrc = "https://player.twitch.tv/js/embed/v1.js";
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="' + scriptSrc + '"]',
-    );
-
-    if (existing) {
-      initialize();
-    } else {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="' + scriptSrc + '"]');
+    if (existing) initialize();
+    else {
       const script = document.createElement("script");
       script.src = scriptSrc;
       script.async = true;
@@ -126,7 +112,6 @@ export default function StreamView({
 
   useEffect(() => {
     if (stream?.type !== "twitch") return;
-
     twitchPlayerRef.current?.setMuted(muted);
     twitchPlayerRef.current?.setVolume(volume / 100);
   }, [muted, volume, stream?.type]);
@@ -138,30 +123,18 @@ export default function StreamView({
       stream.url +
       (stream.url.includes("?") ? "&" : "?") +
       "enablejsapi=1&autoplay=1&mute=1&origin=" +
-      encodeURIComponent(
-        typeof window !== "undefined" ? window.location.origin : "",
-      );
+      encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "");
 
-    return (
-      <iframe
-        ref={iframeRef}
-        key={reloadKey}
-        className="h-full w-full border-0 bg-black"
-        src={src}
-        title="YouTube live stream"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
-    );
+    return <iframe ref={iframeRef} key={reloadKey} className="h-full w-full border-0 bg-black" src={src} title="YouTube live stream" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
   }
 
   if (stream.type === "twitch") {
     return <div ref={twitchContainerRef} className="h-full w-full bg-black" />;
   }
 
-  return (
-    <div className="flex h-full items-center justify-center bg-neutral-950 text-sm text-neutral-500">
-      Unsupported webcast type: {stream.type}
-    </div>
-  );
+  if (stream.type === "custom") {
+    return <iframe key={reloadKey} className="h-full w-full border-0 bg-black" src={stream.url} title="Custom webcast" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="no-referrer" />;
+  }
+
+  return <div className="flex h-full items-center justify-center bg-neutral-950 text-sm text-neutral-500">Unsupported webcast type: {stream.type}</div>;
 }
