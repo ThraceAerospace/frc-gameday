@@ -9,15 +9,37 @@ function streamKey(stream: Stream) { return stream.key ?? `${stream.type}:${stre
 function today(timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 
 export function useStreamController(input: Stream[] = [], timezone?: string | null, preferredKey?: string | null) {
-  const streams = useMemo(() => input.filter((s) => s?.type && s?.channel).map((s) => ({ ...s, key: streamKey(s) })), [input]);
+  const streams = useMemo(() => {
+    const available = input.filter((s) => s?.type && s?.channel).map((s) => ({ ...s, key: streamKey(s) }));
+    if (preferredKey?.startsWith("custom:")) {
+      const url = preferredKey.slice("custom:".length);
+      try {
+        const parsed = new URL(url);
+        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && !available.some((stream) => stream.key === preferredKey)) {
+          available.push({
+            type: "custom",
+            channel: url,
+            url: parsed.toString(),
+            date: null,
+            meta: { title: "Custom stream URL" },
+            key: preferredKey,
+          } as Stream);
+        }
+      } catch {
+        // Ignore malformed custom selections rather than rendering an unsafe URL.
+      }
+    }
+    return available;
+  }, [input, preferredKey]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const map = useMemo(() => new Map(streams.map((stream) => [stream.key!, stream])), [streams]);
 
   useEffect(() => {
-    if (!streams.length || !timezone) return;
     setActiveKey((current) => {
       if (preferredKey && map.has(preferredKey)) return preferredKey;
       if (current && map.has(current)) return current;
+      if (!streams.length) return null;
+      if (!timezone) return streams[0]?.key ?? null;
       const now = today(timezone);
       const ordered = [...streams].sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")));
       return ([...ordered].reverse().find((s) => String(s.date ?? "") <= now) ?? ordered[0])?.key ?? null;
