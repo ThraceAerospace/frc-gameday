@@ -3,27 +3,41 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BuiltStream } from "@/lib/tba/buildStreams";
 
-type Stream = BuiltStream & { key?: string };
+type InputStream = BuiltStream & { key?: string };
+type ResolvedStream = {
+  key: string;
+  type: string;
+  channel: string;
+  url: string;
+  date?: string | null;
+  meta?: { title?: string | null } | null;
+};
 
-function streamKey(stream: Stream) { return stream.key ?? `${stream.type}:${stream.channel}:${stream.date ?? ""}`; }
+function streamKey(stream: InputStream) { return stream.key ?? `${stream.type}:${stream.channel}:${stream.date ?? ""}`; }
 function today(timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 
-export function useStreamController(input: Stream[] = [], timezone?: string | null, preferredKey?: string | null) {
-  const streams = useMemo(() => {
-    const available = input.filter((s) => s?.type && s?.channel).map((s) => ({ ...s, key: streamKey(s) }));
+export function useStreamController(input: InputStream[] = [], timezone?: string | null, preferredKey?: string | null) {
+  const streams = useMemo<ResolvedStream[]>(() => {
+    const available: ResolvedStream[] = input
+      .filter((s) => s?.type && s?.channel)
+      .map((s) => ({ ...s, key: streamKey(s) }));
+
     if (preferredKey?.startsWith("custom:")) {
       const url = preferredKey.slice("custom:".length);
       try {
         const parsed = new URL(url);
-        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && !available.some((stream) => stream.key === preferredKey)) {
+        if (
+          (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+          !available.some((stream) => stream.key === preferredKey)
+        ) {
           available.push({
             type: "custom",
-            channel: url,
+            channel: parsed.toString(),
             url: parsed.toString(),
             date: null,
             meta: { title: "Custom stream URL" },
             key: preferredKey,
-          } as Stream);
+          });
         }
       } catch {
         // Ignore malformed custom selections rather than rendering an unsafe URL.
@@ -32,7 +46,7 @@ export function useStreamController(input: Stream[] = [], timezone?: string | nu
     return available;
   }, [input, preferredKey]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const map = useMemo(() => new Map(streams.map((stream) => [stream.key!, stream])), [streams]);
+  const map = useMemo(() => new Map(streams.map((stream) => [stream.key, stream])), [streams]);
 
   useEffect(() => {
     setActiveKey((current) => {
