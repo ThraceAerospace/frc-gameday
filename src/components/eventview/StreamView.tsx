@@ -133,7 +133,7 @@ export default function StreamView({
   }
 
   if (stream.type === "custom") {
-    return <iframe key={reloadKey} className="h-full w-full border-0 bg-black" src={stream.url} title="Custom webcast" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="no-referrer" />;
+    return <iframe key={reloadKey} className="h-full w-full border-0 bg-black" src={stream.url} title="Custom webcast" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />;
   }
 
   return <div className="flex h-full items-center justify-center bg-neutral-950 text-sm text-neutral-500">Unsupported webcast type: {stream.type}</div>;
