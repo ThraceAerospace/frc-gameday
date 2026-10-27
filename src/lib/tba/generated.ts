@@ -3605,6 +3605,8 @@ export interface components {
                 /** @description Points awarded for qualification match performance. */
                 qual_points: number;
             }[];
+            /** @description Any points adjustments applied to the team. */
+            adjustments?: number;
         };
         /** @enum {string} */
         RobotAuto_2016_WithUnknown: "Crossed" | "None" | "Reached" | "Unknown";
