@@ -4,6 +4,8 @@ import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
 import { TBA } from "@/lib/tba/service";
 import type { TBAEvent } from "@/lib/tba/types";
+import { getEventWebcastStatus } from "@/lib/tba/formatters";
+import { getEventWebcastStatus } from "@/lib/tba/formatters";
 import { parseLocalDate } from "@/lib/time";
 
 function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
@@ -17,12 +19,6 @@ function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
   return events
     .filter((event) => parseLocalDate(event.start_date) <= weekEnd && parseLocalDate(event.end_date) >= weekStart)
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
-}
-
-function getWebcastStatus(event: TBAEvent): "Live" | "Offline" | "No Webcast" {
-  const webcasts = event.webcasts ?? [];
-  if (!webcasts.length) return "No Webcast";
-  return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
 }
 
 export default async function HomePage() {
@@ -55,7 +51,7 @@ export default async function HomePage() {
           {weekEvents.length ? (
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {weekEvents.map((event) => {
-                const webcastStatus = getWebcastStatus(event);
+                const webcastStatus = getEventWebcastStatus(event);
                 return (
                   <Link key={event.key} href={`/event/${event.key}`} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
                     <div className="flex items-start justify-between gap-3">
