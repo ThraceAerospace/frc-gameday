@@ -5,7 +5,6 @@ import EventDateRange from "@/components/event/EventDateRange";
 import { TBA } from "@/lib/tba/service";
 import type { TBAEvent } from "@/lib/tba/types";
 import { getEventWebcastStatus } from "@/lib/tba/formatters";
-import { getEventWebcastStatus } from "@/lib/tba/formatters";
 import { parseLocalDate } from "@/lib/time";
 
 function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
