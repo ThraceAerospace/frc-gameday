@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 function parseLocalDate(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -21,7 +23,6 @@ function formatDate(value: string, locale: string, english: boolean): string {
     return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
-      year: "numeric",
     }).format(date);
   }
 
@@ -37,7 +38,11 @@ export default function EventDateRange({
   startDate: string;
   endDate: string;
 }) {
-  const locale = typeof navigator === "undefined" ? "en-US" : navigator.language;
+  const [locale, setLocale] = useState("en-US");
+  useEffect(() => {
+    setLocale(navigator.language || "en-US");
+  }, []);
+
   const english = locale.toLowerCase().startsWith("en");
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
