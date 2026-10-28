@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TBAMatch, TBAEliminationAlliance } from "@/lib/tba/types";
+import type { TBAEvent, TBAMatch, TBAEliminationAlliance } from "@/lib/tba/types";
 import { formatEventTime } from "@/lib/time";
 
 export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
@@ -328,4 +328,12 @@ export function formatPlayoffAllianceName(
   }
 
   return bestMatch && bestMatch.overlap >= 2 ? bestMatch.name : null;
+}
+
+
+/** Summarize the webcast availability reported by The Blue Alliance. */
+export function getEventWebcastStatus(event: TBAEvent): "Live" | "Offline" | "No Webcast" {
+  const webcasts = event.webcasts ?? [];
+  if (webcasts.length === 0) return "No Webcast";
+  return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
 }

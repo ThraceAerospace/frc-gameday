@@ -77,3 +77,44 @@ export function dumbDateString(dateStr: string): string {
 
   return `${months[month - 1]} ${day}, ${year}`;
 }
+
+/** Format a TBA date range in the viewer's locale, without UTC date shifts. */
+export function formatEventDateRange(
+  startDate: string,
+  endDate: string,
+  locale = "en-US",
+): string {
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  const english = locale.toLowerCase().startsWith("en");
+
+  const formatDay = (value: Date) => {
+    if (!english) {
+      return new Intl.DateTimeFormat(locale, {
+        month: "short",
+        day: "numeric",
+      }).format(value);
+    }
+
+    const month = new Intl.DateTimeFormat(locale, { month: "short" }).format(value);
+    const day = value.getDate();
+    const suffix =
+      day % 100 >= 11 && day % 100 <= 13
+        ? "th"
+        : day % 10 === 1
+          ? "st"
+          : day % 10 === 2
+            ? "nd"
+            : day % 10 === 3
+              ? "rd"
+              : "th";
+
+    return `${month} ${day}${suffix}`;
+  };
+
+  if (startDate === endDate) {
+    return `${formatDay(start)}, ${start.getFullYear()}`;
+  }
+
+  return `${formatDay(start)} to ${formatDay(end)}, ${end.getFullYear()}`;
+}
