@@ -6,14 +6,10 @@ import { FunnelIcon, VideoCameraIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
 import type { TBAEvent } from "@/lib/tba/types";
+import { getEventWebcastStatus } from "@/lib/tba/formatters";
+import { getEventWebcastStatus } from "@/lib/tba/formatters";
 
 type GroupMode = "week" | "type";
-
-function getWebcastStatus(event: TBAEvent): "Live" | "Offline" | "No Webcast" {
-  const webcasts = event.webcasts ?? [];
-  if (!webcasts.length) return "No Webcast";
-  return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
-}
 
 export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [mode, setMode] = useState<GroupMode>("week");
@@ -119,7 +115,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
               <h2 className="mb-3 text-lg font-bold text-slate-900">{group} <span className="text-sm font-medium text-slate-400">{groupEvents.length}</span></h2>
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {groupEvents.map((event, index) => {
-                  const webcastStatus = getWebcastStatus(event);
+                  const webcastStatus = getEventWebcastStatus(event);
                   return (
                     <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
                       <div className="min-w-0">
