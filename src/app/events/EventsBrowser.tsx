@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { FunnelIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, VideoCameraIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
+import EventDateRange from "@/components/event/EventDateRange";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type GroupMode = "week" | "type";
+
+function getWebcastStatus(event: TBAEvent): "Live" | "Offline" | "No Webcast" {
+  const webcasts = event.webcasts ?? [];
+  if (!webcasts.length) return "No Webcast";
+  return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
+}
 
 export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [mode, setMode] = useState<GroupMode>("week");
@@ -109,19 +116,25 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
         <div className="mt-6 space-y-8">
           {groups.map(([group, groupEvents]) => (
             <section key={group}>
-              <h2 className="mb-3 text-lg font-bold text-slate-900">{group}</h2>
+              <h2 className="mb-3 text-lg font-bold text-slate-900">{group} <span className="text-sm font-medium text-slate-400">{groupEvents.length}</span></h2>
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                {groupEvents.map((event, index) => (
-                  <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-900">{event.name}</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {event.key} · {event.start_date} – {event.end_date} · {event.city}{event.state_prov ? `, ${event.state_prov}` : ""}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs font-semibold text-blue-600">View →</span>
-                  </Link>
-                ))}
+                {groupEvents.map((event, index) => {
+                  const webcastStatus = getWebcastStatus(event);
+                  return (
+                    <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-900">{event.name}</p>
+                        <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
+                        <p className="mt-1 text-xs text-slate-400"><EventDateRange startDate={event.start_date} endDate={event.end_date} /> · {event.key}</p>
+                        <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold">
+                          <VideoCameraIcon className="h-4 w-4" />
+                          <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-blue-600">View →</span>
+                    </Link>
+                  );
+                })}
               </div>
             </section>
           ))}
