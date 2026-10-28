@@ -4,6 +4,7 @@ import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
 import { TBA } from "@/lib/tba/service";
 import type { TBAEvent } from "@/lib/tba/types";
+import { parseLocalDate } from "@/lib/time";
 
 function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
   const weekStart = new Date(now);
@@ -13,13 +14,8 @@ function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
   weekEnd.setDate(weekEnd.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
 
-  const date = (value: string) => {
-    const [year, month, day] = value.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  };
-
   return events
-    .filter((event) => date(event.start_date) <= weekEnd && date(event.end_date) >= weekStart)
+    .filter((event) => parseLocalDate(event.start_date) <= weekEnd && parseLocalDate(event.end_date) >= weekStart)
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 }
 
