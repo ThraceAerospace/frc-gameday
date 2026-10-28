@@ -7,7 +7,6 @@ import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
 import type { TBAEvent } from "@/lib/tba/types";
 import { getEventWebcastStatus } from "@/lib/tba/formatters";
-import { getEventWebcastStatus } from "@/lib/tba/formatters";
 
 type GroupMode = "week" | "type";
 
