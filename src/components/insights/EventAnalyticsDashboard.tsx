@@ -45,7 +45,14 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }
   }, [eventKey]);
 
-  useEffect(() => { void load(liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
+  useEffect(() => {
+    void load(liveMatchKey);
+    // The first response is the current snapshot; the server refresh runs in
+    // waitUntil. Read the persisted result again shortly after a live change.
+    if (!liveMatchKey) return;
+    const timer = window.setTimeout(() => { void load(liveMatchKey); }, 2_500);
+    return () => window.clearTimeout(timer);
+  }, [load, liveMatchKey, liveMatchSignature]);
 
   useEffect(() => {
     if (!data || data.collection.state === "complete" || data.collection.state === "partial") return;
