@@ -55,19 +55,22 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [activeGroup, setActiveGroup] = useState("");
 
   const eventTypes = useMemo(() => {
-    const typeValues = new Map<string, number>();
+    const typeLabels = new Map<number, string>();
     for (const event of events) {
       const label = event.event_type_string?.trim();
-      if (!label) continue;
-      typeValues.set(label, Math.min(typeValues.get(label) ?? Infinity, event.event_type));
+      if (label) typeLabels.set(event.event_type, label);
     }
 
-    // TBA assigns lower numeric IDs to regular season event types and higher
-    // IDs to preseason/offseason types, so ascending IDs put season events first.
-    return [...typeValues.keys()].sort((a, b) =>
-      (typeValues.get(a)! - typeValues.get(b)!) ||
-      a.localeCompare(b, undefined, { sensitivity: "base" })
-    );
+    // Keep the display order tied to TBA's numeric event type IDs, not labels.
+    const preferredOrder = [100, 0, 1, 5, 2, 3, 4, 99];
+    const orderedIds = [
+      ...preferredOrder.filter((id) => typeLabels.has(id)),
+      ...[...typeLabels.keys()]
+        .filter((id) => !preferredOrder.includes(id))
+        .sort((a, b) => a - b),
+    ];
+
+    return orderedIds.map((id) => ({ id, label: typeLabels.get(id)! }));
   }, [events]);
 
   const districts = useMemo(() => [...new Map(
@@ -80,7 +83,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const filtered = useMemo(() => events.filter((event) => {
     const districtKey = event.district?.key ?? "none";
     return (district === "all" || districtKey === district) &&
-      (eventType === "all" || event.event_type_string === eventType);
+      (eventType === "all" || event.event_type === Number(eventType));
   }), [events, district, eventType]);
 
   const groups = useMemo(() => {
@@ -154,8 +157,8 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
             <label className="text-sm font-semibold text-slate-700">
               Event type
               <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal">
-                <option value="all">All event types</option>
-                {eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                <option value="all">All Events</option>
+                {eventTypes.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
               </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">
