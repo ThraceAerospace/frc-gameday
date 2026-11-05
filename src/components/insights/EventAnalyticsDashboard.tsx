@@ -55,8 +55,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   }, [load, liveMatchKey, liveMatchSignature]);
 
   useEffect(() => {
-    if (!data || data.collection.state === "complete" || data.collection.state === "partial") return;
-    const timer = window.setTimeout(() => { void load(liveMatchKey); }, 1800);
+    if (!data) return;
+    // WebSocket changes refresh immediately; this slower check reconciles
+    // schedule and OPR updates that do not change the latest completed match.
+    const delay = data.collection.state === "complete" || data.collection.state === "partial" ? 30_000 : 5_000;
+    const timer = window.setTimeout(() => { void load(liveMatchKey); }, delay);
     return () => window.clearTimeout(timer);
   }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, load, liveMatchKey]);
 
