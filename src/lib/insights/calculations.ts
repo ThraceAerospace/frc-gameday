@@ -103,22 +103,6 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
     if (item.residual === null || Math.abs(item.residual) < threshold) continue;
     findings.push({ id: `residual:${item.matchKey}:${item.color}`, category: "score-residual", subject: `${item.matchLabel} · ${item.color} alliance`, title: item.residual > 0 ? "Alliance scored well above prediction" : "Alliance scored well below prediction", description: `Actual alliance score differed from prediction by ${Math.round(item.residual)} points.`, evidence: [`Predicted ${Math.round(item.predicted ?? 0)} · actual ${item.actual}`, `Sample residual SD: ${spread.toFixed(1)} points`], sampleSize: residuals.length, sampleCoverage: sampleCoverage(residuals.length), suggestedAction: "Review the match and webcast. This is an alliance-level result, not an attribution to a robot.", severity: Math.abs(item.residual) >= threshold * 2 ? "high" : "medium" });
   }
-  for (const team of teams) {
-    if (team.epaPercentile === null || team.oprPercentile === null) continue;
-    const difference = Math.abs(team.epaPercentile - team.oprPercentile);
-    if (difference < 0.25) continue;
-    findings.push({ id: `models:${team.teamNumber}`, category: "model-disagreement", subject: `Team ${team.teamNumber}`, title: "EPA and OPR rank this team differently", description: `Event-relative EPA and OPR percentiles differ by ${Math.round(difference * 100)} percentile points.`, evidence: [`EPA percentile: ${Math.round(team.epaPercentile * 100)}`, `OPR percentile: ${Math.round(team.oprPercentile * 100)}`], sampleSize: team.matchesSeen, sampleCoverage: sampleCoverage(team.matchesSeen), suggestedAction: "Review match history and alliance context. These are different models, not interchangeable measurements.", severity: difference >= 0.45 ? "high" : "medium" });
-  }
-  for (const record of records) for (const color of ["red", "blue"] as const) {
-    const keys = record.match.alliances[color].team_keys ?? [];
-    const updates = keys.map((key) => {
-      const before = numberOrNull(epaFor(record, key, "pre_epas")?.epa);
-      const after = numberOrNull(epaFor(record, key, "epas")?.epa);
-      return before === null || after === null ? null : after - before;
-    }).filter((value): value is number => value !== null);
-    if (updates.length < 2 || !updates.every((value) => Math.abs(value - updates[0]) < 0.02) || Math.abs(updates[0]) < 10) continue;
-    findings.push({ id: `update:${record.match.key}:${color}`, category: "rating-update", subject: `${matchLabel(record)} · ${color} alliance`, title: "Large shared EPA model update", description: `The model applied approximately ${updates[0] > 0 ? "+" : ""}${updates[0].toFixed(1)} EPA to each available team estimate.`, evidence: [`Teams: ${keys.map((key) => key.replace(/^frc/i, "")).join(", ")}`, "Shared updates are not independently observed robot contributions."], sampleSize: 1, sampleCoverage: "low", suggestedAction: "Review the alliance result and score breakdown. Do not attribute the update to an individual robot.", severity: Math.abs(updates[0]) >= 20 ? "high" : "medium" });
-  }
   const combinations = new Map<string, AllianceResult[]>();
   for (const item of allianceResults) if (item.residual !== null && item.teamKeys.length === 3) {
     const key = [...item.teamKeys].sort().join("-");
