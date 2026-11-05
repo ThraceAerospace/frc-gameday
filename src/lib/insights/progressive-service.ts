@@ -151,6 +151,29 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
     if (!job) return;
     job.state = "collecting";
 
+    // Refresh the event's canonical match list periodically. Existing
+    // analytics records survive schedule changes and only new matches queue.
+    if (!job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
+      try {
+        const latestMatches = sortMatches(await TBA.getEventMatches(eventKey));
+        const existing = new Map(job.matches.map((match) => [match.key, match]));
+        for (const match of latestMatches) {
+          const prior = existing.get(match.key);
+          if (!prior) existing.set(match.key, match);
+          else {
+            const priorPlayed = prior.actual_time != null || (prior.alliances.red.score >= 0 && prior.alliances.blue.score >= 0);
+            const nextPlayed = match.actual_time != null || (match.alliances.red.score >= 0 && match.alliances.blue.score >= 0);
+            if (nextPlayed || !priorPlayed) existing.set(match.key, match);
+          }
+        }
+        job.matches = sortMatches([...existing.values()]);
+        job.scheduleRefreshedAt = Date.now();
+        await writeJob(eventKey, job);
+      } catch (error) {
+        console.warn("[Insights] event schedule refresh failed", eventKey, error);
+      }
+    }
+
     if (liveMatchKey) {
       try {
         await refreshLiveMatch(eventKey, job, liveMatchKey);
