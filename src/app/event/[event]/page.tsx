@@ -83,6 +83,16 @@ export default async function EventPage({
   });
   const qualificationMatches = matches.filter((match: TBAMatch) => match.comp_level === "qm");
   const playoffMatches = matches.filter((match: TBAMatch) => isEliminationMatch(match.comp_level));
+  const playoffMatchesPanel = (
+    <MatchGroup
+      title="Playoff Matches"
+      eventKey={event.key}
+      playoffType={event.playoff_type ?? null}
+      matches={playoffMatches}
+      playoffAlliances={alliances}
+      groupPlayoffsByRound
+    />
+  );
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
 
@@ -102,7 +112,6 @@ export default async function EventPage({
                   </div>
                   <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
                     {event.name}
-                    <span className="ml-2 whitespace-nowrap text-slate-400">{event.year}</span>
                   </h1>
                   <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
                     {dates && <span>{dates}</span>}
@@ -201,27 +210,31 @@ export default async function EventPage({
                 <h2 className="text-lg font-semibold">Match Schedule</h2>
               </div>
               <div className="mt-3 grid items-start gap-5 xl:grid-cols-2">
-                <MatchGroup
-                  title="Qualification Matches"
-                  eventKey={event.key}
-                  playoffType={event.playoff_type ?? null}
-                  matches={qualificationMatches}
-                  playoffAlliances={alliances}
-                />
-                <div className="space-y-5">
+                {qualificationMatches.length > 0 ? (
+                  <MatchGroup
+                    title="Qualification Matches"
+                    eventKey={event.key}
+                    playoffType={event.playoff_type ?? null}
+                    matches={qualificationMatches}
+                    playoffAlliances={alliances}
+                  />
+                ) : (
+                  playoffMatchesPanel
+                )}
+                {qualificationMatches.length > 0 ? (
+                  <div className="space-y-5">
+                    <PlayoffAlliances
+                      alliances={alliances}
+                      playoffType={event.playoff_type}
+                    />
+                    {playoffMatchesPanel}
+                  </div>
+                ) : (
                   <PlayoffAlliances
                     alliances={alliances}
                     playoffType={event.playoff_type}
                   />
-                  <MatchGroup
-                    title="Playoff Matches"
-                    eventKey={event.key}
-                    playoffType={event.playoff_type ?? null}
-                    matches={playoffMatches}
-                    playoffAlliances={alliances}
-                    groupPlayoffsByRound
-                  />
-                </div>
+                )}
               </div>
             </section>
           )}
@@ -348,7 +361,7 @@ function PlayoffAlliances({
                 key={alliance.name ?? index}
                 className="event-divider flex items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"
               >
-                <span className="w-16 shrink-0 truncate text-xs font-semibold text-slate-500">
+                <span className="w-28 shrink-0 truncate text-xs font-semibold text-slate-500">
                   {formatAllianceLongName(alliance.name, index)}
                 </span>
                 <div className="flex min-w-0 flex-wrap gap-1">

@@ -32,7 +32,7 @@ export function matchCode(matchKey: string): string {
 }
 
 /** Map TBA's playoff set numbers to their double-elimination bracket and round. */
-function doubleEliminationBracketInfo(setNum: number): { bracket: "Upper" | "Lower"; round: number } | null {
+function doubleEliminationBracket8AllianceInfo(setNum: number): { bracket: "Upper" | "Lower"; round: number } | null {
   const bracket = [1, 2, 3, 4, 7, 8, 11].includes(setNum)
     ? "Upper"
     : [5, 6, 9, 10, 12, 13].includes(setNum)
@@ -53,16 +53,41 @@ function doubleEliminationBracketInfo(setNum: number): { bracket: "Upper" | "Low
   return bracket && round ? { bracket, round } : null;
 }
 
+function doubleEliminationBracket4AllianceInfo(setNum: number): { bracket: "Upper" | "Lower"; round: number } | null {
+  const bracket = [1, 2, 3].includes(setNum)
+    ? "Upper"
+    : [4, 5].includes(setNum)
+      ? "Lower"
+      : null;
+  const round = setNum <= 2
+    ? 1
+    : setNum <= 4
+      ? 2
+      : setNum <= 5
+        ? 3
+        : null;
+
+  return bracket && round ? { bracket, round } : null;
+}
+
 export function formatPlayoffMatchGroup(
   match: Pick<TBAMatch, "comp_level" | "set_number">,
   playoffType: number | null = null,
 ): string {
   const compLevel = match.comp_level.toLowerCase();
 
-  if (playoffType === 10 || playoffType === 11) {
+  if (playoffType === 10) {
     if (compLevel === "f") return "Finals";
     if (compLevel === "sf") {
-      const bracketInfo = doubleEliminationBracketInfo(match.set_number);
+      const bracketInfo = doubleEliminationBracket8AllianceInfo(match.set_number);
+      return bracketInfo
+        ? `Round ${bracketInfo.round}`
+        : "Playoffs";
+    }
+  } else if (playoffType === 11) {
+    if (compLevel === "f") return "Finals";
+    if (compLevel === "sf") {
+      const bracketInfo = doubleEliminationBracket4AllianceInfo(match.set_number);
       return bracketInfo
         ? `Round ${bracketInfo.round}`
         : "Playoffs";
@@ -96,7 +121,9 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
         return `Final ${matchNum}`;
       case "SF":
         if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          const bracketInfo = doubleEliminationBracketInfo(setNum);
+          const bracketInfo = eventPlayoffType === 10
+            ? doubleEliminationBracket8AllianceInfo(setNum)
+            : doubleEliminationBracket4AllianceInfo(setNum);
           return bracketInfo
             ? `${bracketInfo.bracket} Bracket - Round ${bracketInfo.round} - Match ${setNum}`
             : `Playoff ${setNum}`;
@@ -132,7 +159,9 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
         return `Final ${matchNum}`;
       case "SF":
         if (eventPlayoffType === 10 || eventPlayoffType === 11) {
-          const bracketInfo = doubleEliminationBracketInfo(setNum);
+          const bracketInfo = eventPlayoffType === 10
+            ? doubleEliminationBracket8AllianceInfo(setNum)
+            : doubleEliminationBracket4AllianceInfo(setNum);
           const bracket = bracketInfo?.bracket === "Upper"
             ? "UB"
             : bracketInfo?.bracket === "Lower"
@@ -173,7 +202,7 @@ export function matchAbbreviationName(
 
     if (compLevel === "SF") {
       if (eventPlayoffType === 10) {
-        const round = doubleEliminationBracketInfo(setNum)?.round;
+        const round = doubleEliminationBracket8AllianceInfo(setNum)?.round;
         return round == null ? `R?-${matchNum}` : `R${round}-${matchNum}`;
       }
       if (eventPlayoffType === 11 || eventPlayoffType === 5) {
@@ -298,9 +327,12 @@ export function formatPlayoffLevel(
 ): string {
   const status = alliance.status;
   if (!status) return "—";
-  if (playoffType === 10) return status.double_elim_round ?? "—";
-  return status.level ?? "—";
+  if (playoffType === 10 || playoffType === 11) {
+    return status.double_elim_round ?? "—";
+  }
+  return compLevelShortName(status.level ?? "") || "—";
 }
+
 
 
 /** Human-readable name for a TBA competition level. */
