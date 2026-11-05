@@ -33,12 +33,12 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
   const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(requestedLimit) || 20));
   const safeOffset = Math.max(0, Math.floor(offset) || 0);
   const cacheKey = `${CACHE_PREFIX}${eventKey}:${safeOffset}:${limit}`;
-  const cached = await redis.get(cacheKey);
+  const cached = liveMatchKey ? null : await redis.get(cacheKey);
   if (cached) {
     try { return JSON.parse(cached) as EventAnalyticsResponse; } catch { await redis.del(cacheKey); }
   }
 
-  const lockKey = `${LOCK_PREFIX}${eventKey}:${safeOffset}:${limit}`;
+  const lockKey = `${LOCK_PREFIX}${eventKey}:${safeOffset}:${limit}:${liveMatchKey ?? "base"}`;
   const token = randomUUID();
   let acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
   if (acquired !== "OK") {
@@ -47,7 +47,7 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
     // a spurious 502 to every waiting request.
     for (let attempt = 0; attempt < 40; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 250));
-      const result = await redis.get(cacheKey);
+      const result = liveMatchKey ? null : await redis.get(cacheKey);
       if (result) {
         try {
           return JSON.parse(result) as EventAnalyticsResponse;
@@ -68,10 +68,13 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
       TBA.getEvent(eventKey), TBA.getTeamsAtEvent(eventKey), TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey),
     ]);
     const matches = sortMatches(rawMatches);
-    const selectedMatches = matches.slice(safeOffset, safeOffset + limit);
+    const pageMatches = matches.slice(safeOffset, safeOffset + limit);
+    const selectedMatches = liveMatchKey && !pageMatches.some((match) => match.key === liveMatchKey)
+      ? [...pageMatches, ...matches.filter((match) => match.key === liveMatchKey)]
+      : pageMatches;
     const analyticsMatches = await withConcurrency(selectedMatches, CONCURRENCY, async (match): Promise<AnalyticsMatch> => {
       try {
-        const statbotics = await Statbotics.getMatch(match.key);
+        const statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey });
         return { match, statbotics, statboticsStatus: statbotics ? "ready" : "unavailable" };
       } catch {
         return { match, statbotics: null, statboticsStatus: "unavailable" };
@@ -85,10 +88,10 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
     const payload: EventAnalyticsResponse = {
       event, teams: teamRows, matches: analyticsMatches, allianceResults, findings,
       matchCount: matches.length, loadedMatchCount: analyticsMatches.length,
-      offset: safeOffset, limit, hasMore: safeOffset + selectedMatches.length < matches.length,
+      offset: safeOffset, limit, hasMore: safeOffset + pageMatches.length < matches.length,
       residualStats: { mean: mean(residuals), standardDeviation: standardDeviation(residuals), sampleSize: residuals.length },
     };
-    await redis.set(cacheKey, JSON.stringify(payload), "EX", CACHE_TTL_SECONDS);
+    if (!liveMatchKey) await redis.set(cacheKey, JSON.stringify(payload), "EX", CACHE_TTL_SECONDS);
     return payload;
   } finally {
     if (acquired === "OK") {
