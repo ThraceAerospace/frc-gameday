@@ -63,4 +63,5 @@ export type EventAnalyticsResponse = {
   limit: number;
   hasMore: boolean;
   residualStats: { mean: number | null; standardDeviation: number | null; sampleSize: number };
+  collection: { state: "queued" | "collecting" | "complete" | "partial"; processedMatchCount: number; totalMatchCount: number; unavailableMatchCount: number; updatedAt: number };
 };
