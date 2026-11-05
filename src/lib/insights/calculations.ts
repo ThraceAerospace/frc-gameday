@@ -75,22 +75,17 @@ export function buildTeamRows(
   }
   const rows = teams.map((team) => {
     const current = latest.get(String(team.team_number));
-    const residuals = allianceResults.filter((item) => item.teamKeys.includes(team.key) && item.residual !== null).map((item) => item.residual as number);
     return {
       teamKey: team.key, teamNumber: team.team_number, name: team.nickname || team.name || `Team ${team.team_number}`,
       opr: numberOrNull(oprs?.oprs?.[team.key]), dpr: numberOrNull(oprs?.dprs?.[team.key]), ccwm: numberOrNull(oprs?.ccwms?.[team.key]),
       epa: numberOrNull(current?.epa?.epa), autoEpa: numberOrNull(current?.epa?.auto_epa), teleopEpa: numberOrNull(current?.epa?.teleop_epa), endgameEpa: numberOrNull(current?.epa?.endgame_epa),
-      matchesSeen: current?.matchesSeen ?? 0, epaPercentile: null as number | null, oprPercentile: null as number | null,
-      allianceResidualMean: mean(residuals), allianceResidualSpread: standardDeviation(residuals),
+      matchesSeen: current?.matchesSeen ?? 0, epaPercentile: null as number | null,
     };
   });
-  const comparableRows = rows.filter((row) => row.epa !== null && row.opr !== null);
-  const epaValues = comparableRows.map((row) => row.epa as number);
-  const oprValues = comparableRows.map((row) => row.opr as number);
+  const epaValues = rows.flatMap((row) => row.epa === null ? [] : [row.epa]);
   return rows.map((row) => ({
     ...row,
-    epaPercentile: row.epa === null || row.opr === null ? null : percentile(epaValues, row.epa),
-    oprPercentile: row.epa === null || row.opr === null ? null : percentile(oprValues, row.opr),
+    epaPercentile: row.epa === null ? null : percentile(epaValues, row.epa),
   }));
 }
 function sampleCoverage(n: number): ReviewFinding["sampleCoverage"] { return n >= 12 ? "high" : n >= 6 ? "medium" : "low"; }
