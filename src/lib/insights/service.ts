@@ -82,7 +82,7 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
     });
 
     const allianceResults = buildAllianceResults(analyticsMatches);
-    const teamRows = buildTeamRows(teams, oprs, analyticsMatches, allianceResults);
+    const teamRows = buildTeamRows(teams, oprs, analyticsMatches);
     const findings = buildReviewFindings(analyticsMatches, allianceResults, teamRows);
     const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
     const payload: EventAnalyticsResponse = {
