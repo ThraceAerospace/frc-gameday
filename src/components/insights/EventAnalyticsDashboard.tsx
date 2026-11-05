@@ -57,7 +57,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }
   }, [eventKey]);
 
-  useEffect(() => { void load(offset, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature, offset]);
+  useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
