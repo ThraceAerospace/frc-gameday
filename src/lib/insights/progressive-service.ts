@@ -25,6 +25,7 @@ type Job = {
   attempts: Record<string, number>;
   state: "queued" | "collecting" | "complete" | "partial";
   updatedAt: number;
+  scheduleRefreshedAt?: number;
 };
 
 function jobKey(eventKey: string) {
