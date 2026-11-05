@@ -87,6 +87,10 @@ Specialized presentation/derivation hooks remain separate where applicable:
 - `useStreamController` — webcast normalization and selection.
 
 
+## Event Insights
+
+The standalone `/insights/event/<event>` analytics workspace participates in the shared live runtime. It consumes `useEventState` snapshots through the origin-wide SharedWorker/WebSocket system, just like Tile View, and refreshes its server-calculated analytics when the current completed match changes. It must not create a separate WebSocket or move authoritative analytics calculations into the browser. Historical Statbotics collection and analytics remain server-side.
+
 ## Match data
 
 The client-side match helpers live in `src/lib/gameday/matchUtils.ts`.
