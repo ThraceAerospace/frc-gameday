@@ -63,8 +63,7 @@ export function buildTeamRows(
   teams: { key: string; team_number: number; nickname?: string | null; name?: string | null }[],
   oprs: { oprs?: Record<string, number>; dprs?: Record<string, number>; ccwms?: Record<string, number> } | null,
   records: AnalyticsMatch[],
-  allianceResults: AllianceResult[],
-): TeamAnalyticsRow[] {
+ ): TeamAnalyticsRow[] {
   const latest = new Map<string, { epa?: StatboticsEPA; matchesSeen: number }>();
   for (const record of records) {
     for (const key of [...(record.match.alliances.red.team_keys ?? []), ...(record.match.alliances.blue.team_keys ?? [])]) {
