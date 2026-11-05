@@ -13,8 +13,9 @@ export default function EventAnalyticsSurface({
   const snapshot = useEventState(eventKey);
   const liveMatch = snapshot.eventLastMatch;
   const liveMatchKey = liveMatch?.key ?? null;
+  const liveStatbotics = liveMatchKey ? snapshot.statboticsMatches[liveMatchKey] : undefined;
   const liveMatchSignature = liveMatch
-    ? `${liveMatch.key}:${liveMatch.alliances.red.score}:${liveMatch.alliances.blue.score}:${liveMatch.actual_time ?? ""}`
+    ? `${liveMatch.key}:${liveMatch.alliances.red.score}:${liveMatch.alliances.blue.score}:${liveMatch.actual_time ?? ""}:${liveStatbotics?.status ?? "missing"}:${JSON.stringify(liveStatbotics?.data ?? null)}`
     : "";
 
   return (
