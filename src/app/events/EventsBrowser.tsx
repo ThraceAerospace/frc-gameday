@@ -13,16 +13,15 @@ function getEventGroup(event: TBAEvent): string {
   const normalizedType = type.toLowerCase();
   const normalizedName = event.name.toLowerCase();
 
-  if (normalizedType.includes("preseason") || normalizedName.includes("preseason")) return "Preseason";
-  if (
-    normalizedType.includes("championship division") ||
-    normalizedType.includes("championship finals") ||
-    normalizedName.includes("first championship") ||
-    normalizedName.includes("championship division") ||
-    normalizedName.includes("championship finals")
-  ) return "FIRST Championship";
-  if (normalizedType.includes("offseason") || normalizedType.includes("off-season")) return "Off-Season";
-  if (event.week != null) return `Week ${event.week}`;
+  // TBA event type IDs: 2/5 are District Championship events, while
+  // 3/4 are the FIRST Championship divisions/finals.
+  if (event.event_type === 100) return "Preseason";
+  if (event.event_type === 2 || event.event_type === 5) return "District Championship";
+  if (event.event_type === 3 || event.event_type === 4) return "FIRST Championship";
+  if (event.event_type === 99) return "Off-Season";
+  // TBA's week field is zero-indexed relative to the first official week.
+  // Preseason events are separately grouped above and do not shift this value.
+  if (event.week != null) return `Week ${event.week + 1}`;
   return type || "Other";
 }
 
@@ -58,9 +57,21 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState("");
 
-  const eventTypes = useMemo(() => [...new Set(
-    events.map((event) => event.event_type_string?.trim()).filter((value): value is string => Boolean(value))
-  )].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })), [events]);
+  const eventTypes = useMemo(() => {
+    const typeValues = new Map<string, number>();
+    for (const event of events) {
+      const label = event.event_type_string?.trim();
+      if (!label) continue;
+      typeValues.set(label, Math.min(typeValues.get(label) ?? Infinity, event.event_type));
+    }
+
+    // TBA assigns lower numeric IDs to regular season event types and higher
+    // IDs to preseason/offseason types, so ascending IDs put season events first.
+    return [...typeValues.keys()].sort((a, b) =>
+      (typeValues.get(a)! - typeValues.get(b)!) ||
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
+  }, [events]);
 
   const districts = useMemo(() => [...new Map(
     events.filter((event) => event.district?.key).map((event) => [
