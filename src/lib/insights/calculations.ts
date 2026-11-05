@@ -8,7 +8,28 @@ function statboticsTeamKey(teamKey: string): string {
   return String(Number(teamKey.replace(/^frc/i, "")));
 }
 function matchLabel(match: AnalyticsMatch["match"]): string {
-  return match.comp_level === "qm" ? `QM ${match.match_number}` : `${match.comp_level.toUpperCase()} ${match.set_number} · ${match.match_number}`;
+  // TBA normally supplies comp_level/set_number/match_number, but tolerate
+  // incomplete records by recovering the label from the canonical match key.
+  const keyParts = typeof match.key === "string"
+    ? match.key.match(/_([a-z]{2})(?:(\\d+)m)?(\\d+)$/i)
+    : null;
+  const level = typeof match.comp_level === "string" && match.comp_level.length
+    ? match.comp_level
+    : keyParts?.[1]?.toLowerCase();
+  const matchNumber = Number.isFinite(match.match_number)
+    ? match.match_number
+    : Number(keyParts?.[3]);
+  const setNumber = Number.isFinite(match.set_number)
+    ? match.set_number
+    : Number(keyParts?.[2]);
+
+  if (level === "qm" || level === "pm") return `QM ${Number.isFinite(matchNumber) ? matchNumber : "?"}`;
+  if (level) {
+    const set = Number.isFinite(setNumber) ? setNumber : "?";
+    const number = Number.isFinite(matchNumber) ? matchNumber : "?";
+    return `${level.toUpperCase()} ${set} · ${number}`;
+  }
+  return typeof match.key === "string" ? match.key : "Unknown match";
 }
 function epaFor(record: AnalyticsMatch, teamKey: string, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
   return record.statbotics?.[phase]?.[statboticsTeamKey(teamKey)];
