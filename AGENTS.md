@@ -247,7 +247,7 @@ Prefer small, focused cleanup commits.
 
 - The standalone event analytics route is `/insights/event/<event>`. Its UI and analytics pipeline remain independent of Gameday tile/remote-session configuration, but its live event context must use `useEventState` and the shared `/insights` live-runtime layout. Do not create a second WebSocket or duplicate EventState.
 - `src/lib/insights` contains server-side calculations and orchestration. It consumes TBA/Statbotics services; Views must not call upstream APIs directly.
-- The API endpoint pages match records and bounds Statbotics fan-out. Preserve pagination and concurrency limits; do not fetch every match for every team on a page request.
+- Event analytics collection is a resumable server-side job stored in Redis. The route returns the current complete-so-far snapshot and uses Vercel `waitUntil` to advance bounded Statbotics match batches; the browser polls only collection status/results and never requests a "next page". Preserve the worker lock, execution budget, retry limits, and bounded concurrency. Refresh the TBA match schedule and OPR periodically; WebSocket/EventState updates trigger immediate refresh of the latest completed match. Do not create a second WebSocket or move calculations into the browser.
 - Derived event pages use a short Redis cache and a request lock. Do not turn Redis into permanent season-history storage.
 - Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
 - Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
