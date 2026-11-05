@@ -163,6 +163,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
           <p className="text-xs text-slate-500">Loaded {data.loadedMatchCount} of {data.matchCount} matches. Each page loads up to 20 Statbotics match records.</p>
           <div className="flex gap-2"><button disabled={offset === 0 || loadingMore} onClick={() => void load(Math.max(0, offset-20), false)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">Previous page</button><button disabled={!data.hasMore || loadingMore} onClick={() => void load(offset+20, true)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{loadingMore ? "Loading…" : "Load next 20 matches"}</button></div>
         </div>
+        <p className="mt-5 text-[11px] leading-5 text-slate-400">Sources: The Blue Alliance supplies event metadata, team rosters, match scores, score breakdowns, and OPR/DPR/CCWM. Statbotics data is supplied by the FieldView Statbotics mirror and includes model predictions and EPA estimates. Event-level model comparisons and alliance residuals are not robot-specific observations.</p>
       </> : null}
     </div>
   );
