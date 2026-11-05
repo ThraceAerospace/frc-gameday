@@ -39,14 +39,14 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
       const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=20${liveQuery}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
-      setData((current) => append && current ? {
+      setData((current) => (append || refreshMatchKey) && current ? {
         ...next,
-        matches: [...current.matches, ...next.matches],
-        allianceResults: [...current.allianceResults, ...next.allianceResults],
+        matches: [...new Map([...current.matches, ...next.matches].map((item) => [item.match.key, item])).values()],
+        allianceResults: [...new Map([...current.allianceResults, ...next.allianceResults].map((item) => [`${item.matchKey}:${item.color}`, item])).values()],
         findings: [...current.findings.filter((item) => !next.findings.some((candidate) => candidate.id === item.id)), ...next.findings],
-        loadedMatchCount: current.loadedMatchCount + next.loadedMatchCount,
-        hasMore: next.hasMore,
-        offset: 0,
+        loadedMatchCount: new Set([...current.matches, ...next.matches].map((item) => item.match.key)).size,
+        hasMore: next.hasMore || current.hasMore,
+        offset: append ? 0 : current.offset,
       } : next);
       setOffset(nextOffset);
     } catch (cause) {
@@ -57,7 +57,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }
   }, [eventKey]);
 
-  useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
+  useEffect(() => { void load(offset, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature, offset]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
