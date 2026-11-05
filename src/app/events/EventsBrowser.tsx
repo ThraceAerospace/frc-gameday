@@ -106,8 +106,9 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
     const sections = groupIds
       .map((id) => document.getElementById(id))
       .filter((section): section is HTMLElement => section !== null);
+    const scrollContainer = document.querySelector("[data-scroll-container]");
 
-    if (!sections.length) return;
+    if (!sections.length || !scrollContainer) return;
 
     const observer = new IntersectionObserver((entries) => {
       const visible = entries
@@ -115,15 +116,16 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
         .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
       if (visible[0]) setActiveGroup(visible[0].target.id);
     }, {
+      root: scrollContainer,
       rootMargin: "-15% 0px -70% 0px",
       threshold: 0,
     });
 
     sections.forEach((section) => observer.observe(section));
-    if (!activeGroup || !groupIds.includes(activeGroup)) setActiveGroup(groupIds[0]);
+    setActiveGroup((current) => groupIds.includes(current) ? current : groupIds[0]);
 
     return () => observer.disconnect();
-  }, [groups, activeGroup]);
+  }, [groups]);
 
   return (
     <SiteShell events={events}>
