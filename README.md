@@ -244,3 +244,12 @@ Architecture boundaries:
 - Statbotics fields are accessed directly from the typed API response. The underlying data is not modified; displayed metrics are formatted to at most one decimal place for readability.
 - The Insights alliance row sums each team’s OPR, DPR, CCWM, EPA, Auto EPA, Teleop EPA, and Endgame EPA. A total is shown only when all three team values for that metric are available.
 - When TBA has posted match scores and a score breakdown, the official, year-specific breakdown is shown below the alliance tables. The year comes from Statbotics match data when available, falling back to the year prefix in the TBA match key.
+
+
+## Event Analytics prototype
+
+The standalone event analytics workspace lives at `/insights/event/<event>` and is intentionally separate from Gameday tile surfaces. It consumes the same server-side TBA and Statbotics services, then derives event-relative team comparisons, alliance score residuals, EPA/OPR disagreement, rating changes, alliance context, and a rule-based scouting review queue.
+
+The event analytics API is `/api/insights/event/<event>?offset=0&limit=30`. Match records are loaded in pages (maximum 60 per request) with bounded Statbotics concurrency. Derived response pages are cached briefly in Redis and use a request lock to avoid duplicate work. Team and match data remain sourced from TBA and the Statbotics mirror; the analytics layer does not create a historical database.
+
+This is an exploratory prototype. Findings and review status are not persisted; review actions are local to the browser. Match residuals and rating updates are alliance/model-level signals and must not be interpreted as robot-specific attribution. Event-relative percentiles are only comparable within the loaded event roster.
