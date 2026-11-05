@@ -20,10 +20,8 @@ const percentileLabel = (value: number | null) => value === null ? "—" : `${Ma
 
 export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
-  const [offset, setOffset] = useState(0);
   const [tab, setTab] = useState<Tab>("review");
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
@@ -31,29 +29,27 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [historyB, setHistoryB] = useState<TeamSeasonHistory | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const load = useCallback(async (nextOffset: number, append: boolean, refreshMatchKey: string | null = null) => {
-    append ? setLoadingMore(true) : setLoading(true);
+  const load = useCallback(async (refreshMatchKey: string | null = null) => {
+    setLoading(true);
     setError(null);
     try {
-      const liveQuery = refreshMatchKey ? `&liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";
-      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?${liveQuery.replace(/^&/, "")}`, { cache: "no-store" });
+      const liveQuery = refreshMatchKey ? `?liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";
+      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}${liveQuery}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
       setData(next);
-      setOffset(0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load analytics");
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   }, [eventKey]);
 
-  useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
+  useEffect(() => { void load(liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
 
   useEffect(() => {
     if (!data || data.collection.state === "complete" || data.collection.state === "partial") return;
-    const timer = window.setTimeout(() => { void load(0, false, liveMatchKey); }, 1800);
+    const timer = window.setTimeout(() => { void load(liveMatchKey); }, 1800);
     return () => window.clearTimeout(timer);
   }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, load, liveMatchKey]);
 
