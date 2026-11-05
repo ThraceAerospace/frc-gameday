@@ -252,3 +252,5 @@ Prefer small, focused cleanup commits.
 - Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
 - Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
 - Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
+
+- Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
