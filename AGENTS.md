@@ -87,6 +87,11 @@ useMatches → EventView → EventFooter → MatchStrip → MatchCard
 
 Preserve the established next-match semantics and the stale-response protection in `useMatches`.
 
+Team presentation rules:
+
+- Show teams in their red or blue alliance color only when displaying a match; outside match context, use neutral black styling.
+- When a match's alliance data includes a team in `dq_team_keys`, render that team's number with a strikethrough.
+
 ## Multiview
 
 MultiviewView owns:
@@ -223,6 +228,7 @@ Prefer small, focused cleanup commits.
 
 ## Coding approach
 
+- Do not duplicate logic that already exists; search for and reuse existing helpers. For date/time parsing, formatting, and timezone behavior, use `src/lib/time`. If a needed helper is missing, add it there for reuse.
 - Keep data fetching in hooks/services rather than presentation components where practical.
 - Keep Multiview state transitions explicit.
 - Keep WSS payloads small.

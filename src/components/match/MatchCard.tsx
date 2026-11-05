@@ -2,7 +2,7 @@
 
 import type { TBAMatch } from "@/lib/tba/types";
 import NextMatchCountdown from "./NextMatchCountdown";
-import { formatAlliance, formatAllianceShortName, matchCode, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
+import { formatAlliance, formatAllianceShortName, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
 type PlayoffAlliance = {
   name?: string;
@@ -87,7 +87,7 @@ export default function MatchCard({
       <article
         className={[
           "shrink-0",
-          "min-w-[204px]",
+          "min-w-[232px]",
           "rounded-md",
           "border",
           "px-2 py-1",
@@ -99,12 +99,12 @@ export default function MatchCard({
               : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
         ].join(" ")}
       >
-        <div className="grid grid-cols-[65px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
+        <div className="grid grid-cols-[92px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
           {/* Match name */}
-          <div className="row-span-2 flex h-full flex-col justify-center">
+          <div className="relative top-px row-span-2 flex h-full flex-col justify-center">
             <span
               className={[
-                "text-[10px] font-bold uppercase tracking-wide",
+                "whitespace-nowrap text-[10px] font-bold uppercase tracking-wide",
                 isNext ? "text-white" : "text-zinc-300",
               ].join(" ")}
             >
@@ -113,7 +113,7 @@ export default function MatchCard({
 
             <span
               className={[
-                "mt-1 font-mono text-[9px] tabular-nums",
+                "mt-1 whitespace-nowrap font-mono text-[9px] tabular-nums",
                 isNext
                   ? "font-semibold text-zinc-200"
                   : "text-zinc-500",
