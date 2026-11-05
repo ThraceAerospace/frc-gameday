@@ -156,7 +156,7 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
     // analytics records survive schedule changes and only new matches queue.
     if (!job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
       try {
-        const latestMatches = sortMatches(await TBA.getEventMatches(eventKey));
+        const [latestMatchesRaw, latestOprs] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey)]);\n        const latestMatches = sortMatches(latestMatchesRaw);\n        job.oprs = latestOprs;
         const existing = new Map(job.matches.map((match) => [match.key, match]));
         for (const match of latestMatches) {
           const prior = existing.get(match.key);
