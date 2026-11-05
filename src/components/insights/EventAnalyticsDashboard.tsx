@@ -6,14 +6,13 @@ import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
-type Tab = "review" | "teams" | "unexpected" | "models" | "consistency" | "alliances";
+type Tab = "review" | "teams" | "unexpected" | "quality" | "alliances";
 const TABS: { id: Tab; label: string }[] = [
   { id: "review", label: "Review queue" },
   { id: "teams", label: "Team comparison" },
   { id: "unexpected", label: "Unexpected results" },
-  { id: "models", label: "Model disagreement" },
-  { id: "consistency", label: "Consistency" },
-  { id: "alliances", label: "Alliance context" },
+  { id: "quality", label: "Prediction quality" },
+  { id: "alliances", label: "Alliance patterns" },
 ];
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 const percentileLabel = (value: number | null) => value === null ? "—" : `${Math.round(value * 100)}th`;
@@ -128,7 +127,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div className="mt-5">
           {tab === "review" && <ReviewQueue findings={findings} />}
           {tab === "teams" && <section className="space-y-4">
-            <Panel title="Compare teams" description="Compare event-relative model estimates and the alliance outcomes in matches they appeared in.">
+            <Panel title="Compare teams" description="Compare distinct rating systems and the alliance outcomes in matches they appeared in. EPA and OPR are not interchangeable or competing measurements.">
               <div className="grid gap-3 sm:grid-cols-2">
                 <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
                 <TeamSelect label="Team B" teams={teams} value={teamB} onChange={setTeamB} />
@@ -156,12 +155,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           {tab === "unexpected" && <section className="space-y-4">
             <Panel title="Which alliances surprised the model?" description="Each bar is one alliance in one match. Positive values mean the alliance scored more than predicted; negative values mean it scored less. Select a row to open that match on The Blue Alliance."><ResidualBars residuals={residuals} /></Panel>
           </section>}
-          {tab === "models" && <Panel title="Where EPA and OPR disagree" description="Each team has two bars showing its percentile among this event's teams. A large gap means the models rank that team differently; it does not tell us which model is correct."><ModelComparisonBars teams={teams} /></Panel>}
-          {tab === "consistency" && <section className="space-y-4">
-            <Panel title="Team-level alliance outcome context" description="Residual mean and spread summarize alliance scores in matches featuring each team. They do not isolate the team's contribution."><TeamTable teams={[...teams].sort((a,b)=>(b.allianceResidualSpread ?? -1)-(a.allianceResidualSpread ?? -1))} showResidual /></Panel>
-            <Panel title="Match-by-match EPA changes" description="The chart shows model rating updates, not observed robot performance."><EpaChangeChart records={data.matches} teams={teams} /></Panel>
-          </section>}
-          {tab === "alliances" && <Panel title="Alliance context" description="Inspect alliance partners, opponents, pre-match EPA totals, predictions, and actual scores."><AllianceTable records={data.matches} /></Panel>}
+          {tab === "quality" && <Panel title="How well did the model predict this event?" description="Event-specific score error and winner accuracy across available completed matches."><PredictionQuality stats={data.predictionStats} residualStats={data.residualStats} /></Panel>}
+          {tab === "alliances" && <Panel title="Repeated alliance combinations" description="Repeated three-team combinations with a notable average score residual. This describes the combination, not individual team contribution."><AlliancePatterns findings={findings.filter((item) => item.category === "alliance-pattern")} /></Panel>}
         </div>
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
