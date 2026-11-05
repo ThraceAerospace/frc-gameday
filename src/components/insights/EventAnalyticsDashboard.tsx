@@ -18,7 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 const percentileLabel = (value: number | null) => value === null ? "—" : `${Math.round(value * 100)}th`;
 
-export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
+export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
   const [offset, setOffset] = useState(0);
   const [tab, setTab] = useState<Tab>("review");
@@ -35,7 +35,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     append ? setLoadingMore(true) : setLoading(true);
     setError(null);
     try {
-      const liveQuery = refreshMatchKey ? `&liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";\n      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=20${liveQuery}`, { cache: "no-store" });
+      const liveQuery = refreshMatchKey ? `&liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";
+      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=20${liveQuery}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
       setData((current) => append && current ? {
@@ -56,7 +57,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }
   }, [eventKey]);
 
-  useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey]);
+  useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
@@ -103,7 +104,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{eventName}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-500">Statistical signals to help scouts decide what deserves a closer look. These are model outputs and alliance-level results, not robot-specific observations.</p>\n          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · Reconciliation pending" : ""}</p>
+          <p className="mt-2 max-w-3xl text-sm text-slate-500">Statistical signals to help scouts decide what deserves a closer look. These are model outputs and alliance-level results, not robot-specific observations.</p>
+          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · Reconciliation pending" : ""}</p>
         </div>
         <Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link>
       </div>
