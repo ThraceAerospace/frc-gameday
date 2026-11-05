@@ -45,3 +45,22 @@ export type StatboticsMatch = {
 };
 
 export type StatboticsMatchStatus = "loading" | "ready" | "unavailable";
+
+
+export type StatboticsRecordLine = {
+  wins?: number; losses?: number; ties?: number; count?: number; winrate?: number;
+  rps?: number; rps_per_match?: number; rank?: number; num_teams?: number;
+};
+export type StatboticsTeamRecord = { qual?: StatboticsRecordLine; elim?: StatboticsRecordLine; total?: StatboticsRecordLine };
+export type StatboticsEpaProfile = {
+  total_points?: number; unitless?: number; norm?: number;
+  breakdown?: Record<string, number>; stats?: Record<string, number>;
+};
+export type StatboticsTeamEvent = {
+  team?: number; year?: number; event?: string; event_name?: string; team_name?: string;
+  time?: number; week?: number; type?: string; status?: string; first_event?: boolean;
+  epa?: StatboticsEpaProfile; record?: StatboticsTeamRecord;
+};
+export type StatboticsTeamYear = StatboticsTeamEvent & {
+  country?: string; state?: string; district?: string; ranks?: Record<string, number>;
+};
