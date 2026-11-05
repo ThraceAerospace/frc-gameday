@@ -90,6 +90,24 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
       matchCount: matches.length, loadedMatchCount: analyticsMatches.length,
       offset: safeOffset, limit, hasMore: safeOffset + pageMatches.length < matches.length,
       residualStats: { mean: mean(residuals), standardDeviation: standardDeviation(residuals), sampleSize: residuals.length },
+      predictionStats: (() => {
+      const errors = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
+      const winChecks = analyticsMatches.flatMap((record) => {
+        const probability = record.statbotics?.pred?.red_win_prob ?? record.statbotics?.prediction?.red_win_prob;
+        const winner = record.match.winning_alliance;
+        if (typeof probability !== "number" || (winner !== "red" && winner !== "blue")) return [];
+        return [((probability >= 0.5 ? "red" : "blue") === winner) ? 1 : 0];
+      });
+      return {
+        allianceCount: errors.length,
+        meanAbsoluteError: errors.length ? errors.reduce((sum, value) => sum + Math.abs(value), 0) / errors.length : null,
+        rootMeanSquareError: errors.length ? Math.sqrt(errors.reduce((sum, value) => sum + value * value, 0) / errors.length) : null,
+        meanResidual: mean(errors),
+        within25Count: errors.filter((value) => Math.abs(value) <= 25).length,
+        winPredictionCount: winChecks.length,
+        winPredictionAccuracy: winChecks.length ? winChecks.reduce((sum, value) => sum + value, 0) / winChecks.length : null,
+      };
+    })(),
       collection: { state: safeOffset + pageMatches.length >= matches.length ? "complete" : "collecting", processedMatchCount: analyticsMatches.length, totalMatchCount: matches.length, unavailableMatchCount: analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length, updatedAt: Date.now() },
     };
     if (!liveMatchKey) await redis.set(cacheKey, JSON.stringify(payload), "EX", CACHE_TTL_SECONDS);
