@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { FunnelIcon, VideoCameraIcon } from "@heroicons/react/24/outline";
+import { VideoCameraIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
 import type { TBAEvent } from "@/lib/tba/types";
@@ -55,7 +55,6 @@ function compareGroups(
 export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [district, setDistrict] = useState("all");
   const [eventType, setEventType] = useState("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState("");
   const [activeOffseasonMonth, setActiveOffseasonMonth] = useState("");
 
@@ -201,32 +200,26 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
             <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">FIRST events</h1>
             <p className="mt-2 text-sm text-slate-500">{filtered.length} of {events.length} events</p>
           </div>
-          <button onClick={() => setFilterOpen((open) => !open)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" aria-expanded={filterOpen}>
-            <FunnelIcon className="h-4 w-4" /> Filters
-          </button>
         </div>
-
-        {filterOpen && (
-          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
-            <label className="text-sm font-semibold text-slate-700">
-              Event type
-              <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal">
-                <option value="all">All Events</option>
-                {eventTypes.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              District
-              <select value={district} onChange={(e) => setDistrict(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal">
-                <option value="all">All districts</option>
-                {districts.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-              </select>
-            </label>
-          </div>
-        )}
 
         <div className="mt-6 items-start gap-8 lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="mb-6 lg:sticky lg:top-6 lg:mb-0">
+            <div className="mb-4 space-y-2">
+              <label className="block text-xs font-semibold text-slate-600">
+                Event type
+                <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700">
+                  <option value="all">All Events</option>
+                  {eventTypes.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold text-slate-600">
+                District
+                <select value={district} onChange={(e) => setDistrict(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700">
+                  <option value="all">All districts</option>
+                  {districts.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+                </select>
+              </label>
+            </div>
             <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Jump to group</h2>
             <nav aria-label="Event groups" className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 lg:block lg:space-y-1 lg:overflow-visible">
               {groups.map(([group, groupEvents]) => {
