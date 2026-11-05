@@ -30,7 +30,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
     append ? setLoadingMore(true) : setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=30`, { cache: "no-store" });
+      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=20`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
       setData((current) => append && current ? {
@@ -121,8 +121,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
           {tab === "alliances" && <Panel title="Alliance context" description="Inspect alliance partners, opponents, pre-match EPA totals, predictions, and actual scores."><AllianceTable records={data.matches} /></Panel>}
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-          <p className="text-xs text-slate-500">Loaded {data.loadedMatchCount} of {data.matchCount} matches. Each page loads up to 30 Statbotics match records.</p>
-          <div className="flex gap-2"><button disabled={offset === 0 || loadingMore} onClick={() => void load(Math.max(0, offset-30), false)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">Previous page</button><button disabled={!data.hasMore || loadingMore} onClick={() => void load(offset+30, true)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{loadingMore ? "Loading…" : "Load next 30 matches"}</button></div>
+          <p className="text-xs text-slate-500">Loaded {data.loadedMatchCount} of {data.matchCount} matches. Each page loads up to 20 Statbotics match records.</p>
+          <div className="flex gap-2"><button disabled={offset === 0 || loadingMore} onClick={() => void load(Math.max(0, offset-20), false)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">Previous page</button><button disabled={!data.hasMore || loadingMore} onClick={() => void load(offset+20, true)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{loadingMore ? "Loading…" : "Load next 20 matches"}</button></div>
         </div>
       </> : null}
     </div>
