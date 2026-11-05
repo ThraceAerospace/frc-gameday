@@ -1,20 +1,10 @@
 import type { StatboticsMatch } from "@/lib/statbotics/types";
-import type { TBAEvent, TBAEventOPRs, TBAMatch, TBATeam } from "@/lib/tba/types";
+import type { TBAEvent, TBAMatch } from "@/lib/tba/types";
 
 export type AnalyticsMatch = {
   match: TBAMatch;
   statbotics: StatboticsMatch | null;
   statboticsStatus: "ready" | "unavailable";
-};
-
-export type EventAnalyticsPayload = {
-  event: TBAEvent;
-  teams: TBATeam[];
-  oprs: TBAEventOPRs | null;
-  totalMatches: number;
-  offset: number;
-  limit: number;
-  matches: AnalyticsMatch[];
 };
 
 export type AllianceResult = {
@@ -44,6 +34,8 @@ export type TeamAnalyticsRow = {
   matchesSeen: number;
   epaPercentile: number | null;
   oprPercentile: number | null;
+  allianceResidualMean: number | null;
+  allianceResidualSpread: number | null;
 };
 
 export type ReviewFinding = {
@@ -59,9 +51,16 @@ export type ReviewFinding = {
   severity: "high" | "medium" | "low";
 };
 
-export type TeamEpaPoint = {
-  matchKey: string;
-  matchLabel: string;
-  preEpa: number;
-  postEpa: number;
+export type EventAnalyticsResponse = {
+  event: TBAEvent;
+  teams: TeamAnalyticsRow[];
+  matches: AnalyticsMatch[];
+  allianceResults: AllianceResult[];
+  findings: ReviewFinding[];
+  matchCount: number;
+  loadedMatchCount: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  residualStats: { mean: number | null; standardDeviation: number | null; sampleSize: number };
 };
