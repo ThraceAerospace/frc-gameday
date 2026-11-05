@@ -29,7 +29,7 @@ async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (i
   return results;
 }
 
-export async function getEventAnalytics(eventKey: string, offset = 0, requestedLimit = 20): Promise<EventAnalyticsResponse> {
+export async function getEventAnalytics(eventKey: string, offset = 0, requestedLimit = 20, liveMatchKey: string | null = null): Promise<EventAnalyticsResponse> {
   const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(requestedLimit) || 20));
   const safeOffset = Math.max(0, Math.floor(offset) || 0);
   const cacheKey = `${CACHE_PREFIX}${eventKey}:${safeOffset}:${limit}`;
