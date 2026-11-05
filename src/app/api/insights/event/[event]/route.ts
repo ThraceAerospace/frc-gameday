@@ -5,7 +5,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
   if (!event || !/^[a-zA-Z0-9_-]+$/.test(event)) return Response.json({ error: "Invalid event key" }, { status: 400 });
   const url = new URL(request.url);
   const offset = Number(url.searchParams.get("offset") ?? 0);
-  const limit = Number(url.searchParams.get("limit") ?? 30);
+  const limit = Number(url.searchParams.get("limit") ?? 20);
   if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(limit) || limit < 1 || limit > 40) {
     return Response.json({ error: "Invalid pagination parameters" }, { status: 400 });
   }
