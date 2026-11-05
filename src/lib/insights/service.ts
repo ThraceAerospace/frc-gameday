@@ -10,8 +10,8 @@ const CACHE_TTL_SECONDS = 60;
 const LOCK_TTL_SECONDS = 45;
 const CACHE_PREFIX = "cache:insights:event:";
 const LOCK_PREFIX = "lock:insights:event:";
-const MAX_PAGE_SIZE = 60;
-const CONCURRENCY = 5;
+const MAX_PAGE_SIZE = 40;
+const CONCURRENCY = 4;
 
 async function releaseLock(key: string, token: string) {
   await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, key, token);
@@ -29,8 +29,8 @@ async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (i
   return results;
 }
 
-export async function getEventAnalytics(eventKey: string, offset = 0, requestedLimit = 30): Promise<EventAnalyticsResponse> {
-  const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(requestedLimit) || 30));
+export async function getEventAnalytics(eventKey: string, offset = 0, requestedLimit = 20): Promise<EventAnalyticsResponse> {
+  const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(requestedLimit) || 20));
   const safeOffset = Math.max(0, Math.floor(offset) || 0);
   const cacheKey = `${CACHE_PREFIX}${eventKey}:${safeOffset}:${limit}`;
   const cached = await redis.get(cacheKey);
