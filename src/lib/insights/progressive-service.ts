@@ -1,0 +1,219 @@
+import { randomUUID } from "node:crypto";
+import { redis } from "@/lib/cache/redis";
+import { TBA } from "@/lib/tba/service";
+import { Statbotics } from "@/lib/statbotics/service";
+import { sortMatches } from "@/lib/tba/matchUtils";
+import { buildAllianceResults, buildReviewFindings, buildTeamRows, mean, standardDeviation } from "./calculations";
+import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
+import type { TBAEvent, TBAEventOPRs, TBAMatch, TBATeam } from "@/lib/tba/types";
+
+const JOB_TTL_SECONDS = 12 * 60 * 60;
+const LOCK_TTL_SECONDS = 55;
+const LOCK_PREFIX = "lock:insights:progressive:";
+const JOB_PREFIX = "insights:progressive:";
+const CONCURRENCY = 4;
+const BATCH_SIZE = 16;
+const MAX_ATTEMPTS = 3;
+const WORK_BUDGET_MS = 42_000;
+
+type Job = {
+  event: TBAEvent;
+  teams: TBATeam[];
+  oprs: TBAEventOPRs | null;
+  matches: TBAMatch[];
+  records: Record<string, AnalyticsMatch>;
+  attempts: Record<string, number>;
+  state: "queued" | "collecting" | "complete" | "partial";
+  updatedAt: number;
+};
+
+function jobKey(eventKey: string) {
+  return JOB_PREFIX + eventKey;
+}
+
+async function readJob(eventKey: string): Promise<Job | null> {
+  const raw = await redis.get(jobKey(eventKey));
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Job;
+    if (!value.event || !Array.isArray(value.matches) || !value.records || !value.attempts) {
+      await redis.del(jobKey(eventKey));
+      return null;
+    }
+    return value;
+  } catch {
+    await redis.del(jobKey(eventKey));
+    return null;
+  }
+}
+
+async function writeJob(eventKey: string, job: Job) {
+  job.updatedAt = Date.now();
+  await redis.set(jobKey(eventKey), JSON.stringify(job), "EX", JOB_TTL_SECONDS);
+}
+
+async function withConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await worker(item);
+    }
+  }));
+}
+
+function buildPayload(job: Job): EventAnalyticsResponse {
+  const matchOrder = new Map(job.matches.map((match, index) => [match.key, index]));
+  const analyticsMatches = Object.values(job.records).sort(
+    (a, b) => (matchOrder.get(a.match.key) ?? 0) - (matchOrder.get(b.match.key) ?? 0),
+  );
+  const allianceResults = buildAllianceResults(analyticsMatches);
+  const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches, allianceResults);
+  const findings = buildReviewFindings(analyticsMatches, allianceResults, teams);
+  const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
+  const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
+  return {
+    event: job.event,
+    teams,
+    matches: analyticsMatches,
+    allianceResults,
+    findings,
+    matchCount: job.matches.length,
+    loadedMatchCount: analyticsMatches.length,
+    offset: 0,
+    limit: job.matches.length,
+    hasMore: false,
+    residualStats: {
+      mean: mean(residuals),
+      standardDeviation: standardDeviation(residuals),
+      sampleSize: residuals.length,
+    },
+    collection: {
+      state: job.state,
+      processedMatchCount: analyticsMatches.length,
+      totalMatchCount: job.matches.length,
+      unavailableMatchCount,
+      updatedAt: job.updatedAt,
+    },
+  };
+}
+
+export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalyticsResponse> {
+  let job = await readJob(eventKey);
+  if (!job) {
+    const [event, teams, matches, oprs] = await Promise.all([
+      TBA.getEvent(eventKey),
+      TBA.getTeamsAtEvent(eventKey),
+      TBA.getEventMatches(eventKey),
+      TBA.getEventOPRs(eventKey),
+    ]);
+    job = {
+      event,
+      teams,
+      oprs,
+      matches: sortMatches(matches),
+      records: {},
+      attempts: {},
+      state: "queued",
+      updatedAt: Date.now(),
+    };
+    await writeJob(eventKey, job);
+  }
+  return buildPayload(job);
+}
+
+async function refreshLiveMatch(eventKey: string, job: Job, matchKey: string) {
+  if (!matchKey.startsWith(eventKey + "_")) return;
+  const [match, statbotics] = await Promise.all([
+    TBA.getMatch(matchKey),
+    Statbotics.getMatch(matchKey, { refresh: true }),
+  ]);
+  const index = job.matches.findIndex((item) => item.key === matchKey);
+  if (index === -1) job.matches.push(match);
+  else job.matches[index] = match;
+  job.matches = sortMatches(job.matches);
+  job.records[matchKey] = {
+    match,
+    statbotics,
+    statboticsStatus: statbotics ? "ready" : "unavailable",
+  };
+}
+
+export async function advanceEventAnalytics(eventKey: string, liveMatchKey: string | null = null): Promise<void> {
+  const lockKey = LOCK_PREFIX + eventKey;
+  const token = randomUUID();
+  const acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
+  if (acquired !== "OK") return;
+
+  const deadline = Date.now() + WORK_BUDGET_MS;
+  try {
+    let job = await readJob(eventKey);
+    if (!job) return;
+    job.state = "collecting";
+
+    if (liveMatchKey) {
+      try {
+        await refreshLiveMatch(eventKey, job, liveMatchKey);
+        await writeJob(eventKey, job);
+      } catch (error) {
+        console.error("[Insights] live match analytics refresh failed", eventKey, liveMatchKey, error);
+      }
+    }
+
+    while (Date.now() < deadline) {
+      const pending = job.matches
+        .filter((match) => !job.records[match.key] && (job.attempts[match.key] ?? 0) < MAX_ATTEMPTS)
+        .slice(0, BATCH_SIZE);
+      if (!pending.length) break;
+
+      await withConcurrency(pending, CONCURRENCY, async (match) => {
+        try {
+          const statbotics = await Statbotics.getMatch(match.key);
+          job!.records[match.key] = {
+            match,
+            statbotics,
+            statboticsStatus: statbotics ? "ready" : "unavailable",
+          };
+        } catch (error) {
+          const attempts = (job!.attempts[match.key] ?? 0) + 1;
+          job!.attempts[match.key] = attempts;
+          if (attempts >= MAX_ATTEMPTS) {
+            job!.records[match.key] = {
+              match,
+              statbotics: null,
+              statboticsStatus: "unavailable",
+            };
+            console.warn("[Insights] Statbotics match unavailable after retries", eventKey, match.key, error);
+          }
+        }
+      });
+
+      const remaining = job.matches.some(
+        (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
+      );
+      job.state = remaining ? "collecting" : Object.values(job.records).some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete";
+      await writeJob(eventKey, job);
+      if (!remaining) break;
+    }
+
+    const remaining = job.matches.some(
+      (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
+    );
+    if (remaining) job.state = "collecting";
+    else job.state = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete";
+    await writeJob(eventKey, job);
+  } catch (error) {
+    console.error("[Insights] progressive event analytics worker failed", eventKey, error);
+  } finally {
+    try {
+      await redis.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        1,
+        lockKey,
+        token,
+      );
+    } catch (error) {
+      console.error("[Insights] failed to release progressive analytics lock", eventKey, error);
+    }
+  }
+}
