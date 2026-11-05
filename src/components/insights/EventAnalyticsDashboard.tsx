@@ -250,41 +250,36 @@ function ResidualBars({residuals}:{residuals:{matchKey:string;matchLabel:string;
     <p className="mt-3 text-xs text-slate-500">This ranks alliance-level score differences. It cannot identify which robot caused the difference.</p>
   </div>;
 }
-function ModelComparisonBars({teams}:{teams:TeamAnalyticsRow[]}) {
-  const rows=[...teams].filter((team)=>team.epaPercentile!==null&&team.oprPercentile!==null).sort((a,b)=>Math.abs((b.epaPercentile??0)-(b.oprPercentile??0))-Math.abs((a.epaPercentile??0)-(a.oprPercentile??0)));
-  if (!rows.length) return <p className="text-sm text-slate-500">EPA and OPR data are not yet available for comparison.</p>;
-  const top=rows.slice(0,20);
-  const largest=top[0];
-  const gap=largest?Math.round(Math.abs((largest.epaPercentile??0)-(largest.oprPercentile??0))*100):0;
+function PredictionQuality({stats,residualStats}:{stats:EventAnalyticsResponse["predictionStats"];residualStats:EventAnalyticsResponse["residualStats"]}) {
+  const pct = (value:number|null) => value === null ? "—" : (value*100).toFixed(1) + "%";
+  const within = stats.allianceCount ? stats.within25Count / stats.allianceCount : null;
   return <div>
-    <div className="mb-4 rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Largest difference in the loaded event roster</p><p className="mt-1 text-lg font-bold text-slate-900">Team {largest?.teamNumber} <span className="text-sm font-semibold text-amber-700">· {gap} percentile points apart</span></p><p className="mt-1 text-xs text-slate-500">EPA {percentileLabel(largest?.epaPercentile??null)} · OPR {percentileLabel(largest?.oprPercentile??null)}</p></div>
-    <div className="mb-3 flex flex-wrap gap-4 text-xs text-slate-600"><span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-blue-600"/>Statbotics EPA percentile</span><span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-500"/>TBA OPR percentile</span></div>
-    <div className="space-y-3">
-      {top.map((team)=> {
-        const epa=(team.epaPercentile??0)*100, opr=(team.oprPercentile??0)*100;
-        const difference=Math.abs(epa-opr);
-        return <div key={team.teamKey} className="rounded-lg border border-slate-100 p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><Link href={`/team/${team.teamNumber}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">Team {team.teamNumber} · {team.name}</Link><span className={`text-xs font-semibold tabular-nums ${difference>=35?"text-amber-700":"text-slate-500"}`}>{Math.round(difference)}-point gap</span></div>
-          <PercentileBar label="EPA" value={epa} color="bg-blue-600"/>
-          <PercentileBar label="OPR" value={opr} color="bg-amber-500"/>
-        </div>;
-      })}
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <QualityMetric label="Mean absolute error" value={fmt(stats.meanAbsoluteError)} unit="pts" detail="Average size of a score prediction miss" />
+      <QualityMetric label="Root mean square error" value={fmt(stats.rootMeanSquareError)} unit="pts" detail="Penalizes large misses more heavily" />
+      <QualityMetric label="Within ±25 points" value={pct(within)} detail={stats.within25Count + " of " + stats.allianceCount + " alliance scores"} />
+      <QualityMetric label="Winner prediction accuracy" value={pct(stats.winPredictionAccuracy)} detail={stats.winPredictionCount + " matches with prediction and result"} />
     </div>
-    <p className="mt-3 text-xs text-slate-500">100th percentile means highest in this event's comparable team sample; 0th means lowest. These are relative ranks, not points or probabilities. Teams without both metrics are omitted.</p>
+    <div className="mt-5 rounded-lg border border-slate-100 p-4">
+      <h3 className="text-sm font-semibold text-slate-900">Prediction bias</h3>
+      <p className="mt-1 text-xs text-slate-500">Mean residual = actual score − predicted score. Positive means predictions tended low; negative means predictions tended high.</p>
+      <p className={"mt-2 text-2xl font-black tabular-nums " + ((stats.meanResidual ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700")}>{stats.meanResidual === null ? "—" : (stats.meanResidual > 0 ? "+" : "") + fmt(stats.meanResidual) + " pts"}</p>
+      <p className="mt-1 text-xs text-slate-500">Residual standard deviation: {fmt(residualStats.standardDeviation)} pts across {residualStats.sampleSize} alliance scores.</p>
+    </div>
+    <p className="mt-3 text-xs text-slate-500">Score metrics use alliances with both a Statbotics prediction and completed TBA score. Winner accuracy uses matches with a predicted red win probability and recorded winner. This describes this event's sample, not universal model accuracy.</p>
   </div>;
 }
-function PercentileBar({label,value,color}:{label:string;value:number;color:string}) {
-  return <div className="grid grid-cols-[42px_1fr_42px] items-center gap-2 text-xs"><span className="text-slate-500">{label}</span><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${color}`} style={{width:`${Math.max(0,Math.min(100,value))}%`}}/></div><span className="text-right font-semibold tabular-nums text-slate-700">{Math.round(value)}%</span></div>;
+function QualityMetric({label,value,unit,detail}:{label:string;value:string;unit?:string;detail:string}) {
+  return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{value}{unit ? <span className="ml-1 text-sm font-semibold text-slate-500">{unit}</span> : null}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div>;
 }
-function EpaChangeChart({records,teams}:{records:EventAnalyticsResponse["matches"];teams:TeamAnalyticsRow[]}) {
-  const [selected,setSelected]=useState("");
-  const points=records.filter((record)=>[...record.match.alliances.red.team_keys,...record.match.alliances.blue.team_keys].some((key)=>key.replace(/^frc/i,"")===selected)).map((record)=>{
-    const before=record.statbotics?.pre_epas?.[selected]?.epa;
-    const after=record.statbotics?.epas?.[selected]?.epa;
-    return typeof before==="number"&&typeof after==="number"?{label:record.match.comp_level==="qm"?`QM ${record.match.match_number}`:`${record.match.comp_level.toUpperCase()} ${record.match.match_number}`,delta:after-before}:null;
-  }).filter((point):point is {label:string;delta:number}=>point!==null);
-  const max=Math.max(1,...points.map((point)=>Math.abs(point.delta)));
-  return <><label className="block max-w-xs text-sm font-semibold text-slate-700">Team<select value={selected} onChange={(event)=>setSelected(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="">Choose team</option>{teams.map((item)=><option key={item.teamKey} value={item.teamNumber}>{item.teamNumber} · {item.name}</option>)}</select></label>{selected && points.length === 0 && <p className="mt-3 text-sm text-slate-500">No match-level EPA updates for this team are loaded yet. Load more matches or choose another team.</p>}{selected && <div className="mt-3 space-y-2">{points.map((point,index)=><div key={index} className="grid grid-cols-[70px_1fr_65px] items-center gap-2 text-xs"><span className="text-slate-500">{point.label}</span><div className="h-3 overflow-hidden rounded bg-slate-100"><div className={`h-full ${point.delta>=0?"bg-emerald-500":"bg-rose-500"}`} style={{width:`${Math.abs(point.delta)/max*100}%`}}/></div><span className="text-right tabular-nums">{point.delta>0?"+":""}{fmt(point.delta)}</span></div>)}</div>}</>;
+function AlliancePatterns({findings}:{findings:ReviewFinding[]}) {
+  if (!findings.length) return <p className="text-sm text-slate-500">No repeated three-team combinations with a notable average score residual have been identified yet.</p>;
+  return <div className="space-y-3">{findings.map((finding)=><article key={finding.id} className="rounded-lg border border-slate-100 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">{finding.subject}</h3><span className="text-xs text-slate-500">{finding.sampleSize} matches</span></div>
+    <p className="mt-1 text-sm text-slate-700">{finding.description}</p>
+    <div className="mt-2 flex flex-wrap gap-2">{finding.evidence.map((item)=><span key={item} className="rounded-md bg-slate-50 px-2 py-1 text-xs tabular-nums text-slate-600">{item}</span>)}</div>
+    <p className="mt-2 text-xs text-slate-500">{finding.suggestedAction}</p>
+  </article>)}</div>;
 }
 function AllianceTable({records}:{records:EventAnalyticsResponse["matches"]}) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase text-slate-400"><th className="py-2">Match</th><th>Alliance</th><th>Teams</th><th>Pre-match EPA</th><th>Predicted</th><th>Actual</th><th>Residual</th></tr></thead><tbody>{records.flatMap((record)=>(["red","blue"] as const).map((color)=>{const alliance=record.match.alliances[color];const predicted=color==="red"?record.statbotics?.pred?.red_score:record.statbotics?.pred?.blue_score;const values=alliance.team_keys.map((key)=>record.statbotics?.pre_epas?.[key.replace(/^frc/i,"")]?.epa);const epa=values.every((value)=>typeof value==="number")?values.reduce<number>((sum,value)=>sum+(value??0),0):null;const actual=typeof alliance.score==="number"&&alliance.score>=0?alliance.score:null;const residual=actual!==null&&typeof predicted==="number"?actual-predicted:null;return <tr key={record.match.key+color} className="border-b border-slate-100"><th className="py-2 text-left">{record.match.comp_level.toUpperCase()} {record.match.match_number}</th><td className="capitalize">{color}</td><td>{alliance.team_keys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</td><td>{fmt(epa)}</td><td>{fmt(predicted)}</td><td>{fmt(actual)}</td><td className={residual!==null&&residual>=0?"text-emerald-700":"text-rose-700"}>{fmt(residual)}</td></tr>}))}</tbody></table></div>;
