@@ -89,7 +89,7 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
       event, teams: teamRows, matches: analyticsMatches, allianceResults, findings,
       matchCount: matches.length, loadedMatchCount: analyticsMatches.length,
       offset: safeOffset, limit, hasMore: safeOffset + pageMatches.length < matches.length,
-      residualStats: { mean: mean(residuals), standardDeviation: standardDeviation(residuals), sampleSize: residuals.length },
+      residualStats: { mean: mean(residuals), standardDeviation: standardDeviation(residuals), sampleSize: residuals.length },\n      collection: { state: safeOffset + pageMatches.length >= matches.length ? "complete" : "collecting", processedMatchCount: analyticsMatches.length, totalMatchCount: matches.length, unavailableMatchCount: analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length, updatedAt: Date.now() },
     };
     if (!liveMatchKey) await redis.set(cacheKey, JSON.stringify(payload), "EX", CACHE_TTL_SECONDS);
     return payload;
