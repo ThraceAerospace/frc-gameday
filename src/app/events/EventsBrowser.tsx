@@ -10,9 +10,6 @@ import { getEventWebcastStatus } from "@/lib/tba/formatters";
 
 function getEventGroup(event: TBAEvent): string {
   const type = event.event_type_string?.trim() ?? "";
-  const normalizedType = type.toLowerCase();
-  const normalizedName = event.name.toLowerCase();
-
   // TBA event type IDs: 2/5 are District Championship events, while
   // 3/4 are the FIRST Championship divisions/finals.
   if (event.event_type === 100) return "Preseason";
