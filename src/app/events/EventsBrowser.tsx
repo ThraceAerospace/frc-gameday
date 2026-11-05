@@ -118,7 +118,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
 
     const monthMap = new Map<string, TBAEvent[]>();
     for (const event of offseason[1]) {
-      const match = /^(\\d{4})-(\\d{2})-/.exec(event.start_date);
+      const match = /^(\d{4})-(\d{2})-/.exec(event.start_date);
       if (!match) continue;
       const monthKey = `${match[1]}-${match[2]}`;
       const monthEvents = monthMap.get(monthKey) ?? [];
