@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/lib/insights/types";
+import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
+type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type Tab = "review" | "teams" | "unexpected" | "models" | "consistency" | "alliances";
 const TABS: { id: Tab; label: string }[] = [
   { id: "review", label: "Review queue" },
@@ -25,6 +27,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
   const [error, setError] = useState<string | null>(null);
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
+  const [historyA, setHistoryA] = useState<TeamSeasonHistory | null>(null);
+  const [historyB, setHistoryB] = useState<TeamSeasonHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback(async (nextOffset: number, append: boolean) => {
     append ? setLoadingMore(true) : setLoading(true);
@@ -52,6 +57,35 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
   }, [eventKey]);
 
   useEffect(() => { void load(0, false); }, [load]);
+
+  useEffect(() => {
+    if (!teamA || !teamB) {
+      setHistoryA(null);
+      setHistoryB(null);
+      return;
+    }
+    let active = true;
+    setHistoryLoading(true);
+    Promise.all([
+      fetch(`/api/insights/team/${teamA}?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
+      fetch(`/api/insights/team/${teamB}?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
+    ]).then(async ([responseA, responseB]) => {
+      if (!responseA.ok || !responseB.ok) throw new Error("Team season history is temporarily unavailable");
+      const [nextA, nextB] = await Promise.all([responseA.json(), responseB.json()]);
+      if (active) {
+        setHistoryA(nextA as TeamSeasonHistory);
+        setHistoryB(nextB as TeamSeasonHistory);
+      }
+    }).catch(() => {
+      if (active) {
+        setHistoryA(null);
+        setHistoryB(null);
+      }
+    }).finally(() => {
+      if (active) setHistoryLoading(false);
+    });
+    return () => { active = false; };
+  }, [teamA, teamB, data?.event.year]);
 
   const teams = data?.teams ?? [];
   const selectedA = teams.find((team) => String(team.teamNumber) === teamA);
@@ -104,6 +138,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
                   ["OPR percentile", selectedA.oprPercentile === null ? null : selectedA.oprPercentile * 100, selectedB.oprPercentile === null ? null : selectedB.oprPercentile * 100],
                 ].map(([label, a, b]) => <tr key={String(label)} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-600">{label}</th><td className="py-2 tabular-nums">{fmt(a as number | null)}{String(label).includes("percentile") && a !== null ? "%" : ""}</td><td className="py-2 tabular-nums">{fmt(b as number | null)}{String(label).includes("percentile") && b !== null ? "%" : ""}</td></tr>)}</tbody></table></div>
                 <p className="mt-3 text-xs text-slate-500">Matches featuring both teams in the loaded sample: {commonMatches.length}.</p>
+                <div className="mt-5 border-t border-slate-200 pt-4">
+                  <h3 className="font-semibold text-slate-900">Official-season EPA progression</h3>
+                  <p className="mt-1 text-xs text-slate-500">Statbotics team-event snapshots across each team's TBA-listed official-season events. Offseason and preseason events are excluded.</p>
+                  {historyLoading ? <p className="mt-3 text-sm text-slate-500">Loading team histories…</p> : historyA && historyB ? <TeamHistoryComparison first={historyA} second={historyB} /> : <p className="mt-3 text-sm text-slate-500">Season histories are unavailable for one or both teams.</p>}
+                </div>
                 {commonMatches.length > 0 && <div className="mt-2 space-y-1">{commonMatches.map((record) => <a key={record.match.key} href={`https://www.thebluealliance.com/match/${record.match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg bg-slate-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50">{record.match.comp_level.toUpperCase()} {record.match.match_number} · {record.match.alliances.red.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")} vs {record.match.alliances.blue.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")}</a>)}</div>}
               </> : <p className="mt-4 text-sm text-slate-500">Select two different teams to compare their event estimates.</p>}
             </Panel>
@@ -127,6 +166,26 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
       </> : null}
     </div>
   );
+}
+ 
+function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
+  const firstPoints=first.events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
+  const secondPoints=second.events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
+  const all=[...firstPoints,...secondPoints];
+  const max=Math.max(1,...all.map((point)=>point.value));
+  return <div className="mt-3 grid gap-4 lg:grid-cols-2">
+    <div><p className="text-xs font-semibold text-slate-700">Team {first.team.nickname || first.team.name}</p><HistoryLine points={firstPoints} max={max} color="#2563eb"/><p className="mt-1 text-xs text-slate-500">Team-year EPA: {fmt(first.season?.epa?.total_points)}</p><HistoryTable events={first.events}/></div>
+    <div><p className="text-xs font-semibold text-slate-700">Team {second.team.nickname || second.team.name}</p><HistoryLine points={secondPoints} max={max} color="#0f766e"/><p className="mt-1 text-xs text-slate-500">Team-year EPA: {fmt(second.season?.epa?.total_points)}</p><HistoryTable events={second.events}/></div>
+  </div>;
+}
+function HistoryLine({points,max,color}:{points:{label:string;value:number}[];max:number;color:string}) {
+  if (!points.length) return <p className="py-5 text-xs text-slate-400">No Statbotics team-event history available.</p>;
+  const width=280, height=100, pad=12;
+  const coords=points.map((point,index)=>({x:pad+(points.length===1?0:index/(points.length-1))*(width-pad*2),y:height-pad-(point.value/max)*(height-pad*2)}));
+  return <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 w-full max-w-sm" role="img" aria-label="Team EPA progression by event"><line x1={pad} y1={height-pad} x2={width-pad} y2={height-pad} stroke="#cbd5e1"/><polyline points={coords.map((point)=>`${point.x},${point.y}`).join(" ")} fill="none" stroke={color} strokeWidth="2.5"/>{coords.map((point,index)=><circle key={index} cx={point.x} cy={point.y} r="3.5" fill={color}><title>{points[index].label}: {points[index].value.toFixed(1)} EPA</title></circle>)}</svg>;
+}
+function HistoryTable({events}:{events:TeamSeasonHistory["events"]}) {
+  return <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-slate-100"><table className="w-full text-xs"><thead className="sticky top-0 bg-slate-50 text-left text-slate-400"><tr><th className="px-2 py-1.5">Event</th><th className="px-2 py-1.5 text-right">EPA</th><th className="px-2 py-1.5 text-right">Qual W-L</th></tr></thead><tbody>{events.map((item)=><tr key={item.event.key} className="border-t border-slate-100"><td className="px-2 py-1.5">{item.event.short_name ?? item.event.name}</td><td className="px-2 py-1.5 text-right tabular-nums">{fmt(item.statbotics?.epa?.total_points)}</td><td className="px-2 py-1.5 text-right tabular-nums">{item.statbotics?.record?.qual ? `${item.statbotics.record.qual.wins ?? "—"}-${item.statbotics.record.qual.losses ?? "—"}` : "—"}</td></tr>)}</tbody></table></div>;
 }
 
 function Metric({label,value,detail}:{label:string;value:string|number;detail:string}) {
