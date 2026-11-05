@@ -63,9 +63,14 @@ export function buildTeamRows(
       allianceResidualMean: mean(residuals), allianceResidualSpread: standardDeviation(residuals),
     };
   });
-  const epaValues = rows.flatMap((row) => row.epa === null ? [] : [row.epa]);
-  const oprValues = rows.flatMap((row) => row.opr === null ? [] : [row.opr]);
-  return rows.map((row) => ({ ...row, epaPercentile: row.epa === null ? null : percentile(epaValues, row.epa), oprPercentile: row.opr === null ? null : percentile(oprValues, row.opr) }));
+  const comparableRows = rows.filter((row) => row.epa !== null && row.opr !== null);
+  const epaValues = comparableRows.map((row) => row.epa as number);
+  const oprValues = comparableRows.map((row) => row.opr as number);
+  return rows.map((row) => ({
+    ...row,
+    epaPercentile: row.epa === null || row.opr === null ? null : percentile(epaValues, row.epa),
+    oprPercentile: row.epa === null || row.opr === null ? null : percentile(oprValues, row.opr),
+  }));
 }
 function confidence(n: number): ReviewFinding["confidence"] { return n >= 12 ? "high" : n >= 6 ? "medium" : "low"; }
 export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[]): ReviewFinding[] {
