@@ -1,6 +1,8 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
+import { Statbotics } from "@/lib/statbotics/service";
+import MatchInsightsPanel from "@/components/match/MatchInsightsPanel";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatMatchEventTime, formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
@@ -52,6 +54,13 @@ export default async function MatchPage({
       </main>
     );
   }
+
+  const [statboticsResult, oprsResult] = await Promise.allSettled([
+    Statbotics.getMatch(matchKey),
+    TBA.getEventOPRs(eventKey),
+  ]);
+  const statbotics = statboticsResult.status === "fulfilled" ? statboticsResult.value : null;
+  const eventOprs = oprsResult.status === "fulfilled" ? oprsResult.value : null;
 
   return (
     <SiteShell events={navigationEvents} selectedEventKey={event.key}>
@@ -176,6 +185,8 @@ export default async function MatchPage({
             </div>
           </section>
         )}
+
+        <MatchInsightsPanel match={match} statbotics={statbotics} oprs={eventOprs} />
 
         {/* Match information */}
         <section className="mt-8">
