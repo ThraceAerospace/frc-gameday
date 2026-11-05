@@ -69,7 +69,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
     (a, b) => (matchOrder.get(a.match.key) ?? 0) - (matchOrder.get(b.match.key) ?? 0),
   );
   const allianceResults = buildAllianceResults(analyticsMatches);
-  const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches, allianceResults);
+  const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches);
   const findings = buildReviewFindings(analyticsMatches, allianceResults, teams);
   const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
