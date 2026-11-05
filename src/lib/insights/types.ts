@@ -40,7 +40,7 @@ export type TeamAnalyticsRow = {
 
 export type ReviewFinding = {
   id: string;
-  category: "score-residual" | "model-disagreement" | "rating-update" | "alliance-pattern";
+  category: "score-residual" | "alliance-pattern";
   subject: string;
   title: string;
   description: string;
