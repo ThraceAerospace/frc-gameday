@@ -89,7 +89,7 @@ Specialized presentation/derivation hooks remain separate where applicable:
 
 ## Event Insights
 
-The standalone `/insights/event/<event>` analytics workspace participates in the shared live runtime. It consumes `useEventState` snapshots through the origin-wide SharedWorker/WebSocket system, just like Tile View, and refreshes its server-calculated analytics when the current completed match changes. It must not create a separate WebSocket or move authoritative analytics calculations into the browser. Historical Statbotics collection and analytics remain server-side.
+The standalone `/insights/event/<event>` analytics workspace participates in the shared live runtime. It consumes `useEventState` snapshots through the origin-wide SharedWorker/WebSocket system, just like Tile View, and refreshes its server-calculated analytics when the current completed match changes. It must not create a separate WebSocket or move authoritative analytics calculations into the browser. Historical Statbotics collection is a resumable Redis-backed server job: the API returns the complete-so-far snapshot and uses Vercel `waitUntil` to process bounded match batches with retries and concurrency limits. The page automatically refreshes collection progress/results; it does not require manual pagination. The worker periodically refreshes the TBA event match schedule and OPR, while WebSocket/EventState changes trigger immediate refresh of the latest completed match.
 
 ## Match data
 
