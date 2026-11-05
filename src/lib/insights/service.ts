@@ -74,7 +74,7 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
       : pageMatches;
     const analyticsMatches = await withConcurrency(selectedMatches, CONCURRENCY, async (match): Promise<AnalyticsMatch> => {
       try {
-        const statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey });
+        const statbotics = await Statbotics.getMatch(match.key);
         return { match, statbotics, statboticsStatus: statbotics ? "ready" : "unavailable" };
       } catch {
         return { match, statbotics: null, statboticsStatus: "unavailable" };
