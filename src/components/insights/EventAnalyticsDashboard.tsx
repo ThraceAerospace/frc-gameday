@@ -36,19 +36,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     setError(null);
     try {
       const liveQuery = refreshMatchKey ? `&liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";
-      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?offset=${nextOffset}&limit=20${liveQuery}`, { cache: "no-store" });
+      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}?${liveQuery.replace(/^&/, "")}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
-      setData((current) => (append || refreshMatchKey) && current ? {
-        ...next,
-        matches: [...new Map([...current.matches, ...next.matches].map((item) => [item.match.key, item])).values()],
-        allianceResults: [...new Map([...current.allianceResults, ...next.allianceResults].map((item) => [`${item.matchKey}:${item.color}`, item])).values()],
-        findings: [...current.findings.filter((item) => !next.findings.some((candidate) => candidate.id === item.id)), ...next.findings],
-        loadedMatchCount: new Set([...current.matches, ...next.matches].map((item) => item.match.key)).size,
-        hasMore: next.hasMore || current.hasMore,
-        offset: append ? 0 : current.offset,
-      } : next);
-      setOffset(nextOffset);
+      setData(next);
+      setOffset(0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load analytics");
     } finally {
@@ -58,6 +50,12 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   }, [eventKey]);
 
   useEffect(() => { void load(0, false, liveMatchKey); }, [load, liveMatchKey, liveMatchSignature]);
+
+  useEffect(() => {
+    if (!data || data.collection.state === "complete" || data.collection.state === "partial") return;
+    const timer = window.setTimeout(() => { void load(0, false, liveMatchKey); }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, load, liveMatchKey]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
@@ -159,9 +157,13 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           </section>}
           {tab === "alliances" && <Panel title="Alliance context" description="Inspect alliance partners, opponents, pre-match EPA totals, predictions, and actual scores."><AllianceTable records={data.matches} /></Panel>}
         </div>
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-          <p className="text-xs text-slate-500">Loaded {data.loadedMatchCount} of {data.matchCount} matches. Each page loads up to 20 Statbotics match records.</p>
-          <div className="flex gap-2"><button disabled={offset === 0 || loadingMore} onClick={() => void load(Math.max(0, offset-20), false)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">Previous page</button><button disabled={!data.hasMore || loadingMore} onClick={() => void load(offset+20, true)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{loadingMore ? "Loading…" : "Load next 20 matches"}</button></div>
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><p className="text-sm font-semibold text-slate-900">{data.collection.state === "complete" ? "Event analysis complete" : data.collection.state === "partial" ? "Event analysis partially complete" : "Analyzing event matches automatically"}</p><p className="mt-1 text-xs text-slate-500">{data.collection.processedMatchCount} of {data.collection.totalMatchCount} matches processed · {data.collection.unavailableMatchCount} unavailable</p></div>
+            <span className="text-sm font-semibold tabular-nums text-slate-700">{data.collection.totalMatchCount ? Math.round(data.collection.processedMatchCount / data.collection.totalMatchCount * 100) : 100}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{width:`${data.collection.totalMatchCount ? data.collection.processedMatchCount / data.collection.totalMatchCount * 100 : 100}%`}} /></div>
+          {data.collection.state === "partial" && <p className="mt-2 text-xs text-amber-700">Some Statbotics records were unavailable after retries. Available analytics are still shown.</p>}
         </div>
         <p className="mt-5 text-[11px] leading-5 text-slate-400">Sources: The Blue Alliance supplies event metadata, team rosters, match scores, score breakdowns, and OPR/DPR/CCWM. Statbotics data is supplied by the FieldView Statbotics mirror and includes model predictions and EPA estimates. Event-level model comparisons and alliance residuals are not robot-specific observations.</p>
       </> : null}
