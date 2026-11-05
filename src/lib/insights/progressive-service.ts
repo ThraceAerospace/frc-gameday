@@ -157,7 +157,8 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
     if (!job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
       try {
         const [latestMatchesRaw, latestOprs] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey)]);
-        const latestMatches = sortMatches(latestMatchesRaw);\n        job.oprs = latestOprs;
+        const latestMatches = sortMatches(latestMatchesRaw);
+        job.oprs = latestOprs;
         const existing = new Map(job.matches.map((match) => [match.key, match]));
         for (const match of latestMatches) {
           const prior = existing.get(match.key);
