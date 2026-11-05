@@ -246,8 +246,8 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                       <span>{group}</span>
                       <span className={`text-xs tabular-nums ${isActive ? "text-blue-600" : "text-slate-400"}`}>{groupEvents.length}</span>
                     </a>
-                    {group === "Off-Season" && offseasonMonths.length > 0 && (
-                      <div className="ml-3 mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                    {group === "Off-Season" && isActive && offseasonMonths.length > 0 && (
+                      <div className="mt-1 flex gap-1 overflow-x-auto whitespace-nowrap px-1 pb-1 lg:ml-3 lg:flex-col lg:space-y-0.5 lg:overflow-visible lg:border-l lg:border-slate-200 lg:pl-2">
                         {offseasonMonths.map(({ id: monthId, label, events: monthEvents }) => {
                           const monthIsActive = activeOffseasonMonth === monthId;
                           return (
@@ -259,7 +259,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                                 setActiveOffseasonMonth(monthId);
                               }}
                               aria-current={monthIsActive ? "location" : undefined}
-                              className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${monthIsActive ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                              className={`flex shrink-0 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${monthIsActive ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
                             >
                               <span>{label}</span>
                               <span className={`tabular-nums ${monthIsActive ? "text-blue-600" : "text-slate-400"}`}>{monthEvents.length}</span>
