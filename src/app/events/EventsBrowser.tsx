@@ -15,7 +15,14 @@ function getEventGroup(event: TBAEvent): string {
   if (event.event_type === 100) return "Preseason";
   if (event.event_type === 2 || event.event_type === 5) return "District Championship";
   if (event.event_type === 3 || event.event_type === 4) return "FIRST Championship";
-  if (event.event_type === 99) return "Off-Season";
+  if (event.event_type === 99) {
+    // Group offseason events by the calendar month of their start date.
+    const startDate = new Date(`${event.start_date}T00:00:00`);
+    if (!Number.isNaN(startDate.getTime())) {
+      return `Off-Season · ${startDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}`;
+    }
+    return "Off-Season";
+  }
   // TBA's week field is zero-indexed relative to the first official week.
   // Preseason events are separately grouped above and do not shift this value.
   if (event.week != null) return `Week ${event.week + 1}`;
@@ -36,9 +43,10 @@ function compareGroups(
     if (name === "Preseason") return 0;
     const week = /^Week (\d+)$/i.exec(name);
     if (week) return 100 + Number(week[1]);
+    if (name === "District Championship") return 5000;
     if (name === "FIRST Championship") return 10000;
-    if (name === "Off-Season") return 20000;
-    return 5000;
+    if (name.startsWith("Off-Season")) return 20000;
+    return 15000;
   };
   const rankDiff = rank(nameA) - rank(nameB);
   if (rankDiff !== 0) return rankDiff;
@@ -54,20 +62,13 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState("");
 
-  const eventTypes = useMemo(() => {
-    const typeValues = new Map<string, number>();
+  const eventGroups = useMemo(() => {
+    const groupMap = new Map<string, TBAEvent[]>();
     for (const event of events) {
-      const label = event.event_type_string?.trim();
-      if (!label) continue;
-      typeValues.set(label, Math.min(typeValues.get(label) ?? Infinity, event.event_type));
+      const group = getEventGroup(event);
+      groupMap.set(group, [...(groupMap.get(group) ?? []), event]);
     }
-
-    // TBA assigns lower numeric IDs to regular season event types and higher
-    // IDs to preseason/offseason types, so ascending IDs put season events first.
-    return [...typeValues.keys()].sort((a, b) =>
-      (typeValues.get(a)! - typeValues.get(b)!) ||
-      a.localeCompare(b, undefined, { sensitivity: "base" })
-    );
+    return [...groupMap.entries()].sort(compareGroups).map(([name]) => name);
   }, [events]);
 
   const districts = useMemo(() => [...new Map(
@@ -80,7 +81,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const filtered = useMemo(() => events.filter((event) => {
     const districtKey = event.district?.key ?? "none";
     return (district === "all" || districtKey === district) &&
-      (eventType === "all" || event.event_type_string === eventType);
+      (eventType === "all" || getEventGroup(event) === eventType);
   }), [events, district, eventType]);
 
   const groups = useMemo(() => {
@@ -152,10 +153,10 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
         {filterOpen && (
           <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
-              Event type
+              Event group
               <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal">
-                <option value="all">All event types</option>
-                {eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                <option value="all">All event groups</option>
+                {eventGroups.map((group) => <option key={group} value={group}>{group}</option>)}
               </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">
