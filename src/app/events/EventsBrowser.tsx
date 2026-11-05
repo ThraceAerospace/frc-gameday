@@ -13,7 +13,7 @@ function getEventGroup(event: TBAEvent): string {
   // TBA event type IDs: 2/5 are District Championship events, while
   // 3/4 are the FIRST Championship divisions/finals.
   if (event.event_type === 100) return "Preseason";
-  if (event.event_type === 2 || event.event_type === 5) return "District Championship";
+  if (event.event_type === 2 || event.event_type === 5) return "District Championships";
   if (event.event_type === 3 || event.event_type === 4) return "FIRST Championship";
   if (event.event_type === 99) return "Off-Season";
   // TBA's week field is zero-indexed relative to the first official week.
@@ -220,7 +220,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                 </select>
               </label>
             </div>
-            <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Jump to group</h2>
+            
             <nav aria-label="Event groups" className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 lg:block lg:space-y-1 lg:overflow-visible">
               {groups.map(([group, groupEvents]) => {
                 const id = getGroupId(group);
