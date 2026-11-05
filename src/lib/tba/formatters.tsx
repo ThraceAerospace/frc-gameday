@@ -53,6 +53,36 @@ function doubleEliminationBracketInfo(setNum: number): { bracket: "Upper" | "Low
   return bracket && round ? { bracket, round } : null;
 }
 
+export function formatPlayoffMatchGroup(
+  match: Pick<TBAMatch, "comp_level" | "set_number">,
+  playoffType: number | null = null,
+): string {
+  const compLevel = match.comp_level.toLowerCase();
+
+  if (playoffType === 10 || playoffType === 11) {
+    if (compLevel === "f") return "Finals";
+    if (compLevel === "sf") {
+      const bracketInfo = doubleEliminationBracketInfo(match.set_number);
+      return bracketInfo
+        ? `Round ${bracketInfo.round}`
+        : "Playoffs";
+    }
+  }
+
+  switch (compLevel) {
+    case "ef":
+      return "Eighthfinals";
+    case "qf":
+      return "Quarterfinals";
+    case "sf":
+      return playoffType === 5 ? `Playoff ${match.set_number}` : "Semifinals";
+    case "f":
+      return "Finals";
+    default:
+      return "Playoffs";
+  }
+}
+
 export function matchLongName(match: TBAMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
@@ -101,8 +131,19 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
       case "F":
         return `Final ${matchNum}`;
       case "SF":
-        if (eventPlayoffType === 10 || eventPlayoffType === 11 || eventPlayoffType === 5) {
-            return `Playoff ${setNum}`;
+        if (eventPlayoffType === 10 || eventPlayoffType === 11) {
+          const bracketInfo = doubleEliminationBracketInfo(setNum);
+          const bracket = bracketInfo?.bracket === "Upper"
+            ? "UB"
+            : bracketInfo?.bracket === "Lower"
+              ? "LB"
+              : null;
+          return bracket
+            ? `Playoff ${setNum} [${bracket}]`
+            : `Playoff ${setNum}`;
+        }
+        if (eventPlayoffType === 5) {
+          return `Playoff ${setNum}`;
         } else {
           return `Semis ${setNum}-${matchNum}`;
         }
