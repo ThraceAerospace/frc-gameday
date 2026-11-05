@@ -245,7 +245,7 @@ Prefer small, focused cleanup commits.
 
 ## Event Analytics prototype
 
-- The standalone event analytics route is `/insights/event/<event>`; keep it independent of Gameday tile and remote-session lifecycle.
+- The standalone event analytics route is `/insights/event/<event>`. Its UI and analytics pipeline remain independent of Gameday tile/remote-session configuration, but its live event context must use `useEventState` and the shared `/insights` live-runtime layout. Do not create a second WebSocket or duplicate EventState.
 - `src/lib/insights` contains server-side calculations and orchestration. It consumes TBA/Statbotics services; Views must not call upstream APIs directly.
 - The API endpoint pages match records and bounds Statbotics fan-out. Preserve pagination and concurrency limits; do not fetch every match for every team on a page request.
 - Derived event pages use a short Redis cache and a request lock. Do not turn Redis into permanent season-history storage.
