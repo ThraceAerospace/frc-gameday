@@ -1,5 +1,5 @@
 import { statbotics } from "./index";
-import type { StatboticsMatch } from "./types";
+import type { StatboticsMatch, StatboticsTeamEvent, StatboticsTeamYear } from "./types";
 
 export const Statbotics = {
   getMatch: (
@@ -7,4 +7,8 @@ export const Statbotics = {
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsMatch | null> =>
     statbotics.getMatch(matchKey, options),
+  getTeamYear: (team: number, year: number): Promise<StatboticsTeamYear | null> =>
+    statbotics.getTeamYear(team, year),
+  getTeamEvent: (team: number, eventKey: string): Promise<StatboticsTeamEvent | null> =>
+    statbotics.getTeamEvent(team, eventKey),
 };
