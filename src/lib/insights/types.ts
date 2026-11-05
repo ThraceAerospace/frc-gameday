@@ -33,9 +33,6 @@ export type TeamAnalyticsRow = {
   endgameEpa: number | null;
   matchesSeen: number;
   epaPercentile: number | null;
-  oprPercentile: number | null;
-  allianceResidualMean: number | null;
-  allianceResidualSpread: number | null;
 };
 
 export type ReviewFinding = {
