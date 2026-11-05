@@ -117,8 +117,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
           <Metric label="Analyzed matches" value={data.loadedMatchCount} detail="Statbotics records loaded" />
           <Metric label="Score residuals" value={data.residualStats.sampleSize} detail="Alliance samples with scores" />
         </div>
-        <nav aria-label="Analytics views" className="no-scrollbar mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">
-          {TABS.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === item.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{item.label}</button>)}
+        <nav aria-label="Analytics views" className="no-scrollbar mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">          {TABS.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === item.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{item.label}</button>)}
         </nav>
         <div className="mt-5">
           {tab === "review" && <ReviewQueue findings={findings} />}
@@ -149,10 +148,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName }: { event
             <Panel title="Event team table" description="Percentiles are calculated among teams in this event, using currently available EPA and OPR values."><TeamTable teams={teams} /></Panel>
           </section>}
           {tab === "unexpected" && <section className="space-y-4">
-            <Panel title="Predicted vs actual alliance score" description="Each point is one alliance score. Points above the diagonal exceeded prediction; points below fell short."><ResidualPlot residuals={residuals} /></Panel>
-            <Panel title="Largest score residuals" description="Actual minus predicted score. These are alliance outcomes, not individual team contributions."><div className="space-y-2">{[...residuals].sort((a,b)=>Math.abs(b.residual ?? 0)-Math.abs(a.residual ?? 0)).slice(0,20).map((item)=><div key={item.matchKey+item.color} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm"><div><strong>{item.matchLabel}</strong><span className="ml-2 text-xs capitalize text-slate-500">{item.color} alliance</span><p className="text-xs text-slate-500">Teams {item.teamKeys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</p></div><strong className={item.residual! >= 0 ? "text-emerald-700" : "text-rose-700"}>{item.residual! > 0 ? "+" : ""}{fmt(item.residual)} pts</strong></div>)}</div></Panel>
+            <Panel title="Which alliances surprised the model?" description="Each bar is one alliance in one match. Positive values mean the alliance scored more than predicted; negative values mean it scored less. Select a row to open that match on The Blue Alliance."><ResidualBars residuals={residuals} /></Panel>
           </section>}
-          {tab === "models" && <Panel title="EPA vs OPR disagreement" description="Both metrics are converted to within-event percentiles before comparison. Percentiles show relative position, not interchangeable point units."><ModelScatter teams={teams} /></Panel>}
+          {tab === "models" && <Panel title="Where EPA and OPR disagree" description="Each team has two bars showing its percentile among this event's teams. A large gap means the models rank that team differently; it does not tell us which model is correct."><ModelComparisonBars teams={teams} /></Panel>}
           {tab === "consistency" && <section className="space-y-4">
             <Panel title="Team-level alliance outcome context" description="Residual mean and spread summarize alliance scores in matches featuring each team. They do not isolate the team's contribution."><TeamTable teams={[...teams].sort((a,b)=>(b.allianceResidualSpread ?? -1)-(a.allianceResidualSpread ?? -1))} showResidual /></Panel>
             <Panel title="Match-by-match EPA changes" description="The chart shows model rating updates, not observed robot performance."><EpaChangeChart records={data.matches} teams={teams} /></Panel>
@@ -213,17 +211,65 @@ function ReviewQueue({findings}:{findings:ReviewFinding[]}) {
     {!visible.length ? <p className="text-sm text-slate-500">No findings met the current prototype thresholds in this sample.</p> : <div className="space-y-3">{visible.map((finding)=><article key={finding.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${finding.severity==="high"?"bg-rose-100 text-rose-700":finding.severity==="medium"?"bg-amber-100 text-amber-800":"bg-slate-100 text-slate-600"}`}>{finding.severity}</span><span className="text-xs text-slate-400">{finding.category} · {finding.sampleCoverage} sample coverage · n={finding.sampleSize}</span></div><p className="mt-2 text-xs font-semibold text-slate-500">{finding.subject}</p><h3 className="mt-1 font-bold text-slate-900">{finding.title}</h3><p className="mt-1 text-sm text-slate-600">{finding.description}</p><ul className="mt-2 list-disc pl-5 text-xs text-slate-500">{finding.evidence.map((item)=><li key={item}>{item}</li>)}</ul><p className="mt-2 text-xs font-medium text-slate-700">Suggested follow-up: {finding.suggestedAction}</p><div className="mt-3 flex gap-2"><button onClick={()=>setReviewed((current)=>current.includes(finding.id)?current:[...current,finding.id])} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold">{reviewed.includes(finding.id)?"Reviewed":"Mark reviewed"}</button><button onClick={()=>setDismissed((current)=>[...current,finding.id])} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100">Dismiss</button></div></article>)}</div>}
   </Panel>;
 }
-function ResidualPlot({residuals}:{residuals:{matchKey:string;matchLabel:string;color:string;predicted:number|null;actual:number|null;residual:number|null}[]}) {
-  const points=residuals.filter((item)=>item.predicted!==null&&item.actual!==null);
-  if (!points.length) return <p className="text-sm text-slate-500">No completed matches with predictions are available in this sample.</p>;
-  const max=Math.max(1,...points.flatMap((item)=>[item.predicted??0,item.actual??0]))*1.05;
-  const xy=(value:number)=>40+(value/max)*520;
-  return <div className="overflow-x-auto"><svg viewBox="0 0 600 430" className="w-full min-w-[420px]" role="img" aria-label="Predicted versus actual alliance score scatter plot"><line x1="40" y1="390" x2="560" y2="390" stroke="#94a3b8"/><line x1="40" y1="390" x2="40" y2="30" stroke="#94a3b8"/><line x1="40" y1="390" x2="560" y2="30" stroke="#cbd5e1" strokeDasharray="5 5"/>{points.map((item)=><circle key={item.matchKey+item.color} cx={xy(item.predicted!)} cy={390-(item.actual!/max)*360} r="4" fill={item.color==="red"?"#dc2626":"#2563eb"} opacity=".75"><title>{item.matchLabel} {item.color}: predicted {item.predicted}, actual {item.actual}, residual {item.residual}</title></circle>)}<text x="300" y="423" textAnchor="middle" fontSize="12" fill="currentColor">Predicted alliance score</text><text x="12" y="210" transform="rotate(-90 12 210)" textAnchor="middle" fontSize="12" fill="currentColor">Actual alliance score</text></svg><div className="mt-2 flex gap-4 text-xs text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-red-600"/>Red alliance</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600"/>Blue alliance</span></div></div>;
+function ResidualBars({residuals}:{residuals:{matchKey:string;matchLabel:string;color:string;teamKeys:string[];predicted:number|null;actual:number|null;residual:number|null}[]}) {
+  const points=[...residuals].filter((item)=>item.residual!==null&&item.predicted!==null&&item.actual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0)).slice(0,15);
+  if (!points.length) return <p className="text-sm text-slate-500">No completed alliances with both a prediction and an actual score are available in the loaded sample.</p>;
+  const maxAbs=Math.max(1,...points.map((item)=>Math.abs(item.residual??0)));
+  const positive=points.filter((item)=>(item.residual??0)>0).length;
+  const negative=points.filter((item)=>(item.residual??0)<0).length;
+  return <div>
+    <div className="mb-4 grid grid-cols-3 gap-2">
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Alliances shown</p><p className="text-xl font-bold tabular-nums">{points.length}</p></div>
+      <div className="rounded-lg bg-emerald-50 p-3"><p className="text-[11px] text-emerald-700">Above prediction</p><p className="text-xl font-bold tabular-nums text-emerald-800">{positive}</p></div>
+      <div className="rounded-lg bg-rose-50 p-3"><p className="text-[11px] text-rose-700">Below prediction</p><p className="text-xl font-bold tabular-nums text-rose-800">{negative}</p></div>
+    </div>
+    <div className="mb-2 flex flex-wrap justify-between gap-2 text-[11px] text-slate-500"><span>Largest differences first · actual score − predicted score</span><span>Bar length shows size of difference</span></div>
+    <div className="space-y-3">
+      {points.map((item)=> {
+        const value=item.residual??0;
+        const width=Math.abs(value)/maxAbs*100;
+        return <a key={item.matchKey+item.color} href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-100 p-3 transition-colors hover:border-blue-200 hover:bg-blue-50/40">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div><span className="font-semibold text-slate-900">{item.matchLabel}</span><span className={`ml-2 text-xs font-semibold uppercase ${item.color==="red"?"text-rose-700":"text-blue-700"}`}>{item.color} alliance</span><p className="mt-0.5 text-xs text-slate-500">Teams {item.teamKeys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</p></div>
+            <span className={`text-sm font-bold tabular-nums ${value>=0?"text-emerald-700":"text-rose-700"}`}>{value>0?"+":""}{fmt(value)} pts</span>
+          </div>
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px] text-slate-500"><span className="text-right">Predicted {fmt(item.predicted)}</span><span>→</span><span>Actual {fmt(item.actual)}</span></div>
+          <div className="mt-2 flex h-3 items-center rounded-full bg-slate-100">
+            <div className="flex h-full w-1/2 justify-end"><div className={`h-full rounded-l-full ${value<0?"bg-rose-500":"bg-transparent"}`} style={{width:value<0?`${width}%`:"0%"}} /></div>
+            <div className="h-5 w-px shrink-0 bg-slate-400" />
+            <div className="flex h-full w-1/2"><div className={`h-full rounded-r-full ${value>0?"bg-emerald-500":"bg-transparent"}`} style={{width:value>0?`${width}%`:"0%"}} /></div>
+          </div>
+        </a>;
+      })}
+    </div>
+    <p className="mt-3 text-xs text-slate-500">This ranks alliance-level score differences. It cannot identify which robot caused the difference.</p>
+  </div>;
 }
-function ModelScatter({teams}:{teams:TeamAnalyticsRow[]}) {
-  const rows=teams.filter((team)=>team.epaPercentile!==null&&team.oprPercentile!==null);
-  if (!rows.length) return <p className="text-sm text-slate-500">EPA and OPR data are not yet available.</p>;
-  return <div className="overflow-x-auto"><svg viewBox="0 0 600 430" className="w-full min-w-[420px]" role="img" aria-label="EPA percentile versus OPR percentile"><line x1="45" y1="380" x2="560" y2="380" stroke="#94a3b8"/><line x1="45" y1="380" x2="45" y2="30" stroke="#94a3b8"/><line x1="45" y1="380" x2="560" y2="30" stroke="#e2e8f0" strokeDasharray="5 5"/>{rows.map((team)=><circle key={team.teamKey} cx={45+(team.epaPercentile??0)*515} cy={380-(team.oprPercentile??0)*350} r="5" fill="#2563eb" opacity=".75"><title>Team {team.teamNumber}: EPA {percentileLabel(team.epaPercentile)}, OPR {percentileLabel(team.oprPercentile)}</title></circle>)}<text x="300" y="415" textAnchor="middle" fontSize="12" fill="currentColor">EPA percentile</text><text x="12" y="205" transform="rotate(-90 12 205)" textAnchor="middle" fontSize="12" fill="currentColor">OPR percentile</text></svg><p className="mt-2 text-xs text-slate-500">Teams far from the diagonal have greater model disagreement. This compares event-relative rank only.</p></div>;
+function ModelComparisonBars({teams}:{teams:TeamAnalyticsRow[]}) {
+  const rows=[...teams].filter((team)=>team.epaPercentile!==null&&team.oprPercentile!==null).sort((a,b)=>Math.abs((b.epaPercentile??0)-(b.oprPercentile??0))-Math.abs((a.epaPercentile??0)-(a.oprPercentile??0)));
+  if (!rows.length) return <p className="text-sm text-slate-500">EPA and OPR data are not yet available for comparison.</p>;
+  const top=rows.slice(0,20);
+  const largest=top[0];
+  const gap=largest?Math.round(Math.abs((largest.epaPercentile??0)-(largest.oprPercentile??0))*100):0;
+  return <div>
+    <div className="mb-4 rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Largest difference in the loaded event roster</p><p className="mt-1 text-lg font-bold text-slate-900">Team {largest?.teamNumber} <span className="text-sm font-semibold text-amber-700">· {gap} percentile points apart</span></p><p className="mt-1 text-xs text-slate-500">EPA {percentileLabel(largest?.epaPercentile??null)} · OPR {percentileLabel(largest?.oprPercentile??null)}</p></div>
+    <div className="mb-3 flex flex-wrap gap-4 text-xs text-slate-600"><span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-blue-600"/>Statbotics EPA percentile</span><span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-500"/>TBA OPR percentile</span></div>
+    <div className="space-y-3">
+      {top.map((team)=> {
+        const epa=(team.epaPercentile??0)*100, opr=(team.oprPercentile??0)*100;
+        const difference=Math.abs(epa-opr);
+        return <div key={team.teamKey} className="rounded-lg border border-slate-100 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><Link href={`/team/${team.teamNumber}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">Team {team.teamNumber} · {team.name}</Link><span className={`text-xs font-semibold tabular-nums ${difference>=35?"text-amber-700":"text-slate-500"}`}>{Math.round(difference)}-point gap</span></div>
+          <PercentileBar label="EPA" value={epa} color="bg-blue-600"/>
+          <PercentileBar label="OPR" value={opr} color="bg-amber-500"/>
+        </div>;
+      })}
+    </div>
+    <p className="mt-3 text-xs text-slate-500">100th percentile means highest in this event's comparable team sample; 0th means lowest. These are relative ranks, not points or probabilities. Teams without both metrics are omitted.</p>
+  </div>;
+}
+function PercentileBar({label,value,color}:{label:string;value:number;color:string}) {
+  return <div className="grid grid-cols-[42px_1fr_42px] items-center gap-2 text-xs"><span className="text-slate-500">{label}</span><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${color}`} style={{width:`${Math.max(0,Math.min(100,value))}%`}}/></div><span className="text-right font-semibold tabular-nums text-slate-700">{Math.round(value)}%</span></div>;
 }
 function EpaChangeChart({records,teams}:{records:EventAnalyticsResponse["matches"];teams:TeamAnalyticsRow[]}) {
   const [selected,setSelected]=useState("");
