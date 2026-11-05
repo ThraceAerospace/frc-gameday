@@ -42,11 +42,12 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
   const token = randomUUID();
   const acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
   if (acquired !== "OK") {
-    for (let attempt = 0; attempt < 12; attempt++) {
+    for (let attempt = 0; attempt < 20; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       const result = await redis.get(cacheKey);
       if (result) return JSON.parse(result) as EventAnalyticsResponse;
     }
+    throw new Error("An analytics request for this event page is already in progress");
   }
 
   try {
