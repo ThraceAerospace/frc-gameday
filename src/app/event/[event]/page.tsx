@@ -160,6 +160,12 @@ export default async function EventPage({
                 label="Teams"
                 count={sortedTeams.length}
               />
+              <Link
+                href={`/insights/event/${event.key}`}
+                className="border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-500 hover:text-slate-800"
+              >
+                Analytics
+              </Link>
             </nav>
           </header>
 
