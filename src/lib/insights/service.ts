@@ -7,7 +7,7 @@ import { buildAllianceResults, buildReviewFindings, buildTeamRows, mean, standar
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
 
 const CACHE_TTL_SECONDS = 60;
-const LOCK_TTL_SECONDS = 45;
+const LOCK_TTL_SECONDS = 90;
 const CACHE_PREFIX = "cache:insights:event:";
 const LOCK_PREFIX = "lock:insights:event:";
 const MAX_PAGE_SIZE = 40;
@@ -40,14 +40,27 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
 
   const lockKey = `${LOCK_PREFIX}${eventKey}:${safeOffset}:${limit}`;
   const token = randomUUID();
-  const acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
+  let acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
   if (acquired !== "OK") {
-    for (let attempt = 0; attempt < 20; attempt++) {
+    // Another request may be building this page. Prefer its cached result,
+    // but if it fails and releases the lock, take over instead of returning
+    // a spurious 502 to every waiting request.
+    for (let attempt = 0; attempt < 40; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       const result = await redis.get(cacheKey);
-      if (result) return JSON.parse(result) as EventAnalyticsResponse;
+      if (result) {
+        try {
+          return JSON.parse(result) as EventAnalyticsResponse;
+        } catch {
+          await redis.del(cacheKey);
+        }
+      }
+      acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
+      if (acquired === "OK") break;
     }
-    throw new Error("An analytics request for this event page is already in progress");
+    if (acquired !== "OK") {
+      throw new Error("An analytics request for this event page is still in progress");
+    }
   }
 
   try {
@@ -78,6 +91,14 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
     await redis.set(cacheKey, JSON.stringify(payload), "EX", CACHE_TTL_SECONDS);
     return payload;
   } finally {
-    if (acquired === "OK") await releaseLock(lockKey, token);
+    if (acquired === "OK") {
+      try {
+        await releaseLock(lockKey, token);
+      } catch (error) {
+        // The lock has a finite TTL; don't mask the original request failure
+        // if Redis is temporarily unavailable during cleanup.
+        console.error("[Insights] failed to release event analytics lock", eventKey, error);
+      }
+    }
   }
 }
