@@ -26,6 +26,10 @@ function getGroupId(group: string): string {
   return `event-group-${group.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 
+function getOffseasonMonthId(monthKey: string): string {
+  return `offseason-month-${monthKey}`;
+}
+
 function compareGroups(
   a: [string, TBAEvent[]],
   b: [string, TBAEvent[]]
@@ -53,6 +57,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   const [eventType, setEventType] = useState("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState("");
+  const [activeOffseasonMonth, setActiveOffseasonMonth] = useState("");
 
   const eventTypes = useMemo(() => {
     const typeLabels = new Map<number, string>();
@@ -107,14 +112,49 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
       .sort(compareGroups);
   }, [filtered]);
 
+  const offseasonMonths = useMemo(() => {
+    const offseason = groups.find(([name]) => name === "Off-Season");
+    if (!offseason) return [];
+
+    const monthMap = new Map<string, TBAEvent[]>();
+    for (const event of offseason[1]) {
+      const match = /^(\\d{4})-(\\d{2})-/.exec(event.start_date);
+      if (!match) continue;
+      const monthKey = `${match[1]}-${match[2]}`;
+      const monthEvents = monthMap.get(monthKey) ?? [];
+      monthEvents.push(event);
+      monthMap.set(monthKey, monthEvents);
+    }
+
+    const hasMultipleYears = new Set([...monthMap.keys()].map((key) => key.slice(0, 4))).size > 1;
+    return [...monthMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, monthEvents]) => {
+        const [year, month] = key.split("-").map(Number);
+        const label = new Date(year, month - 1, 1).toLocaleString(undefined, { month: "long" });
+        return {
+          key,
+          id: getOffseasonMonthId(key),
+          label: hasMultipleYears ? `${label} ${year}` : label,
+          events: monthEvents,
+        };
+      });
+  }, [groups]);
+
   useEffect(() => {
     if (!groups.length) {
       setActiveGroup("");
+      setActiveOffseasonMonth("");
       return;
     }
 
-    const groupIds = groups.map(([name]) => getGroupId(name));
-    const sections = groupIds
+    const scrollspyIds = groups.flatMap(([name]) => {
+      const groupId = getGroupId(name);
+      return name === "Off-Season"
+        ? [groupId, ...offseasonMonths.map(({ id }) => id)]
+        : [groupId];
+    });
+    const sections = scrollspyIds
       .map((id) => document.getElementById(id))
       .filter((section): section is HTMLElement => section !== null);
     const scrollContainer = document.querySelector("[data-scroll-container]");
@@ -125,7 +165,17 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
       const visible = entries
         .filter((entry) => entry.isIntersecting)
         .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (visible[0]) setActiveGroup(visible[0].target.id);
+      if (!visible[0]) return;
+
+      const activeId = visible[0].target.id;
+      const activeMonth = offseasonMonths.find(({ id }) => id === activeId);
+      if (activeMonth) {
+        setActiveGroup(getGroupId("Off-Season"));
+        setActiveOffseasonMonth(activeMonth.id);
+      } else {
+        setActiveGroup(activeId);
+        setActiveOffseasonMonth("");
+      }
     }, {
       root: scrollContainer,
       rootMargin: "-15% 0px -70% 0px",
@@ -133,10 +183,14 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
     });
 
     sections.forEach((section) => observer.observe(section));
-    setActiveGroup((current) => groupIds.includes(current) ? current : groupIds[0]);
+    const firstId = scrollspyIds[0];
+    setActiveGroup((current) => scrollspyIds.includes(current) ? current : firstId);
+    setActiveOffseasonMonth((current) =>
+      offseasonMonths.some(({ id }) => id === current) ? current : ""
+    );
 
     return () => observer.disconnect();
-  }, [groups]);
+  }, [groups, offseasonMonths]);
 
   return (
     <SiteShell events={events}>
@@ -179,16 +233,42 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                 const id = getGroupId(group);
                 const isActive = activeGroup === id;
                 return (
-                  <a
-                    key={group}
-                    href={`#${id}`}
-                    onClick={() => setActiveGroup(id)}
-                    aria-current={isActive ? "location" : undefined}
-                    className={`flex shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                  >
-                    <span>{group}</span>
-                    <span className={`text-xs tabular-nums ${isActive ? "text-blue-600" : "text-slate-400"}`}>{groupEvents.length}</span>
-                  </a>
+                  <div key={group} className="shrink-0 lg:shrink">
+                    <a
+                      href={`#${id}`}
+                      onClick={() => {
+                        setActiveGroup(id);
+                        setActiveOffseasonMonth("");
+                      }}
+                      aria-current={isActive ? "location" : undefined}
+                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                    >
+                      <span>{group}</span>
+                      <span className={`text-xs tabular-nums ${isActive ? "text-blue-600" : "text-slate-400"}`}>{groupEvents.length}</span>
+                    </a>
+                    {group === "Off-Season" && offseasonMonths.length > 0 && (
+                      <div className="ml-3 mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                        {offseasonMonths.map(({ id: monthId, label, events: monthEvents }) => {
+                          const monthIsActive = activeOffseasonMonth === monthId;
+                          return (
+                            <a
+                              key={monthId}
+                              href={`#${monthId}`}
+                              onClick={() => {
+                                setActiveGroup(id);
+                                setActiveOffseasonMonth(monthId);
+                              }}
+                              aria-current={monthIsActive ? "location" : undefined}
+                              className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${monthIsActive ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                            >
+                              <span>{label}</span>
+                              <span className={`tabular-nums ${monthIsActive ? "text-blue-600" : "text-slate-400"}`}>{monthEvents.length}</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>
@@ -196,30 +276,62 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
 
           <div className="min-w-0 space-y-8">
             {groups.map(([group, groupEvents]) => (
-              <section key={group} id={getGroupId(group)} className="scroll-mt-6">
-                <div className="mb-3 flex items-baseline justify-between gap-3">
+              <section key={group} className="scroll-mt-6">
+                <div id={getGroupId(group)} className="mb-3 flex scroll-mt-6 items-baseline justify-between gap-3">
                   <h2 className="text-lg font-bold text-slate-900">{group}</h2>
                   <span className="text-sm font-medium text-slate-400">{groupEvents.length} {groupEvents.length === 1 ? "event" : "events"}</span>
                 </div>
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  {groupEvents.map((event, index) => {
-                    const webcastStatus = getEventWebcastStatus(event);
-                    return (
-                      <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">{event.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
-                          <p className="mt-1 text-xs text-slate-400"><EventDateRange startDate={event.start_date} endDate={event.end_date} /> · {event.key}</p>
-                          <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold">
-                            <VideoCameraIcon className="h-4 w-4" />
-                            <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
-                          </p>
+                {group === "Off-Season" ? (
+                  <div className="space-y-6">
+                    {offseasonMonths.map(({ id, label, events: monthEvents }) => (
+                      <section key={id} className="scroll-mt-6">
+                        <div id={id} className="mb-2 flex scroll-mt-6 items-baseline justify-between gap-3">
+                          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">{label}</h3>
+                          <span className="text-xs font-medium text-slate-400">{monthEvents.length} {monthEvents.length === 1 ? "event" : "events"}</span>
                         </div>
-                        <span className="shrink-0 text-xs font-semibold text-blue-600">View →</span>
-                      </Link>
-                    );
-                  })}
-                </div>
+                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                          {monthEvents.map((event, index) => {
+                            const webcastStatus = getEventWebcastStatus(event);
+                            return (
+                              <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
+                                <div className="min-w-0">
+                                  <p className="truncate font-semibold text-slate-900">{event.name}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
+                                  <p className="mt-1 text-xs text-slate-400"><EventDateRange startDate={event.start_date} endDate={event.end_date} /> · {event.key}</p>
+                                  <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold">
+                                    <VideoCameraIcon className="h-4 w-4" />
+                                    <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-xs font-semibold text-blue-600">View →</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    {groupEvents.map((event, index) => {
+                      const webcastStatus = getEventWebcastStatus(event);
+                      return (
+                        <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-blue-50/60 ${index ? "border-t border-slate-100" : ""}`}>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{event.name}</p>
+                            <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
+                            <p className="mt-1 text-xs text-slate-400"><EventDateRange startDate={event.start_date} endDate={event.end_date} /> · {event.key}</p>
+                            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold">
+                              <VideoCameraIcon className="h-4 w-4" />
+                              <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-semibold text-blue-600">View →</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             ))}
             {!groups.length && (
