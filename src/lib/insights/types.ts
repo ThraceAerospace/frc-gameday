@@ -46,7 +46,7 @@ export type ReviewFinding = {
   description: string;
   evidence: string[];
   sampleSize: number;
-  confidence: "low" | "medium" | "high";
+  sampleCoverage: "low" | "medium" | "high";
   suggestedAction: string;
   severity: "high" | "medium" | "low";
 };
