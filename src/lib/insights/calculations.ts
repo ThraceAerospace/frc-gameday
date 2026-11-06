@@ -224,10 +224,13 @@ export function buildSeasonAwareTeamInsights(
   const ordered = [...changes].sort((a,b) => b.change-a.change);
   const byTeam = new Map(changes.map((item) => [item.teamNumber, { ...item, cohortRank: ordered.findIndex((other) => other.teamNumber === item.teamNumber)+1, cohortSize: ordered.length }]));
   return insights.map((insight) => {
+    const history = cohort.records.filter((record) => record.teamNumber === insight.teamNumber)
+      .sort((a,b) => a.event.startDate.localeCompare(b.event.startDate))
+      .map((record) => ({ event: { key: record.event.key, name: record.event.name, startDate: record.event.startDate }, epaTotal: record.epaTotal, matches: record.matches, status: record.status }));
     const comparison = byTeam.get(insight.teamNumber) ?? null;
-    if (!comparison) return { ...insight, seasonComparison: null };
+    if (!comparison) return { ...insight, seasonComparison: null, seasonHistory: history };
     const ordinal = (value:number) => { const n=value%100; return n>=11&&n<=13?"th":value%10===1?"st":value%10===2?"nd":value%10===3?"rd":"th"; };
-    return { ...insight, seasonComparison: comparison, summary: [...insight.summary,
+    return { ...insight, seasonComparison: comparison, seasonHistory: history, summary: [...insight.summary,
       `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change>=0?"increased":"decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ${comparison.cohortRank}${ordinal(comparison.cohortRank)}-largest change among ${comparison.cohortSize} event teams with usable prior-event records.`] };
   });
 }
