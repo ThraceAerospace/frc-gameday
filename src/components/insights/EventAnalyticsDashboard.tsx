@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/lib/insights/types";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
@@ -222,14 +223,24 @@ function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"b
           const previous=index>0?history.events[index-1].statbotics?.epa?.total_points:undefined;
           const change=typeof epa==="number"&&typeof previous==="number"?epa-previous:null;
           const qualRecord=item.statbotics?.record?.qual;
-          return <tr key={item.event.key} className="border-t border-slate-100">
-            <td className="px-2 py-2 font-medium text-slate-700">{item.event.short_name ?? item.event.name}<span className="ml-1 text-[10px] text-slate-400">{item.status==="unavailable"?"· unavailable":""}</span></td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmt(epa)}</td>
-            <td className={"px-2 py-2 text-right tabular-nums " + (change===null?"text-slate-400":change>=0?"text-emerald-700":"text-rose-700")}>{change===null?"—":(change>0?"+":"")+fmt(change)}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{qualRecord?`${qualRecord.wins ?? 0}-${qualRecord.losses ?? 0}`:"—"}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmt(qualRecord?.rps_per_match,2)}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{qualRecord?.rank ?? "—"}</td>
-          </tr>;
+          const elimRecord=item.statbotics?.record?.elim;
+          const totalRecord=item.statbotics?.record?.total;
+          const breakdown=item.statbotics?.epa?.breakdown ?? {};
+          const componentRows=Object.entries(breakdown).filter(([,value])=>typeof value==="number");
+          return <Fragment key={item.event.key}>
+            <tr className="border-t border-slate-100">
+              <td className="px-2 py-2 font-medium text-slate-700">{item.event.short_name ?? item.event.name}<span className="ml-1 text-[10px] text-slate-400">{item.status==="unavailable"?"· unavailable":""}</span></td>
+              <td className="px-2 py-2 text-right tabular-nums">{fmt(epa)}</td>
+              <td className={"px-2 py-2 text-right tabular-nums " + (change===null?"text-slate-400":change>=0?"text-emerald-700":"text-rose-700")}>{change===null?"—":(change>0?"+":"")+fmt(change)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{qualRecord?`${qualRecord.wins ?? 0}-${qualRecord.losses ?? 0}`:"—"}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{fmt(qualRecord?.rps_per_match,2)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{qualRecord?.rank != null ? `${qualRecord.rank}${qualRecord.num_teams ? ` / ${qualRecord.num_teams}` : ""}` : "—"}</td>
+            </tr>
+            {item.statbotics && <tr className="bg-slate-50/70"><td colSpan={6} className="px-2 pb-3 pt-1">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500"><span>Overall {totalRecord ? `${totalRecord.wins ?? 0}-${totalRecord.losses ?? 0}-${totalRecord.ties ?? 0}` : "—"}</span><span>Playoffs {elimRecord ? `${elimRecord.wins ?? 0}-${elimRecord.losses ?? 0}` : "—"}</span><span>Event EPA {fmt(epa)}</span></div>
+              {componentRows.length>0 && <div className="mt-2 flex flex-wrap gap-2">{componentRows.map(([key,value])=><span key={key} className="rounded bg-white px-2 py-1 text-[10px] text-slate-600">{key.replaceAll("_"," ")} <strong className="tabular-nums">{fmt(value)}</strong></span>)}</div>}
+            </td></tr>}
+          </Fragment>;
         })}</tbody>
       </table>
     </div>
