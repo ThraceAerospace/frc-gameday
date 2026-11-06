@@ -25,11 +25,11 @@ export default function HomeMatchCard({ match, eventTimezone, isNext = false }: 
           : "Time TBD";
 
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2">
-      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2.5">
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-x-2.5">
         <div className="flex min-w-0 flex-col justify-center border-r border-slate-200 pr-2">
           <span className="text-[10px] font-bold leading-tight text-slate-700">{matchShortName(match)}</span>
-          <span className="mt-1 text-[9px] font-medium leading-tight tabular-nums text-slate-500">{time}</span>
+          <span className="mt-1 w-[64px] whitespace-nowrap text-[9px] font-medium leading-tight tabular-nums text-slate-500">{time}</span>
         </div>
         <div className="min-w-0 space-y-1.5">
           <div className="flex min-w-0 items-center justify-between gap-2">

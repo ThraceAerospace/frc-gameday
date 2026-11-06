@@ -239,6 +239,7 @@ Prefer small, focused cleanup commits.
 
 ## Coding approach
 
+- Always use Tailwind CSS utilities where they provide the needed styling; do not add custom CSS for styles Tailwind already supports.
 - Do not duplicate logic that already exists; search for and reuse existing helpers. For date/time parsing, formatting, and timezone behavior, use `src/lib/time`. If a needed helper is missing, add it there for reuse.
 - Keep data fetching in hooks/services rather than presentation components where practical.
 - Keep Multiview state transitions explicit.

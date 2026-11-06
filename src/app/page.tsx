@@ -6,7 +6,7 @@ import HomeEventCard from "@/components/event/HomeEventCard";
 import { TBA } from "@/lib/tba/service";
 import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import type { TBAEvent } from "@/lib/tba/types";
-import { parseLocalDate } from "@/lib/time";
+import { getEventCompetitionStatus, parseLocalDate } from "@/lib/time";
 
 export const revalidate = 3600;
 
@@ -54,6 +54,23 @@ const getHomepageSnapshot = unstable_cache(
 
 export default async function HomePage() {
   const { allEvents, eventSummaries } = await getHomepageSnapshot();
+  const now = new Date();
+  const statusOrder = { inProgress: 0, upcoming: 1, completed: 2 } as const;
+  const sortedEventSummaries = [...eventSummaries].sort((a, b) =>
+    statusOrder[getEventCompetitionStatus(
+      a.event.start_date,
+      a.event.end_date,
+      a.event.timezone,
+      now,
+    )] - statusOrder[getEventCompetitionStatus(
+      b.event.start_date,
+      b.event.end_date,
+      b.event.timezone,
+      now,
+    )]
+    || a.event.start_date.localeCompare(b.event.start_date)
+    || a.event.name.localeCompare(b.event.name),
+  );
 
   return (
     <SiteShell events={allEvents}>
@@ -80,7 +97,7 @@ export default async function HomePage() {
 
           {eventSummaries.length ? (
             <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              {eventSummaries.map((summary) => (
+              {sortedEventSummaries.map((summary) => (
                 <HomeEventCard key={summary.event.key} {...summary} />
               ))}
             </div>

@@ -8,7 +8,7 @@ import Link from "next/link";
 import HomeMatchCard from "@/components/event/HomeMatchCard";
 import type { TBAEvent, TBAMatch } from "@/lib/tba/types";
 import { formatEventName, getEventWebcastStatus } from "@/lib/tba/formatters";
-import { formatEventDateRange } from "@/lib/time";
+import { formatEventDateRange, getEventCompetitionStatus } from "@/lib/time";
 
 type HomeEventCardProps = {
   event: TBAEvent;
@@ -17,20 +17,14 @@ type HomeEventCardProps = {
 };
 
 function getCompetitionStatus(event: TBAEvent) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: event.timezone ?? "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-      .formatToParts(new Date())
-      .map(({ type, value }) => [type, value]),
+  const status = getEventCompetitionStatus(
+    event.start_date,
+    event.end_date,
+    event.timezone,
   );
-  const today = `${parts.year}-${parts.month}-${parts.day}`;
 
-  if (today < event.start_date) return { label: "Upcoming", className: "bg-blue-50 text-blue-700 ring-blue-200" };
-  if (today > event.end_date) return { label: "Completed", className: "bg-slate-100 text-slate-600 ring-slate-200" };
+  if (status === "upcoming") return { label: "Upcoming", className: "bg-blue-50 text-blue-700 ring-blue-200" };
+  if (status === "completed") return { label: "Completed", className: "bg-slate-100 text-slate-600 ring-slate-200" };
   return { label: "In progress", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
 }
 
@@ -55,7 +49,7 @@ export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEvent
           <h3 className="min-w-0 text-sm font-bold leading-snug text-slate-900">
             <Link href={`/event/${event.key}`} className="hover:text-blue-700">{eventName}</Link>
           </h3>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1 ring-inset ${competitionStatus.className}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1 ring-inset ${competitionStatus.className} ${competitionStatus.label === "In progress" ? "dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800" : ""}`}>
             {competitionStatus.label}
           </span>
           <Link href={`/event/${event.key}`} aria-label={`View ${eventName}`} className="ml-auto shrink-0 text-slate-300 hover:text-blue-600">
