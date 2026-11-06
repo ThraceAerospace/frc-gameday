@@ -47,7 +47,7 @@ export default async function DistrictPage({ params }: { params: Promise<{ distr
           <section className="min-w-0">
             <h2 className="mb-3 text-lg font-bold text-slate-900">District rankings</h2>
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              {rankings.map((ranking, index) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0"><Link href={`/team/${ranking.team_key}?year=${year}`} className="font-mono text-sm font-semibold text-slate-800 hover:text-blue-700">{ranking.team_key ? formatTeamNumber(ranking.team_key) : "—"}</Link><span className="text-sm font-semibold tabular-nums text-slate-600">{ranking.point_total ?? ranking.total_points ?? "—"} pts</span></div>)}
+              {rankings.map((ranking, index) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0"><Link href={`/team/${ranking.team_key}?year=${year}`} className="font-mono text-sm font-semibold text-slate-800 hover:text-blue-700">{ranking.team_key ? formatTeamNumber(ranking.team_key) : "—"}</Link><span className="text-sm font-semibold tabular-nums text-slate-600">{ranking.point_total ?? "—"} pts</span></div>)}
               {!rankings.length && <p className="p-4 text-sm text-slate-500">No rankings are available yet.</p>}
             </div>
           </section>
