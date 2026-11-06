@@ -123,7 +123,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum,value)=>sum+(value??0),0);
       }
       const actualComponents: Record<string, number> = {};
-      const breakdownFields: Record<string,string[]> = { auto:["totalAutoPoints","autoPoints","auto_points"], teleop:["totalTeleopPoints","teleopPoints","teleop_points"], endgame:["totalTowerPoints","endGamePoints","endgamePoints","endGameBargePoints"], fouls:["foulPoints","foul_points"] };
+      const breakdownFields: Record<string,string[]> = { auto:["totalAutoPoints","autoPoints","auto_points"], teleop:["totalTeleopPoints","teleopPoints","teleop_points"], endgame:["endGameTowerPoints","endGamePoints","endgamePoints","endGameBargePoints","totalTowerPoints"], fouls:["foulPoints","foul_points"] };
       for (const [label, candidates] of Object.entries(breakdownFields)) {
         const field = candidates.find((candidate) => typeof actualRP[candidate] === "number");
         if (field) actualComponents[label] = actualRP[field] as number;
