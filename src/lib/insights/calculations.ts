@@ -226,3 +226,29 @@ export function buildTeamInsights(
 }
 function ordinalSuffix(value: number): string { const mod100 = value % 100; if (mod100 >= 11 && mod100 <= 13) return "th"; return value % 10 === 1 ? "st" : value % 10 === 2 ? "nd" : value % 10 === 3 ? "rd" : "th"; }
 function fmtValue(value: number | null): string { return value === null ? "—" : value.toFixed(1); }
+
+
+export function buildSeasonAwareTeamInsights(
+  records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[],
+  rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
+  cohort: import("./types").SeasonCohortSnapshot, targetEventKey: string, targetStartDate: string,
+): import("./types").TeamInsight[] {
+  const insights = buildTeamInsights(records, allianceResults, teams, rankings);
+  const usable = cohort.records.filter((record) => record.status === "ready" && record.epaTotal !== null);
+  const changes = teams.flatMap((team) => {
+    const current = usable.find((record) => record.teamNumber === team.teamNumber && record.event.key === targetEventKey);
+    const prior = usable.filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
+      .sort((a,b) => b.event.startDate.localeCompare(a.event.startDate))[0];
+    if (!current || !prior || current.epaTotal === null || prior.epaTotal === null) return [];
+    return [{ teamNumber: team.teamNumber, priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate }, priorEPA: prior.epaTotal, currentEPA: current.epaTotal, change: current.epaTotal - prior.epaTotal }];
+  });
+  const ordered = [...changes].sort((a,b) => b.change-a.change);
+  const byTeam = new Map(changes.map((item) => [item.teamNumber, { ...item, cohortRank: ordered.findIndex((other) => other.teamNumber === item.teamNumber)+1, cohortSize: ordered.length }]));
+  return insights.map((insight) => {
+    const comparison = byTeam.get(insight.teamNumber) ?? null;
+    if (!comparison) return { ...insight, seasonComparison: null };
+    const ordinal = (value:number) => { const n=value%100; return n>=11&&n<=13?"th":value%10===1?"st":value%10===2?"nd":value%10===3?"rd":"th"; };
+    return { ...insight, seasonComparison: comparison, summary: [...insight.summary,
+      `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change>=0?"increased":"decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ${comparison.cohortRank}${ordinal(comparison.cohortRank)}-largest change among ${comparison.cohortSize} event teams with usable prior-event records.`] };
+  });
+}

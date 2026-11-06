@@ -151,7 +151,7 @@ export async function advanceSeasonCohort(eventKey: string): Promise<void> {
       await withConcurrency(batch, CONCURRENCY, async (pair) => {
         const id = pairKey(pair);
         try {
-          const record = await Statbotics.getTeamEvent(pair.teamNumber, pair.event.key);
+          const record = await Statbotics.getTeamEvent(pair.teamNumber, pair.event.key, { refresh: pair.event.key === eventKey });
           const total = finite(record?.epa?.total_points);
           const breakdown = Object.fromEntries(Object.entries(record?.epa?.breakdown ?? {})
             .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));

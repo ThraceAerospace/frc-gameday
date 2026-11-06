@@ -159,6 +159,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
             <TeamSnapshot teams={teams} selectedTeam={teamFocus} onSelect={setTeamFocus} team={selectedFocus} insight={focusedInsight ?? null} />
+            {data.seasonCohort ? <p className="text-xs text-slate-500">Season comparison data: {data.seasonCohort.processedTeamEventRecords} / {data.seasonCohort.totalTeamEventRecords} team-event records · {data.seasonCohort.state} · {data.seasonCohort.unavailableTeamEventRecords} unavailable or failed.</p> : null}
             <Panel title="Compare teams" description="Compare two event teams, then expand into their season-long Statbotics histories: event-by-event EPA, component estimates, records, ranking points, event ranks, and shared-event comparisons. EPA and OPR are separate models, not interchangeable scores.">
               <div className="grid gap-3 sm:grid-cols-2">
                 <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
@@ -245,6 +246,7 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
       </div>
       <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">{insight.summary.map((item,index)=><li key={index}>{item}</li>)}</ul>
+      {insight.seasonComparison ? <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/40 p-3"><h4 className="text-sm font-bold text-slate-900">Compared with its previous event</h4><p className="mt-1 text-sm text-slate-700">EPA {fmt(insight.seasonComparison.priorEPA,1)} → {fmt(insight.seasonComparison.currentEPA,1)} ({insight.seasonComparison.change>0?"+":""}{fmt(insight.seasonComparison.change,1)}). {insight.seasonComparison.cohortRank}{insight.seasonComparison.cohortRank===1?"st":insight.seasonComparison.cohortRank===2?"nd":insight.seasonComparison.cohortRank===3?"rd":"th"} largest change among {insight.seasonComparison.cohortSize} event teams with usable histories. Previous event: {insight.seasonComparison.priorEvent.name}.</p></div> : null}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <HistoryMetric label="Event EPA" value={fmt(insight.metrics.epa,2)}/>
         <HistoryMetric label="Event percentile" value={insight.metrics.epaPercentile===null?"—":`${Math.round(insight.metrics.epaPercentile*100)}th`}/>
