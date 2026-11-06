@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
 import HomeEventCard from "@/components/event/HomeEventCard";
@@ -22,27 +23,37 @@ function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 }
 
-export default async function HomePage() {
-  const allEvents = await TBA.getEvents(new Date().getFullYear());
-  const weekEvents = getCalendarWeekEvents(allEvents);
+const getHomepageSnapshot = unstable_cache(
+  async () => {
+    const allEvents = await TBA.getEvents(new Date().getFullYear());
+    const weekEvents = getCalendarWeekEvents(allEvents);
 
-  // Read the canonical full event match cache. TBAClient handles Redis freshness,
-  // ETags, webhook mutations, and upstream reconciliation for each schedule.
-  const eventSummaries = await Promise.all(
-    weekEvents.map(async (event) => {
-      try {
-        const matches = sortMatches(await TBA.getEventMatches(event.key));
-        return {
-          event,
-          lastMatch: getLastMatch(matches),
-          nextMatch: getNextMatch(matches),
-        };
-      } catch (error) {
-        console.error(`Failed to load homepage match summary for ${event.key}:`, error);
-        return { event, lastMatch: null, nextMatch: null };
-      }
-    }),
-  );
+    // Read the canonical full event match cache. TBAClient handles Redis freshness,
+    // ETags, webhook mutations, and upstream reconciliation for each schedule.
+    const eventSummaries = await Promise.all(
+      weekEvents.map(async (event) => {
+        try {
+          const matches = sortMatches(await TBA.getEventMatches(event.key));
+          return {
+            event,
+            lastMatch: getLastMatch(matches),
+            nextMatch: getNextMatch(matches),
+          };
+        } catch (error) {
+          console.error(`Failed to load homepage match summary for ${event.key}:`, error);
+          return { event, lastMatch: null, nextMatch: null };
+        }
+      }),
+    );
+
+    return { allEvents, eventSummaries };
+  },
+  ["homepage-event-snapshot"],
+  { revalidate: 3600, tags: ["homepage-events"] },
+);
+
+export default async function HomePage() {
+  const { allEvents, eventSummaries } = await getHomepageSnapshot();
 
   return (
     <SiteShell events={allEvents}>
@@ -68,7 +79,7 @@ export default async function HomePage() {
           </div>
 
           {eventSummaries.length ? (
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
               {eventSummaries.map((summary) => (
                 <HomeEventCard key={summary.event.key} {...summary} />
               ))}

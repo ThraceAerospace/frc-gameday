@@ -11,20 +11,26 @@ type HomeEventCardProps = {
   nextMatch: TBAMatch | null;
 };
 
-function getCompetitionStatus(lastMatch: TBAMatch | null, nextMatch: TBAMatch | null) {
-  if (lastMatch && nextMatch) {
-    return { label: "In progress", className: "bg-emerald-50 text-emerald-700" };
-  }
+function getCompetitionStatus(event: TBAEvent) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: event.timezone ?? "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(new Date())
+      .map(({ type, value }) => [type, value]),
+  );
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
 
-  if (lastMatch) {
-    return { label: "Completed", className: "bg-slate-100 text-slate-600" };
-  }
-
-  if (nextMatch) {
+  if (today < event.start_date) {
     return { label: "Upcoming", className: "bg-blue-50 text-blue-700" };
   }
-
-  return { label: "Match data unavailable", className: "bg-slate-100 text-slate-500" };
+  if (today > event.end_date) {
+    return { label: "Completed", className: "bg-slate-100 text-slate-600" };
+  }
+  return { label: "In progress", className: "bg-emerald-50 text-emerald-700" };
 }
 
 export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEventCardProps) {
@@ -37,7 +43,7 @@ export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEvent
       : webcastStatus === "Offline"
         ? "Webcast offline"
         : "No webcast";
-  const competitionStatus = getCompetitionStatus(lastMatch, nextMatch);
+  const competitionStatus = getCompetitionStatus(event);
 
   return (
     <Link
@@ -92,7 +98,7 @@ export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEvent
         {nextMatch ? (
           <div className="min-w-0">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Next match</p>
-            <MatchCard match={nextMatch} isNext eventTimezone={event.timezone ?? undefined} playoffType={event.playoff_type ?? null} />
+            <MatchCard match={nextMatch} eventTimezone={event.timezone ?? undefined} playoffType={event.playoff_type ?? null} />
           </div>
         ) : null}
       </div>

@@ -262,3 +262,11 @@ Prefer small, focused cleanup commits.
 - Retrieve each event's canonical full match schedule through `TBA.getEventMatches`; derive last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
 - Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a homepage-specific match cache, browser polling, or a homepage WebSocket subscription.
 - Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
+
+
+## Homepage event snapshot
+
+- The homepage (`src/app/page.tsx`) is a Server Component with one-hour ISR (`revalidate = 3600`). It renders the current Sunday–Saturday event list and event summaries into the initial HTML.
+- The complete homepage data snapshot is wrapped in `unstable_cache` with a one-hour revalidation period. It retrieves each event's canonical full match schedule through `TBA.getEventMatches` and derives last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
+- Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a separate homepage match cache, browser polling, or a homepage WebSocket subscription.
+- Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
