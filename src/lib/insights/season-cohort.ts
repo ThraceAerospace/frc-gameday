@@ -10,9 +10,9 @@ const TTL_SECONDS = 24 * 60 * 60;
 const LOCK_SECONDS = 45;
 const PREFIX = "insights:season-cohort:v1:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
-const DISCOVERY_BATCH = 8;
+const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
-const CONCURRENCY = 2;
+const CONCURRENCY = 1;
 const MAX_ATTEMPTS = 2;
 const WORK_BUDGET_MS = 22_000;
 const CURRENT_EVENT_REFRESH_MS = 10 * 60 * 1000;
@@ -30,6 +30,7 @@ type Job = {
   discoveryFailures: number[];
   updatedAt: number;
   currentEventRefreshedAt: number | null;
+  rosterRefreshedAt?: number;
 };
 
 function key(eventKey: string) { return PREFIX + eventKey; }
@@ -96,6 +97,19 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
       discoveryAttempts: {}, recordQueue: [], recordAttempts: {}, records: {},
       discoveryFailures: [], updatedAt: Date.now(), currentEventRefreshedAt: null,
     };
+    await writeJob(eventKey, job);
+  }
+  // Reconcile the target event roster periodically; newly added teams join discovery.
+  if (!job.rosterRefreshedAt || Date.now() - job.rosterRefreshedAt > 60 * 60 * 1000) {
+    const currentTeams = teams.map((team) => team.teamNumber).filter(Number.isFinite);
+    const known = new Set(job.teamNumbers);
+    for (const teamNumber of currentTeams) {
+      if (!known.has(teamNumber)) {
+        job.teamNumbers.push(teamNumber);
+        if (!job.discoveryQueue.includes(teamNumber)) job.discoveryQueue.push(teamNumber);
+      }
+    }
+    job.rosterRefreshedAt = Date.now();
     await writeJob(eventKey, job);
   }
   // The current event's Statbotics team-event record evolves as the event progresses.

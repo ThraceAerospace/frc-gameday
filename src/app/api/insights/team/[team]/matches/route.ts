@@ -66,6 +66,8 @@ async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (i
   return result;
 }
 
+export const maxDuration = 60;
+
 export async function GET(request: Request, { params }: { params: Promise<{ team: string }> }) {
   const { team: rawTeam } = await params;
   if (!/^\d{1,6}$/.test(rawTeam)) return Response.json({ error: "Invalid team number" }, { status: 400 });
@@ -90,7 +92,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       matches: sortMatches(await TBA.getTeamMatches(`frc${teamNumber}`, event.key)),
     }));
     const allMatches = eventMatches.flatMap(({ event, matches }) => matches.map((match) => ({ event, match })));
-    const rows: (TeamMatchRow | null)[] = await withConcurrency(allMatches, 4, async ({ event, match }) => {
+    const rows: (TeamMatchRow | null)[] = await withConcurrency(allMatches, 2, async ({ event, match }) => {
       let statbotics: StatboticsMatch | null = null;
       try { statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey }); } catch { /* retain TBA match data */ }
       const red = match.alliances.red.team_keys ?? [];
