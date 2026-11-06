@@ -11,6 +11,8 @@ import type {
   TBAEventRanking,
   TBAEventAdvancementPoints,
   TBAAward,
+  TBAMedia,
+  TBATeamAvatar,
   TBADistrict,
   TBADistrictAdvancementMap,
   TBADistrictAdvancementResponse,
@@ -52,6 +54,14 @@ function isMatchPlayed(match: TBAMatch | TBAMatchSimple) {
 export const TBA = {
   getTeam: (teamKey: string): Promise<TBATeam> =>
     tba.get<TBATeam>(`/team/${teamKey}`),
+
+  getTeamAvatar: async (
+    teamKey: string,
+    year: number,
+  ): Promise<TBATeamAvatar | null> => {
+    const media = await tba.get<TBAMedia[]>(`/team/${teamKey}/media/${year}`);
+    return media.find((item): item is TBATeamAvatar => item.type === "avatar") ?? null;
+  },
 
   getTeams: (year: number): Promise<TBATeam[]> =>
     tba.get<TBATeam[]>(`/teams/${year}`),

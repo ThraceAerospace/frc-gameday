@@ -80,7 +80,11 @@ export default async function TeamPage({
   );
   const requestedYear = Number(Array.isArray(search.year) ? search.year[0] : search.year);
   const year = years.includes(requestedYear) ? requestedYear : currentYear;
-  const teamEvents = [...(await TBA.getTeamEvents(teamKey, year))].sort(sortEvents);
+  const [teamEventsResponse, avatar] = await Promise.all([
+    TBA.getTeamEvents(teamKey, year),
+    TBA.getTeamAvatar(teamKey, year),
+  ]);
+  const teamEvents = [...teamEventsResponse].sort(sortEvents);
 
   const eventSections: TeamEventSection[] = await Promise.all(
     teamEvents.map(async (teamEvent) => {
@@ -119,7 +123,7 @@ export default async function TeamPage({
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         <header className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <TeamAvatar team={team} size="lg" />
+            <TeamAvatar team={team} avatar={avatar} size="lg" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h1 className="text-4xl font-black tracking-tight text-slate-950">{team.team_number}</h1>
