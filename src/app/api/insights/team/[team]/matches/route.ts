@@ -99,15 +99,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const opponentActual = finite(other.score) !== null && other.score >= 0 ? other.score : null;
       const redProbability = finite(statbotics?.pred?.red_win_prob ?? statbotics?.prediction?.red_win_prob);
       const teamProbability = redProbability === null ? null : alliance === "red" ? redProbability : 1 - redProbability;
-      const pre = teamEPA(statbotics ?? {}, teamNumber, "pre_epas");
-      const post = teamEPA(statbotics ?? {}, teamNumber, "epas");
+      const pre = teamEPA(statbotics, teamNumber, "pre_epas");
+      const post = teamEPA(statbotics, teamNumber, "epas");
       const preEPA = finite(pre?.epa);
       const postEPA = finite(post?.epa);
       const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
       const allianceDeltas = own.team_keys.map((key) => {
         const id = Number(key.replace(/^frc/i, ""));
-        const before = finite(teamEPA(statbotics ?? {}, id, "pre_epas")?.epa);
-        const after = finite(teamEPA(statbotics ?? {}, id, "epas")?.epa);
+        const before = finite(teamEPA(statbotics, id, "pre_epas")?.epa);
+        const after = finite(teamEPA(statbotics, id, "epas")?.epa);
         return before !== null && after !== null ? after - before : null;
       }).filter((value): value is number => value !== null);
       const spread = allianceDeltas.length === own.team_keys.length && allianceDeltas.length > 1
@@ -127,9 +127,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       } satisfies TeamMatchRow;
     });
     const completed = rows.filter((row): row is TeamMatchRow => row !== null);
+    const summarize = (items: TeamMatchRow[]) => {
+      const scored = items.filter((row) => row.residual !== null);
+      const residuals = scored.map((row) => row.residual as number);
+      const wins = items.filter((row) => row.won === true).length;
+      const decisions = items.filter((row) => row.won !== null).length;
+      const deltas = items.flatMap((row) => row.deltaEPA === null ? [] : [row.deltaEPA]);
+      return {
+        matches: items.length, wins, losses: decisions - wins,
+        winRate: decisions ? wins / decisions : null,
+        meanResidual: residuals.length ? residuals.reduce((sum, value) => sum + value, 0) / residuals.length : null,
+        meanAbsoluteError: residuals.length ? residuals.reduce((sum, value) => sum + Math.abs(value), 0) / residuals.length : null,
+        rootMeanSquareError: residuals.length ? Math.sqrt(residuals.reduce((sum, value) => sum + value * value, 0) / residuals.length) : null,
+        meanMatchEPAChange: deltas.length ? deltas.reduce((sum, value) => sum + value, 0) / deltas.length : null,
+        epaStart: items.find((row) => row.preEPA !== null)?.preEPA ?? null,
+        epaEnd: [...items].reverse().find((row) => row.postEPA !== null)?.postEPA ?? null,
+      };
+    };
+    const eventSummaries = events.map((event) => {
+      const items = completed.filter((row) => row.event.key === event.key);
+      return { event: { key: event.key, name: event.name, shortName: event.short_name, startDate: event.start_date }, ...summarize(items) };
+    }).filter((event) => event.matches > 0);
+    const phaseSummaries = ["qm", "ef", "qf", "sf", "f"].map((phase) => ({
+      phase, ...summarize(completed.filter((row) => row.compLevel === phase)),
+    })).filter((item) => item.matches > 0);
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
-      matches: completed,
+      summary: summarize(completed), eventSummaries, phaseSummaries, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
     await redis.set(cacheKey, JSON.stringify(payload), "EX", 10 * 60);
