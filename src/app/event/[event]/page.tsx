@@ -50,7 +50,7 @@ export default async function EventPage({
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
     ]);
-    alliances = activeTab === "matches"
+    alliances = activeTab === "matches" && matches.some((match: TBAMatch) => isEliminationMatch(match.comp_level))
       ? await TBA.getEventPlayoffAlliances(eventKey)
       : null;
   } catch {

@@ -21,6 +21,12 @@ export default async function TeamsPage() {
           page.
         </p>
 
+        {teams.length === 0 ? (
+          <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            <p className="font-semibold text-slate-800">No teams were returned for {year}.</p>
+            <p className="mt-1 text-sm text-slate-500">The Blue Alliance may not have published this season's team directory yet.</p>
+          </div>
+        ) : (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {teams.slice(0, 200).map((team) => (
             <Link
@@ -42,6 +48,7 @@ export default async function TeamsPage() {
           ))}
         </div>
 
+        )}
         {teams.length > 200 && (
           <p className="mt-6 text-center text-xs text-slate-400">
             Showing the first 200 teams. Team search will be expanded in the
