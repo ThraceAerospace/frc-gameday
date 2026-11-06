@@ -17,8 +17,7 @@ export default async function TeamsPage() {
           {year} teams
         </h1>
         <p className="mt-2 text-sm text-slate-500">
-          Search for a team using the navigation search, then open its team
-          page.
+          Browse teams listed for the current season, then open a team page.
         </p>
 
         {teams.length === 0 ? (
