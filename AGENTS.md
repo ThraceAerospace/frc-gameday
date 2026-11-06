@@ -166,7 +166,18 @@ Do not reintroduce Nexus unless explicitly requested.
 
 Avoid rebuilding a monolithic `useGameday` hook.
 
-## Event timezone
+## Event timezone — core presentation principle
+
+**All dates, times, and datetimes displayed by the application must use the event's timezone.** This is a core product principle, not merely a default formatting preference.
+
+- Use the event's IANA timezone for displayed schedules, match times, date labels, timestamps, and other event-related date/time values.
+- Countdown clocks and time-based UI must use the same event-time basis, so the application's clocks agree with the time announced at the venue.
+- Do not display event dates or times in the viewer's browser/system timezone, and do not silently fall back to browser-local formatting.
+- The viewer's local time is already available from their system clock. The application does not need to duplicate it.
+- A next-match countdown communicates the relative time until the match; once a countdown is shown, the viewer does not need a timezone conversion to understand it.
+- Treat event time as the canonical presentation context throughout the application, including pages that aggregate or compare multiple events. When showing multiple events, each event's displayed date/time must be formatted in that event's own timezone.
+
+The goal is consistency with the venue: the time shown by FieldView should match what event announcers and field staff are using.
 
 `/api/events/active` interprets event dates using the event's own timezone. Do not replace this with browser-local comparisons.
 
