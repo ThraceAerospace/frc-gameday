@@ -172,7 +172,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     };
     const eventSummaries = events.map((event) => {
       const items = completed.filter((row) => row.event.key === event.key);
-      return { event: { key: event.key, name: event.name, shortName: event.short_name, startDate: event.start_date }, ...summarize(items) };
+      return { event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, ...summarize(items) };
     }).filter((event) => event.matches > 0);
     const phaseSummaries = ["qm", "ef", "qf", "sf", "f"].map((phase) => ({
       phase, ...summarize(completed.filter((row) => row.compLevel === phase)),
