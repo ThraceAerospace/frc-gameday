@@ -177,9 +177,55 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     const phaseSummaries = ["qm", "ef", "qf", "sf", "f"].map((phase) => ({
       phase, ...summarize(completed.filter((row) => row.compLevel === phase)),
     })).filter((item) => item.matches > 0);
+    // Event-level shifts prevent events with longer playoff schedules from dominating.
+    const eliminationByEvent = new Map<string, { event: TeamMatchRow["event"]; qualification: number[]; elimination: number[]; qualificationMatches: string[]; eliminationMatches: string[] }>();
+    for (const row of completed) {
+      if (row.residual === null) continue;
+      let group = eliminationByEvent.get(row.event.key);
+      if (!group) {
+        group = { event: row.event, qualification: [], elimination: [], qualificationMatches: [], eliminationMatches: [] };
+        eliminationByEvent.set(row.event.key, group);
+      }
+      if (row.compLevel === "qm") { group.qualification.push(row.residual); group.qualificationMatches.push(row.matchKey); }
+      else if (["ef", "qf", "sf", "f"].includes(row.compLevel)) { group.elimination.push(row.residual); group.eliminationMatches.push(row.matchKey); }
+    }
+    const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    const median = (values: number[]) => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    };
+    const eligibleEliminationEvents = [...eliminationByEvent.values()]
+      .filter((item) => item.qualification.length >= 3 && item.elimination.length >= 2)
+      .sort((a, b) => a.event.startDate.localeCompare(b.event.startDate))
+      .map((item) => ({
+        event: item.event, qualificationMatches: item.qualification.length, eliminationMatches: item.elimination.length,
+        qualificationMeanResidual: average(item.qualification), eliminationMeanResidual: average(item.elimination),
+        shift: (average(item.elimination) ?? 0) - (average(item.qualification) ?? 0),
+        qualificationMatchKeys: item.qualificationMatches, eliminationMatchKeys: item.eliminationMatches,
+      }));
+    const eventShifts = eligibleEliminationEvents.map((item) => item.shift);
+    const negativeEventCount = eventShifts.filter((value) => value < 0).length;
+    const nEvents = eventShifts.length;
+    // Exact one-sided sign test: probability of at least this many negative shifts under p=0.5.
+    const binomialCoefficient = (n: number, k: number) => {
+      let value = 1;
+      for (let i = 1; i <= k; i++) value = value * (n - i + 1) / i;
+      return value;
+    };
+    const signTestPValue = nEvents ? Array.from({ length: nEvents - negativeEventCount + 1 }, (_, index) => negativeEventCount + index)
+      .reduce((sum, successes) => sum + binomialCoefficient(nEvents, successes) / (2 ** nEvents), 0) : null;
+    const eliminationShift = {
+      eligibleEventCount: nEvents, negativeEventCount, meanShift: average(eventShifts), medianShift: median(eventShifts),
+      signTestPValue, minimumQualificationMatchesPerEvent: 3, minimumEliminationMatchesPerEvent: 2,
+      events: eligibleEliminationEvents,
+      interpretation: nEvents < 3 ? "insufficient-history" as const
+        : signTestPValue !== null && signTestPValue <= 0.05 && negativeEventCount >= 3 ? "recurring-negative-shift" as const
+        : "no-established-negative-shift" as const,
+    };
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
-      summary: summarize(completed), eventSummaries, phaseSummaries, matches: completed,
+      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
     await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);
