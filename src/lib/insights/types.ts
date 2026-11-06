@@ -130,6 +130,7 @@ export type SeasonCohortSnapshot = {
   totalTeamEventRecords: number;
   processedTeamEventRecords: number;
   unavailableTeamEventRecords: number;
+  discoveryPendingTeams: number;
   updatedAt: number;
   records: SeasonCohortRecord[];
 };

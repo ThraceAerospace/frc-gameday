@@ -65,10 +65,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     if (!data) return;
     // WebSocket changes refresh immediately; this slower check reconciles
     // schedule and OPR updates that do not change the latest completed match.
-    const delay = data.collection.state === "complete" || data.collection.state === "partial" ? 30_000 : 5_000;
+    const cohortPending = data.seasonCohort && data.seasonCohort.state !== "complete" && data.seasonCohort.state !== "partial";
+    const delay = data.collection.state === "complete" && !cohortPending ? 30_000 : 5_000;
     const timer = window.setTimeout(() => { void load(liveMatchKey); }, delay);
     return () => window.clearTimeout(timer);
-  }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, load, liveMatchKey]);
+  }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, data?.seasonCohort?.state, data?.seasonCohort?.updatedAt, load, liveMatchKey]);
 
   useEffect(() => {
     if (!teamA || !teamB) {

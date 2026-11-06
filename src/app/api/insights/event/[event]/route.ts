@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
 
   try {
     const snapshot = await getEventAnalyticsSnapshot(event);
-    const seasonCohort = await getSeasonCohortSnapshot(snapshot.event, snapshot.teams as never[]);
+    const seasonCohort = await getSeasonCohortSnapshot(snapshot.event, snapshot.teams);
     snapshot.seasonCohort = seasonCohort;
     snapshot.teamInsights = buildSeasonAwareTeamInsights(snapshot.matches, snapshot.allianceResults, snapshot.teams, snapshot.rankings ?? null, seasonCohort, snapshot.event.key, snapshot.event.start_date);
     waitUntil(Promise.all([advanceEventAnalytics(event, liveMatchKey), advanceSeasonCohort(event)]));

@@ -80,11 +80,12 @@ function snapshot(job: Job): SeasonCohortSnapshot {
     totalTeamEventRecords: records.length + job.recordQueue.length,
     processedTeamEventRecords: records.length,
     unavailableTeamEventRecords: records.filter((record) => record.status === "unavailable").length + job.discoveryFailures.length,
+    discoveryPendingTeams: job.discoveryQueue.length,
     updatedAt: job.updatedAt, records,
   };
 }
 
-export async function getSeasonCohortSnapshot(event: TBAEvent, teams: TBATeam[]): Promise<SeasonCohortSnapshot> {
+export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { team_number: number }[]): Promise<SeasonCohortSnapshot> {
   const eventKey = event.key;
   let job = await readJob(eventKey);
   if (!job) {
