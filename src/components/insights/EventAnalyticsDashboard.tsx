@@ -188,6 +188,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA && matchAnalysisB ? <div className="mt-5 space-y-6">
                 <div className="grid gap-3 md:grid-cols-2"><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/><MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`}/></div>
+                <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? `Team ${teamA}`} nameB={selectedB?.name ?? `Team ${teamB}`}/>
                 <div className="grid gap-5 xl:grid-cols-2">
                   <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
                   <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/>
@@ -233,6 +234,29 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
     <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Mean score error is calculated from the team's alliance predictions.</p>
   </section>;
 }
+function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAnalysis;second:TeamMatchAnalysis;nameA:string;nameB:string}) {
+  const byKey=new Map(second.matches.map((m)=>[m.matchKey,m]));
+  const shared=first.matches.flatMap((a)=>{const b=byKey.get(a.matchKey);return b&&a.preEPA!==null&&b.preEPA!==null?[{a,b}]:[];});
+  if(!shared.length) return <section className="rounded-xl border border-slate-200 p-4"><h3 className="font-semibold text-slate-900">Same-match EPA comparison</h3><p className="mt-1 text-sm text-slate-500">These teams have no common matches with complete pre-match EPA data.</p></section>;
+  const values=shared.flatMap(({a,b})=>[a.preEPA as number,b.preEPA as number]);
+  const min=Math.min(0,...values),max=Math.max(1,...values),range=Math.max(1,max-min);
+  const x=(i:number)=>shared.length<2?450:50+i*800/(shared.length-1);
+  const y=(v:number)=>214-(v-min)/range*170;
+  const lineA=shared.map(({a},i)=>`${x(i)},${y(a.preEPA as number)}`).join(" ");
+  const lineB=shared.map(({b},i)=>`${x(i)},${y(b.preEPA as number)}`).join(" ");
+  const mid=Math.floor((shared.length-1)/2);
+  return <section className="rounded-xl border border-slate-200 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Same-match EPA comparison</h3><p className="text-xs text-slate-500">Pre-match ratings for both teams in the exact same matches · {shared.length} shared matches</p></div><div className="flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600"/>{nameA}</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-teal-600"/>{nameB}</span></div></div>
+    <svg viewBox="0 0 900 260" role="img" aria-label={`Pre-match EPA comparison between ${nameA} and ${nameB} across ${shared.length} common matches`} className="mt-3 w-full">
+      {[0,1,2,3].map((n)=><g key={n}><line x1="48" x2="858" y1={40+n*56} y2={40+n*56} stroke="#e2e8f0" strokeDasharray="3 4"/><text x="40" y={44+n*56} textAnchor="end" fontSize="10" fill="#64748b">{(max-range*n/3).toFixed(0)}</text></g>)}
+      <polyline points={lineA} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round"/><polyline points={lineB} fill="none" stroke="#0d9488" strokeWidth="2.5" strokeLinejoin="round"/>
+      {shared.map(({a,b},i)=><g key={a.matchKey}><circle cx={x(i)} cy={y(a.preEPA as number)} r="4" fill="#2563eb"><title>{a.event.shortName??a.event.name} · {a.matchLabel} · {nameA}: {a.preEPA?.toFixed(2)} EPA</title></circle><circle cx={x(i)} cy={y(b.preEPA as number)} r="4" fill="#0d9488"><title>{b.event.shortName??b.event.name} · {b.matchLabel} · {nameB}: {b.preEPA?.toFixed(2)} EPA</title></circle></g>)}
+      <text x="50" y="246" fontSize="10" fill="#64748b">{shared[0].a.matchLabel}</text><text x={x(mid)} y="246" textAnchor="middle" fontSize="10" fill="#64748b">{shared[mid].a.matchLabel}</text><text x="850" y="246" textAnchor="end" fontSize="10" fill="#64748b">{shared[shared.length-1].a.matchLabel}</text>
+    </svg>
+    <p className="text-[10px] text-slate-500">Comparing ratings at the same point in the season controls for match and event timing. EPA is a model estimate, not a direct measure of robot performance. Hover points for exact values.</p>
+  </section>;
+}
+
 function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
   const matches=analysis.matches;
   const color=accent==="blue"?"#2563eb":"#0d9488";
