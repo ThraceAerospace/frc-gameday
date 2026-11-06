@@ -93,7 +93,7 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
     job = {
       target: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
       teamNumbers: teams.map((team) => team.teamNumber).filter(Number.isFinite),
-      discoveryQueue: teams.map((team) => team.team_number).filter(Number.isFinite),
+      discoveryQueue: teams.map((team) => team.teamNumber).filter(Number.isFinite),
       discoveryAttempts: {}, recordQueue: [], recordAttempts: {}, records: {},
       discoveryFailures: [], updatedAt: Date.now(), currentEventRefreshedAt: null,
     };
@@ -191,6 +191,9 @@ export async function advanceSeasonCohort(eventKey: string): Promise<void> {
         }
       });
       await writeJob(eventKey, job);
+    }
+    if (job.currentEventRefreshedAt === null && job.discoveryQueue.length === 0 && !job.recordQueue.some((pair) => pair.event.key === eventKey)) {
+      job.currentEventRefreshedAt = Date.now();
     }
     await writeJob(eventKey, job);
   } catch (error) {
