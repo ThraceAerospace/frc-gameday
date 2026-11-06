@@ -41,7 +41,7 @@ function components(value: StatboticsEPA | undefined): Record<string, number> {
   if (!value) return {};
   const result: Record<string, number> = {};
   for (const [key, amount] of Object.entries(value)) {
-    if (typeof amount === "number" && Number.isFinite(amount) && !/^comp_\\d+_epa$/.test(key)) result[key] = amount;
+    if (typeof amount === "number" && Number.isFinite(amount) && !/^comp_\d+_epa$/.test(key)) result[key] = amount;
   }
   return result;
 }
@@ -63,7 +63,7 @@ async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (i
 
 export async function GET(request: Request, { params }: { params: Promise<{ team: string }> }) {
   const { team: rawTeam } = await params;
-  if (!/^\\d{1,6}$/.test(rawTeam)) return Response.json({ error: "Invalid team number" }, { status: 400 });
+  if (!/^\d{1,6}$/.test(rawTeam)) return Response.json({ error: "Invalid team number" }, { status: 400 });
   const teamNumber = Number(rawTeam);
   const year = Number(new URL(request.url).searchParams.get("year") ?? new Date().getFullYear());
   if (!Number.isInteger(year) || year < 1992 || year > new Date().getFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
