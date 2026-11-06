@@ -55,6 +55,7 @@ export type EventAnalyticsResponse = {
   matches: AnalyticsMatch[];
   allianceResults: AllianceResult[];
   findings: ReviewFinding[];
+  teamInsights?: TeamInsight[];
   matchCount: number;
   loadedMatchCount: number;
   offset: number;
@@ -63,4 +64,45 @@ export type EventAnalyticsResponse = {
   residualStats: { mean: number | null; standardDeviation: number | null; sampleSize: number };
   predictionStats: { allianceCount: number; meanAbsoluteError: number | null; rootMeanSquareError: number | null; meanResidual: number | null; within25Count: number; winPredictionCount: number; winPredictionAccuracy: number | null };
   collection: { state: "queued" | "collecting" | "complete" | "partial"; processedMatchCount: number; totalMatchCount: number; unavailableMatchCount: number; updatedAt: number };
+};
+
+
+export type TeamInsightMatch = {
+  matchKey: string;
+  matchLabel: string;
+  alliance: "red" | "blue";
+  partners: number[];
+  opponents: number[];
+  predicted: number | null;
+  actual: number | null;
+  residual: number | null;
+  winProbability: number | null;
+  won: boolean | null;
+  preEPA: number | null;
+  postEPA: number | null;
+  deltaEPA: number | null;
+  reasons: string[];
+};
+
+export type TeamInsight = {
+  teamNumber: number;
+  summary: string[];
+  metrics: {
+    rank: number | null;
+    wins: number | null;
+    losses: number | null;
+    ties: number | null;
+    matchesSeen: number;
+    completedMatches: number;
+    epa: number | null;
+    epaPercentile: number | null;
+    autoEpa: number | null;
+    teleopEpa: number | null;
+    endgameEpa: number | null;
+    epaStart: number | null;
+    epaEnd: number | null;
+    epaChange: number | null;
+  };
+  epaTrend: { matchKey: string; matchLabel: string; epa: number | null }[];
+  reviewMatches: TeamInsightMatch[];
 };

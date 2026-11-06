@@ -117,3 +117,84 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
   }
   return findings.sort((a, b) => ({ high: 3, medium: 2, low: 1 }[b.severity] - { high: 3, medium: 2, low: 1 }[a.severity]) || b.sampleSize - a.sampleSize);
 }
+
+
+/**
+ * Per-team briefs summarize shared event evidence. They are correlation and
+ * review prompts only; alliance results and model updates are not robot attribution.
+ */
+export function buildTeamInsights(
+  records: AnalyticsMatch[],
+  allianceResults: AllianceResult[],
+  teams: TeamAnalyticsRow[],
+  rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
+): import("./types").TeamInsight[] {
+  const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
+  const residualThreshold = Math.max(25, (standardDeviation(residuals) ?? 0) * 1.5);
+  const rankingByTeam = new Map((rankings?.rankings ?? []).map((item) => [item.team_key, item]));
+  const resultByMatchAlliance = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
+  return teams.map((team) => {
+    const appearances = records.flatMap((record) => {
+      const alliance = record.match.alliances.red.team_keys.includes(team.teamKey) ? "red" as const
+        : record.match.alliances.blue.team_keys.includes(team.teamKey) ? "blue" as const : null;
+      if (!alliance) return [];
+      const own = record.match.alliances[alliance];
+      const opposing = record.match.alliances[alliance === "red" ? "blue" : "red"];
+      const result = resultByMatchAlliance.get(record.match.key + ":" + alliance);
+      const id = statboticsTeamKey(team.teamKey);
+      const preEPA = numberOrNull(record.statbotics?.pre_epas?.[id]?.epa);
+      const postEPA = numberOrNull(record.statbotics?.epas?.[id]?.epa);
+      const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
+      const redProbability = numberOrNull(record.statbotics?.pred?.red_win_prob ?? record.statbotics?.prediction?.red_win_prob);
+      const winProbability = redProbability === null ? null : alliance === "red" ? redProbability : 1 - redProbability;
+      const winner = record.match.winning_alliance;
+      const won = winner === "red" || winner === "blue" ? winner === alliance : null;
+      const reasons: string[] = [];
+      if (result?.residual !== null && result?.residual !== undefined && Math.abs(result.residual) >= residualThreshold) {
+        reasons.push(`Alliance score differed from model prediction by ${result.residual > 0 ? "+" : ""}${result.residual.toFixed(1)} points`);
+      }
+      if (winProbability !== null && won !== null && ((winProbability >= 0.8 && !won) || (winProbability <= 0.2 && won))) {
+        reasons.push(`Outcome differed from the model's ${Math.round(Math.max(winProbability, 1 - winProbability) * 100)}% win-probability expectation`);
+      }
+      return [{
+        matchKey: record.match.key, matchLabel: matchLabel(record.match), alliance,
+        partners: own.team_keys.filter((key) => key !== team.teamKey).map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+        opponents: opposing.team_keys.map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+        predicted: result?.predicted ?? null, actual: result?.actual ?? null, residual: result?.residual ?? null,
+        winProbability, won, preEPA, postEPA, deltaEPA, reasons,
+        completed: typeof own.score === "number" && own.score >= 0 && typeof opposing.score === "number" && opposing.score >= 0,
+      }];
+    });
+    const completedMatches = appearances.filter((item) => item.completed).length;
+    const trend = appearances.flatMap((item) => item.postEPA !== null || item.preEPA !== null
+      ? [{ matchKey: item.matchKey, matchLabel: item.matchLabel, epa: item.postEPA ?? item.preEPA }] : []);
+    const first = appearances.find((item) => item.preEPA !== null)?.preEPA ?? null;
+    const last = [...appearances].reverse().find((item) => item.postEPA !== null)?.postEPA ?? null;
+    const epaChange = first !== null && last !== null ? last - first : null;
+    const ranking = rankingByTeam.get(team.teamKey);
+    const metrics = {
+      rank: ranking?.rank ?? null, wins: ranking?.record?.wins ?? null, losses: ranking?.record?.losses ?? null, ties: ranking?.record?.ties ?? null,
+      matchesSeen: appearances.length, completedMatches, epa: team.epa, epaPercentile: team.epaPercentile,
+      autoEpa: team.autoEpa, teleopEpa: team.teleopEpa, endgameEpa: team.endgameEpa,
+      epaStart: first, epaEnd: last, epaChange,
+    };
+    const summary: string[] = [];
+    summary.push(metrics.rank === null ? "Official qualification standing is not available yet."
+      : `Official qualification rank: #${metrics.rank}${metrics.wins === null ? "" : ` · record ${metrics.wins}–${metrics.losses}–${metrics.ties}`}.`);
+    summary.push(team.epa === null ? "Statbotics EPA is not available in the current match sample."
+      : `Statbotics EPA is ${team.epa.toFixed(1)} (${team.epaPercentile === null ? "event percentile unavailable" : `about the ${Math.round(team.epaPercentile * 100)}th event percentile`}), with ${team.matchesSeen} team appearances represented in the current sample.`);
+    const components = [["auto",team.autoEpa],["teleop",team.teleopEpa],["endgame",team.endgameEpa]].filter((item): item is [string,number] => item[1] !== null);
+    if (components.length) {
+      const largest = [...components].sort((a,b)=>b[1]-a[1])[0];
+      summary.push(`EPA component estimates: auto ${fmtValue(team.autoEpa)}, teleop ${fmtValue(team.teleopEpa)}, endgame ${fmtValue(team.endgameEpa)}; ${largest[0]} is the largest estimate.`);
+    }
+    if (epaChange !== null) summary.push(`Across the observed event sequence, EPA moved from ${first!.toFixed(1)} to ${last!.toFixed(1)} (${epaChange > 0 ? "+" : ""}${epaChange.toFixed(1)}).`);
+    summary.push(`${completedMatches} completed matches represented; ${appearances.filter((item)=>item.reasons.length).length} match(es) have review signals.`);
+    return {
+      teamNumber: team.teamNumber, summary, metrics,
+      epaTrend: trend,
+      reviewMatches: appearances.filter((item)=>item.reasons.length).map(({completed: _completed,...item})=>item),
+    };
+  });
+}
+function fmtValue(value: number | null): string { return value === null ? "—" : value.toFixed(1); }

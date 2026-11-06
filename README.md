@@ -103,6 +103,8 @@ Long-running work is bounded and resumable; Redis is authoritative for job progr
 
 Alliance residuals and combined alliance estimates are contextual evidence, not individual robot attribution. Model provenance, sample coverage, and uncertainty must remain visible wherever analytical conclusions are presented.
 
+Per-team event briefs lead with concise bullet summaries, followed by supporting metrics, graphs, match pointers, and review flags. Flags are correlation-based investigation prompts only. FieldView must not infer or state robot-level causation from alliance scores, model residuals, shared EPA updates, partner combinations, or win-probability outcomes; the human scout investigates causes.
+
 ## Match data
 
 The client-side match helpers live in `src/lib/gameday/matchUtils.ts`.

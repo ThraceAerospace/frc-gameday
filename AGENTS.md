@@ -262,6 +262,7 @@ Prefer small, focused cleanup commits.
 - Event analytics collection is a resumable server-side job stored in Redis. The route returns the current complete-so-far snapshot and uses Vercel `waitUntil` to advance bounded Statbotics match batches; the browser polls only collection status/results and never requests a "next page". Preserve the worker lock, execution budget, retry limits, and bounded concurrency. Refresh the TBA match schedule and OPR periodically; WebSocket/EventState updates trigger immediate refresh of the latest completed match. Do not create a second WebSocket or move calculations into the browser.
 - Derived event pages use a short Redis cache and a request lock. Do not turn Redis into permanent season-history storage.
 - Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
+- Every event team should receive the same concise, bullet-first team brief, followed by supporting analytics, graphs, match pointers, and review flags. Review flags identify correlations/anomalies for a human scout to investigate; they are not causal determinations. Never attribute alliance score residuals, win-probability mismatches, partner patterns, or shared EPA updates to an individual robot.
 - Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
 - Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
 

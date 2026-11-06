@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/lib/insights/types";
+import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
@@ -25,6 +25,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [teamFocus, setTeamFocus] = useState("");
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
   const [historyA, setHistoryA] = useState<TeamSeasonHistory | null>(null);
@@ -119,6 +120,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   }, [teamA,teamB,data?.event.year,liveMatchKey,liveMatchSignature]);
 
   const teams = data?.teams ?? [];
+  const selectedFocus = teams.find((team) => String(team.teamNumber) === teamFocus);
+  const focusedInsight = data?.teamInsights?.find((item) => String(item.teamNumber) === teamFocus);
   const selectedA = teams.find((team) => String(team.teamNumber) === teamA);
   const selectedB = teams.find((team) => String(team.teamNumber) === teamB);
   const commonMatches = useMemo(() => data?.matches.filter((record) => {
@@ -154,6 +157,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div className="mt-5">
           {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
+            <TeamSnapshot teams={teams} selectedTeam={teamFocus} onSelect={setTeamFocus} team={selectedFocus} insight={focusedInsight ?? null} />
             <Panel title="Compare teams" description="Compare two event teams, then expand into their season-long Statbotics histories: event-by-event EPA, component estimates, records, ranking points, event ranks, and shared-event comparisons. EPA and OPR are separate models, not interchangeable scores.">
               <div className="grid gap-3 sm:grid-cols-2">
                 <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
@@ -217,6 +221,57 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   );
 }
  
+
+
+function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
+  const points = insight?.epaTrend.filter((point): point is {matchKey:string;matchLabel:string;epa:number} => point.epa !== null) ?? [];
+  const min = Math.min(...points.map((point)=>point.epa),0);
+  const max = Math.max(...points.map((point)=>point.epa),1);
+  const range = Math.max(1,max-min);
+  const x = (index:number) => points.length < 2 ? 450 : 44 + index * 812 / (points.length - 1);
+  const y = (value:number) => 208 - (value-min) / range * 168;
+  const line = points.map((point,index)=>`${x(index)},${y(point.epa)}`).join(" ");
+  return <Panel title="Team snapshot" description="A concise, evidence-backed briefing for one team at this event. Select any team in the roster. These are statistical observations and review prompts—not explanations of what caused a result.">
+    <label className="block max-w-md text-sm font-semibold text-slate-700">Select a team
+      <select value={selectedTeam} onChange={(event)=>onSelect(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+        <option value="">Choose a team…</option>
+        {teams.map((item)=><option key={item.teamKey} value={String(item.teamNumber)}>{item.teamNumber} · {item.name}</option>)}
+      </select>
+    </label>
+    {!selectedTeam ? <p className="mt-4 text-sm text-slate-500">Choose a team to see its summary, event trends, and matches flagged for review.</p> : !team || !insight ? <p className="mt-4 text-sm text-slate-500">Team analysis is still being assembled from the event match sample.</p> : <>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team {team.teamNumber}</p><h3 className="text-xl font-black text-slate-950">{team.name}</h3></div>
+        <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
+      </div>
+      <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">{insight.summary.map((item,index)=><li key={index}>{item}</li>)}</ul>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <HistoryMetric label="Event EPA" value={fmt(insight.metrics.epa,2)}/>
+        <HistoryMetric label="Event percentile" value={insight.metrics.epaPercentile===null?"—":`${Math.round(insight.metrics.epaPercentile*100)}th`}/>
+        <HistoryMetric label="Official rank" value={insight.metrics.rank===null?"—":String(insight.metrics.rank)}/>
+        <HistoryMetric label="Matches represented" value={String(insight.metrics.matchesSeen)}/>
+      </div>
+      <div className="mt-5 rounded-lg border border-slate-100 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-900">EPA through this event</h4><p className="text-xs text-slate-500">Post-match model estimate where available; pre-match estimate otherwise</p></div><span className="text-xs text-slate-500">{points.length} data points</span></div>
+        {points.length>1 ? <svg viewBox="0 0 900 238" role="img" aria-label={`Team ${team.teamNumber} EPA progression during the event`} className="mt-2 w-full">
+          {[0,1,2,3].map((n)=><g key={n}><line x1="42" x2="862" y1={34+n*54} y2={34+n*54} stroke="#e2e8f0" strokeDasharray="3 4"/><text x="34" y={38+n*54} textAnchor="end" fontSize="10" fill="#64748b">{(max-range*n/3).toFixed(0)}</text></g>)}
+          <polyline points={line} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round"/>
+          {points.map((point,index)=><circle key={point.matchKey} cx={x(index)} cy={y(point.epa)} r="4" fill="#2563eb"><title>{point.matchLabel}: {point.epa.toFixed(2)} EPA</title></circle>)}
+          <text x="44" y="230" fontSize="10" fill="#64748b">{points[0].matchLabel}</text><text x="858" y="230" textAnchor="end" fontSize="10" fill="#64748b">{points[points.length-1].matchLabel}</text>
+        </svg> : <p className="mt-3 text-sm text-slate-500">Not enough EPA observations to draw a progression yet.</p>}
+      </div>
+      <div className="mt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold text-slate-900">Matches to review</h4><span className="text-xs text-slate-500">{insight.reviewMatches.length} flagged · review state is browser-local only</span></div>
+        <p className="mt-1 text-xs text-slate-500">Flags identify unusual alliance-level score residuals or outcomes that differed from strong model expectations. They do not identify which robot caused the result.</p>
+        {!insight.reviewMatches.length ? <p className="mt-3 text-sm text-slate-500">No match-review signals met the current thresholds in the available sample.</p> : <div className="mt-3 space-y-2">{insight.reviewMatches.map((match)=><article key={match.matchKey} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-bold text-slate-900">{match.matchLabel} · {match.alliance.toUpperCase()} alliance</p><p className="mt-1 text-xs text-slate-500">Partners: {match.partners.join(" · ")||"—"} · Opponents: {match.opponents.join(" · ")||"—"}</p></div><a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Open match ↗</a></div>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">{match.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
+          <p className="mt-2 text-[11px] text-slate-500">Alliance score: predicted {fmt(match.predicted)} · actual {fmt(match.actual,0)} · residual {match.residual===null?"—":`${match.residual>0?"+":""}${fmt(match.residual)}`} · EPA update {match.deltaEPA===null?"—":`${match.deltaEPA>0?"+":""}${fmt(match.deltaEPA,2)}`}</p>
+        </article>)}</div>}
+      </div>
+      <p className="mt-4 text-[11px] leading-5 text-slate-500">Interpretation boundary: EPA is a model estimate; an EPA update may be shared across alliance members. Score residuals and win-probability mismatches describe alliance/match outcomes. They are correlations for a scout to investigate, not causal findings or robot-level attribution.</p>
+    </>}
+  </Panel>;
+}
 
 function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
   const s=analysis.summary;

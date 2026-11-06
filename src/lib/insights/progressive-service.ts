@@ -3,7 +3,7 @@ import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
-import { buildAllianceResults, buildReviewFindings, buildTeamRows, mean, standardDeviation } from "./calculations";
+import { buildAllianceResults, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
 import type { TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
@@ -72,6 +72,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   const allianceResults = buildAllianceResults(analyticsMatches);
   const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches);
   const findings = buildReviewFindings(analyticsMatches, allianceResults, teams);
+  const teamInsights = buildTeamInsights(analyticsMatches, allianceResults, teams, job.rankings);
   const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
   return {
@@ -81,6 +82,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
     matches: analyticsMatches,
     allianceResults,
     findings,
+    teamInsights,
     matchCount: job.matches.length,
     loadedMatchCount: analyticsMatches.length,
     offset: 0,
