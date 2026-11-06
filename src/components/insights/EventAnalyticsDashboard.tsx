@@ -107,9 +107,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }
     let active = true;
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    const query = \`year=\${data.event.year}\${liveMatchKey ? \`&refresh=1&liveMatchKey=\${encodeURIComponent(liveMatchKey)}\` : ""}\`;
-    const firstRequest = fetch(\`/api/insights/team/\${teamA}/matches?\${query}\`, { cache: "no-store" });
-    const secondRequest = teamB ? fetch(\`/api/insights/team/\${teamB}/matches?\${query}\`, { cache: "no-store" }) : Promise.resolve(null);
+    const query = `year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`;
+    const firstRequest = fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" });
+    const secondRequest = teamB ? fetch(`/api/insights/team/${teamB}/matches?${query}`, { cache: "no-store" }) : Promise.resolve(null);
     Promise.all([firstRequest, secondRequest]).then(async ([firstResponse, secondResponse]) => {
       if (!firstResponse.ok || (secondResponse && !secondResponse.ok)) throw new Error("Match-by-match analysis is temporarily unavailable");
       const first = await firstResponse.json();
@@ -193,11 +193,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match history and EPA records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA ? <div className="mt-5 space-y-6">
-                <div className={matchAnalysisB ? "grid gap-3 md:grid-cols-2" : "max-w-3xl"}><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? \`Team \${teamA}\`}/>{matchAnalysisB ? <MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? \`Team \${teamB}\`}/> : null}</div>
-                {matchAnalysisB ? <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? \`Team \${teamA}\`} nameB={selectedB?.name ?? \`Team \${teamB}\`}/> : null}
+                <div className={matchAnalysisB ? "grid gap-3 md:grid-cols-2" : "max-w-3xl"}><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/>{matchAnalysisB ? <MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`}/> : null}</div>
+                {matchAnalysisB ? <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? `Team ${teamA}`} nameB={selectedB?.name ?? `Team ${teamB}`}/> : null}
                 <div className={matchAnalysisB ? "grid gap-5 xl:grid-cols-2" : "max-w-4xl"}>
-                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? \`Team \${teamA}\`} accent="blue"/>
-                  {matchAnalysisB ? <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? \`Team \${teamB}\`} accent="teal"/> : null}
+                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
+                  {matchAnalysisB ? <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/> : null}
                 </div>
               </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select a team to load its season-long match-by-match analysis. A second team is optional for direct comparison.</p> : null}
             </Panel>
