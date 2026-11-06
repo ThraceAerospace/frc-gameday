@@ -149,7 +149,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
                 {commonMatches.length > 0 && <div className="mt-2 space-y-1">{commonMatches.map((record) => <a key={record.match.key} href={`https://www.thebluealliance.com/match/${record.match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg bg-slate-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50">{record.match.comp_level.toUpperCase()} {record.match.match_number} · {record.match.alliances.red.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")} vs {record.match.alliances.blue.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")}</a>)}</div>}
               </> : <p className="mt-4 text-sm text-slate-500">Select two different teams to compare their event estimates.</p>}
             </Panel>
-            <Panel title="Event team table" description="Percentiles are calculated among teams in this event, using currently available EPA and OPR values."><TeamTable teams={teams} /></Panel>
+            <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Show all event team ratings</summary><div className="p-4"><p className="mb-3 text-xs text-slate-500">EPA, OPR, DPR, and CCWM are distinct rating estimates. Their raw values should not be compared directly across systems.</p><TeamTable teams={teams} /></div></details>
           </section>}
           {tab === "unexpected" && <section className="space-y-4">
             <Panel title="Which alliances surprised the model?" description="Each bar is one alliance in one match. Positive values mean the alliance scored more than predicted; negative values mean it scored less. Select a row to open that match on The Blue Alliance."><ResidualBars residuals={residuals} /></Panel>
@@ -178,11 +178,10 @@ function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:Te
       <TeamSeasonProfile history={second} accent="teal" />
     </div>
     <SharedEventComparison first={first} second={second} />
-    <div className="rounded-xl border border-slate-200 p-4">
-      <h4 className="font-semibold text-slate-900">Season EPA component comparison</h4>
-      <p className="mt-1 text-xs text-slate-500">Statbotics modeled contribution estimates. Negative values are below-baseline model estimates, not literal negative points scored.</p>
-      <EpaBreakdownComparison first={first} second={second} />
-    </div>
+    <details className="rounded-xl border border-slate-200">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Compare detailed EPA component estimates</summary>
+      <div className="px-4 pb-4"><p className="mt-1 text-xs text-slate-500">Statbotics modeled contribution estimates. Negative values are below-baseline model estimates, not literal negative points scored. These component estimates describe the model, not independently observed robot scoring.</p><EpaBreakdownComparison first={first} second={second} /></div>
+    </details>
   </div>;
 }
 function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
