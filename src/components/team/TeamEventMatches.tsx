@@ -1,5 +1,4 @@
-import Link from "next/link";
-import type { TBAEliminationAlliance, TBAEventSimple, TBAMatch } from "@/lib/tba/types";
+import type { TBAEliminationAlliance, TBAEvent, TBAMatch } from "@/lib/tba/types";
 import MatchRow from "@/components/match/MatchRow";
 
 export default function TeamEventMatches({
@@ -8,46 +7,24 @@ export default function TeamEventMatches({
   highlightedTeamKeys,
   playoffAlliances,
 }: {
-  event: TBAEventSimple & { playoff_type?: number | null };
+  event: TBAEvent;
   matches: TBAMatch[];
   highlightedTeamKeys: string[];
   playoffAlliances?: TBAEliminationAlliance[] | null;
 }) {
   return (
-    <section className="border-t border-slate-200 first:border-t-0">
-      <div className="bg-slate-50 px-4 py-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <Link
-            href={`/event/${event.key}`}
-            className="font-bold text-slate-900 hover:text-blue-600"
-          >
-            {event.name}
-          </Link>
-          <span className="text-xs text-slate-500">
-            {event.city}
-            {event.state_prov ? `, ${event.state_prov}` : ""}
-            {" · "}
-            {event.start_date} – {event.end_date}
-            {" · "}
-            {matches.length} match{matches.length === 1 ? "" : "es"}
-          </span>
-        </div>
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <h4 className="text-sm font-bold text-slate-800">Matches</h4>
+        <span className="text-xs text-slate-500">{matches.length} match{matches.length === 1 ? "" : "es"}</span>
       </div>
-
       {matches.length === 0 ? (
-        <div className="px-4 py-3 text-sm text-slate-500">No matches.</div>
+        <div className="px-4 py-4 text-sm text-slate-500">No matches.</div>
       ) : (
         matches.map((match) => (
-          <MatchRow
-            key={match.key}
-            eventKey={event.key}
-            playoffType={event.playoff_type ?? null}
-            match={match}
-            highlightedTeamKeys={highlightedTeamKeys}
-            playoffAlliances={playoffAlliances}
-          />
+          <MatchRow key={match.key} eventKey={event.key} playoffType={event.playoff_type ?? null} match={match} highlightedTeamKeys={highlightedTeamKeys} playoffAlliances={playoffAlliances} compact={true} />
         ))
       )}
-    </section>
+    </div>
   );
 }

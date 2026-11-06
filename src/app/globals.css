@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.site-theme-dark, .site-theme-dark *));
 
 :root {
   color-scheme: light;

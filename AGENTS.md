@@ -239,6 +239,7 @@ Prefer small, focused cleanup commits.
 
 ## Coding approach
 
+- Always use Tailwind CSS utilities where they provide the needed styling; do not add custom CSS for styles Tailwind already supports.
 - Do not duplicate logic that already exists; search for and reuse existing helpers. For date/time parsing, formatting, and timezone behavior, use `src/lib/time`. If a needed helper is missing, add it there for reuse.
 - Keep data fetching in hooks/services rather than presentation components where practical.
 - Keep Multiview state transitions explicit.
@@ -252,3 +253,73 @@ Prefer small, focused cleanup commits.
 ## Other agent documentation
 
 `CLAUDE.md` currently points to `AGENTS.md`. Keep those instructions aligned.
+
+
+## Event Analytics prototype
+
+- The standalone event analytics route is `/insights/event/<event>`. Its UI and analytics pipeline remain independent of Gameday tile/remote-session configuration, but its live event context must use `useEventState` and the shared `/insights` live-runtime layout. Do not create a second WebSocket or duplicate EventState.
+- `src/lib/insights` contains server-side calculations and orchestration. It consumes TBA/Statbotics services; Views must not call upstream APIs directly.
+- Event analytics collection is a resumable server-side job stored in Redis. The route returns the current complete-so-far snapshot and uses Vercel `waitUntil` to advance bounded Statbotics match batches; the browser polls only collection status/results and never requests a "next page". Preserve the worker lock, execution budget, retry limits, and bounded concurrency. Refresh the TBA match schedule and OPR periodically; WebSocket/EventState updates trigger immediate refresh of the latest completed match. Do not create a second WebSocket or move calculations into the browser.
+- Derived event pages use a short Redis cache and a request lock. Do not turn Redis into permanent season-history storage.
+- Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
+- Every event team should receive the same concise, bullet-first team brief, followed by supporting analytics, graphs, match pointers, and review flags. Review flags identify correlations/anomalies for a human scout to investigate; they are not causal determinations. Never attribute alliance score residuals, win-probability mismatches, partner patterns, or shared EPA updates to an individual robot.
+- Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
+- Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
+
+- Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
+
+
+## Homepage event snapshot
+
+- The homepage (`src/app/page.tsx`) is a Server Component with one-hour ISR (`revalidate = 3600`). It renders the current Sunday–Saturday event list and event summaries into the initial HTML.
+- Retrieve each event's canonical full match schedule through `TBA.getEventMatches`; derive last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
+- Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a homepage-specific match cache, browser polling, or a homepage WebSocket subscription.
+- Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
+
+
+## Homepage event snapshot
+
+- The homepage (`src/app/page.tsx`) is a Server Component with one-hour ISR (`revalidate = 3600`). It renders the current Sunday–Saturday event list and event summaries into the initial HTML.
+- The complete homepage data snapshot is wrapped in `unstable_cache` with a one-hour revalidation period. It retrieves each event's canonical full match schedule through `TBA.getEventMatches` and derives last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
+- Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a separate homepage match cache, browser polling, or a homepage WebSocket subscription.
+- Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
+
+
+## Analytics architecture — core principles
+
+The analytics experience has four scopes: Event Overview, Team Analysis, Matchup Analysis, and supporting Scouting Tools. Event Overview is the default entry point; scouting review queues are not the product's primary landing view.
+
+Analytics calculations and conclusions are server-authoritative. The browser presents results, manages view selection, and requests a new analysis when its inputs change; it must not fetch TBA/Statbotics directly or independently reproduce statistical models used by the server.
+
+Keep analytics business logic independent of HTTP handlers and the hosting runtime. Vercel route handlers and `waitUntil` are execution adapters, not dependencies of calculation or orchestration services. A future persistent worker must be able to invoke the same service functions without changing the client API.
+
+Long-running collection and computation must be bounded, persistent, resumable, and recoverable. Redis job state—not a serverless process's memory or lifetime—is authoritative. Persist progress and retry state before yielding; use locks with finite TTLs and ensure abandoned work can be resumed by a later invocation.
+
+Prefer incremental processing. A changed match should refresh that match and the derived results it affects rather than requiring a complete event recollection. Periodic source reconciliation remains necessary for schedule, roster, rankings, and OPR changes.
+
+Track source-data freshness separately from calculation freshness. Preserve the source update time, calculation time, and calculation/schema version wherever derived snapshots are cached so changed source data and changed algorithms can be distinguished and invalidated deliberately.
+
+Treat alliance-level results, team-level model estimates, official qualification rankings, and robot-specific scouting observations as different evidence types. Do not attribute alliance score residuals or shared model updates to an individual robot.
+
+
+## Elimination performance shift analysis
+
+The season-long team match analysis calculates a qualification-to-elimination score-residual shift separately for each official event. Only events with at least three scored qualification matches and two scored elimination matches with usable pre-match Statbotics predictions are eligible. Each event contributes one shift to the season summary so events with larger playoff schedules do not dominate. The summary reports mean/median event shift, negative-shift event count, and a one-sided exact sign test across event-level shifts. A recurring-negative label requires at least three eligible events, at least three negative shifts, and sign-test p ≤ 0.05. This is an exploratory association in alliance-level residuals, not proof of robot-level underperformance or choking. The first-pass calculation is not yet adjusted for partner/opponent strength; the UI states this limitation explicitly. Match keys for the qualification and elimination evidence are retained for direct match review.
+
+
+## Season-wide cohort analytics
+
+Event Insights builds a Redis-backed, resumable season cohort for every team on the target event roster. For each team, it discovers all official-season events (excluding TBA event types 99 offseason and 100 preseason), then retrieves Statbotics team-event snapshots through the configured mirror. Work is bounded by a 22-second execution budget, two concurrent upstream requests, small batches, per-record retry limits, a finite lock, and a 24-hour job TTL. Team-event snapshots are cached for 24 hours; the current target event is explicitly refreshed on a 10-minute cadence. This avoids fan-out requests from the browser and avoids collecting every season match for every event team.
+
+The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
+
+The selected-team match-history endpoint adds an event-normalized residual pattern. It compares the selected team's mean alliance score residual with the residual distribution from both alliances in the same matches, requires at least three team matches and six baseline alliance samples per event, and tests whether below- or above-baseline directions recur across events. This is an approximate baseline sampled from matches featuring the team, not an independent event-wide calibration sample. It cannot separate the selected team from its partners or opponents.
+
+
+## Analytics presentation hierarchy
+
+- Every analytics scope must lead with a concise plain-language answer to the question that scope is meant to answer. Present the interpretation before the supporting numbers.
+- Follow the takeaway with a small number of directly relevant evidence elements: comparisons, charts, and match links. Move raw tables, secondary metrics, statistical tests, model diagnostics, and methodology into clearly labeled disclosures.
+- Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Analysis should lead with a bullet-first team brief, relevant previous-event comparison, and matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
+- Do not hide important caveats or sample coverage. Keep them concise and close to the conclusion they qualify.
+- A summary statement must be traceable to the data shown nearby. Distinguish observed change, comparison with a defined cohort, and a prompt for human investigation. Never turn a statistical association into a causal explanation.

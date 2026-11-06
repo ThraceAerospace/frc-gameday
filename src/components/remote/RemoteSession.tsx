@@ -20,8 +20,6 @@ import {
   type RemoteSignalingStatus,
 } from "@/lib/remote/webrtc";
 import RemoteTileSurface from "./RemoteTileSurface";
-import EventInsightsSurface from "@/components/surface/EventInsightsSurface";
-import { resolveActiveEventKey } from "@/lib/surface/resolveActiveEventKey";
 
 type Props = {
   role: RemoteRole;
@@ -50,9 +48,6 @@ export default function RemoteSession({
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
   const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
-  const [displayMode, setDisplayMode] = useState<"gameday" | "insights">("gameday");
-  const displayModeRef = useRef(displayMode);
-  displayModeRef.current = displayMode;
   const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
   const sendControllerState = useMemo(
@@ -84,10 +79,6 @@ export default function RemoteSession({
         ),
       };
       peerRef.current?.sendMessage({ type: "stateSnapshot", state: snapshot });
-      peerRef.current?.sendMessage({
-        type: "displayModeSnapshot",
-        mode: displayModeRef.current,
-      });
       if (includeEventStates) {
         for (const [eventKey, eventState] of Object.entries(eventStatesRef.current)) {
           peerRef.current?.sendMessage({
@@ -126,11 +117,6 @@ export default function RemoteSession({
           applyRemoteSessionAction(localControllerRef.current, action);
         },
         onMessage: (message: RemoteSessionMessage) => {
-          if (message.type === "displayModeSnapshot") {
-            setDisplayMode(message.mode);
-            return;
-          }
-
           if (message.type === "eventStateSnapshot" && role === "display") {
             setEventStates((current) => {
               const next = {
@@ -239,37 +225,15 @@ export default function RemoteSession({
           controller={controller}
           peerStatus={peerStatus}
           eventStates={eventStates}
-          displayMode={displayMode}
-          onDisplayModeChange={(mode) => {
-            setDisplayMode(mode);
-            peer.sendMessage({ type: "displayModeSnapshot", mode });
-          }}
         />
       </div>
     );
   }
 
-  const displayState = surfaceState;
-  const resolvedInsightsEventKey = resolveActiveEventKey(displayState);
-  const trackedTeams = resolvedInsightsEventKey
-    ? displayState.eventConfigs[resolvedInsightsEventKey]?.trackedTeams ?? []
-    : [];
-
   return (
     <EventStateSnapshotsProvider snapshots={eventStates}>
       <div hidden={hidden}>
-        <div hidden={displayMode !== "gameday"}>
-          <TileViewSurface controller={controller} showModeToggle={false} />
-        </div>
-        <div hidden={displayMode !== "insights"}>
-          {resolvedInsightsEventKey ? (
-            <EventInsightsSurface eventKey={resolvedInsightsEventKey} trackedTeams={trackedTeams} />
-          ) : (
-            <main className="flex min-h-screen items-center justify-center bg-black p-8 text-center text-sm text-neutral-500">
-              Add an event from the controller before switching this display to Match Insights.
-            </main>
-          )}
-        </div>
+        <TileViewSurface controller={controller} />
       </div>
     </EventStateSnapshotsProvider>
   );

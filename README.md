@@ -87,6 +87,24 @@ Specialized presentation/derivation hooks remain separate where applicable:
 - `useStreamController` — webcast normalization and selection.
 
 
+## Event Insights
+
+The standalone `/insights/event/<event>` analytics workspace participates in the shared live runtime. It consumes `useEventState` snapshots through the origin-wide SharedWorker/WebSocket system, just like Tile View, and refreshes its server-calculated analytics when the current completed match changes. It must not create a separate WebSocket or move authoritative analytics calculations into the browser. Historical Statbotics collection is a resumable Redis-backed server job: the API returns the complete-so-far snapshot and uses Vercel `waitUntil` to process bounded match batches with retries and concurrency limits. The page automatically refreshes collection progress/results; it does not require manual pagination. The worker periodically refreshes the TBA event match schedule and OPR, while WebSocket/EventState changes trigger immediate refresh of the latest completed match.
+
+## Analytics architecture
+
+The event analytics workspace has four scopes: **Event Overview** (the default competitive landscape), **Team Analysis** (team capability and season context), **Matchup Analysis** (observed alliance comparisons), and **Scouting Tools** (review queue, unexpected results, prediction quality, and alliance patterns). These scopes share one server-calculated event snapshot; they are not separate data pipelines.
+
+TBA and Statbotics acquisition, normalization, statistical calculations, and analytical conclusions remain server-side. The browser selects views and presents the resulting data; it does not call upstream providers or implement a parallel statistical model. Official qualification rank and Statbotics EPA are displayed side by side as distinct measures, not treated as interchangeable scores.
+
+Analytics services are independent of Next.js route handlers and Vercel execution details. Vercel serverless functions currently invoke the services, with Redis holding resumable job state and Vercel `waitUntil` acting only as a bounded execution adapter. The same service functions should remain callable by a future dedicated worker without changing the client-facing API.
+
+Long-running work is bounded and resumable; Redis is authoritative for job progress, retry state, and cached snapshots. Prefer incremental updates when match data changes, while periodically reconciling the event schedule, rankings, roster, and OPR. Keep source-data freshness distinct from calculation freshness and record a calculation version when derived snapshots are persisted.
+
+Alliance residuals and combined alliance estimates are contextual evidence, not individual robot attribution. Model provenance, sample coverage, and uncertainty must remain visible wherever analytical conclusions are presented.
+
+Per-team event briefs lead with concise bullet summaries, followed by supporting metrics, graphs, match pointers, and review flags. Flags are correlation-based investigation prompts only. FieldView must not infer or state robot-level causation from alliance scores, model residuals, shared EPA updates, partner combinations, or win-probability outcomes; the human scout investigates causes.
+
 ## Match data
 
 The client-side match helpers live in `src/lib/gameday/matchUtils.ts`.
@@ -244,3 +262,45 @@ Architecture boundaries:
 - Statbotics fields are accessed directly from the typed API response. The underlying data is not modified; displayed metrics are formatted to at most one decimal place for readability.
 - The Insights alliance row sums each team’s OPR, DPR, CCWM, EPA, Auto EPA, Teleop EPA, and Endgame EPA. A total is shown only when all three team values for that metric are available.
 - When TBA has posted match scores and a score breakdown, the official, year-specific breakdown is shown below the alliance tables. The year comes from Statbotics match data when available, falling back to the year prefix in the TBA match key.
+
+
+## Event Analytics prototype
+
+The standalone event analytics workspace lives at `/insights/event/<event>` and is intentionally separate from Gameday tile surfaces. It consumes the same server-side TBA and Statbotics services, then derives event-relative team comparisons, alliance score residuals, EPA/OPR disagreement, rating changes, alliance context, and a rule-based scouting review queue.
+
+The event analytics API is `/api/insights/event/<event>?offset=0&limit=30`. Match records are loaded in pages (20 by default, maximum 40 per request) with bounded Statbotics concurrency. Team comparison also loads the selected teams' official-season TBA event histories and Statbotics team-year/team-event snapshots on demand. Derived response pages are cached briefly in Redis and use a request lock to avoid duplicate work. Team and match data remain sourced from TBA and the Statbotics mirror; the analytics layer does not create a historical database.
+
+This is an exploratory prototype. Findings and review status are not persisted; review actions are local to the browser. Match residuals and rating updates are alliance/model-level signals and must not be interpreted as robot-specific attribution. Event-relative percentiles are only comparable within the loaded event roster.
+
+
+## Homepage event snapshot
+
+The homepage is a server-rendered snapshot of the current Sunday–Saturday calendar week and is revalidated hourly. Each event card includes its type, location, competition status, webcast availability, and the last/next match when available.
+
+Match summaries are derived on the server from the canonical full event match schedule using the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers. Schedule reads reuse the existing TBA Redis cache, including its TBA-controlled freshness, ETag handling, and webhook mutations. The homepage does not create a separate summary cache, browser polling loop, or WebSocket subscription.
+
+
+## Homepage event snapshot
+
+The homepage is a server-rendered snapshot of the current Sunday–Saturday calendar week and is revalidated hourly. Each event card includes its type, location, competition status, webcast availability, and the last/next match when available.
+
+Match summaries are derived on the server from the canonical full event match schedule using the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers. Schedule reads reuse the existing TBA Redis cache, including its TBA-controlled freshness, ETag handling, and webhook mutations. The homepage snapshot itself is cached for one hour; the page does not create a separate match cache, browser polling loop, or WebSocket subscription.
+
+
+## Elimination performance shift analysis
+
+The season-long team match analysis calculates a qualification-to-elimination score-residual shift separately for each official event. Only events with at least three scored qualification matches and two scored elimination matches with usable pre-match Statbotics predictions are eligible. Each event contributes one shift to the season summary so events with larger playoff schedules do not dominate. The summary reports mean/median event shift, negative-shift event count, and a one-sided exact sign test across event-level shifts. A recurring-negative label requires at least three eligible events, at least three negative shifts, and sign-test p ≤ 0.05. This is an exploratory association in alliance-level residuals, not proof of robot-level underperformance or choking. The first-pass calculation is not yet adjusted for partner/opponent strength; the UI states this limitation explicitly. Match keys for the qualification and elimination evidence are retained for direct match review.
+
+
+## Season-wide cohort analytics
+
+Event Insights builds a Redis-backed, resumable season cohort for every team on the target event roster. For each team, it discovers all official-season events (excluding TBA event types 99 offseason and 100 preseason), then retrieves Statbotics team-event snapshots through the configured mirror. Work is bounded by a 22-second execution budget, two concurrent upstream requests, small batches, per-record retry limits, a finite lock, and a 24-hour job TTL. Team-event snapshots are cached for 24 hours; the current target event is explicitly refreshed on a 10-minute cadence. This avoids fan-out requests from the browser and avoids collecting every season match for every event team.
+
+The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
+
+The selected-team match-history endpoint adds an event-normalized residual pattern. It compares the selected team's mean alliance score residual with the residual distribution from both alliances in the same matches, requires at least three team matches and six baseline alliance samples per event, and tests whether below- or above-baseline directions recur across events. This is an approximate baseline sampled from matches featuring the team, not an independent event-wide calibration sample. It cannot separate the selected team from its partners or opponents.
+
+
+### Reader-first analytics presentation
+
+Each analytics view leads with a concise plain-language takeaway, then shows only the evidence needed to support it. Detailed tables, secondary metrics, statistical tests, and model diagnostics remain available in clearly labeled expandable sections. Event Overview summarizes the competitive picture; Team Analysis begins with a bullet-first brief and review matches; Matchup Analysis begins with the recorded result; Scouting Tools puts actionable review signals ahead of aggregate diagnostics. Conclusions remain descriptive and traceable to their supporting data, never causal robot-level attribution.

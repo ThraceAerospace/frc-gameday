@@ -3645,7 +3645,7 @@ export interface components {
             state_prov: string | null;
             /** @description Country of team derived from parsing the address registered with FIRST. */
             country: string | null;
-            /** @description Will be NULL, for future development. */
+            /** @description Always null. Teams are not geocoded, so there is no address or location name; use city, state_prov, country, and postal_code. */
             address: string | null;
             /** @description Postal code from the team address. */
             postal_code: string | null;
@@ -3666,7 +3666,7 @@ export interface components {
              * @description Will be NULL, for future development.
              */
             lng: number | null;
-            /** @description Will be NULL, for future development. */
+            /** @description Always null. Teams are not geocoded, so there is no address or location name; use city, state_prov, country, and postal_code. */
             location_name: string | null;
             /**
              * Format: url

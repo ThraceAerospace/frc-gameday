@@ -159,6 +159,69 @@ export class StatboticsClient {
       await releaseLock(lockKey, token);
     }
   }
+  async getTeamYear(team: number, year: number) {
+    return this.getCachedRecord<import("./types").StatboticsTeamYear>(
+      `/team_year/${team}/${year}`, `team-year:${team}:${year}`,
+    );
+  }
+
+  async getTeamEvent(team: number, eventKey: string, options: { refresh?: boolean } = {}) {
+    return this.getCachedRecord<import("./types").StatboticsTeamEvent>(
+      "/team_event/" + team + "/" + encodeURIComponent(eventKey),
+      "team-event:" + team + ":" + eventKey,
+      { refresh: options.refresh, ttlSeconds: 24 * 60 * 60 },
+    );
+  }
+
+  private async getCachedRecord<T>(
+    endpoint: string,
+    cacheId: string,
+    options: { refresh?: boolean; ttlSeconds?: number } = {},
+  ): Promise<T | null> {
+    const key = "cache:statbotics:record:" + cacheId;
+    const cachedRaw = await redis.get(key);
+    let cachedData: T | null = null;
+    if (cachedRaw) {
+      try {
+        const cached = JSON.parse(cachedRaw) as { data: T | null };
+        if ("data" in cached) cachedData = cached.data;
+      } catch { await redis.del(key); }
+    }
+    if (cachedRaw && !options.refresh) return cachedData;
+    const lockKey = "lock:statbotics:record:" + cacheId;
+    const token = randomUUID();
+    const acquired = await redis.set(lockKey, token, "EX", REQUEST_LOCK_SECONDS, "NX");
+    if (acquired !== "OK") {
+      if (cachedRaw) return cachedData;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const result = await redis.get(key);
+        if (result) {
+          try { return (JSON.parse(result) as { data: T | null }).data; } catch { /* retry */ }
+        }
+      }
+      throw new Error("A Statbotics team record request is already in progress");
+    }
+    try {
+      const configuredBase = process.env.STATBOTICS_API_BASE_URL?.trim();
+      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, "");
+      const response = await fetch(baseUrl + "/v3" + endpoint, { cache: "no-store" });
+      if (response.status === 404) {
+        await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data: null }), "EX", options.ttlSeconds ?? NOT_FOUND_CACHE_TTL_SECONDS);
+        return null;
+      }
+      if (!response.ok) throw new Error("Statbotics request failed: " + response.status);
+      const data = await response.json() as T;
+      await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data }), "EX", options.ttlSeconds ?? MATCH_CACHE_TTL_SECONDS);
+      return data;
+    } catch (error) {
+      if (cachedRaw) return cachedData;
+      throw error;
+    } finally {
+      await releaseLock(lockKey, token);
+    }
+  }
+
 }
 
 function latestCachedFallback(cached: CachedMatch | null): cached is CachedMatch {

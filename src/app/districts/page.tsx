@@ -1,57 +1,28 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
-import { formatTeamNumber } from "@/lib/tba/formatters";
 import { TBA } from "@/lib/tba/service";
+
+export const revalidate = 3600;
 
 export default async function DistrictsPage() {
   const year = new Date().getFullYear();
-  const [events, districts] = await Promise.all([
-    TBA.getEvents(year),
-    TBA.getDistricts(year),
-  ]);
-
-  const summaries = await Promise.all(districts.map(async (district) => {
-    try {
-      const [teams, districtEvents, rankings] = await Promise.all([
-        TBA.getDistrictTeams(district.key),
-        TBA.getDistrictEvents(district.key),
-        TBA.getDistrictRankings(district.key),
-      ]);
-      return { ...district, teamsCount: teams.length, events: districtEvents, rankings };
-    } catch {
-      return { ...district, teamsCount: 0, events: [], rankings: [] };
-    }
-  }));
-
+  const districts = await TBA.getDistricts(year);
   return (
-    <SiteShell events={events}>
-      <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
+    <SiteShell>
+      <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FIRST Robotics Competition</p>
         <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">{year} Districts</h1>
-        <p className="mt-2 text-sm text-slate-500">Explore district events, team counts, and point rankings.</p>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {summaries.map((district) => (
-            <section key={district.key} className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 p-5">
-                <p className="font-mono text-xs text-slate-400">{district.key}</p>
-                <h2 className="mt-1 truncate text-lg font-bold text-slate-900">{district.display_name}</h2>
-                <div className="mt-3 flex gap-4 text-xs text-slate-500">
-                  <span>{district.teamsCount} teams</span><span>{district.events.length} events</span><span>{district.rankings.length} ranked</span>
-                </div>
-              </div>
-              <div className="p-4">
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Events</p>
-                <div className="space-y-1">
-                  {district.events.slice(0, 4).map((event) => <Link key={event.key} href={`/event/${event.key}`} className="block truncate rounded-lg px-2 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700">{event.name}</Link>)}
-                </div>
-                <p className="mb-2 mt-4 text-[11px] font-bold uppercase tracking-wider text-slate-400">Top district points</p>
-                <div className="space-y-1">
-                  {district.rankings.slice(0, 5).map((ranking: any, index: number) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-2 py-2 text-xs"><span className="truncate font-mono text-slate-700">{ranking.team_key ? formatTeamNumber(ranking.team_key) : "—"}</span><span className="shrink-0 font-semibold text-slate-900">{ranking.point_total ?? ranking.total_points ?? "—"} pts</span></div>)}
-                </div>
-              </div>
-            </section>
+        <p className="mt-2 text-sm text-slate-500">Explore the active districts for the {year} season.</p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {districts.map((district) => (
+            <Link key={district.key} href={`/district/${district.abbreviation.toLowerCase()}`} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40">
+              <p className="font-mono text-xs text-slate-400">{district.key}</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900">{district.display_name}</h2>
+              <p className="mt-3 text-xs font-semibold text-blue-600">View district →</p>
+            </Link>
           ))}
         </div>
+        {!districts.length && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No active districts are listed for {year}.</p>}
       </div>
     </SiteShell>
   );
