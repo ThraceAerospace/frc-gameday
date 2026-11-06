@@ -8,7 +8,7 @@ import type { TBAMatch, TBAEventSimple } from "@/lib/tba/types";
 type TeamMatchRow = {
   matchKey: string;
   matchLabel: string;
-  compLevel: string;
+  compLevel: TBAMatch["comp_level"];
   event: { key: string; name: string; shortName?: string | null; startDate: string };
   partners: string[];
   opponents: string[];
@@ -90,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       matches: sortMatches(await TBA.getTeamMatches(`frc${teamNumber}`, event.key)),
     }));
     const allMatches = eventMatches.flatMap(({ event, matches }) => matches.map((match) => ({ event, match })));
-    const rows = await withConcurrency(allMatches, 4, async ({ event, match }) => {
+    const rows: (TeamMatchRow | null)[] = await withConcurrency(allMatches, 4, async ({ event, match }) => {
       let statbotics: StatboticsMatch | null = null;
       try { statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey }); } catch { /* retain TBA match data */ }
       const red = match.alliances.red.team_keys ?? [];
@@ -140,7 +140,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         : null;
       return {
         matchKey: match.key, matchLabel: label(match), compLevel: match.comp_level,
-        event: { key: event.key, name: event.name, shortName: event.short_name, startDate: event.start_date },
+        event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
         partners: own.team_keys.filter((key) => key !== `frc${teamNumber}`).map((key) => key.replace(/^frc/i, "")),
         opponents: other.team_keys.map((key) => key.replace(/^frc/i, "")),
         alliance, predicted, actual, residual: predicted !== null && actual !== null ? actual - predicted : null,
