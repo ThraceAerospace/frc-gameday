@@ -7,10 +7,10 @@ import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
-type Tab = "review" | "teams" | "unexpected" | "quality" | "alliances";
+type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; redWinProbability:number|null; teamWinProbability:number|null; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;\ntype TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[];matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};\ntype Tab = "review" | "teams" | "matchEpa" | "unexpected" | "quality" | "alliances";
 const TABS: { id: Tab; label: string }[] = [
   { id: "review", label: "Review queue" },
-  { id: "teams", label: "Team comparison" },
+  { id: "teams", label: "Team comparison" },\n  { id: "matchEpa", label: "Match-by-match EPA" },
   { id: "unexpected", label: "Unexpected results" },
   { id: "quality", label: "Prediction quality" },
   { id: "alliances", label: "Alliance patterns" },
@@ -27,7 +27,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [teamB, setTeamB] = useState("");
   const [historyA, setHistoryA] = useState<TeamSeasonHistory | null>(null);
   const [historyB, setHistoryB] = useState<TeamSeasonHistory | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);\n  const [matchAnalysisA, setMatchAnalysisA] = useState<TeamMatchAnalysis | null>(null);\n  const [matchAnalysisB, setMatchAnalysisB] = useState<TeamMatchAnalysis | null>(null);\n  const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);\n  const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
 
   const load = useCallback(async (refreshMatchKey: string | null = null) => {
     setLoading(true);
@@ -92,7 +92,25 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     return () => { active = false; };
   }, [teamA, teamB, data?.event.year]);
 
-  const teams = data?.teams ?? [];
+\n  useEffect(() => {
+    if (!teamA || !teamB || teamA === teamB || !data?.event.year) {
+      setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
+    }
+    let active = true;
+    setMatchAnalysisLoading(true); setMatchAnalysisError(null);
+    Promise.all([
+      fetch(`/api/insights/team/${teamA}/matches?year=${data.event.year}`, { cache: "no-store" }),
+      fetch(`/api/insights/team/${teamB}/matches?year=${data.event.year}`, { cache: "no-store" }),
+    ]).then(async ([a,b]) => {
+      if (!a.ok || !b.ok) throw new Error("Match-by-match analysis is temporarily unavailable");
+      const [nextA,nextB] = await Promise.all([a.json(),b.json()]);
+      if (active) { setMatchAnalysisA(nextA as TeamMatchAnalysis); setMatchAnalysisB(nextB as TeamMatchAnalysis); }
+    }).catch((error) => {
+      if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load match analysis"); }
+    }).finally(() => { if (active) setMatchAnalysisLoading(false); });
+    return () => { active = false; };
+  }, [teamA,teamB,data?.event.year]);
+\n  const teams = data?.teams ?? [];
   const selectedA = teams.find((team) => String(team.teamNumber) === teamA);
   const selectedB = teams.find((team) => String(team.teamNumber) === teamB);
   const commonMatches = useMemo(() => data?.matches.filter((record) => {
@@ -151,6 +169,23 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
             </Panel>
             <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Show all event team ratings</summary><div className="p-4"><p className="mb-3 text-xs text-slate-500">EPA, OPR, DPR, and CCWM are distinct rating estimates. Their raw values should not be compared directly across systems.</p><TeamTable teams={teams} /></div></details>
           </section>}
+          {tab === "matchEpa" && <section className="space-y-4">
+            <Panel title="Match-by-match EPA comparison" description="Follow each selected team's Statbotics EPA immediately before and after every match, alongside the alliance prediction and actual result. Match-level rating changes are model updates, not isolated measurements of an individual robot.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
+                <TeamSelect label="Team B" teams={teams} value={teamB} onChange={setTeamB} />
+              </div>
+              {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match histories and EPA records for both teams…</p> : null}
+              {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
+              {matchAnalysisA && matchAnalysisB ? <div className="mt-5 space-y-6">
+                <div className="grid gap-3 md:grid-cols-2"><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/><MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/></div>
+                <div className="grid gap-5 xl:grid-cols-2">
+                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
+                  <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/>
+                </div>
+              </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select two different teams to load their season-long match-by-match EPA comparisons.</p> : null}
+            </Panel>
+          </section>}
           {tab === "unexpected" && <section className="space-y-4">
             <Panel title="Which alliances surprised the model?" description="Each bar is one alliance in one match. Positive values mean the alliance scored more than predicted; negative values mean it scored less. Select a row to open that match on The Blue Alliance."><ResidualBars residuals={residuals} /></Panel>
           </section>}
@@ -171,6 +206,38 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   );
 }
  
+\nfunction MatchAnalysisSummary({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
+  const s=analysis.summary;
+  return <section className="rounded-xl border border-slate-200 p-4">
+    <div className="flex items-center justify-between gap-2"><h3 className="font-bold text-slate-900">{name}</h3><span className="text-xs text-slate-500">{analysis.matchCount} matches · {analysis.eventCount} events</span></div>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <HistoryMetric label="Match wins" value={`${s.wins}–${s.losses}`}/>
+      <HistoryMetric label="Win rate" value={s.winRate===null?"—":`${(s.winRate*100).toFixed(1)}%`}/>
+      <HistoryMetric label="Mean score error" value={fmt(s.meanAbsoluteError)}/>
+      <HistoryMetric label="Mean EPA change" value={fmt(s.meanMatchEPAChange,2)}/>
+    </div>
+    <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Mean score error is calculated from the team's alliance predictions.</p>
+  </section>;
+}
+function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
+  const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
+  const matches=analysis.matches;
+  const max=Math.max(1,...matches.flatMap((m)=>[Math.abs(m.preEPA??0),Math.abs(m.postEPA??0)]));
+  return <section className="min-w-0 rounded-xl border border-slate-200 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">{name}</h3><p className="text-xs text-slate-500">Pre-match EPA → post-match EPA</p></div><span className="text-xs text-slate-500">{matches.length} match records</span></div>
+    <div className="mt-3 space-y-3">{matches.map((match)=>{
+      const delta=match.deltaEPA;
+      return <article key={match.matchKey} className="rounded-lg border border-slate-100 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{match.event.shortName??match.event.name} · {match.matchLabel}</p><p className="mt-0.5 text-[11px] text-slate-500">{match.alliance.toUpperCase()} · partners {match.partners.join(", ")||"—"} · opponents {match.opponents.join(", ")}</p></div><a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Match ↗</a></div>
+        <div className="mt-3 grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2"><div><p className="text-[10px] uppercase text-slate-400">Pre EPA</p><p className="text-lg font-bold tabular-nums">{fmt(match.preEPA,2)}</p></div><span className="text-slate-400">→</span><div><p className="text-[10px] uppercase text-slate-400">Post EPA</p><p className="text-lg font-bold tabular-nums">{fmt(match.postEPA,2)}</p></div><span className={`text-sm font-bold tabular-nums ${delta===null?"text-slate-400":delta>=0?"text-emerald-700":"text-rose-700"}`}>{delta===null?"—":`${delta>0?"+":""}${fmt(delta,2)}`}</span></div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${color}`} style={{width:`${match.postEPA===null?0:Math.abs(match.postEPA)/max*100}%`}}/></div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><p className="text-slate-400">Predicted</p><p className="font-semibold tabular-nums">{fmt(match.predicted)}</p></div><div><p className="text-slate-400">Actual</p><p className="font-semibold tabular-nums">{fmt(match.actual)}</p></div><div><p className="text-slate-400">Residual</p><p className={`font-semibold tabular-nums ${(match.residual??0)>=0?"text-emerald-700":"text-rose-700"}`}>{match.residual===null?"—":`${match.residual>0?"+":""}${fmt(match.residual)}`}</p></div></div>
+        {match.sharedAllianceUpdate && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-[10px] text-amber-800">All alliance members received effectively the same EPA change in this model update. Do not interpret this as an individual robot contribution.</p>}
+        <details className="mt-2"><summary className="cursor-pointer text-[11px] font-semibold text-slate-500">Component EPA details</summary><div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">{Object.entries(match.preComponents).filter(([key])=>!/^comp_\d+_epa$/.test(key)).map(([key,value])=><div key={key} className="flex justify-between gap-2"><span className="text-slate-500">{key.replaceAll("_"," ")}</span><span className="font-semibold tabular-nums">{fmt(value,2)}</span></div>)}</div></details>
+      </article>;
+    })}</div>
+  </section>;
+}
 function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
   return <div className="mt-4 space-y-5">
     <div className="grid gap-4 xl:grid-cols-2">
