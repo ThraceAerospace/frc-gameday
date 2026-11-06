@@ -41,9 +41,9 @@ export default function NextMatchCountdown({
   const text = !sameDay
     ? targetDate.toLocaleString("en-US", {
         weekday: "short",
-        hour: "2-digit",
+        hour: "numeric",
         minute: "2-digit",
-        hour12: false,
+        hour12: true,
         timeZone: eventTimezone ?? undefined,
       })
     : "~" + (seconds < 60
