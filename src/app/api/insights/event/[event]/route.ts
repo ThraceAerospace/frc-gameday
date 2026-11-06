@@ -1,5 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { advanceEventAnalytics, getEventAnalyticsSnapshot } from "@/lib/insights/progressive-service";
+import { advanceSeasonCohort, getSeasonCohortSnapshot } from "@/lib/insights/season-cohort";
 
 export const maxDuration = 60;
 
@@ -17,7 +18,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
 
   try {
     const snapshot = await getEventAnalyticsSnapshot(event);
-    waitUntil(advanceEventAnalytics(event, liveMatchKey));
+    const seasonCohort = await getSeasonCohortSnapshot(snapshot.event, snapshot.teams as never[]);
+    snapshot.seasonCohort = seasonCohort;
+    waitUntil(Promise.all([advanceEventAnalytics(event, liveMatchKey), advanceSeasonCohort(event)]));
     return Response.json(snapshot, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error("[Insights] event analytics snapshot failed", event, error);

@@ -128,11 +128,29 @@ export function buildTeamInsights(
   allianceResults: AllianceResult[],
   teams: TeamAnalyticsRow[],
   rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
+  cohort: import("./types").SeasonCohortSnapshot | null = null,
+  cohortTargetKey = "",
+  cohortTargetDate = "",
 ): import("./types").TeamInsight[] {
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const residualThreshold = Math.max(25, (standardDeviation(residuals) ?? 0) * 1.5);
   const rankingByTeam = new Map((rankings?.rankings ?? []).map((item) => [item.team_key, item]));
   const resultByMatchAlliance = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
+  const cohortRecords = cohort?.records ?? [];
+  const seasonComparisons = new Map<number, import("./types").TeamSeasonComparison>();
+  const rawChanges = teams.flatMap((team) => {
+    const current = cohortRecords.find((record) => record.teamNumber === team.teamNumber && record.event.key === cohortTargetKey && record.status === "ready" && record.epaTotal !== null);
+    const prior = cohortRecords.filter((record) => record.teamNumber === team.teamNumber && record.status === "ready" &&
+      record.event.startDate < cohortTargetDate && record.epaTotal !== null)
+      .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
+    if (!current || !prior || current.epaTotal === null || prior.epaTotal === null) return [];
+    return [{ teamNumber: team.teamNumber, priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate },
+      priorEPA: prior.epaTotal, currentEPA: current.epaTotal, change: current.epaTotal - prior.epaTotal }];
+  });
+  const rankedChanges = [...rawChanges].sort((a, b) => b.change - a.change);
+  for (const item of rawChanges) {
+    seasonComparisons.set(item.teamNumber, { ...item, cohortRank: rankedChanges.findIndex((candidate) => candidate.teamNumber === item.teamNumber) + 1, cohortSize: rankedChanges.length });
+  }
   return teams.map((team) => {
     const appearances = records.flatMap((record) => {
       const alliance = record.match.alliances.red.team_keys.includes(team.teamKey) ? "red" as const
@@ -196,12 +214,15 @@ export function buildTeamInsights(
       summary.push(`EPA component estimates: auto ${fmtValue(team.autoEpa)}, teleop ${fmtValue(team.teleopEpa)}, endgame ${fmtValue(team.endgameEpa)}; ${largest[0]} is the largest estimate.`);
     }
     if (epaChange !== null) summary.push(`Across the observed event sequence, EPA moved from ${first!.toFixed(1)} to ${last!.toFixed(1)} (${epaChange > 0 ? "+" : ""}${epaChange.toFixed(1)}).`);
+    const seasonComparison = seasonComparisons.get(team.teamNumber) ?? null;
+    if (seasonComparison) summary.push(`Compared with ${seasonComparison.priorEvent.name}, event EPA ${seasonComparison.change >= 0 ? "increased" : "decreased"} by ${Math.abs(seasonComparison.change).toFixed(1)} points; ${seasonComparison.cohortRank}${ordinalSuffix(seasonComparison.cohortRank)}-largest change among ${seasonComparison.cohortSize} event teams with usable prior-event records.`);
     summary.push(`${completedMatches} completed matches represented; ${appearances.filter((item)=>item.reasons.length).length} match(es) have review signals.`);
     return {
       teamNumber: team.teamNumber, summary, metrics,
-      epaTrend: trend,
+      epaTrend: trend, seasonComparison,
       reviewMatches: appearances.filter((item)=>item.reasons.length).map(({completed: _completed,...item})=>item),
     };
   });
 }
+function ordinalSuffix(value: number): string { const mod100 = value % 100; if (mod100 >= 11 && mod100 <= 13) return "th"; return value % 10 === 1 ? "st" : value % 10 === 2 ? "nd" : value % 10 === 3 ? "rd" : "th"; }
 function fmtValue(value: number | null): string { return value === null ? "—" : value.toFixed(1); }

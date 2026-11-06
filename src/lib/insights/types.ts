@@ -105,6 +105,7 @@ export type TeamInsight = {
     epaChange: number | null;
   };
   epaTrend: { matchKey: string; matchLabel: string; epa: number | null }[];
+  seasonComparison: TeamSeasonComparison | null;
   reviewMatches: TeamInsightMatch[];
 };
 

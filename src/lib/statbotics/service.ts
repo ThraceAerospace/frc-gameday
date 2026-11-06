@@ -9,6 +9,6 @@ export const Statbotics = {
     statbotics.getMatch(matchKey, options),
   getTeamYear: (team: number, year: number): Promise<StatboticsTeamYear | null> =>
     statbotics.getTeamYear(team, year),
-  getTeamEvent: (team: number, eventKey: string): Promise<StatboticsTeamEvent | null> =>
-    statbotics.getTeamEvent(team, eventKey),
+  getTeamEvent: (team: number, eventKey: string, options: { refresh?: boolean } = {}): Promise<StatboticsTeamEvent | null> =>
+    statbotics.getTeamEvent(team, eventKey, options),
 };
