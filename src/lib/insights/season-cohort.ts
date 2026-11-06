@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
-import type { TBAEvent, TBATeam } from "@/lib/tba/types";
+import type { TBAEvent } from "@/lib/tba/types";
 import type { TBAEventSimple } from "@/lib/tba/types";
 import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 

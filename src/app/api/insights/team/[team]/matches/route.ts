@@ -246,15 +246,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     });
     const negativeResidualEventCount = residualPatternEvents.filter((item) => item.belowBaseline).length;
     const residualEventCount = residualPatternEvents.length;
-    const residualSignPValue = residualEventCount ? Array.from({ length: residualEventCount - negativeResidualEventCount + 1 }, (_, index) => negativeResidualEventCount + index)
-      .reduce((sum, successes) => sum + binomialCoefficient(residualEventCount, successes) / (2 ** residualEventCount), 0) : null;
+    const signTail = (n: number, successes: number) => Array.from({ length: n - successes + 1 }, (_, index) => successes + index)
+      .reduce((sum, value) => sum + binomialCoefficient(n, value) / (2 ** n), 0);
+    const positiveResidualEventCount = residualEventCount - negativeResidualEventCount;
+    const residualSignPValue = residualEventCount ? signTail(residualEventCount, negativeResidualEventCount) : null;
+    const positiveResidualSignPValue = residualEventCount ? signTail(residualEventCount, positiveResidualEventCount) : null;
     const residualPattern = {
-      eligibleEventCount: residualEventCount, negativeEventCount: negativeResidualEventCount,
+      eligibleEventCount: residualEventCount, negativeEventCount: negativeResidualEventCount, positiveEventCount: positiveResidualEventCount,
       meanTeamResidual: average(residualPatternEvents.map((item) => item.teamMeanResidual - item.baselineMeanResidual)),
-      signTestPValue: residualSignPValue,
+      signTestPValue: residualSignPValue, positiveSignTestPValue: positiveResidualSignPValue,
       interpretation: residualEventCount < 3 ? "insufficient-history" as const
         : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount >= 3 ? "recurring-below-baseline" as const
-        : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount <= residualEventCount - 3 ? "recurring-above-baseline" as const
+        : positiveResidualSignPValue !== null && positiveResidualSignPValue <= 0.05 && positiveResidualEventCount >= 3 ? "recurring-above-baseline" as const
         : "no-established-pattern" as const,
       events: residualPatternEvents,
     };
