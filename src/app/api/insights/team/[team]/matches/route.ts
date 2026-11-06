@@ -34,8 +34,8 @@ type TeamMatchRow = {
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function teamEPA(record: StatboticsMatch, teamNumber: number, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
-  return record[phase]?.[String(teamNumber)];
+function teamEPA(record: StatboticsMatch | null, teamNumber: number, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
+  return record?.[phase]?.[String(teamNumber)];
 }
 function components(value: StatboticsEPA | undefined): Record<string, number> {
   if (!value) return {};
