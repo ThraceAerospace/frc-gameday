@@ -107,8 +107,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     let active = true;
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
     Promise.all([
-      fetch(`/api/insights/team/${teamA}/matches?year=${data.event.year}`, { cache: "no-store" }),
-      fetch(`/api/insights/team/${teamB}/matches?year=${data.event.year}`, { cache: "no-store" }),
+      fetch(`/api/insights/team/${teamA}/matches?year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`, { cache: "no-store" }),
+      fetch(`/api/insights/team/${teamB}/matches?year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`, { cache: "no-store" }),
     ]).then(async ([a,b]) => {
       if (!a.ok || !b.ok) throw new Error("Match-by-match analysis is temporarily unavailable");
       const [nextA,nextB] = await Promise.all([a.json(),b.json()]);
@@ -117,7 +117,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
       if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load match analysis"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
-  }, [teamA,teamB,data?.event.year]);
+  }, [teamA,teamB,data?.event.year,liveMatchKey,liveMatchSignature]);
 
   const teams = data?.teams ?? [];
   const selectedA = teams.find((team) => String(team.teamNumber) === teamA);
