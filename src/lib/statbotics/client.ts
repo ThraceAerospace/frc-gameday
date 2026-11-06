@@ -167,7 +167,8 @@ export class StatboticsClient {
 
   async getTeamEvent(team: number, eventKey: string, options: { refresh?: boolean } = {}) {
     return this.getCachedRecord<import("./types").StatboticsTeamEvent>(
-      \`/team_event/\${team}/\${encodeURIComponent(eventKey)}\`, \`team-event:\${team}:\${eventKey}\`,
+      "/team_event/" + team + "/" + encodeURIComponent(eventKey),
+      "team-event:" + team + ":" + eventKey,
       { refresh: options.refresh, ttlSeconds: 24 * 60 * 60 },
     );
   }
@@ -177,7 +178,7 @@ export class StatboticsClient {
     cacheId: string,
     options: { refresh?: boolean; ttlSeconds?: number } = {},
   ): Promise<T | null> {
-    const key = \`cache:statbotics:record:\${cacheId}\`;
+    const key = "cache:statbotics:record:" + cacheId;
     const cachedRaw = await redis.get(key);
     let cachedData: T | null = null;
     if (cachedRaw) {
@@ -187,7 +188,7 @@ export class StatboticsClient {
       } catch { await redis.del(key); }
     }
     if (cachedRaw && !options.refresh) return cachedData;
-    const lockKey = \`lock:statbotics:record:\${cacheId}\`;
+    const lockKey = "lock:statbotics:record:" + cacheId;
     const token = randomUUID();
     const acquired = await redis.set(lockKey, token, "EX", REQUEST_LOCK_SECONDS, "NX");
     if (acquired !== "OK") {
@@ -203,13 +204,13 @@ export class StatboticsClient {
     }
     try {
       const configuredBase = process.env.STATBOTICS_API_BASE_URL?.trim();
-      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\\/+$/, "");
-      const response = await fetch(\`\${baseUrl}/v3\${endpoint}\`, { cache: "no-store" });
+      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, "");
+      const response = await fetch(baseUrl + "/v3" + endpoint, { cache: "no-store" });
       if (response.status === 404) {
         await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data: null }), "EX", options.ttlSeconds ?? NOT_FOUND_CACHE_TTL_SECONDS);
         return null;
       }
-      if (!response.ok) throw new Error(\`Statbotics request failed: \${response.status}\`);
+      if (!response.ok) throw new Error("Statbotics request failed: " + response.status);
       const data = await response.json() as T;
       await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data }), "EX", options.ttlSeconds ?? MATCH_CACHE_TTL_SECONDS);
       return data;
