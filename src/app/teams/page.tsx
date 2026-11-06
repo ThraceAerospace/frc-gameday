@@ -5,13 +5,10 @@ import { formatTeamNumber } from "@/lib/tba/formatters";
 
 export default async function TeamsPage() {
   const year = new Date().getFullYear();
-  const [events, teams] = await Promise.all([
-    TBA.getEvents(year),
-    TBA.getTeams(year),
-  ]);
+  const teams = await TBA.getTeams(year);
 
   return (
-    <SiteShell events={events}>
+    <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
           Teams

@@ -31,7 +31,7 @@ export default async function EventPage({
 
   if (!eventKey) {
     return (
-      <SiteShell events={[]}>
+      <SiteShell>
         <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
           <p className="text-slate-500">Missing event key.</p>
         </main>
@@ -43,19 +43,19 @@ export default async function EventPage({
   let teams;
   let matches;
   let alliances;
-  let navigationEvents;
 
   try {
-    [event, teams, matches, alliances, navigationEvents] = await Promise.all([
+    [event, teams, matches] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
-      TBA.getEventPlayoffAlliances(eventKey),
-      TBA.getEvents(new Date().getFullYear()),
     ]);
+    alliances = activeTab === "matches"
+      ? await TBA.getEventPlayoffAlliances(eventKey)
+      : null;
   } catch {
     return (
-      <SiteShell events={[]}>
+      <SiteShell>
         <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
           <div className="mx-auto max-w-5xl">
             <h1 className="text-2xl font-semibold">Event unavailable</h1>
@@ -97,7 +97,7 @@ export default async function EventPage({
   const dates = formatEventDateRange(event.start_date, event.end_date);
 
   return (
-    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+    <SiteShell>
       <main className="min-h-full bg-slate-50 text-slate-900">
         <div className="mx-auto max-w-5xl px-6 py-10">
           <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

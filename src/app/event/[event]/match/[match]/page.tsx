@@ -26,13 +26,11 @@ export default async function MatchPage({
 
   let match;
   let event;
-  let navigationEvents;
 
   try {
-    [match, event, navigationEvents] = await Promise.all([
+    [match, event] = await Promise.all([
       TBA.getMatch(matchKey),
       TBA.getEvent(eventKey),
-      TBA.getEvents(new Date().getFullYear()),
     ]);
   } catch {
     return (
@@ -63,7 +61,7 @@ export default async function MatchPage({
   const eventOprs = oprsResult.status === "fulfilled" ? oprsResult.value : null;
 
   return (
-    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+    <SiteShell>
       <main className="min-h-full bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-5xl px-6 py-10">
         {/* Breadcrumb */}
