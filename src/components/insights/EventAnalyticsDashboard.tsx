@@ -101,18 +101,19 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 
 
   useEffect(() => {
-    if (!teamA || !teamB || teamA === teamB || !data?.event.year) {
+    if (!teamA || teamA === teamB || !data?.event.year) {
       setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
     }
     let active = true;
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    Promise.all([
-      fetch(`/api/insights/team/${teamA}/matches?year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`, { cache: "no-store" }),
-      fetch(`/api/insights/team/${teamB}/matches?year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`, { cache: "no-store" }),
-    ]).then(async ([a,b]) => {
-      if (!a.ok || !b.ok) throw new Error("Match-by-match analysis is temporarily unavailable");
-      const [nextA,nextB] = await Promise.all([a.json(),b.json()]);
-      if (active) { setMatchAnalysisA(nextA as TeamMatchAnalysis); setMatchAnalysisB(nextB as TeamMatchAnalysis); }
+    const query = \`year=\${data.event.year}\${liveMatchKey ? \`&refresh=1&liveMatchKey=\${encodeURIComponent(liveMatchKey)}\` : ""}\`;
+    const firstRequest = fetch(\`/api/insights/team/\${teamA}/matches?\${query}\`, { cache: "no-store" });
+    const secondRequest = teamB ? fetch(\`/api/insights/team/\${teamB}/matches?\${query}\`, { cache: "no-store" }) : Promise.resolve(null);
+    Promise.all([firstRequest, secondRequest]).then(async ([firstResponse, secondResponse]) => {
+      if (!firstResponse.ok || (secondResponse && !secondResponse.ok)) throw new Error("Match-by-match analysis is temporarily unavailable");
+      const first = await firstResponse.json();
+      const second = secondResponse ? await secondResponse.json() : null;
+      if (active) { setMatchAnalysisA(first as TeamMatchAnalysis); setMatchAnalysisB(second as TeamMatchAnalysis | null); }
     }).catch((error) => {
       if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load match analysis"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
@@ -182,21 +183,21 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
             <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Show all event team ratings</summary><div className="p-4"><p className="mb-3 text-xs text-slate-500">EPA, OPR, DPR, and CCWM are distinct rating estimates. Their raw values should not be compared directly across systems.</p><TeamTable teams={teams} /></div></details>
           </section>}
           {tab === "matchEpa" && <section className="space-y-4">
-            <Panel title="Match-by-match EPA comparison" description="Follow each selected team's Statbotics EPA immediately before and after every match, alongside the alliance prediction and actual result. Match-level rating changes are model updates, not isolated measurements of an individual robot.">
+            <Panel title="Team match-by-match analysis" description="Inspect one team’s complete season match history, including elimination performance shifts. Optionally select a second team for same-match EPA comparison. Match-level rating changes are model updates, not isolated measurements of an individual robot.">
               <div className="grid gap-3 sm:grid-cols-2">
-                <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
-                <TeamSelect label="Team B" teams={teams} value={teamB} onChange={setTeamB} />
+                <TeamSelect label="Team" teams={teams} value={teamA} onChange={setTeamA} />
+                <TeamSelect label="Compare with (optional)" teams={teams} value={teamB} onChange={setTeamB} />
               </div>
-              {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match histories and EPA records for both teams…</p> : null}
+              {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match history and EPA records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
-              {matchAnalysisA && matchAnalysisB ? <div className="mt-5 space-y-6">
-                <div className="grid gap-3 md:grid-cols-2"><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/><MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`}/></div>
-                <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? `Team ${teamA}`} nameB={selectedB?.name ?? `Team ${teamB}`}/>
-                <div className="grid gap-5 xl:grid-cols-2">
-                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
-                  <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/>
+              {matchAnalysisA ? <div className="mt-5 space-y-6">
+                <div className={matchAnalysisB ? "grid gap-3 md:grid-cols-2" : "max-w-3xl"}><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? \`Team \${teamA}\`}/>{matchAnalysisB ? <MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? \`Team \${teamB}\`}/> : null}</div>
+                {matchAnalysisB ? <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? \`Team \${teamA}\`} nameB={selectedB?.name ?? \`Team \${teamB}\`}/> : null}
+                <div className={matchAnalysisB ? "grid gap-5 xl:grid-cols-2" : "max-w-4xl"}>
+                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? \`Team \${teamA}\`} accent="blue"/>
+                  {matchAnalysisB ? <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? \`Team \${teamB}\`} accent="teal"/> : null}
                 </div>
-              </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select two different teams to load their season-long match-by-match EPA comparisons.</p> : null}
+              </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select a team to load its season-long match-by-match analysis. A second team is optional for direct comparison.</p> : null}
             </Panel>
           </section>}
           {tab === "matchup" && <MatchupAnalysis data={data} />}
