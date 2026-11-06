@@ -30,6 +30,7 @@ export type TBADistrictRanking = components["schemas"]["District_Ranking"];
 export type TBAWebcast = components["schemas"]["Webcast"];
 export type TBAEventRanking = components["schemas"]["Event_Ranking"];
 export type TBAEventOPRs = components["schemas"]["Event_OPRs"];
+export type TBAEventAdvancementPoints = components["schemas"]["Event_District_Points"];
 
 export type TBAEventWithTeams = TBAEvent & {
   teams: TBATeam[];

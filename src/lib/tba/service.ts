@@ -9,6 +9,8 @@ import type {
   TBAEventWithTeams,
   TBAEventOPRs,
   TBAEventRanking,
+  TBAEventAdvancementPoints,
+  TBAAward,
   TBADistrict,
   TBADistrictAdvancementMap,
   TBADistrictAdvancementResponse,
@@ -68,6 +70,12 @@ export const TBA = {
       `/team/${teamKey}/event/${eventKey}/status`
     ),
 
+  getTeamEventAwards: (
+    teamKey: string,
+    eventKey: string
+  ): Promise<TBAAward[]> =>
+    tba.get<TBAAward[]>(`/team/${teamKey}/event/${eventKey}/awards`),
+
   getTeamMatches: (
     teamKey: string,
     eventKey: string
@@ -87,6 +95,13 @@ export const TBA = {
 
   getEventSimple: (eventKey: string): Promise<TBAEventSimple> =>
     tba.get<TBAEventSimple>(`/event/${eventKey}/simple`),
+
+  getEventAdvancementPoints: (
+    eventKey: string
+  ): Promise<TBAEventAdvancementPoints | null> =>
+    tba.get<TBAEventAdvancementPoints | null>(
+      `/event/${eventKey}/advancement_points`
+    ),
 
   getEvents: (year: number): Promise<TBAEvent[]> =>
     tba.get<TBAEvent[]>(`/events/${year}`),

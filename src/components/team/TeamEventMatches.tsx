@@ -22,7 +22,7 @@ export default function TeamEventMatches({
         <div className="px-4 py-4 text-sm text-slate-500">No matches.</div>
       ) : (
         matches.map((match) => (
-          <MatchRow key={match.key} eventKey={event.key} playoffType={event.playoff_type ?? null} match={match} highlightedTeamKeys={highlightedTeamKeys} playoffAlliances={playoffAlliances} />
+          <MatchRow key={match.key} eventKey={event.key} playoffType={event.playoff_type ?? null} match={match} highlightedTeamKeys={highlightedTeamKeys} playoffAlliances={playoffAlliances} compact={true} />
         ))
       )}
     </div>

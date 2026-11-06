@@ -35,7 +35,6 @@ export default function TeamEventsSidebar({ events }: { events: SidebarEvent[] }
           return (
             <a key={event.key} href={`#${event.id}`} aria-current={active ? "location" : undefined} onClick={() => setActiveEventId(event.id)} className={`block min-w-max rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:min-w-0 ${active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
               <span className="block truncate lg:whitespace-normal">{event.name}</span>
-              <span className={`mt-0.5 block font-mono text-[10px] ${active ? "text-blue-500" : "text-slate-400"}`}>{event.key}</span>
             </a>
           );
         })}
