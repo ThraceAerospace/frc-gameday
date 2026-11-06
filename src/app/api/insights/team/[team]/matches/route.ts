@@ -204,6 +204,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         event: item.event, qualificationMatches: item.qualification.length, eliminationMatches: item.elimination.length,
         qualificationMeanResidual: average(item.qualification), eliminationMeanResidual: average(item.elimination),
         shift: (average(item.elimination) ?? 0) - (average(item.qualification) ?? 0),
+        shiftStandardError: Math.sqrt((item.qualification.reduce((sum,value)=>sum+(value-(average(item.qualification)??0))**2,0)/Math.max(1,item.qualification.length-1))/item.qualification.length + (item.elimination.reduce((sum,value)=>sum+(value-(average(item.elimination)??0))**2,0)/Math.max(1,item.elimination.length-1))/item.elimination.length),
         qualificationMatchKeys: item.qualificationMatches, eliminationMatchKeys: item.eliminationMatches,
       }));
     const eventShifts = eligibleEliminationEvents.map((item) => item.shift);
@@ -211,7 +212,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     // The "after strong qualifications" test only includes events where the
     // team's qualification alliance residual was positive (above prediction).
     const positiveQualificationEvents = eligibleEliminationEvents.filter((item) => (item.qualificationMeanResidual ?? 0) > 0);
-    const negativeShiftAfterPositiveQualCount = positiveQualificationEvents.filter((item) => item.shift < 0).length;
+    const negativeShiftAfterPositiveQualCount = positiveQualificationEvents.filter((item) => item.shift < -item.shiftStandardError).length;
     const nPositiveQualificationEvents = positiveQualificationEvents.length;
     // Exact one-sided sign test: probability of at least this many negative shifts under p=0.5.
     const binomialCoefficient = (n: number, k: number) => {
