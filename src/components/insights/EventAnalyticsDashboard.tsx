@@ -171,25 +171,90 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 }
  
 function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
-  const firstPoints=first.events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
-  const secondPoints=second.events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
-  const all=[...firstPoints,...secondPoints];
-  const max=Math.max(1,...all.map((point)=>point.value));
-  return <div className="mt-3 grid gap-4 lg:grid-cols-2">
-    <div><p className="text-xs font-semibold text-slate-700">Team {first.team.nickname || first.team.name}</p><HistoryLine points={firstPoints} max={max} color="#2563eb"/><p className="mt-1 text-xs text-slate-500">Team-year EPA: {fmt(first.season?.epa?.total_points)}</p><HistoryTable events={first.events}/></div>
-    <div><p className="text-xs font-semibold text-slate-700">Team {second.team.nickname || second.team.name}</p><HistoryLine points={secondPoints} max={max} color="#0f766e"/><p className="mt-1 text-xs text-slate-500">Team-year EPA: {fmt(second.season?.epa?.total_points)}</p><HistoryTable events={second.events}/></div>
+  return <div className="mt-4 space-y-5">
+    <div className="grid gap-4 xl:grid-cols-2">
+      <TeamSeasonProfile history={first} accent="blue" />
+      <TeamSeasonProfile history={second} accent="teal" />
+    </div>
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h4 className="font-semibold text-slate-900">Season EPA component comparison</h4>
+      <p className="mt-1 text-xs text-slate-500">Statbotics modeled contribution estimates. Negative values are below-baseline model estimates, not literal negative points scored.</p>
+      <EpaBreakdownComparison first={first} second={second} />
+    </div>
   </div>;
 }
-function HistoryLine({points,max,color}:{points:{label:string;value:number}[];max:number;color:string}) {
-  if (!points.length) return <p className="py-5 text-xs text-slate-400">No Statbotics team-event history available.</p>;
-  const width=280, height=100, pad=12;
-  const coords=points.map((point,index)=>({x:pad+(points.length===1?0:index/(points.length-1))*(width-pad*2),y:height-pad-(point.value/max)*(height-pad*2)}));
-  return <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 w-full max-w-sm" role="img" aria-label="Team EPA progression by event"><line x1={pad} y1={height-pad} x2={width-pad} y2={height-pad} stroke="#cbd5e1"/><polyline points={coords.map((point)=>`${point.x},${point.y}`).join(" ")} fill="none" stroke={color} strokeWidth="2.5"/>{coords.map((point,index)=><circle key={index} cx={point.x} cy={point.y} r="3.5" fill={color}><title>{points[index].label}: {points[index].value.toFixed(1)} EPA</title></circle>)}</svg>;
+function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
+  const events=history.events.filter((item)=>item.statbotics?.epa?.total_points !== undefined);
+  const epaValues=events.map((item)=>item.statbotics?.epa?.total_points ?? 0);
+  const firstValue=epaValues[0] ?? null;
+  const lastValue=epaValues[epaValues.length-1] ?? null;
+  const delta=firstValue !== null && lastValue !== null ? lastValue-firstValue : null;
+  const record=history.season?.record?.total;
+  const qual=history.season?.record?.qual;
+  const ranks=history.season?.ranks ?? {};
+  const stats=history.season?.epa?.stats ?? {};
+  const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
+  const textColor=accent==="blue"?"text-blue-700":"text-teal-700";
+  return <section className="min-w-0 rounded-xl bg-slate-50 p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div><p className="text-xs font-semibold text-slate-500">Team {history.season?.team ?? history.events[0]?.statbotics?.team ?? ""}</p><h4 className="text-lg font-bold text-slate-950">{history.team.nickname || history.team.name || "Team history"}</h4></div>
+      <span className={"text-xs font-bold " + textColor}>{events.length} event snapshots</span>
+    </div>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <HistoryMetric label="Season EPA" value={fmt(history.season?.epa?.total_points)} />
+      <HistoryMetric label="Overall record" value={record ? `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}` : "—"} />
+      <HistoryMetric label="Qual record" value={qual ? `${qual.wins ?? 0}-${qual.losses ?? 0}` : "—"} />
+      <HistoryMetric label="EPA change" value={delta === null ? "—" : `${delta > 0 ? "+" : ""}${fmt(delta)}`} />
+    </div>
+    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+      {Object.entries(ranks).filter(([,value])=>typeof value==="number").map(([label,value])=><div key={label} className="flex justify-between gap-2 border-b border-slate-200 pb-1"><span className="capitalize text-slate-500">{label} rank</span><span className="font-semibold tabular-nums text-slate-800">{value}</span></div>)}
+      {Object.entries(stats).filter(([key,value])=>typeof value==="number" && ["start","pre_elim","mean","max","min"].includes(key)).map(([label,value])=><div key={label} className="flex justify-between gap-2 border-b border-slate-200 pb-1"><span className="capitalize text-slate-500">EPA {label.replace("_"," ")}</span><span className="font-semibold tabular-nums text-slate-800">{fmt(value)}</span></div>)}
+    </div>
+    <div className="mt-4">
+      <div className="mb-2 flex items-center justify-between"><h5 className="text-xs font-bold uppercase tracking-wide text-slate-500">EPA by event</h5><span className="text-[11px] text-slate-400">Chronological</span></div>
+      <EventEpaBars events={events} color={color} />
+    </div>
+    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table className="w-full min-w-[520px] text-xs">
+        <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-2 py-2">Event</th><th className="px-2 py-2 text-right">EPA</th><th className="px-2 py-2 text-right">Δ EPA</th><th className="px-2 py-2 text-right">Qual W-L</th><th className="px-2 py-2 text-right">RP / match</th><th className="px-2 py-2 text-right">Rank</th></tr></thead>
+        <tbody>{history.events.map((item,index)=>{
+          const epa=item.statbotics?.epa?.total_points;
+          const previous=index>0?history.events[index-1].statbotics?.epa?.total_points:undefined;
+          const change=typeof epa==="number"&&typeof previous==="number"?epa-previous:null;
+          const qualRecord=item.statbotics?.record?.qual;
+          return <tr key={item.event.key} className="border-t border-slate-100">
+            <td className="px-2 py-2 font-medium text-slate-700">{item.event.short_name ?? item.event.name}<span className="ml-1 text-[10px] text-slate-400">{item.status==="unavailable"?"· unavailable":""}</span></td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmt(epa)}</td>
+            <td className={"px-2 py-2 text-right tabular-nums " + (change===null?"text-slate-400":change>=0?"text-emerald-700":"text-rose-700")}>{change===null?"—":(change>0?"+":"")+fmt(change)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{qualRecord?`${qualRecord.wins ?? 0}-${qualRecord.losses ?? 0}`:"—"}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmt(qualRecord?.rps_per_match,2)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{qualRecord?.rank ?? "—"}</td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+  </section>;
 }
-function HistoryTable({events}:{events:TeamSeasonHistory["events"]}) {
-  return <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-slate-100"><table className="w-full text-xs"><thead className="sticky top-0 bg-slate-50 text-left text-slate-400"><tr><th className="px-2 py-1.5">Event</th><th className="px-2 py-1.5 text-right">EPA</th><th className="px-2 py-1.5 text-right">Qual W-L</th></tr></thead><tbody>{events.map((item)=><tr key={item.event.key} className="border-t border-slate-100"><td className="px-2 py-1.5">{item.event.short_name ?? item.event.name}</td><td className="px-2 py-1.5 text-right tabular-nums">{fmt(item.statbotics?.epa?.total_points)}</td><td className="px-2 py-1.5 text-right tabular-nums">{item.statbotics?.record?.qual ? `${item.statbotics.record.qual.wins ?? "—"}-${item.statbotics.record.qual.losses ?? "—"}` : "—"}</td></tr>)}</tbody></table></div>;
+function HistoryMetric({label,value}:{label:string;value:string}) {
+  return <div className="rounded-lg border border-slate-200 bg-white p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-slate-900">{value}</p></div>;
 }
-
+function EventEpaBars({events,color}:{events:TeamSeasonHistory["events"];color:string}) {
+  const points=events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
+  if(!points.length) return <p className="text-xs text-slate-400">No event EPA snapshots available.</p>;
+  const max=Math.max(1,...points.map((point)=>Math.abs(point.value)));
+  return <div className="space-y-2">{points.map((point,index)=><div key={index} className="grid grid-cols-[minmax(70px,110px)_1fr_42px] items-center gap-2 text-xs"><span className="truncate text-slate-500" title={point.label}>{point.label}</span><div className="h-3 overflow-hidden rounded-full bg-white"><div className={"h-full rounded-full " + color} style={{width:`${Math.max(2,Math.abs(point.value)/max*100)}%`}} /></div><span className="text-right font-semibold tabular-nums text-slate-700">{fmt(point.value)}</span></div>)}</div>;
+}
+function EpaBreakdownComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
+  const a=first.season?.epa?.breakdown ?? {};
+  const b=second.season?.epa?.breakdown ?? {};
+  const keys=[...new Set([...Object.keys(a),...Object.keys(b)])].filter((key)=>typeof a[key]==="number"||typeof b[key]==="number").sort();
+  if(!keys.length) return <p className="mt-3 text-sm text-slate-500">Component breakdowns are not available for both selected teams.</p>;
+  const max=Math.max(1,...keys.flatMap((key)=>[Math.abs(a[key] ?? 0),Math.abs(b[key] ?? 0)]));
+  return <div className="mt-3 space-y-3">{keys.map((key)=><div key={key} className="grid grid-cols-[110px_1fr_1fr] items-center gap-3 text-xs">
+    <span className="break-words font-medium text-slate-600">{key.replaceAll("_"," ")}</span>
+    {[{value:a[key],color:"bg-blue-600"},{value:b[key],color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?first.team.nickname || first.team.name || "Team A":second.team.nickname || second.team.name || "Team B"}</span><span className="font-semibold tabular-nums">{fmt(item.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.abs(item.value ?? 0)/max*100}%`}} /></div></div>)}
+  </div>)}</div>;
+}
 function Metric({label,value,detail}:{label:string;value:string|number;detail:string}) {
   return <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div>;
 }
