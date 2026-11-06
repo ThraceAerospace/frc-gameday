@@ -128,7 +128,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div className="mt-5">
           {tab === "review" && <ReviewQueue findings={findings} />}
           {tab === "teams" && <section className="space-y-4">
-            <Panel title="Compare teams" description="Compare distinct rating systems and the alliance outcomes in matches they appeared in. EPA and OPR are not interchangeable or competing measurements.">
+            <Panel title="Compare teams" description="Compare two event teams, then expand into their season-long Statbotics histories: event-by-event EPA, component estimates, records, ranking points, event ranks, and shared-event comparisons. EPA and OPR are separate models, not interchangeable scores.">
               <div className="grid gap-3 sm:grid-cols-2">
                 <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
                 <TeamSelect label="Team B" teams={teams} value={teamB} onChange={setTeamB} />
@@ -142,7 +142,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
                 ].map(([label, a, b]) => <tr key={String(label)} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-600">{label}</th><td className="py-2 tabular-nums">{fmt(a as number | null)}{String(label).includes("percentile") && a !== null ? "%" : ""}</td><td className="py-2 tabular-nums">{fmt(b as number | null)}{String(label).includes("percentile") && b !== null ? "%" : ""}</td></tr>)}</tbody></table></div>
                 <p className="mt-3 text-xs text-slate-500">Matches featuring both teams in the loaded sample: {commonMatches.length}.</p>
                 <div className="mt-5 border-t border-slate-200 pt-4">
-                  <h3 className="font-semibold text-slate-900">Official-season EPA progression</h3>
+                  <h3 className="font-semibold text-slate-900">Season history and event progression</h3>
                   <p className="mt-1 text-xs text-slate-500">Statbotics team-event snapshots across each team's TBA-listed official-season events. Offseason and preseason events are excluded.</p>
                   {historyLoading ? <p className="mt-3 text-sm text-slate-500">Loading team histories…</p> : historyA && historyB ? <TeamHistoryComparison first={historyA} second={historyB} /> : <p className="mt-3 text-sm text-slate-500">Season histories are unavailable for one or both teams.</p>}
                 </div>
@@ -193,8 +193,8 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
   });
   if(!shared.length) return <section className="rounded-xl border border-slate-200 p-4"><h4 className="font-semibold text-slate-900">Shared event comparison</h4><p className="mt-2 text-sm text-slate-500">These teams did not attend the same official-season events.</p></section>;
   return <section className="rounded-xl border border-slate-200 p-4">
-    <h4 className="font-semibold text-slate-900">Head-to-head event context</h4>
-    <p className="mt-1 text-xs text-slate-500">Both teams attended these events. EPA is each team's Statbotics event snapshot; ranks are within that event and are not directly comparable across different event sizes.</p>
+    <h4 className="font-semibold text-slate-900">Shared event comparison</h4>
+    <p className="mt-1 text-xs text-slate-500">Both teams attended these events. EPA is each team's Statbotics event snapshot; ranks are within that event and are not directly comparable across different event sizes. Shared attendance does not imply they played directly against each other.</p>
     <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[640px] text-xs">
       <thead className="bg-slate-50 text-left uppercase tracking-wide text-slate-500"><tr><th className="px-2 py-2">Shared event</th><th className="px-2 py-2 text-right">{first.team.nickname || first.team.name || "Team A"} EPA</th><th className="px-2 py-2 text-right">{second.team.nickname || second.team.name || "Team B"} EPA</th><th className="px-2 py-2 text-right">EPA gap</th><th className="px-2 py-2 text-right">Team A qual rank</th><th className="px-2 py-2 text-right">Team B qual rank</th></tr></thead>
       <tbody>{shared.map(({a,b})=>{
@@ -231,7 +231,7 @@ function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"b
       <HistoryMetric label="Season EPA" value={fmt(history.season?.epa?.total_points)} />
       <HistoryMetric label="Overall record" value={record ? `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}` : "—"} />
       <HistoryMetric label="Qual record" value={qual ? `${qual.wins ?? 0}-${qual.losses ?? 0}` : "—"} />
-      <HistoryMetric label="EPA change" value={delta === null ? "—" : `${delta > 0 ? "+" : ""}${fmt(delta)}`} />
+      <HistoryMetric label="First→last event Δ" value={delta === null ? "—" : `${delta > 0 ? "+" : ""}${fmt(delta)}`} />
     </div>
     <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
       {Object.entries(ranks).filter(([,value])=>typeof value==="number").map(([label,value])=><div key={label} className="flex justify-between gap-2 border-b border-slate-200 pb-1"><span className="capitalize text-slate-500">{label} rank</span><span className="font-semibold tabular-nums text-slate-800">{value}</span></div>)}
@@ -279,7 +279,7 @@ function EventEpaBars({events,color}:{events:TeamSeasonHistory["events"];color:s
   const points=events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.short_name ?? item.event.name,value:item.statbotics.epa.total_points}]:[]);
   if(!points.length) return <p className="text-xs text-slate-400">No event EPA snapshots available.</p>;
   const max=Math.max(1,...points.map((point)=>Math.abs(point.value)));
-  return <div className="space-y-2">{points.map((point,index)=><div key={index} className="grid grid-cols-[minmax(70px,110px)_1fr_42px] items-center gap-2 text-xs"><span className="truncate text-slate-500" title={point.label}>{point.label}</span><div className="h-3 overflow-hidden rounded-full bg-white"><div className={"h-full rounded-full " + color} style={{width:`${Math.max(2,Math.abs(point.value)/max*100)}%`}} /></div><span className="text-right font-semibold tabular-nums text-slate-700">{fmt(point.value)}</span></div>)}</div>;
+  return <div className="space-y-2">{points.map((point,index)=><div key={index} className="grid grid-cols-[minmax(70px,110px)_1fr_42px] items-center gap-2 text-xs"><span className="truncate text-slate-500" title={point.label}>{point.label}</span><div className="h-3 overflow-hidden rounded-full bg-white"><div className={"h-full rounded-full " + (point.value < 0 ? "bg-rose-500" : color)} style={{width:`${Math.max(2,Math.abs(point.value)/max*100)}%`}} /></div><span className="text-right font-semibold tabular-nums text-slate-700">{fmt(point.value)}</span></div>)}</div>;
 }
 function EpaBreakdownComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
   const a=first.season?.epa?.breakdown ?? {};
