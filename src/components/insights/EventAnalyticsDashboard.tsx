@@ -226,6 +226,7 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
       <HistoryMetric label="Mean score error" value={fmt(s.meanAbsoluteError)}/>
       <HistoryMetric label="Mean EPA change" value={fmt(s.meanMatchEPAChange,2)}/>
     </div>
+    <div className="mt-3 grid grid-cols-3 gap-2">{s.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">Brier {fmt(item.brier,3)} · n={item.sampleSize}</p></div>)}</div>
     <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Mean score error is calculated from the team's alliance predictions.</p>
   </section>;
 }
