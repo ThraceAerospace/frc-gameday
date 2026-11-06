@@ -56,6 +56,7 @@ export type EventAnalyticsResponse = {
   allianceResults: AllianceResult[];
   findings: ReviewFinding[];
   teamInsights?: TeamInsight[];
+  seasonCohort?: SeasonCohortSnapshot;
   matchCount: number;
   loadedMatchCount: number;
   offset: number;
@@ -105,4 +106,38 @@ export type TeamInsight = {
   };
   epaTrend: { matchKey: string; matchLabel: string; epa: number | null }[];
   reviewMatches: TeamInsightMatch[];
+};
+
+
+export type SeasonCohortRecord = {
+  teamNumber: number;
+  event: { key: string; name: string; shortName: string; startDate: string };
+  epaTotal: number | null;
+  epaUnitless: number | null;
+  breakdown: Record<string, number>;
+  wins: number | null;
+  losses: number | null;
+  ties: number | null;
+  matches: number | null;
+  fetchedAt: number;
+  status: "ready" | "unavailable";
+};
+
+export type SeasonCohortSnapshot = {
+  state: "queued" | "discovering" | "collecting" | "complete" | "partial";
+  teamCount: number;
+  totalTeamEventRecords: number;
+  processedTeamEventRecords: number;
+  unavailableTeamEventRecords: number;
+  updatedAt: number;
+  records: SeasonCohortRecord[];
+};
+
+export type TeamSeasonComparison = {
+  priorEvent: { key: string; name: string; startDate: string };
+  priorEPA: number;
+  currentEPA: number;
+  change: number;
+  cohortRank: number;
+  cohortSize: number;
 };
