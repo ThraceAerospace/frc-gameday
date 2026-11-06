@@ -299,3 +299,8 @@ Event Insights builds a Redis-backed, resumable season cohort for every team on 
 The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
 
 The selected-team match-history endpoint adds an event-normalized residual pattern. It compares the selected team's mean alliance score residual with the residual distribution from both alliances in the same matches, requires at least three team matches and six baseline alliance samples per event, and tests whether below- or above-baseline directions recur across events. This is an approximate baseline sampled from matches featuring the team, not an independent event-wide calibration sample. It cannot separate the selected team from its partners or opponents.
+
+
+### Reader-first analytics presentation
+
+Each analytics view leads with a concise plain-language takeaway, then shows only the evidence needed to support it. Detailed tables, secondary metrics, statistical tests, and model diagnostics remain available in clearly labeled expandable sections. Event Overview summarizes the competitive picture; Team Analysis begins with a bullet-first brief and review matches; Matchup Analysis begins with the recorded result; Scouting Tools puts actionable review signals ahead of aggregate diagnostics. Conclusions remain descriptive and traceable to their supporting data, never causal robot-level attribution.

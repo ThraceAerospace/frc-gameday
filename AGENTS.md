@@ -314,3 +314,12 @@ Event Insights builds a Redis-backed, resumable season cohort for every team on 
 The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
 
 The selected-team match-history endpoint adds an event-normalized residual pattern. It compares the selected team's mean alliance score residual with the residual distribution from both alliances in the same matches, requires at least three team matches and six baseline alliance samples per event, and tests whether below- or above-baseline directions recur across events. This is an approximate baseline sampled from matches featuring the team, not an independent event-wide calibration sample. It cannot separate the selected team from its partners or opponents.
+
+
+## Analytics presentation hierarchy
+
+- Every analytics scope must lead with a concise plain-language answer to the question that scope is meant to answer. Present the interpretation before the supporting numbers.
+- Follow the takeaway with a small number of directly relevant evidence elements: comparisons, charts, and match links. Move raw tables, secondary metrics, statistical tests, model diagnostics, and methodology into clearly labeled disclosures.
+- Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Analysis should lead with a bullet-first team brief, relevant previous-event comparison, and matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
+- Do not hide important caveats or sample coverage. Keep them concise and close to the conclusion they qualify.
+- A summary statement must be traceable to the data shown nearby. Distinguish observed change, comparison with a defined cohort, and a prompt for human investigation. Never turn a statistical association into a causal explanation.
