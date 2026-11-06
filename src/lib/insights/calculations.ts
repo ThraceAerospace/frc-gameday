@@ -199,7 +199,7 @@ export function buildTeamInsights(
     summary.push(`${completedMatches} completed matches represented; ${appearances.filter((item)=>item.reasons.length).length} match(es) have review signals.`);
     return {
       teamNumber: team.teamNumber, summary, metrics,
-      epaTrend: trend, seasonComparison: null,
+      epaTrend: trend, seasonComparison: null, seasonHistory: [],
       reviewMatches: appearances.filter((item)=>item.reasons.length).map(({completed: _completed,...item})=>item),
     };
   });
