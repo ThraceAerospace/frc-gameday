@@ -122,7 +122,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
 export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalyticsResponse> {
   let job = await readJob(eventKey);
   if (!job) {
-    const [event, teams, matches, oprs] = await Promise.all([
+    const [event, teams, matches, oprs, rankings] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),

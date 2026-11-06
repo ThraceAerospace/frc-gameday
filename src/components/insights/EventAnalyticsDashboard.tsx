@@ -437,7 +437,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   return <div className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Teams competing" value={data.teams.length} detail="Official event roster" />
-      <Metric label="Matches played" value={completedMatches} detail={`${data.matchCount} scheduled matches`} />
+      <Metric label="Scored matches analyzed" value={completedMatches} detail={`${data.matchCount} scheduled matches`} />
       <Metric label="Ranked teams" value={rankings.length} detail="TBA qualification standings" />
       <Metric label="Prediction samples" value={data.predictionStats.allianceCount} detail="Alliance scores with model predictions" />
     </div>
@@ -458,6 +458,9 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
 
 function MatchupAnalysis({ data }: { data: EventAnalyticsResponse }) {
   const [matchKey, setMatchKey] = useState(data.matches.find(({ match }) => match.alliances.red.score >= 0 && match.alliances.blue.score >= 0)?.match.key ?? data.matches[0]?.match.key ?? "");
+  useEffect(() => {
+    setMatchKey(data.matches.find(({ match }) => match.alliances.red.score >= 0 && match.alliances.blue.score >= 0)?.match.key ?? data.matches[0]?.match.key ?? "");
+  }, [data.event.key, data.matches]);
   const record = data.matches.find(({ match }) => match.key === matchKey);
   const red = data.allianceResults.find((item) => item.matchKey === matchKey && item.color === "red");
   const blue = data.allianceResults.find((item) => item.matchKey === matchKey && item.color === "blue");
