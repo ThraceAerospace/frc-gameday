@@ -232,10 +232,13 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
 function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
   const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
   const matches=analysis.matches;
+  const groups=Array.from(matches.reduce((map,match)=>{const group=map.get(match.event.key)??[];group.push(match);map.set(match.event.key,group);return map;},new Map<string,TeamMatchRow[]>()));
   const max=Math.max(1,...matches.flatMap((m)=>[Math.abs(m.preEPA??0),Math.abs(m.postEPA??0)]));
   return <section className="min-w-0 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">{name}</h3><p className="text-xs text-slate-500">Pre-match EPA → post-match EPA</p></div><span className="text-xs text-slate-500">{matches.length} match records</span></div>
-    <div className="mt-3 space-y-3">{matches.map((match)=>{
+    <div className="mt-3 space-y-3">{groups.map(([eventKey,eventMatches],groupIndex)=>{
+      const event=eventMatches[0].event;
+      return <details key={eventKey} open={groupIndex===0} className="rounded-lg border border-slate-200"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3"><span className="text-sm font-semibold text-slate-800">{event.shortName??event.name}</span><span className="text-xs text-slate-500">{eventMatches.length} matches · {eventMatches.filter((match)=>match.deltaEPA!==null).length} EPA updates</span></summary><div className="space-y-2 border-t border-slate-100 p-2">{eventMatches.map((match)=>{
       const delta=match.deltaEPA;
       return <article key={match.matchKey} className="rounded-lg border border-slate-100 p-3">
         <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{match.event.shortName??match.event.name} · {match.matchLabel}</p><p className="mt-0.5 text-[11px] text-slate-500">{match.alliance.toUpperCase()} · partners {match.partners.join(", ")||"—"} · opponents {match.opponents.join(", ")}</p></div><a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Match ↗</a></div>
@@ -245,6 +248,7 @@ function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;n
         {match.sharedAllianceUpdate && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-[10px] text-amber-800">All alliance members received effectively the same EPA change in this model update. Do not interpret this as an individual robot contribution.</p>}
         <details className="mt-2"><summary className="cursor-pointer text-[11px] font-semibold text-slate-500">Component EPA details</summary><div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">{Object.entries(match.preComponents).filter(([key])=>!/^comp_\d+_epa$/.test(key)).map(([key,value])=><div key={key} className="flex justify-between gap-2"><span className="text-slate-500">{key.replaceAll("_"," ")}</span><span className="font-semibold tabular-nums">{fmt(value,2)}</span></div>)}</div></details>
       </article>;
+    })}</div></details>;
     })}</div>
   </section>;
 }
