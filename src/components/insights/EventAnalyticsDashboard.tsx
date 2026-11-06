@@ -7,10 +7,13 @@ import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow } from "@/
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
-type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; redWinProbability:number|null; teamWinProbability:number|null; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;\ntype TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[];matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};\ntype Tab = "review" | "teams" | "matchEpa" | "unexpected" | "quality" | "alliances";
+type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; redWinProbability:number|null; teamWinProbability:number|null; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
+type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[];matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
+type Tab = "review" | "teams" | "matchEpa" | "unexpected" | "quality" | "alliances";
 const TABS: { id: Tab; label: string }[] = [
   { id: "review", label: "Review queue" },
-  { id: "teams", label: "Team comparison" },\n  { id: "matchEpa", label: "Match-by-match EPA" },
+  { id: "teams", label: "Team comparison" },
+  { id: "matchEpa", label: "Match-by-match EPA" },
   { id: "unexpected", label: "Unexpected results" },
   { id: "quality", label: "Prediction quality" },
   { id: "alliances", label: "Alliance patterns" },
@@ -27,7 +30,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [teamB, setTeamB] = useState("");
   const [historyA, setHistoryA] = useState<TeamSeasonHistory | null>(null);
   const [historyB, setHistoryB] = useState<TeamSeasonHistory | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);\n  const [matchAnalysisA, setMatchAnalysisA] = useState<TeamMatchAnalysis | null>(null);\n  const [matchAnalysisB, setMatchAnalysisB] = useState<TeamMatchAnalysis | null>(null);\n  const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);\n  const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [matchAnalysisA, setMatchAnalysisA] = useState<TeamMatchAnalysis | null>(null);
+  const [matchAnalysisB, setMatchAnalysisB] = useState<TeamMatchAnalysis | null>(null);
+  const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
+  const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
 
   const load = useCallback(async (refreshMatchKey: string | null = null) => {
     setLoading(true);
@@ -92,7 +99,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     return () => { active = false; };
   }, [teamA, teamB, data?.event.year]);
 
-\n  useEffect(() => {
+
+  useEffect(() => {
     if (!teamA || !teamB || teamA === teamB || !data?.event.year) {
       setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
     }
@@ -110,7 +118,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
   }, [teamA,teamB,data?.event.year]);
-\n  const teams = data?.teams ?? [];
+
+  const teams = data?.teams ?? [];
   const selectedA = teams.find((team) => String(team.teamNumber) === teamA);
   const selectedB = teams.find((team) => String(team.teamNumber) === teamB);
   const commonMatches = useMemo(() => data?.matches.filter((record) => {
@@ -178,7 +187,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match histories and EPA records for both teams…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA && matchAnalysisB ? <div className="mt-5 space-y-6">
-                <div className="grid gap-3 md:grid-cols-2"><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/><MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/></div>
+                <div className="grid gap-3 md:grid-cols-2"><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/><MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`}/></div>
                 <div className="grid gap-5 xl:grid-cols-2">
                   <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
                   <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/>
@@ -206,7 +215,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   );
 }
  
-\nfunction MatchAnalysisSummary({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
+
+function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
   const s=analysis.summary;
   return <section className="rounded-xl border border-slate-200 p-4">
     <div className="flex items-center justify-between gap-2"><h3 className="font-bold text-slate-900">{name}</h3><span className="text-xs text-slate-500">{analysis.matchCount} matches · {analysis.eventCount} events</span></div>
