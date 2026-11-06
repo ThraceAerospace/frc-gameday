@@ -22,36 +22,32 @@ export default function HomeMatchCard({ match, eventTimezone, isNext = false }: 
         ? formatMatchEventTime(match.predicted_time, eventTimezone)
         : match.time != null
           ? formatMatchEventTime(match.time, eventTimezone)
-          : null;
+          : "Time TBD";
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-slate-700">{matchShortName(match)}</span>
-        {time ? <span className="text-[10px] font-medium tabular-nums text-slate-500">{time}</span> : null}
-      </div>
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="h-2 w-2 shrink-0 rounded-sm bg-red-500" />
-            <span className="truncate text-xs font-medium text-slate-700">
+    <div className="rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2">
+      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2.5">
+        <div className="flex min-w-0 flex-col justify-center border-r border-slate-200 pr-2">
+          <span className="text-[10px] font-bold leading-tight text-slate-700">{matchShortName(match)}</span>
+          <span className="mt-1 text-[9px] font-medium leading-tight tabular-nums text-slate-500">{time}</span>
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className={`min-w-0 truncate text-[11px] ${hasResult && redScore > blueScore ? "font-bold" : "font-medium"} text-red-600`}>
               {match.alliances.red.team_keys.map(formatTeamNumber).join(" · ")}
             </span>
-          </div>
-          <span className={`font-mono text-xs tabular-nums ${hasResult && redScore > blueScore ? "font-bold text-slate-950" : "text-slate-600"}`}>
-            {redScore == null || redScore < 0 ? "—" : redScore}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="h-2 w-2 shrink-0 rounded-sm bg-blue-500" />
-            <span className="truncate text-xs font-medium text-slate-700">
-              {match.alliances.blue.team_keys.map(formatTeamNumber).join(" · ")}
+            <span className={`shrink-0 font-mono text-[11px] tabular-nums ${hasResult && redScore > blueScore ? "font-bold text-red-700" : "font-medium text-slate-600"}`}>
+              {redScore == null || redScore < 0 ? "—" : redScore}
             </span>
           </div>
-          <span className={`font-mono text-xs tabular-nums ${hasResult && blueScore > redScore ? "font-bold text-slate-950" : "text-slate-600"}`}>
-            {blueScore == null || blueScore < 0 ? "—" : blueScore}
-          </span>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className={`min-w-0 truncate text-[11px] ${hasResult && blueScore > redScore ? "font-bold" : "font-medium"} text-blue-600`}>
+              {match.alliances.blue.team_keys.map(formatTeamNumber).join(" · ")}
+            </span>
+            <span className={`shrink-0 font-mono text-[11px] tabular-nums ${hasResult && blueScore > redScore ? "font-bold text-blue-700" : "font-medium text-slate-600"}`}>
+              {blueScore == null || blueScore < 0 ? "—" : blueScore}
+            </span>
+          </div>
         </div>
       </div>
     </div>
