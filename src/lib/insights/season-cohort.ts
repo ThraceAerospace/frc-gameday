@@ -85,13 +85,13 @@ function snapshot(job: Job): SeasonCohortSnapshot {
   };
 }
 
-export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { team_number: number }[]): Promise<SeasonCohortSnapshot> {
+export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumber: number }[]): Promise<SeasonCohortSnapshot> {
   const eventKey = event.key;
   let job = await readJob(eventKey);
   if (!job) {
     job = {
       target: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
-      teamNumbers: teams.map((team) => team.team_number).filter(Number.isFinite),
+      teamNumbers: teams.map((team) => team.teamNumber).filter(Number.isFinite),
       discoveryQueue: teams.map((team) => team.team_number).filter(Number.isFinite),
       discoveryAttempts: {}, recordQueue: [], recordAttempts: {}, records: {},
       discoveryFailures: [], updatedAt: Date.now(), currentEventRefreshedAt: null,
