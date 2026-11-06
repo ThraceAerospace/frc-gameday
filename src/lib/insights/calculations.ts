@@ -97,8 +97,15 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
     if (item.residual === null || Math.abs(item.residual) < threshold) continue;
     findings.push({ id: `residual:${item.matchKey}:${item.color}`, category: "score-residual", subject: `${item.matchLabel} · ${item.color} alliance`, title: item.residual > 0 ? "Alliance scored well above prediction" : "Alliance scored well below prediction", description: `Actual alliance score differed from prediction by ${Math.round(item.residual)} points.`, evidence: [`Predicted ${Math.round(item.predicted ?? 0)} · actual ${item.actual}`, `Sample residual SD: ${spread.toFixed(1)} points`], sampleSize: residuals.length, sampleCoverage: sampleCoverage(residuals.length), suggestedAction: "Review the match and webcast. This is an alliance-level result, not an attribution to a robot.", severity: Math.abs(item.residual) >= threshold * 2 ? "high" : "medium" });
   }
+  // Playoff alliances are deliberately assembled as fixed three-team selections
+  // across rounds. They are not repeated scouting combinations. Only qualification
+  // matches are eligible for this signal.
+  const qualificationResults = allianceResults.filter((item) => {
+    if (item.compLevel) return item.compLevel.toLowerCase() === "qm";
+    return /_qm\d+$/i.test(item.matchKey);
+  });
   const combinations = new Map<string, AllianceResult[]>();
-  for (const item of allianceResults) if (item.residual !== null && item.teamKeys.length === 3) {
+  for (const item of qualificationResults) if (item.residual !== null && item.teamKeys.length === 3) {
     const key = [...item.teamKeys].sort().join("-");
     combinations.set(key, [...(combinations.get(key) ?? []), item]);
   }
@@ -106,7 +113,7 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
     if (items.length < 2) continue;
     const average = mean(items.map((item) => item.residual ?? 0)) ?? 0;
     if (Math.abs(average) < 20) continue;
-    findings.push({ id: `alliance:${key}`, category: "alliance-pattern", subject: `Alliance ${key.split("-").map((value) => value.replace(/^frc/i, "")).join(" · ")}`, title: average > 0 ? "Repeated positive alliance residuals" : "Repeated negative alliance residuals", description: `This exact three-team combination averaged ${average > 0 ? "+" : ""}${average.toFixed(1)} points relative to prediction.`, evidence: items.map((item) => `${item.matchLabel}: ${item.residual?.toFixed(1)} points`), sampleSize: items.length, sampleCoverage: sampleCoverage(items.length), suggestedAction: "Review repeated matchups and partner context. This describes the combination, not an individual team's contribution.", severity: items.length >= 3 && Math.abs(average) >= 35 ? "high" : "low" });
+    findings.push({ id: `alliance:quals:${key}`, category: "alliance-pattern", subject: `Alliance ${key.split("-").map((value) => value.replace(/^frc/i, "")).join(" · ")}`, title: average > 0 ? "Repeated positive qualification residuals" : "Repeated negative qualification residuals", description: `This exact three-team combination averaged ${average > 0 ? "+" : ""}${average.toFixed(1)} points relative to prediction across ${items.length} qualification matches.`, evidence: items.map((item) => `${item.matchLabel}: ${item.residual?.toFixed(1)} points`), sampleSize: items.length, sampleCoverage: sampleCoverage(items.length), suggestedAction: "Review these qualification matches and partner context. This describes the alliance combination, not an individual team's contribution.", severity: items.length >= 3 && Math.abs(average) >= 35 ? "high" : "low" });
   }
   return findings.sort((a, b) => ({ high: 3, medium: 2, low: 1 }[b.severity] - { high: 3, medium: 2, low: 1 }[a.severity]) || b.sampleSize - a.sampleSize);
 }
