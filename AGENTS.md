@@ -300,8 +300,3 @@ Prefer incremental processing. A changed match should refresh that match and the
 Track source-data freshness separately from calculation freshness. Preserve the source update time, calculation time, and calculation/schema version wherever derived snapshots are cached so changed source data and changed algorithms can be distinguished and invalidated deliberately.
 
 Treat alliance-level results, team-level model estimates, official qualification rankings, and robot-specific scouting observations as different evidence types. Do not attribute alliance score residuals or shared model updates to an individual robot.
-
-
-## Elimination performance shift analysis
-
-The season-long team match analysis calculates a qualification-to-elimination score-residual shift separately for each official event. Only events with at least three scored qualification matches and two scored elimination matches with usable pre-match Statbotics predictions are eligible. Each event contributes one shift to the season summary so events with larger playoff schedules do not dominate. The summary reports mean/median event shift, negative-shift event count, and a one-sided exact sign test across event-level shifts. A recurring-negative label requires at least three eligible events, at least three negative shifts, and sign-test p ≤ 0.05. This is an exploratory association in alliance-level residuals, not proof of robot-level underperformance or choking. The first-pass calculation is not yet adjusted for partner/opponent strength; the UI states this limitation explicitly. Match keys for the qualification and elimination evidence are retained for direct match review.
