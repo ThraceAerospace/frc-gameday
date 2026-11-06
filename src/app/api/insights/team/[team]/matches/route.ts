@@ -229,9 +229,38 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         : signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
     };
+    const residualPatternEvents = eventMatches.flatMap(({ event }) => {
+      const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
+      const baseline = items.flatMap((row) => [row.residual, row.opponentResidual]).filter((value): value is number => value !== null);
+      if (items.length < 3 || baseline.length < 6) return [];
+      const baselineMean = average(baseline) ?? 0;
+      const baselineSd = Math.sqrt(baseline.reduce((sum, value) => sum + (value - baselineMean) ** 2, 0) / baseline.length);
+      const teamMean = average(items.map((row) => row.residual as number)) ?? 0;
+      return [{
+        event: items[0].event, teamMatches: items.length, baselineAllianceSamples: baseline.length,
+        teamMeanResidual: teamMean, baselineMeanResidual: baselineMean, baselineStandardDeviation: baselineSd,
+        belowOneSigma: items.filter((row) => row.residual! < baselineMean - baselineSd).length,
+        aboveOneSigma: items.filter((row) => row.residual! > baselineMean + baselineSd).length,
+        belowBaseline: teamMean < baselineMean, matchKeys: items.map((row) => row.matchKey),
+      }];
+    });
+    const negativeResidualEventCount = residualPatternEvents.filter((item) => item.belowBaseline).length;
+    const residualEventCount = residualPatternEvents.length;
+    const residualSignPValue = residualEventCount ? Array.from({ length: residualEventCount - negativeResidualEventCount + 1 }, (_, index) => negativeResidualEventCount + index)
+      .reduce((sum, successes) => sum + binomialCoefficient(residualEventCount, successes) / (2 ** residualEventCount), 0) : null;
+    const residualPattern = {
+      eligibleEventCount: residualEventCount, negativeEventCount: negativeResidualEventCount,
+      meanTeamResidual: average(residualPatternEvents.map((item) => item.teamMeanResidual - item.baselineMeanResidual)),
+      signTestPValue: residualSignPValue,
+      interpretation: residualEventCount < 3 ? "insufficient-history" as const
+        : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount >= 3 ? "recurring-below-baseline" as const
+        : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount <= residualEventCount - 3 ? "recurring-above-baseline" as const
+        : "no-established-pattern" as const,
+      events: residualPatternEvents,
+    };
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
-      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, matches: completed,
+      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
     await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);
