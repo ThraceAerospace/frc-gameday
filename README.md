@@ -257,3 +257,10 @@ The standalone event analytics workspace lives at `/insights/event/<event>` and 
 The event analytics API is `/api/insights/event/<event>?offset=0&limit=30`. Match records are loaded in pages (20 by default, maximum 40 per request) with bounded Statbotics concurrency. Team comparison also loads the selected teams' official-season TBA event histories and Statbotics team-year/team-event snapshots on demand. Derived response pages are cached briefly in Redis and use a request lock to avoid duplicate work. Team and match data remain sourced from TBA and the Statbotics mirror; the analytics layer does not create a historical database.
 
 This is an exploratory prototype. Findings and review status are not persisted; review actions are local to the browser. Match residuals and rating updates are alliance/model-level signals and must not be interpreted as robot-specific attribution. Event-relative percentiles are only comparable within the loaded event roster.
+
+
+## Homepage event snapshot
+
+The homepage is a server-rendered snapshot of the current Sunday–Saturday calendar week and is revalidated hourly. Each event card includes its type, location, competition status, webcast availability, and the last/next match when available.
+
+Match summaries are derived on the server from the canonical full event match schedule using the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers. Schedule reads reuse the existing TBA Redis cache, including its TBA-controlled freshness, ETag handling, and webhook mutations. The homepage does not create a separate summary cache, browser polling loop, or WebSocket subscription.
