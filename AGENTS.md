@@ -282,3 +282,20 @@ Prefer small, focused cleanup commits.
 - The complete homepage data snapshot is wrapped in `unstable_cache` with a one-hour revalidation period. It retrieves each event's canonical full match schedule through `TBA.getEventMatches` and derives last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
 - Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a separate homepage match cache, browser polling, or a homepage WebSocket subscription.
 - Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
+
+
+## Analytics architecture — core principles
+
+The analytics experience has four scopes: Event Overview, Team Analysis, Matchup Analysis, and supporting Scouting Tools. Event Overview is the default entry point; scouting review queues are not the product's primary landing view.
+
+Analytics calculations and conclusions are server-authoritative. The browser presents results, manages view selection, and requests a new analysis when its inputs change; it must not fetch TBA/Statbotics directly or independently reproduce statistical models used by the server.
+
+Keep analytics business logic independent of HTTP handlers and the hosting runtime. Vercel route handlers and `waitUntil` are execution adapters, not dependencies of calculation or orchestration services. A future persistent worker must be able to invoke the same service functions without changing the client API.
+
+Long-running collection and computation must be bounded, persistent, resumable, and recoverable. Redis job state—not a serverless process's memory or lifetime—is authoritative. Persist progress and retry state before yielding; use locks with finite TTLs and ensure abandoned work can be resumed by a later invocation.
+
+Prefer incremental processing. A changed match should refresh that match and the derived results it affects rather than requiring a complete event recollection. Periodic source reconciliation remains necessary for schedule, roster, rankings, and OPR changes.
+
+Track source-data freshness separately from calculation freshness. Preserve the source update time, calculation time, and calculation/schema version wherever derived snapshots are cached so changed source data and changed algorithms can be distinguished and invalidated deliberately.
+
+Treat alliance-level results, team-level model estimates, official qualification rankings, and robot-specific scouting observations as different evidence types. Do not attribute alliance score residuals or shared model updates to an individual robot.

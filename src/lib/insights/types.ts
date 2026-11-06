@@ -1,5 +1,5 @@
 import type { StatboticsMatch } from "@/lib/statbotics/types";
-import type { TBAEvent, TBAMatch } from "@/lib/tba/types";
+import type { TBAEvent, TBAEventRanking, TBAMatch } from "@/lib/tba/types";
 
 export type AnalyticsMatch = {
   match: TBAMatch;
@@ -50,6 +50,7 @@ export type ReviewFinding = {
 
 export type EventAnalyticsResponse = {
   event: TBAEvent;
+  rankings?: TBAEventRanking | null;
   teams: TeamAnalyticsRow[];
   matches: AnalyticsMatch[];
   allianceResults: AllianceResult[];

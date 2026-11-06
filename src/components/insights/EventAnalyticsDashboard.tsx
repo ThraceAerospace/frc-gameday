@@ -9,21 +9,20 @@ import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/t
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
 type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}[];matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
-type Tab = "review" | "teams" | "matchEpa" | "unexpected" | "quality" | "alliances";
+type Tab = "overview" | "teams" | "matchup" | "matchEpa" | "scouting";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "review", label: "Review queue" },
-  { id: "teams", label: "Team comparison" },
-  { id: "matchEpa", label: "Match-by-match EPA" },
-  { id: "unexpected", label: "Unexpected results" },
-  { id: "quality", label: "Prediction quality" },
-  { id: "alliances", label: "Alliance patterns" },
+  { id: "overview", label: "Event Overview" },
+  { id: "teams", label: "Team Analysis" },
+  { id: "matchup", label: "Matchup Analysis" },
+  { id: "matchEpa", label: "Team Match History" },
+  { id: "scouting", label: "Scouting Tools" },
 ];
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 const percentileLabel = (value: number | null) => value === null ? "—" : `${Math.round(value * 100)}th`;
 
 export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
-  const [tab, setTab] = useState<Tab>("review");
+  const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teamA, setTeamA] = useState("");
@@ -135,7 +134,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{eventName}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-500">Statistical signals to help scouts decide what deserves a closer look. These are model outputs and alliance-level results, not robot-specific observations.</p>
+          <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
           <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · Reconciliation pending" : ""}</p>
         </div>
         <Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link>
@@ -153,7 +152,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <nav aria-label="Analytics views" className="no-scrollbar mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">          {TABS.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === item.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{item.label}</button>)}
         </nav>
         <div className="mt-5">
-          {tab === "review" && <ReviewQueue findings={findings} />}
+          {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
             <Panel title="Compare teams" description="Compare two event teams, then expand into their season-long Statbotics histories: event-by-event EPA, component estimates, records, ranking points, event ranks, and shared-event comparisons. EPA and OPR are separate models, not interchangeable scores.">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -196,11 +195,13 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select two different teams to load their season-long match-by-match EPA comparisons.</p> : null}
             </Panel>
           </section>}
-          {tab === "unexpected" && <section className="space-y-4">
-            <Panel title="Which alliances surprised the model?" description="Each bar is one alliance in one match. Positive values mean the alliance scored more than predicted; negative values mean it scored less. Select a row to open that match on The Blue Alliance."><ResidualBars residuals={residuals} /></Panel>
+          {tab === "matchup" && <MatchupAnalysis data={data} />}
+          {tab === "scouting" && <section className="space-y-4">
+            <ReviewQueue findings={findings} />
+            <Panel title="Unexpected results" description="Alliance-level score differences from the Statbotics prediction. Positive values mean the alliance scored above prediction; negative values mean below."><ResidualBars residuals={residuals} /></Panel>
+            <Panel title="Prediction quality" description="Event-specific score error and winner accuracy across available completed matches."><PredictionQuality stats={data.predictionStats} residualStats={data.residualStats} /></Panel>
+            <Panel title="Alliance patterns" description="Repeated three-team qualification combinations with notable average score residuals. These describe combinations, not individual team contribution."><AlliancePatterns findings={findings.filter((item) => item.category === "alliance-pattern")} /></Panel>
           </section>}
-          {tab === "quality" && <Panel title="How well did the model predict this event?" description="Event-specific score error and winner accuracy across available completed matches."><PredictionQuality stats={data.predictionStats} residualStats={data.residualStats} /></Panel>}
-          {tab === "alliances" && <Panel title="Repeated alliance combinations" description="Repeated three-team combinations with a notable average score residual. This describes the combination, not individual team contribution."><AlliancePatterns findings={findings.filter((item) => item.category === "alliance-pattern")} /></Panel>}
         </div>
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -427,6 +428,47 @@ function TeamCard({team}:{team:TeamAnalyticsRow}) {
 function TeamTable({teams}:{teams:TeamAnalyticsRow[]}) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase text-slate-400"><th className="py-2">Team</th><th>EPA</th><th>OPR</th><th>DPR</th><th>CCWM</th><th>EPA %ile</th></tr></thead><tbody>{teams.map((team)=><tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 text-left"><Link className="font-semibold text-slate-800 hover:text-blue-700" href={`/team/${team.teamNumber}`}>{team.teamNumber} · {team.name}</Link></th><td>{fmt(team.epa)}</td><td>{fmt(team.opr)}</td><td>{fmt(team.dpr)}</td><td>{fmt(team.ccwm)}</td><td>{percentileLabel(team.epaPercentile)}</td></tr>)}</tbody></table></div>;
 }
+function EventOverview({ data }: { data: EventAnalyticsResponse }) {
+  const teamByKey = new Map(data.teams.map((team) => [team.teamKey, team]));
+  const rankings = data.rankings?.rankings ?? [];
+  const completedMatches = data.matches.filter(({ match }) => match.alliances.red.score >= 0 && match.alliances.blue.score >= 0).length;
+  const rankedTeams = rankings.map((ranking) => ({ ranking, team: teamByKey.get(ranking.team_key) })).filter((item) => item.team);
+  const epaLeaders = [...data.teams].filter((team) => team.epa !== null).sort((a, b) => (b.epa ?? 0) - (a.epa ?? 0)).slice(0, 5);
+  return <div className="space-y-4">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Metric label="Teams competing" value={data.teams.length} detail="Official event roster" />
+      <Metric label="Matches played" value={completedMatches} detail={`${data.matchCount} scheduled matches`} />
+      <Metric label="Ranked teams" value={rankings.length} detail="TBA qualification standings" />
+      <Metric label="Prediction samples" value={data.predictionStats.allianceCount} detail="Alliance scores with model predictions" />
+    </div>
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+      <Panel title="Qualification standings and team strength" description="Official TBA rank alongside Statbotics event EPA. Rank reflects qualification performance and ranking-point rules; EPA estimates team strength.">
+        {rankedTeams.length ? <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Rank</th><th className="py-2 pr-3">Team</th><th className="py-2 pr-3">Record</th><th className="py-2 pr-3">EPA</th><th className="py-2">Event %ile</th></tr></thead><tbody>{rankedTeams.slice(0, 15).map(({ ranking, team }) => <tr key={ranking.team_key} className="border-b border-slate-100"><td className="py-2 pr-3 font-bold tabular-nums">{ranking.rank}</td><th className="py-2 pr-3 text-left font-semibold"><Link className="text-slate-800 hover:text-blue-700" href={`/team/${team!.teamNumber}`}>{team!.teamNumber} · {team!.name}</Link></th><td className="py-2 pr-3 tabular-nums">{ranking.record ? `${ranking.record.wins}-${ranking.record.losses}-${ranking.record.ties}` : "—"}</td><td className="py-2 pr-3 tabular-nums">{fmt(team!.epa)}</td><td className="py-2 tabular-nums">{percentileLabel(team!.epaPercentile)}</td></tr>)}</tbody></table></div> : <p className="text-sm text-slate-500">Official qualification rankings are not available yet. Team strength estimates appear as Statbotics match data is collected.</p>}
+        <p className="mt-3 text-xs text-slate-500">EPA percentiles are relative to the event roster and loaded match sample. They are not season-wide rankings.</p>
+      </Panel>
+      <Panel title="Highest event EPA" description="Teams with the highest available Statbotics event estimates.">
+        {epaLeaders.length ? <ol className="space-y-3">{epaLeaders.map((team, index) => <li key={team.teamKey} className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold text-slate-400">#{index + 1}</p><Link href={`/team/${team.teamNumber}`} className="block truncate text-sm font-semibold text-slate-800 hover:text-blue-700">{team.teamNumber} · {team.name}</Link><p className="text-xs text-slate-500">{team.matchesSeen} matches represented</p></div><p className="text-lg font-black tabular-nums text-slate-900">{fmt(team.epa)}</p></li>)}</ol> : <p className="text-sm text-slate-500">EPA leaders will appear as match records become available.</p>}
+      </Panel>
+    </div>
+    <Panel title="Event snapshot" description="Live event context, updated as match data and Statbotics records are collected.">
+      <div className="grid gap-3 sm:grid-cols-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Collection</p><p className="mt-1 text-sm font-semibold capitalize text-slate-800">{data.collection.state}</p><p className="text-xs text-slate-500">{data.collection.processedMatchCount} / {data.collection.totalMatchCount} matches processed</p></div><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Average score error</p><p className="mt-1 text-sm font-semibold text-slate-800">{fmt(data.predictionStats.meanAbsoluteError)} points</p><p className="text-xs text-slate-500">Mean absolute alliance-score error</p></div><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Winner accuracy</p><p className="mt-1 text-sm font-semibold text-slate-800">{data.predictionStats.winPredictionAccuracy === null ? "—" : `${(data.predictionStats.winPredictionAccuracy * 100).toFixed(1)}%`}</p><p className="text-xs text-slate-500">{data.predictionStats.winPredictionCount} decided matches evaluated</p></div></div>
+    </Panel>
+  </div>;
+}
+
+function MatchupAnalysis({ data }: { data: EventAnalyticsResponse }) {
+  const [matchKey, setMatchKey] = useState(data.matches.find(({ match }) => match.alliances.red.score >= 0 && match.alliances.blue.score >= 0)?.match.key ?? data.matches[0]?.match.key ?? "");
+  const record = data.matches.find(({ match }) => match.key === matchKey);
+  const red = data.allianceResults.find((item) => item.matchKey === matchKey && item.color === "red");
+  const blue = data.allianceResults.find((item) => item.matchKey === matchKey && item.color === "blue");
+  const teams = new Map(data.teams.map((team) => [team.teamKey, team]));
+  const allianceCard = (result: typeof red, label: string) => result ? <div className="rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-bold text-slate-900">{label} alliance</h3><span className="text-xs text-slate-500">{result.winner ? "Won" : "Lost"}</span></div><ul className="mt-3 space-y-2">{result.teamKeys.map((key) => { const team = teams.get(key); return <li key={key} className="flex justify-between gap-3 text-sm"><span className="text-slate-700">{team ? `${team.teamNumber} · ${team.name}` : key}</span><span className="tabular-nums text-slate-500">{fmt(team?.epa ?? null)} EPA</span></li>; })}</ul><div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3"><div><p className="text-[10px] uppercase text-slate-400">Combined pre-match EPA</p><p className="text-lg font-black tabular-nums">{fmt(result.preEpaTotal)}</p></div><div><p className="text-[10px] uppercase text-slate-400">Predicted score</p><p className="text-lg font-black tabular-nums">{fmt(result.predicted)}</p></div><div><p className="text-[10px] uppercase text-slate-400">Actual score</p><p className="text-lg font-black tabular-nums">{fmt(result.actual, 0)}</p></div></div><p className="mt-2 text-xs text-slate-500">Score residual: {result.residual === null ? "—" : `${result.residual > 0 ? "+" : ""}${fmt(result.residual)}`}</p></div> : <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Alliance model data is unavailable for this match.</div>;
+  return <Panel title="Alliance matchup explorer" description="Compare the two alliances in an event match using pre-match team EPA, model-predicted score, and actual result. Combined EPA is not itself a score prediction.">
+    <label className="block max-w-sm text-sm font-semibold text-slate-700">Match<select value={matchKey} onChange={(event) => setMatchKey(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">{data.matches.map(({ match }) => <option key={match.key} value={match.key}>{match.comp_level.toUpperCase()} {match.match_number} · {match.key}</option>)}</select></label>
+    {record ? <><div className="mt-4 grid gap-3 md:grid-cols-2">{allianceCard(red, "Red")}{allianceCard(blue, "Blue")}</div><p className="mt-3 text-xs text-slate-500">Historical matchup evidence only. This view does not claim to predict hypothetical alliances or attribute outcomes to individual robots.</p><a className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:text-blue-900" href={`https://www.thebluealliance.com/match/${record.match.key}`} target="_blank" rel="noreferrer">Open match on The Blue Alliance</a></> : <p className="mt-3 text-sm text-slate-500">No match data is available for this event yet.</p>}
+  </Panel>;
+}
+
 function ReviewQueue({findings}:{findings:ReviewFinding[]}) {
   const [reviewed,setReviewed] = useState<string[]>([]);
   const [dismissed,setDismissed] = useState<string[]>([]);

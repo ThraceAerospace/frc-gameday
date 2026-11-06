@@ -5,7 +5,7 @@ import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildReviewFindings, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
-import type { TBAEvent, TBAEventOPRs, TBAMatch, TBATeam } from "@/lib/tba/types";
+import type { TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
 const JOB_TTL_SECONDS = 12 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
@@ -20,6 +20,7 @@ type Job = {
   event: TBAEvent;
   teams: TBATeam[];
   oprs: TBAEventOPRs | null;
+  rankings: TBAEventRanking | null;
   matches: TBAMatch[];
   records: Record<string, AnalyticsMatch>;
   attempts: Record<string, number>;
@@ -75,6 +76,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
   return {
     event: job.event,
+    rankings: job.rankings,
     teams,
     matches: analyticsMatches,
     allianceResults,
@@ -125,11 +127,13 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
       TBA.getEventOPRs(eventKey),
+      TBA.getEventRankings(eventKey).catch(() => null),
     ]);
     job = {
       event,
       teams,
       oprs,
+      rankings,
       matches: sortMatches(matches),
       records: {},
       attempts: {},
@@ -174,9 +178,10 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
     // analytics records survive schedule changes and only new matches queue.
     if (!job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
       try {
-        const [latestMatchesRaw, latestOprs] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey)]);
+        const [latestMatchesRaw, latestOprs, latestRankings] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey), TBA.getEventRankings(eventKey).catch(() => null)]);
         const latestMatches = sortMatches(latestMatchesRaw);
         job.oprs = latestOprs;
+        job.rankings = latestRankings;
         const existing = new Map(job.matches.map((match) => [match.key, match]));
         for (const match of latestMatches) {
           const prior = existing.get(match.key);

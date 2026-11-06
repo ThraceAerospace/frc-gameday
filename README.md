@@ -91,6 +91,18 @@ Specialized presentation/derivation hooks remain separate where applicable:
 
 The standalone `/insights/event/<event>` analytics workspace participates in the shared live runtime. It consumes `useEventState` snapshots through the origin-wide SharedWorker/WebSocket system, just like Tile View, and refreshes its server-calculated analytics when the current completed match changes. It must not create a separate WebSocket or move authoritative analytics calculations into the browser. Historical Statbotics collection is a resumable Redis-backed server job: the API returns the complete-so-far snapshot and uses Vercel `waitUntil` to process bounded match batches with retries and concurrency limits. The page automatically refreshes collection progress/results; it does not require manual pagination. The worker periodically refreshes the TBA event match schedule and OPR, while WebSocket/EventState changes trigger immediate refresh of the latest completed match.
 
+## Analytics architecture
+
+The event analytics workspace has four scopes: **Event Overview** (the default competitive landscape), **Team Analysis** (team capability and season context), **Matchup Analysis** (observed alliance comparisons), and **Scouting Tools** (review queue, unexpected results, prediction quality, and alliance patterns). These scopes share one server-calculated event snapshot; they are not separate data pipelines.
+
+TBA and Statbotics acquisition, normalization, statistical calculations, and analytical conclusions remain server-side. The browser selects views and presents the resulting data; it does not call upstream providers or implement a parallel statistical model. Official qualification rank and Statbotics EPA are displayed side by side as distinct measures, not treated as interchangeable scores.
+
+Analytics services are independent of Next.js route handlers and Vercel execution details. Vercel serverless functions currently invoke the services, with Redis holding resumable job state and Vercel `waitUntil` acting only as a bounded execution adapter. The same service functions should remain callable by a future dedicated worker without changing the client-facing API.
+
+Long-running work is bounded and resumable; Redis is authoritative for job progress, retry state, and cached snapshots. Prefer incremental updates when match data changes, while periodically reconciling the event schedule, rankings, roster, and OPR. Keep source-data freshness distinct from calculation freshness and record a calculation version when derived snapshots are persisted.
+
+Alliance residuals and combined alliance estimates are contextual evidence, not individual robot attribution. Model provenance, sample coverage, and uncertainty must remain visible wherever analytical conclusions are presented.
+
 ## Match data
 
 The client-side match helpers live in `src/lib/gameday/matchUtils.ts`.
