@@ -72,7 +72,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   if (!Number.isInteger(year) || year < 1992 || year > new Date().getFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
   const cacheKey = `cache:insights:team-match-analysis:${teamNumber}:${year}`;
-  const cached = await redis.get(cacheKey);
+  const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+  const liveMatchKey = new URL(request.url).searchParams.get("liveMatchKey");
+  const cached = refresh ? null : await redis.get(cacheKey);
   if (cached) {
     try { return Response.json(JSON.parse(cached)); } catch { await redis.del(cacheKey); }
   }
@@ -88,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     const allMatches = eventMatches.flatMap(({ event, matches }) => matches.map((match) => ({ event, match })));
     const rows = await withConcurrency(allMatches, 4, async ({ event, match }) => {
       let statbotics: StatboticsMatch | null = null;
-      try { statbotics = await Statbotics.getMatch(match.key); } catch { /* retain TBA match data */ }
+      try { statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey }); } catch { /* retain TBA match data */ }
       const red = match.alliances.red.team_keys ?? [];
       const blue = match.alliances.blue.team_keys ?? [];
       const alliance = red.includes(`frc${teamNumber}`) ? "red" : blue.includes(`frc${teamNumber}`) ? "blue" : null;
@@ -166,8 +168,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       summary: summarize(completed), eventSummaries, phaseSummaries, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
-    await redis.set(cacheKey, JSON.stringify(payload), "EX", 10 * 60);
-    return Response.json(payload, { headers: { "Cache-Control": "private, max-age=60" } });
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);
+    return Response.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error("[Insights] team match analysis failed", teamNumber, year, error);
     return Response.json({ error: "Team match analysis is temporarily unavailable" }, { status: 502 });
