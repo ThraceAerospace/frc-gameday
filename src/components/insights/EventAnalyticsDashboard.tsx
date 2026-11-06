@@ -189,87 +189,78 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
   const secondByKey=new Map(second.events.map((item)=>[item.event.key,item]));
   const shared=first.events.flatMap((a)=>{
     const b=secondByKey.get(a.event.key);
-    return b ? [{a,b}] : [];
+    const av=a.statbotics?.epa?.total_points, bv=b?.statbotics?.epa?.total_points;
+    return b && typeof av==="number" && typeof bv==="number" ? [{a,b,av,bv,gap:av-bv}] : [];
   });
-  if(!shared.length) return <section className="rounded-xl border border-slate-200 p-4"><h4 className="font-semibold text-slate-900">Shared event comparison</h4><p className="mt-2 text-sm text-slate-500">These teams did not attend the same official-season events.</p></section>;
+  if(!shared.length) return <section className="rounded-xl border border-slate-200 p-4"><h4 className="font-semibold text-slate-900">Events in common</h4><p className="mt-2 text-sm text-slate-500">No shared events have usable EPA snapshots for both teams.</p></section>;
+  const averageGap=shared.reduce((sum,item)=>sum+item.gap,0)/shared.length;
+  const winsA=shared.filter((item)=>item.gap>0).length;
+  const winsB=shared.filter((item)=>item.gap<0).length;
+  const max=Math.max(1,...shared.flatMap((item)=>[item.av,item.bv]));
+  const nameA=first.team.nickname || first.team.name || "Team A";
+  const nameB=second.team.nickname || second.team.name || "Team B";
   return <section className="rounded-xl border border-slate-200 p-4">
-    <h4 className="font-semibold text-slate-900">Shared event comparison</h4>
-    <p className="mt-1 text-xs text-slate-500">Both teams attended these events. EPA is each team's Statbotics event snapshot; ranks are within that event and are not directly comparable across different event sizes. Shared attendance does not imply they played directly against each other.</p>
-    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[640px] text-xs">
-      <thead className="bg-slate-50 text-left uppercase tracking-wide text-slate-500"><tr><th className="px-2 py-2">Shared event</th><th className="px-2 py-2 text-right">{first.team.nickname || first.team.name || "Team A"} EPA</th><th className="px-2 py-2 text-right">{second.team.nickname || second.team.name || "Team B"} EPA</th><th className="px-2 py-2 text-right">EPA gap</th><th className="px-2 py-2 text-right">Team A qual rank</th><th className="px-2 py-2 text-right">Team B qual rank</th></tr></thead>
-      <tbody>{shared.map(({a,b})=>{
-        const av=a.statbotics?.epa?.total_points, bv=b.statbotics?.epa?.total_points;
-        const gap=typeof av==="number"&&typeof bv==="number"?av-bv:null;
-        return <tr key={a.event.key} className="border-t border-slate-100">
-          <th className="px-2 py-2 text-left font-medium text-slate-700">{a.event.short_name ?? a.event.name}</th>
-          <td className="px-2 py-2 text-right tabular-nums">{fmt(av)}</td><td className="px-2 py-2 text-right tabular-nums">{fmt(bv)}</td>
-          <td className={"px-2 py-2 text-right font-semibold tabular-nums "+(gap===null?"text-slate-400":gap>=0?"text-blue-700":"text-teal-700")}>{gap===null?"—":(gap>0?"+":"")+fmt(gap)}</td>
-          <td className="px-2 py-2 text-right tabular-nums">{a.statbotics?.record?.qual?.rank ?? "—"}</td><td className="px-2 py-2 text-right tabular-nums">{b.statbotics?.record?.qual?.rank ?? "—"}</td>
-        </tr>;
-      })}</tbody>
-    </table></div>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h4 className="font-semibold text-slate-900">How did they compare at the same events?</h4><p className="mt-1 text-xs text-slate-500">{shared.length} shared events with EPA data. These are event rating snapshots, not head-to-head match results.</p></div>
+      <div className="rounded-lg bg-slate-50 px-3 py-2 text-right"><p className="text-[10px] font-semibold uppercase text-slate-500">Average EPA gap</p><p className="text-xl font-black tabular-nums">{averageGap>0?"+":""}{fmt(averageGap)}</p><p className="text-[10px] text-slate-500">{nameA} minus {nameB}</p></div>
+    </div>
+    <p className="mt-3 text-sm text-slate-700">{averageGap===0?"Their average EPA was equal across these shared events.":averageGap>0?`${nameA} had the higher event EPA at ${winsA} of ${shared.length} shared events; ${nameB} was higher at ${winsB}.`:`${nameB} had the higher event EPA at ${winsB} of ${shared.length} shared events; ${nameA} was higher at ${winsA}.`} This compares the model's estimates, not the teams' direct match outcomes.</p>
+    <div className="mt-4 space-y-3">{shared.map(({a,av,bv})=>{
+      const label=a.event.short_name ?? a.event.name;
+      return <div key={a.event.key} className="grid grid-cols-[minmax(78px,110px)_1fr_1fr] items-center gap-3 text-xs">
+        <span className="truncate font-medium text-slate-600" title={label}>{label}</span>
+        {[{value:av,color:"bg-blue-600"},{value:bv,color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,item.value/max*100)}%`}} /></div></div>)}
+      </div>;
+    })}</div>
   </section>;
 }
 function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
-  const events=history.events.filter((item)=>item.statbotics?.epa?.total_points !== undefined);
-  const epaValues=events.map((item)=>item.statbotics?.epa?.total_points ?? 0);
-  const firstValue=epaValues[0] ?? null;
-  const lastValue=epaValues[epaValues.length-1] ?? null;
-  const delta=firstValue !== null && lastValue !== null ? lastValue-firstValue : null;
+  const events=history.events.filter((item)=>typeof item.statbotics?.epa?.total_points==="number");
+  const first=events[0], last=events[events.length-1];
+  const firstValue=first?.statbotics?.epa?.total_points ?? null;
+  const lastValue=last?.statbotics?.epa?.total_points ?? null;
+  const delta=firstValue!==null&&lastValue!==null?lastValue-firstValue:null;
   const record=history.season?.record?.total;
   const qual=history.season?.record?.qual;
-  const ranks=history.season?.ranks ?? {};
-  const stats=history.season?.epa?.stats ?? {};
+  const name=history.team.nickname || history.team.name || "Team";
   const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
-  const textColor=accent==="blue"?"text-blue-700":"text-teal-700";
-  return <section className="min-w-0 rounded-xl bg-slate-50 p-4">
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><p className="text-xs font-semibold text-slate-500">Team {history.season?.team ?? history.events[0]?.statbotics?.team ?? ""}</p><h4 className="text-lg font-bold text-slate-950">{history.team.nickname || history.team.name || "Team history"}</h4></div>
-      <span className={"text-xs font-bold " + textColor}>{events.length} event snapshots</span>
+  const changeText=delta===null?"Not enough event snapshots":delta===0?"EPA was unchanged across the available event snapshots":`EPA ${delta>0?"increased":"decreased"} by ${fmt(Math.abs(delta))} points from the first to last available event snapshot.`;
+  const largest=events.reduce<{label:string;value:number}|null>((best,item)=>{
+    const value=item.statbotics?.epa?.total_points;
+    return typeof value==="number"&&(!best||value>best.value)?{label:item.event.short_name??item.event.name,value}:best;
+  },null);
+  const smallest=events.reduce<{label:string;value:number}|null>((best,item)=>{
+    const value=item.statbotics?.epa?.total_points;
+    return typeof value==="number"&&(!best||value<best.value)?{label:item.event.short_name??item.event.name,value}:best;
+  },null);
+  return <section className="min-w-0 rounded-xl border border-slate-200 p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold text-slate-500">Team {history.season?.team ?? history.events[0]?.statbotics?.team ?? ""}</p><h4 className="text-lg font-bold text-slate-950">{name}</h4></div><span className="text-xs font-semibold text-slate-500">{events.length} event snapshots</span></div>
+    <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Current season EPA</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{fmt(history.season?.epa?.total_points)}</p></div>
+      <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Overall record</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{record?`${record.wins??0}-${record.losses??0}-${record.ties??0}`:"—"}</p></div>
     </div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <HistoryMetric label="Season EPA" value={fmt(history.season?.epa?.total_points)} />
-      <HistoryMetric label="Overall record" value={record ? `${record.wins ?? 0}-${record.losses ?? 0}-${record.ties ?? 0}` : "—"} />
-      <HistoryMetric label="Qual record" value={qual ? `${qual.wins ?? 0}-${qual.losses ?? 0}` : "—"} />
-      <HistoryMetric label="First→last event Δ" value={delta === null ? "—" : `${delta > 0 ? "+" : ""}${fmt(delta)}`} />
-    </div>
-    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-      {Object.entries(ranks).filter(([,value])=>typeof value==="number").map(([label,value])=><div key={label} className="flex justify-between gap-2 border-b border-slate-200 pb-1"><span className="capitalize text-slate-500">{label} rank</span><span className="font-semibold tabular-nums text-slate-800">{value}</span></div>)}
-      {Object.entries(stats).filter(([key,value])=>typeof value==="number" && ["start","pre_elim","mean","max","min"].includes(key)).map(([label,value])=><div key={label} className="flex justify-between gap-2 border-b border-slate-200 pb-1"><span className="capitalize text-slate-500">EPA {label.replace("_"," ")}</span><span className="font-semibold tabular-nums text-slate-800">{fmt(value)}</span></div>)}
-    </div>
+    <div className="mt-4 rounded-lg border-l-4 border-blue-500 bg-blue-50/60 p-3"><p className="text-sm font-semibold text-slate-900">{changeText}</p><p className="mt-1 text-xs text-slate-600">This is a change in Statbotics' rating estimate, not a direct measurement of robot performance.</p></div>
     <div className="mt-4">
-      <div className="mb-2 flex items-center justify-between"><h5 className="text-xs font-bold uppercase tracking-wide text-slate-500">EPA by event</h5><span className="text-[11px] text-slate-400">Chronological</span></div>
+      <div className="mb-2 flex items-center justify-between"><h5 className="text-xs font-bold uppercase tracking-wide text-slate-500">Rating progression</h5><span className="text-[11px] text-slate-400">Earlier → later events</span></div>
       <EventEpaBars events={events} color={color} />
     </div>
-    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full min-w-[520px] text-xs">
-        <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-2 py-2">Event</th><th className="px-2 py-2 text-right">EPA</th><th className="px-2 py-2 text-right">Δ EPA</th><th className="px-2 py-2 text-right">Qual W-L</th><th className="px-2 py-2 text-right">RP / match</th><th className="px-2 py-2 text-right">Rank</th></tr></thead>
-        <tbody>{history.events.map((item,index)=>{
-          const epa=item.statbotics?.epa?.total_points;
-          const previous=index>0?history.events[index-1].statbotics?.epa?.total_points:undefined;
-          const change=typeof epa==="number"&&typeof previous==="number"?epa-previous:null;
-          const qualRecord=item.statbotics?.record?.qual;
-          const elimRecord=item.statbotics?.record?.elim;
-          const totalRecord=item.statbotics?.record?.total;
-          const breakdown=item.statbotics?.epa?.breakdown ?? {};
-          const componentRows=Object.entries(breakdown).filter(([,value])=>typeof value==="number");
-          return <Fragment key={item.event.key}>
-            <tr className="border-t border-slate-100">
-              <td className="px-2 py-2 font-medium text-slate-700">{item.event.short_name ?? item.event.name}<span className="ml-1 text-[10px] text-slate-400">{item.status==="unavailable"?"· unavailable":""}</span></td>
-              <td className="px-2 py-2 text-right tabular-nums">{fmt(epa)}</td>
-              <td className={"px-2 py-2 text-right tabular-nums " + (change===null?"text-slate-400":change>=0?"text-emerald-700":"text-rose-700")}>{change===null?"—":(change>0?"+":"")+fmt(change)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{qualRecord?`${qualRecord.wins ?? 0}-${qualRecord.losses ?? 0}`:"—"}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{fmt(qualRecord?.rps_per_match,2)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{qualRecord?.rank != null ? `${qualRecord.rank}${qualRecord.num_teams ? ` / ${qualRecord.num_teams}` : ""}` : "—"}</td>
-            </tr>
-            {item.statbotics && <tr className="bg-slate-50/70"><td colSpan={6} className="px-2 pb-3 pt-1">
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500"><span>Overall {totalRecord ? `${totalRecord.wins ?? 0}-${totalRecord.losses ?? 0}-${totalRecord.ties ?? 0}` : "—"}</span><span>Playoffs {elimRecord ? `${elimRecord.wins ?? 0}-${elimRecord.losses ?? 0}` : "—"}</span><span>Event EPA {fmt(epa)}</span></div>
-              {componentRows.length>0 && <div className="mt-2 flex flex-wrap gap-2">{componentRows.map(([key,value])=><span key={key} className="rounded bg-white px-2 py-1 text-[10px] text-slate-600">{key.replaceAll("_"," ")} <strong className="tabular-nums">{fmt(value)}</strong></span>)}</div>}
-            </td></tr>}
-          </Fragment>;
-        })}</tbody>
-      </table>
+    <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-slate-500">Highest event EPA</p><p className="mt-1 font-bold text-slate-900">{largest?fmt(largest.value):"—"}</p><p className="text-slate-500">{largest?.label??"No data"}</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-slate-500">Lowest event EPA</p><p className="mt-1 font-bold text-slate-900">{smallest?fmt(smallest.value):"—"}</p><p className="text-slate-500">{smallest?.label??"No data"}</p></div>
     </div>
+    <p className="mt-3 text-xs text-slate-500">{qual?`Qualification record: ${qual.wins??0} wins, ${qual.losses??0} losses · ${fmt(qual.rps_per_match,2)} ranking points per match`:"Qualification record unavailable"}.</p>
+    <details className="mt-4 rounded-lg border border-slate-200">
+      <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700">Detailed event history and EPA components</summary>
+      <div className="overflow-x-auto px-3 pb-3"><table className="w-full min-w-[540px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>EPA</th><th>Change</th><th>Qual W-L</th><th>RP / match</th><th>Rank</th></tr></thead><tbody>{history.events.map((item,index)=>{
+        const epa=item.statbotics?.epa?.total_points;
+        const previous=index>0?history.events[index-1].statbotics?.epa?.total_points:undefined;
+        const change=typeof epa==="number"&&typeof previous==="number"?epa-previous:null;
+        const eventQual=item.statbotics?.record?.qual;
+        return <tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium">{item.event.short_name??item.event.name}</th><td className="tabular-nums">{fmt(epa)}</td><td className="tabular-nums">{change===null?"—":(change>0?"+":"")+fmt(change)}</td><td>{eventQual?`${eventQual.wins??0}-${eventQual.losses??0}`:"—"}</td><td>{fmt(eventQual?.rps_per_match,2)}</td><td>{eventQual?.rank!=null?`${eventQual.rank}${eventQual.num_teams?` / ${eventQual.num_teams}`:""}`:"—"}</td></tr>;
+      })}</tbody></table>
+      {events.length>0&&<div className="mt-3 grid gap-2 sm:grid-cols-2">{events.map((item)=><div key={item.event.key} className="rounded-lg bg-slate-50 p-2"><p className="text-xs font-semibold text-slate-700">{item.event.short_name??item.event.name}</p><div className="mt-1 flex flex-wrap gap-1">{Object.entries(item.statbotics?.epa?.breakdown??{}).filter(([key,value])=>typeof value==="number"&&!/^comp_\d+_epa$/.test(key)).map(([key,value])=><span key={key} className="rounded bg-white px-2 py-1 text-[10px] text-slate-600">{key.replaceAll("_"," ")} <strong>{fmt(value)}</strong></span>)}</div></div>)}</div>}
+      </div>
+    </details>
   </section>;
 }
 function HistoryMetric({label,value}:{label:string;value:string}) {
