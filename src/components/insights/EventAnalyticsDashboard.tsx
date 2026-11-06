@@ -177,12 +177,38 @@ function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:Te
       <TeamSeasonProfile history={first} accent="blue" />
       <TeamSeasonProfile history={second} accent="teal" />
     </div>
+    <SharedEventComparison first={first} second={second} />
     <div className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">Season EPA component comparison</h4>
       <p className="mt-1 text-xs text-slate-500">Statbotics modeled contribution estimates. Negative values are below-baseline model estimates, not literal negative points scored.</p>
       <EpaBreakdownComparison first={first} second={second} />
     </div>
   </div>;
+}
+function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
+  const secondByKey=new Map(second.events.map((item)=>[item.event.key,item]));
+  const shared=first.events.flatMap((a)=>{
+    const b=secondByKey.get(a.event.key);
+    return b ? [{a,b}] : [];
+  });
+  if(!shared.length) return <section className="rounded-xl border border-slate-200 p-4"><h4 className="font-semibold text-slate-900">Shared event comparison</h4><p className="mt-2 text-sm text-slate-500">These teams did not attend the same official-season events.</p></section>;
+  return <section className="rounded-xl border border-slate-200 p-4">
+    <h4 className="font-semibold text-slate-900">Head-to-head event context</h4>
+    <p className="mt-1 text-xs text-slate-500">Both teams attended these events. EPA is each team's Statbotics event snapshot; ranks are within that event and are not directly comparable across different event sizes.</p>
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[640px] text-xs">
+      <thead className="bg-slate-50 text-left uppercase tracking-wide text-slate-500"><tr><th className="px-2 py-2">Shared event</th><th className="px-2 py-2 text-right">{first.team.nickname || first.team.name || "Team A"} EPA</th><th className="px-2 py-2 text-right">{second.team.nickname || second.team.name || "Team B"} EPA</th><th className="px-2 py-2 text-right">EPA gap</th><th className="px-2 py-2 text-right">Team A qual rank</th><th className="px-2 py-2 text-right">Team B qual rank</th></tr></thead>
+      <tbody>{shared.map(({a,b})=>{
+        const av=a.statbotics?.epa?.total_points, bv=b.statbotics?.epa?.total_points;
+        const gap=typeof av==="number"&&typeof bv==="number"?av-bv:null;
+        return <tr key={a.event.key} className="border-t border-slate-100">
+          <th className="px-2 py-2 text-left font-medium text-slate-700">{a.event.short_name ?? a.event.name}</th>
+          <td className="px-2 py-2 text-right tabular-nums">{fmt(av)}</td><td className="px-2 py-2 text-right tabular-nums">{fmt(bv)}</td>
+          <td className={"px-2 py-2 text-right font-semibold tabular-nums "+(gap===null?"text-slate-400":gap>=0?"text-blue-700":"text-teal-700")}>{gap===null?"—":(gap>0?"+":"")+fmt(gap)}</td>
+          <td className="px-2 py-2 text-right tabular-nums">{a.statbotics?.record?.qual?.rank ?? "—"}</td><td className="px-2 py-2 text-right tabular-nums">{b.statbotics?.record?.qual?.rank ?? "—"}</td>
+        </tr>;
+      })}</tbody>
+    </table></div>
+  </section>;
 }
 function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
   const events=history.events.filter((item)=>item.statbotics?.epa?.total_points !== undefined);
