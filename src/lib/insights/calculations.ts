@@ -165,6 +165,13 @@ export function buildTeamInsights(
         completed: typeof own.score === "number" && own.score >= 0 && typeof opposing.score === "number" && opposing.score >= 0,
       }];
     });
+    const epaDeltas = appearances.flatMap((item) => item.deltaEPA === null ? [] : [item.deltaEPA]);
+    const epaDeltaThreshold = Math.max(2, (standardDeviation(epaDeltas) ?? 0) * 1.5);
+    for (const item of appearances) {
+      if (item.deltaEPA !== null && Math.abs(item.deltaEPA) >= epaDeltaThreshold) {
+        item.reasons.push(`Statbotics updated this team's EPA by ${item.deltaEPA > 0 ? "+" : ""}${item.deltaEPA.toFixed(2)}; check whether this was a shared alliance model update`);
+      }
+    }
     const completedMatches = appearances.filter((item) => item.completed).length;
     const trend = appearances.flatMap((item) => item.postEPA !== null || item.preEPA !== null
       ? [{ matchKey: item.matchKey, matchLabel: item.matchLabel, epa: item.postEPA ?? item.preEPA }] : []);
