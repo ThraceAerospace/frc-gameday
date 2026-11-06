@@ -206,27 +206,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       }));
     const eventShifts = eligibleEliminationEvents.map((item) => item.shift);
     const negativeEventCount = eventShifts.filter((value) => value < 0).length;
-    // The "after strong qualifications" test only includes events where the
-    // team's qualification alliance residual was positive (above prediction).
-    const positiveQualificationEvents = eligibleEliminationEvents.filter((item) => (item.qualificationMeanResidual ?? 0) > 0);
-    const negativeShiftAfterPositiveQualCount = positiveQualificationEvents.filter((item) => item.shift < 0).length;
-    const nPositiveQualificationEvents = positiveQualificationEvents.length;
+    const nEvents = eventShifts.length;
     // Exact one-sided sign test: probability of at least this many negative shifts under p=0.5.
     const binomialCoefficient = (n: number, k: number) => {
       let value = 1;
       for (let i = 1; i <= k; i++) value = value * (n - i + 1) / i;
       return value;
     };
-    const signTestPValue = nPositiveQualificationEvents ? Array.from({ length: nPositiveQualificationEvents - negativeShiftAfterPositiveQualCount + 1 }, (_, index) => negativeShiftAfterPositiveQualCount + index)
-      .reduce((sum, successes) => sum + binomialCoefficient(nPositiveQualificationEvents, successes) / (2 ** nPositiveQualificationEvents), 0) : null;
+    const signTestPValue = nEvents ? Array.from({ length: nEvents - negativeEventCount + 1 }, (_, index) => negativeEventCount + index)
+      .reduce((sum, successes) => sum + binomialCoefficient(nEvents, successes) / (2 ** nEvents), 0) : null;
     const eliminationShift = {
-      eligibleEventCount: eligibleEliminationEvents.length, negativeEventCount,
-      positiveQualificationEventCount: nPositiveQualificationEvents, negativeShiftAfterPositiveQualCount,
-      meanShift: average(eventShifts), medianShift: median(eventShifts),
+      eligibleEventCount: nEvents, negativeEventCount, meanShift: average(eventShifts), medianShift: median(eventShifts),
       signTestPValue, minimumQualificationMatchesPerEvent: 3, minimumEliminationMatchesPerEvent: 2,
       events: eligibleEliminationEvents,
-      interpretation: nPositiveQualificationEvents < 3 ? "insufficient-history" as const
-        : signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
+      interpretation: nEvents < 3 ? "insufficient-history" as const
+        : signTestPValue !== null && signTestPValue <= 0.05 && negativeEventCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
     };
     const payload = {
