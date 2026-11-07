@@ -332,9 +332,10 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team {team.teamNumber}</p><h3 className="text-xl font-black text-slate-950">{team.name}</h3><p className="mt-1 text-xs text-slate-500">{insight.metrics.matchesSeen} appearances in the loaded event sample</p></div>
         <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <QualityMetric label="Statbotics EPA" value={fmt(team.epa)} detail="Current team strength estimate"/>
         <QualityMetric label="Event percentile" value={team.epaPercentile===null?"—":`${Math.round(team.epaPercentile*100)}%`} detail="Relative to this event roster"/>
+        <QualityMetric label="Official rank" value={insight.metrics.rank===null?"—":String(insight.metrics.rank)} detail="Current TBA event ranking"/>
         <QualityMetric label="TBA OPR" value={fmt(team.opr)} detail="Offensive score contribution estimate"/>
         <QualityMetric label="TBA DPR" value={fmt(team.dpr)} detail="Defensive score contribution estimate"/>
         <QualityMetric label="TBA CCWM" value={fmt(team.ccwm)} detail="Calculated contribution to winning margin"/>
@@ -350,18 +351,6 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <p className="mt-2 text-sm text-slate-700">{insight.peerPerformance.interpretation==="insufficient-sample"?"Not enough comparable alliance results to establish a peer-relative pattern.":insight.peerPerformance.interpretation==="above-peers"?"Alliances involving this team have scored meaningfully above comparable-strength alliances.":insight.peerPerformance.interpretation==="below-peers"?"Alliances involving this team have scored meaningfully below comparable-strength alliances.":"Alliance results involving this team are broadly similar to comparable-strength alliances."}</p>
         <p className="mt-1 text-xs text-slate-500">Mean residual: {fmt(insight.peerPerformance.teamMeanResidual)} pts · peer mean: {fmt(insight.peerPerformance.peerMeanResidual)} pts · difference: {fmt(insight.peerPerformance.difference)} pts. Peers are other event alliances within ±20% pre-match combined EPA; this is alliance-level context, not robot attribution.</p>
       </div>
-      <details className="mt-4 rounded-lg border border-slate-200">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Detailed team metrics and official-season history</summary>
-        <div className="p-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <HistoryMetric label="Event EPA" value={fmt(insight.metrics.epa,2)}/>
-            <HistoryMetric label="Event percentile" value={insight.metrics.epaPercentile===null?"—":`${Math.round(insight.metrics.epaPercentile*100)}th`}/>
-            <HistoryMetric label="Official rank" value={insight.metrics.rank===null?"—":String(insight.metrics.rank)}/>
-            <HistoryMetric label="Matches represented" value={String(insight.metrics.matchesSeen)}/>
-          </div>
-          {insight.seasonHistory.length ? <div className="mt-4 overflow-x-auto"><h4 className="mb-2 text-sm font-semibold text-slate-800">Official-season event history</h4><table className="w-full min-w-[420px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>EPA total points</th><th>Matches</th><th>Data</th></tr></thead><tbody>{insight.seasonHistory.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium"><a href={"https://www.thebluealliance.com/event/"+item.event.key} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{item.event.name}</a></th><td className="tabular-nums">{fmt(item.epaTotal,2)}</td><td>{item.matches??"—"}</td><td>{item.status}</td></tr>)}</tbody></table><p className="mt-2 text-[11px] text-slate-500">Statbotics team-event EPA total-points snapshots, not measured robot scores.</p></div> : <p className="mt-3 text-sm text-slate-500">No official-season history records are available yet.</p>}
-        </div>
-      </details>
       <p className="mt-4 text-[11px] leading-5 text-slate-500">Interpretation boundary: EPA is a model estimate; an EPA update may be shared across alliance members. Score residuals and win-probability mismatches describe alliance/match outcomes. They are investigation prompts, not causal findings or robot-level attribution.</p>
     </>}
   </section>;
