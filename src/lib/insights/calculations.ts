@@ -1,4 +1,5 @@
 import type { StatboticsEPA } from "@/lib/statbotics/types";
+import type { TBAEliminationAlliance } from "@/lib/tba/types";
 import { matchShortName } from "@/lib/tba/formatters";
 import type { AllianceResult, AnalyticsMatch, ReviewFinding, TeamAnalyticsRow } from "./types";
 

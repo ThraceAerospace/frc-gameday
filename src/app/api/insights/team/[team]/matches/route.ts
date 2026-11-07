@@ -159,7 +159,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas)
         : null;
       return {
-        matchKey: match.key, matchLabel: label(match, event.playoff_type), compLevel: match.comp_level,
+        matchKey: match.key, matchLabel: label(match, (event as TBAEventSimple & { playoff_type?: number | null }).playoff_type), compLevel: match.comp_level,
         event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
         partners: own.team_keys.filter((key) => key !== `frc${teamNumber}`).map((key) => key.replace(/^frc/i, "")),
         opponents: other.team_keys.map((key) => key.replace(/^frc/i, "")),
