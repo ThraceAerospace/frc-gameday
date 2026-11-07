@@ -1,4 +1,5 @@
 import type { StatboticsEPA } from "@/lib/statbotics/types";
+import { matchShortName } from "@/lib/tba/formatters";
 import type { AllianceResult, AnalyticsMatch, ReviewFinding, TeamAnalyticsRow } from "./types";
 
 function numberOrNull(value: unknown): number | null {
@@ -8,28 +9,7 @@ function statboticsTeamKey(teamKey: string): string {
   return String(Number(teamKey.replace(/^frc/i, "")));
 }
 function matchLabel(match: AnalyticsMatch["match"]): string {
-  // TBA normally supplies comp_level/set_number/match_number, but tolerate
-  // incomplete records by recovering the label from the canonical match key.
-  const keyParts = typeof match.key === "string"
-    ? match.key.match(/_([a-z]{2})(?:(\\d+)m)?(\\d+)$/i)
-    : null;
-  const level = typeof match.comp_level === "string" && match.comp_level.length
-    ? match.comp_level
-    : keyParts?.[1]?.toLowerCase();
-  const matchNumber = Number.isFinite(match.match_number)
-    ? match.match_number
-    : Number(keyParts?.[3]);
-  const setNumber = Number.isFinite(match.set_number)
-    ? match.set_number
-    : Number(keyParts?.[2]);
-
-  if (level === "qm" || level === "pm") return `QM ${Number.isFinite(matchNumber) ? matchNumber : "?"}`;
-  if (level) {
-    const set = Number.isFinite(setNumber) ? setNumber : "?";
-    const number = Number.isFinite(matchNumber) ? matchNumber : "?";
-    return `${level.toUpperCase()} ${set} · ${number}`;
-  }
-  return typeof match.key === "string" ? match.key : "Unknown match";
+  return matchShortName(match);
 }
 function epaFor(record: AnalyticsMatch, teamKey: string, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
   return record.statbotics?.[phase]?.[statboticsTeamKey(teamKey)];
@@ -56,7 +36,10 @@ export function buildAllianceResults(records: AnalyticsMatch[]): AllianceResult[
     const teamKeys = alliance.team_keys ?? [];
     const values = teamKeys.map((key) => numberOrNull(statbotics?.pre_epas?.[statboticsTeamKey(key)]?.epa));
     const preEpaTotal = values.every((value) => value !== null) ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0) : null;
-    return { matchKey: match.key, matchLabel: matchLabel(match), compLevel: match.comp_level, color, teamKeys, predicted, actual, residual: actual !== null && predicted !== null ? actual - predicted : null, preEpaTotal, winner: match.winning_alliance === color };
+    const outcome = match.winning_alliance === color ? "win" as const
+      : match.winning_alliance === (color === "red" ? "blue" : "red") ? "loss" as const
+      : match.winning_alliance === "" ? "tie" as const : "unknown" as const;
+    return { matchKey: match.key, matchLabel: matchLabel(match), compLevel: match.comp_level, color, teamKeys, predicted, actual, residual: actual !== null && predicted !== null ? actual - predicted : null, preEpaTotal, winner: outcome === "win", outcome };
   }));
 }
 export function buildTeamRows(
@@ -293,27 +276,77 @@ export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceR
 }
 
 /** Playoff alliance combinations are separate from qualification combinations. */
-export function buildPlayoffAnalysis(allianceResults: AllianceResult[]): import("./types").PlayoffAnalysis {
-  const playoffs = allianceResults.filter((item)=>["ef","qf","sf","f"].includes(item.compLevel.toLowerCase()) && item.actual !== null);
-  const average=(values:number[])=>values.length?values.reduce((sum,value)=>sum+value,0)/values.length:null;
-  const groups=new Map<string,AllianceResult[]>();
-  for(const item of playoffs) if(item.teamKeys.length===3) {
-    const key=[...item.teamKeys].sort().join("|");
-    groups.set(key,[...(groups.get(key)??[]),item]);
+function officialPlayoffAllianceName(
+  teamKeys: string[],
+  alliances: TBAEliminationAlliance[] | null,
+): string | null {
+  if (!alliances?.length || teamKeys.length !== 3) return null;
+  const teamSet = new Set(teamKeys.map((key) => key.toLowerCase()));
+  const candidates = alliances.filter((alliance) => {
+    if (typeof alliance.name !== "string" || !alliance.name.trim()) return false;
+    const selected = new Set([
+      ...(alliance.picks ?? []),
+      ...(alliance.backup?.in ? [alliance.backup.in] : []),
+    ].map((key) => key.toLowerCase()));
+    return [...teamSet].every((key) => selected.has(key));
+  });
+  return candidates.length === 1 ? candidates[0].name!.trim() : null;
+}
+
+/** Group scored elimination results by official TBA alliance when available. */
+export function buildPlayoffAnalysis(
+  allianceResults: AllianceResult[],
+  officialAlliances: TBAEliminationAlliance[] | null = null,
+): import("./types").PlayoffAnalysis {
+  const playoffs = allianceResults.filter((item) =>
+    ["ef", "qf", "sf", "f"].includes(item.compLevel.toLowerCase()) && item.actual !== null,
+  );
+  const average = (values: number[]) =>
+    values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const groups = new Map<string, AllianceResult[]>();
+  const names = new Map<string, string | null>();
+
+  for (const item of playoffs) {
+    if (item.teamKeys.length !== 3) continue;
+    const sortedTeams = [...item.teamKeys].sort();
+    const name = officialPlayoffAllianceName(item.teamKeys, officialAlliances);
+    // Never invent an alliance number or infer a name from array position.
+    const key = name ? `name:${name.toLowerCase()}` : `teams:${sortedTeams.join("|")}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+    names.set(key, name);
   }
-  const alliances=[...groups.values()].map((items)=>{
-    const scored=items.filter((item)=>item.actual!==null&&item.predicted!==null&&item.residual!==null);
-    const residuals=scored.map((item)=>item.residual as number);
-    return {teamKeys:[...items[0].teamKeys].sort(),matchCount:items.length,wins:items.filter((item)=>item.winner).length,
-      losses:items.filter((item)=>!item.winner).length,meanPredicted:average(scored.map((item)=>item.predicted as number)),
-      meanActual:average(scored.map((item)=>item.actual as number)),meanResidual:average(residuals),
-      residualStandardDeviation:standardDeviation(residuals),
-      matches:items.map((item)=>({matchKey:item.matchKey,matchLabel:item.matchLabel,compLevel:item.compLevel,residual:item.residual,actual:item.actual,predicted:item.predicted}))};
-  }).sort((a,b)=>b.matchCount-a.matchCount);
-  const roundSummaries=["ef","qf","sf","f"].map((round)=>{
-    const items=playoffs.filter((item)=>item.compLevel.toLowerCase()===round&&item.residual!==null);
-    return {round,matchCount:items.length,meanResidual:average(items.map((item)=>item.residual as number)),
-      abovePrediction:items.filter((item)=>(item.residual??0)>0).length,belowPrediction:items.filter((item)=>(item.residual??0)<0).length};
-  }).filter((item)=>item.matchCount>0);
-  return {matchCount:new Set(playoffs.map((item)=>item.matchKey)).size,allianceCount:alliances.length,roundSummaries,alliances};
+
+  const alliances = [...groups.entries()].map(([key, items]) => {
+    const scored = items.filter((item) => item.predicted !== null && item.residual !== null);
+    const residuals = scored.map((item) => item.residual as number);
+    const teamKeys = [...new Set(items.flatMap((item) => item.teamKeys))].sort();
+    return {
+      name: names.get(key) ?? null,
+      teamKeys,
+      matchCount: items.length,
+      scoredMatchCount: scored.length,
+      wins: items.filter((item) => item.outcome === "win").length,
+      losses: items.filter((item) => item.outcome === "loss").length,
+      ties: items.filter((item) => item.outcome === "tie").length,
+      meanPredicted: average(scored.map((item) => item.predicted as number)),
+      meanActual: average(scored.map((item) => item.actual as number)),
+      meanResidual: average(residuals),
+      residualStandardDeviation: standardDeviation(residuals),
+      matches: items.map((item) => ({
+        matchKey: item.matchKey,
+        compLevel: item.compLevel,
+        color: item.color,
+        outcome: item.outcome,
+        residual: item.residual,
+        actual: item.actual,
+        predicted: item.predicted,
+      })),
+    };
+  }).sort((a, b) => b.matchCount - a.matchCount || (a.name ?? "").localeCompare(b.name ?? ""));
+
+  return {
+    matchCount: new Set(playoffs.map((item) => item.matchKey)).size,
+    allianceCount: alliances.length,
+    alliances,
+  };
 }

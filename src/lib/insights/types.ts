@@ -1,5 +1,5 @@
 import type { StatboticsMatch } from "@/lib/statbotics/types";
-import type { TBAEvent, TBAEventRanking, TBAMatch } from "@/lib/tba/types";
+import type { TBAEliminationAlliance, TBAEvent, TBAEventRanking, TBAMatch } from "@/lib/tba/types";
 
 export type AnalyticsMatch = {
   match: TBAMatch;
@@ -18,6 +18,7 @@ export type AllianceResult = {
   residual: number | null;
   preEpaTotal: number | null;
   winner: boolean;
+  outcome: "win" | "loss" | "tie" | "unknown";
 };
 
 export type TeamAnalyticsRow = {
@@ -55,14 +56,23 @@ export type QualificationAnomaly = {
   outsideExpectedRange: boolean; highConfidenceMiss: boolean; severity: "high" | "medium"; reasons: string[];
 };
 export type PlayoffAlliancePerformance = {
-  teamKeys: string[]; matchCount: number; wins: number; losses: number;
-  meanPredicted: number | null; meanActual: number | null; meanResidual: number | null;
+  /** Official TBA alliance name; null when TBA does not provide one. */
+  name: string | null;
+  teamKeys: string[];
+  matchCount: number;
+  scoredMatchCount: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  meanPredicted: number | null;
+  meanActual: number | null;
+  meanResidual: number | null;
   residualStandardDeviation: number | null;
-  matches: { matchKey: string; matchLabel: string; compLevel: string; residual: number | null; actual: number | null; predicted: number | null }[];
+  matches: { matchKey: string; compLevel: string; color: "red" | "blue"; outcome: "win" | "loss" | "tie" | "unknown"; residual: number | null; actual: number | null; predicted: number | null }[];
 };
 export type PlayoffAnalysis = {
-  matchCount: number; allianceCount: number;
-  roundSummaries: { round: string; matchCount: number; meanResidual: number | null; abovePrediction: number; belowPrediction: number }[];
+  matchCount: number;
+  allianceCount: number;
   alliances: PlayoffAlliancePerformance[];
 };
 export type EventAnalyticsResponse = {

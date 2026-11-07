@@ -5,7 +5,7 @@ import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
-import type { TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
+import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
 const JOB_TTL_SECONDS = 12 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
@@ -18,6 +18,7 @@ type Job = {
   teams: TBATeam[];
   oprs: TBAEventOPRs | null;
   rankings: TBAEventRanking | null;
+  playoffAlliances?: TBAEliminationAlliance[] | null;
   matches: TBAMatch[];
   records: Record<string, AnalyticsMatch>;
   attempts: Record<string, number>;
@@ -61,7 +62,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches);
   const findings = buildReviewFindings(analyticsMatches, allianceResults, teams);
   const qualificationAnomalies = buildQualificationAnomalies(analyticsMatches, allianceResults);
-  const playoffAnalysis = buildPlayoffAnalysis(allianceResults);
+  const playoffAnalysis = buildPlayoffAnalysis(allianceResults, job.playoffAlliances ?? null);
   const teamInsights = buildTeamInsights(analyticsMatches, allianceResults, teams, job.rankings);
   const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
@@ -117,24 +118,30 @@ function buildPayload(job: Job): EventAnalyticsResponse {
 export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalyticsResponse> {
   let job = await readJob(eventKey);
   if (!job) {
-    const [event, teams, matches, oprs, rankings] = await Promise.all([
+    const [event, teams, matches, oprs, rankings, playoffAlliances] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
       TBA.getEventOPRs(eventKey),
       TBA.getEventRankings(eventKey).catch(() => null),
+      TBA.getEventPlayoffAlliances(eventKey).catch(() => null),
     ]);
     job = {
       event,
       teams,
       oprs,
       rankings,
+      playoffAlliances,
       matches: sortMatches(matches),
       records: {},
       attempts: {},
       state: "queued",
       updatedAt: Date.now(),
     };
+    await writeJob(eventKey, job);
+  }
+  if (job.playoffAlliances === undefined) {
+    job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey).catch(() => null);
     await writeJob(eventKey, job);
   }
   return buildPayload(job);

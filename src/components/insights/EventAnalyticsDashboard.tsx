@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
+import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
@@ -261,17 +262,92 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   </section>;
 }
 function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
-  const playoff=data.playoffAnalysis;
+  const playoff = data.playoffAnalysis;
+  const matchesByKey = new Map(data.matches.map(({match}) => [match.key, match]));
   return <section className="space-y-4">
-    <Panel title="Playoff alliance performance" description="Elimination matches are grouped separately from qualification patterns. Results are evaluated at alliance level against pre-match Statbotics score predictions.">
-      {!playoff||!playoff.matchCount?<p className="text-sm text-slate-500">No completed or scheduled elimination alliance records are available in this event sample yet.</p>:<>
-        <div className="grid gap-3 sm:grid-cols-3"><QualityMetric label="Playoff matches" value={String(playoff.matchCount)} detail="Elimination matches represented" /><QualityMetric label="Alliance combinations" value={String(playoff.allianceCount)} detail="Distinct three-team combinations" /><QualityMetric label="Rounds represented" value={String(playoff.roundSummaries.length)} detail="EF, QF, SF, and finals" /></div>
-        <div className="mt-4 space-y-2">{playoff.roundSummaries.map((round)=><div key={round.round} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span className="font-semibold uppercase text-slate-700">{round.round}</span><span className="text-slate-500">{round.matchCount} alliance results</span><span className={round.meanResidual!==null&&round.meanResidual<0?"font-semibold text-rose-700":"font-semibold text-emerald-700"}>{fmt(round.meanResidual)} avg residual</span></div>)}</div>
-        <div className="mt-5 space-y-3">{playoff.alliances.map((alliance)=><article key={alliance.teamKeys.join("-")} className="rounded-lg border border-slate-200 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">Teams {alliance.teamKeys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</h3><span className="text-xs text-slate-500">{alliance.wins} wins · {alliance.losses} losses · {alliance.matchCount} matches</span></div>
-          <p className="mt-1 text-sm text-slate-600">Mean predicted {fmt(alliance.meanPredicted)} · actual {fmt(alliance.meanActual)} · residual {alliance.meanResidual===null?"—":`${alliance.meanResidual>0?"+":""}${fmt(alliance.meanResidual)} pts`}</p>
-          <div className="mt-2 space-y-1">{alliance.matches.map((match)=><a key={match.matchKey} className="flex justify-between gap-2 text-xs text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer"><span>{match.matchLabel}</span><span>{match.residual===null?"—":`${match.residual>0?"+":""}${fmt(match.residual)} pts`}</span></a>)}</div>
-        </article>)}</div>
+    <Panel
+      title="Playoff alliance performance"
+      description="See how each official playoff alliance performed against Statbotics' pre-match score estimate. Positive residuals mean the alliance scored above prediction; negative residuals mean it scored below."
+    >
+      {!playoff || !playoff.matchCount ? (
+        <p className="text-sm text-slate-500">No completed elimination matches with recorded scores are available in the current event data.</p>
+      ) : <>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <QualityMetric label="Completed playoff matches" value={String(playoff.matchCount)} detail="Matches with recorded alliance scores" />
+          <QualityMetric label="Alliance groups" value={String(playoff.allianceCount)} detail="Distinct official alliances or observed team lineups" />
+        </div>
+        <div className="mt-4 space-y-3">
+          {playoff.alliances.map((alliance) => {
+            const residual = alliance.meanResidual;
+            const residualTone = residual === null || residual === 0
+              ? "text-slate-700"
+              : residual > 0 ? "text-emerald-700" : "text-rose-700";
+            const residualLabel = residual === null ? "Unavailable"
+              : residual > 0 ? "Above prediction" : residual < 0 ? "Below prediction" : "On prediction";
+            const record = `${alliance.wins}-${alliance.losses}-${alliance.ties}`;
+            return <article key={alliance.name ? `name:${alliance.name}` : alliance.teamKeys.join("|")} className="rounded-xl border border-slate-200 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{alliance.name ?? "Alliance name unavailable"}</p>
+                  <h3 className="mt-1 text-base font-bold text-slate-900">Teams {alliance.teamKeys.map(formatTeamNumber).join(" · ")}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{alliance.matchCount} completed match{alliance.matchCount === 1 ? "" : "es"} · {alliance.scoredMatchCount} with score predictions</p>
+                </div>
+                <div className="shrink-0 rounded-lg bg-slate-50 px-3 py-2 text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Playoff record</p>
+                  <p className="text-lg font-bold tabular-nums text-slate-900">{record}</p>
+                  <p className="text-[10px] text-slate-500">W–L–T</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-100 py-3">
+                <div>
+                  <p className="text-[11px] text-slate-500">Avg. predicted</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">{fmt(alliance.meanPredicted, 0)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Avg. actual</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">{fmt(alliance.meanActual, 0)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Avg. residual</p>
+                  <p className={`mt-1 text-lg font-bold tabular-nums ${residualTone}`}>{residual === null ? "—" : `${residual > 0 ? "+" : ""}${fmt(residual, 1)}`}</p>
+                  <p className={`text-[10px] font-medium ${residualTone}`}>{residualLabel}</p>
+                </div>
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  Match-by-match results ({alliance.matchCount})
+                </summary>
+                <div className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100">
+                  {alliance.matches.map((match) => {
+                    const sourceMatch = matchesByKey.get(match.matchKey);
+                    const label = sourceMatch ? matchShortName(sourceMatch, data.event.playoff_type) : "Match label unavailable";
+                    const outcomeTone = match.outcome === "win" ? "text-emerald-700"
+                      : match.outcome === "loss" ? "text-rose-700" : "text-slate-500";
+                    return <a
+                      key={match.matchKey}
+                      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-xs hover:bg-slate-50"
+                      href={`https://www.thebluealliance.com/match/${match.matchKey}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <span className="font-semibold text-blue-700">{label} ↗</span>
+                      <span className="tabular-nums text-slate-600">
+                        Actual {fmt(match.actual, 0)} · Predicted {fmt(match.predicted, 0)}
+                      </span>
+                      <span className={`font-semibold tabular-nums ${match.residual === null ? "text-slate-500" : match.residual >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {match.residual === null ? "No prediction" : `${match.residual > 0 ? "+" : ""}${fmt(match.residual)} pts`}
+                      </span>
+                      <span className={`uppercase ${outcomeTone}`}>{match.outcome === "unknown" ? "Result unavailable" : match.outcome}</span>
+                    </a>;
+                  })}
+                </div>
+              </details>
+            </article>;
+          })}
+        </div>
+        <p className="text-xs leading-5 text-slate-500">
+          Residual = actual score − predicted score. A positive average means the alliance outscored the model estimate; a negative average means it scored below it. These are alliance-level results, not evidence about an individual robot.
+        </p>
       </>}
     </Panel>
   </section>;
