@@ -12,7 +12,7 @@ const b = { anyOf: [{ type: "boolean" }, { type: "null" }] };
 const obj = (properties, additionalProperties = false) => ({ type: "object", properties, additionalProperties });
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 
-const schemas = {
+const fallbackSchemas = {
   FieldViewStatboticsRecordLine: obj({ wins:i, losses:i, ties:i, count:i, winrate:ns, rps:ns, rps_per_match:ns, rank:ni, num_teams:ni, alliance:s, is_captain:b }),
   FieldViewStatboticsTeamRecord: obj({ qual:ref("FieldViewStatboticsRecordLine"), elim:ref("FieldViewStatboticsRecordLine"), total:ref("FieldViewStatboticsRecordLine") }),
   FieldViewStatboticsEpaRanks: obj({
@@ -67,15 +67,35 @@ function generic(schema) {
   if (schema.type === "array") return generic(schema.items);
   return schema.type === "object" && (!schema.properties || !Object.keys(schema.properties).length);
 }
-function patch(spec, suffix, schemaName, array = false) {
+function getMedia(spec, suffix) {
   const entry = Object.entries(spec.paths ?? {}).find(([path]) => path.endsWith(suffix));
-  if (!entry) { console.warn(`OpenAPI path not found: ${suffix}`); return; }
+  if (!entry) throw new Error(`OpenAPI path not found: ${suffix}`);
   const response = entry[1].get?.responses?.["200"] ?? entry[1].get?.responses?.["2XX"];
   const media = response?.content?.["application/json"];
-  if (!media) return;
+  if (!media) throw new Error(`OpenAPI JSON response schema not found: ${suffix}`);
+  return media;
+}
+function patchResponse(spec, suffix, schemaName, array = false) {
+  const media = getMedia(spec, suffix);
   const schema = media.schema;
   if (array && schema?.type === "array" && generic(schema.items)) media.schema = { ...schema, items: ref(schemaName) };
   else if (!schema || generic(schema)) media.schema = array ? { type:"array",items:ref(schemaName) } : ref(schemaName);
+}
+function ensureNamedSchema(spec, suffix, fallbackName, array = false) {
+  const media = getMedia(spec, suffix);
+  const schema = array ? media.schema?.items : media.schema;
+  if (!schema) throw new Error(`Response schema missing after fallback for ${suffix}`);
+  if (schema.$ref) {
+    const match = schema.$ref.match(/^#\/components\/schemas\/([^/]+)$/);
+    if (!match) throw new Error(`Unsupported schema reference for ${suffix}: ${schema.$ref}`);
+    return match[1];
+  }
+  // Preserve a concrete inline upstream schema while giving aliases a stable name.
+  const name = `FieldViewStatboticsUpstream${fallbackName.replace("FieldViewStatbotics", "")}`;
+  spec.components.schemas[name] = schema;
+  if (array) media.schema.items = ref(name);
+  else media.schema = ref(name);
+  return name;
 }
 
 async function main() {
@@ -84,20 +104,45 @@ async function main() {
   const spec = await response.json();
   if (!spec?.paths || !spec?.components) throw new Error("Statbotics OpenAPI document is missing paths/components");
   spec.components.schemas ??= {};
-  for (const [name,schema] of Object.entries(schemas)) spec.components.schemas[name] ??= schema;
+  for (const [name,schema] of Object.entries(fallbackSchemas)) spec.components.schemas[name] ??= schema;
 
-  patch(spec,"/match/{match}","FieldViewStatboticsMatch");
-  patch(spec,"/matches","FieldViewStatboticsMatch",true);
-  patch(spec,"/team/{team}","FieldViewStatboticsTeam");
-  patch(spec,"/team_year/{team}/{year}","FieldViewStatboticsTeamYear");
-  patch(spec,"/team_years","FieldViewStatboticsTeamYear",true);
-  patch(spec,"/team_event/{team}/{event}","FieldViewStatboticsTeamEvent");
-  patch(spec,"/team_events","FieldViewStatboticsTeamEvent",true);
+  patchResponse(spec,"/match/{match}","FieldViewStatboticsMatch");
+  patchResponse(spec,"/matches","FieldViewStatboticsMatch",true);
+  patchResponse(spec,"/team/{team}","FieldViewStatboticsTeam");
+  patchResponse(spec,"/team_year/{team}/{year}","FieldViewStatboticsTeamYear");
+  patchResponse(spec,"/team_years","FieldViewStatboticsTeamYear",true);
+  patchResponse(spec,"/team_event/{team}/{event}","FieldViewStatboticsTeamEvent");
+  patchResponse(spec,"/team_events","FieldViewStatboticsTeamEvent",true);
+
+  const aliases = {
+    StatboticsMatch: ensureNamedSchema(spec,"/match/{match}","FieldViewStatboticsMatch"),
+    StatboticsTeam: ensureNamedSchema(spec,"/team/{team}","FieldViewStatboticsTeam"),
+    StatboticsTeamYear: ensureNamedSchema(spec,"/team_year/{team}/{year}","FieldViewStatboticsTeamYear"),
+    StatboticsTeamEvent: ensureNamedSchema(spec,"/team_event/{team}/{event}","FieldViewStatboticsTeamEvent"),
+    StatboticsMatchListItem: ensureNamedSchema(spec,"/matches","FieldViewStatboticsMatch",true),
+    StatboticsTeamYearListItem: ensureNamedSchema(spec,"/team_years","FieldViewStatboticsTeamYear",true),
+    StatboticsTeamEventListItem: ensureNamedSchema(spec,"/team_events","FieldViewStatboticsTeamEvent",true),
+  };
+  // Nested helper aliases stay pointed at the fallback definitions only while needed.
+  const typeFile = [
+    'import type { components } from "./generated";',
+    '',
+    'type Schemas = components["schemas"];',
+    ...Object.entries(aliases).map(([alias,name]) => `export type ${alias} = Schemas["${name}"];`),
+    'export type StatboticsPrediction = Schemas["FieldViewStatboticsPrediction"];',
+    'export type StatboticsEPA = Schemas["FieldViewStatboticsMatchEPA"];',
+    'export type StatboticsRecordLine = Schemas["FieldViewStatboticsRecordLine"];',
+    'export type StatboticsTeamRecord = Schemas["FieldViewStatboticsTeamRecord"];',
+    'export type StatboticsEpaProfile = Schemas["FieldViewStatboticsEpaProfile"];',
+    'export type StatboticsMatchStatus = "loading" | "ready" | "unavailable";',
+    '',
+  ].join("\n");
 
   const dir=mkdtempSync(join(tmpdir(),"fieldview-statbotics-"));
   try {
     const file=join(dir,"openapi.json"); writeFileSync(file,JSON.stringify(spec));
     execFileSync(process.platform==="win32"?"npx.cmd":"npx",["openapi-typescript",file,"-o","src/lib/statbotics/generated.ts"],{stdio:"inherit"});
+    writeFileSync("src/lib/statbotics/types.ts",typeFile);
   } finally { rmSync(dir,{recursive:true,force:true}); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
