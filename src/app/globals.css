@@ -337,3 +337,109 @@ button:disabled {
   border-color: color-mix(in srgb, var(--tracked-accent) 80%, transparent);
   box-shadow: 0 8px 30px color-mix(in srgb, var(--tracked-accent) 20%, transparent);
 }
+
+
+/* Insights uses the same site theme, with explicit contrast for semantic chart
+   colors and tinted surfaces that are intentionally distinct from Gameday. */
+.insights-dashboard {
+  --insights-gridline: #e2e8f0;
+  --insights-muted: #64748b;
+}
+
+.insights-dashboard :focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.site-theme-dark .insights-dashboard {
+  --insights-gridline: #3f454b;
+  --insights-muted: #a1a1aa;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-white/95"] {
+  background-color: rgb(28 30 32 / 95%);
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-blue-50/40"],
+.site-theme-dark .insights-dashboard [class~="bg-blue-50/50"],
+.site-theme-dark .insights-dashboard [class~="bg-blue-50/60"] {
+  background-color: rgb(30 58 95 / 42%);
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-rose-50"],
+.site-theme-dark .insights-dashboard [class~="bg-rose-50/40"] {
+  background-color: #3b2028;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-rose-100"] {
+  background-color: #542632;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-amber-50"] {
+  background-color: #3d3020;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-amber-100"] {
+  background-color: #57401f;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-emerald-50"] {
+  background-color: #18392f;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-emerald-100"] {
+  background-color: #20503f;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-blue-100"] {
+  background-color: #203d60;
+}
+
+.site-theme-dark .insights-dashboard [class~="text-blue-950"] {
+  color: #dbeafe;
+}
+
+.site-theme-dark .insights-dashboard [class~="text-rose-950"],
+.site-theme-dark .insights-dashboard [class~="text-rose-800"],
+.site-theme-dark .insights-dashboard [class~="text-rose-700"],
+.site-theme-dark .insights-dashboard [class~="text-rose-600"] {
+  color: #fda4af;
+}
+
+.site-theme-dark .insights-dashboard [class~="text-amber-800"],
+.site-theme-dark .insights-dashboard [class~="text-amber-700"] {
+  color: #fcd34d;
+}
+
+.site-theme-dark .insights-dashboard [class~="text-emerald-800"],
+.site-theme-dark .insights-dashboard [class~="text-emerald-700"],
+.site-theme-dark .insights-dashboard [class~="text-emerald-600"] {
+  color: #6ee7b7;
+}
+
+.site-theme-dark .insights-dashboard [class~="border-blue-100"],
+.site-theme-dark .insights-dashboard [class~="border-blue-200"] {
+  border-color: #35577d;
+}
+
+.site-theme-dark .insights-dashboard [class~="border-rose-100"],
+.site-theme-dark .insights-dashboard [class~="border-rose-500"] {
+  border-color: #85404e;
+}
+
+.site-theme-dark .insights-dashboard [class~="ring-blue-300"] {
+  --tw-ring-color: #6096ca;
+}
+
+.site-theme-dark .insights-dashboard [class~="ring-rose-300"] {
+  --tw-ring-color: #c46a7b;
+}
+
+.site-theme-dark .insights-dashboard [class~="bg-slate-300"],
+.site-theme-dark .insights-dashboard [class~="bg-slate-400"] {
+  background-color: #626970;
+}
+
+.site-theme-dark .insights-dashboard [class~="text-slate-300"] {
+  color: #71717a;
+}

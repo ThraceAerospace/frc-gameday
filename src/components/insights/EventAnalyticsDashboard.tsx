@@ -142,7 +142,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const residuals = data?.allianceResults.filter((item) => item.residual !== null) ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+    <div className="insights-dashboard mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
@@ -372,6 +372,9 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team {team.teamNumber}</p><h3 className="text-xl font-black text-slate-950">{team.name}</h3><p className="mt-1 text-xs text-slate-500">{insight.metrics.matchesSeen} appearances in the loaded event sample</p></div>
         <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
       </div>
+      {insight.summary.length ? <ul aria-label={`Team ${team.teamNumber} summary`} className="mt-4 grid gap-2 text-sm leading-6 text-slate-700 sm:grid-cols-2">
+        {insight.summary.map((item) => <li key={item} className="flex min-w-0 gap-2"><span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" /><span>{item}</span></li>)}
+      </ul> : null}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <QualityMetric label="Statbotics EPA" value={fmt(team.epa)} detail="Current team strength estimate"/>
         <QualityMetric label="Event percentile" value={team.epaPercentile===null?"—":`${Math.round(team.epaPercentile*100)}%`} detail="Relative to this event roster"/>
@@ -446,10 +449,10 @@ function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAna
   return <section className="rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Same-match EPA comparison</h3><p className="text-xs text-slate-500">Pre-match ratings for both teams in the exact same matches · {shared.length} shared matches</p></div><div className="flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600"/>{nameA}</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-teal-600"/>{nameB}</span></div></div>
     <svg viewBox="0 0 900 260" role="img" aria-label={`Pre-match EPA comparison between ${nameA} and ${nameB} across ${shared.length} common matches`} className="mt-3 w-full">
-      {[0,1,2,3].map((n)=><g key={n}><line x1="48" x2="858" y1={40+n*56} y2={40+n*56} stroke="#e2e8f0" strokeDasharray="3 4"/><text x="40" y={44+n*56} textAnchor="end" fontSize="10" fill="#64748b">{(max-range*n/3).toFixed(0)}</text></g>)}
+      {[0,1,2,3].map((n)=><g key={n}><line x1="48" x2="858" y1={40+n*56} y2={40+n*56} stroke="var(--insights-gridline)" strokeDasharray="3 4"/><text x="40" y={44+n*56} textAnchor="end" fontSize="10" fill="var(--insights-muted)">{(max-range*n/3).toFixed(0)}</text></g>)}
       <polyline points={lineA} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round"/><polyline points={lineB} fill="none" stroke="#0d9488" strokeWidth="2.5" strokeLinejoin="round"/>
       {shared.map(({a,b},i)=><g key={a.matchKey}><circle cx={x(i)} cy={y(a.preEPA as number)} r="4" fill="#2563eb"><title>{a.event.shortName??a.event.name} · {a.matchLabel} · {nameA}: {a.preEPA?.toFixed(2)} EPA</title></circle><circle cx={x(i)} cy={y(b.preEPA as number)} r="4" fill="#0d9488"><title>{b.event.shortName??b.event.name} · {b.matchLabel} · {nameB}: {b.preEPA?.toFixed(2)} EPA</title></circle></g>)}
-      <text x="50" y="246" fontSize="10" fill="#64748b">{shared[0].a.matchLabel}</text><text x={x(mid)} y="246" textAnchor="middle" fontSize="10" fill="#64748b">{shared[mid].a.matchLabel}</text><text x="850" y="246" textAnchor="end" fontSize="10" fill="#64748b">{shared[shared.length-1].a.matchLabel}</text>
+      <text x="50" y="246" fontSize="10" fill="var(--insights-muted)">{shared[0].a.matchLabel}</text><text x={x(mid)} y="246" textAnchor="middle" fontSize="10" fill="var(--insights-muted)">{shared[mid].a.matchLabel}</text><text x="850" y="246" textAnchor="end" fontSize="10" fill="var(--insights-muted)">{shared[shared.length-1].a.matchLabel}</text>
     </svg>
     <p className="text-[10px] text-slate-500">Comparing ratings at the same point in the season controls for match and event timing. EPA is a model estimate, not a direct measure of robot performance. Hover points for exact values.</p>
   </section>;
@@ -474,20 +477,20 @@ function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;n
     <div className="mt-4 rounded-lg border border-slate-100 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-800">EPA progression</h4><p className="text-[11px] text-slate-500">Pre-match and post-match rating at each match</p></div><div className="flex gap-3 text-[11px]"><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-slate-400"/>Pre</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{backgroundColor:color}}/>Post</span></div></div>
       <svg viewBox="0 0 900 250" role="img" aria-label={`${name} EPA progression across ${matches.length} matches`} className="mt-2 w-full overflow-visible">
-        {[0,1,2,3].map((n)=><g key={n}><line x1="42" x2="862" y1={40+n*58} y2={40+n*58} stroke="#e2e8f0" strokeDasharray="3 4"/><text x="34" y={44+n*58} textAnchor="end" fontSize="10" fill="#64748b">{(epaMax-(epaRange*n/3)).toFixed(0)}</text></g>)}
+        {[0,1,2,3].map((n)=><g key={n}><line x1="42" x2="862" y1={40+n*58} y2={40+n*58} stroke="var(--insights-gridline)" strokeDasharray="3 4"/><text x="34" y={44+n*58} textAnchor="end" fontSize="10" fill="var(--insights-muted)">{(epaMax-(epaRange*n/3)).toFixed(0)}</text></g>)}
         {pre&&<polyline points={pre} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="5 4"/>}
         {post&&<polyline points={post} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round"/>}
         {matches.map((m,i)=><g key={m.matchKey}>{m.preEPA!==null&&<circle cx={x(i)} cy={y(m.preEPA)} r="3" fill="#94a3b8"><title>{m.event.shortName??m.event.name} · {m.matchLabel}: pre-match EPA {m.preEPA.toFixed(2)}</title></circle>}{m.postEPA!==null&&<circle cx={x(i)} cy={y(m.postEPA)} r="3.5" fill={color}><title>{m.event.shortName??m.event.name} · {m.matchLabel}: post-match EPA {m.postEPA.toFixed(2)}{m.sharedAllianceUpdate?" · shared alliance update":""}</title></circle>}</g>)}
-        <text x="44" y="238" fontSize="10" fill="#64748b">First match</text><text x="862" y="238" textAnchor="end" fontSize="10" fill="#64748b">Latest match</text>
+        <text x="44" y="238" fontSize="10" fill="var(--insights-muted)">First match</text><text x="862" y="238" textAnchor="end" fontSize="10" fill="var(--insights-muted)">Latest match</text>
       </svg>
       <p className="text-[10px] text-slate-500">Each point is a model rating snapshot, not a direct measurement of that match's robot contribution. Hover points for event and match details.</p>
     </div>
     <div className="mt-3 rounded-lg border border-slate-100 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-800">Alliance score prediction residual</h4><p className="text-[11px] text-slate-500">Actual score minus predicted score; positive means the alliance scored above prediction</p></div><span className="text-xs text-slate-500">n={residuals.length}</span></div>
       <svg viewBox="0 0 900 190" role="img" aria-label={`${name} alliance score prediction residuals by match`} className="mt-2 w-full">
-        <line x1="42" x2="862" y1="88" y2="88" stroke="#64748b" strokeWidth="1.5"/>
+        <line x1="42" x2="862" y1="88" y2="88" stroke="var(--insights-muted)" strokeWidth="1.5"/>
         {residuals.map((m,i)=>{const barW=Math.max(2,Math.min(14,812/residuals.length-2));const bx=48+i*812/Math.max(1,residuals.length);const h=Math.abs(m.residual??0)/residualMax*68;const positive=(m.residual??0)>=0;return <rect key={m.matchKey} x={bx} y={positive?88-h:88} width={barW} height={Math.max(1,h)} rx="1" fill={positive?"#0d9488":"#e11d48"}><title>{m.event.shortName??m.event.name} · {m.matchLabel}: predicted {fmt(m.predicted)}, actual {fmt(m.actual)}, residual {fmt(m.residual)}</title></rect>;})}
-        <text x="44" y="177" fontSize="10" fill="#64748b">First match</text><text x="862" y="177" textAnchor="end" fontSize="10" fill="#64748b">Latest match</text>
+        <text x="44" y="177" fontSize="10" fill="var(--insights-muted)">First match</text><text x="862" y="177" textAnchor="end" fontSize="10" fill="var(--insights-muted)">Latest match</text>
       </svg>
       <div className="flex gap-4 text-[10px] text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-teal-600"/>Above prediction</span><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-rose-600"/>Below prediction</span></div>
     </div>
