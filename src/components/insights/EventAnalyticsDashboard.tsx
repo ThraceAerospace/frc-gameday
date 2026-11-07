@@ -266,7 +266,7 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
 }
 function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phase:"qualification"|"elimination"}) {
   const isQual=phase==="qualification";
-  const phaseData=analysis.phaseSummaries.find((item)=>isQual?/qual|qm/i.test(item.phase):/elim|playoff/i.test(item.phase));
+  const phaseData=analysis.phaseSummaries.find((item)=>isQual?/qual|qm|^q$/i.test(item.phase):/elim|playoff|^e$/i.test(item.phase));
   const title=isQual?"Qualification Performance":"Elimination Performance";
   if(!phaseData) return <section><h3 className="text-base font-bold text-slate-900">{title}</h3><p className="mt-2 text-sm text-slate-500">No {isQual?"qualification":"elimination"} match sample is available yet.</p></section>;
   return <section>
