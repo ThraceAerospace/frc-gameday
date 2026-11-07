@@ -185,12 +185,12 @@ export function buildTeamInsights(
       autoEpa: team.autoEpa, teleopEpa: team.teleopEpa, endgameEpa: team.endgameEpa,
       epaStart: first, epaEnd: last, epaChange,
     };
-    const ownAllianceResults = allianceResults.filter((item) => item.teamKeys.includes(team.teamKey) && item.residual !== null && item.preEpaTotal !== null);
+    const ownAllianceResults = allianceResults.filter((item) => item.compLevel.toLowerCase() === "qm" && item.teamKeys.includes(team.teamKey) && item.residual !== null && item.preEpaTotal !== null);
     const peerMap = new Map<string, number>();
     for (const own of ownAllianceResults) {
       const band = Math.max(5, Math.abs(own.preEpaTotal ?? 0) * 0.2);
       for (const peer of allianceResults) {
-        if (peer.matchKey === own.matchKey || peer.residual === null || peer.preEpaTotal === null ||
+        if (peer.compLevel.toLowerCase() !== own.compLevel.toLowerCase() || peer.matchKey === own.matchKey || peer.residual === null || peer.preEpaTotal === null ||
             peer.teamKeys.includes(team.teamKey) || Math.abs(peer.preEpaTotal - (own.preEpaTotal ?? 0)) > band) continue;
         peerMap.set(peer.matchKey + ":" + peer.color, peer.residual);
       }

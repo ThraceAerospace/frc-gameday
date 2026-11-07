@@ -282,7 +282,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const reasons: string[] = [];
       const kinds: string[] = [];
       if (teamResiduals.length >= 8 && row.residual !== null && teamMedian !== null && Math.abs(row.residual-teamMedian)>teamOutlierBand) {
-        kinds.push(row.residual<teamMedian?"alliance-underperformance":"alliance-overperformance");
+        kinds.push(row.residual<0?"alliance-underperformance":"alliance-overperformance");
         reasons.push(`Alliance residual ${row.residual>0?"+":""}${row.residual.toFixed(1)} pts was ${Math.abs(row.residual-teamMedian).toFixed(1)} pts from this team's season median.`);
       }
       if (opponentResiduals.length >= 8 && row.opponentResidual !== null && opponentMedian !== null && Math.abs(row.opponentResidual-opponentMedian)>opponentOutlierBand) {
