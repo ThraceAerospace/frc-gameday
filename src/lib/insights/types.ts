@@ -48,13 +48,30 @@ export type ReviewFinding = {
   severity: "high" | "medium" | "low";
 };
 
+export type QualificationAnomaly = {
+  id: string; matchKey: string; matchLabel: string; alliance: "red" | "blue"; teamKeys: string[];
+  predicted: number; actual: number; residual: number; marginOfError: number | null;
+  standardizedResidual: number | null; winProbability: number | null;
+  outsideExpectedRange: boolean; highConfidenceMiss: boolean; severity: "high" | "medium"; reasons: string[];
+};
+export type PlayoffAlliancePerformance = {
+  teamKeys: string[]; matchCount: number; wins: number; losses: number;
+  meanPredicted: number | null; meanActual: number | null; meanResidual: number | null;
+  residualStandardDeviation: number | null;
+  matches: { matchKey: string; matchLabel: string; compLevel: string; residual: number | null; actual: number | null; predicted: number | null }[];
+};
+export type PlayoffAnalysis = {
+  matchCount: number; allianceCount: number;
+  roundSummaries: { round: string; matchCount: number; meanResidual: number | null; abovePrediction: number; belowPrediction: number }[];
+  alliances: PlayoffAlliancePerformance[];
+};
 export type EventAnalyticsResponse = {
   event: TBAEvent;
   rankings?: TBAEventRanking | null;
   teams: TeamAnalyticsRow[];
   matches: AnalyticsMatch[];
   allianceResults: AllianceResult[];
-  findings: ReviewFinding[];
+  findings: ReviewFinding[];\n  qualificationAnomalies?: QualificationAnomaly[];\n  playoffAnalysis?: PlayoffAnalysis;
   teamInsights?: TeamInsight[];
   seasonCohort?: SeasonCohortSnapshot;
   matchCount: number;
