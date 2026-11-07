@@ -105,7 +105,7 @@ export type TeamInsight = {
     epaChange: number | null;
   };
   epaTrend: { matchKey: string; matchLabel: string; epa: number | null }[];
-  seasonComparison: TeamSeasonComparison | null;
+  seasonComparison: TeamSeasonComparison | null;\n  peerPerformance: { teamMatches: number; peerAllianceCount: number; teamMeanResidual: number | null; peerMeanResidual: number | null; difference: number | null; interpretation: "above-peers" | "below-peers" | "similar-to-peers" | "insufficient-sample" };
   seasonHistory: { event: { key: string; name: string; startDate: string }; epaTotal: number | null; matches: number | null; status: "ready" | "unavailable" }[];
   reviewMatches: TeamInsightMatch[];
 };

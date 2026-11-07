@@ -185,6 +185,27 @@ export function buildTeamInsights(
       autoEpa: team.autoEpa, teleopEpa: team.teleopEpa, endgameEpa: team.endgameEpa,
       epaStart: first, epaEnd: last, epaChange,
     };
+    const ownAllianceResults = allianceResults.filter((item) => item.teamKeys.includes(team.teamKey) && item.residual !== null && item.preEpaTotal !== null);
+    const peerMap = new Map<string, number>();
+    for (const own of ownAllianceResults) {
+      const band = Math.max(5, Math.abs(own.preEpaTotal ?? 0) * 0.2);
+      for (const peer of allianceResults) {
+        if (peer.matchKey === own.matchKey || peer.residual === null || peer.preEpaTotal === null ||
+            peer.teamKeys.includes(team.teamKey) || Math.abs(peer.preEpaTotal - (own.preEpaTotal ?? 0)) > band) continue;
+        peerMap.set(peer.matchKey + ":" + peer.color, peer.residual);
+      }
+    }
+    const ownResiduals = ownAllianceResults.map((item) => item.residual as number);
+    const peerResiduals = [...peerMap.values()];
+    const teamMeanResidual = mean(ownResiduals);
+    const peerMeanResidual = mean(peerResiduals);
+    const peerDifference = teamMeanResidual !== null && peerMeanResidual !== null ? teamMeanResidual-peerMeanResidual : null;
+    const peerPerformance = {
+      teamMatches: ownResiduals.length, peerAllianceCount: peerResiduals.length,
+      teamMeanResidual, peerMeanResidual, difference: peerDifference,
+      interpretation: ownResiduals.length < 3 || peerResiduals.length < 5 || peerDifference === null ? "insufficient-sample" as const
+        : peerDifference > 10 ? "above-peers" as const : peerDifference < -10 ? "below-peers" as const : "similar-to-peers" as const,
+    };
     const summary: string[] = [];
     summary.push(metrics.rank === null ? "Official qualification standing is not available yet."
       : `Official qualification rank: #${metrics.rank}${metrics.wins === null ? "" : ` · record ${metrics.wins}–${metrics.losses}–${metrics.ties}`}.`);
