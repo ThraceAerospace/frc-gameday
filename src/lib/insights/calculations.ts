@@ -315,5 +315,5 @@ export function buildPlayoffAnalysis(allianceResults: AllianceResult[]): import(
     return {round,matchCount:items.length,meanResidual:average(items.map((item)=>item.residual as number)),
       abovePrediction:items.filter((item)=>(item.residual??0)>0).length,belowPrediction:items.filter((item)=>(item.residual??0)<0).length};
   }).filter((item)=>item.matchCount>0);
-  return {matchCount:playoffs.length,allianceCount:alliances.length,roundSummaries,alliances};
+  return {matchCount:new Set(playoffs.map((item)=>item.matchKey)).size,allianceCount:alliances.length,roundSummaries,alliances};
 }
