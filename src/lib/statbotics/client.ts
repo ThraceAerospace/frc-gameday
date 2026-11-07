@@ -54,10 +54,7 @@ function getEffectiveTtlSeconds(
   fallbackTtlSeconds: number,
 ): number {
   const upstreamMaxAge = getMaxAge(cacheControl);
-  return Math.max(
-    MIN_REQUEST_INTERVAL_SECONDS,
-    upstreamMaxAge ?? fallbackTtlSeconds,
-  );
+  return upstreamMaxAge ?? fallbackTtlSeconds;
 }
 
 function parseCached<T>(raw: string): CachedResponse<T> | null {
