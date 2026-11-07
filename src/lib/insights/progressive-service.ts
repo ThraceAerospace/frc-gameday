@@ -216,7 +216,7 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
       ));
       for (const match of job.matches) {
         if (match.key === liveMatchKey && job.records[match.key]?.statbotics) continue;
-        const statbotics = byKey.get(match.key) ?? null;
+        const statbotics = byKey.get(match.key) ?? job.records[match.key]?.statbotics ?? null;
         job.records[match.key] = {
           match,
           statbotics,
