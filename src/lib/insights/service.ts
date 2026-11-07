@@ -93,7 +93,7 @@ export async function getEventAnalytics(eventKey: string, offset = 0, requestedL
       predictionStats: (() => {
       const errors = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
       const winChecks = analyticsMatches.flatMap((record) => {
-        const probability = record.statbotics?.pred?.red_win_prob ?? record.statbotics?.prediction?.red_win_prob;
+        const probability = record.statbotics?.pred?.red_win_prob;
         const winner = record.match.winning_alliance;
         if (typeof probability !== "number" || (winner !== "red" && winner !== "blue")) return [];
         return [((probability >= 0.5 ? "red" : "blue") === winner) ? 1 : 0];
