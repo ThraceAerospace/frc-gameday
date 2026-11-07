@@ -270,6 +270,10 @@ Prefer small, focused cleanup commits.
 
 - Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
 
+- Prefer Statbotics bulk collection endpoints whenever a filtered collection can satisfy the request: `/v3/matches?event=...`, `/v3/matches?team=...&year=...`, and `/v3/team_events?team=...&year=...`. Use paginated collection methods (up to 1000 records per page) through the shared Statbotics client/service; preserve per-query caching, upstream Cache-Control, and the shared request floor. Use single-record endpoints for targeted live-match refreshes or when a collection endpoint cannot express the lookup.
+- Start independent TBA and Statbotics collection requests concurrently. Do not serialize unrelated event metadata, schedule, rankings, OPR, match collection, or team-event collection fetches. Merge bulk Statbotics records into the canonical TBA schedule by match/event key; TBA remains authoritative for schedule and actual results.
+- Persist usable bulk results and retain previously collected records if a later refresh fails or omits a record. Distinguish a failed collection request from a successful collection response that contains no record for a scheduled match. The browser must keep displaying the latest complete-so-far analytics snapshot while polling, reject stale overlapping responses, and show a sticky progress/status area at the top of the analytics page with explicit missing-data explanations.
+
 
 ## Homepage event snapshot
 
