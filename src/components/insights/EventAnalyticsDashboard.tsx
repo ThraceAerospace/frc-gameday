@@ -195,6 +195,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisA ? <div className="mt-5 space-y-5">
                 <TeamRiskPanel analysis={matchAnalysisA} />
                 <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
+                <PhasePerformancePanel analysis={matchAnalysisA} phase="qualification" />
+                <section className="rounded-xl border border-slate-200 bg-white p-4">
+                  <PhasePerformancePanel analysis={matchAnalysisA} phase="elimination" />
+                  <EliminationShiftPanel analysis={matchAnalysisA} />
+                </section>
                 <details className="rounded-xl border border-slate-200 bg-white">
                   <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Season charts and match-by-match evidence</summary>
                   <div className="p-4"><TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/></div>
@@ -226,7 +231,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 
 function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const summary=analysis.anomalySummary;
-  return <Panel title="Season match anomalies and scouting risks" description="Flags unusual outcomes in matches involving this team across its season. They identify where to investigate, not which robot caused an outcome.">
+  return <Panel title="Scouting flags" description="Season-wide matches involving this team that deserve a closer look. Flags are investigation prompts, not explanations of what caused an outcome.">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <QualityMetric label="Flagged matches" value={String(summary.matchesWithAnomalies)} detail={`of ${summary.matchesEvaluated} evaluated matches`} />
       <QualityMetric label="Anomaly frequency" value={summary.frequency===null?"—":`${(summary.frequency*100).toFixed(1)}%`} detail="Share of this team's evaluated matches" />
@@ -241,6 +246,41 @@ function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
       <a className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
     </article>)}</div> : <p className="mt-4 text-sm text-slate-500">No matches have met the current anomaly criteria. This is not a guarantee that every match was routine.</p>}
   </Panel>;
+}
+function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
+  const s=analysis.summary;
+  return <section className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900">Overall Season Performance</h3><p className="mt-1 text-xs text-slate-500">{name} · {analysis.matchCount} matches across {analysis.eventCount} official events</p></div></div>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <HistoryMetric label="Match record" value={`${s.wins}–${s.losses}`}/>
+      <HistoryMetric label="Win rate" value={s.winRate===null?"—":`${(s.winRate*100).toFixed(1)}%`}/>
+      <HistoryMetric label="Mean score error" value={fmt(s.meanAbsoluteError)+" pts"}/>
+      <HistoryMetric label="Prediction bias" value={s.meanResidual===null?"—":`${s.meanResidual>0?"+":""}${fmt(s.meanResidual)} pts`}/>
+      <HistoryMetric label="Score RMSE" value={fmt(s.rootMeanSquareError)+" pts"}/>
+      <HistoryMetric label="EPA first → last" value={`${fmt(s.epaStart,2)} → ${fmt(s.epaEnd,2)}`}/>
+    </div>
+    <ResidualPatternPanel analysis={analysis}/>
+    <details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Event-by-event season performance</summary><div className="overflow-x-auto p-3"><table className="w-full min-w-[680px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>Matches</th><th>W-L</th><th>Win rate</th><th>Mean absolute error</th><th>Residual bias</th><th>Score RMSE</th><th>EPA first → last</th></tr></thead><tbody>{analysis.eventSummaries.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-700">{item.event.shortName??item.event.name}</th><td>{item.matches}</td><td>{item.wins}–{item.losses}</td><td>{item.winRate===null?"—":`${(item.winRate*100).toFixed(1)}%`}</td><td>{fmt(item.meanAbsoluteError)}</td><td>{item.meanResidual===null?"—":(item.meanResidual>0?"+":"")+fmt(item.meanResidual)}</td><td>{fmt(item.rootMeanSquareError)}</td><td>{fmt(item.epaStart,2)} → {fmt(item.epaEnd,2)}</td></tr>)}</tbody></table></div></details>
+    <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Score metrics describe the team's alliance results, not individual robot contribution.</p>
+  </section>;
+}
+function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phase:"qualification"|"elimination"}) {
+  const isQual=phase==="qualification";
+  const phaseData=analysis.phaseSummaries.find((item)=>isQual?/qual|qm/i.test(item.phase):/elim|playoff/i.test(item.phase));
+  const title=isQual?"Qualification Performance":"Elimination Performance";
+  if(!phaseData) return <section><h3 className="text-base font-bold text-slate-900">{title}</h3><p className="mt-2 text-sm text-slate-500">No {isQual?"qualification":"elimination"} match sample is available yet.</p></section>;
+  return <section>
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900">{title}</h3><p className="mt-1 text-xs text-slate-500">{phaseData.matches} {isQual?"qualification":"elimination"} matches across the official season</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{phaseData.wins}–{phaseData.losses}</span></div>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+      <HistoryMetric label="Win rate" value={phaseData.winRate===null?"—":`${(phaseData.winRate*100).toFixed(1)}%`}/>
+      <HistoryMetric label="Mean score error" value={fmt(phaseData.meanAbsoluteError)+" pts"}/>
+      <HistoryMetric label="Prediction bias" value={phaseData.meanResidual===null?"—":`${phaseData.meanResidual>0?"+":""}${fmt(phaseData.meanResidual)} pts`}/>
+      <HistoryMetric label="Score RMSE" value={fmt(phaseData.rootMeanSquareError)+" pts"}/>
+      <HistoryMetric label="EPA first → last" value={`${fmt(phaseData.epaStart,2)} → ${fmt(phaseData.epaEnd,2)}`}/>
+    </div>
+    {isQual&&phaseData.rp.length ? <div className="mt-3"><h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ranking point prediction accuracy</h4><div className="mt-2 grid grid-cols-3 gap-2">{phaseData.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">Brier {fmt(item.brier,3)} · n={item.sampleSize}</p></div>)}</div><p className="mt-2 text-[11px] text-slate-500">RP prediction metrics use matches with both a model probability and a recorded outcome.</p></div>:null}
+    {isQual?<p className="mt-3 text-xs text-slate-500">Residuals are actual alliance score minus predicted alliance score. They include partners and opponents and cannot isolate this team's contribution.</p>:<p className="mt-3 text-xs text-slate-500">Elimination samples are typically much smaller than qualification samples; treat these metrics as descriptive rather than definitive.</p>}
+  </section>;
 }
 function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level==="qm").sort((a,b)=>a.match.match_number-b.match.match_number);
