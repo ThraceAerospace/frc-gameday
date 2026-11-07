@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
     const snapshot = await getEventAnalyticsSnapshot(event);
     const seasonCohort = await getSeasonCohortSnapshot(snapshot.event, snapshot.teams);
     snapshot.seasonCohort = seasonCohort;
-    snapshot.teamInsights = buildSeasonAwareTeamInsights(snapshot.matches, snapshot.allianceResults, snapshot.teams, snapshot.rankings ?? null, seasonCohort, snapshot.event.key, snapshot.event.start_date);
+    snapshot.teamInsights = buildSeasonAwareTeamInsights(snapshot.matches, snapshot.allianceResults, snapshot.teams, snapshot.rankings ?? null, seasonCohort, snapshot.event.key, snapshot.event.start_date, snapshot.event.playoff_type);
     waitUntil(Promise.all([advanceEventAnalytics(event, liveMatchKey), advanceSeasonCohort(event)]));
     return Response.json(snapshot, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

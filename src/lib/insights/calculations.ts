@@ -8,8 +8,8 @@ function numberOrNull(value: unknown): number | null {
 function statboticsTeamKey(teamKey: string): string {
   return String(Number(teamKey.replace(/^frc/i, "")));
 }
-function matchLabel(match: AnalyticsMatch["match"]): string {
-  return matchShortName(match);
+function matchLabel(match: AnalyticsMatch["match"], playoffType?: number | null): string {
+  return matchShortName(match, playoffType);
 }
 function epaFor(record: AnalyticsMatch, teamKey: string, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
   return record.statbotics?.[phase]?.[statboticsTeamKey(teamKey)];
@@ -27,7 +27,7 @@ export function standardDeviation(values: number[]): number | null {
   const average = mean(values) ?? 0;
   return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length);
 }
-export function buildAllianceResults(records: AnalyticsMatch[]): AllianceResult[] {
+export function buildAllianceResults(records: AnalyticsMatch[], playoffType?: number | null): AllianceResult[] {
   return records.flatMap(({ match, statbotics }) => (["red", "blue"] as const).map((color) => {
     const alliance = match.alliances[color];
     const predicted = numberOrNull(color === "red" ? statbotics?.pred?.red_score : statbotics?.pred?.blue_score);
@@ -39,7 +39,7 @@ export function buildAllianceResults(records: AnalyticsMatch[]): AllianceResult[
     const outcome = match.winning_alliance === color ? "win" as const
       : match.winning_alliance === (color === "red" ? "blue" : "red") ? "loss" as const
       : match.winning_alliance === "" ? "tie" as const : "unknown" as const;
-    return { matchKey: match.key, matchLabel: matchLabel(match), compLevel: match.comp_level, color, teamKeys, predicted, actual, residual: actual !== null && predicted !== null ? actual - predicted : null, preEpaTotal, winner: outcome === "win", outcome };
+    return { matchKey: match.key, matchLabel: matchLabel(match, playoffType), compLevel: match.comp_level, color, teamKeys, predicted, actual, residual: actual !== null && predicted !== null ? actual - predicted : null, preEpaTotal, winner: outcome === "win", outcome };
   }));
 }
 export function buildTeamRows(
@@ -111,6 +111,7 @@ export function buildTeamInsights(
   allianceResults: AllianceResult[],
   teams: TeamAnalyticsRow[],
   rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
+  playoffType?: number | null,
 ): import("./types").TeamInsight[] {
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const residualThreshold = Math.max(25, (standardDeviation(residuals) ?? 0) * 1.5);
@@ -140,7 +141,7 @@ export function buildTeamInsights(
         reasons.push(`Outcome differed from the model's ${Math.round(Math.max(winProbability, 1 - winProbability) * 100)}% win-probability expectation`);
       }
       return [{
-        matchKey: record.match.key, matchLabel: matchLabel(record.match), alliance,
+        matchKey: record.match.key, matchLabel: matchLabel(record.match, playoffType), alliance,
         partners: own.team_keys.filter((key) => key !== team.teamKey).map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
         opponents: opposing.team_keys.map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
         predicted: result?.predicted ?? null, actual: result?.actual ?? null, residual: result?.residual ?? null,
@@ -215,8 +216,9 @@ export function buildSeasonAwareTeamInsights(
   records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[],
   rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
   cohort: import("./types").SeasonCohortSnapshot, targetEventKey: string, targetStartDate: string,
+  playoffType?: number | null,
 ): import("./types").TeamInsight[] {
-  const insights = buildTeamInsights(records, allianceResults, teams, rankings);
+  const insights = buildTeamInsights(records, allianceResults, teams, rankings, playoffType);
   const usable = cohort.records.filter((record) => record.status === "ready" && record.epaTotal !== null);
   const changes = teams.flatMap((team) => {
     const current = usable.find((record) => record.teamNumber === team.teamNumber && record.event.key === targetEventKey);
@@ -241,7 +243,7 @@ export function buildSeasonAwareTeamInsights(
 
 
 /** Statbotics exposes win probability, but not an alliance score prediction interval. */
-export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceResults: AllianceResult[]): import("./types").QualificationAnomaly[] {
+export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceResults: AllianceResult[], playoffType?: number | null): import("./types").QualificationAnomaly[] {
   const qualifications = allianceResults.filter((item) => item.compLevel.toLowerCase() === "qm");
   const residuals = qualifications.flatMap((item) => item.residual === null ? [] : [item.residual]);
   if (residuals.length < 8) return [];
@@ -266,7 +268,7 @@ export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceR
     if (outsideExpectedRange) reasons.push(`Residual ${item.residual > 0 ? "+" : ""}${item.residual.toFixed(1)} pts is outside the event-calibrated ±${marginOfError.toFixed(1)} pt band around the ${center.toFixed(1)} pt median.`);
     if (highConfidenceMiss) reasons.push(`The model assigned this alliance a ${Math.round((winProbability ?? 0) * 100)}% win probability, but it lost.`);
     anomalies.push({
-      id: `qualification:${item.matchKey}:${item.color}`, matchKey: item.matchKey, matchLabel: item.matchLabel,
+      id: `qualification:${item.matchKey}:${item.color}`, matchKey: item.matchKey, matchLabel: matchLabel(records.find((record) => record.match.key === item.matchKey)!.match, playoffType),
       alliance: item.color, teamKeys: item.teamKeys, predicted: item.predicted, actual: item.actual,
       residual: item.residual, marginOfError, standardizedResidual: z, winProbability,
       outsideExpectedRange, highConfidenceMiss, severity: highConfidenceMiss || (z !== null && Math.abs(z) >= 3.5) ? "high" : "medium", reasons,

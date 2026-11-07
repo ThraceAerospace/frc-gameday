@@ -58,12 +58,12 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   const analyticsMatches = Object.values(job.records).sort(
     (a, b) => (matchOrder.get(a.match.key) ?? 0) - (matchOrder.get(b.match.key) ?? 0),
   );
-  const allianceResults = buildAllianceResults(analyticsMatches);
+  const allianceResults = buildAllianceResults(analyticsMatches, job.event.playoff_type);
   const teams = buildTeamRows(job.teams, job.oprs, analyticsMatches);
   const findings = buildReviewFindings(analyticsMatches, allianceResults, teams);
-  const qualificationAnomalies = buildQualificationAnomalies(analyticsMatches, allianceResults);
+  const qualificationAnomalies = buildQualificationAnomalies(analyticsMatches, allianceResults, job.event.playoff_type);
   const playoffAnalysis = buildPlayoffAnalysis(allianceResults, job.playoffAlliances ?? null);
-  const teamInsights = buildTeamInsights(analyticsMatches, allianceResults, teams, job.rankings);
+  const teamInsights = buildTeamInsights(analyticsMatches, allianceResults, teams, job.rankings, job.event.playoff_type);
   const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
   return {
