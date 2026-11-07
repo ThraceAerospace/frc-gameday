@@ -299,9 +299,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         opponentResidual:row.opponentResidual,teamWinProbability:row.teamWinProbability,won:row.won,
         kinds,reasons,highConfidenceMiss:kinds.includes("high-confidence-loss")}];
     });
+    const evaluatedTeamMatches = completed.filter((row)=>row.residual!==null||row.opponentResidual!==null||(row.teamWinProbability!==null&&row.won!==null)).length;
     const anomalySummary = {
-      matchesWithAnomalies: teamAnomalies.length, matchesEvaluated: completed.length,
-      frequency: completed.length ? teamAnomalies.length/completed.length : null,
+      matchesWithAnomalies: teamAnomalies.length, matchesEvaluated: evaluatedTeamMatches,
+      frequency: evaluatedTeamMatches ? teamAnomalies.length/evaluatedTeamMatches : null,
       allianceUnderperformance: teamAnomalies.filter((item)=>item.kinds.includes("alliance-underperformance")).length,
       allianceOverperformance: teamAnomalies.filter((item)=>item.kinds.includes("alliance-overperformance")).length,
       opponentAnomalies: teamAnomalies.filter((item)=>item.kinds.includes("opponent-anomaly")).length,
