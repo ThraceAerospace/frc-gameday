@@ -2,6 +2,7 @@ import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
+import { matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsEPA, StatboticsMatch } from "@/lib/statbotics/types";
 import type { TBAMatch, TBAEventSimple } from "@/lib/tba/types";
 
@@ -51,9 +52,8 @@ function components(value: StatboticsEPA | undefined): Record<string, number> {
   }
   return result;
 }
-function label(match: TBAMatch): string {
-  if (match.comp_level === "qm" || match.comp_level === "pm") return `QM ${match.match_number}`;
-  return `${match.comp_level.toUpperCase()} ${match.set_number} · ${match.match_number}`;
+function label(match: TBAMatch, playoffType?: number | null): string {
+  return matchShortName(match, playoffType);
 }
 async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
   const result = new Array<R>(items.length);
@@ -159,7 +159,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas)
         : null;
       return {
-        matchKey: match.key, matchLabel: label(match), compLevel: match.comp_level,
+        matchKey: match.key, matchLabel: label(match, event.playoff_type), compLevel: match.comp_level,
         event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
         partners: own.team_keys.filter((key) => key !== `frc${teamNumber}`).map((key) => key.replace(/^frc/i, "")),
         opponents: other.team_keys.map((key) => key.replace(/^frc/i, "")),
