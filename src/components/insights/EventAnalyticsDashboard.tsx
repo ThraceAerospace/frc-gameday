@@ -279,7 +279,7 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
         <QualityMetric label="Statbotics EPA" value={fmt(team.epa)} detail="Current team strength estimate"/>
-        <QualityMetric label="Event percentile" value={percentileLabel(team.epaPercentile)} detail="Relative to this event roster"/>
+        <QualityMetric label="Event percentile" value={team.epaPercentile===null?"—":`${Math.round(team.epaPercentile*100)}%`} detail="Relative to this event roster"/>
         <QualityMetric label="TBA OPR" value={fmt(team.opr)} detail="Offensive score contribution estimate"/>
         <QualityMetric label="TBA DPR" value={fmt(team.dpr)} detail="Defensive score contribution estimate"/>
         <QualityMetric label="TBA CCWM" value={fmt(team.ccwm)} detail="Calculated contribution to winning margin"/>
