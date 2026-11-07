@@ -145,7 +145,7 @@ export function buildTeamInsights(
       const preEPA = numberOrNull(record.statbotics?.pre_epas?.[id]?.epa);
       const postEPA = numberOrNull(record.statbotics?.epas?.[id]?.epa);
       const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
-      const redProbability = numberOrNull(record.statbotics?.pred?.red_win_prob ?? record.statbotics?.prediction?.red_win_prob);
+      const redProbability = numberOrNull(record.statbotics?.pred?.red_win_prob);
       const winProbability = redProbability === null ? null : alliance === "red" ? redProbability : 1 - redProbability;
       const winner = record.match.winning_alliance;
       const won = winner === "red" || winner === "blue" ? winner === alliance : null;
