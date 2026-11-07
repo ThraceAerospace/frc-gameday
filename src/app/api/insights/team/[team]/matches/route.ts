@@ -4,7 +4,7 @@ import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsEPA, StatboticsMatch } from "@/lib/statbotics/types";
-import type { TBAMatch, TBAEventSimple } from "@/lib/tba/types";
+import type { TBAMatch, TBAEvent } from "@/lib/tba/types";
 
 type TeamMatchRow = {
   matchKey: string;
@@ -93,7 +93,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       }),
     ]);
     const events = rawEvents
-      .filter((event: TBAEventSimple) => event.event_type !== 99 && event.event_type !== 100)
+      .filter((event) => event.event_type !== 99 && event.event_type !== 100)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
     const statboticsByMatch = new Map(statboticsMatches.flatMap((record) =>
       typeof record.key === "string" ? [[record.key, record] as const] : [],
@@ -159,7 +159,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas)
         : null;
       return {
-        matchKey: match.key, matchLabel: label(match, (event as TBAEventSimple & { playoff_type?: number | null }).playoff_type), compLevel: match.comp_level,
+        matchKey: match.key, matchLabel: label(match, event.playoff_type), compLevel: match.comp_level,
         event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
         partners: own.team_keys.filter((key) => key !== `frc${teamNumber}`).map((key) => key.replace(/^frc/i, "")),
         opponents: other.team_keys.map((key) => key.replace(/^frc/i, "")),

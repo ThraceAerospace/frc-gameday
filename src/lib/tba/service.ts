@@ -69,8 +69,8 @@ export const TBA = {
   getTeamDistricts: (teamKey: string): Promise<TBADistrict[]> =>
     tba.get<TBADistrict[]>(`/team/${teamKey}/districts`),
 
-  getTeamEvents: (teamKey: string, year: number): Promise<TBAEventSimple[]> =>
-    tba.get<TBAEventSimple[]>(`/team/${teamKey}/events/${year}`),
+  getTeamEvents: (teamKey: string, year: number): Promise<TBAEvent[]> =>
+    tba.get<TBAEvent[]>(`/team/${teamKey}/events/${year}`),
 
   getTeamEventStatus: (
     teamKey: string,
