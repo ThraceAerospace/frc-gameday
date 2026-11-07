@@ -11,10 +11,7 @@ const JOB_TTL_SECONDS = 12 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
 const LOCK_PREFIX = "lock:insights:progressive:";
 const JOB_PREFIX = "insights:progressive:";
-const CONCURRENCY = 2;
-const BATCH_SIZE = 16;
 const MAX_ATTEMPTS = 3;
-const WORK_BUDGET_MS = 42_000;
 
 type Job = {
   event: TBAEvent;
@@ -53,16 +50,6 @@ async function readJob(eventKey: string): Promise<Job | null> {
 async function writeJob(eventKey: string, job: Job) {
   job.updatedAt = Date.now();
   await redis.set(jobKey(eventKey), JSON.stringify(job), "EX", JOB_TTL_SECONDS);
-}
-
-async function withConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await worker(item);
-    }
-  }));
 }
 
 function buildPayload(job: Job): EventAnalyticsResponse {
@@ -176,11 +163,15 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
   const acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
   if (acquired !== "OK") return;
 
-  const deadline = Date.now() + WORK_BUDGET_MS;
   try {
     let job = await readJob(eventKey);
     if (!job) return;
     job.state = "collecting";
+    // Begin the bulk Statbotics collection independently of TBA schedule,
+    // rankings, and OPR reconciliation below.
+    const statboticsCollectionPromise = Statbotics.getMatches({ event: eventKey }, { refresh: true })
+      .then((records) => ({ records }))
+      .catch((error: unknown) => ({ error }));
 
     // Refresh the event's canonical match list periodically. Existing
     // analytics records survive schedule changes and only new matches queue.
@@ -217,35 +208,37 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
       }
     }
 
-    while (Date.now() < deadline) {
-      const pending = job.matches
-        .filter((match) => !job.records[match.key] && (job.attempts[match.key] ?? 0) < MAX_ATTEMPTS)
-        .slice(0, BATCH_SIZE);
-      if (!pending.length) break;
-
-      await withConcurrency(pending, CONCURRENCY, async (match) => {
-        try {
-          const statbotics = await Statbotics.getMatch(match.key);
-          job!.records[match.key] = {
-            match,
-            statbotics,
-            statboticsStatus: statbotics ? "ready" : "unavailable",
-          };
-        } catch (error) {
-          const attempts = (job!.attempts[match.key] ?? 0) + 1;
-          job!.attempts[match.key] = attempts;
-          if (attempts >= MAX_ATTEMPTS) {
-            job!.records[match.key] = {
-              match,
-              statbotics: null,
-              statboticsStatus: "unavailable",
-            };
-            console.warn("[Insights] Statbotics match unavailable after retries", eventKey, match.key, error);
-          }
+    const statboticsCollection = await statboticsCollectionPromise;
+    if ("records" in statboticsCollection) {
+      job.statboticsFetchError = null;
+      const byKey = new Map(statboticsCollection.records.flatMap((record) =>
+        typeof record.key === "string" ? [[record.key, record] as const] : [],
+      ));
+      for (const match of job.matches) {
+        if (match.key === liveMatchKey && job.records[match.key]?.statbotics) continue;
+        const statbotics = byKey.get(match.key) ?? null;
+        job.records[match.key] = {
+          match,
+          statbotics,
+          statboticsStatus: statbotics ? "ready" : "unavailable",
+        };
+      }
+    } else {
+      job.statboticsFetchError = statboticsCollection.error instanceof Error
+        ? statboticsCollection.error.message
+        : "Unknown Statbotics collection request error";
+      console.warn("[Insights] Statbotics event collection request failed", eventKey, statboticsCollection.error);
+      for (const match of job.matches) {
+        if (job.records[match.key]) continue;
+        const attempts = (job.attempts[match.key] ?? 0) + 1;
+        job.attempts[match.key] = attempts;
+        if (attempts >= MAX_ATTEMPTS) {
+          job.records[match.key] = { match, statbotics: null, statboticsStatus: "unavailable" };
         }
-      });
+      }
+    }
 
-      const remaining = job.matches.some(
+    const remaining = job.matches.some(
         (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
       );
       job.state = remaining ? "collecting" : Object.values(job.records).some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete";
