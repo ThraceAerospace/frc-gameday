@@ -206,7 +206,7 @@ npm run generate:tba-types
 npm run generate:statbotics-types
 ```
 
-Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas are used only while upstream response definitions are absent or generic; concrete upstream schemas take precedence automatically. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
+Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas fill only missing fields and generic response definitions; existing upstream fields and types always take precedence. When Statbotics adds or corrects response models in OpenAPI, generation adopts those definitions automatically, after which the corresponding fallback fields can be removed. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
 
 ## File organization
 
