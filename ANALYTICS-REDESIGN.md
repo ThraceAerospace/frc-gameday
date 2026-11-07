@@ -12,7 +12,7 @@ Answer five questions for one team at a time:
 4. Peer-relative performance: compare residuals from alliances involving the selected team with other alliances in the same event whose pre-match combined EPA is within ±20% of the selected alliance's strength. Require at least three selected-team matches and five peer alliance results. Label the result as alliance-level context.
 5. Season anomaly/risk history: list unusual outcomes in matches involving the team across its season. Use robust median/MAD residual bands with at least eight scored observations; separately flag a loss after at least 80% model win probability. Include underperformance, overperformance, opponent anomalies, partners, opponents, event, phase, and match links. Count flagged matches and divide by evaluated matches. These are investigation leads, not causal determinations.
 
-Only the selected team's full match history is requested by the browser. Event-roster data may support the current event peer comparison, but the browser must not fetch full match histories for every team.
+Only the selected team's full match history is requested by the browser. Event-roster data may support the current event peer comparison. The season-wide residual pattern also compares the selected alliance with opponents within ±20% pre-match combined EPA in the same matches. The browser must not fetch full match histories for every team.
 
 ## Qualification Analysis — event-wide match review
 
