@@ -20,6 +20,7 @@ type TeamMatchRow = {
   opponentActual: number | null;
   opponentResidual: number | null;
   alliancePreEPATotal: number | null;
+  opponentPreEPATotal: number | null;
   alliancePreComponents: Record<string, number>;
   actualComponents: Record<string, number>;
   redWinProbability: number | null;
@@ -118,6 +119,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const postEPA = finite(post?.epa);
       const alliancePreValues = own.team_keys.map((key) => finite(statbotics?.pre_epas?.[String(Number(key.replace(/^frc/i, "")))]?.epa));
       const alliancePreEPATotal = alliancePreValues.every((value) => value !== null) ? alliancePreValues.reduce<number>((sum,value)=>sum+(value??0),0) : null;
+      const opponentPreValues = other.team_keys.map((key) => finite(statbotics?.pre_epas?.[String(Number(key.replace(/^frc/i, "")))]?.epa));
+      const opponentPreEPATotal = opponentPreValues.every((value) => value !== null) ? opponentPreValues.reduce<number>((sum,value)=>sum+(value??0),0) : null;
       const componentKeys = ["auto_epa","teleop_epa","endgame_epa","rp_1_epa","rp_2_epa","rp_3_epa","tiebreaker_epa"];
       const alliancePreComponents: Record<string, number> = {};
       for (const key of componentKeys) {
@@ -146,7 +149,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         partners: own.team_keys.filter((key) => key !== `frc${teamNumber}`).map((key) => key.replace(/^frc/i, "")),
         opponents: other.team_keys.map((key) => key.replace(/^frc/i, "")),
         alliance, predicted, actual, residual: predicted !== null && actual !== null ? actual - predicted : null,
-        opponentPredicted, opponentActual, opponentResidual: opponentPredicted !== null && opponentActual !== null ? opponentActual-opponentPredicted : null, alliancePreEPATotal, alliancePreComponents, actualComponents, redWinProbability: redProbability, teamWinProbability: teamProbability, rpOutcomes,
+        opponentPredicted, opponentActual, opponentResidual: opponentPredicted !== null && opponentActual !== null ? opponentActual-opponentPredicted : null, alliancePreEPATotal, opponentPreEPATotal, alliancePreComponents, actualComponents, redWinProbability: redProbability, teamWinProbability: teamProbability, rpOutcomes,
         won: match.winning_alliance === "red" || match.winning_alliance === "blue" ? match.winning_alliance === alliance : null,
         preEPA, postEPA, deltaEPA, preComponents: components(pre), postComponents: components(post),
         allianceDeltaSpread: spread, sharedAllianceUpdate: spread !== null && spread < 0.000001,
@@ -234,7 +237,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     };
     const residualPatternEvents = eventMatches.flatMap(({ event }) => {
       const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
-      const baseline = items.flatMap((row) => [row.residual, row.opponentResidual]).filter((value): value is number => value !== null);
+      const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
       if (items.length < 3 || baseline.length < 6) return [];
       const baselineMean = average(baseline) ?? 0;
       const baselineSd = Math.sqrt(baseline.reduce((sum, value) => sum + (value - baselineMean) ** 2, 0) / baseline.length);
