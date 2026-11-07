@@ -264,9 +264,53 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         : "no-established-pattern" as const,
       events: residualPatternEvents,
     };
+
+    const medianOf = (values: number[]) => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a,b)=>a-b), middle = Math.floor(sorted.length/2);
+      return sorted.length % 2 ? sorted[middle] : (sorted[middle-1]+sorted[middle])/2;
+    };
+    const teamResiduals = completed.flatMap((row)=>row.residual===null?[]:[row.residual]);
+    const opponentResiduals = completed.flatMap((row)=>row.opponentResidual===null?[]:[row.opponentResidual]);
+    const teamMedian = medianOf(teamResiduals);
+    const teamMad = medianOf(teamResiduals.flatMap((value)=>teamMedian===null?[]:[Math.abs(value-teamMedian)])) ?? 0;
+    const opponentMedian = medianOf(opponentResiduals);
+    const opponentMad = medianOf(opponentResiduals.flatMap((value)=>opponentMedian===null?[]:[Math.abs(value-opponentMedian)])) ?? 0;
+    const teamOutlierBand = Math.max(25, 3 * 1.4826 * teamMad);
+    const opponentOutlierBand = Math.max(25, 3 * 1.4826 * opponentMad);
+    const teamAnomalies = completed.flatMap((row) => {
+      const reasons: string[] = [];
+      const kinds: string[] = [];
+      if (teamResiduals.length >= 8 && row.residual !== null && teamMedian !== null && Math.abs(row.residual-teamMedian)>teamOutlierBand) {
+        kinds.push(row.residual<teamMedian?"alliance-underperformance":"alliance-overperformance");
+        reasons.push(`Alliance residual ${row.residual>0?"+":""}${row.residual.toFixed(1)} pts was ${Math.abs(row.residual-teamMedian).toFixed(1)} pts from this team's season median.`);
+      }
+      if (opponentResiduals.length >= 8 && row.opponentResidual !== null && opponentMedian !== null && Math.abs(row.opponentResidual-opponentMedian)>opponentOutlierBand) {
+        kinds.push("opponent-anomaly");
+        reasons.push(`Opponent alliance residual ${row.opponentResidual>0?"+":""}${row.opponentResidual.toFixed(1)} pts was unusual in this team's season match sample.`);
+      }
+      if (row.teamWinProbability !== null && row.teamWinProbability >= 0.8 && row.won === false) {
+        kinds.push("high-confidence-loss");
+        reasons.push(`Model assigned this team's alliance a ${Math.round(row.teamWinProbability*100)}% win probability, but it lost.`);
+      }
+      if (!reasons.length) return [];
+      return [{matchKey:row.matchKey,matchLabel:row.matchLabel,event:row.event,compLevel:row.compLevel,
+        partners:row.partners,opponents:row.opponents,alliance:row.alliance,residual:row.residual,
+        opponentResidual:row.opponentResidual,teamWinProbability:row.teamWinProbability,won:row.won,
+        kinds,reasons,highConfidenceMiss:kinds.includes("high-confidence-loss")}];
+    });
+    const anomalySummary = {
+      matchesWithAnomalies: teamAnomalies.length, matchesEvaluated: completed.length,
+      frequency: completed.length ? teamAnomalies.length/completed.length : null,
+      allianceUnderperformance: teamAnomalies.filter((item)=>item.kinds.includes("alliance-underperformance")).length,
+      allianceOverperformance: teamAnomalies.filter((item)=>item.kinds.includes("alliance-overperformance")).length,
+      opponentAnomalies: teamAnomalies.filter((item)=>item.kinds.includes("opponent-anomaly")).length,
+      highConfidenceMisses: teamAnomalies.filter((item)=>item.highConfidenceMiss).length,
+      baseline: "Season median and median absolute deviation; minimum 8 scored observations per side. Flags describe matches involving this team, not individual robot causation.",
+    };
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
-      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, matches: completed,
+      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, anomalySummary, anomalies: teamAnomalies, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
     await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);

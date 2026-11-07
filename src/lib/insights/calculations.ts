@@ -206,6 +206,27 @@ export function buildTeamInsights(
       interpretation: ownResiduals.length < 3 || peerResiduals.length < 5 || peerDifference === null ? "insufficient-sample" as const
         : peerDifference > 10 ? "above-peers" as const : peerDifference < -10 ? "below-peers" as const : "similar-to-peers" as const,
     };
+    const ownAllianceResults = allianceResults.filter((item) => item.teamKeys.includes(team.teamKey) && item.residual !== null && item.preEpaTotal !== null);
+    const peerMap = new Map<string, number>();
+    for (const own of ownAllianceResults) {
+      const band = Math.max(5, Math.abs(own.preEpaTotal ?? 0) * 0.2);
+      for (const peer of allianceResults) {
+        if (peer.matchKey === own.matchKey || peer.residual === null || peer.preEpaTotal === null ||
+            peer.teamKeys.includes(team.teamKey) || Math.abs(peer.preEpaTotal - (own.preEpaTotal ?? 0)) > band) continue;
+        peerMap.set(peer.matchKey + ":" + peer.color, peer.residual);
+      }
+    }
+    const ownResiduals = ownAllianceResults.map((item) => item.residual as number);
+    const peerResiduals = [...peerMap.values()];
+    const teamMeanResidual = mean(ownResiduals);
+    const peerMeanResidual = mean(peerResiduals);
+    const peerDifference = teamMeanResidual !== null && peerMeanResidual !== null ? teamMeanResidual - peerMeanResidual : null;
+    const peerPerformance = {
+      teamMatches: ownResiduals.length, peerAllianceCount: peerResiduals.length,
+      teamMeanResidual, peerMeanResidual, difference: peerDifference,
+      interpretation: ownResiduals.length < 3 || peerResiduals.length < 5 || peerDifference === null ? "insufficient-sample" as const
+        : peerDifference > 10 ? "above-peers" as const : peerDifference < -10 ? "below-peers" as const : "similar-to-peers" as const,
+    };
     const summary: string[] = [];
     summary.push(metrics.rank === null ? "Official qualification standing is not available yet."
       : `Official qualification rank: #${metrics.rank}${metrics.wins === null ? "" : ` · record ${metrics.wins}–${metrics.losses}–${metrics.ties}`}.`);
@@ -219,7 +240,7 @@ export function buildTeamInsights(
     if (epaChange !== null) summary.push(`Across the observed event sequence, EPA moved from ${first!.toFixed(1)} to ${last!.toFixed(1)} (${epaChange > 0 ? "+" : ""}${epaChange.toFixed(1)}).`);
     summary.push(`${completedMatches} completed matches represented; ${appearances.filter((item)=>item.reasons.length).length} match(es) have review signals.`);
     return {
-      teamNumber: team.teamNumber, summary, metrics,
+      teamNumber: team.teamNumber, summary, metrics, peerPerformance,
       epaTrend: trend, seasonComparison: null, seasonHistory: [],
       reviewMatches: appearances.filter((item)=>item.reasons.length).map(({completed: _completed,...item})=>item),
     };
@@ -254,4 +275,66 @@ export function buildSeasonAwareTeamInsights(
     return { ...insight, seasonComparison: comparison, seasonHistory: history, summary: [...insight.summary,
       `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change>=0?"increased":"decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ${comparison.cohortRank}${ordinal(comparison.cohortRank)}-largest change among ${comparison.cohortSize} event teams with usable prior-event records.`] };
   });
+}
+
+
+/** Statbotics exposes win probability, but not an alliance score prediction interval. */
+export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceResults: AllianceResult[]): import("./types").QualificationAnomaly[] {
+  const qualifications = allianceResults.filter((item) => item.compLevel.toLowerCase() === "qm");
+  const residuals = qualifications.flatMap((item) => item.residual === null ? [] : [item.residual]);
+  if (residuals.length < 8) return [];
+  const center = [...residuals].sort((a,b)=>a-b)[Math.floor(residuals.length/2)];
+  const deviations = residuals.map((value)=>Math.abs(value-center)).sort((a,b)=>a-b);
+  const spread = 1.4826 * deviations[Math.floor(deviations.length/2)];
+  const marginOfError = Math.max(20, 3 * spread);
+  const matches = new Map(records.map((record) => [record.match.key, record]));
+  const anomalies: import("./types").QualificationAnomaly[] = [];
+  for (const item of qualifications) {
+    if (item.actual === null || item.predicted === null || item.residual === null) continue;
+    const record = matches.get(item.matchKey);
+    const redProbability = numberOrNull(record?.statbotics?.pred?.red_win_prob);
+    const winProbability = redProbability === null ? null : item.color === "red" ? redProbability : 1 - redProbability;
+    const winner = record?.match.winning_alliance;
+    const highConfidenceMiss = winProbability !== null && winProbability >= 0.8 &&
+      (winner === "red" || winner === "blue") && winner !== item.color;
+    const outsideExpectedRange = Math.abs(item.residual-center) > marginOfError;
+    if (!outsideExpectedRange && !highConfidenceMiss) continue;
+    const z = spread > 0 ? (item.residual-center)/spread : null;
+    const reasons: string[] = [];
+    if (outsideExpectedRange) reasons.push(`Residual ${item.residual > 0 ? "+" : ""}${item.residual.toFixed(1)} pts is outside the event-calibrated ±${marginOfError.toFixed(1)} pt band around the ${center.toFixed(1)} pt median.`);
+    if (highConfidenceMiss) reasons.push(`The model assigned this alliance a ${Math.round((winProbability ?? 0) * 100)}% win probability, but it lost.`);
+    anomalies.push({
+      id: `qualification:${item.matchKey}:${item.color}`, matchKey: item.matchKey, matchLabel: item.matchLabel,
+      alliance: item.color, teamKeys: item.teamKeys, predicted: item.predicted, actual: item.actual,
+      residual: item.residual, marginOfError, standardizedResidual: z, winProbability,
+      outsideExpectedRange, highConfidenceMiss, severity: highConfidenceMiss || (z !== null && Math.abs(z) >= 3.5) ? "high" : "medium", reasons,
+    });
+  }
+  return anomalies.sort((a,b)=>Number(b.highConfidenceMiss)-Number(a.highConfidenceMiss)||Math.abs(b.standardizedResidual??0)-Math.abs(a.standardizedResidual??0));
+}
+
+/** Playoff alliance combinations are separate from qualification combinations. */
+export function buildPlayoffAnalysis(allianceResults: AllianceResult[]): import("./types").PlayoffAnalysis {
+  const playoffs = allianceResults.filter((item)=>["ef","qf","sf","f"].includes(item.compLevel.toLowerCase()) && item.actual !== null);
+  const average=(values:number[])=>values.length?values.reduce((sum,value)=>sum+value,0)/values.length:null;
+  const groups=new Map<string,AllianceResult[]>();
+  for(const item of playoffs) if(item.teamKeys.length===3) {
+    const key=[...item.teamKeys].sort().join("|");
+    groups.set(key,[...(groups.get(key)??[]),item]);
+  }
+  const alliances=[...groups.values()].map((items)=>{
+    const scored=items.filter((item)=>item.actual!==null&&item.predicted!==null&&item.residual!==null);
+    const residuals=scored.map((item)=>item.residual as number);
+    return {teamKeys:[...items[0].teamKeys].sort(),matchCount:items.length,wins:items.filter((item)=>item.winner).length,
+      losses:items.filter((item)=>!item.winner).length,meanPredicted:average(scored.map((item)=>item.predicted as number)),
+      meanActual:average(scored.map((item)=>item.actual as number)),meanResidual:average(residuals),
+      residualStandardDeviation:standardDeviation(residuals),
+      matches:items.map((item)=>({matchKey:item.matchKey,matchLabel:item.matchLabel,compLevel:item.compLevel,residual:item.residual,actual:item.actual,predicted:item.predicted}))};
+  }).sort((a,b)=>b.matchCount-a.matchCount);
+  const roundSummaries=["ef","qf","sf","f"].map((round)=>{
+    const items=playoffs.filter((item)=>item.compLevel.toLowerCase()===round&&item.residual!==null);
+    return {round,matchCount:items.length,meanResidual:average(items.map((item)=>item.residual as number)),
+      abovePrediction:items.filter((item)=>(item.residual??0)>0).length,belowPrediction:items.filter((item)=>(item.residual??0)<0).length};
+  }).filter((item)=>item.matchCount>0);
+  return {matchCount:playoffs.length,allianceCount:alliances.length,roundSummaries,alliances};
 }

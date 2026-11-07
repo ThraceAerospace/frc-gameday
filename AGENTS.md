@@ -289,7 +289,7 @@ Prefer small, focused cleanup commits.
 
 ## Analytics architecture — core principles
 
-The analytics experience has four scopes: Event Overview, Team Analysis, Matchup Analysis, and supporting Scouting Tools. Event Overview is the default entry point; scouting review queues are not the product's primary landing view.
+The analytics experience has distinct scopes: Event Overview, Team Investigation, Qualification Analysis, Playoff Analysis, Matchup Analysis, and supporting Scouting Tools. Event Overview is the default entry point; scouting review queues are not the product's primary landing view. Team Investigation loads one selected team at a time.
 
 Analytics calculations and conclusions are server-authoritative. The browser presents results, manages view selection, and requests a new analysis when its inputs change; it must not fetch TBA/Statbotics directly or independently reproduce statistical models used by the server.
 
@@ -325,3 +325,13 @@ The selected-team match-history endpoint adds an event-normalized residual patte
 - Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Analysis should lead with a bullet-first team brief, relevant previous-event comparison, and matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
 - Do not hide important caveats or sample coverage. Keep them concise and close to the conclusion they qualify.
 - A summary statement must be traceable to the data shown nearby. Distinguish observed change, comparison with a defined cohort, and a prompt for human investigation. Never turn a statistical association into a causal explanation.
+
+
+## Team, qualification, and playoff investigations
+
+- Team Investigation is a one-team-at-a-time workflow. Its questions are absolute strength, performance relative to expectations, development within/across events, strength-matched peer-relative performance, and season-wide unusual matches involving that team.
+- Team peer comparisons use pre-match combined alliance EPA to find other event alliances within ±20% of the selected team's alliance strength. Compare alliance residuals, not individual robot output; require at least three selected-team matches and five peer alliance results before interpreting the comparison.
+- Team match anomaly flags use the selected team's season residual median and median absolute deviation (MAD), with a minimum of eight scored observations. High-confidence losses are separately flagged when the model assigned the team's alliance at least 80% win probability and it lost. Opponent anomalies are contextual. All flags identify matches to inspect and do not establish robot-level causation.
+- Qualification Analysis is event-wide and includes qualification matches only. Flag alliance score residuals outside a robust event-calibrated band (median ± max(20 points, 3 × 1.4826 × MAD)) and high-confidence win-probability misses (at least 80% predicted win probability but the alliance lost). The score band is estimated from observed event residuals; Statbotics does not provide a score prediction interval in this integration. Do not call it a model-provided confidence interval.
+- Playoff Analysis is separate from qualification analysis. It groups completed elimination alliance results by three-team composition and summarizes residuals by elimination round. Team elimination progression remains season-wide and event-balanced, requiring at least three scored qualification matches and two scored elimination matches per event. A recurring-negative pattern requires at least three eligible events and an exact one-sided sign-test p-value ≤ 0.05 after positive qualification baselines; it is an alliance-level association, not proof of robot-level choking.
+- Every anomaly and conclusion must link to supporting match evidence, expose sample coverage, and distinguish observed alliance outcomes from robot-specific scouting observations.

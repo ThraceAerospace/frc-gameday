@@ -12,9 +12,10 @@ type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCou
 type Tab = "overview" | "teams" | "qualification" | "playoffs" | "matchup" | "scouting";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Event Overview" },
-  { id: "teams", label: "Team Analysis" },
+  { id: "teams", label: "Team Investigation" },
+  { id: "qualification", label: "Qualification Analysis" },
+  { id: "playoffs", label: "Playoff Analysis" },
   { id: "matchup", label: "Matchup Analysis" },
-  { id: "matchEpa", label: "Team Match History" },
   { id: "scouting", label: "Scouting Tools" },
 ];
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
@@ -255,7 +256,8 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     </Panel>
   </section>;
 }
-\nfunction TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
+
+function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
   const points = insight?.epaTrend.filter((point): point is {matchKey:string;matchLabel:string;epa:number} => point.epa !== null) ?? [];
   const min = Math.min(...points.map((point)=>point.epa),0);
   const max = Math.max(...points.map((point)=>point.epa),1);
