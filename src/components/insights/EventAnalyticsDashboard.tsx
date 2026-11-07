@@ -152,10 +152,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
             <Panel title="Team investigation" description="Investigate one team at a time across its season: strength, match performance, development, peer-relative context, and unusual matches worth scouting.">
-              <TeamSelect label="Select one team" teams={teams} value={teamA} onChange={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} />
+              <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null}/>
               {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
-              {selectedFocus && focusedInsight ? <div className="mt-4"><TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight}/></div> : null}
               {matchAnalysisA ? <div className="mt-5 space-y-5">
                 <TeamRiskPanel analysis={matchAnalysisA} />
                 <div className="grid gap-4 xl:grid-cols-2">
