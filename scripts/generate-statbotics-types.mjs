@@ -75,11 +75,78 @@ function getMedia(spec, suffix) {
   if (!media) throw new Error(`OpenAPI JSON response schema not found: ${suffix}`);
   return media;
 }
+function cloneSchema(schema) {
+  return schema === undefined ? undefined : JSON.parse(JSON.stringify(schema));
+}
+
+function resolveSchema(spec, schema) {
+  if (!schema?.$ref?.startsWith("#/components/schemas/")) return schema;
+  const name = schema.$ref.slice("#/components/schemas/".length);
+  return spec.components.schemas[name] ?? schema;
+}
+
+/**
+ * The live upstream schema wins. Fallbacks only fill absent properties or
+ * generic object/array definitions, so improved upstream definitions are
+ * adopted automatically without touching this compatibility layer.
+ */
+function mergeMissingSchema(spec, upstream, fallback, seen = new Set()) {
+  if (!upstream) return cloneSchema(fallback);
+  if (!fallback || typeof fallback !== "object" || typeof upstream !== "object") return upstream;
+
+  const resolved = resolveSchema(spec, upstream);
+  if (resolved !== upstream) {
+    if (seen.has(resolved)) return upstream;
+    seen.add(resolved);
+    mergeMissingSchema(spec, resolved, fallback, seen);
+    return upstream;
+  }
+
+  if (upstream.anyOf || upstream.oneOf || upstream.allOf) {
+    const variants = upstream.anyOf ?? upstream.oneOf ?? upstream.allOf;
+    const objectVariant = variants.find((variant) => variant.type === "object" || variant.$ref);
+    if (objectVariant) mergeMissingSchema(spec, objectVariant, fallback, seen);
+    return upstream;
+  }
+
+  if (fallback.type === "array" && upstream.type === "array") {
+    upstream.items = mergeMissingSchema(spec, upstream.items, fallback.items, seen);
+    return upstream;
+  }
+
+  if (fallback.type === "object" || fallback.properties) {
+    upstream.type ??= "object";
+    upstream.properties ??= {};
+    for (const [key, fallbackProperty] of Object.entries(fallback.properties ?? {})) {
+      if (!Object.hasOwn(upstream.properties, key)) {
+        upstream.properties[key] = cloneSchema(fallbackProperty);
+      } else {
+        upstream.properties[key] = mergeMissingSchema(spec, upstream.properties[key], fallbackProperty, seen);
+      }
+    }
+
+    if (fallback.additionalProperties !== undefined) {
+      if (upstream.additionalProperties === undefined || upstream.additionalProperties === true) {
+        upstream.additionalProperties = cloneSchema(fallback.additionalProperties);
+      } else if (typeof upstream.additionalProperties === "object" && typeof fallback.additionalProperties === "object") {
+        upstream.additionalProperties = mergeMissingSchema(spec, upstream.additionalProperties, fallback.additionalProperties, seen);
+      }
+    }
+  }
+  return upstream;
+}
+
 function patchResponse(spec, suffix, schemaName, array = false) {
   const media = getMedia(spec, suffix);
-  const schema = media.schema;
-  if (array && schema?.type === "array" && generic(schema.items)) media.schema = { ...schema, items: ref(schemaName) };
-  else if (!schema || generic(schema)) media.schema = array ? { type:"array",items:ref(schemaName) } : ref(schemaName);
+  const fallback = spec.components.schemas[schemaName];
+  if (array) {
+    if (!media.schema || generic(media.schema)) media.schema = { type: "array", items: ref(schemaName) };
+    else if (media.schema.type === "array") media.schema.items = mergeMissingSchema(spec, media.schema.items, fallback);
+    else throw new Error(`Expected an array response schema for ${suffix}`);
+    return;
+  }
+  if (!media.schema || generic(media.schema)) media.schema = ref(schemaName);
+  else mergeMissingSchema(spec, media.schema, fallback);
 }
 function ensureNamedSchema(spec, suffix, fallbackName, array = false) {
   const media = getMedia(spec, suffix);
