@@ -19,6 +19,7 @@ type Job = {
   oprs: TBAEventOPRs | null;
   rankings: TBAEventRanking | null;
   playoffAlliances?: TBAEliminationAlliance[] | null;
+  playoffAlliancesRefreshedAt?: number;
   matches: TBAMatch[];
   records: Record<string, AnalyticsMatch>;
   attempts: Record<string, number>;
@@ -140,9 +141,14 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
     };
     await writeJob(eventKey, job);
   }
-  if (job.playoffAlliances === undefined) {
-    job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey).catch(() => null);
-    await writeJob(eventKey, job);
+  if (!job.playoffAlliancesRefreshedAt || Date.now() - job.playoffAlliancesRefreshedAt > 10 * 60 * 1000) {
+    try {
+      job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey);
+      job.playoffAlliancesRefreshedAt = Date.now();
+      await writeJob(eventKey, job);
+    } catch {
+      // Retain the last known official alliance list; a later snapshot retries.
+    }
   }
   return buildPayload(job);
 }
