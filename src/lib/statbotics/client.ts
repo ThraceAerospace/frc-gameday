@@ -92,7 +92,14 @@ async function writeCache<T>(
   entry: CachedResponse<T>,
   ttlSeconds: number,
 ) {
-  await redis.set(cacheKey(endpoint), JSON.stringify(entry), "EX", Math.max(1, ttlSeconds));
+  // Retain the entry long enough to enforce the request floor even when the
+  // upstream max-age is shorter than our conservative minimum interval.
+  await redis.set(
+    cacheKey(endpoint),
+    JSON.stringify(entry),
+    "EX",
+    Math.max(1, ttlSeconds, MIN_REQUEST_INTERVAL_SECONDS),
+  );
 }
 
 async function waitForCache<T>(
