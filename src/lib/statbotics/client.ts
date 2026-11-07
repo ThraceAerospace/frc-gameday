@@ -154,6 +154,48 @@ export class StatboticsClient {
     );
   }
 
+  async getMatches(
+    filters: { team?: number; year?: number; event?: string; elim?: boolean } = {},
+    options: { refresh?: boolean } = {},
+  ): Promise<StatboticsMatch[]> {
+    return this.getCollection<StatboticsMatch>("/matches", filters, MATCH_FALLBACK_TTL_SECONDS, options);
+  }
+
+  async getTeamEvents(
+    filters: { team?: number; year?: number; event?: string } = {},
+    options: { refresh?: boolean } = {},
+  ): Promise<StatboticsTeamEvent[]> {
+    return this.getCollection<StatboticsTeamEvent>("/team_events", filters, TEAM_EVENT_FALLBACK_TTL_SECONDS, options);
+  }
+
+  private async getCollection<T>(
+    endpoint: string,
+    filters: Record<string, string | number | boolean | undefined>,
+    fallbackTtlSeconds: number,
+    options: { refresh?: boolean },
+  ): Promise<T[]> {
+    const results: T[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+    while (true) {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined) query.set(key, String(value));
+      }
+      query.set("limit", String(pageSize));
+      query.set("offset", String(offset));
+      const page = await this.getCached<T[]>(`${endpoint}?${query.toString()}`, {
+        refresh: options.refresh,
+        fallbackTtlSeconds,
+      });
+      if (!page?.length) break;
+      results.push(...page);
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return results;
+  }
+
   private async getCached<T>(
     endpoint: string,
     options: CacheOptions,

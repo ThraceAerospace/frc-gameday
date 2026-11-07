@@ -11,4 +11,8 @@ export const Statbotics = {
     statbotics.getTeamYear(team, year),
   getTeamEvent: (team: number, eventKey: string, options: { refresh?: boolean } = {}): Promise<StatboticsTeamEvent | null> =>
     statbotics.getTeamEvent(team, eventKey, options),
+  getMatches: (filters: { team?: number; year?: number; event?: string; elim?: boolean } = {}, options: { refresh?: boolean } = {}): Promise<StatboticsMatch[]> =>
+    statbotics.getMatches(filters, options),
+  getTeamEvents: (filters: { team?: number; year?: number; event?: string } = {}, options: { refresh?: boolean } = {}): Promise<StatboticsTeamEvent[]> =>
+    statbotics.getTeamEvents(filters, options),
 };

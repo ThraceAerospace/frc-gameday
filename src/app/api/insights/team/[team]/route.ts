@@ -5,17 +5,6 @@ import type { TBAEventSimple } from "@/lib/tba/types";
 
 const TEAM_HISTORY_TTL_SECONDS = 15 * 60;
 
-async function withConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await worker(items[index]);
-    }
-  }));
-  return results;
-}
 
 export const maxDuration = 60;
 
@@ -36,21 +25,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   }
 
   try {
-    const [teamInfo, events, season] = await Promise.all([
+    const [teamInfo, events, season, statboticsEvents] = await Promise.all([
       TBA.getTeam(`frc${team}`),
       TBA.getTeamEvents(`frc${team}`, year),
       Statbotics.getTeamYear(team, year).catch(() => null),
+      Statbotics.getTeamEvents({ team, year }).catch(() => []),
     ]);
     const officialEvents = [...events]
       .filter((event: TBAEventSimple) => event.event_type !== 99 && event.event_type !== 100)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
-    const eventHistory = await withConcurrency(officialEvents, 2, async (event) => {
-      try {
-        const statbotics = await Statbotics.getTeamEvent(team, event.key);
-        return { event, statbotics, status: statbotics ? "ready" as const : "unavailable" as const };
-      } catch {
-        return { event, statbotics: null, status: "unavailable" as const };
-      }
+    const statboticsByEvent = new Map(statboticsEvents.flatMap((record) =>
+      typeof record.event === "string" ? [[record.event, record] as const] : [],
+    ));
+    const eventHistory = officialEvents.map((event) => {
+      const statbotics = statboticsByEvent.get(event.key) ?? null;
+      return { event, statbotics, status: statbotics ? "ready" as const : "unavailable" as const };
     });
     const payload = {
       team: teamInfo,

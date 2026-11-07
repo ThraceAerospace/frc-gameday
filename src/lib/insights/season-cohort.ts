@@ -140,14 +140,30 @@ export async function advanceSeasonCohort(eventKey: string): Promise<void> {
       const batch = job.discoveryQueue.slice(0, DISCOVERY_BATCH);
       await withConcurrency(batch, CONCURRENCY, async (teamNumber) => {
         try {
-          const events = await TBA.getTeamEvents("frc" + teamNumber, Number(job.target.key.slice(0, 4)));
+          const [events, statboticsEvents] = await Promise.all([
+            TBA.getTeamEvents("frc" + teamNumber, Number(job.target.key.slice(0, 4))),
+            Statbotics.getTeamEvents({ team: teamNumber, year: Number(job.target.key.slice(0, 4)) }),
+          ]);
           const relevant = events.filter((event) =>
             event.event_type !== 99 && event.event_type !== 100 &&
             (event.key === eventKey || event.start_date < job.target.startDate));
+          const statboticsByEvent = new Map(statboticsEvents.flatMap((record) =>
+            typeof record.event === "string" ? [[record.event, record] as const] : [],
+          ));
           for (const event of relevant) {
             const pair: Pair = { teamNumber, event: eventRef(event) };
             const id = pairKey(pair);
-            if (!job.records[id] && !job.recordQueue.some((item) => pairKey(item) === id)) job.recordQueue.push(pair);
+            const record = statboticsByEvent.get(event.key) ?? null;
+            const totalRecord = record?.record?.total;
+            const breakdown = Object.fromEntries(Object.entries(record?.epa?.breakdown ?? {})
+              .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
+            job.records[id] = {
+              teamNumber, event: pair.event, epaTotal: finite(record?.epa?.total_points),
+              epaUnitless: finite(record?.epa?.unitless), breakdown,
+              wins: finite(totalRecord?.wins), losses: finite(totalRecord?.losses), ties: finite(totalRecord?.ties),
+              matches: finite(totalRecord?.count), fetchedAt: Date.now(),
+              status: record ? "ready" : "unavailable",
+            };
           }
           job.discoveryQueue = job.discoveryQueue.filter((value) => value !== teamNumber);
         } catch {
@@ -163,30 +179,41 @@ export async function advanceSeasonCohort(eventKey: string): Promise<void> {
     }
     while (Date.now() < deadline && job.discoveryQueue.length === 0 && job.recordQueue.length) {
       const batch = job.recordQueue.slice(0, RECORD_BATCH);
-      await withConcurrency(batch, CONCURRENCY, async (pair) => {
-        const id = pairKey(pair);
+      const teamNumbers = [...new Set(batch.map((pair) => pair.teamNumber))];
+      await withConcurrency(teamNumbers, CONCURRENCY, async (teamNumber) => {
+        const requested = batch.filter((pair) => pair.teamNumber === teamNumber);
+        const year = Number(job.target.key.slice(0, 4));
         try {
-          const record = await Statbotics.getTeamEvent(pair.teamNumber, pair.event.key, { refresh: pair.event.key === eventKey });
-          const total = finite(record?.epa?.total_points);
-          const breakdown = Object.fromEntries(Object.entries(record?.epa?.breakdown ?? {})
-            .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
-          const totalRecord = record?.record?.total;
-          job.records[id] = {
-            teamNumber: pair.teamNumber, event: pair.event, epaTotal: total,
-            epaUnitless: finite(record?.epa?.unitless), breakdown,
-            wins: finite(totalRecord?.wins), losses: finite(totalRecord?.losses), ties: finite(totalRecord?.ties),
-            matches: finite(totalRecord?.count), fetchedAt: Date.now(),
-            status: record ? "ready" : "unavailable",
-          };
-          job.recordQueue = job.recordQueue.filter((item) => pairKey(item) !== id);
-        } catch {
-          const attempts = (job.recordAttempts[id] ?? 0) + 1;
-          job.recordAttempts[id] = attempts;
-          if (attempts >= MAX_ATTEMPTS) {
-            job.records[id] = { teamNumber: pair.teamNumber, event: pair.event, epaTotal: null,
-              epaUnitless: null, breakdown: {}, wins: null, losses: null, ties: null, matches: null,
-              fetchedAt: Date.now(), status: "unavailable" };
+          const records = await Statbotics.getTeamEvents({ team: teamNumber, year }, { refresh: true });
+          const byEvent = new Map(records.flatMap((record) =>
+            typeof record.event === "string" ? [[record.event, record] as const] : [],
+          ));
+          for (const pair of requested) {
+            const id = pairKey(pair);
+            const record = byEvent.get(pair.event.key) ?? null;
+            const totalRecord = record?.record?.total;
+            const breakdown = Object.fromEntries(Object.entries(record?.epa?.breakdown ?? {})
+              .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
+            job.records[id] = {
+              teamNumber, event: pair.event, epaTotal: finite(record?.epa?.total_points),
+              epaUnitless: finite(record?.epa?.unitless), breakdown,
+              wins: finite(totalRecord?.wins), losses: finite(totalRecord?.losses), ties: finite(totalRecord?.ties),
+              matches: finite(totalRecord?.count), fetchedAt: Date.now(),
+              status: record ? "ready" : "unavailable",
+            };
             job.recordQueue = job.recordQueue.filter((item) => pairKey(item) !== id);
+          }
+        } catch {
+          for (const pair of requested) {
+            const id = pairKey(pair);
+            const attempts = (job.recordAttempts[id] ?? 0) + 1;
+            job.recordAttempts[id] = attempts;
+            if (attempts >= MAX_ATTEMPTS) {
+              job.records[id] = { teamNumber, event: pair.event, epaTotal: null, epaUnitless: null,
+                breakdown: {}, wins: null, losses: null, ties: null, matches: null,
+                fetchedAt: Date.now(), status: "unavailable" };
+              job.recordQueue = job.recordQueue.filter((item) => pairKey(item) !== id);
+            }
           }
         }
       });

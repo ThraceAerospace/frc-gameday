@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment } from "react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
@@ -23,6 +23,7 @@ const percentileLabel = (value: number | null) => value === null ? "—" : `${Ma
 
 export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
+  const loadGeneration = useRef(0);
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
 
   const load = useCallback(async (refreshMatchKey: string | null = null) => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
@@ -45,11 +47,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
       const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}${liveQuery}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
-      setData(next);
+      if (generation === loadGeneration.current) setData(next);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load analytics");
+      if (generation === loadGeneration.current) setError(cause instanceof Error ? cause.message : "Unable to load analytics");
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [eventKey]);
 

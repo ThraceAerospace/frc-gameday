@@ -85,17 +85,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   }
 
   try {
-    const events = (await TBA.getTeamEvents(`frc${teamNumber}`, year))
+    const [rawEvents, statboticsMatches] = await Promise.all([
+      TBA.getTeamEvents(`frc${teamNumber}`, year),
+      Statbotics.getMatches({ team: teamNumber, year }).catch((error) => {
+        console.warn("[Insights] bulk Statbotics team-match request failed", teamNumber, year, error);
+        return [];
+      }),
+    ]);
+    const events = rawEvents
       .filter((event: TBAEventSimple) => event.event_type !== 99 && event.event_type !== 100)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const statboticsByMatch = new Map(statboticsMatches.flatMap((record) =>
+      typeof record.key === "string" ? [[record.key, record] as const] : [],
+    ));
+    if (liveMatchKey) {
+      try {
+        const liveRecord = await Statbotics.getMatch(liveMatchKey, { refresh: true });
+        if (liveRecord) statboticsByMatch.set(liveMatchKey, liveRecord);
+      } catch { /* retain the bulk record */ }
+    }
     const eventMatches = await withConcurrency(events, 4, async (event) => ({
       event,
       matches: sortMatches(await TBA.getTeamMatches(`frc${teamNumber}`, event.key)),
     }));
     const allMatches = eventMatches.flatMap(({ event, matches }) => matches.map((match) => ({ event, match })));
     const rows: (TeamMatchRow | null)[] = await withConcurrency(allMatches, 2, async ({ event, match }) => {
-      let statbotics: StatboticsMatch | null = null;
-      try { statbotics = await Statbotics.getMatch(match.key, { refresh: match.key === liveMatchKey }); } catch { /* retain TBA match data */ }
+      const statbotics: StatboticsMatch | null = statboticsByMatch.get(match.key) ?? null;
       const red = match.alliances.red.team_keys ?? [];
       const blue = match.alliances.blue.team_keys ?? [];
       const alliance = red.includes(`frc${teamNumber}`) ? "red" : blue.includes(`frc${teamNumber}`) ? "blue" : null;

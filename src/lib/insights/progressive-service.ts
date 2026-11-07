@@ -27,6 +27,7 @@ type Job = {
   state: "queued" | "collecting" | "complete" | "partial";
   updatedAt: number;
   scheduleRefreshedAt?: number;
+  statboticsFetchError?: string | null;
 };
 
 function jobKey(eventKey: string) {
@@ -120,6 +121,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
       processedMatchCount: analyticsMatches.length,
       totalMatchCount: job.matches.length,
       unavailableMatchCount,
+      statboticsFetchError: job.statboticsFetchError ?? null,
       updatedAt: job.updatedAt,
     },
   };
