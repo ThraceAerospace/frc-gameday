@@ -188,7 +188,10 @@ export class StatboticsClient {
         refresh: options.refresh,
         fallbackTtlSeconds,
       });
-      if (!page?.length) break;
+      if (page === null) {
+        throw new Error(`Statbotics collection request failed for ${endpoint} (offset ${offset})`);
+      }
+      if (page.length === 0) break;
       results.push(...page);
       if (page.length < pageSize) break;
       offset += pageSize;
