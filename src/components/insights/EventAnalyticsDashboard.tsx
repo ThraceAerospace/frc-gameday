@@ -163,7 +163,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
                 </div>
                 <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
               </div> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="mt-4 text-sm text-slate-500">No season match analysis is available yet.</p> : null}
-              {!teamA ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Choose one team to load its season-long investigation. No other team's match history is loaded.</p> : null}
+
             </Panel>
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
