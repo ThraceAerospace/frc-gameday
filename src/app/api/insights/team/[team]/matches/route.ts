@@ -156,7 +156,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         statboticsAvailable: statbotics !== null,
       } satisfies TeamMatchRow;
     });
-    const completed = rows.filter((row): row is TeamMatchRow => row !== null);
+    const completed = rows.filter((row): row is TeamMatchRow => row !== null && row.actual !== null && row.opponentActual !== null);
     const summarize = (items: TeamMatchRow[]) => {
       const scored = items.filter((row) => row.residual !== null);
       const residuals = scored.map((row) => row.residual as number);
