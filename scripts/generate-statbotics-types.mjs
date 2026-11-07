@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const url = process.env.STATBOTICS_OPENAPI_URL?.trim() || "https://api.statbotics.io/openapi.json";
-const n = { type: "number" }, i = { type: "integer" };
+const i = { type: "integer" };
 const ns = { anyOf: [{ type: "number" }, { type: "null" }] };
 const ni = { anyOf: [{ type: "integer" }, { type: "null" }] };
 const s = { anyOf: [{ type: "string" }, { type: "null" }] };
@@ -13,20 +13,20 @@ const obj = (properties, additionalProperties = false) => ({ type: "object", pro
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 
 const schemas = {
-  FieldViewStatboticsRecordLine: obj({ wins:i, losses:i, ties:i, count:i, winrate:n, rps:n, rps_per_match:n, rank:ni, num_teams:ni, alliance:s, is_captain:b }),
+  FieldViewStatboticsRecordLine: obj({ wins:i, losses:i, ties:i, count:i, winrate:ns, rps:ns, rps_per_match:ns, rank:ni, num_teams:ni, alliance:s, is_captain:b }),
   FieldViewStatboticsTeamRecord: obj({ qual:ref("FieldViewStatboticsRecordLine"), elim:ref("FieldViewStatboticsRecordLine"), total:ref("FieldViewStatboticsRecordLine") }),
   FieldViewStatboticsEpaRanks: obj({
     total:obj({rank:ni,percentile:ns,team_count:ni}), country:obj({rank:ni,percentile:ns,team_count:ni}),
     state:obj({rank:ni,percentile:ns,team_count:ni}), district:obj({rank:ni,percentile:ns,team_count:ni}),
   }),
   FieldViewStatboticsEpaProfile: obj({
-    total_points:n, unitless:n, norm:ns, breakdown:{type:"object",additionalProperties:n},
-    stats:{type:"object",additionalProperties:n}, ranks:ref("FieldViewStatboticsEpaRanks"),
+    total_points:ns, unitless:ns, norm:ns, breakdown:{type:"object",additionalProperties:ns},
+    stats:{type:"object",additionalProperties:ns}, ranks:ref("FieldViewStatboticsEpaRanks"),
   }),
   FieldViewStatboticsTeam: obj({
     team:i,name:{type:"string"},country:s,state:s,district:s,rookie_year:ni,active:{type:"boolean"},
-    last_active_year:ni,record:obj({wins:i,losses:i,ties:i,count:i,winrate:n}),
-    norm_epa:obj({current:n,recent:n,mean:n,max:n}),
+    last_active_year:ni,record:obj({wins:i,losses:i,ties:i,count:i,winrate:ns}),
+    norm_epa:obj({current:ns,recent:ns,mean:ns,max:ns}),
   }),
   FieldViewStatboticsTeamYear: obj({
     team:i,year:i,name:{type:"string"},country:s,state:s,district:s,rookie_year:ni,
@@ -70,16 +70,12 @@ function generic(schema) {
 function patch(spec, suffix, schemaName, array = false) {
   const entry = Object.entries(spec.paths ?? {}).find(([path]) => path.endsWith(suffix));
   if (!entry) { console.warn(`OpenAPI path not found: ${suffix}`); return; }
-  const operation = entry[1].get;
-  const response = operation?.responses?.["200"] ?? operation?.responses?.["2XX"];
+  const response = entry[1].get?.responses?.["200"] ?? entry[1].get?.responses?.["2XX"];
   const media = response?.content?.["application/json"];
   if (!media) return;
   const schema = media.schema;
-  if (array && schema?.type === "array" && generic(schema.items)) {
-    media.schema = { ...schema, items: ref(schemaName) };
-  } else if (!schema || generic(schema)) {
-    media.schema = array ? { type:"array",items:ref(schemaName) } : ref(schemaName);
-  }
+  if (array && schema?.type === "array" && generic(schema.items)) media.schema = { ...schema, items: ref(schemaName) };
+  else if (!schema || generic(schema)) media.schema = array ? { type:"array",items:ref(schemaName) } : ref(schemaName);
 }
 
 async function main() {

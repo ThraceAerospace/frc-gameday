@@ -8,5 +8,8 @@ export type StatboticsMatch = Schemas["FieldViewStatboticsMatch"];
 export type StatboticsTeam = Schemas["FieldViewStatboticsTeam"];
 export type StatboticsTeamEvent = Schemas["FieldViewStatboticsTeamEvent"];
 export type StatboticsTeamYear = Schemas["FieldViewStatboticsTeamYear"];
+export type StatboticsRecordLine = Schemas["FieldViewStatboticsRecordLine"];
+export type StatboticsTeamRecord = Schemas["FieldViewStatboticsTeamRecord"];
+export type StatboticsEpaProfile = Schemas["FieldViewStatboticsEpaProfile"];
 
 export type StatboticsMatchStatus = "loading" | "ready" | "unavailable";
