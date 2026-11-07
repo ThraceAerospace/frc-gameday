@@ -239,18 +239,12 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
     }
 
     const remaining = job.matches.some(
-        (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
-      );
-      job.state = remaining ? "collecting" : Object.values(job.records).some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete";
-      await writeJob(eventKey, job);
-      if (!remaining) break;
-    }
-
-    const remaining = job.matches.some(
       (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
     );
     if (remaining) job.state = "collecting";
-    else job.state = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete";
+    else job.state = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable")
+      ? "partial"
+      : "complete";
     await writeJob(eventKey, job);
   } catch (error) {
     console.error("[Insights] progressive event analytics worker failed", eventKey, error);

@@ -145,6 +145,33 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link>
       </div>
 
+      <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        {data ? (() => {
+          const total = data.collection.totalMatchCount;
+          const processed = data.collection.processedMatchCount;
+          const unavailable = data.collection.unavailableMatchCount;
+          const percent = total ? Math.round(processed / total * 100) : 100;
+          return <div aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{data.collection.state === "complete" ? "Event analysis complete" : data.collection.state === "partial" ? "Event analysis has gaps" : "Building event analysis"}</p>
+                <p className="mt-0.5 text-xs text-slate-600">{processed} of {total} matches processed · {unavailable} without a Statbotics match record</p>
+              </div>
+              <span className="text-sm font-semibold tabular-nums text-slate-700">{percent}%</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-[width] duration-500" style={{width:`${percent}%`}} /></div>
+            {data.collection.statboticsFetchError ? <p className="mt-2 text-xs leading-5 text-amber-800">
+              The bulk Statbotics request failed: {data.collection.statboticsFetchError}. TBA schedule and scores remain available. FieldView will retry the model-data request automatically; model-dependent metrics may be incomplete until it succeeds.
+            </p> : unavailable > 0 ? <p className="mt-2 text-xs leading-5 text-amber-800">
+              {unavailable} scheduled match(es) have no corresponding record in the Statbotics event collection. TBA match results are still retained. Statbotics may not have published predictions for these matches yet, or may not provide records for that match type. FieldView will reconcile the collection again as event data changes.
+            </p> : null}
+          </div>;
+        })() : <div aria-live="polite">
+          <p className="text-sm font-semibold text-slate-900">Loading event analytics</p>
+          <p className="mt-0.5 text-xs text-slate-600">Retrieving the event schedule, teams, rankings, and available model records in parallel.</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/3 animate-pulse rounded-full bg-blue-600" /></div>
+        </div>}
+      </div>
       {error && <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       {loading && !data ? <div className="mt-8 rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Loading event analytics…</div> : null}
       {data ? <>
@@ -179,14 +206,6 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               <Panel title="Repeated alliance patterns" description="Repeated three-team qualification combinations with notable average score residuals. These describe combinations, not individual team contribution."><AlliancePatterns findings={findings.filter((item) => item.category === "alliance-pattern")} /></Panel>
             </div></details>
           </section>}
-        </div>
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><p className="text-sm font-semibold text-slate-900">{data.collection.state === "complete" ? "Event analysis complete" : data.collection.state === "partial" ? "Event analysis partially complete" : "Analyzing event matches automatically"}</p><p className="mt-1 text-xs text-slate-500">{data.collection.processedMatchCount} of {data.collection.totalMatchCount} matches processed · {data.collection.unavailableMatchCount} unavailable</p></div>
-            <span className="text-sm font-semibold tabular-nums text-slate-700">{data.collection.totalMatchCount ? Math.round(data.collection.processedMatchCount / data.collection.totalMatchCount * 100) : 100}%</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{width:`${data.collection.totalMatchCount ? data.collection.processedMatchCount / data.collection.totalMatchCount * 100 : 100}%`}} /></div>
-          {data.collection.state === "partial" && <p className="mt-2 text-xs text-amber-700">Some Statbotics records were unavailable after retries. Available analytics are still shown.</p>}
         </div>
         <p className="mt-5 text-[11px] leading-5 text-slate-400">Sources: The Blue Alliance supplies event metadata, team rosters, match scores, score breakdowns, and OPR/DPR/CCWM. Statbotics data is supplied by the FieldView Statbotics mirror and includes model predictions and EPA estimates. Event-level model comparisons and alliance residuals are not robot-specific observations.</p>
       </> : null}
