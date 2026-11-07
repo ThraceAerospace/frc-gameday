@@ -1,71 +1,122 @@
 import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
-import type { StatboticsMatch } from "./types";
+import type {
+  StatboticsMatch,
+  StatboticsTeamEvent,
+  StatboticsTeamYear,
+} from "./types";
 
 const DEFAULT_BASE_URL = "https://api.statbotics.io";
-const MATCH_CACHE_TTL_SECONDS = 10 * 60;
-const NOT_FOUND_CACHE_TTL_SECONDS = 10 * 60;
-const MATCH_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
+const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
+const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
+const TEAM_YEAR_FALLBACK_TTL_SECONDS = 10 * 60;
+const TEAM_EVENT_FALLBACK_TTL_SECONDS = 24 * 60 * 60;
 const REQUEST_LOCK_SECONDS = 20;
-const CACHE_PREFIX = "cache:statbotics:match:";
-const LOCK_PREFIX = "lock:statbotics:match:";
+const CACHE_PREFIX = "cache:statbotics:v3:";
+const LOCK_PREFIX = "lock:statbotics:v3:";
 
-type CachedMatch = {
+type CachedResponse<T> = {
+  data: T | null;
+  etag: string | null;
   fetchedAt: number;
-  lastRefreshAt?: number;
-  data: StatboticsMatch | null;
+  lastRefreshAt: number;
+  expiresAt: number;
 };
 
-function matchCacheKey(matchKey: string) {
-  return CACHE_PREFIX + matchKey;
+type CacheOptions = {
+  refresh?: boolean;
+  fallbackTtlSeconds: number;
+};
+
+function cacheKey(endpoint: string) {
+  return CACHE_PREFIX + endpoint.replace(/\//g, ":");
 }
 
-function matchLockKey(matchKey: string) {
-  return LOCK_PREFIX + matchKey;
+function lockKey(endpoint: string) {
+  return LOCK_PREFIX + endpoint.replace(/\//g, ":");
 }
 
-async function readCache(matchKey: string): Promise<CachedMatch | null> {
-  const raw = await redis.get(matchCacheKey(matchKey));
-  if (!raw) return null;
+function getMaxAge(cacheControl: string | null): number | null {
+  if (!cacheControl) return null;
+  const match = cacheControl.match(/(?:^|,)\s*max-age\s*=\s*"?([0-9]+)"?/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
 
+/**
+ * Respect Statbotics' advertised freshness, but never make requests more
+ * frequently than our conservative shared-service floor. If max-age is
+ * absent, use the endpoint-specific fallback.
+ */
+function getEffectiveTtlSeconds(
+  cacheControl: string | null,
+  fallbackTtlSeconds: number,
+): number {
+  const upstreamMaxAge = getMaxAge(cacheControl);
+  return Math.max(
+    MIN_REQUEST_INTERVAL_SECONDS,
+    upstreamMaxAge ?? fallbackTtlSeconds,
+  );
+}
+
+function parseCached<T>(raw: string): CachedResponse<T> | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (
-      parsed &&
-      typeof parsed === "object" &&
-      "fetchedAt" in parsed &&
-      typeof parsed.fetchedAt === "number" &&
-      "data" in parsed
-    ) {
-      return parsed as CachedMatch;
-    }
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("data" in parsed) ||
+      !("fetchedAt" in parsed) ||
+      typeof parsed.fetchedAt !== "number" ||
+      !("lastRefreshAt" in parsed) ||
+      typeof parsed.lastRefreshAt !== "number" ||
+      !("expiresAt" in parsed) ||
+      typeof parsed.expiresAt !== "number"
+    ) return null;
+    return parsed as CachedResponse<T>;
   } catch {
-    // Treat malformed cache data as a miss.
+    return null;
   }
+}
 
-  await redis.del(matchCacheKey(matchKey));
+async function readCache<T>(endpoint: string): Promise<CachedResponse<T> | null> {
+  const key = cacheKey(endpoint);
+  const raw = await redis.get(key);
+  if (!raw) return null;
+  const cached = parseCached<T>(raw);
+  if (cached) return cached;
+  await redis.del(key);
   return null;
 }
 
-async function waitForCache(
-  matchKey: string,
+async function writeCache<T>(
+  endpoint: string,
+  entry: CachedResponse<T>,
+  ttlSeconds: number,
+) {
+  await redis.set(cacheKey(endpoint), JSON.stringify(entry), "EX", Math.max(1, ttlSeconds));
+}
+
+async function waitForCache<T>(
+  endpoint: string,
   previousFetchedAt: number | null,
-): Promise<CachedMatch | null> {
+): Promise<CachedResponse<T> | null> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const cached = await readCache(matchKey);
+    const cached = await readCache<T>(endpoint);
     if (cached && (previousFetchedAt === null || cached.fetchedAt > previousFetchedAt)) {
       return cached;
     }
   }
-  return readCache(matchKey);
+  return readCache<T>(endpoint);
 }
 
-async function releaseLock(lockKey: string, token: string) {
+async function releaseLock(key: string, token: string) {
   await redis.eval(
     "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
     1,
-    lockKey,
+    key,
     token,
   );
 }
@@ -75,166 +126,141 @@ export class StatboticsClient {
     matchKey: string,
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsMatch | null> {
-    const cached = await readCache(matchKey);
-    const sinceLastRefresh = cached?.lastRefreshAt == null
-      ? Infinity
-      : Date.now() - cached.lastRefreshAt;
-
-    if (cached && (!options.refresh || sinceLastRefresh < MATCH_REFRESH_COOLDOWN_MS)) {
-      return cached.data;
-    }
-
-    const lockKey = matchLockKey(matchKey);
-    const token = randomUUID();
-    const acquired = await redis.set(
-      lockKey,
-      token,
-      "EX",
-      REQUEST_LOCK_SECONDS,
-      "NX",
+    return this.getCached<StatboticsMatch>(
+      `/match/${encodeURIComponent(matchKey)}`,
+      { refresh: options.refresh, fallbackTtlSeconds: MATCH_FALLBACK_TTL_SECONDS },
     );
+  }
+
+  async getTeamYear(team: number, year: number): Promise<StatboticsTeamYear | null> {
+    return this.getCached<StatboticsTeamYear>(
+      `/team_year/${team}/${year}`,
+      { fallbackTtlSeconds: TEAM_YEAR_FALLBACK_TTL_SECONDS },
+    );
+  }
+
+  async getTeamEvent(
+    team: number,
+    eventKey: string,
+    options: { refresh?: boolean } = {},
+  ): Promise<StatboticsTeamEvent | null> {
+    return this.getCached<StatboticsTeamEvent>(
+      `/team_event/${team}/${encodeURIComponent(eventKey)}`,
+      { refresh: options.refresh, fallbackTtlSeconds: TEAM_EVENT_FALLBACK_TTL_SECONDS },
+    );
+  }
+
+  private async getCached<T>(
+    endpoint: string,
+    options: CacheOptions,
+  ): Promise<T | null> {
+    const cached = await readCache<T>(endpoint);
+    const now = Date.now();
+    const withinRequestFloor = cached !== null &&
+      now - cached.lastRefreshAt < MIN_REQUEST_INTERVAL_SECONDS * 1000;
+
+    if (cached && !options.refresh && now < cached.expiresAt) return cached.data;
+    if (cached && withinRequestFloor) return cached.data;
+
+    const key = lockKey(endpoint);
+    const token = randomUUID();
+    const acquired = await redis.set(key, token, "EX", REQUEST_LOCK_SECONDS, "NX");
 
     if (acquired !== "OK") {
       if (cached) return cached.data;
-      const concurrentResult = await waitForCache(matchKey, null);
+      const concurrentResult = await waitForCache<T>(endpoint, null);
       if (concurrentResult) return concurrentResult.data;
-      throw new Error("A Statbotics request for this match is already in progress");
+      throw new Error("A Statbotics request for this resource is already in progress");
     }
 
     let fallback = cached;
     try {
-      // Re-read after acquiring the lock: another request may have populated
-      // the cache between our initial read and lock acquisition.
-      const latest = await readCache(matchKey);
+      // Re-read after acquiring the lock to avoid duplicating a request that
+      // completed between the first cache read and lock acquisition.
+      const latest = await readCache<T>(endpoint);
       fallback = latest ?? fallback;
-      const sinceLatestRefresh = latest?.lastRefreshAt == null
-        ? Infinity
-        : Date.now() - latest.lastRefreshAt;
-      if (latest && (!options.refresh || sinceLatestRefresh < MATCH_REFRESH_COOLDOWN_MS)) {
+      const refreshedAt = Date.now();
+      const latestWithinFloor = latest !== null &&
+        refreshedAt - latest.lastRefreshAt < MIN_REQUEST_INTERVAL_SECONDS * 1000;
+
+      if (latest && ((!options.refresh && refreshedAt < latest.expiresAt) || latestWithinFloor)) {
         return latest.data;
       }
 
       const configuredBase = process.env.STATBOTICS_API_BASE_URL?.trim();
       const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, "");
-      const response = await fetch(
-        `${baseUrl}/v3/match/${encodeURIComponent(matchKey)}`,
-        { cache: "no-store" },
+      const headers: Record<string, string> = {};
+      if (latest?.etag) headers["If-None-Match"] = latest.etag;
+
+      const response = await fetch(baseUrl + "/v3" + endpoint, {
+        headers,
+        cache: "no-store",
+      });
+      const ttlSeconds = getEffectiveTtlSeconds(
+        response.headers.get("Cache-Control"),
+        options.fallbackTtlSeconds,
       );
+      const fetchedAt = Date.now();
+
+      if (response.status === 304) {
+        if (!latest) throw new Error("Statbotics returned 304 without a cached representation");
+        const entry: CachedResponse<T> = {
+          ...latest,
+          fetchedAt,
+          lastRefreshAt: fetchedAt,
+          expiresAt: fetchedAt + ttlSeconds * 1000,
+          etag: response.headers.get("ETag") ?? latest.etag,
+        };
+        await writeCache(endpoint, entry, ttlSeconds);
+        return entry.data;
+      }
 
       if (response.status === 404) {
-        const entry: CachedMatch = {
-          fetchedAt: Date.now(),
-          lastRefreshAt: Date.now(),
+        const entry: CachedResponse<T> = {
           data: null,
+          etag: response.headers.get("ETag"),
+          fetchedAt,
+          lastRefreshAt: fetchedAt,
+          expiresAt: fetchedAt + ttlSeconds * 1000,
         };
-        await redis.set(
-          matchCacheKey(matchKey),
-          JSON.stringify(entry),
-          "EX",
-          NOT_FOUND_CACHE_TTL_SECONDS,
-        );
+        await writeCache(endpoint, entry, ttlSeconds);
         return null;
       }
 
-      if (!response.ok) {
-        throw new Error(`Statbotics request failed: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Statbotics request failed: ${response.status}`);
 
-      const data = await response.json() as StatboticsMatch;
-      const entry: CachedMatch = {
-        fetchedAt: Date.now(),
-        lastRefreshAt: Date.now(),
+      const data = await response.json() as T;
+      const entry: CachedResponse<T> = {
         data,
+        etag: response.headers.get("ETag"),
+        fetchedAt,
+        lastRefreshAt: fetchedAt,
+        expiresAt: fetchedAt + ttlSeconds * 1000,
       };
-      await redis.set(
-        matchCacheKey(matchKey),
-        JSON.stringify(entry),
-        "EX",
-        MATCH_CACHE_TTL_SECONDS,
-      );
+      await writeCache(endpoint, entry, ttlSeconds);
       return data;
     } catch (error) {
-      // Back off after failures too. The public API is shared community
-      // infrastructure; don't turn an outage into a retry storm.
+      // Failed refreshes are throttled too. Preserve stale data if available,
+      // and otherwise retain a short negative entry to prevent retry storms.
       const failedAt = Date.now();
-      const failedEntry: CachedMatch = fallback
-        ? { ...fallback, lastRefreshAt: failedAt }
-        : { fetchedAt: failedAt, lastRefreshAt: failedAt, data: null };
-      await redis.set(
-        matchCacheKey(matchKey),
-        JSON.stringify(failedEntry),
-        "EX",
-        failedEntry.data === null ? NOT_FOUND_CACHE_TTL_SECONDS : MATCH_CACHE_TTL_SECONDS,
-      );
-      // Keep a previously usable prediction while respecting the retry cooldown.
+      const failedEntry: CachedResponse<T> = fallback
+        ? {
+            ...fallback,
+            lastRefreshAt: failedAt,
+            expiresAt: failedAt + options.fallbackTtlSeconds * 1000,
+          }
+        : {
+            data: null,
+            etag: null,
+            fetchedAt: failedAt,
+            lastRefreshAt: failedAt,
+            expiresAt: failedAt + options.fallbackTtlSeconds * 1000,
+          };
+      await writeCache(endpoint, failedEntry, options.fallbackTtlSeconds);
       if (fallback) return fallback.data;
       throw error;
     } finally {
-      await releaseLock(lockKey, token);
+      await releaseLock(key, token);
     }
   }
-  async getTeamYear(team: number, year: number) {
-    return this.getCachedRecord<import("./types").StatboticsTeamYear>(
-      `/team_year/${team}/${year}`, `team-year:${team}:${year}`,
-    );
-  }
-
-  async getTeamEvent(team: number, eventKey: string, options: { refresh?: boolean } = {}) {
-    return this.getCachedRecord<import("./types").StatboticsTeamEvent>(
-      "/team_event/" + team + "/" + encodeURIComponent(eventKey),
-      "team-event:" + team + ":" + eventKey,
-      { refresh: options.refresh, ttlSeconds: 24 * 60 * 60 },
-    );
-  }
-
-  private async getCachedRecord<T>(
-    endpoint: string,
-    cacheId: string,
-    options: { refresh?: boolean; ttlSeconds?: number } = {},
-  ): Promise<T | null> {
-    const key = "cache:statbotics:record:" + cacheId;
-    const cachedRaw = await redis.get(key);
-    let cachedData: T | null = null;
-    if (cachedRaw) {
-      try {
-        const cached = JSON.parse(cachedRaw) as { data: T | null };
-        if ("data" in cached) cachedData = cached.data;
-      } catch { await redis.del(key); }
-    }
-    if (cachedRaw && !options.refresh) return cachedData;
-    const lockKey = "lock:statbotics:record:" + cacheId;
-    const token = randomUUID();
-    const acquired = await redis.set(lockKey, token, "EX", REQUEST_LOCK_SECONDS, "NX");
-    if (acquired !== "OK") {
-      if (cachedRaw) return cachedData;
-      for (let attempt = 0; attempt < 12; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        const result = await redis.get(key);
-        if (result) {
-          try { return (JSON.parse(result) as { data: T | null }).data; } catch { /* retry */ }
-        }
-      }
-      throw new Error("A Statbotics team record request is already in progress");
-    }
-    try {
-      const configuredBase = process.env.STATBOTICS_API_BASE_URL?.trim();
-      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, "");
-      const response = await fetch(baseUrl + "/v3" + endpoint, { cache: "no-store" });
-      if (response.status === 404) {
-        await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data: null }), "EX", options.ttlSeconds ?? NOT_FOUND_CACHE_TTL_SECONDS);
-        return null;
-      }
-      if (!response.ok) throw new Error("Statbotics request failed: " + response.status);
-      const data = await response.json() as T;
-      await redis.set(key, JSON.stringify({ fetchedAt: Date.now(), data }), "EX", options.ttlSeconds ?? MATCH_CACHE_TTL_SECONDS);
-      return data;
-    } catch (error) {
-      if (cachedRaw) return cachedData;
-      throw error;
-    } finally {
-      await releaseLock(lockKey, token);
-    }
-  }
-
 }
-
