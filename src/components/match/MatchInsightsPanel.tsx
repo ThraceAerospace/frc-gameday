@@ -34,7 +34,7 @@ function ScoreComparison({
   color,
 }: {
   label: string;
-  predicted: number | undefined;
+  predicted: number | null | undefined;
   actual: number | null;
   color: "red" | "blue";
 }) {
@@ -56,7 +56,7 @@ function ScoreComparison({
 }
 
 export default function MatchInsightsPanel({ match, statbotics, oprs }: Props) {
-  const prediction = statbotics?.pred ?? statbotics?.prediction;
+  const prediction = statbotics?.pred ?? undefined;
   const redActual = score(match.alliances.red.score);
   const blueActual = score(match.alliances.blue.score);
   const redPredicted = prediction?.red_score;
