@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
 import type { StatboticsMatch } from "./types";
 
-const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
-const MATCH_CACHE_TTL_SECONDS = 4 * 60;
-const NOT_FOUND_CACHE_TTL_SECONDS = 4 * 60;
-const MATCH_REFRESH_COOLDOWN_MS = 3 * 60 * 1000;
+const DEFAULT_BASE_URL = "https://api.statbotics.io";
+const MATCH_CACHE_TTL_SECONDS = 10 * 60;
+const NOT_FOUND_CACHE_TTL_SECONDS = 10 * 60;
+const MATCH_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 const REQUEST_LOCK_SECONDS = 20;
 const CACHE_PREFIX = "cache:statbotics:match:";
 const LOCK_PREFIX = "lock:statbotics:match:";
@@ -101,10 +101,12 @@ export class StatboticsClient {
       throw new Error("A Statbotics request for this match is already in progress");
     }
 
+    let fallback = cached;
     try {
       // Re-read after acquiring the lock: another request may have populated
       // the cache between our initial read and lock acquisition.
       const latest = await readCache(matchKey);
+      fallback = latest ?? fallback;
       const sinceLatestRefresh = latest?.lastRefreshAt == null
         ? Infinity
         : Date.now() - latest.lastRefreshAt;
@@ -152,8 +154,20 @@ export class StatboticsClient {
       );
       return data;
     } catch (error) {
-      // A refresh failure should not discard a previously usable prediction.
-      if (latestCachedFallback(cached)) return cached!.data;
+      // Back off after failures too. The public API is shared community
+      // infrastructure; don't turn an outage into a retry storm.
+      const failedAt = Date.now();
+      const failedEntry: CachedMatch = fallback
+        ? { ...fallback, lastRefreshAt: failedAt }
+        : { fetchedAt: failedAt, lastRefreshAt: failedAt, data: null };
+      await redis.set(
+        matchCacheKey(matchKey),
+        JSON.stringify(failedEntry),
+        "EX",
+        failedEntry.data === null ? NOT_FOUND_CACHE_TTL_SECONDS : MATCH_CACHE_TTL_SECONDS,
+      );
+      // Keep a previously usable prediction while respecting the retry cooldown.
+      if (fallback) return fallback.data;
       throw error;
     } finally {
       await releaseLock(lockKey, token);
@@ -224,6 +238,3 @@ export class StatboticsClient {
 
 }
 
-function latestCachedFallback(cached: CachedMatch | null): cached is CachedMatch {
-  return cached !== null;
-}
