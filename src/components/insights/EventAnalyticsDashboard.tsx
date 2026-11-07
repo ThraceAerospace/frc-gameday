@@ -432,25 +432,6 @@ function ResidualPatternPanel({analysis}:{analysis:TeamMatchAnalysis}) {
     <p className="mt-3 text-[11px] leading-5 text-slate-500">The baseline uses opposing alliances in matches featuring this team, matched within ±20% of the selected alliance pre-match combined EPA. It is an approximate event-specific peer sample, not a fully independent event-wide calibration. This signal cannot separate the selected team from its partners or opponents; it is a review prompt, not an attribution or causal conclusion.</p>
   </section>;
 }
-function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
-  const s=analysis.summary;
-  return <section className="rounded-xl border border-slate-200 p-4">
-    <div className="flex items-center justify-between gap-2"><h3 className="font-bold text-slate-900">{name}</h3><span className="text-xs text-slate-500">{analysis.matchCount} matches · {analysis.eventCount} events</span></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-      <HistoryMetric label="Match wins" value={`${s.wins}–${s.losses}`}/>
-      <HistoryMetric label="Win rate" value={s.winRate===null?"—":`${(s.winRate*100).toFixed(1)}%`}/>
-      <HistoryMetric label="Mean score error" value={fmt(s.meanAbsoluteError)}/>
-      <HistoryMetric label="Prediction bias" value={s.meanResidual===null?"—":`${s.meanResidual>0?"+":""}${fmt(s.meanResidual)}`}/>
-      <HistoryMetric label="Score RMSE" value={fmt(s.rootMeanSquareError)}/>
-      <HistoryMetric label="EPA first → last" value={`${fmt(s.epaStart,2)} → ${fmt(s.epaEnd,2)}`}/>
-    </div>
-    <EliminationShiftPanel analysis={analysis} />
-    <ResidualPatternPanel analysis={analysis} />
-    <div className="mt-3 grid grid-cols-3 gap-2">{s.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">Brier {fmt(item.brier,3)} · n={item.sampleSize}</p></div>)}</div>
-    <details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Event-by-event and match-phase performance</summary><div className="overflow-x-auto p-3"><table className="w-full min-w-[680px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>Matches</th><th>W-L</th><th>Win rate</th><th>Mean absolute error</th><th>Residual bias</th><th>Score RMSE</th><th>EPA first → last</th></tr></thead><tbody>{analysis.eventSummaries.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-700">{item.event.shortName??item.event.name}</th><td>{item.matches}</td><td>{item.wins}–{item.losses}</td><td>{item.winRate===null?"—":`${(item.winRate*100).toFixed(1)}%`}</td><td>{fmt(item.meanAbsoluteError)}</td><td>{item.meanResidual===null?"—":(item.meanResidual>0?"+":"")+fmt(item.meanResidual)}</td><td>{fmt(item.rootMeanSquareError)}</td><td>{fmt(item.epaStart,2)} → {fmt(item.epaEnd,2)}</td></tr>)}</tbody></table><div className="mt-3 flex flex-wrap gap-2">{analysis.phaseSummaries.map((item)=><span key={item.phase} className="rounded bg-slate-50 px-2 py-1 text-[10px] text-slate-600">{item.phase.toUpperCase()}: {item.wins}–{item.losses} · {item.matches} matches</span>)}</div></div></details>
-    <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Mean score error is calculated from the team's alliance predictions.</p>
-  </section>;
-}
 function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAnalysis;second:TeamMatchAnalysis;nameA:string;nameB:string}) {
   const byKey=new Map(second.matches.map((m)=>[m.matchKey,m]));
   const shared=first.matches.flatMap((a)=>{const b=byKey.get(a.matchKey);return b&&a.preEPA!==null&&b.preEPA!==null?[{a,b}]:[];});
