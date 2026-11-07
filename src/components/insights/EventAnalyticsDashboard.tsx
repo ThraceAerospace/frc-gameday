@@ -277,6 +277,13 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team {team.teamNumber}</p><h3 className="text-xl font-black text-slate-950">{team.name}</h3><p className="mt-1 text-xs text-slate-500">{insight.metrics.matchesSeen} appearances in the loaded event sample</p></div>
         <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
       </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        <QualityMetric label="Statbotics EPA" value={fmt(team.epa)} detail="Current team strength estimate"/>
+        <QualityMetric label="Event percentile" value={percentileLabel(team.epaPercentile)} detail="Relative to this event roster"/>
+        <QualityMetric label="TBA OPR" value={fmt(team.opr)} detail="Offensive score contribution estimate"/>
+        <QualityMetric label="TBA DPR" value={fmt(team.dpr)} detail="Defensive score contribution estimate"/>
+        <QualityMetric label="TBA CCWM" value={fmt(team.ccwm)} detail="Calculated contribution to winning margin"/>
+      </div>
       {insight.seasonComparison ? <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-4">
         <p className="text-xs font-bold uppercase tracking-wide text-blue-800">Compared with previous event</p>
         <p className="mt-1 text-sm font-semibold text-slate-900">EPA {fmt(insight.seasonComparison.priorEPA,1)} → {fmt(insight.seasonComparison.currentEPA,1)} ({insight.seasonComparison.change>0?"+":""}{fmt(insight.seasonComparison.change,1)} points)</p>
