@@ -2,7 +2,9 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
 
-export const revalidate = 3600;
+// TBAClient uses Redis for upstream caching and fetches with cache: "no-store".
+// Keep this route dynamically rendered so Next.js does not try to ISR-cache it.
+export const dynamic = "force-dynamic";
 
 export default async function DistrictsPage() {
   const year = new Date().getFullYear();
