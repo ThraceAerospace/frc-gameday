@@ -90,7 +90,6 @@ function ensureNamedSchema(spec, suffix, fallbackName, array = false) {
     if (!match) throw new Error(`Unsupported schema reference for ${suffix}: ${schema.$ref}`);
     return match[1];
   }
-  // Preserve a concrete inline upstream schema while giving aliases a stable name.
   const name = `FieldViewStatboticsUpstream${fallbackName.replace("FieldViewStatbotics", "")}`;
   spec.components.schemas[name] = schema;
   if (array) media.schema.items = ref(name);
@@ -119,21 +118,17 @@ async function main() {
     StatboticsTeam: ensureNamedSchema(spec,"/team/{team}","FieldViewStatboticsTeam"),
     StatboticsTeamYear: ensureNamedSchema(spec,"/team_year/{team}/{year}","FieldViewStatboticsTeamYear"),
     StatboticsTeamEvent: ensureNamedSchema(spec,"/team_event/{team}/{event}","FieldViewStatboticsTeamEvent"),
-    StatboticsMatchListItem: ensureNamedSchema(spec,"/matches","FieldViewStatboticsMatch",true),
-    StatboticsTeamYearListItem: ensureNamedSchema(spec,"/team_years","FieldViewStatboticsTeamYear",true),
-    StatboticsTeamEventListItem: ensureNamedSchema(spec,"/team_events","FieldViewStatboticsTeamEvent",true),
   };
-  // Nested helper aliases stay pointed at the fallback definitions only while needed.
   const typeFile = [
     'import type { components } from "./generated";',
     '',
     'type Schemas = components["schemas"];',
     ...Object.entries(aliases).map(([alias,name]) => `export type ${alias} = Schemas["${name}"];`),
-    'export type StatboticsPrediction = Schemas["FieldViewStatboticsPrediction"];',
-    'export type StatboticsEPA = Schemas["FieldViewStatboticsMatchEPA"];',
-    'export type StatboticsRecordLine = Schemas["FieldViewStatboticsRecordLine"];',
-    'export type StatboticsTeamRecord = Schemas["FieldViewStatboticsTeamRecord"];',
-    'export type StatboticsEpaProfile = Schemas["FieldViewStatboticsEpaProfile"];',
+    'export type StatboticsPrediction = NonNullable<StatboticsMatch["pred"]>;',
+    'export type StatboticsEPA = NonNullable<NonNullable<StatboticsMatch["epas"]>[string]>;',
+    'export type StatboticsRecordLine = NonNullable<NonNullable<StatboticsTeamEvent["record"]>["qual"]>;',
+    'export type StatboticsTeamRecord = NonNullable<StatboticsTeamEvent["record"]>;',
+    'export type StatboticsEpaProfile = NonNullable<StatboticsTeamYear["epa"]>;',
     'export type StatboticsMatchStatus = "loading" | "ready" | "unavailable";',
     '',
   ].join("\n");
