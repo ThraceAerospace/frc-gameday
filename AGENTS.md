@@ -322,7 +322,7 @@ The selected-team match-history endpoint adds an event-normalized residual patte
 
 - Every analytics scope must lead with a concise plain-language answer to the question that scope is meant to answer. Present the interpretation before the supporting numbers.
 - Follow the takeaway with a small number of directly relevant evidence elements: comparisons, charts, and match links. Move raw tables, secondary metrics, statistical tests, model diagnostics, and methodology into clearly labeled disclosures.
-- Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Analysis should lead with a bullet-first team brief, relevant previous-event comparison, and matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
+- Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Investigation should lead with a single-team strength profile, expectations and peer context, event/season progression, and season-wide anomaly matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
 - Do not hide important caveats or sample coverage. Keep them concise and close to the conclusion they qualify.
 - A summary statement must be traceable to the data shown nearby. Distinguish observed change, comparison with a defined cohort, and a prompt for human investigation. Never turn a statistical association into a causal explanation.
 
