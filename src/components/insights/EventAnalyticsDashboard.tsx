@@ -8,8 +8,8 @@ import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/t
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
-type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}[];eliminationShift:{eligibleEventCount:number;negativeEventCount:number;positiveQualificationEventCount:number;negativeShiftAfterPositiveQualCount:number;meanShift:number|null;medianShift:number|null;signTestPValue:number|null;minimumQualificationMatchesPerEvent:number;minimumEliminationMatchesPerEvent:number;interpretation:"insufficient-history"|"recurring-negative-shift"|"no-established-negative-shift";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};qualificationMatches:number;eliminationMatches:number;qualificationMeanResidual:number|null;eliminationMeanResidual:number|null;shift:number;shiftStandardError:number;qualificationMatchKeys:string[];eliminationMatchKeys:string[]}[]};residualPattern:{eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;meanTeamResidual:number|null;signTestPValue:number|null;positiveSignTestPValue:number|null;interpretation:"insufficient-history"|"recurring-below-baseline"|"recurring-above-baseline"|"no-established-pattern";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};teamMatches:number;baselineAllianceSamples:number;teamMeanResidual:number;baselineMeanResidual:number;baselineStandardDeviation:number;belowOneSigma:number;aboveOneSigma:number;belowBaseline:boolean;matchKeys:string[]}[]};matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
-type Tab = "overview" | "teams" | "matchup" | "matchEpa" | "scouting";
+type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; anomalySummary:{matchesWithAnomalies:number;matchesEvaluated:number;frequency:number|null;allianceUnderperformance:number;allianceOverperformance:number;opponentAnomalies:number;highConfidenceMisses:number;baseline:string}; anomalies:{matchKey:string;matchLabel:string;event:{key:string;name:string;startDate:string};compLevel:string;partners:string[];opponents:string[];alliance:string;residual:number|null;opponentResidual:number|null;teamWinProbability:number|null;won:boolean|null;kinds:string[];reasons:string[];highConfidenceMiss:boolean}[]; summary:{matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}[];eliminationShift:{eligibleEventCount:number;negativeEventCount:number;positiveQualificationEventCount:number;negativeShiftAfterPositiveQualCount:number;meanShift:number|null;medianShift:number|null;signTestPValue:number|null;minimumQualificationMatchesPerEvent:number;minimumEliminationMatchesPerEvent:number;interpretation:"insufficient-history"|"recurring-negative-shift"|"no-established-negative-shift";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};qualificationMatches:number;eliminationMatches:number;qualificationMeanResidual:number|null;eliminationMeanResidual:number|null;shift:number;shiftStandardError:number;qualificationMatchKeys:string[];eliminationMatchKeys:string[]}[]};residualPattern:{eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;meanTeamResidual:number|null;signTestPValue:number|null;positiveSignTestPValue:number|null;interpretation:"insufficient-history"|"recurring-below-baseline"|"recurring-above-baseline"|"no-established-pattern";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};teamMatches:number;baselineAllianceSamples:number;teamMeanResidual:number;baselineMeanResidual:number;baselineStandardDeviation:number;belowOneSigma:number;aboveOneSigma:number;belowBaseline:boolean;matchKeys:string[]}[]};matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
+type Tab = "overview" | "teams" | "qualification" | "playoffs" | "matchup" | "scouting";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Event Overview" },
   { id: "teams", label: "Team Analysis" },
@@ -102,24 +102,21 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 
 
   useEffect(() => {
-    if (!teamA || teamA === teamB || !data?.event.year) {
+    if (!teamA || !data?.event.year) {
       setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
     }
     let active = true;
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
     const query = `year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`;
-    const firstRequest = fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" });
-    const secondRequest = teamB ? fetch(`/api/insights/team/${teamB}/matches?${query}`, { cache: "no-store" }) : Promise.resolve(null);
-    Promise.all([firstRequest, secondRequest]).then(async ([firstResponse, secondResponse]) => {
-      if (!firstResponse.ok || (secondResponse && !secondResponse.ok)) throw new Error("Match-by-match analysis is temporarily unavailable");
-      const first = await firstResponse.json();
-      const second = secondResponse ? await secondResponse.json() : null;
-      if (active) { setMatchAnalysisA(first as TeamMatchAnalysis); setMatchAnalysisB(second as TeamMatchAnalysis | null); }
+    fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
+      const result = await response.json();
+      if (active) { setMatchAnalysisA(result as TeamMatchAnalysis); setMatchAnalysisB(null); }
     }).catch((error) => {
-      if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load match analysis"); }
+      if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
-  }, [teamA,teamB,data?.event.year,liveMatchKey,liveMatchSignature]);
+  }, [teamA,data?.event.year,liveMatchKey,liveMatchSignature]);
 
   const teams = data?.teams ?? [];
   const selectedFocus = teams.find((team) => String(team.teamNumber) === teamFocus);
@@ -153,51 +150,24 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div className="mt-5">
           {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
-            <TeamSnapshot teams={teams} selectedTeam={teamFocus} onSelect={setTeamFocus} team={selectedFocus} insight={focusedInsight ?? null} />
-            {data.seasonCohort ? <details className="rounded-lg border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Season comparison data status</summary><p className="px-4 pb-4 text-xs text-slate-500">{data.seasonCohort.processedTeamEventRecords} / {data.seasonCohort.totalTeamEventRecords} team-event records · {data.seasonCohort.discoveryPendingTeams} teams still discovering history · {data.seasonCohort.state} · {data.seasonCohort.unavailableTeamEventRecords} unavailable or failed.</p></details> : null}
-            <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Compare two teams and inspect season histories</summary><div className="p-4">
-            <Panel title="Compare teams" description="Compare two event teams, then expand into their season-long Statbotics histories: event-by-event EPA, component estimates, records, ranking points, event ranks, and shared-event comparisons. EPA and OPR are separate models, not interchangeable scores.">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <TeamSelect label="Team A" teams={teams} value={teamA} onChange={setTeamA} />
-                <TeamSelect label="Team B" teams={teams} value={teamB} onChange={setTeamB} />
-              </div>
-              {selectedA && selectedB ? <>
-                <div className="mt-5 grid gap-3 md:grid-cols-2"><TeamCard team={selectedA} /><TeamCard team={selectedB} /></div>
-                <p className="mt-4 text-xs leading-5 text-slate-500">Statbotics EPA estimates expected point contribution through its predictive model. TBA OPR/DPR/CCWM are linear score-attribution estimates. They are complementary views with different assumptions; a numerical gap between them is not itself a performance signal.</p><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-400"><th className="py-2">Statbotics EPA / TBA OPR-DPR-CCWM</th><th>Team {selectedA.teamNumber}</th><th>Team {selectedB.teamNumber}</th></tr></thead><tbody>{[
-                  ["Statbotics EPA", selectedA.epa, selectedB.epa], ["Auto EPA", selectedA.autoEpa, selectedB.autoEpa],
-                  ["Teleop EPA", selectedA.teleopEpa, selectedB.teleopEpa], ["Endgame EPA", selectedA.endgameEpa, selectedB.endgameEpa],
-                  ["TBA OPR", selectedA.opr, selectedB.opr], ["TBA DPR", selectedA.dpr, selectedB.dpr], ["TBA CCWM", selectedA.ccwm, selectedB.ccwm],
-                ].map(([label, a, b]) => <tr key={String(label)} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-600">{label}</th><td className="py-2 tabular-nums">{fmt(a as number | null)}{String(label).includes("percentile") && a !== null ? "%" : ""}</td><td className="py-2 tabular-nums">{fmt(b as number | null)}{String(label).includes("percentile") && b !== null ? "%" : ""}</td></tr>)}</tbody></table></div>
-                <p className="mt-3 text-xs text-slate-500">Matches featuring both teams in the loaded sample: {commonMatches.length}.</p>
-                <div className="mt-5 border-t border-slate-200 pt-4">
-                  <h3 className="font-semibold text-slate-900">Season history and event progression</h3>
-                  <p className="mt-1 text-xs text-slate-500">Statbotics team-event snapshots across each team's TBA-listed official-season events. Offseason and preseason events are excluded.</p>
-                  {historyLoading ? <p className="mt-3 text-sm text-slate-500">Loading team histories…</p> : historyA && historyB ? <TeamHistoryComparison first={historyA} second={historyB} /> : <p className="mt-3 text-sm text-slate-500">Season histories are unavailable for one or both teams.</p>}
-                </div>
-                {commonMatches.length > 0 && <div className="mt-2 space-y-1">{commonMatches.map((record) => <a key={record.match.key} href={`https://www.thebluealliance.com/match/${record.match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg bg-slate-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50">{record.match.comp_level.toUpperCase()} {record.match.match_number} · {record.match.alliances.red.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")} vs {record.match.alliances.blue.team_keys.map((key) => key.replace(/^frc/i, "")).join(" / ")}</a>)}</div>}
-              </> : <p className="mt-4 text-sm text-slate-500">Select two different teams to compare their event estimates.</p>}
-            </Panel>
-            <details className="mt-3 rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Show all event team ratings</summary><div className="p-4"><p className="mb-3 text-xs text-slate-500">EPA, OPR, DPR, and CCWM are distinct rating estimates. Their raw values should not be compared directly across systems.</p><TeamTable teams={teams} /></div></details>
-            </div></details>
-          </section>}
-          {tab === "matchEpa" && <section className="space-y-4">
-            <Panel title="Team match-by-match analysis" description="Inspect one team’s complete season match history, including elimination performance shifts. Optionally select a second team for same-match EPA comparison. Match-level rating changes are model updates, not isolated measurements of an individual robot.">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <TeamSelect label="Team" teams={teams} value={teamA} onChange={setTeamA} />
-                <TeamSelect label="Compare with (optional)" teams={teams} value={teamB} onChange={setTeamB} />
-              </div>
-              {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading complete season match history and EPA records…</p> : null}
+            <Panel title="Team investigation" description="Investigate one team at a time across its season: strength, match performance, development, peer-relative context, and unusual matches worth scouting.">
+              <TeamSelect label="Select one team" teams={teams} value={teamA} onChange={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} />
+              {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
-              {matchAnalysisA ? <div className="mt-5 space-y-6">
-                <div className={matchAnalysisB ? "grid gap-3 md:grid-cols-2" : "max-w-3xl"}><MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/>{matchAnalysisB ? <MatchAnalysisSummary analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`}/> : null}</div>
-                {matchAnalysisB ? <SharedMatchEpaComparison first={matchAnalysisA} second={matchAnalysisB} nameA={selectedA?.name ?? `Team ${teamA}`} nameB={selectedB?.name ?? `Team ${teamB}`}/> : null}
-                <div className={matchAnalysisB ? "grid gap-5 xl:grid-cols-2" : "max-w-4xl"}>
-                  <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
-                  {matchAnalysisB ? <TeamMatchEpaLedger analysis={matchAnalysisB} name={selectedB?.name ?? `Team ${teamB}`} accent="teal"/> : null}
+              {selectedFocus && focusedInsight ? <div className="mt-4"><TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight}/></div> : null}
+              {matchAnalysisA ? <div className="mt-5 space-y-5">
+                <TeamRiskPanel analysis={matchAnalysisA} />
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
+                  <TeamEliminationSummary analysis={matchAnalysisA} />
                 </div>
-              </div> : !matchAnalysisLoading && !matchAnalysisError ? <p className="mt-4 text-sm text-slate-500">Select a team to load its season-long match-by-match analysis. A second team is optional for direct comparison.</p> : null}
+                <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
+              </div> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="mt-4 text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+              {!teamA ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Choose one team to load its season-long investigation. No other team's match history is loaded.</p> : null}
             </Panel>
           </section>}
+          {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
+          {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
           {tab === "matchup" && <MatchupAnalysis data={data} />}
           {tab === "scouting" && <section className="space-y-4">
             <ReviewQueue findings={findings} />
@@ -224,7 +194,68 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
  
 
 
-function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
+
+function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
+  const summary=analysis.anomalySummary;
+  return <Panel title="Season match anomalies and scouting risks" description="Flags unusual outcomes in matches involving this team across its season. They identify where to investigate, not which robot caused an outcome.">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <QualityMetric label="Flagged matches" value={String(summary.matchesWithAnomalies)} detail={`of ${summary.matchesEvaluated} evaluated matches`} />
+      <QualityMetric label="Anomaly frequency" value={summary.frequency===null?"—":`${(summary.frequency*100).toFixed(1)}%`} detail="Share of this team's evaluated matches" />
+      <QualityMetric label="High-confidence misses" value={String(summary.highConfidenceMisses)} detail="Model win probability ≥80%, but alliance lost" />
+      <QualityMetric label="Alliance underperformance" value={String(summary.allianceUnderperformance)} detail="Unusually negative score residuals" />
+    </div>
+    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500"><span>{summary.allianceOverperformance} unusual overperformance</span><span>·</span><span>{summary.opponentAnomalies} unusual opponent results</span></div>
+    <p className="mt-3 text-xs leading-5 text-slate-500">{summary.baseline}</p>
+    {analysis.anomalies.length ? <div className="mt-4 space-y-3">{analysis.anomalies.map((item)=><article key={item.matchKey} className="rounded-lg border border-slate-200 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{item.matchLabel} · {item.event.name}</p><p className="text-xs text-slate-500">Partners {item.partners.join(" · ")||"—"} · Opponents {item.opponents.join(" · ")||"—"}</p></div><div className="flex flex-wrap gap-1">{item.kinds.map((kind)=><span key={kind} className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">{kind.replaceAll("-"," ")}</span>)}</div></div>
+      <ul className="mt-2 space-y-1 text-sm text-slate-600">{item.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
+      <a className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
+    </article>)}</div> : <p className="mt-4 text-sm text-slate-500">No matches have met the current anomaly criteria. This is not a guarantee that every match was routine.</p>}
+  </Panel>;
+}
+function TeamEliminationSummary({analysis}:{analysis:TeamMatchAnalysis}) {
+  const shift=analysis.eliminationShift;
+  const label=shift.interpretation==="recurring-negative-shift"?"Recurring negative elimination shift":shift.interpretation==="insufficient-history"?"Insufficient elimination history":"No established recurring negative shift";
+  return <Panel title="Elimination progression" description="Qualification-to-elimination changes are evaluated per event so long playoff schedules do not dominate the season result.">
+    <p className="text-sm font-semibold text-slate-900">{label}</p>
+    <div className="mt-3 grid grid-cols-2 gap-3"><QualityMetric label="Eligible events" value={String(shift.eligibleEventCount)} detail="≥3 scored quals and ≥2 scored elims" /><QualityMetric label="Negative shifts" value={String(shift.negativeEventCount)} detail="Elimination residual below qualification residual" /></div>
+    <p className="mt-3 text-xs text-slate-500">Mean event shift: {fmt(shift.meanShift)} pts · median: {fmt(shift.medianShift)} pts · one-sided sign-test p: {fmt(shift.signTestPValue,3)}.</p>
+    <p className="mt-2 text-xs text-slate-500">This is an exploratory alliance-level association, not proof of robot-level underperformance. Partner and opponent strength are not fully adjusted.</p>
+    {shift.events.length ? <div className="mt-3 space-y-2">{shift.events.map((event)=><div key={event.event.key} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs"><span className="min-w-0 truncate">{event.event.name}</span><span className={event.shift<0?"font-semibold text-rose-700":"font-semibold text-emerald-700"}>{event.shift>0?"+":""}{fmt(event.shift)} pts</span></div>)}</div>:null}
+  </Panel>;
+}
+function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
+  const anomalies=data.qualificationAnomalies??[];
+  return <section className="space-y-4">
+    <Panel title="Qualification match anomalies" description="Find qualification matches where an alliance score fell outside the event-calibrated residual band or a high-confidence win prediction was wrong.">
+      <p className="text-xs text-slate-500">Only qualification matches are included. The score band is estimated from observed event residuals; it is not a Statbotics-provided prediction interval. A flagged match is an investigation lead, not an explanation.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3"><QualityMetric label="Flagged alliance results" value={String(anomalies.length)} detail="Across the loaded qualification sample" /><QualityMetric label="High-confidence misses" value={String(anomalies.filter((item)=>item.highConfidenceMiss).length)} detail="At least 80% predicted win probability, but lost" /><QualityMetric label="Outside expected range" value={String(anomalies.filter((item)=>item.outsideExpectedRange).length)} detail="Residual outside empirical band" /></div>
+      {anomalies.length ? <div className="mt-4 space-y-3">{anomalies.map((item)=><article key={item.id} className="rounded-lg border border-slate-200 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold text-slate-900">{item.matchLabel} · {item.alliance} alliance</h3><p className="text-xs text-slate-500">Teams {item.teamKeys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</p></div><span className={item.severity==="high"?"rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700":"rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800"}>{item.severity} priority</span></div>
+        <p className="mt-2 text-sm text-slate-700">Predicted {fmt(item.predicted)} · actual {fmt(item.actual)} · residual {item.residual>0?"+":""}{fmt(item.residual)} pts · win probability {item.winProbability===null?"—":`${Math.round(item.winProbability*100)}%`}</p>
+        <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">{item.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
+        <a className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
+      </article>)}</div> : <p className="mt-4 text-sm text-slate-500">{data.matches.filter((item)=>item.match.comp_level==="qm"&&item.match.alliances.red.score>=0&&item.match.alliances.blue.score>=0).length<8?"Waiting for a larger completed qualification sample before flagging score outliers.":"No qualification anomalies met the current criteria in the loaded sample."}</p>}
+    </Panel>
+  </section>;
+}
+function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
+  const playoff=data.playoffAnalysis;
+  return <section className="space-y-4">
+    <Panel title="Playoff alliance performance" description="Elimination matches are grouped separately from qualification patterns. Results are evaluated at alliance level against pre-match Statbotics score predictions.">
+      {!playoff||!playoff.matchCount?<p className="text-sm text-slate-500">No completed or scheduled elimination alliance records are available in this event sample yet.</p>:<>
+        <div className="grid gap-3 sm:grid-cols-3"><QualityMetric label="Playoff matches" value={String(playoff.matchCount)} detail="Elimination matches represented" /><QualityMetric label="Alliance combinations" value={String(playoff.allianceCount)} detail="Distinct three-team combinations" /><QualityMetric label="Rounds represented" value={String(playoff.roundSummaries.length)} detail="EF, QF, SF, and finals" /></div>
+        <div className="mt-4 space-y-2">{playoff.roundSummaries.map((round)=><div key={round.round} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span className="font-semibold uppercase text-slate-700">{round.round}</span><span className="text-slate-500">{round.matchCount} alliance results</span><span className={round.meanResidual!==null&&round.meanResidual<0?"font-semibold text-rose-700":"font-semibold text-emerald-700"}>{fmt(round.meanResidual)} avg residual</span></div>)}</div>
+        <div className="mt-5 space-y-3">{playoff.alliances.map((alliance)=><article key={alliance.teamKeys.join("-")} className="rounded-lg border border-slate-200 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">Teams {alliance.teamKeys.map((key)=>key.replace(/^frc/i,"")).join(" · ")}</h3><span className="text-xs text-slate-500">{alliance.wins} wins · {alliance.losses} losses · {alliance.matchCount} matches</span></div>
+          <p className="mt-1 text-sm text-slate-600">Mean predicted {fmt(alliance.meanPredicted)} · actual {fmt(alliance.meanActual)} · residual {alliance.meanResidual===null?"—":`${alliance.meanResidual>0?"+":""}${fmt(alliance.meanResidual)} pts`}</p>
+          <div className="mt-2 space-y-1">{alliance.matches.map((match)=><a key={match.matchKey} className="flex justify-between gap-2 text-xs text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer"><span>{match.matchLabel}</span><span>{match.residual===null?"—":`${match.residual>0?"+":""}${fmt(match.residual)} pts`}</span></a>)}</div>
+        </article>)}</div>
+      </>}
+    </Panel>
+  </section>;
+}
+\nfunction TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
   const points = insight?.epaTrend.filter((point): point is {matchKey:string;matchLabel:string;epa:number} => point.epa !== null) ?? [];
   const min = Math.min(...points.map((point)=>point.epa),0);
   const max = Math.max(...points.map((point)=>point.epa),1);
