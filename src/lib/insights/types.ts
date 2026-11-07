@@ -64,6 +64,7 @@ export type PlayoffAlliancePerformance = {
   wins: number;
   losses: number;
   ties: number;
+  unknownOutcomes: number;
   meanPredicted: number | null;
   meanActual: number | null;
   meanResidual: number | null;

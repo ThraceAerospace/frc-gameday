@@ -295,7 +295,7 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
                 <div className="shrink-0 rounded-lg bg-slate-50 px-3 py-2 text-right">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Playoff record</p>
                   <p className="text-lg font-bold tabular-nums text-slate-900">{record}</p>
-                  <p className="text-[10px] text-slate-500">W–L–T</p>
+                  <p className="text-[10px] text-slate-500">W–L–T{alliance.unknownOutcomes > 0 ? ` · ${alliance.unknownOutcomes} winner not recorded` : ""}</p>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-100 py-3">

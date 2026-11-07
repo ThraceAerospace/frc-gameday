@@ -330,6 +330,7 @@ export function buildPlayoffAnalysis(
       wins: items.filter((item) => item.outcome === "win").length,
       losses: items.filter((item) => item.outcome === "loss").length,
       ties: items.filter((item) => item.outcome === "tie").length,
+      unknownOutcomes: items.filter((item) => item.outcome === "unknown").length,
       meanPredicted: average(scored.map((item) => item.predicted as number)),
       meanActual: average(scored.map((item) => item.actual as number)),
       meanResidual: average(residuals),
