@@ -236,6 +236,10 @@ The generated schema may contain endpoints or schemas that FieldView does not cu
 
 See [README-TBA-TYPES.md](README-TBA-TYPES.md) for the type-generation workflow.
 
+## Statbotics types
+
+`src/lib/statbotics/generated.ts` is generated from the live official Statbotics OpenAPI document. Run `npm run generate:statbotics-types` to refresh it; `predev` and `prebuild` do this automatically. The generator applies fallback response schemas only where upstream definitions are missing or generic, and automatically defers to concrete upstream schemas when Statbotics publishes them. See [README-STATBOTICS-TYPES.md](README-STATBOTICS-TYPES.md).
+
 ## Development
 
 ```bash

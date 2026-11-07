@@ -197,15 +197,16 @@ The application-facing service is `src/lib/tba/service.ts`.
 
 ## Generated types
 
-Never hand-edit `src/lib/tba/generated.ts`.
+Never hand-edit `src/lib/tba/generated.ts` or `src/lib/statbotics/generated.ts`.
 
 Regenerate with:
 
 ```bash
 npm run generate:tba-types
+npm run generate:statbotics-types
 ```
 
-`src/lib/tba/types.ts` contains ergonomic application aliases and composed application types.
+Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas are used only while upstream response definitions are absent or generic; concrete upstream schemas take precedence automatically. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
 
 ## File organization
 
