@@ -22,6 +22,10 @@ const TABS: { id: Tab; label: string }[] = [
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 const percentileLabel = (value: number | null) => value === null ? "—" : `${Math.round(value * 100)}th`;
 
+function teamLinkForNumber(teamNumber:number,name:string):ReactNode {
+  return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-blue-700">{teamNumber} · {name}</Link>;
+}
+
 export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
   const loadGeneration = useRef(0);
