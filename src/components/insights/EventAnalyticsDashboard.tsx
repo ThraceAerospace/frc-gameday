@@ -194,11 +194,11 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA ? <div className="mt-5 space-y-5">
                 <TeamRiskPanel analysis={matchAnalysisA} />
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
-                  <TeamEliminationSummary analysis={matchAnalysisA} />
-                </div>
-                <TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/>
+                <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
+                <details className="rounded-xl border border-slate-200 bg-white">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Season charts and match-by-match evidence</summary>
+                  <div className="p-4"><TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/></div>
+                </details>
               </div> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="mt-4 text-sm text-slate-500">No season match analysis is available yet.</p> : null}
 
             </Panel>
@@ -240,17 +240,6 @@ function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
       <ul className="mt-2 space-y-1 text-sm text-slate-600">{item.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
       <a className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
     </article>)}</div> : <p className="mt-4 text-sm text-slate-500">No matches have met the current anomaly criteria. This is not a guarantee that every match was routine.</p>}
-  </Panel>;
-}
-function TeamEliminationSummary({analysis}:{analysis:TeamMatchAnalysis}) {
-  const shift=analysis.eliminationShift;
-  const label=shift.interpretation==="recurring-negative-shift"?"Recurring negative elimination shift":shift.interpretation==="insufficient-history"?"Insufficient elimination history":"No established recurring negative shift";
-  return <Panel title="Elimination progression" description="Qualification-to-elimination changes are evaluated per event so long playoff schedules do not dominate the season result.">
-    <p className="text-sm font-semibold text-slate-900">{label}</p>
-    <div className="mt-3 grid grid-cols-2 gap-3"><QualityMetric label="Eligible events" value={String(shift.eligibleEventCount)} detail="≥3 scored quals and ≥2 scored elims" /><QualityMetric label="Negative shifts" value={String(shift.negativeEventCount)} detail="Elimination residual below qualification residual" /></div>
-    <p className="mt-3 text-xs text-slate-500">Mean event shift: {fmt(shift.meanShift)} pts · median: {fmt(shift.medianShift)} pts · one-sided sign-test p: {fmt(shift.signTestPValue,3)}.</p>
-    <p className="mt-2 text-xs text-slate-500">This is an exploratory alliance-level association, not proof of robot-level underperformance. Partner and opponent strength are not fully adjusted.</p>
-    {shift.events.length ? <div className="mt-3 space-y-2">{shift.events.map((event)=><div key={event.event.key} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs"><span className="min-w-0 truncate">{event.event.name}</span><span className={event.shift<0?"font-semibold text-rose-700":"font-semibold text-emerald-700"}>{event.shift>0?"+":""}{fmt(event.shift)} pts</span></div>)}</div>:null}
   </Panel>;
 }
 function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
@@ -330,15 +319,8 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 }
 
 function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
-  const points = insight?.epaTrend.filter((point): point is {matchKey:string;matchLabel:string;epa:number} => point.epa !== null) ?? [];
-  const min = Math.min(...points.map((point)=>point.epa),0);
-  const max = Math.max(...points.map((point)=>point.epa),1);
-  const range = Math.max(1,max-min);
-  const x = (index:number) => points.length < 2 ? 450 : 44 + index * 812 / (points.length - 1);
-  const y = (value:number) => 208 - (value-min) / range * 168;
-  const line = points.map((point,index)=>`${x(index)},${y(point.epa)}`).join(" ");
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-    <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team analysis</p><h2 className="mt-1 text-lg font-bold text-slate-900">Team brief</h2><p className="mt-1 text-sm text-slate-500">Start with the main takeaways. Open the evidence only when you want the underlying numbers or match details.</p></div>
+    <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team analysis</p><h2 className="mt-1 text-lg font-bold text-slate-900">Team profile</h2><p className="mt-1 text-sm text-slate-500">Current event strength, official metrics, and peer context. Season-wide scouting risks appear immediately below.</p></div>
     <label className="mt-4 block max-w-md text-sm font-semibold text-slate-700">Choose a team
       <select value={selectedTeam} onChange={(event)=>onSelect(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
         <option value="">Choose a team…</option>
@@ -363,33 +345,10 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
         <p className="mt-1 text-sm text-slate-700">This was the {insight.seasonComparison.cohortRank}{insight.seasonComparison.cohortRank===1?"st":insight.seasonComparison.cohortRank===2?"nd":insight.seasonComparison.cohortRank===3?"rd":"th"} largest change among {insight.seasonComparison.cohortSize} event teams with usable previous-event records.</p>
         <p className="mt-1 text-xs text-slate-500">Previous event: {insight.seasonComparison.priorEvent.name}. EPA is a model estimate, not a direct measurement of robot scoring.</p>
       </div> : null}
-      <div className="mt-4">
-        <h4 className="text-sm font-bold text-slate-900">What stands out</h4>
-        <ul className="mt-2 space-y-3">{insight.summary.slice(0,3).map((item,index)=><li key={index} className="flex gap-3 text-sm leading-6 text-slate-700"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"/><span>{item}</span></li>)}</ul>
-        {insight.summary.length>3 ? <details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">More summary details</summary><ul className="space-y-2 px-4 pb-3 pt-1 text-sm text-slate-600">{insight.summary.slice(3).map((item,index)=><li key={index} className="list-disc ml-4">{item}</li>)}</ul></details> : null}
-      </div>
       <div className="mt-4 rounded-lg border border-slate-200 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-900">Performance against similarly rated alliances</h4><span className="text-xs text-slate-500">{insight.peerPerformance.teamMatches} team matches · {insight.peerPerformance.peerAllianceCount} peer alliance results</span></div>
         <p className="mt-2 text-sm text-slate-700">{insight.peerPerformance.interpretation==="insufficient-sample"?"Not enough comparable alliance results to establish a peer-relative pattern.":insight.peerPerformance.interpretation==="above-peers"?"Alliances involving this team have scored meaningfully above comparable-strength alliances.":insight.peerPerformance.interpretation==="below-peers"?"Alliances involving this team have scored meaningfully below comparable-strength alliances.":"Alliance results involving this team are broadly similar to comparable-strength alliances."}</p>
         <p className="mt-1 text-xs text-slate-500">Mean residual: {fmt(insight.peerPerformance.teamMeanResidual)} pts · peer mean: {fmt(insight.peerPerformance.peerMeanResidual)} pts · difference: {fmt(insight.peerPerformance.difference)} pts. Peers are other event alliances within ±20% pre-match combined EPA; this is alliance-level context, not robot attribution.</p>
-      </div>
-      <div className="mt-5 rounded-lg border border-slate-100 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-900">EPA trend during this event</h4><p className="text-xs text-slate-500">A supporting view of the model estimate across match appearances</p></div><span className="text-xs text-slate-500">{points.length} observations</span></div>
-        {points.length>1 ? <svg viewBox="0 0 900 238" role="img" aria-label={`Team ${team.teamNumber} EPA progression during the event`} className="mt-2 w-full">
-          {[0,1,2,3].map((n)=><g key={n}><line x1="42" x2="862" y1={34+n*54} y2={34+n*54} stroke="#e2e8f0" strokeDasharray="3 4"/><text x="34" y={38+n*54} textAnchor="end" fontSize="10" fill="#64748b">{(max-range*n/3).toFixed(0)}</text></g>)}
-          <polyline points={line} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round"/>
-          {points.map((point,index)=><circle key={point.matchKey} cx={x(index)} cy={y(point.epa)} r="4" fill="#2563eb"><title>{point.matchLabel}: {point.epa.toFixed(2)} EPA</title></circle>)}
-          <text x="44" y="230" fontSize="10" fill="#64748b">{points[0].matchLabel}</text><text x="858" y="230" textAnchor="end" fontSize="10" fill="#64748b">{points[points.length-1].matchLabel}</text>
-        </svg> : <p className="mt-3 text-sm text-slate-500">Not enough EPA observations to draw a progression yet.</p>}
-      </div>
-      <div className="mt-5">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold text-slate-900">Matches worth reviewing</h4><span className="text-xs text-slate-500">{insight.reviewMatches.length} signals · browser-local review state</span></div>
-        <p className="mt-1 text-xs text-slate-500">These matches differed from model expectations or contained unusual alliance-level updates. The signal identifies where to look, not why the result happened.</p>
-        {!insight.reviewMatches.length ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No matches met the current review thresholds in the available sample.</p> : <div className="mt-3 space-y-2">{insight.reviewMatches.map((match)=><article key={match.matchKey} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-bold text-slate-900">{match.matchLabel} · {match.alliance.toUpperCase()} alliance</p><p className="mt-1 text-xs text-slate-500">Partners: {match.partners.join(" · ")||"—"} · Opponents: {match.opponents.join(" · ")||"—"}</p></div><a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Review match ↗</a></div>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">{match.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
-          <p className="mt-2 text-[11px] text-slate-500">Predicted {fmt(match.predicted)} · actual {fmt(match.actual,0)} · residual {match.residual===null?"—":`${match.residual>0?"+":""}${fmt(match.residual)}`} · EPA update {match.deltaEPA===null?"—":`${match.deltaEPA>0?"+":""}${fmt(match.deltaEPA,2)}`}</p>
-        </article>)}</div>}
       </div>
       <details className="mt-4 rounded-lg border border-slate-200">
         <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Detailed team metrics and official-season history</summary>
