@@ -266,7 +266,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     };
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
-      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, matches: completed,
+      summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, anomalySummary, anomalies: teamAnomalies, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
     await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);
