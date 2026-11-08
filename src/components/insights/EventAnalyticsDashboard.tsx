@@ -396,13 +396,22 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   const scored=ordered.filter((match)=>match.actual!==null&&match.opponentActual!==null);
   const completed=scored.filter((match)=>match.won!==null);
+  const eventRecord=scored.reduce((record,match)=>{
+    if(match.won===true)record.wins++;
+    else if(match.won===false)record.losses++;
+    else {
+      const source=records.find((item)=>item.match.key===match.matchKey)?.match;
+      if(source?.winning_alliance===""&&match.actual===match.opponentActual)record.ties++;
+    }
+    return record;
+  },{wins:0,losses:0,ties:0});
   const wins=completed.filter((match)=>match.won===true).sort((a,b)=>((b.actual??0)-(b.opponentActual??0))-((a.actual??0)-(a.opponentActual??0)));
   const biggestWin=wins[0]??null;
   const upsetLoss=completed.filter((match)=>match.won===false&&match.teamWinProbability!==null&&match.teamWinProbability>=0.65).sort((a,b)=>(b.teamWinProbability??0)-(a.teamWinProbability??0))[0]??null;
   const unexpectedWin=completed.filter((match)=>match.won===true&&match.teamWinProbability!==null&&match.teamWinProbability<=0.35).sort((a,b)=>(a.teamWinProbability??1)-(b.teamWinProbability??1))[0]??null;
   let streakCount=0;
   let streakResult:boolean|null=null;
-  for (const match of [...completed].reverse()) {
+  for (const match of [...scored].reverse()) {
     if (match.won===null) break;
     if (streakResult===null) streakResult=match.won;
     if (match.won!==streakResult) break;
@@ -426,7 +435,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
     if(timestamp===null||!timezone)return "Time unavailable";
     return new Intl.DateTimeFormat("en-US",{timeZone:timezone,weekday:"short",hour:"numeric",minute:"2-digit"}).format(new Date(timestamp*1000));
   };
-  const past=[...completed].reverse().slice(0,8);
+  const past=[...scored].reverse().slice(0,8);
   const estimatedShare=(match:TeamMatchRow)=>{
     if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0||match.preEPA>match.alliancePreEPATotal)return null;
     return match.preEPA/match.alliancePreEPATotal*100;
@@ -456,7 +465,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakResult===null?"No current streak":`${streakCount}-match ${streakResult?"win":"loss"} streak`}</span></div>
     <div className="mt-3 grid gap-2 sm:grid-cols-3">
-      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{completed.filter((match)=>match.won).length}–{completed.filter((match)=>match.won===false).length}–{scored.length-wins.length-completed.filter((match)=>match.won===false).length}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{eventRecord.wins}–{eventRecord.losses}–{eventRecord.ties}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Remaining schedule</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{upcoming.length}</p><p className="text-[11px] text-slate-500">Upcoming matches with model predictions</p></div>
     </div>
@@ -842,7 +851,7 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
   const averageGap=shared.reduce((sum,item)=>sum+item.gap,0)/shared.length;
   const winsA=shared.filter((item)=>item.gap>0).length;
   const winsB=shared.filter((item)=>item.gap<0).length;
-  const max=Math.max(1,...shared.flatMap((item)=>[item.av,item.bv]));
+  const max=Math.max(1,...shared.flatMap((item)=>[Math.abs(item.av),Math.abs(item.bv)]));
   const nameA=first.team.nickname || first.team.name || "Team A";
   const nameB=second.team.nickname || second.team.name || "Team B";
   return <section className="rounded-xl border border-slate-200 p-4">
@@ -855,13 +864,13 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
       const label=a.event.name;
       return <div key={a.event.key} className="grid grid-cols-[minmax(78px,110px)_1fr_1fr] items-center gap-3 text-xs">
         <span className="truncate font-medium text-slate-600" title={label}>{label}</span>
-        {[{value:av,color:"bg-blue-600"},{value:bv,color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,item.value/max*100)}%`}} /></div></div>)}
+        {[{value:av,color:"bg-blue-600"},{value:bv,color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,Math.abs(item.value)/max*100)}%`}} /></div></div>)}
       </div>;
     })}</div>
   </section>;
 }
 function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
-  const events=history.events.filter((item)=>typeof item.statbotics?.epa?.total_points==="number");
+  const events=history.events.filter((item)=>typeof item.statbotics?.epa?.total_points==="number").sort((a,b)=>a.event.start_date.localeCompare(b.event.start_date));
   const first=events[0], last=events[events.length-1];
   const firstValue=first?.statbotics?.epa?.total_points ?? null;
   const lastValue=last?.statbotics?.epa?.total_points ?? null;
@@ -913,7 +922,7 @@ function HistoryMetric({label,value}:{label:string;value:string}) {
   return <div className="rounded-lg border border-slate-200 bg-white p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-slate-900">{value}</p></div>;
 }
 function EventEpaBars({events,color}:{events:TeamSeasonHistory["events"];color:string}) {
-  const points=events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.name,value:item.statbotics.epa.total_points}]:[]);
+  const points=events.flatMap((item)=>typeof item.statbotics?.epa?.total_points==="number"?[{label:item.event.name,date:item.event.start_date,value:item.statbotics.epa.total_points}]:[]).sort((a,b)=>a.date.localeCompare(b.date));
   if(!points.length) return <p className="text-xs text-slate-400">No event EPA snapshots available.</p>;
   const max=Math.max(1,...points.map((point)=>Math.abs(point.value)));
   return <div className="space-y-2">{points.map((point,index)=><div key={index} className="grid grid-cols-[minmax(70px,110px)_1fr_42px] items-center gap-2 text-xs"><span className="truncate text-slate-500" title={point.label}>{point.label}</span><div className="h-3 overflow-hidden rounded-full bg-white"><div className={"h-full rounded-full " + (point.value < 0 ? "bg-rose-500" : color)} style={{width:`${Math.max(2,Math.abs(point.value)/max*100)}%`}} /></div><span className="text-right font-semibold tabular-nums text-slate-700">{fmt(point.value)}</span></div>)}</div>;
