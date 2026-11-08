@@ -304,6 +304,10 @@ export function buildSeasonAwareTeamInsights(
     }
     return null;
   };
+  const currentEventEPAValues = cohort.records.flatMap((record) =>
+    record.event.key === targetEventKey && record.status === "ready" && finite(record.epaTotal)
+      ? [record.epaTotal] : [],
+  );
   const componentDefinitions = {
     auto: ["auto_epa", "auto", "auto_points"],
     teleop: ["teleop_epa", "teleop", "teleop_points"],
@@ -345,6 +349,7 @@ export function buildSeasonAwareTeamInsights(
       priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate },
       priorEPA: prior.epaTotal,
       currentEPA: current.epaTotal,
+      currentEpaPercentile: percentile(currentEventEPAValues, current.epaTotal),
       change: current.epaTotal - prior.epaTotal,
       components,
     }];
