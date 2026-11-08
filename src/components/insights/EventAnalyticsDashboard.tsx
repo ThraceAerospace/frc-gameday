@@ -532,7 +532,7 @@ function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAna
 }
 
 function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
-  const matches=analysis.matches;
+  const matches=[...analysis.matches].sort((a,b)=>a.event.startDate.localeCompare(b.event.startDate)||a.event.key.localeCompare(b.event.key)||a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   const epaValues=matches.flatMap((m)=>[m.preEPA,m.postEPA]).filter((v):v is number=>v!==null);
   const epaMin=Math.min(0,...epaValues), epaMax=Math.max(1,...epaValues);
   const epaRange=Math.max(1,epaMax-epaMin);
