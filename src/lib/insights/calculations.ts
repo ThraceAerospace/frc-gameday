@@ -353,10 +353,34 @@ export function buildSeasonAwareTeamInsights(
     ]));
   };
   const totalRanks = rankFor((item) => item.change);
+  // Component denominators are independent of total-EPA eligibility. A team
+  // with valid component snapshots still belongs in that component's ranking
+  // even if its total-points field is unavailable.
+  const rankComponent = (key: keyof typeof componentDefinitions) => {
+    const eligible = teams.flatMap((team) => {
+      const current = cohort.records.find((record) =>
+        record.teamNumber === team.teamNumber && record.event.key === targetEventKey,
+      );
+      const prior = cohort.records
+        .filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
+        .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
+      if (!current || current.status !== "ready" || !prior || prior.status !== "ready") return [];
+      const before = componentValue(prior, [...componentDefinitions[key]]);
+      const now = componentValue(current, [...componentDefinitions[key]]);
+      return before !== null && now !== null ? [{ teamNumber: team.teamNumber, change: now - before }] : [];
+    });
+    return new Map(eligible.map((item) => [
+      item.teamNumber,
+      {
+        cohortRank: 1 + eligible.filter((other) => other.change > item.change).length,
+        cohortSize: eligible.length,
+      },
+    ]));
+  };
   const componentRanks = {
-    auto: rankFor((item) => item.components.auto?.change ?? null),
-    teleop: rankFor((item) => item.components.teleop?.change ?? null),
-    endgame: rankFor((item) => item.components.endgame?.change ?? null),
+    auto: rankComponent("auto"),
+    teleop: rankComponent("teleop"),
+    endgame: rankComponent("endgame"),
   };
   const byTeam = new Map(comparisons.map((item) => {
     const totalRank = totalRanks.get(item.teamNumber)!;
