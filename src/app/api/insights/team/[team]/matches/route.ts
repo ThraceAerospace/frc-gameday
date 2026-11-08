@@ -246,8 +246,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       meanShift: average(eventShifts), medianShift: median(eventShifts),
       signTestPValue, minimumQualificationMatchesPerEvent: 3, minimumEliminationMatchesPerEvent: 2,
       events: eligibleEliminationEvents,
-      interpretation: nPositiveQualificationEvents < 3 ? "insufficient-history" as const
-        : signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
+      interpretation: eligibleEliminationEvents.length === 0 ? "no-elimination-matches" as const
+        : eligibleEliminationEvents.length === 1 ? "single-event-shift" as const
+        : nPositiveQualificationEvents >= 3 && signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
     };
     const residualPatternDiagnostics = eventMatches.map(({ event }) => {
@@ -257,12 +258,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const opponentResidualSamples = scoredRows.filter((row) => row.opponentResidual !== null).length;
       const strengthRatedSamples = items.filter((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null).length;
       const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
-      return { event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, matches: eventRows.length, scoredMatches: scoredRows.length, teamResidualSamples: items.length, opponentResidualSamples, strengthRatedSamples, baselineAllianceSamples: baseline.length, eligible: items.length >= 3 && baseline.length >= 6 };
+      return { event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, matches: eventRows.length, scoredMatches: scoredRows.length, teamResidualSamples: items.length, opponentResidualSamples, strengthRatedSamples, baselineAllianceSamples: baseline.length, eligible: items.length >= 3 && baseline.length >= 2 };
     });
     const residualPatternEvents = eventMatches.flatMap(({ event }) => {
       const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
       const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
-      if (items.length < 3 || baseline.length < 6) return [];
+      if (items.length < 3 || baseline.length < 2) return [];
       const baselineMean = average(baseline) ?? 0;
       const baselineSd = Math.sqrt(baseline.reduce((sum, value) => sum + (value - baselineMean) ** 2, 0) / baseline.length);
       const teamMean = average(items.map((row) => row.residual as number)) ?? 0;
@@ -285,7 +286,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       eligibleEventCount: residualEventCount, negativeEventCount: negativeResidualEventCount, positiveEventCount: positiveResidualEventCount,
       meanTeamResidual: average(residualPatternEvents.map((item) => item.teamMeanResidual - item.baselineMeanResidual)),
       signTestPValue: residualSignPValue, positiveSignTestPValue: positiveResidualSignPValue,
-      interpretation: residualEventCount < 3 ? "insufficient-history" as const
+      interpretation: residualEventCount === 0 ? "insufficient-history" as const
+        : residualEventCount === 1 && negativeResidualEventCount === 1 ? "single-event-below-baseline" as const
+        : residualEventCount === 1 ? "single-event-above-baseline" as const
         : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount >= 3 ? "recurring-below-baseline" as const
         : positiveResidualSignPValue !== null && positiveResidualSignPValue <= 0.05 && positiveResidualEventCount >= 3 ? "recurring-above-baseline" as const
         : "no-established-pattern" as const,
