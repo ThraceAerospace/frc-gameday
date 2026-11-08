@@ -494,12 +494,10 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
           <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Biggest gain</p>
           <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
-          {best?<p className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">{formatRank(best)} among teams with comparable history</p>:null}
         </div>
         <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900 dark:bg-rose-950/30">
           <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Biggest loss</p>
           <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"loss")}</p>
-          {worst?<p className="mt-2 text-xs text-rose-800 dark:text-rose-300">{formatRank(worst)} by size of decline</p>:null}
         </div>
       </div>
       <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
