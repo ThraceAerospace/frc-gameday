@@ -609,7 +609,8 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const enoughHistory = result.interpretation !== "insufficient-history";
   const label = recurring ? "Recurring decline signal" : enoughHistory ? "No consistent decline detected" : "More history needed";
   const negativeCount = result.events.filter((item) => item.shift < 0).length;
-  const positiveCount = result.events.length - negativeCount;
+  const positiveCount = result.events.filter((item) => item.shift > 0).length;
+  const unchangedCount = result.events.length - negativeCount - positiveCount;
   const signed = (value:number|null) => value === null ? "—" : (value > 0 ? "+" : "") + fmt(value) + " pts";
   return <section className="mt-4 space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -646,7 +647,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
     {result.events.length ? <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h5 className="text-sm font-bold text-slate-900">Event-by-event comparison</h5>
-        <p className="text-xs text-slate-500">{result.events.length} qualifying events · {positiveCount} increased · {negativeCount} decreased</p>
+        <p className="text-xs text-slate-500">{result.events.length} qualifying events · {positiveCount} increased · {negativeCount} decreased · {unchangedCount} unchanged</p>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         {result.events.map((item) => {
