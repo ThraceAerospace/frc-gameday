@@ -390,14 +390,15 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;timezone:string|null}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey);
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
-  const completed=ordered.filter((match)=>match.won!==null&&match.actual!==null&&match.opponentActual!==null);
+  const scored=ordered.filter((match)=>match.actual!==null&&match.opponentActual!==null);
+  const completed=scored.filter((match)=>match.won!==null);
   const wins=completed.filter((match)=>match.won===true).sort((a,b)=>((b.actual??0)-(b.opponentActual??0))-((a.actual??0)-(a.opponentActual??0)));
   const biggestWin=wins[0]??null;
   const upsetLoss=completed.filter((match)=>match.won===false&&match.teamWinProbability!==null&&match.teamWinProbability>=0.65).sort((a,b)=>(b.teamWinProbability??0)-(a.teamWinProbability??0))[0]??null;
   const unexpectedWin=completed.filter((match)=>match.won===true&&match.teamWinProbability!==null&&match.teamWinProbability<=0.35).sort((a,b)=>(a.teamWinProbability??1)-(b.teamWinProbability??1))[0]??null;
   let streakCount=0;
   let streakResult:boolean|null=null;
-  for (const match of [...ordered].reverse()) {
+  for (const match of [...completed].reverse()) {
     if (match.won===null) break;
     if (streakResult===null) streakResult=match.won;
     if (match.won!==streakResult) break;
@@ -451,7 +452,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakLabel}</span></div>
     <div className="mt-3 grid gap-2 sm:grid-cols-3">
-      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{completed.filter((match)=>match.won).length}–{completed.filter((match)=>match.won===false).length}–{completed.filter((match)=>match.won===null).length}</p><p className="text-[11px] text-slate-500">{completed.length} scored matches</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{completed.filter((match)=>match.won).length}–{completed.filter((match)=>match.won===false).length}–{scored.length-wins.length-completed.filter((match)=>match.won===false).length}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Remaining schedule</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{upcoming.length}</p><p className="text-[11px] text-slate-500">Upcoming matches with model predictions</p></div>
     </div>
