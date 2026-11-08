@@ -654,7 +654,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
           const declined = item.shift < 0;
           return <article key={item.event.key} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <a className="font-bold text-blue-700 hover:underline" href={"https://www.thebluealliance.com/event/" + item.event.key} target="_blank" rel="noreferrer">{item.event.shortName ?? item.event.name}</a>
+              <a className="font-bold text-blue-700 hover:underline" href={"https://www.thebluealliance.com/event/" + item.event.key} target="_blank" rel="noreferrer">{item.event.name}</a>
               <span className={"rounded-md px-2 py-1 text-xs font-bold tabular-nums " + (declined ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800")}>{declined ? "Down " : "Up "}{signed(item.shift)}</span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
