@@ -471,7 +471,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
       <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Upcoming matches</h4>
         {upcoming.length?<div className="mt-2 space-y-2">{upcoming.map((match)=>{
           const close=match.teamWinProbability!==null&&Math.abs(match.teamWinProbability-0.5)<=0.15;
-          const opposing=match.alliance==="red"?"blue":"red";
+          const opposing: "red" | "blue" = match.alliance === "red" ? "blue" : "red";
           return <a key={match.key} href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-200 p-3 hover:border-slate-400">
             <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-900">{match.label}</span><span className="text-[10px] text-slate-500">{formatEventTime(match.time)} · event time</span></div>
             <div className="mt-2 space-y-1 text-xs"><p className="font-semibold text-rose-700">{match.redTeams.join(" · ")}</p><p className="font-semibold text-blue-700">{match.blueTeams.join(" · ")}</p></div><div className="mt-2 flex items-center justify-between gap-3 text-sm"><span className={`font-bold tabular-nums ${teamAllianceClass(match.alliance)}`}>{match.alliance==="red"?"RED":"BLUE"} · {match.alliance==="red"?fmt(match.redScore):fmt(match.blueScore)}</span><span className="text-slate-400">vs</span><span className={`font-bold tabular-nums ${teamAllianceClass(opposing)}`}>{opposing.toUpperCase()} · {match.alliance==="red"?fmt(match.blueScore):fmt(match.redScore)}</span></div>

@@ -2,6 +2,7 @@ import type { StatboticsEPA } from "@/lib/statbotics/types";
 import type { TBAEliminationAlliance } from "@/lib/tba/types";
 import { matchShortName } from "@/lib/tba/formatters";
 import type { AllianceResult, AnalyticsMatch, ReviewFinding, TeamAnalyticsRow } from "./types";
+import type { TBAMatch } from "@/lib/tba/types";
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -72,7 +73,7 @@ export function buildTeamRows(
   }));
 }
 function sampleCoverage(n: number): ReviewFinding["sampleCoverage"] { return n >= 12 ? "high" : n >= 6 ? "medium" : "low"; }
-export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[]): ReviewFinding[] {
+export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[], allEventMatches: TBAMatch[] = records.map((record) => record.match)): ReviewFinding[] {
   const findings: ReviewFinding[] = [];
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const spread = standardDeviation(residuals) ?? 0;
@@ -102,12 +103,14 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
   // TBA penalty counts belong to the alliance. Treat them as shared exposure,
   // not proof that any individual robot caused the penalties.
   const penaltySamples = new Map<string, number[]>();
-  for (const record of records) {
-    if (record.match.comp_level.toLowerCase() !== "qm") continue;
-    const breakdown = record.match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
+  // Penalty evidence comes from the complete TBA event schedule, not the
+  // progressively collected Statbotics subset.
+  for (const match of allEventMatches) {
+    if (match.comp_level.toLowerCase() !== "qm") continue;
+    const breakdown = match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
     if (!breakdown) continue;
     for (const color of ["red", "blue"] as const) {
-      const alliance = record.match.alliances[color];
+      const alliance = match.alliances[color];
       if (typeof alliance.score !== "number" || alliance.score < 0) continue;
       const values = breakdown[color];
       if (!values) continue;
@@ -118,7 +121,9 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
       const count = major !== null || minor !== null ? (major ?? 0) + (minor ?? 0)
         : legacyFouls !== null || technical !== null ? (legacyFouls ?? 0) + (technical ?? 0) : null;
       if (count === null || count < 0) continue;
-      for (const teamKey of alliance.team_keys ?? []) penaltySamples.set(teamKey, [...(penaltySamples.get(teamKey) ?? []), count]);
+      for (const teamKey of alliance.team_keys ?? []) {
+        penaltySamples.set(teamKey, [...(penaltySamples.get(teamKey) ?? []), count]);
+      }
     }
   }
   const minimumPenaltyMatches = 5;
