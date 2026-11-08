@@ -992,7 +992,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
     const significant=count>=3&&mean!==null&&margin!==null&&Math.abs(mean)>margin;
     return {team,mean,margin,count,significant};
   });
-  const residuals=residualDiagnostics.filter((item)=>item.significant&&item.mean!==null&&item.margin!==null);
+  const residuals=residualDiagnostics.flatMap((item)=>item.significant&&item.mean!==null&&item.margin!==null?[{...item,mean:item.mean,margin:item.margin}]:[]);
   const over=residuals.filter((item)=>(item.mean??0)>0).sort((a,b)=>(b.mean??0)-(a.mean??0)).slice(0,5);
   const under=residuals.filter((item)=>(item.mean??0)<0).sort((a,b)=>(a.mean??0)-(b.mean??0)).slice(0,5);
   const performanceStatus=(teamKey:string)=>{
