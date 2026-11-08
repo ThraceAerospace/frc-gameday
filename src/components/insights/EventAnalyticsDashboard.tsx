@@ -483,7 +483,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
   const currentEventKey=data.event.key;
   const priorFor=(teamNumber:number)=>records.filter((record)=>record.teamNumber===teamNumber&&record.status==="ready"&&record.event.startDate<data.event.start_date).sort((a,b)=>b.event.startDate.localeCompare(a.event.startDate))[0];
   const currentFor=(teamNumber:number)=>records.find((record)=>record.teamNumber===teamNumber&&record.event.key===currentEventKey&&record.status==="ready");
-  const read=(record:{breakdown:Record<string,number>;epaTotal:number|null}|undefined,keys:string[])=>{
+  const read=(record:{breakdown:Record<string,number>;epaTotal:number|null}|undefined,keys:string[]):number|null=>{
     for(const key of keys){const value=record?.breakdown?.[key];if(typeof value==="number"&&Number.isFinite(value))return value;}
     return null;
   };
@@ -498,7 +498,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
     const currentValue=definition.key==="total"?(current?.epaTotal??team.epa):read(current,definition.keys);
     const priorValue=definition.key==="total"?(prior?.epaTotal??null):read(prior,definition.keys);
     const fallbackTotal=definition.key==="total"?insight.seasonComparison?.change:null;
-    const delta=currentValue!==null&&priorValue!==null?currentValue-priorValue:fallbackTotal;
+    const delta:number|null=currentValue!=null&&priorValue!=null?currentValue-priorValue:fallbackTotal;
     if(delta===null||!Number.isFinite(delta))return [];
     const peerDeltas=data.teams.flatMap((peer)=>{
       const peerCurrent=currentFor(peer.teamNumber),peerPrior=priorFor(peer.teamNumber);
@@ -581,7 +581,7 @@ function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:Team
         <p className="mt-1 text-xs text-slate-500">Statbotics EPA estimates, not measured points scored by the robot.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(team.epa)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{team.epaPercentile===null?"Event percentile unavailable":`${Math.round(team.epaPercentile*100)}th percentile at this event`}</p></div>
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[team.autoEpa,team.teleopEpa,team.endgameEpa].map((value,index)=>{const total=[team.autoEpa,team.teleopEpa,team.endgameEpa].reduce((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(team.autoEpa)}</span><span>Teleop {fmt(team.teleopEpa)}</span><span>Endgame {fmt(team.endgameEpa)}</span></div></div>
+          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[team.autoEpa,team.teleopEpa,team.endgameEpa].map((value,index)=>{const total=[team.autoEpa,team.teleopEpa,team.endgameEpa].reduce<number>((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(team.autoEpa)}</span><span>Teleop {fmt(team.teleopEpa)}</span><span>Endgame {fmt(team.endgameEpa)}</span></div></div>
         </div>
       </section>
       <section>
