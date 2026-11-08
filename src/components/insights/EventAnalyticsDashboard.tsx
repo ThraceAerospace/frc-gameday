@@ -192,6 +192,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
             {matchAnalysisA ? <div className="space-y-4">
+              <TeamStandoutMatches analysis={matchAnalysisA}/>
               {selectedA && focusedInsight ? <TeamModelDetailPanel team={selectedA} insight={focusedInsight}/> : null}
               <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} eventKey={eventKey} timezone={data.event.timezone ?? null} />
               <TeamRiskPanel analysis={matchAnalysisA} />
@@ -442,6 +443,39 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   </section>;
 }
 
+
+function TeamStandoutMatches({analysis}:{analysis:TeamMatchAnalysis}) {
+  const completed=analysis.matches.filter((match)=>match.won!==null&&match.actual!==null&&match.opponentActual!==null);
+  const wins=completed.filter((match)=>match.won===true).sort((a,b)=>((b.actual??0)-(b.opponentActual??0))-((a.actual??0)-(a.opponentActual??0)));
+  const biggestWin=wins[0]??null;
+  const upsetLosses=completed.filter((match)=>match.won===false&&match.teamWinProbability!==null&&match.teamWinProbability>=0.65).sort((a,b)=>(b.teamWinProbability??0)-(a.teamWinProbability??0));
+  const unexpectedWins=completed.filter((match)=>match.won===true&&match.teamWinProbability!==null&&match.teamWinProbability<=0.35).sort((a,b)=>(a.teamWinProbability??1)-(b.teamWinProbability??1));
+  const upsetLoss=upsetLosses[0]??null;
+  const unexpectedWin=unexpectedWins[0]??null;
+  const MatchCard=({match,label,tone,description}:{match:TeamMatchRow;label:string;tone:"win"|"loss"|"surprise";description:string})=>{
+    const margin=(match.actual??0)-(match.opponentActual??0);
+    const toneClass=tone==="win"?"border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30":tone==="loss"?"border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30":"border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30";
+    return <article className={`rounded-xl border p-3 ${toneClass}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-wide">{label}</span><span className="text-xs font-semibold text-slate-500">{match.event.shortName??match.event.name} · {match.matchLabel}</span></div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="min-w-0"><p className="text-sm font-bold text-slate-900 dark:text-slate-100">{match.partners.join(" · ")||"Team alliance"}</p><p className="mt-0.5 text-[11px] text-slate-500">vs {match.opponents.join(" · ")||"opponents"}</p></div>
+        <div className="shrink-0 text-right"><p className="text-xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(match.actual,0)}–{fmt(match.opponentActual,0)}</p><p className={`text-xs font-bold tabular-nums ${margin>0?"text-emerald-700":margin<0?"text-rose-700":"text-slate-500"}`}>{margin>0?"+":""}{fmt(margin,0)} alliance points</p></div>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">{description}</p>
+      <a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-slate-700 hover:underline dark:text-slate-200">View match ↗</a>
+    </article>;
+  };
+  if(!completed.length)return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950"><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Standout matches</h3><p className="mt-2 text-sm text-slate-500">No completed team matches with full score and prediction data are available yet.</p></section>;
+  return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
+    <div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Standout matches</h3><p className="mt-1 text-xs text-slate-500">The team's biggest scoreline win and results that ran against the pre-match prediction.</p></div>
+    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      {biggestWin?<MatchCard match={biggestWin} label="Biggest win" tone="win" description={`Won by ${fmt((biggestWin.actual??0)-(biggestWin.opponentActual??0),0)} points. Pre-match win probability was ${biggestWin.teamWinProbability===null?"unavailable":(biggestWin.teamWinProbability*100).toFixed(0)+"%"}.`}/>:<p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No completed wins in the available sample.</p>}
+      {upsetLoss?<MatchCard match={upsetLoss} label="Unexpected loss" tone="loss" description={`The model gave this alliance a ${((upsetLoss.teamWinProbability??0)*100).toFixed(0)}% chance to win before the match. The loss is a result worth investigating, not proof of why it happened.`}/>:unexpectedWin?<MatchCard match={unexpectedWin} label="Unexpected win" tone="surprise" description={`The model gave this alliance only a ${((unexpectedWin.teamWinProbability??0)*100).toFixed(0)}% chance to win. The result substantially outperformed the pre-match expectation.`}/>:<p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No clear upset result with a strong pre-match probability is present in this sample.</p>}
+    </div>
+    {upsetLoss&&unexpectedWin?<div className="mt-3"><MatchCard match={unexpectedWin} label="Unexpected win" tone="surprise" description={`The model gave this alliance only a ${((unexpectedWin.teamWinProbability??0)*100).toFixed(0)}% chance to win. The result substantially outperformed the pre-match expectation.`}/></div>:null}
+    <p className="mt-3 text-[11px] leading-5 text-slate-500">Scores and predictions are alliance-level. “Biggest win” is based on final score margin; unexpected results are based on pre-match Statbotics win probability. Match outcomes cannot isolate an individual robot's contribution.</p>
+  </section>;
+}
 
 function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsResponse;team:TeamAnalyticsRow;insight:TeamInsight}) {
   type Change = {key:string;label:string;delta:number;rank:number;fieldSize:number};
