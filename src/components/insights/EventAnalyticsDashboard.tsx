@@ -300,7 +300,32 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
 
 function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phase:"qualification"|"elimination"}) {
   const isQual=phase==="qualification";
-  const phaseData=analysis.phaseSummaries.find((item)=>isQual?/qual|qm|^q$/i.test(item.phase):/elim|playoff|^e$/i.test(item.phase));
+  const phaseItems=analysis.phaseSummaries.filter((item)=>isQual?item.phase==="qm":["ef","qf","sf","f"].includes(item.phase));
+  const phaseMatches=phaseItems.reduce((sum,item)=>sum+item.matches,0);
+  const weighted=(key:"meanResidual"|"meanAbsoluteError",items=phaseItems)=>{
+    const available=items.filter((item)=>item[key]!==null);
+    const count=available.reduce((sum,item)=>sum+item.matches,0);
+    return count?available.reduce((sum,item)=>sum+(item[key]??0)*item.matches,0)/count:null;
+  };
+  const residualItems=phaseItems.filter((item)=>item.rootMeanSquareError!==null);
+  const residualCount=residualItems.reduce((sum,item)=>sum+item.matches,0);
+  const phaseData=phaseItems.length?{
+    matches:phaseMatches,
+    wins:phaseItems.reduce((sum,item)=>sum+item.wins,0),
+    losses:phaseItems.reduce((sum,item)=>sum+item.losses,0),
+    winRate:(phaseItems.reduce((sum,item)=>sum+item.wins,0)+phaseItems.reduce((sum,item)=>sum+item.losses,0))>0
+      ?phaseItems.reduce((sum,item)=>sum+item.wins,0)/(phaseItems.reduce((sum,item)=>sum+item.wins+item.losses,0)):null,
+    meanResidual:weighted("meanResidual"),
+    meanAbsoluteError:weighted("meanAbsoluteError"),
+    rootMeanSquareError:residualCount?Math.sqrt(residualItems.reduce((sum,item)=>sum+(item.rootMeanSquareError??0)**2*item.matches,0)/residualCount):null,
+    epaStart:phaseItems.find((item)=>item.epaStart!==null)?.epaStart??null,
+    epaEnd:[...phaseItems].reverse().find((item)=>item.epaEnd!==null)?.epaEnd??null,
+    rp:["energized","supercharged","traversal"].map((key)=>{
+      const values=phaseItems.flatMap((item)=>item.rp.filter((rp)=>rp.key===key));
+      const sampleSize=values.reduce((sum,item)=>sum+item.sampleSize,0);
+      return {key,sampleSize,accuracy:sampleSize?values.reduce((sum,item)=>sum+(item.accuracy??0)*item.sampleSize,0)/sampleSize:null,brier:sampleSize?values.reduce((sum,item)=>sum+(item.brier??0)*item.sampleSize,0)/sampleSize:null};
+    }).filter((item)=>item.sampleSize>0),
+  }:null;
   const title=isQual?"Qualification matches":"Elimination matches";
   if(!phaseData) return <section><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h3><p className="mt-2 text-sm text-slate-500">No {isQual?"qualification":"elimination"} match sample is available yet.</p></section>;
   return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
@@ -534,8 +559,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
   const worst=teamChanges.filter((item)=>item.delta<0).sort((a,b)=>a.delta-b.delta)[0]??null;
   const formatRank=(item:Change|null)=>{
     if(!item||!item.rank||!item.fieldSize)return "Not enough comparable event history";
-    const topPercent=Math.max(1,Math.round(item.rank/item.fieldSize*100));
-    return `#${item.rank} of ${item.fieldSize} · top ${topPercent}%`;
+    return `Ranked #${item.rank} of ${item.fieldSize}`;
   };
   const movement=(item:Change|null,kind:"gain"|"loss")=>{
     if(!item)return kind==="gain"?"No measured EPA dimension increased since the previous event.":"No measured EPA dimension decreased since the previous event.";
