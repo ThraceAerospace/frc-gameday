@@ -193,7 +193,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA ? <div className="mt-5 space-y-5">
-                <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} timezone={data.event.timezone ?? null} />
+                <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} eventKey={eventKey} timezone={data.event.timezone ?? null} />
                 <TeamRiskPanel analysis={matchAnalysisA} />
                 <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
                 <PhasePerformancePanel analysis={matchAnalysisA} phase="qualification" />
@@ -398,7 +398,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,timezone}:{analysi
     <div className="mt-4 grid gap-4 xl:grid-cols-2">
       <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Recent matches</h4>
         {past.length?<div className="mt-2 overflow-x-auto"><table className="w-full min-w-[510px] text-xs"><thead className="text-left text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="py-2">Match</th><th>Pred. → actual</th><th>Auto</th><th>Teleop</th><th>Endgame</th><th>EPA share*</th></tr></thead><tbody>{past.map((match)=><tr key={match.matchKey} className="border-t border-slate-100"><th className="py-2 text-left"><a className="font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel}</a><span className="block text-[10px] font-normal text-slate-400">{match.won===null?"—":match.won?"Win":"Loss"}</span></th><td className="whitespace-nowrap tabular-nums">{fmt(match.predicted)} → {fmt(match.actual)}</td>{(["auto","teleop","endgame"] as const).map((component)=>{const estimate=match.alliancePreComponents[`${component}_epa`];const actual=match.actualComponents[component];return <td key={component} className="whitespace-nowrap tabular-nums">{fmt(estimate)} → {fmt(actual)}</td>;})}<td className="tabular-nums">{estimatedShare(match)===null?"—":fmt(estimatedShare(match))+"%"}</td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No completed matches for this team are available in the selected event sample.</p>}
-        <p className="mt-2 text-[10px]] leading-5 text-slate-500">* Estimated EPA share = the team's pre-match EPA divided by its alliance's combined pre-match EPA. It is a model-based share, not observed scoring attribution. Component estimates are alliance totals, not per-team scores.</p>
+        <p className="mt-2 text-[10px] leading-5 text-slate-500">* Estimated EPA share = the team's pre-match EPA divided by its alliance's combined pre-match EPA. It is a model-based share, not observed scoring attribution. Component estimates are alliance totals, not per-team scores.</p>
       </div>
       <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Upcoming matches</h4>
         {upcoming.length?<div className="mt-2 space-y-2">{upcoming.map((match)=>{
