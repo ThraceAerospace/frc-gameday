@@ -158,13 +158,12 @@ export default function TeamModal({
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-sm font-bold">
                     {displayTeamNumber}
+                    {isRemapped && (
+                      <span className="ml-1 font-normal opacity-50">
+                        ({team.team_number})
+                      </span>
+                    )}
                   </span>
-
-                  {isRemapped && (
-                    <span className="text-[10px] font-mono opacity-50">
-                      TBA {team.team_number}
-                    </span>
-                  )}
 
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                     {isRemapped && /^Off-Season Demo Team\b/i.test(team.nickname ?? "") ? `Team ${displayTeamNumber}` : team.nickname || "Unknown team"}
