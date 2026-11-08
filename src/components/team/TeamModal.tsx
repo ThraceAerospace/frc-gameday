@@ -153,7 +153,12 @@ export default function TeamModal({
               >
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-sm font-bold">
-                    {team.team_number}
+                    {displayTeamNumber}
+                    {isRemapped && (
+                      <span className="ml-1 font-normal opacity-50">
+                        ({team.team_number})
+                      </span>
+                    )}
                   </span>
 
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
