@@ -18,8 +18,19 @@ function epaFor(record: AnalyticsMatch, teamKey: string, phase: "pre_epas" | "ep
 }
 function percentile(values: number[], value: number): number | null {
   if (!values.length) return null;
-  const belowOrEqual = values.filter((candidate) => candidate <= value).length;
-  return values.length === 1 ? 1 : (belowOrEqual - 1) / (values.length - 1);
+  if (values.length === 1) return 1;
+  // Use the midpoint rank for ties so equal EPA values receive the same percentile.
+  const below = values.filter((candidate) => candidate < value).length;
+  const equal = values.filter((candidate) => candidate === value).length;
+  return (below + (equal - 1) / 2) / (values.length - 1);
+}
+function ordinal(value: number): string {
+  const lastTwo = value % 100;
+  const suffix = lastTwo >= 11 && lastTwo <= 13 ? "th"
+    : value % 10 === 1 ? "st"
+    : value % 10 === 2 ? "nd"
+    : value % 10 === 3 ? "rd" : "th";
+  return `${value}${suffix}`;
 }
 export function mean(values: number[]): number | null {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
@@ -256,7 +267,7 @@ export function buildTeamInsights(
     summary.push(metrics.rank === null ? "Official qualification standing is not available yet."
       : `Official qualification rank: #${metrics.rank}${metrics.wins === null ? "" : ` · record ${metrics.wins}–${metrics.losses}–${metrics.ties}`}.`);
     summary.push(team.epa === null ? "Statbotics EPA is not available in the current match sample."
-      : `Statbotics EPA is ${team.epa.toFixed(1)} (${team.epaPercentile === null ? "event percentile unavailable" : `about the ${Math.round(team.epaPercentile * 100)}th event percentile`}), with ${team.matchesSeen} team appearances represented in the current sample.`);
+      : `Statbotics EPA is ${team.epa.toFixed(1)} (${team.epaPercentile === null ? "event percentile unavailable" : `about the ${ordinal(Math.round(team.epaPercentile * 100))} event percentile`}), with ${team.matchesSeen} team appearances represented in the current sample.`);
     const components = [["auto",team.autoEpa],["teleop",team.teleopEpa],["endgame",team.endgameEpa]].filter((item): item is [string,number] => item[1] !== null);
     if (components.length) {
       const largest = [...components].sort((a,b)=>b[1]-a[1])[0];
@@ -293,6 +304,10 @@ export function buildSeasonAwareTeamInsights(
     }
     return null;
   };
+  const currentEventEPAValues = cohort.records.flatMap((record) =>
+    record.event.key === targetEventKey && record.status === "ready" && finite(record.epaTotal)
+      ? [record.epaTotal] : [],
+  );
   const componentDefinitions = {
     auto: ["auto_epa", "auto", "auto_points"],
     teleop: ["teleop_epa", "teleop", "teleop_points"],
@@ -334,6 +349,7 @@ export function buildSeasonAwareTeamInsights(
       priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate },
       priorEPA: prior.epaTotal,
       currentEPA: current.epaTotal,
+      currentEpaPercentile: percentile(currentEventEPAValues, current.epaTotal),
       change: current.epaTotal - prior.epaTotal,
       components,
     }];
