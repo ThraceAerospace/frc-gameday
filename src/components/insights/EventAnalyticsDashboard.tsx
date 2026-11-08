@@ -188,7 +188,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
         <div className="mt-5">
           {tab === "overview" && <EventOverview data={data} />}
           {tab === "teams" && <section className="space-y-4">
-            <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null}/>
+            <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
             {matchAnalysisA ? <div className="space-y-4">
@@ -443,7 +443,78 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
 }
 
 
-function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
+function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsResponse;team:TeamAnalyticsRow;insight:TeamInsight}) {
+  type Change = {key:string;label:string;delta:number;rank:number;fieldSize:number};
+  const records=data.seasonCohort?.records??[];
+  const currentEventKey=data.event.key;
+  const priorFor=(teamNumber:number)=>records.filter((record)=>record.teamNumber===teamNumber&&record.status==="ready"&&record.event.startDate<data.event.start_date).sort((a,b)=>b.event.startDate.localeCompare(a.event.startDate))[0];
+  const currentFor=(teamNumber:number)=>records.find((record)=>record.teamNumber===teamNumber&&record.event.key===currentEventKey&&record.status==="ready");
+  const read=(record:{breakdown:Record<string,number>;epaTotal:number|null}|undefined,keys:string[])=>{
+    for(const key of keys){const value=record?.breakdown?.[key];if(typeof value==="number"&&Number.isFinite(value))return value;}
+    return null;
+  };
+  const definitions=[
+    {key:"total",label:"Overall EPA",keys:[] as string[]},
+    {key:"auto",label:"Autonomous EPA",keys:["auto_epa","auto","auto_points"]},
+    {key:"teleop",label:"Teleop EPA",keys:["teleop_epa","teleop","teleop_points"]},
+    {key:"endgame",label:"Endgame EPA",keys:["endgame_epa","endgame","endgame_points"]},
+  ];
+  const teamChanges=definitions.flatMap((definition)=>{
+    const current=currentFor(team.teamNumber),prior=priorFor(team.teamNumber);
+    const currentValue=definition.key==="total"?(current?.epaTotal??team.epa):read(current,definition.keys);
+    const priorValue=definition.key==="total"?(prior?.epaTotal??null):read(prior,definition.keys);
+    const fallbackTotal=definition.key==="total"?insight.seasonComparison?.change:null;
+    const delta=currentValue!==null&&priorValue!==null?currentValue-priorValue:fallbackTotal;
+    if(delta===null||!Number.isFinite(delta))return [];
+    const peerDeltas=data.teams.flatMap((peer)=>{
+      const peerCurrent=currentFor(peer.teamNumber),peerPrior=priorFor(peer.teamNumber);
+      const now=definition.key==="total"?(peerCurrent?.epaTotal??peer.epa):read(peerCurrent,definition.keys);
+      const before=definition.key==="total"?(peerPrior?.epaTotal??null):read(peerPrior,definition.keys);
+      return now!==null&&before!==null&&Number.isFinite(now-before)?[{teamNumber:peer.teamNumber,delta:now-before}]:[];
+    });
+    const ranked=[...peerDeltas].sort((a,b)=>b.delta-a.delta);
+    const rank=ranked.findIndex((item)=>item.teamNumber===team.teamNumber)+1;
+    return [{key:definition.key,label:definition.label,delta,rank,fieldSize:ranked.length} satisfies Change];
+  });
+  const best=teamChanges.filter((item)=>item.delta>0).sort((a,b)=>b.delta-a.delta)[0]??null;
+  const worst=teamChanges.filter((item)=>item.delta<0).sort((a,b)=>a.delta-b.delta)[0]??null;
+  const formatRank=(item:Change|null)=>{
+    if(!item||!item.rank||!item.fieldSize)return "Not enough comparable event history";
+    const topPercent=Math.max(1,Math.round(item.rank/item.fieldSize*100));
+    return `#${item.rank} of ${item.fieldSize} · top ${topPercent}%`;
+  };
+  const movement=(item:Change|null,kind:"gain"|"loss")=>{
+    if(!item)return kind==="gain"?"No measured EPA dimension increased since the previous event.":"No measured EPA dimension decreased since the previous event.";
+    return <><span className="font-bold">{item.label}</span> {kind==="gain"?"increased":"decreased"} by <strong className="tabular-nums">{Math.abs(item.delta).toFixed(1)} EPA</strong></>;
+  };
+  return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Performance pulse</p><h3 className="mt-1 text-lg font-black text-slate-950 dark:text-slate-50">What's getting better — and what's getting worse?</h3></div><span className="text-xs text-slate-500">Since the previous official event</span></div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Biggest gain</p>
+          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
+          {best?<p className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">{formatRank(best)} among teams with comparable history</p>:null}
+        </div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900 dark:bg-rose-950/30">
+          <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Biggest loss</p>
+          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"loss")}</p>
+          {worst?<p className="mt-2 text-xs text-rose-800 dark:text-rose-300">{formatRank(worst)} by size of decline</p>:null}
+        </div>
+      </div>
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">How does that compare with the field?</p>
+        <div className="mt-3 space-y-3">
+          <div><p className="text-xs text-slate-500">Their strongest improvement</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{best?formatRank(best):"No positive change to rank"}</p><p className="mt-1 text-xs text-slate-500">{best?best.label+" gain":"No EPA category improved."}</p></div>
+          <div className="border-t border-slate-200 pt-3 dark:border-slate-700"><p className="text-xs text-slate-500">Their largest decline</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{worst?formatRank(worst):"No negative change to rank"}</p><p className="mt-1 text-xs text-slate-500">{worst?worst.label+" decline":"No EPA category declined."}</p></div>
+        </div>
+      </div>
+    </div>
+    <p className="mt-3 text-[11px] leading-5 text-slate-500">Compares overall, autonomous, teleop, and endgame EPA changes with the previous official event for teams that have usable records at both events. Rankings are metric-specific; they do not combine unlike statistics into an overall score. EPA is a predictive model estimate, not measured robot performance.</p>
+  </section>;
+}
+
+function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null;data:EventAnalyticsResponse}) {
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2><p className="mt-1 text-sm text-slate-500">A quick read on the team's standing. Detailed model and match analysis follows below.</p></div>
@@ -455,6 +526,7 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnal
       </label>
     </div>
     {!selectedTeam ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p> : !team || !insight ? <p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p> : <>
+      <TeamPerformanceHeadline data={data} team={team} insight={insight}/>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
         <div className="min-w-0"><h3 className="text-xl font-black text-slate-950 dark:text-slate-50">{team.teamNumber} · {team.name}</h3><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{insight.metrics.rank===null?"Official qualification rank unavailable":`Ranked #${insight.metrics.rank}`}{insight.metrics.wins!==null&&insight.metrics.losses!==null?` · ${insight.metrics.wins}–${insight.metrics.losses}–${insight.metrics.ties??0} record`:""}</p></div>
         <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
