@@ -41,6 +41,21 @@ type TeamMatchRow = {
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
+function sumNumericLeavesMatchingKey(value: unknown, pattern: RegExp): number | null {
+  if (!value || typeof value !== "object") return null;
+  let total = 0;
+  let found = false;
+  for (const [key, child] of Object.entries(value)) {
+    if (child && typeof child === "object") {
+      const nested = sumNumericLeavesMatchingKey(child, pattern);
+      if (nested !== null) { total += nested; found = true; }
+    } else if (pattern.test(key) && typeof child === "number" && Number.isFinite(child)) {
+      total += child;
+      found = true;
+    }
+  }
+  return found ? total : null;
+}
 function teamEPA(record: StatboticsMatch | null, teamNumber: number, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
   return record?.[phase]?.[String(teamNumber)];
 }
@@ -143,33 +158,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum,value)=>sum+(value??0),0);
       }
       const actualComponents: Record<string, number> = {};
-      const autoField = ["totalAutoPoints","autoPoints","auto_points"].find((field) => typeof actualRP[field] === "number");
-      const teleopField = ["totalTeleopPoints","teleopPoints","teleop_points"].find((field) => typeof actualRP[field] === "number");
-      const hubScore = actualRP.hubScore && typeof actualRP.hubScore === "object"
-        ? actualRP.hubScore as Record<string, unknown>
-        : null;
-      const endgameFuelPoints = finite(hubScore?.endgamePoints);
-      const endgameTowerPoints = finite(actualRP.endGameTowerPoints);
-      const hasSplit2026Endgame = endgameFuelPoints !== null && endgameTowerPoints !== null;
+      const autoField = Object.keys(actualRP).find((field) => /^(total)?auto(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
+      const teleopField = Object.keys(actualRP).find((field) => /^(total)?teleop(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
+      const endgamePoints = sumNumericLeavesMatchingKey(actualRP, /end.?game/i);
       if (autoField) actualComponents.auto = actualRP[autoField] as number;
       if (teleopField) {
-        const totalTeleop = actualRP[teleopField] as number;
-        // REBUILT's totalTeleopPoints includes both endgame Hub fuel and Tower
-        // points. Keep the phase columns mutually exclusive by removing both
-        // endgame components from the non-endgame teleop value.
-        actualComponents.teleop = hasSplit2026Endgame
-          ? totalTeleop - endgameFuelPoints - endgameTowerPoints
-          : totalTeleop;
+        const teleopTotal = actualRP[teleopField] as number;
+        // Score-breakdown schemas may expose endgame as a subset of the
+        // teleop aggregate or as a separate phase. Remove it only when the
+        // aggregate is explicitly named as a total teleop score.
+        const isTeleopAggregate = /^total/i.test(teleopField.replace(/[_\s-]/g, ""));
+        actualComponents.teleop = isTeleopAggregate && endgamePoints !== null
+          ? teleopTotal - endgamePoints
+          : teleopTotal;
       }
-      if (hasSplit2026Endgame) {
-        actualComponents.endgame = endgameFuelPoints + endgameTowerPoints;
-      } else {
-        // Older score-breakdown formats may expose a single aggregate field.
-        const aggregateEndgameField = ["endGamePoints","endgamePoints","endGameBargePoints","totalTowerPoints"].find((field) => typeof actualRP[field] === "number");
-        if (aggregateEndgameField) actualComponents.endgame = actualRP[aggregateEndgameField] as number;
-        else if (endgameTowerPoints !== null) actualComponents.endgame = endgameTowerPoints;
-      }
-      const foulField = ["foulPoints","foul_points"].find((field) => typeof actualRP[field] === "number");
+      if (endgamePoints !== null) actualComponents.endgame = endgamePoints;
+      const foulField = Object.keys(actualRP).find((field) => /^foul(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
       if (foulField) actualComponents.fouls = actualRP[foulField] as number;
       const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
       const allianceDeltas = own.team_keys.map((key) => {
