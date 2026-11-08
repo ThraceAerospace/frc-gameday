@@ -606,20 +606,85 @@ function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:Team
 function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const result = analysis.eliminationShift;
   const recurring = result.interpretation === "recurring-negative-shift";
-  const label = recurring ? "Recurring negative shift" : result.positiveQualificationEventCount < 3 ? "Insufficient history" : "No established negative shift";
-  return <section className="mt-3 rounded-lg border border-slate-200 p-3">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div><h4 className="text-sm font-bold text-slate-900">Elimination performance shift</h4><p className="text-[11px] text-slate-500">Qualification-to-elimination change in alliance score residual, compared within each event</p></div>
-      <span className={recurring ? "rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800" : "rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600"}>{label}</span>
+  const enoughHistory = result.interpretation !== "insufficient-history";
+  const label = recurring ? "Recurring decline signal" : enoughHistory ? "No consistent decline detected" : "More history needed";
+  const negativeCount = result.events.filter((item) => item.shift < 0).length;
+  const positiveCount = result.events.length - negativeCount;
+  const signed = (value:number|null) => value === null ? "—" : (value > 0 ? "+" : "") + fmt(value) + " pts";
+  return <section className="mt-4 space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="max-w-2xl">
+        <h4 className="text-base font-bold text-slate-900">Elimination performance shift</h4>
+        <p className="mt-1 text-sm leading-6 text-slate-600">Did the team's alliance results move up or down from qualification matches to elimination matches at the same events?</p>
+      </div>
+      <span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (recurring ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700")}>{label}</span>
     </div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <HistoryMetric label="Mean event shift" value={result.meanShift===null?"—":(result.meanShift>0?"+":"")+fmt(result.meanShift)+" pts"}/>
-      <HistoryMetric label="Median event shift" value={result.medianShift===null?"—":(result.medianShift>0?"+":"")+fmt(result.medianShift)+" pts"}/>
-      <HistoryMetric label="Negative shifts after positive quals" value={result.negativeShiftAfterPositiveQualCount+" / "+result.positiveQualificationEventCount}/>
-      <HistoryMetric label="Sign-test p-value" value={fmt(result.signTestPValue, 3)}/>
+
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-xs font-semibold text-slate-500">Typical event shift</p>
+        <p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{signed(result.medianShift)}</p>
+        <p className="mt-1 text-xs text-slate-500">Median change, qual. → elims.</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-xs font-semibold text-slate-500">Average event shift</p>
+        <p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{signed(result.meanShift)}</p>
+        <p className="mt-1 text-xs text-slate-500">Mean change across events</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-xs font-semibold text-slate-500">Events with a decline</p>
+        <p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{negativeCount} <span className="text-sm font-semibold text-slate-400">/ {result.eligibleEventCount}</span></p>
+        <p className="mt-1 text-xs text-slate-500">Negative shift, regardless of size</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-xs font-semibold text-slate-500">Recurrence test</p>
+        <p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{fmt(result.signTestPValue, 3)}</p>
+        <p className="mt-1 text-xs text-slate-500">p-value; smaller means stronger evidence of a recurring pattern</p>
+      </div>
     </div>
-    {result.events.length ? <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>Qual. n</th><th>Elim. n</th><th>Qual. residual</th><th>Elim. residual</th><th>Shift ± 1 SE</th><th>Match evidence</th></tr></thead><tbody>{result.events.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium"><a className="text-blue-700 hover:underline" href={"https://www.thebluealliance.com/event/"+item.event.key} target="_blank" rel="noreferrer">{item.event.shortName??item.event.name}</a></th><td>{item.qualificationMatches}</td><td>{item.eliminationMatches}</td><td className="tabular-nums">{fmt(item.qualificationMeanResidual)}</td><td className="tabular-nums">{fmt(item.eliminationMeanResidual)}</td><td className={item.shift<0?"font-semibold tabular-nums text-rose-700":"font-semibold tabular-nums text-emerald-700"}>{item.shift>0?"+":""}{fmt(item.shift)} ± {fmt(item.shiftStandardError)}</td><td><div className="flex flex-wrap gap-1">{item.qualificationMatchKeys.map((key)=><a key={key} className="text-blue-700 hover:underline" href={"https://www.thebluealliance.com/match/"+key} target="_blank" rel="noreferrer" title="Qualification match">Q</a>)}<span className="text-slate-300">|</span>{item.eliminationMatchKeys.map((key)=><a key={key} className="font-semibold text-amber-700 hover:underline" href={"https://www.thebluealliance.com/match/"+key} target="_blank" rel="noreferrer" title="Elimination match">E</a>)}</div></td></tr>)}</tbody></table></div> : <p className="mt-3 text-xs text-slate-500">No event has at least 3 scored qualification matches and 2 scored elimination matches with usable predictions. More elimination history is needed.</p>}
-    <p className="mt-3 text-[11px] leading-5 text-slate-500">A negative shift means the team's alliance residual was lower in eliminations than qualifications at the same event. The recurrence test counts only declines larger than one estimated standard error, and only after above-prediction qualification performance. The choking-oriented recurrence test only counts events where the qualification residual was positive (above prediction). The sign test measures whether negative shifts recur specifically after above-prediction qualification performances; it is not a causal test. This first-pass signal is unadjusted for partner and opponent strength, and alliance residuals cannot identify an individual robot's contribution. Treat small samples as exploratory, not as a team reputation.</p>
+
+    {result.events.length ? <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h5 className="text-sm font-bold text-slate-900">Event-by-event comparison</h5>
+        <p className="text-xs text-slate-500">{result.events.length} qualifying events · {positiveCount} increased · {negativeCount} decreased</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {result.events.map((item) => {
+          const declined = item.shift < 0;
+          return <article key={item.event.key} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <a className="font-bold text-blue-700 hover:underline" href={"https://www.thebluealliance.com/event/" + item.event.key} target="_blank" rel="noreferrer">{item.event.shortName ?? item.event.name}</a>
+              <span className={"rounded-md px-2 py-1 text-xs font-bold tabular-nums " + (declined ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800")}>{declined ? "Down " : "Up "}{signed(item.shift)}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Qualifications</p>
+                <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{signed(item.qualificationMeanResidual)}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.qualificationMatches} matches</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Eliminations</p>
+                <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{signed(item.eliminationMeanResidual)}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.eliminationMatches} matches</p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <p className="text-xs text-slate-500">Shift uncertainty: ±{fmt(item.shiftStandardError)} pts (1 SE)</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-semibold text-slate-500">Matches:</span>
+                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-50" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchShortName(key)}</a>)}
+                {item.eliminationMatchKeys.map((key) => <a key={key} className="rounded bg-amber-50 px-1.5 py-1 font-semibold text-amber-800 hover:bg-amber-100" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open elimination match">{matchShortName(key)}</a>)}
+              </div>
+            </div>
+          </article>;
+        })}
+      </div>
+    </> : <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm leading-6 text-slate-600">No event has enough usable data yet. Each event needs at least {result.minimumQualificationMatchesPerEvent} scored qualification matches and {result.minimumEliminationMatchesPerEvent} scored elimination matches with predictions.</p>}
+
+    <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+      <p><span className="font-semibold text-slate-800">How to read this:</span> residual = actual alliance score − predicted alliance score. A negative shift means the alliance scored closer to (or further below) its prediction in eliminations than in qualifications. It does not mean the team necessarily scored fewer points.</p>
+      <p className="mt-1">The recurrence test only counts declines larger than one estimated standard error, and only at events where qualification residuals were above zero. p-values are not proof of cause. Partner and opponent strength are not adjusted for, and alliance results cannot isolate one robot's contribution. Treat this as exploratory evidence, not a team label.</p>
+    </div>
   </section>;
 }
 function ResidualPatternPanel({analysis}:{analysis:TeamMatchAnalysis}) {
