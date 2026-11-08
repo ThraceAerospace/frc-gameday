@@ -497,7 +497,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
     const current=currentFor(team.teamNumber),prior=priorFor(team.teamNumber);
     const currentValue=definition.key==="total"?(current?.epaTotal??team.epa):read(current,definition.keys);
     const priorValue=definition.key==="total"?(prior?.epaTotal??null):read(prior,definition.keys);
-    const fallbackTotal=definition.key==="total"?insight.seasonComparison?.change:null;
+    const fallbackTotal=definition.key==="total"?(insight.seasonComparison?.change??null):null;
     const delta:number|null=currentValue!=null&&priorValue!=null?currentValue-priorValue:fallbackTotal;
     if(delta===null||!Number.isFinite(delta))return [];
     const peerDeltas=data.teams.flatMap((peer)=>{
