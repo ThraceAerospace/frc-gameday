@@ -557,7 +557,7 @@ function TeamPerformanceHeadline({team,insight}:{data:EventAnalyticsResponse;tea
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <p className={`text-2xl font-black tabular-nums ${comparison.change>=0?"text-emerald-700":"text-rose-700"}`}>{comparison.change>0?"+":""}{comparison.change.toFixed(1)} EPA</p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)} · current {percentileLabel(comparison.currentEpaPercentile)} percentile</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)} · {comparison.currentEpaPercentile===null?"current event percentile unavailable":`current ${percentileLabel(comparison.currentEpaPercentile)} percentile`}</p>
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{rankLabel(comparison.cohortRank,comparison.cohortSize)} by change</p>
       </div>
     </div>
