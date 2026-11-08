@@ -232,72 +232,86 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 
 function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const summary=analysis.anomalySummary;
-  return <Panel title="Scouting flags" description="Season-wide matches involving this team that deserve a closer look. Flags are investigation prompts, not explanations of what caused an outcome.">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <QualityMetric label="Flagged matches" value={String(summary.matchesWithAnomalies)} detail={`of ${summary.matchesEvaluated} evaluated matches`} />
-      <QualityMetric label="Anomaly frequency" value={summary.frequency===null?"—":`${(summary.frequency*100).toFixed(1)}%`} detail="Share of this team's evaluated matches" />
-      <QualityMetric label="High-confidence misses" value={String(summary.highConfidenceMisses)} detail="Model win probability ≥80%, but alliance lost" />
-      <QualityMetric label="Alliance underperformance" value={String(summary.allianceUnderperformance)} detail="Unusually negative score residuals" />
+  const hasFlags=summary.matchesWithAnomalies>0;
+  return <Panel title="Matches worth reviewing" description="These are season-wide investigation leads, not explanations of what caused a result. Open a match to inspect the full alliance context.">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Matches flagged for review</p>
+        <p className="mt-1 text-3xl font-black tabular-nums text-slate-950 dark:text-slate-50">{summary.matchesWithAnomalies}<span className="ml-2 text-sm font-semibold text-slate-500">/ {summary.matchesEvaluated}</span></p>
+        <p className="mt-1 text-xs text-slate-500">Matches meeting at least one review rule</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">High-confidence losses</p>
+        <p className="mt-1 text-3xl font-black tabular-nums text-slate-950 dark:text-slate-50">{summary.highConfidenceMisses}</p>
+        <p className="mt-1 text-xs text-slate-500">The model gave the alliance at least an 80% chance to win, but it lost</p>
+      </div>
     </div>
-    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500"><span>{summary.allianceOverperformance} unusual overperformance</span><span>·</span><span>{summary.opponentAnomalies} unusual opponent results</span></div>
-    <p className="mt-3 text-xs leading-5 text-slate-500">{summary.baseline}</p>
-    {analysis.anomalies.length ? <div className="mt-4 space-y-3">{analysis.anomalies.map((item)=><article key={item.matchKey} className="rounded-lg border border-slate-200 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{item.matchLabel} · {item.event.name}</p><p className="text-xs text-slate-500">Partners <span className={item.alliance==="red"?"font-semibold text-rose-700":"font-semibold text-blue-700"}>{item.partners.join(" · ")||"—"}</span> · Opponents <span className={item.alliance==="red"?"font-semibold text-blue-700":"font-semibold text-rose-700"}>{item.opponents.join(" · ")||"—"}</span></p></div><div className="flex flex-wrap gap-1">{item.kinds.map((kind)=><span key={kind} className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">{kind.replaceAll("-"," ")}</span>)}</div></div>
-      <ul className="mt-2 space-y-1 text-sm text-slate-600">{item.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
-      <a className="mt-2 inline-block text-xs font-semibold text-slate-700 hover:underline" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
-    </article>)}</div> : <p className="mt-4 text-sm text-slate-500">No matches have met the current anomaly criteria. This is not a guarantee that every match was routine.</p>}
+    <details className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700">
+      <summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">How the review flags break down</summary>
+      <div className="grid gap-3 border-t border-slate-100 p-3 text-sm dark:border-slate-700 sm:grid-cols-3">
+        <div><p className="font-semibold text-slate-900 dark:text-slate-100">{summary.allianceUnderperformance}</p><p className="text-xs text-slate-500">Unusually low alliance scores versus prediction</p></div>
+        <div><p className="font-semibold text-slate-900 dark:text-slate-100">{summary.allianceOverperformance}</p><p className="text-xs text-slate-500">Unusually high alliance scores versus prediction</p></div>
+        <div><p className="font-semibold text-slate-900 dark:text-slate-100">{summary.opponentAnomalies}</p><p className="text-xs text-slate-500">Unusual results on the opposing alliance</p></div>
+      </div>
+      <p className="border-t border-slate-100 px-3 py-2 text-xs leading-5 text-slate-500 dark:border-slate-700">{summary.baseline} Flags require at least eight scored observations for the team's season baseline.</p>
+    </details>
+    {analysis.anomalies.length ? <div className="mt-4 space-y-3">{analysis.anomalies.map((item)=><article key={item.matchKey} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.matchLabel} · {item.event.name}</p><p className="text-xs text-slate-500">Partners <span className={item.alliance==="red"?"font-semibold text-rose-700":"font-semibold text-blue-700"}>{item.partners.join(" · ")||"—"}</span> · Opponents <span className={item.alliance==="red"?"font-semibold text-blue-700":"font-semibold text-rose-700"}>{item.opponents.join(" · ")||"—"}</span></p></div><div className="flex flex-wrap gap-1">{item.kinds.map((kind)=><span key={kind} className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">{kind.replaceAll("-"," ")}</span>)}</div></div>
+      <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">{item.reasons.map((reason)=><li key={reason}>{reason}</li>)}</ul>
+      <a className="mt-2 inline-block text-xs font-semibold text-slate-700 hover:underline dark:text-slate-200" href={`https://www.thebluealliance.com/match/${item.matchKey}`} target="_blank" rel="noreferrer">Inspect match on TBA ↗</a>
+    </article>)}</div> : <p className="mt-4 text-sm text-slate-500">{hasFlags?"Flagged matches are not currently available in the loaded sample.":"No matches meet the current review rules."} This does not guarantee every match was routine.</p>}
   </Panel>;
 }
+
 function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
   const s=analysis.summary;
   const [selectedEvent,setSelectedEvent]=useState(analysis.eventSummaries[0]?.event.key??"");
   const activeEvent=analysis.eventSummaries.find((item)=>item.event.key===selectedEvent)??analysis.eventSummaries[0];
-  return <section className="rounded-xl border border-slate-200 bg-white p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900">Overall Season Performance</h3><p className="mt-1 text-xs text-slate-500">{name} · {analysis.matchCount} matches across {analysis.eventCount} official events</p></div></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-      <HistoryMetric label="Match record" value={`${s.wins}–${s.losses}`}/>
-      <HistoryMetric label="Win rate" value={s.winRate===null?"—":`${(s.winRate*100).toFixed(1)}%`}/>
-      <HistoryMetric label="Mean score error" value={fmt(s.meanAbsoluteError)+" pts"}/>
-      <HistoryMetric label="Prediction bias" value={s.meanResidual===null?"—":`${s.meanResidual>0?"+":""}${fmt(s.meanResidual)} pts`}/>
-      <HistoryMetric label="Score RMSE" value={fmt(s.rootMeanSquareError)+" pts"}/>
-      <HistoryMetric label="EPA first → last" value={`${fmt(s.epaStart,2)} → ${fmt(s.epaEnd,2)}`}/>
+  const rate=(value:number|null)=>value===null?"—":`${(value*100).toFixed(1)}%`;
+  return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950 sm:p-5">
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Season results</h3><p className="mt-1 text-xs text-slate-500">{name} · {analysis.matchCount} matches across {analysis.eventCount} official events</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{s.wins} wins · {s.losses} losses</span></div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Alliance win rate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{rate(s.winRate)}</p><p className="mt-1 text-xs text-slate-500">Across matches involving this team</p></div>
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Typical score prediction miss</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(s.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute difference for the full alliance</p></div>
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Model strength estimate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(s.epaEnd,1)} <span className="text-sm font-semibold">EPA</span></p><p className="mt-1 text-xs text-slate-500">Latest available estimate in this season's match history</p></div>
     </div>
-    <div className="mt-4 rounded-lg border border-slate-200 p-3">
-      <div><h4 className="text-sm font-semibold text-slate-900">Event performance</h4><p className="mt-1 text-xs text-slate-500">Choose an event to isolate its record and prediction results.</p></div>
-      {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-slate-800 bg-slate-800 text-white":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{item.event.shortName??item.event.name}</button>)}</div>
-      {activeEvent?<div role="tabpanel" className="mt-3"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <HistoryMetric label="Matches" value={String(activeEvent.matches)}/>
-        <HistoryMetric label="Match record" value={`${activeEvent.wins}–${activeEvent.losses}`}/>
-        <HistoryMetric label="Win rate" value={activeEvent.winRate===null?"—":`${(activeEvent.winRate*100).toFixed(1)}%`}/>
-        <HistoryMetric label="Mean score error" value={fmt(activeEvent.meanAbsoluteError)+" pts"}/>
-        <HistoryMetric label="Prediction bias" value={activeEvent.meanResidual===null?"—":(activeEvent.meanResidual>0?"+":"")+fmt(activeEvent.meanResidual)+" pts"}/>
-        <HistoryMetric label="Score RMSE" value={fmt(activeEvent.rootMeanSquareError)+" pts"}/>
-        <HistoryMetric label="EPA first → last" value={`${fmt(activeEvent.epaStart,2)} → ${fmt(activeEvent.epaEnd,2)}`}/>
-        <HistoryMetric label="Mean match EPA change" value={fmt(activeEvent.meanMatchEPAChange,2)}/>
-      </div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
-    </div>
+    <details className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700">
+      <summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Prediction diagnostics and event-by-event results</summary>
+      <div className="border-t border-slate-100 p-3 dark:border-slate-700">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div><p className="text-xs text-slate-500">Average prediction direction</p><p className="mt-1 font-bold tabular-nums text-slate-900 dark:text-slate-100">{s.meanResidual===null?"—":(s.meanResidual>0?"+":"")+fmt(s.meanResidual)+" pts"}</p><p className="text-xs text-slate-500">Positive = actual alliance score exceeded prediction</p></div>
+          <div><p className="text-xs text-slate-500">Large misses weighted more heavily (RMSE)</p><p className="mt-1 font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(s.rootMeanSquareError)} pts</p></div>
+          <div><p className="text-xs text-slate-500">Matches with model data</p><p className="mt-1 font-bold tabular-nums text-slate-900 dark:text-slate-100">{analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}</p></div>
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Event-by-event results</h4>
+          {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-slate-800 bg-slate-800 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"}`}>{item.event.shortName??item.event.name}</button>)}</div>
+          {activeEvent?<div role="tabpanel" className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Alliance record</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{activeEvent.wins}–{activeEvent.losses}</p></div><div><p className="text-xs text-slate-500">Win rate</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{rate(activeEvent.winRate)}</p></div><div><p className="text-xs text-slate-500">Typical score miss</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(activeEvent.meanAbsoluteError)} pts</p></div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
+        </div>
+      </div>
+    </details>
     <ResidualPatternPanel analysis={analysis}/>
-    <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Score metrics describe the team's alliance results, not individual robot contribution.</p>
+    <p className="mt-3 text-xs text-slate-500">Score prediction metrics describe the six-team alliance result, not an individual robot's contribution. EPA is a model estimate, not a measured score.</p>
   </section>;
 }
+
 function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phase:"qualification"|"elimination"}) {
   const isQual=phase==="qualification";
   const phaseData=analysis.phaseSummaries.find((item)=>isQual?/qual|qm|^q$/i.test(item.phase):/elim|playoff|^e$/i.test(item.phase));
-  const title=isQual?"Qualification Performance":"Elimination Performance";
-  if(!phaseData) return <section><h3 className="text-base font-bold text-slate-900">{title}</h3><p className="mt-2 text-sm text-slate-500">No {isQual?"qualification":"elimination"} match sample is available yet.</p></section>;
-  return <section>
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900">{title}</h3><p className="mt-1 text-xs text-slate-500">{phaseData.matches} {isQual?"qualification":"elimination"} matches across the official season</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{phaseData.wins}–{phaseData.losses}</span></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-      <HistoryMetric label="Win rate" value={phaseData.winRate===null?"—":`${(phaseData.winRate*100).toFixed(1)}%`}/>
-      <HistoryMetric label="Mean score error" value={fmt(phaseData.meanAbsoluteError)+" pts"}/>
-      <HistoryMetric label="Prediction bias" value={phaseData.meanResidual===null?"—":`${phaseData.meanResidual>0?"+":""}${fmt(phaseData.meanResidual)} pts`}/>
-      <HistoryMetric label="Score RMSE" value={fmt(phaseData.rootMeanSquareError)+" pts"}/>
-      <HistoryMetric label="EPA first → last" value={`${fmt(phaseData.epaStart,2)} → ${fmt(phaseData.epaEnd,2)}`}/>
+  const title=isQual?"Qualification matches":"Elimination matches";
+  if(!phaseData) return <section><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h3><p className="mt-2 text-sm text-slate-500">No {isQual?"qualification":"elimination"} match sample is available yet.</p></section>;
+  return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h3><p className="mt-1 text-xs text-slate-500">{phaseData.matches} matches across the official season</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{phaseData.wins}–{phaseData.losses} alliance record</span></div>
+    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Alliance win rate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{phaseData.winRate===null?"—":`${(phaseData.winRate*100).toFixed(1)}%`}</p><p className="mt-1 text-xs text-slate-500">Results from {isQual?"qualification":"elimination"} matches only</p></div>
+      <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Typical score prediction miss</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(phaseData.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute miss for the full alliance</p></div>
     </div>
-    {isQual&&phaseData.rp.length ? <div className="mt-3"><h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ranking point prediction accuracy</h4><div className="mt-2 grid grid-cols-3 gap-2">{phaseData.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">Brier {fmt(item.brier,3)} · n={item.sampleSize}</p></div>)}</div><p className="mt-2 text-[11px] text-slate-500">RP prediction metrics use matches with both a model probability and a recorded outcome.</p></div>:null}
-    {isQual?<p className="mt-3 text-xs text-slate-500">Residuals are actual alliance score minus predicted alliance score. They include partners and opponents and cannot isolate this team's contribution.</p>:<p className="mt-3 text-xs text-slate-500">Elimination samples are typically much smaller than qualification samples; treat these metrics as descriptive rather than definitive.</p>}
+    <details className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700"><summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Additional model metrics</summary><div className="grid gap-3 border-t border-slate-100 p-3 dark:border-slate-700 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Prediction direction (actual − predicted)</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{phaseData.meanResidual===null?"—":(phaseData.meanResidual>0?"+":"")+fmt(phaseData.meanResidual)+" pts"}</p></div><div><p className="text-xs text-slate-500">Large misses weighted more (RMSE)</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(phaseData.rootMeanSquareError)} pts</p></div><div><p className="text-xs text-slate-500">Model EPA at first → last match</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(phaseData.epaStart,2)} → {fmt(phaseData.epaEnd,2)}</p></div></div></details>
+    {isQual&&phaseData.rp.length ? <details className="mt-2 rounded-lg border border-slate-200 dark:border-slate-700"><summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Ranking-point prediction accuracy</summary><div className="grid grid-cols-3 gap-2 border-t border-slate-100 p-3 dark:border-slate-700">{phaseData.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900 dark:text-slate-100">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">{item.sampleSize} matches · Brier {fmt(item.brier,3)}</p></div>)}</div></details>:null}
+    <p className="mt-3 text-xs text-slate-500">{isQual?"Alliance residuals include partners and opponents; they cannot isolate this team's contribution.":"Elimination samples are usually smaller; treat these results as descriptive, not definitive."}</p>
   </section>;
 }
+
 function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level==="qm").sort((a,b)=>a.match.match_number-b.match.match_number);
   return <Panel title="Qualification match analysis" description="All qualification matches are listed here, not only matches that triggered a review flag.">
