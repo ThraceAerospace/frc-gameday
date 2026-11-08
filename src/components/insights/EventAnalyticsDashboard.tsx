@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import { formatTeamNumber, matchShortName } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchCode } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
@@ -450,7 +450,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
     upsetLoss&&unexpectedWin?standout(unexpectedWin,"Unexpected win","surprise","The model expected this alliance to lose, but it won."):null,
   ].filter((item):item is NonNullable<typeof item>=>item!==null);
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakLabel}</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakResult===null?"No current streak":`${streakCount}-match ${streakResult?"win":"loss"} streak`}</span></div>
     <div className="mt-3 grid gap-2 sm:grid-cols-3">
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{completed.filter((match)=>match.won).length}–{completed.filter((match)=>match.won===false).length}–{scored.length-wins.length-completed.filter((match)=>match.won===false).length}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
@@ -524,10 +524,10 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
     if(!item)return kind==="gain"?"No measured EPA dimension increased since the previous event.":"No measured EPA dimension decreased since the previous event.";
     return <><span className="font-bold">{item.label}</span> {kind==="gain"?"increased":"decreased"} by <strong className="tabular-nums">{Math.abs(item.delta).toFixed(1)} EPA</strong></>;
   };
-  return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Performance pulse</p><h3 className="mt-1 text-lg font-black text-slate-950 dark:text-slate-50">What's getting better — and what's getting worse?</h3></div><span className="text-xs text-slate-500">Since the previous official event</span></div>
-    <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="grid gap-3 sm:grid-cols-2">
+  return <section className="space-y-3">
+    <div className="flex justify-end"><span className="text-xs text-slate-500">Changes since the previous official event</span></div>
+    <div className="grid gap-3 md:grid-cols-3">
+
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
           <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Biggest gain</p>
           <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
@@ -538,7 +538,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
         </div>
       </div>
       <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">How does that compare with the field?</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparison with the field</p>
         <div className="mt-3 space-y-3">
           <div><p className="text-xs text-slate-500">Their strongest improvement</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{best?formatRank(best):"No positive change to rank"}</p><p className="mt-1 text-xs text-slate-500">{best?best.label+" gain":"No EPA category improved."}</p></div>
           <div className="border-t border-slate-200 pt-3 dark:border-slate-700"><p className="text-xs text-slate-500">Their largest decline</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{worst?formatRank(worst):"No negative change to rank"}</p><p className="mt-1 text-xs text-slate-500">{worst?worst.label+" decline":"No EPA category declined."}</p></div>
@@ -560,15 +560,11 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
       </label>
     </div>
     {!selectedTeam ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p> : !team || !insight ? <p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p> : <>
-      <TeamPerformanceHeadline data={data} team={team} insight={insight}/>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <div className="min-w-0"><h3 className="text-xl font-black text-slate-950 dark:text-slate-50">{team.teamNumber} · {team.name}</h3><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{insight.metrics.rank===null?"Official qualification rank unavailable":`Ranked #${insight.metrics.rank}`}{insight.metrics.wins!==null&&insight.metrics.losses!==null?` · ${insight.metrics.wins}–${insight.metrics.losses}–${insight.metrics.ties??0} record`:""}</p></div>
-        <a href={`https://www.thebluealliance.com/team/${team.teamNumber}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
+        <h3 className="text-xl font-black text-slate-950 dark:text-slate-50">{team.teamNumber} · {team.name}</h3>
+        <a href={"https://www.thebluealliance.com/team/" + team.teamNumber} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
       </div>
-      <div className="mt-3 rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">At a glance</p>
-        <p className="mt-1 text-sm leading-6 text-slate-700 dark:text-slate-200">{insight.peerPerformance.interpretation==="insufficient-sample"?"There is not yet enough comparable alliance data to assess performance against similarly rated teams.":insight.peerPerformance.interpretation==="above-peers"?"Alliance results involving this team have been stronger than those of similarly rated alliances.":insight.peerPerformance.interpretation==="below-peers"?"Alliance results involving this team have been weaker than those of similarly rated alliances.":"Alliance results involving this team have been broadly in line with similarly rated alliances."} This is match-level context, not an assessment of an individual robot.</p>
-      </div>
+      <div className="mt-4"><TeamPerformanceHeadline data={data} team={team} insight={insight}/></div>
     </>}
   </section>;
 }
@@ -675,7 +671,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
               <p className="text-xs text-slate-500">Shift uncertainty: ±{fmt(item.shiftStandardError)} pts (1 SE)</p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold text-slate-500">Matches:</span>
-                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-50" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchShortName(key)}</a>)}
+                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-50" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchCode(key)}</a>)}
                 {item.eliminationMatchKeys.map((key) => <a key={key} className="rounded bg-amber-50 px-1.5 py-1 font-semibold text-amber-800 hover:bg-amber-100" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open elimination match">{matchShortName(key)}</a>)}
               </div>
             </div>
