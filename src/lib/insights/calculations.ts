@@ -281,25 +281,145 @@ export function buildSeasonAwareTeamInsights(
   playoffType?: number | null,
 ): import("./types").TeamInsight[] {
   const insights = buildTeamInsights(records, allianceResults, teams, rankings, playoffType);
-  const usable = cohort.records.filter((record) => record.status === "ready" && record.epaTotal !== null);
-  const changes = teams.flatMap((team) => {
-    const current = usable.find((record) => record.teamNumber === team.teamNumber && record.event.key === targetEventKey);
-    const prior = usable.filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
-      .sort((a,b) => b.event.startDate.localeCompare(a.event.startDate))[0];
-    if (!current || !prior || current.epaTotal === null || prior.epaTotal === null) return [];
-    return [{ teamNumber: team.teamNumber, priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate }, priorEPA: prior.epaTotal, currentEPA: current.epaTotal, change: current.epaTotal - prior.epaTotal }];
+  const finite = (value: number | null | undefined): value is number =>
+    typeof value === "number" && Number.isFinite(value);
+  const componentValue = (
+    record: import("./types").SeasonCohortRecord | undefined,
+    keys: string[],
+  ): number | null => {
+    for (const key of keys) {
+      const value = record?.breakdown[key];
+      if (finite(value)) return value;
+    }
+    return null;
+  };
+  const componentDefinitions = {
+    auto: ["auto_epa", "auto", "auto_points"],
+    teleop: ["teleop_epa", "teleop", "teleop_points"],
+    endgame: ["endgame_epa", "endgame", "endgame_points"],
+  } as const;
+
+  // Select the latest official prior event first, regardless of whether its
+  // Statbotics record is usable. If that latest event has no usable record,
+  // the team is excluded rather than silently falling back to an older event.
+  const comparisons = teams.flatMap((team) => {
+    const current = cohort.records.find((record) =>
+      record.teamNumber === team.teamNumber && record.event.key === targetEventKey,
+    );
+    const prior = cohort.records
+      .filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
+      .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
+    if (!current || current.status !== "ready" || !finite(current.epaTotal) ||
+        !prior || prior.status !== "ready" || !finite(prior.epaTotal)) return [];
+
+    const components = {
+      auto: (() => {
+        const before = componentValue(prior, [...componentDefinitions.auto]);
+        const now = componentValue(current, [...componentDefinitions.auto]);
+        return before !== null && now !== null ? { prior: before, current: now, change: now - before } : null;
+      })(),
+      teleop: (() => {
+        const before = componentValue(prior, [...componentDefinitions.teleop]);
+        const now = componentValue(current, [...componentDefinitions.teleop]);
+        return before !== null && now !== null ? { prior: before, current: now, change: now - before } : null;
+      })(),
+      endgame: (() => {
+        const before = componentValue(prior, [...componentDefinitions.endgame]);
+        const now = componentValue(current, [...componentDefinitions.endgame]);
+        return before !== null && now !== null ? { prior: before, current: now, change: now - before } : null;
+      })(),
+    };
+    return [{
+      teamNumber: team.teamNumber,
+      priorEvent: { key: prior.event.key, name: prior.event.name, startDate: prior.event.startDate },
+      priorEPA: prior.epaTotal,
+      currentEPA: current.epaTotal,
+      change: current.epaTotal - prior.epaTotal,
+      components,
+    }];
   });
-  const ordered = [...changes].sort((a,b) => b.change-a.change);
-  const byTeam = new Map(changes.map((item) => [item.teamNumber, { ...item, cohortRank: ordered.findIndex((other) => other.teamNumber === item.teamNumber)+1, cohortSize: ordered.length }]));
+
+  const rankFor = (select: (item: typeof comparisons[number]) => number | null) => {
+    const eligible = comparisons.flatMap((item) => {
+      const change = select(item);
+      return change === null ? [] : [{ teamNumber: item.teamNumber, change }];
+    });
+    return new Map(eligible.map((item) => [
+      item.teamNumber,
+      {
+        cohortRank: 1 + eligible.filter((other) => other.change > item.change).length,
+        cohortSize: eligible.length,
+      },
+    ]));
+  };
+  const totalRanks = rankFor((item) => item.change);
+  // Component denominators are independent of total-EPA eligibility. A team
+  // with valid component snapshots still belongs in that component's ranking
+  // even if its total-points field is unavailable.
+  const rankComponent = (key: keyof typeof componentDefinitions) => {
+    const eligible = teams.flatMap((team) => {
+      const current = cohort.records.find((record) =>
+        record.teamNumber === team.teamNumber && record.event.key === targetEventKey,
+      );
+      const prior = cohort.records
+        .filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
+        .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
+      if (!current || current.status !== "ready" || !prior || prior.status !== "ready") return [];
+      const before = componentValue(prior, [...componentDefinitions[key]]);
+      const now = componentValue(current, [...componentDefinitions[key]]);
+      return before !== null && now !== null ? [{ teamNumber: team.teamNumber, change: now - before }] : [];
+    });
+    return new Map(eligible.map((item) => [
+      item.teamNumber,
+      {
+        cohortRank: 1 + eligible.filter((other) => other.change > item.change).length,
+        cohortSize: eligible.length,
+      },
+    ]));
+  };
+  const componentRanks = {
+    auto: rankComponent("auto"),
+    teleop: rankComponent("teleop"),
+    endgame: rankComponent("endgame"),
+  };
+  const byTeam = new Map(comparisons.map((item) => {
+    const totalRank = totalRanks.get(item.teamNumber)!;
+    const rankedComponent = (key: keyof typeof componentRanks) => {
+      const value = item.components[key];
+      const rank = componentRanks[key].get(item.teamNumber);
+      return value && rank ? { ...value, ...rank } : null;
+    };
+    return [item.teamNumber, {
+      ...item,
+      ...totalRank,
+      components: {
+        auto: rankedComponent("auto"),
+        teleop: rankedComponent("teleop"),
+        endgame: rankedComponent("endgame"),
+      },
+    }] as const;
+  }));
+
   return insights.map((insight) => {
     const history = cohort.records.filter((record) => record.teamNumber === insight.teamNumber)
-      .sort((a,b) => a.event.startDate.localeCompare(b.event.startDate))
-      .map((record) => ({ event: { key: record.event.key, name: record.event.name, startDate: record.event.startDate }, epaTotal: record.epaTotal, matches: record.matches, status: record.status }));
+      .sort((a, b) => a.event.startDate.localeCompare(b.event.startDate))
+      .map((record) => ({
+        event: { key: record.event.key, name: record.event.name, startDate: record.event.startDate },
+        epaTotal: record.epaTotal, matches: record.matches, status: record.status,
+      }));
     const comparison = byTeam.get(insight.teamNumber) ?? null;
     if (!comparison) return { ...insight, seasonComparison: null, seasonHistory: history };
-    const ordinal = (value:number) => { const n=value%100; return n>=11&&n<=13?"th":value%10===1?"st":value%10===2?"nd":value%10===3?"rd":"th"; };
-    return { ...insight, seasonComparison: comparison, seasonHistory: history, summary: [...insight.summary,
-      `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change>=0?"increased":"decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ${comparison.cohortRank}${ordinal(comparison.cohortRank)}-largest change among ${comparison.cohortSize} event teams with usable prior-event records.`] };
+    const ordinal = (value: number) => {
+      const n = value % 100;
+      return n >= 11 && n <= 13 ? "th" : value % 10 === 1 ? "st" : value % 10 === 2 ? "nd" : value % 10 === 3 ? "rd" : "th";
+    };
+    return {
+      ...insight,
+      seasonComparison: comparison,
+      seasonHistory: history,
+      summary: [...insight.summary,
+        `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change >= 0 ? "increased" : "decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ranked ${comparison.cohortRank}${ordinal(comparison.cohortRank)} among ${comparison.cohortSize} event teams with usable current and most-recent-prior-event records.`],
+    };
   });
 }
 

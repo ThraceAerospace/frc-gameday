@@ -527,72 +527,52 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   </section>;
 }
 
-function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsResponse;team:TeamAnalyticsRow;insight:TeamInsight}) {
-  type Change = {key:string;label:string;delta:number;rank:number;fieldSize:number};
-  const records=data.seasonCohort?.records??[];
-  const currentEventKey=data.event.key;
-  const priorFor=(teamNumber:number)=>records.filter((record)=>record.teamNumber===teamNumber&&record.status==="ready"&&record.event.startDate<data.event.start_date).sort((a,b)=>b.event.startDate.localeCompare(a.event.startDate))[0];
-  const currentFor=(teamNumber:number)=>records.find((record)=>record.teamNumber===teamNumber&&record.event.key===currentEventKey&&record.status==="ready");
-  const read=(record:{breakdown:Record<string,number>;epaTotal:number|null}|undefined,keys:string[]):number|null=>{
-    for(const key of keys){const value=record?.breakdown?.[key];if(typeof value==="number"&&Number.isFinite(value))return value;}
-    return null;
-  };
-  const definitions=[
-    {key:"total",label:"Overall EPA",keys:[] as string[]},
-    {key:"auto",label:"Autonomous EPA",keys:["auto_epa","auto","auto_points"]},
-    {key:"teleop",label:"Teleop EPA",keys:["teleop_epa","teleop","teleop_points"]},
-    {key:"endgame",label:"Endgame EPA",keys:["endgame_epa","endgame","endgame_points"]},
-  ];
-  const teamChanges=definitions.flatMap((definition)=>{
-    const current=currentFor(team.teamNumber),prior=priorFor(team.teamNumber);
-    const currentValue=definition.key==="total"?(current?.epaTotal??team.epa):read(current,definition.keys);
-    const priorValue=definition.key==="total"?(prior?.epaTotal??null):read(prior,definition.keys);
-    const fallbackTotal=definition.key==="total"?(insight.seasonComparison?.change??null):null;
-    const delta:number|null=currentValue!=null&&priorValue!=null?currentValue-priorValue:fallbackTotal;
-    if(delta===null||!Number.isFinite(delta))return [];
-    const peerDeltas=data.teams.flatMap((peer)=>{
-      const peerCurrent=currentFor(peer.teamNumber),peerPrior=priorFor(peer.teamNumber);
-      const now=definition.key==="total"?(peerCurrent?.epaTotal??peer.epa):read(peerCurrent,definition.keys);
-      const before=definition.key==="total"?(peerPrior?.epaTotal??null):read(peerPrior,definition.keys);
-      return now!=null&&before!=null&&Number.isFinite(now-before)?[{teamNumber:peer.teamNumber,delta:now-before}]:[];
-    });
-    const ranked=[...peerDeltas].sort((a,b)=>b.delta-a.delta);
-    const rank=ranked.findIndex((item)=>item.teamNumber===team.teamNumber)+1;
-    return [{key:definition.key,label:definition.label,delta,rank,fieldSize:ranked.length} satisfies Change];
-  });
-  const best=teamChanges.filter((item)=>item.delta>0).sort((a,b)=>b.delta-a.delta)[0]??null;
-  const worst=teamChanges.filter((item)=>item.delta<0).sort((a,b)=>a.delta-b.delta)[0]??null;
-  const formatRank=(item:Change|null)=>{
-    if(!item||!item.rank||!item.fieldSize)return "Not enough comparable event history";
-    return `Ranked #${item.rank} of ${item.fieldSize}`;
-  };
-  const movement=(item:Change|null,kind:"gain"|"loss")=>{
-    if(!item)return kind==="gain"?"No measured EPA dimension increased since the previous event.":"No measured EPA dimension decreased since the previous event.";
-    return <><span className="font-bold">{item.label}</span> {kind==="gain"?"increased":"decreased"} by <strong className="tabular-nums">{Math.abs(item.delta).toFixed(1)} EPA</strong></>;
-  };
-  return <section className="space-y-3">
-    <div className="flex justify-end"><span className="text-xs text-slate-500">Changes since the previous official event</span></div>
-    <div className="grid gap-3 md:grid-cols-3">
+function TeamPerformanceHeadline({team,insight}:{data:EventAnalyticsResponse;team:TeamAnalyticsRow;insight:TeamInsight}) {
+  const comparison=insight.seasonComparison;
+  if(!comparison) return <section className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
+    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Prior-event comparison unavailable</p>
+    <p className="mt-1 text-xs leading-5 text-slate-500">A usable Statbotics EPA record is not available for this team's most recent prior official event and the current event. The analysis does not substitute an older event or treat missing data as zero.</p>
+  </section>;
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
-          <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Biggest gain</p>
-          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
-        </div>
-        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900 dark:bg-rose-950/30">
-          <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Biggest loss</p>
-          <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"loss")}</p>
-        </div>
-      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparison with the field</p>
-        <div className="mt-3 space-y-3">
-          <div><p className="text-xs text-slate-500">Their strongest improvement</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{best?formatRank(best):"No positive change to rank"}</p><p className="mt-1 text-xs text-slate-500">{best?best.label+" gain":"No EPA category improved."}</p></div>
-          <div className="border-t border-slate-200 pt-3 dark:border-slate-700"><p className="text-xs text-slate-500">Their largest decline</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{worst?formatRank(worst):"No negative change to rank"}</p><p className="mt-1 text-xs text-slate-500">{worst?worst.label+" decline":"No EPA category declined."}</p></div>
-        </div>
+  const components=[
+    {key:"auto" as const,label:"Autonomous",value:comparison.components.auto},
+    {key:"teleop" as const,label:"Teleop",value:comparison.components.teleop},
+    {key:"endgame" as const,label:"Endgame",value:comparison.components.endgame},
+  ];
+  const rankedComponents=components.filter((item)=>item.value!==null);
+  const best=rankedComponents.filter((item)=>item.value!.change>0).sort((a,b)=>b.value!.change-a.value!.change)[0]??null;
+  const worst=rankedComponents.filter((item)=>item.value!.change<0).sort((a,b)=>a.value!.change-b.value!.change)[0]??null;
+  const rankLabel=(rank:number,size:number)=>`#${rank} of ${size}`;
+  const movement=(item:typeof best,kind:"gain"|"decline")=>item
+    ? <><strong>{item.label} EPA</strong> {kind==="gain"?"increased":"decreased"} by <strong className="tabular-nums">{Math.abs(item.value!.change).toFixed(1)}</strong></>
+    : kind==="gain"?"No EPA component increased.":"No EPA component decreased.";
+  return <section className="space-y-3">
+    <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Overall event EPA change</p>
+        <p className="text-xs text-slate-500">Since {comparison.priorEvent.name}</p>
+      </div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className={`text-2xl font-black tabular-nums ${comparison.change>=0?"text-emerald-700":"text-rose-700"}`}>{comparison.change>0?"+":""}{comparison.change.toFixed(1)} EPA</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)}</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{rankLabel(comparison.cohortRank,comparison.cohortSize)} by change</p>
       </div>
     </div>
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+        <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Largest component gain</p>
+        <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
+        {best?<p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rankLabel(best.value!.cohortRank,best.value!.cohortSize)} among teams with both component records</p>:null}
+      </div>
+      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900 dark:bg-rose-950/30">
+        <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Largest component decline</p>
+        <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"decline")}</p>
+        {worst?<p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rankLabel(worst.value!.cohortRank,worst.value!.cohortSize)} among teams with both component records</p>:null}
+      </div>
+    </div>
+    <p className="text-[11px] leading-5 text-slate-500">Each team is compared with its own most recent prior official event, which may differ from this team's prior event. Ranks include all event teams with usable current and prior records; component ranks use the subset with that component available. EPA changes are model updates, not measured scoring changes.</p>
   </section>;
 }
-
 function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null;data:EventAnalyticsResponse}) {
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -616,6 +596,10 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:TeamInsight}) {
   const change=insight.seasonComparison;
+  const currentEPA=change?.currentEPA??team.epa;
+  const currentAuto=change?.components.auto?.current??team.autoEpa;
+  const currentTeleop=change?.components.teleop?.current??team.teleopEpa;
+  const currentEndgame=change?.components.endgame?.current??team.endgameEpa;
   return <details className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
     <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Team model details and comparisons</summary>
     <div className="space-y-4 border-t border-slate-100 p-4 dark:border-slate-800">
@@ -623,8 +607,8 @@ function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:Team
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Estimated scoring profile</h3>
         <p className="mt-1 text-xs text-slate-500">Statbotics EPA estimates, not measured points scored by the robot.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(team.epa)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{team.epaPercentile===null?"Event percentile unavailable":`${Math.round(team.epaPercentile*100)}th percentile at this event`}</p></div>
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[team.autoEpa,team.teleopEpa,team.endgameEpa].map((value,index)=>{const total=[team.autoEpa,team.teleopEpa,team.endgameEpa].reduce<number>((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(team.autoEpa)}</span><span>Teleop {fmt(team.teleopEpa)}</span><span>Endgame {fmt(team.endgameEpa)}</span></div></div>
+          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(currentEPA)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{team.epaPercentile===null?"Event percentile unavailable":`${Math.round(team.epaPercentile*100)}th percentile at this event`}</p></div>
+          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[currentAuto,currentTeleop,currentEndgame].map((value,index)=>{const total=[currentAuto,currentTeleop,currentEndgame].reduce<number>((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(currentAuto)}</span><span>Teleop {fmt(currentTeleop)}</span><span>Endgame {fmt(currentEndgame)}</span></div></div>
         </div>
       </section>
       <section>
@@ -1001,20 +985,10 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   const qualificationLeader=rankedTeams[0];
   const highestEpaTeam=epaTeams.find((team)=>team.epa!==null);
   const leadFinding=data.findings[0];
-  const cohortRecords=data.seasonCohort?.records??[];
-  const componentValue=(breakdown:Record<string,number>|undefined,keys:string[])=>{
-    for(const key of keys)if(typeof breakdown?.[key]==="number"&&Number.isFinite(breakdown[key]))return breakdown[key];
-    return null;
-  };
-  const trend=(current:number|null,prior:number|null)=>{
-    if(current===null||prior===null)return <span aria-label="Previous event comparison unavailable" className="text-slate-400">—</span>;
-    if(current===prior)return <span aria-label="No change since last event" className="text-slate-400">−</span>;
-    const increased=current>prior;
-    return <svg aria-label={increased?"Increased since last event":"Decreased since last event"} role="img" className={"inline size-4 "+(increased?"text-emerald-600":"text-rose-600")} viewBox="0 0 20 20" fill="none"><path d={increased?"m5 12 5-5 5 5":"m5 8 5 5 5-5"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  };
   const insights=data.teamInsights??[];
-  const improved=insights.filter((item)=>item.seasonComparison).sort((a,b)=>(b.seasonComparison?.change??0)-(a.seasonComparison?.change??0)).slice(0,5);
-  const declined=insights.filter((item)=>item.seasonComparison).sort((a,b)=>(a.seasonComparison?.change??0)-(b.seasonComparison?.change??0)).slice(0,5);
+  const comparisons=insights.flatMap((item)=>item.seasonComparison?[{teamNumber:item.teamNumber,comparison:item.seasonComparison}]:[]);
+  const improved=[...comparisons].sort((a,b)=>b.comparison.change-a.comparison.change).slice(0,5);
+  const declined=[...comparisons].sort((a,b)=>a.comparison.change-b.comparison.change).slice(0,5);
   const residualDiagnostics=data.teams.map((team)=>{
     const values=data.allianceResults
       .filter((item)=>item.teamKeys.includes(team.teamKey)&&item.actual!==null&&item.residual!==null)
@@ -1043,7 +1017,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
     return {label:"Near prediction",tone:"bg-slate-100 text-slate-700"};
   };
   const residualDiagnosticsSorted=[...residualDiagnostics].sort((a,b)=>(a.mean??Infinity)-(b.mean??Infinity));
-  const movement=(items:TeamInsight[],empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=>{const cmp=item.seasonComparison!;return <li key={item.teamNumber} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.teamNumber)}</div><div className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">Since Last Event</span><strong className={"tabular-nums "+(cmp.change>=0?"text-emerald-700":"text-rose-700")}>{cmp.change>0?"+":""}{fmt(cmp.change)}</strong></div></li>; }):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
+  const movement=(items:typeof comparisons,empty:string)=><ol className="space-y-2">{items.length?items.map(({teamNumber,comparison})=><li key={teamNumber} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0">{teamNumberLink(teamNumber)}<span className="ml-2 text-[10px] text-slate-400">{comparison.priorEvent.name}</span></div><div className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">#{comparison.cohortRank} of {comparison.cohortSize}</span><strong className={"tabular-nums "+(comparison.change>=0?"text-emerald-700":"text-rose-700")}>{comparison.change>0?"+":""}{fmt(comparison.change)}</strong></div></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   const residualList=(items:typeof residuals,empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=><li key={item.team.teamKey} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.team.teamNumber)}</div><strong className={"shrink-0 tabular-nums "+(item.mean>0?"text-emerald-700":"text-rose-700")}>{item.mean>0?"+":""}{fmt(item.mean)} pts</strong></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   return <div className="space-y-5">
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Event overview</p><h2 className="mt-1 text-lg font-bold text-slate-900">The competitive picture</h2><p className="mt-1 text-sm text-slate-500">Who is gaining ground, who is falling behind expectations, and where the model is being surprised.</p></div><span className="text-xs text-slate-500">{data.teams.length} teams · {completedMatches} scored matches represented</span></div>
@@ -1057,7 +1031,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
         </ul>
       </div>
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <Panel title="EPA Change from Last Event" description="Change in Statbotics event EPA total-points estimate versus each team's most recent preceding official event."><div className="grid gap-4 sm:grid-cols-2"><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-emerald-700">Largest EPA Gain</p>{movement(improved,"No usable prior-event comparisons yet.")}</div><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-700">Largest EPA Decline</p>{movement(declined,"No usable prior-event comparisons yet.")}</div></div><p className="mt-3 text-[11px] leading-5 text-slate-500">This is movement in a predictive model estimate, not measured scoring improvement. Teams without a preceding event record are omitted.</p></Panel>
+        <Panel title="EPA Change from Last Event" description="Every team is compared with its own most recent prior official event, regardless of whether that event was attended by other teams here."><div className="grid gap-4 sm:grid-cols-2"><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-emerald-700">Largest EPA Gain</p>{movement(improved,"No usable prior-event comparisons yet.")}</div><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-700">Largest EPA Decline</p>{movement(declined,"No usable prior-event comparisons yet.")}</div></div><p className="mt-3 text-[11px] leading-5 text-slate-500">{comparisons.length} of {data.teams.length} event teams have usable current and most-recent-prior-event EPA records. Others remain included in event standings and analysis. EPA is a predictive model estimate, not measured scoring improvement.</p></Panel>
         <Panel title="Outside the margin of error" description="Teams whose average alliance score residual is distinguishable from zero after accounting for sample size."><div className="grid gap-4 sm:grid-cols-2"><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-emerald-700">Above prediction</p>{residualList(over,"No teams currently clear the positive uncertainty band.")}</div><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-700">Below prediction</p>{residualList(under,"No teams currently clear the negative uncertainty band.")}</div></div><details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-700">Show every team's residual and sample size ({residualDiagnostics.length})</summary><div className="mt-2 overflow-x-auto"><table className="w-full min-w-[540px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Team</th><th className="py-2 text-right">Mean residual</th><th className="py-2 text-right">95% margin</th><th className="py-2 text-right">Samples</th><th className="py-2 pl-3">Assessment</th></tr></thead><tbody>{residualDiagnosticsSorted.map((item)=>{const status=performanceStatus(item.team.teamKey);return <tr key={item.team.teamKey} className="border-b border-slate-100"><th className="py-2 text-left">{teamNumberLink(item.team.teamNumber)}</th><td className="py-2 text-right font-semibold tabular-nums">{item.mean===null?"—":(item.mean>0?"+":"")+fmt(item.mean)+" pts"}</td><td className="py-2 text-right tabular-nums">{item.margin===null?"—":"±"+fmt(item.margin)}</td><td className="py-2 text-right tabular-nums">{item.count}</td><td className="py-2 pl-3"><span className={"whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold "+status.tone}>{status.label}</span></td></tr>;})}</tbody></table></div></details><p className="mt-3 text-[11px] leading-5 text-slate-500">Residual = actual alliance score − Statbotics predicted alliance score. Each observation belongs to the team's own alliance and includes its two alliance partners; it does not include the opposing alliance. The uncertainty margin uses a two-sided 95% t interval (minimum three scored samples). Alliance-level results cannot isolate one robot's contribution.</p></Panel>
       </div>
     </section>
@@ -1070,16 +1044,12 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
         {epaTeams.length?<div className="overflow-x-auto"><table className="w-full min-w-[680px] table-fixed text-sm"><colgroup><col className="w-[18%]"/><col className="w-[12%]"/><col className="w-[16%]"/><col className="w-[18%]"/><col className="w-[18%]"/><col className="w-[18%]"/></colgroup>
           <thead className="bg-white"><tr className="border-b text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-2">Team</th><th className="py-2 px-1 text-right">EPA</th><th className="py-2 px-1 text-right">Event percentile</th><th className="py-2 px-1 text-right">Auto</th><th className="py-2 px-1 text-right">Teleop</th><th className="py-2 pl-1 text-right">Endgame</th></tr></thead>
           <tbody>{epaTeams.map((team)=>{
-            const currentRecord=cohortRecords.find((record)=>record.teamNumber===team.teamNumber&&record.event.key===data.event.key);
-            const priorRecord=cohortRecords.filter((record)=>record.teamNumber===team.teamNumber&&record.status==="ready"&&record.event.startDate<data.event.start_date).sort((a,b)=>b.event.startDate.localeCompare(a.event.startDate))[0];
-            const currentAuto=componentValue(currentRecord?.breakdown,["auto_epa","auto","auto_points"])??team.autoEpa;
-            const currentTeleop=componentValue(currentRecord?.breakdown,["teleop_epa","teleop","teleop_points"])??team.teleopEpa;
-            const currentEndgame=componentValue(currentRecord?.breakdown,["endgame_epa","endgame","endgame_points"])??team.endgameEpa;
-            const priorAuto=componentValue(priorRecord?.breakdown,["auto_epa","auto","auto_points"]);
-            const priorTeleop=componentValue(priorRecord?.breakdown,["teleop_epa","teleop","teleop_points"]);
-            const priorEndgame=componentValue(priorRecord?.breakdown,["endgame_epa","endgame","endgame_points"]);
-            const total=currentRecord?.epaTotal??team.epa;
-            return <tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 pr-2 text-left">{teamNumberLink(team.teamNumber)}</th><td className="px-1 text-right font-semibold tabular-nums">{fmt(total)}</td><td className="px-1 text-right tabular-nums">{percentileLabel(team.epaPercentile)}</td><td className="px-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(currentAuto)}{trend(currentAuto,priorAuto)}</span></td><td className="px-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(currentTeleop)}{trend(currentTeleop,priorTeleop)}</span></td><td className="pl-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(currentEndgame)}{trend(currentEndgame,priorEndgame)}</span></td></tr>;
+            const comparison=insights.find((item)=>item.teamNumber===team.teamNumber)?.seasonComparison;
+            const auto=comparison?.components.auto??null;
+            const teleop=comparison?.components.teleop??null;
+            const endgame=comparison?.components.endgame??null;
+            const trend=(change:number|null)=>change===null?<span aria-label="Previous event comparison unavailable" className="text-slate-400">—</span>:change===0?<span aria-label="No change since last event" className="text-slate-400">−</span>:<span aria-label={change>0?"Increased since last event":"Decreased since last event"} className={change>0?"text-emerald-600":"text-rose-600"}>{change>0?"↑":"↓"}</span>;
+            return <tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 pr-2 text-left">{teamNumberLink(team.teamNumber)}</th><td className="px-1 text-right font-semibold tabular-nums">{fmt(comparison?.currentEPA??team.epa)}</td><td className="px-1 text-right tabular-nums">{percentileLabel(team.epaPercentile)}</td><td className="px-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(auto?.current??team.autoEpa)}{trend(auto?.change??null)}</span></td><td className="px-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(teleop?.current??team.teleopEpa)}{trend(teleop?.change??null)}</span></td><td className="pl-1 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(endgame?.current??team.endgameEpa)}{trend(endgame?.change??null)}</span></td></tr>;
           })}</tbody>
         </table></div>:<p className="text-sm text-slate-500">EPA records are not available yet.</p>}
       </Panel>
