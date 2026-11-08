@@ -41,15 +41,16 @@ type TeamMatchRow = {
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function sumNumericLeavesMatchingKey(value: unknown, pattern: RegExp): number | null {
+function sumNumericLeavesMatchingKey(value: unknown, pattern: RegExp, parentIsMatch = false): number | null {
   if (!value || typeof value !== "object") return null;
   let total = 0;
   let found = false;
   for (const [key, child] of Object.entries(value)) {
+    const matchesPath = parentIsMatch || pattern.test(key);
     if (child && typeof child === "object") {
-      const nested = sumNumericLeavesMatchingKey(child, pattern);
+      const nested = sumNumericLeavesMatchingKey(child, pattern, matchesPath);
       if (nested !== null) { total += nested; found = true; }
-    } else if (pattern.test(key) && typeof child === "number" && Number.isFinite(child)) {
+    } else if (matchesPath && typeof child === "number" && Number.isFinite(child)) {
       total += child;
       found = true;
     }
