@@ -177,10 +177,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const residuals = scored.map((row) => row.residual as number);
       const wins = items.filter((row) => row.won === true).length;
       const decisions = items.filter((row) => row.won !== null).length;
+      const ties = items.filter((row) => row.won === null && row.actual === row.opponentActual).length;
       const deltas = items.flatMap((row) => row.deltaEPA === null ? [] : [row.deltaEPA]);
       const rp = ["energized","supercharged","traversal"].map((key) => { const samples=items.flatMap((row)=>row.rpOutcomes.filter((item)=>item.key===key&&item.predicted!==null&&item.achieved!==null).map((item)=>({p:item.predicted as number,y:item.achieved?1:0}))); return {key,sampleSize:samples.length,accuracy:samples.length?samples.filter((item)=>(item.p>=0.5?1:0)===item.y).length/samples.length:null,brier:samples.length?samples.reduce((sum,item)=>sum+(item.p-item.y)**2,0)/samples.length:null}; });
       return {
-        matches: items.length, wins, losses: decisions - wins,
+        matches: items.length, wins, losses: decisions - wins, ties,
         winRate: decisions ? wins / decisions : null,
         meanResidual: residuals.length ? residuals.reduce((sum, value) => sum + value, 0) / residuals.length : null,
         meanAbsoluteError: residuals.length ? residuals.reduce((sum, value) => sum + Math.abs(value), 0) / residuals.length : null,
