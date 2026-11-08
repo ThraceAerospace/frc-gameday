@@ -360,12 +360,12 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 }
 
 
-function TeamCurrentEventOutlook({analysis,records,teamNumber,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;timezone:string|null}) {
-  const currentMatches=analysis.matches.filter((match)=>match.event.key===records[0]?.match.event_key || match.event.key===analysis.matches[0]?.event.key);
+function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;timezone:string|null}) {
+  const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey);
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   let streakCount=0;
   let streakResult:boolean|null=null;
-  for (const match of ordered) {
+  for (const match of [...ordered].reverse()) {
     if (match.won===null) break;
     if (streakResult===null) streakResult=match.won;
     if (match.won!==streakResult) break;
