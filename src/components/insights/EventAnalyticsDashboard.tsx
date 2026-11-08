@@ -19,7 +19,13 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "scouting", label: "Suggested Review" },
 ];
 const fmt = (value: number | null | undefined, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
-const percentileLabel = (value: number | null) => value === null ? "—" : `${Math.round(value * 100)}th`;
+const ordinal = (value: number) => {
+  const lastTwo = value % 100;
+  const suffix = lastTwo >= 11 && lastTwo <= 13 ? "th"
+    : value % 10 === 1 ? "st" : value % 10 === 2 ? "nd" : value % 10 === 3 ? "rd" : "th";
+  return `${value}${suffix}`;
+};
+const percentileLabel = (value: number | null) => value === null ? "—" : ordinal(Math.round(value * 100));
 
 function allianceTeamNumbers(teamNumber: number, otherTeams: string[]): string[] {
   return [...new Set([String(teamNumber), ...otherTeams])];
@@ -236,12 +242,12 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
 function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const summary=analysis.anomalySummary;
   const hasFlags=summary.matchesWithAnomalies>0;
-  return <Panel title="Matches worth reviewing" description="These are season-wide investigation leads, not explanations of what caused a result. Open a match to inspect the full alliance context.">
+  return <Panel title="Matches worth reviewing" description="Season-wide review leads involving this team. A flag may concern this team's alliance, the opposing alliance, or an unexpected win-probability result; it is not an explanation of cause.">
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Matches flagged for review</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Matches involving this team flagged</p>
         <p className="mt-1 text-3xl font-black tabular-nums text-slate-950 dark:text-slate-50">{summary.matchesWithAnomalies}<span className="ml-2 text-sm font-semibold text-slate-500">/ {summary.matchesEvaluated}</span></p>
-        <p className="mt-1 text-xs text-slate-500">Matches meeting at least one review rule</p>
+        <p className="mt-1 text-xs text-slate-500">At least one team-side, opponent-side, or prediction flag</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">High-confidence losses</p>
@@ -275,7 +281,7 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
     <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Season results</h3><p className="mt-1 text-xs text-slate-500">{name} · {analysis.matchCount} matches across {analysis.eventCount} official events</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{s.wins} wins · {s.losses} losses{s.ties?` · ${s.ties} ties`:""}</span></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Alliance win rate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{rate(s.winRate)}</p><p className="mt-1 text-xs text-slate-500">Across matches involving this team</p></div>
-      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Typical score prediction miss</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(s.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute difference for the full alliance</p></div>
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Mean absolute prediction error</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(s.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute difference for the full alliance</p></div>
       <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Model strength estimate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(s.epaEnd,1)} <span className="text-sm font-semibold">EPA</span></p><p className="mt-1 text-xs text-slate-500">Latest available estimate in this season's match history</p></div>
     </div>
     <details className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -289,7 +295,7 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
         <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Event-by-event results</h4>
           {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-slate-800 bg-slate-800 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"}`}>{item.event.name}</button>)}</div>
-          {activeEvent?<div role="tabpanel" className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Alliance record</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{activeEvent.wins}–{activeEvent.losses}–{activeEvent.ties}</p></div><div><p className="text-xs text-slate-500">Win rate</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{rate(activeEvent.winRate)}</p></div><div><p className="text-xs text-slate-500">Typical score miss</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(activeEvent.meanAbsoluteError)} pts</p></div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
+          {activeEvent?<div role="tabpanel" className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Alliance record</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{activeEvent.wins}–{activeEvent.losses}–{activeEvent.ties}</p></div><div><p className="text-xs text-slate-500">Win rate</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{rate(activeEvent.winRate)}</p></div><div><p className="text-xs text-slate-500">Mean absolute error</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(activeEvent.meanAbsoluteError)} pts</p></div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
         </div>
       </div>
     </details>
@@ -337,7 +343,7 @@ function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phas
     <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h3><p className="mt-1 text-xs text-slate-500">{phaseData.matches} matches across the official season</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{phaseData.wins}–{phaseData.losses}–{phaseData.ties} alliance record</span></div>
     <div className="mt-3 grid gap-3 sm:grid-cols-2">
       <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Alliance win rate</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{phaseData.winRate===null?"—":`${(phaseData.winRate*100).toFixed(1)}%`}</p><p className="mt-1 text-xs text-slate-500">Results from {isQual?"qualification":"elimination"} matches only</p></div>
-      <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Typical score prediction miss</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(phaseData.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute miss for the full alliance</p></div>
+      <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Mean absolute prediction error</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(phaseData.meanAbsoluteError)} <span className="text-sm font-semibold">pts</span></p><p className="mt-1 text-xs text-slate-500">Average absolute miss for the full alliance</p></div>
     </div>
     <details className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700"><summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Additional model metrics</summary><div className="grid gap-3 border-t border-slate-100 p-3 dark:border-slate-700 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Prediction direction (actual − predicted)</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{phaseData.meanResidual===null?"—":(phaseData.meanResidual>0?"+":"")+fmt(phaseData.meanResidual)+" pts"}</p></div><div><p className="text-xs text-slate-500">Large misses weighted more (RMSE)</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(phaseData.rootMeanSquareError)} pts</p></div><div><p className="text-xs text-slate-500">Model EPA at first → last match</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(phaseData.epaStart,2)} → {fmt(phaseData.epaEnd,2)}</p></div></div></details>
     {isQual&&phaseData.rp.length ? <details className="mt-2 rounded-lg border border-slate-200 dark:border-slate-700"><summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Ranking-point prediction accuracy</summary><div className="grid grid-cols-3 gap-2 border-t border-slate-100 p-3 dark:border-slate-700">{phaseData.rp.map((item)=><div key={item.key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.key} RP</p><p className="text-sm font-bold text-slate-900 dark:text-slate-100">{item.accuracy===null?"—":`${(item.accuracy*100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500">{item.sampleSize} matches · Brier {fmt(item.brier,3)}</p></div>)}</div></details>:null}
@@ -554,20 +560,24 @@ function TeamPerformanceHeadline({team,insight}:{data:EventAnalyticsResponse;tea
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <p className={`text-2xl font-black tabular-nums ${comparison.change>=0?"text-emerald-700":"text-rose-700"}`}>{comparison.change>0?"+":""}{comparison.change.toFixed(1)} EPA</p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)}</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)} · current {percentileLabel(team.epaPercentile)} percentile</p>
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{rankLabel(comparison.cohortRank,comparison.cohortSize)} by change</p>
       </div>
     </div>
-    <div className="grid gap-3 md:grid-cols-2">
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
-        <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Largest component gain</p>
-        <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(best,"gain")}</p>
-        {best?<p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rankLabel(best.value!.cohortRank,best.value!.cohortSize)} among teams with both component records</p>:null}
+    <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Component EPA movement</h4>
+        <p className="text-[11px] text-slate-500">Model estimate changes · not measured scoring</p>
       </div>
-      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900 dark:bg-rose-950/30">
-        <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Largest component decline</p>
-        <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"decline")}</p>
-        {worst?<p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rankLabel(worst.value!.cohortRank,worst.value!.cohortSize)} among teams with both component records</p>:null}
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {components.map((item) => <div key={item.key} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{item.label}</p>
+          {item.value ? <>
+            <p className={`mt-1 text-xl font-black tabular-nums ${item.value.change>0?"text-emerald-700":item.value.change<0?"text-rose-700":"text-slate-700"}`}>{item.value.change>0?"+":""}{item.value.change.toFixed(1)}</p>
+            <p className="text-[11px] text-slate-500">{item.value.prior.toFixed(1)} → {item.value.current.toFixed(1)}</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">{rankLabel(item.value.cohortRank,item.value.cohortSize)}</p>
+          </> : <p className="mt-1 text-sm text-slate-500">Comparison unavailable</p>}
+        </div>)}
       </div>
     </div>
     <p className="text-[11px] leading-5 text-slate-500">Each team is compared with its own most recent prior official event, which may differ from this team's prior event. Ranks include all event teams with usable current and prior records; component ranks use the subset with that component available. EPA changes are model updates, not measured scoring changes.</p>
@@ -607,7 +617,7 @@ function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:Team
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Estimated scoring profile</h3>
         <p className="mt-1 text-xs text-slate-500">Statbotics EPA estimates, not measured points scored by the robot.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(currentEPA)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{team.epaPercentile===null?"Event percentile unavailable":`${Math.round(team.epaPercentile*100)}th percentile at this event`}</p></div>
+          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(currentEPA)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{team.epaPercentile===null?"Event percentile unavailable":`${ordinal(Math.round(team.epaPercentile*100))} percentile at this event`}</p></div>
           <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[currentAuto,currentTeleop,currentEndgame].map((value,index)=>{const total=[currentAuto,currentTeleop,currentEndgame].reduce<number>((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(currentAuto)}</span><span>Teleop {fmt(currentTeleop)}</span><span>Endgame {fmt(currentEndgame)}</span></div></div>
         </div>
       </section>
@@ -622,9 +632,9 @@ function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:Team
       </section>
       {change ? <section className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Change since previous event</h3><p className="mt-1 text-sm text-slate-700 dark:text-slate-200">EPA {change.change>0?"increased":change.change<0?"decreased":"was unchanged"} by {fmt(Math.abs(change.change))} points, from {fmt(change.priorEPA)} at {change.priorEvent.name} to {fmt(change.currentEPA)} now.</p><p className="mt-1 text-xs text-slate-500">This was the {change.cohortRank}{change.cohortRank===1?"st":change.cohortRank===2?"nd":change.cohortRank===3?"rd":"th"} largest change among {change.cohortSize} event teams with usable records. EPA is a predictive estimate, not measured scoring improvement.</p></section> : null}
       <section>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Comparable-alliance results</h3>
-        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{insight.peerPerformance.interpretation==="insufficient-sample"?"There are not enough comparable results to identify a reliable pattern.":insight.peerPerformance.interpretation==="above-peers"?"Alliances involving this team scored meaningfully above other alliances of similar predicted strength.":insight.peerPerformance.interpretation==="below-peers"?"Alliances involving this team scored meaningfully below other alliances of similar predicted strength.":"Alliance results involving this team were broadly similar to other alliances of comparable predicted strength."}</p>
-        <details className="mt-2 rounded-lg bg-slate-50 dark:bg-slate-900"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Show sample and comparison method</summary><div className="space-y-1 border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700"><p>{insight.peerPerformance.teamMatches} team matches and {insight.peerPerformance.peerAllianceCount} comparison results.</p><p>Team-involved alliance average: {fmt(insight.peerPerformance.teamMeanResidual)} points above/below prediction.</p><p>Comparable-alliance average: {fmt(insight.peerPerformance.peerMeanResidual)} points above/below prediction.</p><p>Difference between averages: {fmt(insight.peerPerformance.difference)} points.</p><p>Comparable alliances were within ±20% of the selected alliance's pre-match combined EPA. Alliance results cannot isolate one robot's contribution.</p></div></details>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Current-event comparable alliances</h3>
+        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{insight.peerPerformance.interpretation==="insufficient-sample"?"There are not enough qualification results to compare this team's alliances with the event field.":`In qualification matches at this event, this team's alliances averaged ${fmt(insight.peerPerformance.teamMeanResidual)} points of residual versus ${fmt(insight.peerPerformance.peerMeanResidual)} for ${insight.peerPerformance.peerAllianceCount} other strength-matched alliances. The difference was ${insight.peerPerformance.difference===null?"—":(insight.peerPerformance.difference>0?"+":"")+fmt(insight.peerPerformance.difference)} points across ${insight.peerPerformance.teamMatches} team matches.`}</p>
+        <p className="mt-1 text-xs text-slate-500">The comparison sample includes other qualification alliances at this event, not necessarily the selected team's opponents. Peers are selected within ±20% of the team's alliance pre-match combined EPA. This is separate from the season-wide, same-match opposing-alliance baseline below.</p>
       </section>
     </div>
   </details>;
@@ -636,7 +646,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const label = result.interpretation === "no-elimination-matches" ? "No elimination matches played"
     : result.interpretation === "single-event-shift" ? "Single-event comparison"
     : recurring ? "Recurring decline signal"
-    : result.interpretation === "insufficient-history" ? "More match data needed" : "No consistent decline detected";
+    : result.interpretation === "insufficient-history" ? "More match data needed" : "No statistically clear recurring decline detected";
   const negativeCount = result.events.filter((item) => item.shift < 0).length;
   const positiveCount = result.events.filter((item) => item.shift > 0).length;
   const unchangedCount = result.events.length - negativeCount - positiveCount;
@@ -744,7 +754,7 @@ function ResidualPatternPanel({analysis}:{analysis:TeamMatchAnalysis}) {
         {result.events.map((item)=>{
           const gap=item.teamMeanResidual-item.baselineMeanResidual;
           return <div key={item.event.key} className="flex flex-col gap-1 rounded-lg border border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{item.event.name}</p><p className="text-xs text-slate-500">{item.teamMatches} matches · Team alliance residual {fmt(item.teamMeanResidual)} · Peer baseline {fmt(item.baselineMeanResidual)}</p></div>
+            <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{item.event.name}</p><p className="text-xs text-slate-500">{item.teamMatches} team matches · Team residual {fmt(item.teamMeanResidual)} · Matched opposing-alliance baseline {fmt(item.baselineMeanResidual)} (n={item.baselineAllianceSamples})</p></div>
             <span className={`shrink-0 text-sm font-bold tabular-nums ${gap>=0?"text-emerald-700":"text-rose-700"}`}>{gap>0?"+":""}{fmt(gap)} pts {gap>=0?"above":"below"}</span>
           </div>;
         })}
