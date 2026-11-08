@@ -203,7 +203,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
                 </section>
                 <details className="rounded-xl border border-slate-200 bg-white">
                   <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Season charts and match-by-match evidence</summary>
-                  <div className="p-4"><TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} accent="blue"/></div>
+                  <div className="p-4"><TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/></div>
                 </details>
               </div> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="mt-4 text-sm text-slate-500">No season match analysis is available yet.</p> : null}
 
@@ -531,7 +531,7 @@ function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAna
   </section>;
 }
 
-function TeamMatchEpaLedger({analysis,name,accent}:{analysis:TeamMatchAnalysis;name:string;accent:"blue"|"teal"}) {
+function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
   const matches=analysis.matches;
   const epaValues=matches.flatMap((m)=>[m.preEPA,m.postEPA]).filter((v):v is number=>v!==null);
   const epaMin=Math.min(0,...epaValues), epaMax=Math.max(1,...epaValues);
