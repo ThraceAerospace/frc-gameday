@@ -167,7 +167,7 @@ export default function TeamModal({
                   )}
 
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                    {team.nickname || "Unknown team"}
+                    {isRemapped && /^Off-Season Demo Team\b/i.test(team.nickname ?? "") ? `Team ${displayTeamNumber}` : team.nickname || "Unknown team"}
                   </span>
 
                   {selected && (
