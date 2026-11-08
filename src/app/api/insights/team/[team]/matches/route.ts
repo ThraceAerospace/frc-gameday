@@ -250,6 +250,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         : signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
     };
+    const residualPatternDiagnostics = eventMatches.map(({ event }) => {
+      const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
+      const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
+      return { event: items[0]?.event ?? { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, teamMatches: items.length, baselineAllianceSamples: baseline.length, eligible: items.length >= 3 && baseline.length >= 6 };
+    }).filter((item) => item.teamMatches > 0);
     const residualPatternEvents = eventMatches.flatMap(({ event }) => {
       const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
       const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
@@ -280,7 +285,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         : residualSignPValue !== null && residualSignPValue <= 0.05 && negativeResidualEventCount >= 3 ? "recurring-below-baseline" as const
         : positiveResidualSignPValue !== null && positiveResidualSignPValue <= 0.05 && positiveResidualEventCount >= 3 ? "recurring-above-baseline" as const
         : "no-established-pattern" as const,
-      events: residualPatternEvents,
+      events: residualPatternEvents, diagnostics: residualPatternDiagnostics,
     };
 
     const medianOf = (values: number[]) => {
