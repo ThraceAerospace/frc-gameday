@@ -38,7 +38,7 @@ export type TeamAnalyticsRow = {
 
 export type ReviewFinding = {
   id: string;
-  category: "score-residual" | "alliance-pattern";
+  category: "score-residual" | "alliance-pattern" | "penalty-frequency";
   subject: string;
   title: string;
   description: string;
