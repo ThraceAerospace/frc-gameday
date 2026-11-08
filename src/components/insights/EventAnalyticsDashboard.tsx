@@ -362,7 +362,7 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 
 function TeamCurrentEventOutlook({analysis,records,teamNumber,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;timezone:string|null}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===records[0]?.match.event_key || match.event.key===analysis.matches[0]?.event.key);
-  const ordered=[...currentMatches].reverse();
+  const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   let streakCount=0;
   let streakResult:boolean|null=null;
   for (const match of ordered) {
@@ -388,7 +388,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,timezone}:{analysi
     if(timestamp===null||!timezone)return "Time unavailable";
     return new Intl.DateTimeFormat("en-US",{timeZone:timezone,weekday:"short",hour:"numeric",minute:"2-digit"}).format(new Date(timestamp*1000));
   };
-  const past=[...currentMatches].reverse().slice(0,8);
+  const past=[...ordered].reverse().slice(0,8);
   const estimatedShare=(match:TeamMatchRow)=>{
     if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0)return null;
     return match.preEPA/match.alliancePreEPATotal*100;
