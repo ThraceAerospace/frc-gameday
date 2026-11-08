@@ -143,11 +143,34 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
         if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum,value)=>sum+(value??0),0);
       }
       const actualComponents: Record<string, number> = {};
-      const breakdownFields: Record<string,string[]> = { auto:["totalAutoPoints","autoPoints","auto_points"], teleop:["totalTeleopPoints","teleopPoints","teleop_points"], endgame:["endGameTowerPoints","endGamePoints","endgamePoints","endGameBargePoints","totalTowerPoints"], fouls:["foulPoints","foul_points"] };
-      for (const [label, candidates] of Object.entries(breakdownFields)) {
-        const field = candidates.find((candidate) => typeof actualRP[candidate] === "number");
-        if (field) actualComponents[label] = actualRP[field] as number;
+      const autoField = ["totalAutoPoints","autoPoints","auto_points"].find((field) => typeof actualRP[field] === "number");
+      const teleopField = ["totalTeleopPoints","teleopPoints","teleop_points"].find((field) => typeof actualRP[field] === "number");
+      const hubScore = actualRP.hubScore && typeof actualRP.hubScore === "object"
+        ? actualRP.hubScore as Record<string, unknown>
+        : null;
+      const endgameFuelPoints = finite(hubScore?.endgamePoints);
+      const endgameTowerPoints = finite(actualRP.endGameTowerPoints);
+      const hasSplit2026Endgame = endgameFuelPoints !== null && endgameTowerPoints !== null;
+      if (autoField) actualComponents.auto = actualRP[autoField] as number;
+      if (teleopField) {
+        const totalTeleop = actualRP[teleopField] as number;
+        // REBUILT's totalTeleopPoints includes both endgame Hub fuel and Tower
+        // points. Keep the phase columns mutually exclusive by removing both
+        // endgame components from the non-endgame teleop value.
+        actualComponents.teleop = hasSplit2026Endgame
+          ? totalTeleop - endgameFuelPoints - endgameTowerPoints
+          : totalTeleop;
       }
+      if (hasSplit2026Endgame) {
+        actualComponents.endgame = endgameFuelPoints + endgameTowerPoints;
+      } else {
+        // Older score-breakdown formats may expose a single aggregate field.
+        const aggregateEndgameField = ["endGamePoints","endgamePoints","endGameBargePoints","totalTowerPoints"].find((field) => typeof actualRP[field] === "number");
+        if (aggregateEndgameField) actualComponents.endgame = actualRP[aggregateEndgameField] as number;
+        else if (endgameTowerPoints !== null) actualComponents.endgame = endgameTowerPoints;
+      }
+      const foulField = ["foulPoints","foul_points"].find((field) => typeof actualRP[field] === "number");
+      if (foulField) actualComponents.fouls = actualRP[foulField] as number;
       const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
       const allianceDeltas = own.team_keys.map((key) => {
         const id = Number(key.replace(/^frc/i, ""));
