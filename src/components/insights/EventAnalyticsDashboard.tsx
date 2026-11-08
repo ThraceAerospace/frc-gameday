@@ -193,6 +193,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
               {matchAnalysisLoading ? <p className="mt-4 text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
               {matchAnalysisError ? <p role="alert" className="mt-4 text-sm text-rose-700">{matchAnalysisError}</p> : null}
               {matchAnalysisA ? <div className="mt-5 space-y-5">
+                <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} timezone={data.event.timezone ?? null} />
                 <TeamRiskPanel analysis={matchAnalysisA} />
                 <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
                 <PhasePerformancePanel analysis={matchAnalysisA} phase="qualification" />
@@ -357,6 +358,63 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     <p className="mt-3 text-xs leading-5 text-slate-500">Assessment uses the alliance mean residual and an approximate 95% confidence margin (1.96 × sample standard deviation / √n), requiring at least two scored matches. Small samples are explicitly marked insufficient. Official alliance names are used when supplied by TBA; otherwise a neutral alliance number is shown.</p>
   </Panel>;
 }
+
+
+function TeamCurrentEventOutlook({analysis,records,teamNumber,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;timezone:string|null}) {
+  const currentMatches=analysis.matches.filter((match)=>match.event.key===records[0]?.match.event_key || match.event.key===analysis.matches[0]?.event.key);
+  const ordered=[...currentMatches].reverse();
+  let streakCount=0;
+  let streakResult:boolean|null=null;
+  for (const match of ordered) {
+    if (match.won===null) break;
+    if (streakResult===null) streakResult=match.won;
+    if (match.won!==streakResult) break;
+    streakCount++;
+  }
+  const streakLabel=streakResult===null||streakCount===0?"No active streak":`${streakCount} ${streakResult?"win":"loss"}${streakCount===1?"":"s"}`;
+  const upcoming=records.flatMap((record)=>{
+    const match=record.match;
+    const red=match.alliances.red.team_keys.map((key)=>key.replace(/^frc/i,""));
+    const blue=match.alliances.blue.team_keys.map((key)=>key.replace(/^frc/i,""));
+    const alliance=red.includes(String(teamNumber))?"red":blue.includes(String(teamNumber))?"blue":null;
+    if(!alliance || match.alliances.red.score>=0 || match.alliances.blue.score>=0) return [];
+    const stat=record.statbotics as unknown as {predicted_time?:number|null;pred?:{red_score?:number|null;blue_score?:number|null;red_win_prob?:number|null}|null}|null;
+    if(!stat?.pred) return [];
+    const probability=stat.pred.red_win_prob;
+    const teamWinProbability=typeof probability==="number"?(alliance==="red"?probability:1-probability):null;
+    return [{key:match.key,label:matchShortName(match),alliance,redScore:stat.pred.red_score??null,blueScore:stat.pred.blue_score??null,teamWinProbability,time:stat.predicted_time??match.time??null,teams:[...red,...blue]}];
+  }).sort((a,b)=>(a.time??Number.MAX_SAFE_INTEGER)-(b.time??Number.MAX_SAFE_INTEGER));
+  const formatEventTime=(timestamp:number|null)=>{
+    if(timestamp===null||!timezone)return "Time unavailable";
+    return new Intl.DateTimeFormat("en-US",{timeZone:timezone,weekday:"short",hour:"numeric",minute:"2-digit"}).format(new Date(timestamp*1000));
+  };
+  const past=[...currentMatches].reverse().slice(0,8);
+  const estimatedShare=(match:TeamMatchRow)=>{
+    if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0)return null;
+    return match.preEPA/match.alliancePreEPATotal*100;
+  };
+  return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">Recent outcomes and the remaining schedule for this team at this event.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakLabel}</span></div>
+    <div className="mt-4 grid gap-4 xl:grid-cols-2">
+      <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Recent matches</h4>
+        {past.length?<div className="mt-2 overflow-x-auto"><table className="w-full min-w-[510px] text-xs"><thead className="text-left text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="py-2">Match</th><th>Pred. → actual</th><th>Auto</th><th>Teleop</th><th>Endgame</th><th>EPA share*</th></tr></thead><tbody>{past.map((match)=><tr key={match.matchKey} className="border-t border-slate-100"><th className="py-2 text-left"><a className="font-semibold text-blue-700 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel}</a><span className="block text-[10px] font-normal text-slate-400">{match.won===null?"—":match.won?"Win":"Loss"}</span></th><td className="whitespace-nowrap tabular-nums">{fmt(match.predicted)} → {fmt(match.actual)}</td>{(["auto","teleop","endgame"] as const).map((component)=>{const estimate=match.alliancePreComponents[`${component}_epa`];const actual=match.actualComponents[component];return <td key={component} className="whitespace-nowrap tabular-nums">{fmt(estimate)} → {fmt(actual)}</td>;})}<td className="tabular-nums">{estimatedShare(match)===null?"—":fmt(estimatedShare(match))+"%"}</td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No completed matches for this team are available in the selected event sample.</p>}
+        <p className="mt-2 text-[10px]] leading-5 text-slate-500">* Estimated EPA share = the team's pre-match EPA divided by its alliance's combined pre-match EPA. It is a model-based share, not observed scoring attribution. Component estimates are alliance totals, not per-team scores.</p>
+      </div>
+      <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Upcoming matches</h4>
+        {upcoming.length?<div className="mt-2 space-y-2">{upcoming.map((match)=>{
+          const close=match.teamWinProbability!==null&&Math.abs(match.teamWinProbability-0.5)<=0.15;
+          return <a key={match.key} href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-200 p-3 hover:border-blue-300">
+            <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-900">{match.label}</span><span className="text-[10px] text-slate-500">{formatEventTime(match.time)} · event time</span></div>
+            <div className="mt-2 flex items-center justify-between gap-3 text-sm"><span className={match.alliance==="red"?"font-semibold text-rose-700":"font-semibold text-blue-700"}>{match.alliance.toUpperCase()} · {match.alliance==="red"?fmt(match.redScore):fmt(match.blueScore)}</span><span className="text-slate-400">vs</span><span className={match.alliance==="red"?"font-semibold text-blue-700":"font-semibold text-rose-700"}>{match.alliance==="red"?fmt(match.blueScore):fmt(match.redScore)}</span></div>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Team alliance win probability: {match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</span><span className={close?"font-semibold text-amber-700":"text-slate-500"}>{close?"Closest projected matchup":"Model projection"}</span></div>
+          </a>;
+        })}</div>:<p className="mt-2 text-sm text-slate-500">No upcoming match with a published Statbotics prediction is available for this team.</p>}
+        <p className="mt-2 text-[10px] leading-5 text-slate-500">Projected score and win probability are alliance-level Statbotics predictions. “Closest projected matchup” means the model sees a relatively even contest; it does not establish tournament or ranking-point importance.</p>
+      </div>
+    </div>
+  </section>;
+}
+
 
 function TeamSnapshot({teams,selectedTeam,onSelect,team,insight}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null}) {
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
