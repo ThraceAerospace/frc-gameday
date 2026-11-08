@@ -29,6 +29,11 @@ export function standardDeviation(values: number[]): number | null {
   const average = mean(values) ?? 0;
   return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length);
 }
+function sampleStandardDeviation(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const average = mean(values) ?? 0;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / (values.length - 1));
+}
 export function buildAllianceResults(records: AnalyticsMatch[], playoffType?: number | null): AllianceResult[] {
   return records.flatMap(({ match, statbotics }) => (["red", "blue"] as const).map((color) => {
     const alliance = match.alliances[color];
@@ -391,7 +396,7 @@ export function buildPlayoffAnalysis(
       meanPredicted: average(scored.map((item) => item.predicted as number)),
       meanActual: average(scored.map((item) => item.actual as number)),
       meanResidual: average(residuals),
-      residualStandardDeviation: standardDeviation(residuals),
+      residualStandardDeviation: sampleStandardDeviation(residuals),
       matches: items.map((item) => ({
         matchKey: item.matchKey,
         compLevel: item.compLevel,
