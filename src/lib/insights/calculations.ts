@@ -99,6 +99,57 @@ export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: 
     if (Math.abs(average) < 20) continue;
     findings.push({ id: `alliance:quals:${key}`, category: "alliance-pattern", subject: `Alliance ${key.split("-").map((value) => value.replace(/^frc/i, "")).join(" · ")}`, title: average > 0 ? "Repeated positive qualification residuals" : "Repeated negative qualification residuals", description: `This exact three-team combination averaged ${average > 0 ? "+" : ""}${average.toFixed(1)} points relative to prediction across ${items.length} qualification matches.`, evidence: items.map((item) => `${item.matchLabel}: ${item.residual?.toFixed(1)} points`), sampleSize: items.length, sampleCoverage: sampleCoverage(items.length), suggestedAction: "Review these qualification matches and partner context. This describes the alliance combination, not an individual team's contribution.", severity: items.length >= 3 && Math.abs(average) >= 35 ? "high" : "low" });
   }
+  // TBA penalty counts belong to the alliance. Treat them as shared exposure,
+  // not proof that any individual robot caused the penalties.
+  const penaltySamples = new Map<string, number[]>();
+  for (const record of records) {
+    if (record.match.comp_level.toLowerCase() !== "qm") continue;
+    const breakdown = record.match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
+    if (!breakdown) continue;
+    for (const color of ["red", "blue"] as const) {
+      const alliance = record.match.alliances[color];
+      if (typeof alliance.score !== "number" || alliance.score < 0) continue;
+      const values = breakdown[color];
+      if (!values) continue;
+      const major = numberOrNull(values.majorFoulCount);
+      const minor = numberOrNull(values.minorFoulCount);
+      const legacyFouls = numberOrNull(values.foulCount);
+      const technical = numberOrNull(values.techFoulCount);
+      const count = major !== null || minor !== null ? (major ?? 0) + (minor ?? 0)
+        : legacyFouls !== null || technical !== null ? (legacyFouls ?? 0) + (technical ?? 0) : null;
+      if (count === null || count < 0) continue;
+      for (const teamKey of alliance.team_keys ?? []) penaltySamples.set(teamKey, [...(penaltySamples.get(teamKey) ?? []), count]);
+    }
+  }
+  const minimumPenaltyMatches = 5;
+  const teamPenaltyRates = [...penaltySamples.entries()]
+    .filter(([, samples]) => samples.length >= minimumPenaltyMatches)
+    .map(([teamKey, samples]) => ({ teamKey, samples, rate: mean(samples) ?? 0 }));
+  if (teamPenaltyRates.length >= 6) {
+    for (const team of teamPenaltyRates) {
+      const peers = teamPenaltyRates.filter((candidate) => candidate.teamKey !== team.teamKey).map((candidate) => candidate.rate);
+      const peerMean = mean(peers) ?? 0;
+      const peerDeviation = standardDeviation(peers) ?? 0;
+      const threshold = peerMean + Math.max(0.5, peerDeviation * 1.5);
+      if (team.rate <= threshold) continue;
+      const teamNumber = Number(team.teamKey.replace(/^frc/i, ""));
+      const teamName = teams.find((candidate) => candidate.teamKey === team.teamKey)?.name ?? `Team ${teamNumber}`;
+      const difference = team.rate - peerMean;
+      findings.push({
+        id: `penalty-frequency:${team.teamKey}`, category: "penalty-frequency", subject: `Team ${teamNumber} · ${teamName}`,
+        title: "Unusually high penalty frequency",
+        description: `This team's alliances averaged ${team.rate.toFixed(2)} penalty calls per qualification match, above the other eligible teams at this event.`,
+        evidence: [
+          `${team.samples.reduce((sum, value) => sum + value, 0)} alliance penalty calls across ${team.samples.length} completed qualification matches`,
+          `Other eligible teams averaged ${peerMean.toFixed(2)} calls per match`,
+          `${difference.toFixed(2)} more calls per match than the peer average`,
+        ],
+        sampleSize: team.samples.length, sampleCoverage: sampleCoverage(team.samples.length),
+        suggestedAction: "Review the team's qualification matches and scouting notes for recurring behaviors. TBA reports these penalties for the whole alliance and does not identify the responsible robot.",
+        severity: team.rate > peerMean + Math.max(1, peerDeviation * 2.5) ? "high" : "medium",
+      });
+    }
+  }
   return findings.sort((a, b) => ({ high: 3, medium: 2, low: 1 }[b.severity] - { high: 3, medium: 2, low: 1 }[a.severity]) || b.sampleSize - a.sampleSize);
 }
 
