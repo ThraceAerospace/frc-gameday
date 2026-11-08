@@ -167,6 +167,14 @@ export type SeasonCohortSnapshot = {
   records: SeasonCohortRecord[];
 };
 
+export type TeamSeasonComponentComparison = {
+  prior: number;
+  current: number;
+  change: number;
+  cohortRank: number;
+  cohortSize: number;
+};
+
 export type TeamSeasonComparison = {
   priorEvent: { key: string; name: string; startDate: string };
   priorEPA: number;
@@ -174,4 +182,9 @@ export type TeamSeasonComparison = {
   change: number;
   cohortRank: number;
   cohortSize: number;
+  components: {
+    auto: TeamSeasonComponentComparison | null;
+    teleop: TeamSeasonComponentComparison | null;
+    endgame: TeamSeasonComponentComparison | null;
+  };
 };
