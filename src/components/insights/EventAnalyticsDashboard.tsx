@@ -192,7 +192,6 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
             {matchAnalysisA ? <div className="space-y-4">
-              <TeamStandoutMatches analysis={matchAnalysisA}/>
               {selectedA && focusedInsight ? <TeamModelDetailPanel team={selectedA} insight={focusedInsight}/> : null}
               <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} eventKey={eventKey} timezone={data.event.timezone ?? null} />
               <TeamRiskPanel analysis={matchAnalysisA} />
@@ -391,6 +390,11 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;timezone:string|null}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey);
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
+  const completed=ordered.filter((match)=>match.won!==null&&match.actual!==null&&match.opponentActual!==null);
+  const wins=completed.filter((match)=>match.won===true).sort((a,b)=>((b.actual??0)-(b.opponentActual??0))-((a.actual??0)-(a.opponentActual??0)));
+  const biggestWin=wins[0]??null;
+  const upsetLoss=completed.filter((match)=>match.won===false&&match.teamWinProbability!==null&&match.teamWinProbability>=0.65).sort((a,b)=>(b.teamWinProbability??0)-(a.teamWinProbability??0))[0]??null;
+  const unexpectedWin=completed.filter((match)=>match.won===true&&match.teamWinProbability!==null&&match.teamWinProbability<=0.35).sort((a,b)=>(a.teamWinProbability??1)-(b.teamWinProbability??1))[0]??null;
   let streakCount=0;
   let streakResult:boolean|null=null;
   for (const match of [...ordered].reverse()) {
@@ -402,6 +406,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   const streakLabel=streakResult===null||streakCount===0?"No active streak":`${streakCount} ${streakResult?"win":"loss"}${streakCount===1?"":"s"}`;
   const upcoming=records.flatMap((record)=>{
     const match=record.match;
+    if(match.event_key!==eventKey)return [];
     const red=match.alliances.red.team_keys.map((key)=>key.replace(/^frc/i,""));
     const blue=match.alliances.blue.team_keys.map((key)=>key.replace(/^frc/i,""));
     const alliance=red.includes(String(teamNumber))?"red":blue.includes(String(teamNumber))?"blue":null;
@@ -416,64 +421,61 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
     if(timestamp===null||!timezone)return "Time unavailable";
     return new Intl.DateTimeFormat("en-US",{timeZone:timezone,weekday:"short",hour:"numeric",minute:"2-digit"}).format(new Date(timestamp*1000));
   };
-  const past=[...ordered].reverse().slice(0,8);
+  const past=[...completed].reverse().slice(0,8);
   const estimatedShare=(match:TeamMatchRow)=>{
     if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0||match.preEPA>match.alliancePreEPATotal)return null;
     return match.preEPA/match.alliancePreEPATotal*100;
   };
+  const teamAllianceClass=(alliance:"red"|"blue")=>alliance==="red"?"text-rose-700":"text-blue-700";
+  const opponentAllianceClass=(alliance:"red"|"blue")=>alliance==="red"?"text-blue-700":"text-rose-700";
+  const standout=(match:TeamMatchRow,label:string,tone:"win"|"loss"|"surprise",description:string)=>{
+    const margin=(match.actual??0)-(match.opponentActual??0);
+    const toneClass=tone==="win"?"border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30":tone==="loss"?"border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30":"border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30";
+    const allianceLabel=match.alliance==="red"?"Red alliance":"Blue alliance";
+    return <article key={match.matchKey} className={`rounded-lg border p-3 ${toneClass}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-wide">{label}</span><a className="text-xs font-semibold text-slate-600 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel} ↗</a></div>
+      <p className="mt-2 text-xs font-semibold text-slate-500">{allianceLabel} · {match.partners.length+1} robots</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 text-sm"><p className={`font-bold ${teamAllianceClass(match.alliance)}`}>{[String(teamNumber),...match.partners].join(" · ")}</p><p className={`mt-0.5 text-xs font-semibold ${opponentAllianceClass(match.alliance)}`}>vs {match.opponents.join(" · ")||"opponents"}</p></div>
+        <p className="shrink-0 text-xl font-black tabular-nums"><span className={teamAllianceClass(match.alliance)}>{fmt(match.actual,0)}</span><span className="px-1 text-slate-400">–</span><span className={opponentAllianceClass(match.alliance)}>{fmt(match.opponentActual,0)}</span></p>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">{description} <span className="font-semibold">Pre-match win probability: {match.teamWinProbability===null?"unavailable":(match.teamWinProbability*100).toFixed(0)+"%"}.</span></p>
+      <p className={`mt-1 text-xs font-bold tabular-nums ${margin>0?"text-emerald-700":margin<0?"text-rose-700":"text-slate-500"}`}>{margin>0?"+":""}{fmt(margin,0)} alliance points</p>
+    </article>;
+  };
+  const highlights=[
+    biggestWin?standout(biggestWin,"Biggest win","win",`Won by ${fmt((biggestWin.actual??0)-(biggestWin.opponentActual??0),0)} points.`):null,
+    upsetLoss?standout(upsetLoss,"Unexpected loss","loss",`The model favored this alliance despite the loss.`):unexpectedWin?standout(unexpectedWin,"Unexpected win","surprise",`The model expected this alliance to lose, but it won.`):null,
+    upsetLoss&&unexpectedWin?standout(unexpectedWin,"Unexpected win","surprise","The model expected this alliance to lose, but it won."):null,
+  ].filter((item):item is NonNullable<typeof item>=>item!==null);
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">Recent outcomes and the remaining schedule for this team at this event.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakLabel}</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakLabel}</span></div>
+    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{completed.filter((match)=>match.won).length}–{completed.filter((match)=>match.won===false).length}–{completed.filter((match)=>match.won===null).length}</p><p className="text-[11px] text-slate-500">{completed.length} scored matches</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Remaining schedule</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{upcoming.length}</p><p className="text-[11px] text-slate-500">Upcoming matches with model predictions</p></div>
+    </div>
     <div className="mt-4 grid gap-4 xl:grid-cols-2">
       <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Recent matches</h4>
-        {past.length?<div className="mt-2 overflow-x-auto"><table className="w-full min-w-[510px] text-xs"><thead className="text-left text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="py-2">Match</th><th>Pred. → actual</th><th>Auto</th><th>Teleop</th><th>Endgame</th><th>EPA share*</th></tr></thead><tbody>{past.map((match)=><tr key={match.matchKey} className="border-t border-slate-100"><th className="py-2 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel}</a><span className="block text-[10px] font-normal text-slate-400">{match.won===null?"—":match.won?"Win":"Loss"}</span></th><td className="whitespace-nowrap tabular-nums">{fmt(match.predicted)} → {fmt(match.actual)}</td>{(["auto","teleop","endgame"] as const).map((component)=>{const estimate=match.alliancePreComponents[`${component}_epa`];const actual=match.actualComponents[component];return <td key={component} className="whitespace-nowrap tabular-nums">{fmt(estimate)} → {fmt(actual)}</td>;})}<td className="tabular-nums">{estimatedShare(match)===null?"—":fmt(estimatedShare(match))+"%"}</td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No completed matches for this team are available in the selected event sample.</p>}
-        <p className="mt-2 text-[10px] leading-5 text-slate-500">* Estimated EPA share = the team's pre-match EPA divided by its alliance's combined pre-match EPA. It is a model-based share, not observed scoring attribution. Component estimates are alliance totals, not per-team scores.</p>
+        {past.length?<div className="mt-2 overflow-x-auto"><table className="w-full min-w-[510px] text-xs"><thead className="text-left text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="py-2">Match</th><th>Alliance score<br/>predicted → actual</th><th>Auto</th><th>Teleop</th><th>Endgame</th><th>EPA share*</th></tr></thead><tbody>{past.map((match)=><tr key={match.matchKey} className="border-t border-slate-100"><th className="py-2 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel}</a><span className={`block text-[10px] font-semibold ${match.alliance==="red"?"text-rose-700":"text-blue-700"}`}>{match.alliance==="red"?"Red":"Blue"} alliance · {match.won===null?"—":match.won?"Win":"Loss"}</span></th><td className="whitespace-nowrap tabular-nums"><span className={teamAllianceClass(match.alliance)}>{fmt(match.predicted)}</span><span className="px-1 text-slate-400">→</span><span className={teamAllianceClass(match.alliance)}>{fmt(match.actual)}</span></td>{(["auto","teleop","endgame"] as const).map((component)=>{const estimate=match.alliancePreComponents[`${component}_epa`];const actual=match.actualComponents[component];return <td key={component} className={`whitespace-nowrap tabular-nums ${teamAllianceClass(match.alliance)}`}>{fmt(estimate)} → {fmt(actual)}</td>;})}<td className="tabular-nums">{estimatedShare(match)===null?"—":fmt(estimatedShare(match))+"%"}</td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No completed matches for this team are available at this event yet.</p>}
+        <p className="mt-2 text-[10px] leading-5 text-slate-500">Predicted and actual scores are alliance totals. Auto, teleop, and endgame show estimated alliance contribution versus recorded points. EPA share is the team's pre-match EPA divided by its alliance's combined pre-match EPA; it is a model-based estimate, not observed scoring attribution.</p>
       </div>
       <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Upcoming matches</h4>
         {upcoming.length?<div className="mt-2 space-y-2">{upcoming.map((match)=>{
           const close=match.teamWinProbability!==null&&Math.abs(match.teamWinProbability-0.5)<=0.15;
+          const opposing=match.alliance==="red"?"blue":"red";
           return <a key={match.key} href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-200 p-3 hover:border-slate-400">
             <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-900">{match.label}</span><span className="text-[10px] text-slate-500">{formatEventTime(match.time)} · event time</span></div>
-            <div className="mt-2 flex items-center justify-between gap-3 text-sm"><span className={match.alliance==="red"?"font-semibold text-rose-700":"font-semibold text-blue-700"}>{match.alliance.toUpperCase()} · {match.alliance==="red"?fmt(match.redScore):fmt(match.blueScore)}</span><span className="text-slate-400">vs</span><span className={match.alliance==="red"?"font-semibold text-blue-700":"font-semibold text-rose-700"}>{match.alliance==="red"?fmt(match.blueScore):fmt(match.redScore)}</span></div>
+            <div className="mt-2 flex items-center justify-between gap-3 text-sm"><span className={`font-semibold ${teamAllianceClass(match.alliance)}`}>{match.alliance==="red"?"RED":"BLUE"} · {match.alliance==="red"?fmt(match.redScore):fmt(match.blueScore)}</span><span className="text-slate-400">vs</span><span className={`font-semibold ${teamAllianceClass(opposing)}`}>{opposing.toUpperCase()} · {match.alliance==="red"?fmt(match.blueScore):fmt(match.redScore)}</span></div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Team alliance win probability: {match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</span><span className={close?"font-semibold text-amber-700":"text-slate-500"}>{close?"Closest projected matchup":"Model projection"}</span></div>
           </a>;
-        })}</div>:<p className="mt-2 text-sm text-slate-500">No upcoming match with a published Statbotics prediction is available for this team.</p>}
-        <p className="mt-2 text-[10px] leading-5 text-slate-500">Projected score and win probability are alliance-level Statbotics predictions. “Closest projected matchup” means the model sees a relatively even contest; it does not establish tournament or ranking-point importance.</p>
+        })}</div>:<p className="mt-2 text-sm text-slate-500">No upcoming match with a published Statbotics prediction is available at this event.</p>}
+        <p className="mt-2 text-[10px] leading-5 text-slate-500">Projected scores and win probability are alliance-level Statbotics predictions. A close matchup means the model sees a relatively even contest; it does not establish tournament or ranking-point importance.</p>
       </div>
     </div>
-  </section>;
-}
-
-
-function TeamStandoutMatches({analysis}:{analysis:TeamMatchAnalysis}) {
-  const completed=analysis.matches.filter((match)=>match.won!==null&&match.actual!==null&&match.opponentActual!==null);
-  const wins=completed.filter((match)=>match.won===true).sort((a,b)=>((b.actual??0)-(b.opponentActual??0))-((a.actual??0)-(a.opponentActual??0)));
-  const biggestWin=wins[0]??null;
-  const upsetLosses=completed.filter((match)=>match.won===false&&match.teamWinProbability!==null&&match.teamWinProbability>=0.65).sort((a,b)=>(b.teamWinProbability??0)-(a.teamWinProbability??0));
-  const unexpectedWins=completed.filter((match)=>match.won===true&&match.teamWinProbability!==null&&match.teamWinProbability<=0.35).sort((a,b)=>(a.teamWinProbability??1)-(b.teamWinProbability??1));
-  const upsetLoss=upsetLosses[0]??null;
-  const unexpectedWin=unexpectedWins[0]??null;
-  const MatchCard=({match,label,tone,description}:{match:TeamMatchRow;label:string;tone:"win"|"loss"|"surprise";description:string})=>{
-    const margin=(match.actual??0)-(match.opponentActual??0);
-    const toneClass=tone==="win"?"border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30":tone==="loss"?"border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30":"border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30";
-    return <article className={`rounded-xl border p-3 ${toneClass}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-wide">{label}</span><span className="text-xs font-semibold text-slate-500">{match.event.shortName??match.event.name} · {match.matchLabel}</span></div>
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <div className="min-w-0"><p className="text-sm font-bold text-slate-900 dark:text-slate-100">{match.partners.join(" · ")||"Team alliance"}</p><p className="mt-0.5 text-[11px] text-slate-500">vs {match.opponents.join(" · ")||"opponents"}</p></div>
-        <div className="shrink-0 text-right"><p className="text-xl font-black tabular-nums text-slate-950 dark:text-slate-50">{fmt(match.actual,0)}–{fmt(match.opponentActual,0)}</p><p className={`text-xs font-bold tabular-nums ${margin>0?"text-emerald-700":margin<0?"text-rose-700":"text-slate-500"}`}>{margin>0?"+":""}{fmt(margin,0)} alliance points</p></div>
-      </div>
-      <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">{description}</p>
-      <a href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-slate-700 hover:underline dark:text-slate-200">View match ↗</a>
-    </article>;
-  };
-  if(!completed.length)return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950"><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Standout matches</h3><p className="mt-2 text-sm text-slate-500">No completed team matches with full score and prediction data are available yet.</p></section>;
-  return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
-    <div><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Standout matches</h3><p className="mt-1 text-xs text-slate-500">The team's biggest scoreline win and results that ran against the pre-match prediction.</p></div>
-    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-      {biggestWin?<MatchCard match={biggestWin} label="Biggest win" tone="win" description={`Won by ${fmt((biggestWin.actual??0)-(biggestWin.opponentActual??0),0)} points. Pre-match win probability was ${biggestWin.teamWinProbability===null?"unavailable":(biggestWin.teamWinProbability*100).toFixed(0)+"%"}.`}/>:<p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No completed wins in the available sample.</p>}
-      {upsetLoss?<MatchCard match={upsetLoss} label="Unexpected loss" tone="loss" description={`The model gave this alliance a ${((upsetLoss.teamWinProbability??0)*100).toFixed(0)}% chance to win before the match. The loss is a result worth investigating, not proof of why it happened.`}/>:unexpectedWin?<MatchCard match={unexpectedWin} label="Unexpected win" tone="surprise" description={`The model gave this alliance only a ${((unexpectedWin.teamWinProbability??0)*100).toFixed(0)}% chance to win. The result substantially outperformed the pre-match expectation.`}/>:<p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No clear upset result with a strong pre-match probability is present in this sample.</p>}
+    <div className="mt-4 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Standout matches at this event</h4><p className="text-xs text-slate-500">Largest win and strongest prediction upsets in this event's completed matches</p></div>
+      {highlights.length?<div className="mt-3 grid gap-3 lg:grid-cols-2">{highlights}</div>:<p className="mt-2 text-sm text-slate-500">No completed match with a standout margin or strong prediction upset is available at this event yet.</p>}
     </div>
-    {upsetLoss&&unexpectedWin?<div className="mt-3"><MatchCard match={unexpectedWin} label="Unexpected win" tone="surprise" description={`The model gave this alliance only a ${((unexpectedWin.teamWinProbability??0)*100).toFixed(0)}% chance to win. The result substantially outperformed the pre-match expectation.`}/></div>:null}
-    <p className="mt-3 text-[11px] leading-5 text-slate-500">Scores and predictions are alliance-level. “Biggest win” is based on final score margin; unexpected results are based on pre-match Statbotics win probability. Match outcomes cannot isolate an individual robot's contribution.</p>
   </section>;
 }
 
@@ -542,7 +544,6 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
         </div>
       </div>
     </div>
-    <p className="mt-3 text-[11px] leading-5 text-slate-500">Compares overall, autonomous, teleop, and endgame EPA changes with the previous official event for teams that have usable records at both events. Rankings are metric-specific; they do not combine unlike statistics into an overall score. EPA is a predictive model estimate, not measured robot performance.</p>
   </section>;
 }
 
