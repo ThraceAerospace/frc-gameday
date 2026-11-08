@@ -240,13 +240,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     };
     const signTestPValue = nPositiveQualificationEvents ? Array.from({ length: nPositiveQualificationEvents - negativeShiftAfterPositiveQualCount + 1 }, (_, index) => negativeShiftAfterPositiveQualCount + index)
       .reduce((sum, successes) => sum + binomialCoefficient(nPositiveQualificationEvents, successes) / (2 ** nPositiveQualificationEvents), 0) : null;
+    const eliminationMatchCount = rows.filter((row): row is TeamMatchRow => row !== null && ["ef", "qf", "sf", "f"].includes(row.compLevel)).length;
     const eliminationShift = {
-      eligibleEventCount: eligibleEliminationEvents.length, negativeEventCount,
+      eliminationMatchCount, eligibleEventCount: eligibleEliminationEvents.length, negativeEventCount,
       positiveQualificationEventCount: nPositiveQualificationEvents, negativeShiftAfterPositiveQualCount,
       meanShift: average(eventShifts), medianShift: median(eventShifts),
       signTestPValue, minimumQualificationMatchesPerEvent: 3, minimumEliminationMatchesPerEvent: 2,
       events: eligibleEliminationEvents,
-      interpretation: eligibleEliminationEvents.length === 0 ? "no-elimination-matches" as const
+      interpretation: eliminationMatchCount === 0 ? "no-elimination-matches" as const
+        : eligibleEliminationEvents.length === 0 ? "insufficient-history" as const
         : eligibleEliminationEvents.length === 1 ? "single-event-shift" as const
         : nPositiveQualificationEvents >= 3 && signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
