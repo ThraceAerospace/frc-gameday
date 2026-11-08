@@ -121,14 +121,15 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
       setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
     }
     let active = true;
+    setMatchAnalysisA(null);
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
     const query = `year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`;
     fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
-      if (active) { setMatchAnalysisA(result as TeamMatchAnalysis); setMatchAnalysisB(null); }
+      if (active) setMatchAnalysisA(result as TeamMatchAnalysis);
     }).catch((error) => {
-      if (active) { setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
+      if (active) { setMatchAnalysisA(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
   }, [teamA,data?.event.year,liveMatchKey,liveMatchSignature]);
@@ -316,7 +317,7 @@ function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phas
 
 function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level==="qm").sort((a,b)=>a.match.match_number-b.match.match_number);
-  return <Panel title="Qualification match analysis" description="All qualification matches are listed here, not only matches that triggered a review flag.">
+  return <Panel title="Qualification match analysis" description="All qualification match records processed so far are listed, including matches without a review flag. The collection status above shows remaining work.">
     <MatchAnalysisTable data={data} records={matches} playoff={false}/>
     <p className="mt-3 text-xs text-slate-500">High-Confidence Miss and Anomalous Score are independent findings. Both alliances remain visible for context, including matches with no finding.</p>
   </Panel>;
@@ -369,7 +370,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
 
 function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level!=="qm").sort((a,b)=>{const order=["ef","qf","sf","f"];return order.indexOf(a.match.comp_level)-order.indexOf(b.match.comp_level)||a.match.set_number-b.match.set_number||a.match.match_number-b.match.match_number;});
-  return <Panel title="Playoff match analysis" description="Every elimination match is listed, with alliance-level score comparisons and anomalous-score findings."><MatchAnalysisTable data={data} records={matches} playoff/><p className="mt-3 text-xs text-slate-500">Anomalous Score marks alliance residuals more than two event standard deviations from zero. Match-level outcomes describe the alliance, not an individual robot.</p></Panel>;
+  return <Panel title="Playoff match analysis" description="Every elimination match record processed so far is listed, with alliance-level score comparisons and anomalous-score findings."><MatchAnalysisTable data={data} records={matches} playoff/><p className="mt-3 text-xs text-slate-500">Anomalous Score marks alliance residuals more than two event standard deviations from zero. Match-level outcomes describe the alliance, not an individual robot.</p></Panel>;
 }
 
 function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
@@ -1008,13 +1009,13 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   const movement=(items:TeamInsight[],empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=>{const cmp=item.seasonComparison!;return <li key={item.teamNumber} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.teamNumber)}</div><div className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">Since Last Event</span><strong className={"tabular-nums "+(cmp.change>=0?"text-emerald-700":"text-rose-700")}>{cmp.change>0?"+":""}{fmt(cmp.change)}</strong></div></li>; }):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   const residualList=(items:typeof residuals,empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=><li key={item.team.teamKey} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.team.teamNumber)}</div><strong className={"shrink-0 tabular-nums "+(item.mean>0?"text-emerald-700":"text-rose-700")}>{item.mean>0?"+":""}{fmt(item.mean)} pts</strong></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   return <div className="space-y-5">
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Event overview</p><h2 className="mt-1 text-lg font-bold text-slate-900">The competitive picture</h2><p className="mt-1 text-sm text-slate-500">Who is gaining ground, who is falling behind expectations, and where the model is being surprised.</p></div><span className="text-xs text-slate-500">{data.teams.length} teams · {completedMatches}/{data.matchCount} matches scored</span></div>
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Event overview</p><h2 className="mt-1 text-lg font-bold text-slate-900">The competitive picture</h2><p className="mt-1 text-sm text-slate-500">Who is gaining ground, who is falling behind expectations, and where the model is being surprised.</p></div><span className="text-xs text-slate-500">{data.teams.length} teams · {completedMatches} scored matches represented</span></div>
       <div className="mt-4 rounded-lg bg-slate-50 p-3">
         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">At a glance</h3>
         <ul className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
           <li><span className="font-semibold text-slate-900">Qualification leader:</span> {qualificationLeader ? `Team ${qualificationLeader.team!.teamNumber} · rank ${qualificationLeader.ranking.rank}` : "Official rankings are not available yet."}</li>
           <li><span className="font-semibold text-slate-900">Highest available EPA:</span> {highestEpaTeam ? `Team ${highestEpaTeam.teamNumber} · ${fmt(highestEpaTeam.epa)} EPA` : "No team EPA estimates are available yet."}</li>
-          <li><span className="font-semibold text-slate-900">Match coverage:</span> {completedMatches} scored of {data.matchCount} scheduled matches; {data.collection.processedMatchCount} processed for analysis.</li>
+          <li><span className="font-semibold text-slate-900">Match coverage:</span> {completedMatches} scored matches represented; {data.collection.processedMatchCount} of {data.matchCount} scheduled matches processed for analysis.</li>
           <li><span className="font-semibold text-slate-900">Review signal:</span> {leadFinding ? leadFinding.title : "No findings currently meet the review thresholds."}</li>
         </ul>
       </div>
