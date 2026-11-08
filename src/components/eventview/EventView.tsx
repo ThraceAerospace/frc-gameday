@@ -343,7 +343,6 @@ export default function EventView({
           setTeamsOpen(false)
         }
         teams={teams}
-        remapTeams={eventData.remap_teams}
         teamsStatuses={
           teamsStatuses
         }
