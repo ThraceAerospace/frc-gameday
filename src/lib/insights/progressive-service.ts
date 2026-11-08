@@ -231,24 +231,32 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
       .sort((a, b) => (job.attempts[a.key] ?? 0) - (job.attempts[b.key] ?? 0))
       .slice(0, 20);
 
-    const batchResults = await Promise.all(pendingMatches.map(async (match) => {
-      const attempt = (job!.attempts[match.key] ?? 0) + 1;
-      try {
-        const statbotics = await Statbotics.getMatch(match.key, { refresh: true });
-        if (statbotics) {
-          job!.records[match.key] = { match, statbotics, statboticsStatus: "ready" };
-          job!.statboticsFetchError = null;
-        } else if (attempt >= MAX_ATTEMPTS) {
-          job!.records[match.key] = { match, statbotics: null, statboticsStatus: "unavailable" };
-        } else {
+    const batchResults: (Error | null)[] = [];
+    for (let offset = 0; offset < pendingMatches.length; offset += 4) {
+      const batch = pendingMatches.slice(offset, offset + 4);
+      const results = await Promise.all(batch.map(async (match) => {
+        const attempt = (job!.attempts[match.key] ?? 0) + 1;
+        try {
+          const statbotics = await Statbotics.getMatch(match.key, { refresh: true });
+          if (statbotics) {
+            job!.records[match.key] = { match, statbotics, statboticsStatus: "ready" };
+            job!.statboticsFetchError = null;
+          } else if (attempt >= MAX_ATTEMPTS) {
+            job!.records[match.key] = { match, statbotics: null, statboticsStatus: "unavailable" };
+          } else {
+            job!.attempts[match.key] = attempt;
+          }
+          return null;
+        } catch (error) {
           job!.attempts[match.key] = attempt;
+          return error instanceof Error ? error : new Error(String(error));
         }
-        return null;
-      } catch (error) {
-        job!.attempts[match.key] = attempt;
-        return error;
-      }
-    }));
+      }));
+      batchResults.push(...results);
+      // Persist after each small group so the next snapshot can use all
+      // successfully collected records even if a later group fails.
+      await writeJob(eventKey, job);
+    }
 
     const batchErrors = batchResults.filter((error): error is Error => error instanceof Error);
     if (batchErrors.length) {
