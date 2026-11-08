@@ -41,22 +41,6 @@ type TeamMatchRow = {
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function sumNumericLeavesMatchingKey(value: unknown, pattern: RegExp, parentIsMatch = false): number | null {
-  if (!value || typeof value !== "object") return null;
-  let total = 0;
-  let found = false;
-  for (const [key, child] of Object.entries(value)) {
-    const matchesPath = parentIsMatch || pattern.test(key);
-    if (child && typeof child === "object") {
-      const nested = sumNumericLeavesMatchingKey(child, pattern, matchesPath);
-      if (nested !== null) { total += nested; found = true; }
-    } else if (matchesPath && typeof child === "number" && Number.isFinite(child)) {
-      total += child;
-      found = true;
-    }
-  }
-  return found ? total : null;
-}
 function teamEPA(record: StatboticsMatch | null, teamNumber: number, phase: "pre_epas" | "epas"): StatboticsEPA | undefined {
   return record?.[phase]?.[String(teamNumber)];
 }
@@ -161,19 +145,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const actualComponents: Record<string, number> = {};
       const autoField = Object.keys(actualRP).find((field) => /^(total)?auto(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
       const teleopField = Object.keys(actualRP).find((field) => /^(total)?teleop(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
-      const endgamePoints = sumNumericLeavesMatchingKey(actualRP, /end.?game/i);
       if (autoField) actualComponents.auto = actualRP[autoField] as number;
-      if (teleopField) {
-        const teleopTotal = actualRP[teleopField] as number;
-        // Score-breakdown schemas may expose endgame as a subset of the
-        // teleop aggregate or as a separate phase. Remove it only when the
-        // aggregate is explicitly named as a total teleop score.
-        const isTeleopAggregate = /^total/i.test(teleopField.replace(/[_\s-]/g, ""));
-        actualComponents.teleop = isTeleopAggregate && endgamePoints !== null
-          ? teleopTotal - endgamePoints
-          : teleopTotal;
-      }
-      if (endgamePoints !== null) actualComponents.endgame = endgamePoints;
+      // TBA score-breakdown schemas do not provide a dependable, consistent
+      // endgame total. Keep teleop intact; infer endgame from Statbotics EPA.
+      if (teleopField) actualComponents.teleop = actualRP[teleopField] as number;
       const foulField = Object.keys(actualRP).find((field) => /^foul(points)?$/i.test(field.replace(/[_\s-]/g, "")) && typeof actualRP[field] === "number");
       if (foulField) actualComponents.fouls = actualRP[foulField] as number;
       const deltaEPA = preEPA !== null && postEPA !== null ? postEPA - preEPA : null;
