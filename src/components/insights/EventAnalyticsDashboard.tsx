@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import { formatTeamNumber, matchCode } from "@/lib/tba/formatters";
+import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
@@ -536,7 +536,6 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
           <p className="text-xs font-bold uppercase tracking-wide text-rose-800 dark:text-rose-300">Biggest loss</p>
           <p className="mt-2 text-sm leading-6 text-slate-800 dark:text-slate-100">{movement(worst,"loss")}</p>
         </div>
-      </div>
       <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparison with the field</p>
         <div className="mt-3 space-y-3">
