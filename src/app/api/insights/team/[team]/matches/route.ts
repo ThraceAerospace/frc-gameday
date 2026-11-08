@@ -269,7 +269,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     const residualPatternEvents = eventMatches.flatMap(({ event }) => {
       const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
       const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
-      if (items.length < 3 || baseline.length < 2) return [];
+      if (items.length < 3 || baseline.length < 6) return [];
       const baselineMean = average(baseline) ?? 0;
       const baselineSd = Math.sqrt(baseline.reduce((sum, value) => sum + (value - baselineMean) ** 2, 0) / baseline.length);
       const teamMean = average(items.map((row) => row.residual as number)) ?? 0;
