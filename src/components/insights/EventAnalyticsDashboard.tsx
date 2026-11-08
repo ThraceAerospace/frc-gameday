@@ -250,6 +250,8 @@ function TeamRiskPanel({analysis}:{analysis:TeamMatchAnalysis}) {
 }
 function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
   const s=analysis.summary;
+  const [selectedEvent,setSelectedEvent]=useState(analysis.eventSummaries[0]?.event.key??"");
+  const activeEvent=analysis.eventSummaries.find((item)=>item.event.key===selectedEvent)??analysis.eventSummaries[0];
   return <section className="rounded-xl border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-base font-bold text-slate-900">Overall Season Performance</h3><p className="mt-1 text-xs text-slate-500">{name} · {analysis.matchCount} matches across {analysis.eventCount} official events</p></div></div>
     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -260,8 +262,21 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
       <HistoryMetric label="Score RMSE" value={fmt(s.rootMeanSquareError)+" pts"}/>
       <HistoryMetric label="EPA first → last" value={`${fmt(s.epaStart,2)} → ${fmt(s.epaEnd,2)}`}/>
     </div>
+    <div className="mt-4 rounded-lg border border-slate-200 p-3">
+      <div><h4 className="text-sm font-semibold text-slate-900">Event performance</h4><p className="mt-1 text-xs text-slate-500">Choose an event to isolate its record and prediction results.</p></div>
+      {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-slate-800 bg-slate-800 text-white":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{item.event.shortName??item.event.name}</button>)}</div>
+      {activeEvent?<div role="tabpanel" className="mt-3"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <HistoryMetric label="Matches" value={String(activeEvent.matches)}/>
+        <HistoryMetric label="Match record" value={`${activeEvent.wins}–${activeEvent.losses}`}/>
+        <HistoryMetric label="Win rate" value={activeEvent.winRate===null?"—":`${(activeEvent.winRate*100).toFixed(1)}%`}/>
+        <HistoryMetric label="Mean score error" value={fmt(activeEvent.meanAbsoluteError)+" pts"}/>
+        <HistoryMetric label="Prediction bias" value={activeEvent.meanResidual===null?"—":(activeEvent.meanResidual>0?"+":"")+fmt(activeEvent.meanResidual)+" pts"}/>
+        <HistoryMetric label="Score RMSE" value={fmt(activeEvent.rootMeanSquareError)+" pts"}/>
+        <HistoryMetric label="EPA first → last" value={`${fmt(activeEvent.epaStart,2)} → ${fmt(activeEvent.epaEnd,2)}`}/>
+        <HistoryMetric label="Mean match EPA change" value={fmt(activeEvent.meanMatchEPAChange,2)}/>
+      </div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
+    </div>
     <ResidualPatternPanel analysis={analysis}/>
-    <details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Event-by-event season performance</summary><div className="overflow-x-auto p-3"><table className="w-full min-w-[680px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>Matches</th><th>W-L</th><th>Win rate</th><th>Mean absolute error</th><th>Residual bias</th><th>Score RMSE</th><th>EPA first → last</th></tr></thead><tbody>{analysis.eventSummaries.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium text-slate-700">{item.event.shortName??item.event.name}</th><td>{item.matches}</td><td>{item.wins}–{item.losses}</td><td>{item.winRate===null?"—":`${(item.winRate*100).toFixed(1)}%`}</td><td>{fmt(item.meanAbsoluteError)}</td><td>{item.meanResidual===null?"—":(item.meanResidual>0?"+":"")+fmt(item.meanResidual)}</td><td>{fmt(item.rootMeanSquareError)}</td><td>{fmt(item.epaStart,2)} → {fmt(item.epaEnd,2)}</td></tr>)}</tbody></table></div></details>
     <p className="mt-3 text-xs text-slate-500">Season match records with Statbotics data: {analysis.collection.statboticsMatches} / {analysis.collection.totalMatches}. Score metrics describe the team's alliance results, not individual robot contribution.</p>
   </section>;
 }
