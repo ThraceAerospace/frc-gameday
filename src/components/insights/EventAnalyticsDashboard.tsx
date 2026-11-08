@@ -690,25 +690,42 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
 }
 function ResidualPatternPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const result = analysis.residualPattern;
-  const status = result.interpretation === "single-event-below-baseline" ? "Below baseline at this event"
-    : result.interpretation === "single-event-above-baseline" ? "Above baseline at this event"
-    : result.interpretation === "recurring-below-baseline" ? "Recurring below-baseline pattern"
-    : result.interpretation === "recurring-above-baseline" ? "Recurring above-baseline pattern"
-    : result.interpretation === "insufficient-history" ? "More match data needed" : "No established pattern";
+  const total = result.negativeEventCount + result.positiveEventCount;
+  const direction = result.positiveEventCount > result.negativeEventCount ? "above" : result.negativeEventCount > result.positiveEventCount ? "below" : "mixed";
+  const status = total === 0 ? "Not enough data"
+    : total === 1 ? (direction === "above" ? "Above baseline at this event" : direction === "below" ? "Below baseline at this event" : "At baseline")
+    : direction === "above" ? `Above baseline at ${result.positiveEventCount} of ${total} events`
+    : direction === "below" ? `Below baseline at ${result.negativeEventCount} of ${total} events`
+    : "Mixed results across events";
+  const meanGap = result.meanTeamResidual;
   return <section className="mt-3 rounded-lg border border-slate-200 p-3">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-900">Score residual vs event baseline</h4><p className="text-[11px] text-slate-500">Per-event comparison of the team's alliance scoring against strength-matched opponents. A single event can show a useful comparison; multiple events are needed to establish recurrence.</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{status}</span></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <HistoryMetric label="Events with enough data" value={String(result.eligibleEventCount)}/>
-      <HistoryMetric label="Below / above events" value={result.negativeEventCount+" / "+result.positiveEventCount}/>
-      <HistoryMetric label="Mean residual gap" value={result.meanTeamResidual===null?"—":(result.meanTeamResidual>0?"+":"")+fmt(result.meanTeamResidual)+" pts"}/>
-      <HistoryMetric label="Directional sign-test" value={result.signTestPValue===null?"—":result.signTestPValue.toFixed(3)}/>
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div><h4 className="text-sm font-bold text-slate-900">Score vs expected alliance performance</h4>
+        <p className="mt-1 max-w-3xl text-xs text-slate-600">Did the team's alliances score more or fewer points than expected, compared with similarly rated opposing alliances?</p>
+      </div>
+      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{status}</span>
     </div>
-    {result.events.length ? <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[560px] text-xs"><thead><tr className="border-b text-left text-slate-400"><th className="py-2">Event</th><th>Matches</th><th>Team residual</th><th>Baseline</th><th>Below / above 1σ</th><th>Evidence</th></tr></thead><tbody>{result.events.map((item)=><tr key={item.event.key} className="border-b border-slate-100"><th className="py-2 text-left font-medium">{item.event.name}</th><td>{item.teamMatches}</td><td className="tabular-nums">{fmt(item.teamMeanResidual)}</td><td className="tabular-nums">{fmt(item.baselineMeanResidual)} ± {fmt(item.baselineStandardDeviation)}</td><td>{item.belowOneSigma} / {item.aboveOneSigma}</td><td><div className="flex flex-wrap gap-1">{item.matchKeys.map((key)=><a key={key} href={"https://www.thebluealliance.com/match/"+key} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{key.split("_").pop()}</a>)}</div></td></tr>)}</tbody></table></div> : <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-      <p className="font-semibold">No event currently passes the eligibility checks.</p>
-      <p className="mt-1">An event needs at least 3 team residuals and 2 strength-matched opponent residuals. These counts separate match retrieval, scoring, prediction coverage, and baseline matching.</p>
-      {result.diagnostics?.length ? <div className="mt-2 space-y-1">{result.diagnostics.map((item)=><div key={item.event.key} className="flex flex-wrap justify-between gap-x-3"><span>{item.event.name}</span><span className="font-mono tabular-nums">{item.matches} matches · {item.scoredMatches} scored · {item.teamResidualSamples} team residuals · {item.opponentResidualSamples} opponent residuals · {item.strengthRatedSamples} rated · {item.baselineAllianceSamples}/2 matched</span></div>)}</div> : null}
+    {total > 0 ? <>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Average advantage vs baseline</p><p className="mt-1 text-xl font-bold tabular-nums">{meanGap===null?"—":`${meanGap>0?"+":""}${fmt(meanGap)} pts`}</p></div>
+        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Events above baseline</p><p className="mt-1 text-xl font-bold tabular-nums">{result.positiveEventCount} of {total}</p></div>
+        <div className="col-span-2 rounded-lg bg-slate-50 p-3 sm:col-span-1"><p className="text-[11px] text-slate-500">Events below baseline</p><p className="mt-1 text-xl font-bold tabular-nums">{result.negativeEventCount} of {total}</p></div>
+      </div>
+      <div className="mt-3 space-y-2">
+        {result.events.map((item)=>{
+          const gap=item.teamMeanResidual-item.baselineMeanResidual;
+          return <div key={item.event.key} className="flex flex-col gap-1 rounded-lg border border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{item.event.name}</p><p className="text-xs text-slate-500">{item.teamMatches} matches · Team alliance residual {fmt(item.teamMeanResidual)} · Peer baseline {fmt(item.baselineMeanResidual)}</p></div>
+            <span className={`shrink-0 text-sm font-bold tabular-nums ${gap>=0?"text-emerald-700":"text-rose-700"}`}>{gap>0?"+":""}{fmt(gap)} pts {gap>=0?"above":"below"}</span>
+          </div>;
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500">Positive means the team's alliances outscored the matched baseline; negative means they scored below it. This is an alliance-level comparison, not an individual-robot rating. Small event counts describe direction, not statistical certainty.</p>
+    </> : <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+      <p className="font-semibold">Not enough usable match data yet.</p>
+      <p className="mt-1">An event needs at least 3 scored team matches and 2 strength-matched opponent samples.</p>
+      {result.diagnostics?.length ? <div className="mt-2 space-y-1">{result.diagnostics.map((item)=><div key={item.event.key} className="flex flex-wrap justify-between gap-x-3"><span>{item.event.name}</span><span className="font-mono tabular-nums">{item.matches} matches · {item.scoredMatches} scored · {item.teamResidualSamples} team residuals · {item.baselineAllianceSamples}/2 peer samples</span></div>)}</div> : null}
     </div>}
-    <p className="mt-3 text-[11px] leading-5 text-slate-500">The baseline uses opposing alliances in matches featuring this team, matched within ±20% of the selected alliance pre-match combined EPA. It is an approximate event-specific peer sample, not a fully independent event-wide calibration. This signal cannot separate the selected team from its partners or opponents; it is a review prompt, not an attribution or causal conclusion.</p>
   </section>;
 }
 function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAnalysis;second:TeamMatchAnalysis;nameA:string;nameB:string}) {
