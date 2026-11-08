@@ -390,7 +390,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   };
   const past=[...ordered].reverse().slice(0,8);
   const estimatedShare=(match:TeamMatchRow)=>{
-    if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0)return null;
+    if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0||match.preEPA>match.alliancePreEPATotal)return null;
     return match.preEPA/match.alliancePreEPATotal*100;
   };
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
