@@ -153,7 +153,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{eventName}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
-          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · Reconciliation pending" : ""}</p>
+          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · polling fallback active" : ""}</p>
         </div>
         <Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link>
       </div>
@@ -322,8 +322,12 @@ function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phas
     epaEnd:[...phaseItems].reverse().find((item)=>item.epaEnd!==null)?.epaEnd??null,
     rp:["energized","supercharged","traversal"].map((key)=>{
       const values=phaseItems.flatMap((item)=>item.rp.filter((rp)=>rp.key===key));
+      const accuracyValues=values.filter((item)=>item.accuracy!==null);
+      const brierValues=values.filter((item)=>item.brier!==null);
       const sampleSize=values.reduce((sum,item)=>sum+item.sampleSize,0);
-      return {key,sampleSize,accuracy:sampleSize?values.reduce((sum,item)=>sum+(item.accuracy??0)*item.sampleSize,0)/sampleSize:null,brier:sampleSize?values.reduce((sum,item)=>sum+(item.brier??0)*item.sampleSize,0)/sampleSize:null};
+      const accuracyCount=accuracyValues.reduce((sum,item)=>sum+item.sampleSize,0);
+      const brierCount=brierValues.reduce((sum,item)=>sum+item.sampleSize,0);
+      return {key,sampleSize,accuracy:accuracyCount?accuracyValues.reduce((sum,item)=>sum+(item.accuracy??0)*item.sampleSize,0)/accuracyCount:null,brier:brierCount?brierValues.reduce((sum,item)=>sum+(item.brier??0)*item.sampleSize,0)/brierCount:null};
     }).filter((item)=>item.sampleSize>0),
   }:null;
   const title=isQual?"Qualification matches":"Elimination matches";
