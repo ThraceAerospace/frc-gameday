@@ -504,7 +504,7 @@ function TeamPerformanceHeadline({data,team,insight}:{data:EventAnalyticsRespons
       const peerCurrent=currentFor(peer.teamNumber),peerPrior=priorFor(peer.teamNumber);
       const now=definition.key==="total"?(peerCurrent?.epaTotal??peer.epa):read(peerCurrent,definition.keys);
       const before=definition.key==="total"?(peerPrior?.epaTotal??null):read(peerPrior,definition.keys);
-      return now!==null&&before!==null&&Number.isFinite(now-before)?[{teamNumber:peer.teamNumber,delta:now-before}]:[];
+      return now!=null&&before!=null&&Number.isFinite(now-before)?[{teamNumber:peer.teamNumber,delta:now-before}]:[];
     });
     const ranked=[...peerDeltas].sort((a,b)=>b.delta-a.delta);
     const rank=ranked.findIndex((item)=>item.teamNumber===team.teamNumber)+1;
