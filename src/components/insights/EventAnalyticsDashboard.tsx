@@ -350,10 +350,59 @@ function PhasePerformancePanel({analysis,phase}:{analysis:TeamMatchAnalysis;phas
 
 function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level==="qm").sort((a,b)=>a.match.match_number-b.match.match_number);
-  return <Panel title="Qualification match analysis" description="All qualification match records processed so far are listed, including matches without a review flag. The collection status above shows remaining work.">
-    <MatchAnalysisTable data={data} records={matches} playoff={false}/>
-    <p className="mt-3 text-xs text-slate-500">High-Confidence Miss and Anomalous Score are independent findings. Both alliances remain visible for context, including matches with no finding.</p>
-  </Panel>;
+  const analysis=data.qualificationAnalysis;
+  const calibration=analysis?.predictionCalibration;
+  const score=analysis?.scorePrediction;
+  const penalties=analysis?.penalties;
+  const anomalies=data.qualificationAnomalies??[];
+  const scoreFlags=anomalies.filter((item)=>item.outsideExpectedRange);
+  const highConfidenceMisses=calibration?.highConfidenceMisses??[];
+  const fmtPct=(value:number|null|undefined)=>value===null||value===undefined?"—":(value*100).toFixed(1)+"%";
+  const signed=(value:number|null)=>value===null?"—":(value>0?"+":"")+fmt(value)+" pts";
+  return <div className="space-y-4">
+    <Panel title="Qualification takeaways" description="Event-wide findings from completed qualification matches. Calibration, score error, and penalty review are separate signals.">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QualityMetric label="Winner prediction accuracy" value={fmtPct(calibration?.accuracy)} detail={(calibration?.matchCount??0)+" matches with prediction and winner"}/>
+        <QualityMetric label="Win-probability Brier score" value={fmt(calibration?.brierScore,3)} detail="Lower is better; 0 is perfect probability prediction"/>
+        <QualityMetric label="Score MAE" value={fmt(score?.meanAbsoluteError)} unit="pts" detail={(score?.allianceCount??0)+" predicted alliance scores"}/>
+        <QualityMetric label="High-confidence misses" value={String(highConfidenceMisses.length)} detail="Predicted winner had at least 80% probability but lost"/>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-100 p-3">
+          <h3 className="text-sm font-semibold text-slate-900">Unexpected outcomes</h3>
+          {highConfidenceMisses.length?<ul className="mt-2 space-y-1 text-sm">{highConfidenceMisses.map((item)=><li key={item.matchKey} className="flex justify-between gap-3"><a className="font-semibold text-slate-800 hover:underline" href={"https://www.thebluealliance.com/match/"+item.matchKey} target="_blank" rel="noreferrer">{item.matchLabel}</a><span className="text-right text-slate-500">{item.predictedWinner} favored · {fmtPct(item.probability)}</span></li>)}</ul>:<p className="mt-2 text-sm text-slate-500">No high-confidence winner misses in the available sample.</p>}
+          <p className="mt-2 text-xs text-slate-500">Score anomalies are independent: {scoreFlags.length} alliance score residuals fell outside the event-calibrated range.</p>
+        </div>
+        <div className="rounded-lg border border-slate-100 p-3">
+          <h3 className="text-sm font-semibold text-slate-900">Score prediction bias</h3>
+          <p className="mt-1 text-xs text-slate-500">Residual = actual − predicted. Positive means the model tended to predict too low.</p>
+          <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{signed(score?.meanResidual??null)}</p>
+          <p className="mt-1 text-xs text-slate-500">RMSE {fmt(score?.rootMeanSquareError)} pts · separate from whether the model picked the winner.</p>
+        </div>
+      </div>
+    </Panel>
+    <Panel title="Win-probability calibration" description="For each probability band, compare the model's average red-win probability with the actual red win rate. Sparse bands should be treated cautiously.">
+      {calibration?.bins.length?<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Predicted red chance</th><th>Matches</th><th>Mean predicted</th><th>Actual red wins</th><th>Observed − predicted</th></tr></thead><tbody>{calibration.bins.map((bin)=><tr key={bin.label} className="border-b border-slate-100"><th className="py-2 text-left">{bin.label}</th><td>{bin.count}</td><td>{fmtPct(bin.meanPredicted)}</td><td>{fmtPct(bin.observedRedWinRate)}</td><td className={bin.calibrationError>0.05?"text-emerald-700":bin.calibrationError< -0.05?"text-rose-700":"text-slate-600"}>{(bin.calibrationError>0?"+":"")+(bin.calibrationError*100).toFixed(1)+" pp"}</td></tr>)}</tbody></table></div>:<p className="text-sm text-slate-500">No completed qualification matches have both a win-probability prediction and a recorded winner.</p>}
+      <p className="mt-2 text-xs text-slate-500">{calibration?.matchCount??0} matches · accuracy {fmtPct(calibration?.accuracy)} · Brier score {fmt(calibration?.brierScore,3)}. Brier score evaluates probability quality, not score prediction.</p>
+    </Panel>
+    <Panel title="Prediction performance through qualifications" description="Score error is grouped by match order to show whether the model's event-specific accuracy changed over the qualification schedule.">
+      {analysis?.progression.length?<div className="grid gap-3 md:grid-cols-3">{analysis.progression.map((period)=><div key={period.label} className="rounded-lg bg-slate-50 p-3"><h3 className="text-sm font-semibold text-slate-800">{period.label}</h3><p className="text-xs text-slate-500">Q{period.firstMatch}–Q{period.lastMatch} · {period.allianceCount} alliance scores</p><p className="mt-2 text-xl font-bold tabular-nums">{fmt(period.meanAbsoluteError)} <span className="text-xs font-medium text-slate-500">MAE pts</span></p><p className="text-xs text-slate-500">Mean residual {signed(period.meanResidual)}</p></div>)}</div>:<p className="text-sm text-slate-500">Not enough completed qualification predictions to compare match periods.</p>}
+    </Panel>
+    <Panel title="Penalty review" description="Combined red and blue penalty points are compared across completed qualification matches. TBA credits penalty points to an alliance; this does not identify which alliance or robot committed the foul.">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <QualityMetric label="Matches with penalty data" value={String(penalties?.sampleSize??0)} detail="Completed qualification matches with both alliance totals"/>
+        <QualityMetric label="Matches with penalty points" value={String(penalties?.matchesWithPenaltyPoints??0)} detail="At least one penalty point credited"/>
+        <QualityMetric label="Total penalty points" value={String(penalties?.totalPenaltyPoints??0)} detail="Red + blue alliance credits"/>
+        <QualityMetric label="Unusual-penalty matches" value={String(penalties?.flaggedMatches.length??0)} detail={penalties?.outlierThreshold===null||penalties?.outlierThreshold===undefined?"Outlier test needs at least 10 matches":"Above "+fmt(penalties.outlierThreshold,1)+" point event threshold"}/>
+      </div>
+      {penalties?.flaggedMatches.length?<div className="mt-4 overflow-x-auto"><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Match</th><th>Red points credited</th><th>Blue points credited</th><th>Combined</th></tr></thead><tbody>{penalties.flaggedMatches.map((item)=><tr key={item.matchKey} className="border-b border-amber-100 bg-amber-50/60"><th className="py-2 text-left"><a className="font-semibold text-slate-900 hover:underline" href={"https://www.thebluealliance.com/match/"+item.matchKey} target="_blank" rel="noreferrer">{item.matchLabel}</a></th><td>{item.redPenaltyPoints}</td><td>{item.bluePenaltyPoints}</td><td className="font-bold">{item.totalPenaltyPoints}</td></tr>)}</tbody></table></div>:<p className="mt-3 text-sm text-slate-500">{(penalties?.sampleSize??0)<10?"Penalty outlier flags will be evaluated after at least 10 completed matches have usable TBA score breakdowns.":"No completed qualification match exceeded the event's upper outlier fence."}</p>}
+      <p className="mt-2 text-xs text-slate-500">Flag rule: Tukey upper fence (Q3 + 1.5 × IQR); when the middle 50% is tied, values above the median are flagged. Flags are review leads, not judgments about responsibility.</p>
+    </Panel>
+    <Panel title="Qualification match explorer" description="Inspect every qualification match with prediction context. Match flags are independent: one match can have a winner miss, score anomaly, penalty flag, multiple flags, or none.">
+      <MatchAnalysisTable data={data} records={matches} playoff={false}/>
+      <p className="mt-3 text-xs text-slate-500">Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
+    </Panel>
+  </div>;
 }
 
 function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
@@ -369,7 +418,8 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const outcomeTone=winProbability===null?"bg-slate-100 text-slate-600":"bg-slate-100 text-slate-700";
     if(playoff)return threshold!==null&&Math.abs(result.residual)>threshold?{label:"Anomalous Score",tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
     const anomaly=data.qualificationAnomalies?.find((item)=>item.matchKey===matchKey&&item.alliance===color);
-    const labels=[...(anomaly?.highConfidenceMiss?["High-Confidence Miss"]:[]),...(anomaly?.outsideExpectedRange?["Anomalous Score"]:[])];
+    const penaltyFlag=data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===matchKey)??false;
+    const labels=[...(anomaly?.highConfidenceMiss?["High-Confidence Miss"]:[]),...(anomaly?.outsideExpectedRange?["Anomalous Score"]:[]),...(penaltyFlag?["Penalty Review"]:[])];
     return labels.length?{label:labels.join(" · "),tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
   };
   if(!records.length)return <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{playoff?"No playoff matches are available yet.":"No qualification matches are available yet."}</p>;
