@@ -402,7 +402,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     </Panel>
     <Panel title="Qualification match explorer" description="Inspect every qualification match with prediction context. Match flags are independent: one match can have a winner miss, score anomaly, penalty flag, multiple flags, or none.">
       <MatchAnalysisTable data={data} records={matches} playoff={false}/>
-      <p className="mt-3 text-xs text-slate-500">Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
+      <p className="mt-3 text-xs text-slate-500">Marker guide: Wrong prediction = predicted winner lost; High total EPA = combined pre-match alliance EPA in the top quartile of this match list; Large delta = at least one alliance score residual in the top decile by absolute size; Penalty review = unusual combined penalty points. Large delta is a relative review marker, not a claim that the score was statistically impossible. Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
     </Panel>
   </div>;
 }
