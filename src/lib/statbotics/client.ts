@@ -300,7 +300,7 @@ export class StatboticsClient {
         ? {
             ...fallback,
             lastRefreshAt: failedAt,
-            expiresAt: failedAt + options.fallbackTtlSeconds * 1000,
+            expiresAt: failedAt + STATBOTICS_DATA_TTL_SECONDS * 1000,
           }
         : {
             data: null,
