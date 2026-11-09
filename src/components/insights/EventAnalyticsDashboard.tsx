@@ -1167,7 +1167,10 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   const comparisons=insights.flatMap((item)=>item.seasonComparison?[{teamNumber:item.teamNumber,comparison:item.seasonComparison}]:[]);
   const improved=[...comparisons].sort((a,b)=>b.comparison.change-a.comparison.change).slice(0,5);
   const declined=[...comparisons].sort((a,b)=>a.comparison.change-b.comparison.change).slice(0,5);
-  const predictionResidualValues=data.allianceResults.filter((item)=>item.actual!==null&&item.residual!==null).map((item)=>item.residual as number);\n  const predictionResidualMean=predictionResidualValues.length?predictionResidualValues.reduce((sum,value)=>sum+value,0)/predictionResidualValues.length:null;\n  const predictionResidualSampleSd=predictionResidualValues.length>1&&predictionResidualMean!==null?Math.sqrt(predictionResidualValues.reduce((sum,value)=>sum+(value-predictionResidualMean)**2,0)/(predictionResidualValues.length-1)):null;\n  const residualDiagnostics=data.teams.map((team)=>{
+  const predictionResidualValues=data.allianceResults.filter((item)=>item.actual!==null&&item.residual!==null).map((item)=>item.residual as number);
+  const predictionResidualMean=predictionResidualValues.length?predictionResidualValues.reduce((sum,value)=>sum+value,0)/predictionResidualValues.length:null;
+  const predictionResidualSampleSd=predictionResidualValues.length>1&&predictionResidualMean!==null?Math.sqrt(predictionResidualValues.reduce((sum,value)=>sum+(value-predictionResidualMean)**2,0)/(predictionResidualValues.length-1)):null;
+  const residualDiagnostics=data.teams.map((team)=>{
     const values=data.allianceResults
       .filter((item)=>item.teamKeys.includes(team.teamKey)&&item.actual!==null&&item.residual!==null)
       .map((item)=>item.residual as number);
