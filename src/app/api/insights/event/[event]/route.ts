@@ -15,7 +15,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
   try {
     // Complete the initial acquisition before returning. Subsequent dashboard
     // opens read the persisted snapshot and make no Statbotics requests.
-    await getEventAnalyticsSnapshot(event);
+    const initialSnapshot = await getEventAnalyticsSnapshot(event);
+    // Initialize the cohort cache before advancing its one-shot collection job.
+    await getSeasonCohortSnapshot(initialSnapshot.event, initialSnapshot.teams);
     await Promise.all([
       advanceEventAnalytics(event, forceRefresh),
       advanceSeasonCohort(event, forceRefresh),
