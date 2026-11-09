@@ -231,30 +231,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       }));
     const eventShifts = eligibleEliminationEvents.map((item) => item.shift);
     const negativeEventCount = eventShifts.filter((value) => value < 0).length;
-    // The "after strong qualifications" test only includes events where the
-    // team's qualification alliance residual was positive (above prediction).
-    const positiveQualificationEvents = eligibleEliminationEvents.filter((item) => (item.qualificationMeanResidual ?? 0) > 0);
-    const negativeShiftAfterPositiveQualCount = positiveQualificationEvents.filter((item) => item.shift < -item.shiftStandardError).length;
-    const nPositiveQualificationEvents = positiveQualificationEvents.length;
-    // Exact one-sided sign test: probability of at least this many negative shifts under p=0.5.
+    const positiveEventCount = eventShifts.filter((value) => value > 0).length;
+    // Test whether decline direction is consistent across all eligible events.
+    // Qualification baseline level and shift magnitude do not determine eligibility;
+    // uncertainty remains visible for interpreting the size of each event's shift.
+    const directionalEventCount = negativeEventCount + positiveEventCount;
     const binomialCoefficient = (n: number, k: number) => {
       let value = 1;
       for (let i = 1; i <= k; i++) value = value * (n - i + 1) / i;
       return value;
     };
-    const signTestPValue = nPositiveQualificationEvents ? Array.from({ length: nPositiveQualificationEvents - negativeShiftAfterPositiveQualCount + 1 }, (_, index) => negativeShiftAfterPositiveQualCount + index)
-      .reduce((sum, successes) => sum + binomialCoefficient(nPositiveQualificationEvents, successes) / (2 ** nPositiveQualificationEvents), 0) : null;
+    // Exact one-sided sign test: probability of at least this many negative shifts
+    // among non-tied event shifts under an equal chance of increase or decline.
+    const signTestPValue = directionalEventCount ? Array.from({ length: directionalEventCount - negativeEventCount + 1 }, (_, index) => negativeEventCount + index)
+      .reduce((sum, successes) => sum + binomialCoefficient(directionalEventCount, successes) / (2 ** directionalEventCount), 0) : null;
     const eliminationMatchCount = rows.filter((row): row is TeamMatchRow => row !== null && ["ef", "qf", "sf", "f"].includes(row.compLevel)).length;
     const eliminationShift = {
       eliminationMatchCount, eligibleEventCount: eligibleEliminationEvents.length, negativeEventCount,
-      positiveQualificationEventCount: nPositiveQualificationEvents, negativeShiftAfterPositiveQualCount,
+      positiveEventCount, directionalEventCount,
       meanShift: average(eventShifts), medianShift: median(eventShifts),
       signTestPValue, minimumQualificationMatchesPerEvent: 3, minimumEliminationMatchesPerEvent: 2,
       events: eligibleEliminationEvents,
       interpretation: eliminationMatchCount === 0 ? "no-elimination-matches" as const
         : eligibleEliminationEvents.length === 0 ? "insufficient-history" as const
         : eligibleEliminationEvents.length === 1 ? "single-event-shift" as const
-        : nPositiveQualificationEvents >= 3 && signTestPValue !== null && signTestPValue <= 0.05 && negativeShiftAfterPositiveQualCount >= 3 ? "recurring-negative-shift" as const
+        : directionalEventCount >= 3 && signTestPValue !== null && signTestPValue <= 0.05 && negativeEventCount >= 3 ? "recurring-negative-shift" as const
         : "no-established-negative-shift" as const,
     };
     const residualPatternDiagnostics = eventMatches.map(({ event }) => {
