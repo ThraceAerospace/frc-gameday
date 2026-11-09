@@ -360,7 +360,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const fmtPct=(value:number|null|undefined)=>value===null||value===undefined?"—":(value*100).toFixed(1)+"%";
   const signed=(value:number|null)=>value===null?"—":(value>0?"+":"")+fmt(value)+" pts";
   return <div className="space-y-4">
-    <Panel title="Qualification takeaways" description="Event-wide findings from completed qualification matches. Calibration, score error, and penalty review are separate signals.">
+    <Panel title="Qualification takeaways" description="Event-wide findings from completed qualification matches. Calibration, score error, and high-penalty counts are separate signals.">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <QualityMetric label="Winner prediction accuracy" value={fmtPct(calibration?.accuracy)} detail={(calibration?.matchCount??0)+" matches with prediction and winner"}/>
         <QualityMetric label="Underdog wins" value={String(calibration?.underdogWins??0)} detail="Matches won by the side with under 50% predicted chance"/>
@@ -390,7 +390,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     <Panel title="Prediction performance through qualifications" description="Score error is grouped by match order to show whether the model's event-specific accuracy changed over the qualification schedule.">
       {analysis?.progression.length?<div className="grid gap-3 md:grid-cols-3">{analysis.progression.map((period)=><div key={period.label} className="rounded-lg bg-slate-50 p-3"><h3 className="text-sm font-semibold text-slate-800">{period.label}</h3><p className="text-xs text-slate-500">Q{period.firstMatch}–Q{period.lastMatch} · {period.allianceCount} alliance scores</p><p className="mt-2 text-xl font-bold tabular-nums">{fmt(period.meanAbsoluteError)} <span className="text-xs font-medium text-slate-500">MAE pts</span></p><p className="text-xs text-slate-500">Mean residual {signed(period.meanResidual)}</p></div>)}</div>:<p className="text-sm text-slate-500">Not enough completed qualification predictions to compare match periods.</p>}
     </Panel>
-    <Panel title="Penalty review" description="Combined red and blue penalty points are compared across completed qualification matches. TBA credits penalty points to an alliance; this does not identify which alliance or robot committed the foul.">
+    <Panel title="High penalties" description="Combined red and blue penalty points are compared across completed qualification matches. TBA credits penalty points to an alliance; this does not identify which alliance or robot committed the foul.">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <QualityMetric label="Matches with penalty data" value={String(penalties?.sampleSize??0)} detail="Completed qualification matches with both alliance totals"/>
         <QualityMetric label="Matches with penalty points" value={String(penalties?.matchesWithPenaltyPoints??0)} detail="At least one penalty point credited"/>
@@ -402,7 +402,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     </Panel>
     <Panel title="Qualification match explorer" description="Inspect every qualification match with prediction context. Match flags are independent: one match can have a winner miss, score anomaly, penalty flag, multiple flags, or none.">
       <MatchAnalysisTable data={data} records={matches} playoff={false}/>
-      <p className="mt-3 text-xs text-slate-500">Marker guide: Wrong prediction = predicted winner lost; High total EPA = combined pre-match alliance EPA in the top quartile of this match list; Large delta = at least one alliance score residual in the top decile by absolute size; Penalty review = unusual combined penalty points. Large delta is a relative review marker, not a claim that the score was statistically impossible. Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
+      <p className="mt-3 text-xs text-slate-500">Marker guide: Wrong prediction = predicted winner lost; High total EPA = combined pre-match alliance EPA in the top quartile of this match list; Large delta = at least one alliance score residual in the top decile by absolute size; High penalties = unusual combined penalty points. Large delta is a relative review marker, not a claim that the score was statistically impossible. Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
     </Panel>
   </div>;
 }
@@ -476,9 +476,9 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       ...(wrongPrediction?["Wrong prediction"]:[]),
       ...(highEpa?["High total EPA"]:[]),
       ...(matchDelta?["Large delta"]:[]),
-      ...(penaltyFlag?["Penalty review"]:[]),
+      ...(penaltyFlag?["High penalties"]:[]),
     ];
-    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800"><th className="py-1.5 pr-2 text-left align-top"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>{matchFlags.length?<div className="mt-1 flex max-w-[180px] flex-wrap gap-1">{matchFlags.map((flag)=><span key={flag} className={"inline-block rounded px-1 py-0.5 text-[8px] font-bold "+(flag==="Penalty review"?"bg-amber-100 text-amber-800":flag==="Wrong prediction"?"bg-rose-100 text-rose-800":flag==="Large delta"?"bg-violet-100 text-violet-800":"bg-sky-100 text-sky-800")}>{flag}</span>)}</div>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
+    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800"><th className="py-1.5 pr-2 text-left align-top"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>{matchFlags.length?<div className="mt-1 flex max-w-[180px] flex-wrap gap-1">{matchFlags.map((flag)=><span key={flag} className={"inline-block rounded px-1 py-0.5 text-[8px] font-bold "+(flag==="High penalties"?"bg-amber-100 text-amber-800":flag==="Wrong prediction"?"bg-rose-100 text-rose-800":flag==="Large delta"?"bg-violet-100 text-violet-800":"bg-sky-100 text-sky-800")}>{flag}</span>)}</div>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
   })}</tbody></table></div>;
 }
 
