@@ -55,6 +55,24 @@ export type QualificationAnomaly = {
   standardizedResidual: number | null; winProbability: number | null;
   outsideExpectedRange: boolean; highConfidenceMiss: boolean; severity: "high" | "medium"; reasons: string[];
 };
+export type QualificationAnalysis = {
+  predictionCalibration: {
+    matchCount: number;
+    correctCount: number;
+    accuracy: number | null;
+    brierScore: number | null;
+    highConfidenceMisses: { matchKey: string; matchLabel: string; predictedWinner: "red" | "blue"; probability: number }[];
+    bins: { label: string; count: number; meanPredicted: number; observedRedWinRate: number; calibrationError: number }[];
+  };
+  scorePrediction: { allianceCount: number; meanAbsoluteError: number | null; rootMeanSquareError: number | null; meanResidual: number | null };
+  progression: { label: string; firstMatch: number; lastMatch: number; allianceCount: number; meanAbsoluteError: number | null; meanResidual: number | null }[];
+  penalties: {
+    sampleSize: number; matchesWithPenaltyPoints: number; totalPenaltyPoints: number;
+    meanPenaltyPoints: number | null; medianPenaltyPoints: number | null; outlierThreshold: number | null;
+    flaggedMatches: { matchKey: string; matchLabel: string; matchNumber: number; redPenaltyPoints: number; bluePenaltyPoints: number; totalPenaltyPoints: number }[];
+  };
+};
+
 export type PlayoffAlliancePerformance = {
   /** Official TBA alliance name; null when TBA does not provide one. */
   name: string | null;
@@ -84,6 +102,7 @@ export type EventAnalyticsResponse = {
   allianceResults: AllianceResult[];
   findings: ReviewFinding[];
   qualificationAnomalies?: QualificationAnomaly[];
+  qualificationAnalysis?: QualificationAnalysis;
   playoffAnalysis?: PlayoffAnalysis;
   teamInsights?: TeamInsight[];
   seasonCohort?: SeasonCohortSnapshot;
