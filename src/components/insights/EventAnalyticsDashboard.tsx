@@ -507,42 +507,15 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   }).sort((a,b)=>b.favoriteProbability-a.favoriteProbability);
   const unexpected=unexpectedThreshold===null?[]:completed.filter((item)=>[item.redResult?.residual,item.blueResult?.residual].some((value)=>typeof value==="number"&&Math.abs(value)>=unexpectedThreshold)).sort((a,b)=>Math.max(Math.abs(b.redResult?.residual??0),Math.abs(b.blueResult?.residual??0))-Math.max(Math.abs(a.redResult?.residual??0),Math.abs(a.blueResult?.residual??0)));
   const closest=[...completed].sort((a,b)=>a.margin-b.margin).slice(0,5);
-  const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
-  const allianceName=(color:"red"|"blue",item:typeof completed[number])=>{
-    const teamKeys=item.match.alliances[color].team_keys;
-    return data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??(color==="red"?"Red alliance":"Blue alliance");
-  };
-  const allianceTeams=(color:"red"|"blue",item:typeof completed[number])=>item.match.alliances[color].team_keys.map((key)=>teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)).join(" · ");
-  const spotlight=(item:typeof completed[number],kind:"upset"|"unexpected"|"close")=>{
-    const redResidual=item.redResult?.residual??null;
-    const blueResidual=item.blueResult?.residual??null;
-    const largestResidual=Math.abs(redResidual??0)>=Math.abs(blueResidual??0)?{color:"red" as const,value:redResidual}:{color:"blue" as const,value:blueResidual};
-    const favorite=(item as typeof upsets[number]).favorite;
-    const detail=kind==="upset"?Math.round((item as typeof upsets[number]).favoriteProbability*100)+"% pre-match win chance for "+allianceName(favorite,item)
-      :kind==="unexpected"?allianceName(largestResidual.color,item)+": "+(largestResidual.value===null?"—":(largestResidual.value>0?"+":"")+fmt(largestResidual.value,0)+" pts vs prediction")
-      :item.margin+"-point final margin";
-    return <article key={item.match.key} className="rounded-lg border border-slate-200 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <a href={"https://www.thebluealliance.com/match/"+item.match.key} target="_blank" rel="noreferrer" className="text-sm font-bold text-slate-900 hover:underline">{matchShortName(item.match,data.event.playoff_type)} ↗</a>
-        <span className="text-xs font-semibold text-slate-500">{detail}</span>
-      </div>
-      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
-        <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-rose-700">{allianceName("red",item)}</p><p className="truncate text-xs text-slate-600">{allianceTeams("red",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.redScore}</p></div>
-        <span className="text-xs text-slate-400">vs</span>
-        <div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase text-blue-700">{allianceName("blue",item)}</p><p className="truncate text-xs text-slate-600">{allianceTeams("blue",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.blueScore}</p></div>
-      </div>
-      {kind==="unexpected"?<p className="mt-1 text-[11px] text-slate-500">{allianceName("red",item)} delta: {redResidual===null?"—":(redResidual>0?"+":"")+fmt(redResidual,0)} pts · {allianceName("blue",item)} delta: {blueResidual===null?"—":(blueResidual>0?"+":"")+fmt(blueResidual,0)} pts</p>:null}
-    </article>;
-  };
   return <div className="space-y-4">
     <Panel title="Playoff upsets" description="Completed elimination matches where the pre-match favorite had at least a 60% win probability but lost.">
-      {upsets.length?<div className="grid gap-3 md:grid-cols-2">{upsets.map((item)=>spotlight(item,"upset"))}</div>:<p className="text-sm text-slate-500">No completed playoff matches meet the upset definition yet. Matches without a winner prediction are excluded.</p>}
+      {upsets.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={upsets.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">No completed playoff matches meet the upset definition yet. Matches without a winner prediction are excluded.</p>}
     </Panel>
     <Panel title="Unexpected results" description={unexpectedThreshold===null?"Alliance score residuals need a larger completed-match sample before unusual results can be highlighted.":"Matches where at least one alliance's absolute score residual falls in the top 10% of playoff alliance results in this event."}>
-      {unexpected.length?<div className="grid gap-3 md:grid-cols-2">{unexpected.map((item)=>spotlight(item,"unexpected"))}</div>:<p className="text-sm text-slate-500">{unexpectedThreshold===null?"Not enough scored alliance predictions are available to establish an event-relative threshold.":"No completed playoff match currently falls in the unusual-score range."}</p>}
+      {unexpected.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={unexpected.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">{unexpectedThreshold===null?"Not enough scored alliance predictions are available to establish an event-relative threshold.":"No completed playoff match currently falls in the unusual-score range."}</p>}
     </Panel>
     <Panel title="Closest matches" description="The five smallest final score margins among completed elimination matches.">
-      {closest.length?<div className="grid gap-3 md:grid-cols-2">{closest.map((item)=>spotlight(item,"close"))}</div>:<p className="text-sm text-slate-500">Completed playoff scores are not available yet.</p>}
+      {closest.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={closest.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">Completed playoff scores are not available yet.</p>}
     </Panel>
     <Panel title="Playoff match explorer" description="Every elimination match record processed so far, with alliance-level score comparisons and the existing match review markers.">
       <MatchAnalysisTable data={data} records={matches} playoff/>
