@@ -6,7 +6,7 @@ import type { TBAEvent } from "@/lib/tba/types";
 import type { TBAEventSimple } from "@/lib/tba/types";
 import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 
-const TTL_SECONDS = 24 * 60 * 60;
+const TTL_SECONDS = 30 * 24 * 60 * 60;
 const LOCK_SECONDS = 45;
 const PREFIX = "insights:season-cohort:v1:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
@@ -15,7 +15,6 @@ const RECORD_BATCH = 10;
 const CONCURRENCY = 2;
 const MAX_ATTEMPTS = 2;
 const WORK_BUDGET_MS = 22_000;
-const CURRENT_EVENT_REFRESH_MS = 10 * 60 * 1000;
 
 type EventRef = { key: string; name: string; shortName: string; startDate: string };
 type Pair = { teamNumber: number; event: EventRef };
@@ -99,8 +98,9 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
     };
     await writeJob(eventKey, job);
   }
-  // Reconcile the target event roster periodically; newly added teams join discovery.
-  if (!job.rosterRefreshedAt || Date.now() - job.rosterRefreshedAt > 60 * 60 * 1000) {
+  // The cohort is a point-in-time Statbotics snapshot. Do not periodically
+  // reconcile or refetch it; use the dashboard's explicit refresh action.
+  if (false) {
     const currentTeams = teams.map((team) => team.teamNumber).filter(Number.isFinite);
     const known = new Set(job.teamNumbers);
     for (const teamNumber of currentTeams) {
@@ -110,18 +110,6 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
       }
     }
     job.rosterRefreshedAt = Date.now();
-    await writeJob(eventKey, job);
-  }
-  // The current event's Statbotics team-event record evolves as the event progresses.
-  if ((job.currentEventRefreshedAt === null || Date.now() - job.currentEventRefreshedAt > CURRENT_EVENT_REFRESH_MS) &&
-      job.discoveryQueue.length === 0 && job.recordQueue.length === 0) {
-    for (const teamNumber of job.teamNumbers) {
-      const id = teamNumber + ":" + eventKey;
-      delete job.records[id];
-      delete job.recordAttempts[id];
-      job.recordQueue.push({ teamNumber, event: job.target });
-    }
-    job.currentEventRefreshedAt = Date.now();
     await writeJob(eventKey, job);
   }
   return snapshot(job);
@@ -184,7 +172,7 @@ export async function advanceSeasonCohort(eventKey: string): Promise<void> {
         const requested = batch.filter((pair) => pair.teamNumber === teamNumber);
         const year = Number(job.target.key.slice(0, 4));
         try {
-          const records = await Statbotics.getTeamEvents({ team: teamNumber, year }, { refresh: true });
+          const records = await Statbotics.getTeamEvents({ team: teamNumber, year });
           const byEvent = new Map(records.flatMap((record) =>
             typeof record.event === "string" ? [[record.event, record] as const] : [],
           ));
