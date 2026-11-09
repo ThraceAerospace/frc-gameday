@@ -6,14 +6,14 @@ import type { TBAEvent } from "@/lib/tba/types";
 import type { TBAEventSimple } from "@/lib/tba/types";
 import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 
-const TTL_SECONDS = 30 * 24 * 60 * 60;
+const TTL_SECONDS = 365 * 24 * 60 * 60;
 const LOCK_SECONDS = 45;
 const PREFIX = "insights:season-cohort:v1:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
 const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
 const CONCURRENCY = 2;
-const MAX_ATTEMPTS = 2;
+const MAX_ATTEMPTS = 1;
 const WORK_BUDGET_MS = 22_000;
 
 type EventRef = { key: string; name: string; shortName: string; startDate: string };
@@ -98,32 +98,30 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
     };
     await writeJob(eventKey, job);
   }
-  // The cohort is a point-in-time Statbotics snapshot. Do not periodically
-  // reconcile or refetch it; use the dashboard's explicit refresh action.
-  if (false) {
-    const currentTeams = teams.map((team) => team.teamNumber).filter(Number.isFinite);
-    const known = new Set(job.teamNumbers);
-    for (const teamNumber of currentTeams) {
-      if (!known.has(teamNumber)) {
-        job.teamNumbers.push(teamNumber);
-        if (!job.discoveryQueue.includes(teamNumber)) job.discoveryQueue.push(teamNumber);
-      }
-    }
-    job.rosterRefreshedAt = Date.now();
-    await writeJob(eventKey, job);
-  }
+  // Historical Statbotics cohort data is immutable for this prototype.
+  // New teams and changed model records are incorporated only on manual refresh.
   return snapshot(job);
 }
 
-export async function advanceSeasonCohort(eventKey: string): Promise<void> {
+export async function advanceSeasonCohort(eventKey: string, forceRefresh = false): Promise<void> {
   const lockKey = LOCK_PREFIX + eventKey;
   const token = randomUUID();
   const acquired = await redis.set(lockKey, token, "EX", LOCK_SECONDS, "NX");
   if (acquired !== "OK") return;
   const deadline = Date.now() + WORK_BUDGET_MS;
   try {
-    const job = await readJob(eventKey);
+    let job = await readJob(eventKey);
     if (!job) return;
+    if (forceRefresh) {
+      job.discoveryQueue = [...job.teamNumbers];
+      job.discoveryAttempts = {};
+      job.recordQueue = [];
+      job.recordAttempts = {};
+      job.records = {};
+      job.discoveryFailures = [];
+      job.currentEventRefreshedAt = null;
+      await writeJob(eventKey, job);
+    }
     while (Date.now() < deadline && job.discoveryQueue.length) {
       const batch = job.discoveryQueue.slice(0, DISCOVERY_BATCH);
       await withConcurrency(batch, CONCURRENCY, async (teamNumber) => {
