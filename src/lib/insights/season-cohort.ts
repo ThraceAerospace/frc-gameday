@@ -163,48 +163,8 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
       });
       await writeJob(eventKey, job);
     }
-    while (Date.now() < deadline && job.discoveryQueue.length === 0 && job.recordQueue.length) {
-      const batch = job.recordQueue.slice(0, RECORD_BATCH);
-      const teamNumbers = [...new Set(batch.map((pair) => pair.teamNumber))];
-      await withConcurrency(teamNumbers, CONCURRENCY, async (teamNumber) => {
-        const requested = batch.filter((pair) => pair.teamNumber === teamNumber);
-        const year = Number(job.target.key.slice(0, 4));
-        try {
-          const records = await Statbotics.getTeamEvents({ team: teamNumber, year });
-          const byEvent = new Map(records.flatMap((record) =>
-            typeof record.event === "string" ? [[record.event, record] as const] : [],
-          ));
-          for (const pair of requested) {
-            const id = pairKey(pair);
-            const record = byEvent.get(pair.event.key) ?? null;
-            const totalRecord = record?.record?.total;
-            const breakdown = Object.fromEntries(Object.entries(record?.epa?.breakdown ?? {})
-              .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
-            job.records[id] = {
-              teamNumber, event: pair.event, epaTotal: finite(record?.epa?.total_points),
-              epaUnitless: finite(record?.epa?.unitless), breakdown,
-              wins: finite(totalRecord?.wins), losses: finite(totalRecord?.losses), ties: finite(totalRecord?.ties),
-              matches: finite(totalRecord?.count), fetchedAt: Date.now(),
-              status: record ? "ready" : "unavailable",
-            };
-            job.recordQueue = job.recordQueue.filter((item) => pairKey(item) !== id);
-          }
-        } catch {
-          for (const pair of requested) {
-            const id = pairKey(pair);
-            const attempts = (job.recordAttempts[id] ?? 0) + 1;
-            job.recordAttempts[id] = attempts;
-            if (attempts >= MAX_ATTEMPTS) {
-              job.records[id] = { teamNumber, event: pair.event, epaTotal: null, epaUnitless: null,
-                breakdown: {}, wins: null, losses: null, ties: null, matches: null,
-                fetchedAt: Date.now(), status: "unavailable" };
-              job.recordQueue = job.recordQueue.filter((item) => pairKey(item) !== id);
-            }
-          }
-        }
-      });
-      await writeJob(eventKey, job);
-    }
+    // Discovery already returns the team's complete filtered team_events collection.
+    // Persist it directly; no second request per team is needed.
     if (job.currentEventRefreshedAt === null && job.discoveryQueue.length === 0 && !job.recordQueue.some((pair) => pair.event.key === eventKey)) {
       job.currentEventRefreshedAt = Date.now();
     }
