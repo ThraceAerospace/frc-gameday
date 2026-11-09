@@ -8,6 +8,7 @@ import type {
 
 const DEFAULT_BASE_URL = "https://api.statbotics.io";
 const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
+const STATBOTICS_DATA_TTL_SECONDS = 365 * 24 * 60 * 60;
 const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
 const TEAM_YEAR_FALLBACK_TTL_SECONDS = 10 * 60;
 const TEAM_EVENT_FALLBACK_TTL_SECONDS = 24 * 60 * 60;
@@ -54,7 +55,10 @@ function getEffectiveTtlSeconds(
   fallbackTtlSeconds: number,
 ): number {
   const upstreamMaxAge = getMaxAge(cacheControl);
-  return upstreamMaxAge ?? fallbackTtlSeconds;
+  // Statbotics model records are treated as snapshots in this prototype.
+  // Keep them until an explicit user refresh rather than silently refreshing
+  // historical event data whenever the upstream max-age expires.
+  return Math.max(STATBOTICS_DATA_TTL_SECONDS, upstreamMaxAge ?? fallbackTtlSeconds);
 }
 
 function parseCached<T>(raw: string): CachedResponse<T> | null {
