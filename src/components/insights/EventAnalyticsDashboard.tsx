@@ -56,13 +56,13 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
 
-  const load = useCallback(async (refreshMatchKey: string | null = null) => {
+  const load = useCallback(async (forceRefresh = false) => {
     const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      const liveQuery = refreshMatchKey ? `?liveMatchKey=${encodeURIComponent(refreshMatchKey)}` : "";
-      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}${liveQuery}`, { cache: "no-store" });
+      const refreshQuery = forceRefresh ? "?refresh=1" : "";
+      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}${refreshQuery}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const next = await response.json() as EventAnalyticsResponse;
       if (generation === loadGeneration.current) setData(next);
@@ -74,23 +74,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
   }, [eventKey]);
 
   useEffect(() => {
-    void load(liveMatchKey);
-    // The first response is the current snapshot; the server refresh runs in
-    // waitUntil. Read the persisted result again shortly after a live change.
-    if (!liveMatchKey) return;
-    const timer = window.setTimeout(() => { void load(liveMatchKey); }, 2_500);
-    return () => window.clearTimeout(timer);
-  }, [load, liveMatchKey, liveMatchSignature]);
-
-  useEffect(() => {
-    if (!data) return;
-    // WebSocket changes refresh immediately; this slower check reconciles
-    // schedule and OPR updates that do not change the latest completed match.
-    const cohortPending = data.seasonCohort && data.seasonCohort.state !== "complete" && data.seasonCohort.state !== "partial";
-    const delay = data.collection.state === "complete" && !cohortPending ? 30_000 : 5_000;
-    const timer = window.setTimeout(() => { void load(liveMatchKey); }, delay);
-    return () => window.clearTimeout(timer);
-  }, [data?.collection.state, data?.collection.processedMatchCount, data?.collection.updatedAt, data?.seasonCohort?.state, data?.seasonCohort?.updatedAt, load, liveMatchKey]);
+    void load();
+  }, [load]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
@@ -129,7 +114,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
     let active = true;
     setMatchAnalysisA(null);
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    const query = `year=${data.event.year}${liveMatchKey ? `&refresh=1&liveMatchKey=${encodeURIComponent(liveMatchKey)}` : ""}`;
+    const query = `year=${data.event.year}`;
     fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
@@ -138,7 +123,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
       if (active) { setMatchAnalysisA(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
-  }, [teamA,data?.event.year,liveMatchKey,liveMatchSignature]);
+  }, [teamA,data?.event.year]);
 
   const teams = data?.teams ?? [];
   const selectedFocus = teams.find((team) => String(team.teamNumber) === teamFocus);
@@ -159,9 +144,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{eventName}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
-          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event updates connected" : websocketStatus === "connecting" ? "Connecting to live event updates…" : "Live event updates disconnected"}{websocketStale ? " · polling fallback active" : ""}</p>
+          <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event feed connected" : websocketStatus === "connecting" ? "Connecting to live event feed…" : "Live event feed disconnected"}{websocketStale ? " · live feed delayed" : ""}</p>
         </div>
-        <Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void load(true)} disabled={loading} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
       </div>
 
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -180,9 +165,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatch
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-[width] duration-500" style={{width:`${percent}%`}} /></div>
             {data.collection.statboticsFetchError ? <p className="mt-2 text-xs leading-5 text-amber-800">
-              The bulk Statbotics request failed: {data.collection.statboticsFetchError}. TBA schedule and scores remain available. FieldView will retry the model-data request automatically; model-dependent metrics may be incomplete until it succeeds.
+              The bulk Statbotics request failed: {data.collection.statboticsFetchError}. TBA schedule and scores remain available. Use Refresh data to retry the model-data request; model-dependent metrics may be incomplete until it succeeds.
             </p> : unavailable > 0 ? <p className="mt-2 text-xs leading-5 text-amber-800">
-              {unavailable} scheduled match(es) have no corresponding record in the Statbotics event collection. TBA match results are still retained. Statbotics may not have published predictions for these matches yet, or may not provide records for that match type. FieldView will reconcile the collection again as event data changes.
+              {unavailable} scheduled match(es) have no corresponding record in the Statbotics event collection. TBA match results are still retained. Statbotics may not have published predictions for these matches yet, or may not provide records for that match type. Use Refresh data to request another Statbotics collection.
             </p> : null}
           </div>;
         })() : <div aria-live="polite">
