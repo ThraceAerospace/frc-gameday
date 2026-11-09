@@ -480,7 +480,66 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
 
 function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const matches=data.matches.filter(({match})=>match.comp_level!=="qm").sort((a,b)=>{const order=["ef","qf","sf","f"];return order.indexOf(a.match.comp_level)-order.indexOf(b.match.comp_level)||a.match.set_number-b.match.set_number||a.match.match_number-b.match.match_number;});
-  return <Panel title="Playoff match analysis" description="Every elimination match record processed so far is listed, with alliance-level score comparisons and anomalous-score findings."><MatchAnalysisTable data={data} records={matches} playoff/><p className="mt-3 text-xs text-slate-500">Anomalous Score marks alliance residuals more than two event standard deviations from zero. Match-level outcomes describe the alliance, not an individual robot.</p></Panel>;
+  const completed=matches.flatMap((record)=>{
+    const {match,statbotics}=record;
+    const redScore=match.alliances.red.score;
+    const blueScore=match.alliances.blue.score;
+    if(redScore<0||blueScore<0)return [];
+    const winner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:redScore===blueScore?null:redScore>blueScore?"red":"blue";
+    const probability=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
+    const redResult=data.allianceResults.find((item)=>item.matchKey===match.key&&item.color==="red");
+    const blueResult=data.allianceResults.find((item)=>item.matchKey===match.key&&item.color==="blue");
+    return [{record,match,winner,probability,redScore,blueScore,margin:Math.abs(redScore-blueScore),redResult,blueResult}];
+  });
+  const residualMagnitudes=completed.flatMap((item)=>[item.redResult?.residual,item.blueResult?.residual].filter((value):value is number=>typeof value==="number"&&Number.isFinite(value)).map(Math.abs)).sort((a,b)=>a-b);
+  const quantile=(values:number[],p:number)=>values.length?values[Math.min(values.length-1,Math.ceil(values.length*p)-1)]:null;
+  const unexpectedThreshold=residualMagnitudes.length>=10?quantile(residualMagnitudes,0.9):null;
+  const upsets=completed.flatMap((item)=>{
+    const {winner,probability}=item;
+    if(!winner||probability===null)return [];
+    const predictedWinner=probability>=0.5?"red":"blue";
+    const favoriteProbability=predictedWinner==="red"?probability:1-probability;
+    return winner!==predictedWinner&&favoriteProbability>=0.6?[{...item,favorite:predictedWinner,favoriteProbability}]:[];
+  }).sort((a,b)=>b.favoriteProbability-a.favoriteProbability);
+  const unexpected=unexpectedThreshold===null?[]:completed.filter((item)=>[item.redResult?.residual,item.blueResult?.residual].some((value)=>typeof value==="number"&&Math.abs(value)>=unexpectedThreshold)).sort((a,b)=>Math.max(Math.abs(b.redResult?.residual??0),Math.abs(b.blueResult?.residual??0))-Math.max(Math.abs(a.redResult?.residual??0),Math.abs(a.blueResult?.residual??0)));
+  const closest=[...completed].sort((a,b)=>a.margin-b.margin).slice(0,5);
+  const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
+  const allianceTeams=(color:"red"|"blue",item:typeof completed[number])=>item.match.alliances[color].team_keys.map((key)=>teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)).join(" · ");
+  const spotlight=(item:typeof completed[number],kind:"upset"|"unexpected"|"close")=>{
+    const redResidual=item.redResult?.residual??null;
+    const blueResidual=item.blueResult?.residual??null;
+    const largestResidual=Math.abs(redResidual??0)>=Math.abs(blueResidual??0)?{color:"red" as const,value:redResidual}:{color:"blue" as const,value:blueResidual};
+    const detail=kind==="upset"?(item as typeof upsets[number]).favoriteProbability===null?"Favorite prediction unavailable":Math.round((item as typeof upsets[number]).favoriteProbability*100)+"% pre-match win chance for "+(((item as typeof upsets[number]).favorite)==="red"?"Red":"Blue")
+      :kind==="unexpected"?(largestResidual.color==="red"?"Red":"Blue")+" alliance: "+(largestResidual.value===null?"—":(largestResidual.value>0?"+":"")+fmt(largestResidual.value,0)+" pts vs prediction")
+      :item.margin+"-point final margin";
+    return <article key={item.match.key} className="rounded-lg border border-slate-200 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <a href={"https://www.thebluealliance.com/match/"+item.match.key} target="_blank" rel="noreferrer" className="text-sm font-bold text-slate-900 hover:underline">{matchShortName(item.match,data.event.playoff_type)} ↗</a>
+        <span className="text-xs font-semibold text-slate-500">{detail}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
+        <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-rose-700">Red</p><p className="truncate text-xs text-slate-600">{allianceTeams("red",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.redScore}</p></div>
+        <span className="text-xs text-slate-400">vs</span>
+        <div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase text-blue-700">Blue</p><p className="truncate text-xs text-slate-600">{allianceTeams("blue",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.blueScore}</p></div>
+      </div>
+      {kind==="unexpected"?<p className="mt-1 text-[11px] text-slate-500">Red delta: {redResidual===null?"—":(redResidual>0?"+":"")+fmt(redResidual,0)} pts · Blue delta: {blueResidual===null?"—":(blueResidual>0?"+":"")+fmt(blueResidual,0)} pts</p>:null}
+    </article>;
+  };
+  return <div className="space-y-4">
+    <Panel title="Playoff upsets" description="Completed elimination matches where the pre-match favorite had at least a 60% win probability but lost.">
+      {upsets.length?<div className="grid gap-3 md:grid-cols-2">{upsets.map((item)=>spotlight(item,"upset"))}</div>:<p className="text-sm text-slate-500">No completed playoff matches meet the upset definition yet. Matches without a winner prediction are excluded.</p>}
+    </Panel>
+    <Panel title="Unexpected results" description={unexpectedThreshold===null?"Alliance score residuals need a larger completed-match sample before unusual results can be highlighted.":"Matches where at least one alliance's absolute score residual falls in the top 10% of playoff alliance results in this event."}>
+      {unexpected.length?<div className="grid gap-3 md:grid-cols-2">{unexpected.map((item)=>spotlight(item,"unexpected"))}</div>:<p className="text-sm text-slate-500">{unexpectedThreshold===null?"Not enough scored alliance predictions are available to establish an event-relative threshold.":"No completed playoff match currently falls in the unusual-score range."}</p>}
+    </Panel>
+    <Panel title="Closest matches" description="The five smallest final score margins among completed elimination matches.">
+      {closest.length?<div className="grid gap-3 md:grid-cols-2">{closest.map((item)=>spotlight(item,"close"))}</div>:<p className="text-sm text-slate-500">Completed playoff scores are not available yet.</p>}
+    </Panel>
+    <Panel title="Playoff match explorer" description="Every elimination match record processed so far, with alliance-level score comparisons and the existing match review markers.">
+      <MatchAnalysisTable data={data} records={matches} playoff/>
+      <p className="mt-3 text-xs text-slate-500">Anomalous Score marks alliance residuals more than two event standard deviations from zero. Unexpected Results above uses a separate event-relative top-decile threshold. Match-level outcomes describe the alliance, not an individual robot.</p>
+    </Panel>
+  </div>;
 }
 
 function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
