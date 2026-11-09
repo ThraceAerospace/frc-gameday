@@ -317,11 +317,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     const teamAnomalies = completed.flatMap((row) => {
       const reasons: string[] = [];
       const kinds: string[] = [];
-      if (teamResiduals.length >= 8 && row.residual !== null && teamMedian !== null && Math.abs(row.residual-teamMedian)>teamOutlierBand) {
+      if (teamResiduals.length >= 4 && row.residual !== null && teamMedian !== null && Math.abs(row.residual-teamMedian)>teamOutlierBand) {
         kinds.push(row.residual<0?"alliance-underperformance":"alliance-overperformance");
         reasons.push(`Alliance residual ${row.residual>0?"+":""}${row.residual.toFixed(1)} pts was ${Math.abs(row.residual-teamMedian).toFixed(1)} pts from this team's season median.`);
       }
-      if (opponentResiduals.length >= 8 && row.opponentResidual !== null && opponentMedian !== null && Math.abs(row.opponentResidual-opponentMedian)>opponentOutlierBand) {
+      if (opponentResiduals.length >= 4 && row.opponentResidual !== null && opponentMedian !== null && Math.abs(row.opponentResidual-opponentMedian)>opponentOutlierBand) {
         kinds.push("opponent-anomaly");
         reasons.push(`Opponent alliance residual ${row.opponentResidual>0?"+":""}${row.opponentResidual.toFixed(1)} pts was unusual in this team's season match sample.`);
       }
@@ -343,7 +343,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       allianceOverperformance: teamAnomalies.filter((item)=>item.kinds.includes("alliance-overperformance")).length,
       opponentAnomalies: teamAnomalies.filter((item)=>item.kinds.includes("opponent-anomaly")).length,
       highConfidenceMisses: teamAnomalies.filter((item)=>item.highConfidenceMiss).length,
-      baseline: "Season median and median absolute deviation; minimum 8 scored observations per side. Flags describe matches involving this team, not individual robot causation.",
+      baseline: "Season median and median absolute deviation; minimum 4 scored observations per side. Flags describe matches involving this team, not individual robot causation.",
     };
     const payload = {
       team: teamNumber, year, eventCount: events.length, matchCount: completed.length,
