@@ -142,7 +142,7 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
     };
     await writeJob(eventKey, job);
   }
-  if (!job.playoffAlliancesRefreshedAt) {
+  if (forceRefresh || !job.playoffAlliancesRefreshedAt) {
     try {
       job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey);
       job.playoffAlliancesRefreshedAt = Date.now();
@@ -172,7 +172,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     job.state = "collecting";
     // Refresh the event's canonical match list periodically. Existing
     // analytics records survive schedule changes and only new matches queue.
-    if (!job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
+    if (forceRefresh || !job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
       try {
         const [latestMatchesRaw, latestOprs, latestRankings] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey), TBA.getEventRankings(eventKey).catch(() => null)]);
         const latestMatches = sortMatches(latestMatchesRaw);
