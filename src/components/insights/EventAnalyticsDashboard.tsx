@@ -445,7 +445,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       const scoreWinner=played&&match.alliances.red.score!==match.alliances.blue.score?(match.alliances.red.score>match.alliances.blue.score?"red":"blue"):null;
       const isWinner=match.winning_alliance===color||(!match.winning_alliance&&scoreWinner===color);
       const winnerSurface=color==="red"?"border-rose-500 border-l-4 bg-rose-100 ring-2 ring-rose-300 dark:border-rose-400 dark:bg-rose-900 dark:ring-rose-400/60":"border-blue-500 border-l-4 bg-blue-100 ring-2 ring-blue-300 dark:border-blue-400 dark:bg-blue-900 dark:ring-blue-400/60";
-      const regularSurface=playoff?"border-slate-200 bg-transparent dark:border-slate-700":color==="red"?"border-rose-200 bg-rose-50/50 dark:border-slate-700 dark:bg-transparent":"border-blue-200 bg-blue-50/50 dark:border-slate-700 dark:bg-transparent";
+      const regularSurface="border-slate-200 bg-transparent dark:border-slate-700";
       return <td key={color} className="py-1.5 pr-2 align-middle"><div className={"grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-2 rounded-md border px-2 py-1.5 "+(isWinner?winnerSurface:regularSurface)}>
         <div className="min-w-0">
           {officialAllianceName(alliance.team_keys)?<p className={"mb-0.5 text-[10px] font-bold "+(color==="red"?"text-rose-800 dark:text-rose-200":"text-blue-800 dark:text-blue-200")}>{officialAllianceName(alliance.team_keys)}</p>:null}
