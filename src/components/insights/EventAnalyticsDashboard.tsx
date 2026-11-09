@@ -420,7 +420,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const blue=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="blue")?.preEpaTotal;
     return red!==null&&red!==undefined&&blue!==null&&blue!==undefined?[{matchKey:match.key,total:red+blue}]:[];
   }).sort((a,b)=>a.total-b.total);
-  const highEpaThreshold=matchEpaTotals.length>=8?quantile(matchEpaTotals,0.75):null;
+  const highEpaThreshold=matchEpaTotals.length>=8?quantile(matchEpaTotals.map(({total})=>total),0.75):null;
   const threshold=data.residualStats.standardDeviation===null?null:2*data.residualStats.standardDeviation;
   const category=(matchKey:string,color:"red"|"blue",played:boolean)=>{
     const result=data.allianceResults.find((item)=>item.matchKey===matchKey&&item.color===color);
