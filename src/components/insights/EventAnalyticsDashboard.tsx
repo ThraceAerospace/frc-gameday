@@ -363,7 +363,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     <Panel title="Qualification takeaways" description="Event-wide findings from completed qualification matches. Calibration, score error, and penalty review are separate signals.">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <QualityMetric label="Winner prediction accuracy" value={fmtPct(calibration?.accuracy)} detail={(calibration?.matchCount??0)+" matches with prediction and winner"}/>
-        <QualityMetric label="Win-probability Brier score" value={fmt(calibration?.brierScore,3)} detail="Lower is better; 0 is perfect probability prediction"/>
+        <QualityMetric label="Underdog wins" value={String(calibration?.underdogWins??0)} detail="Matches won by the side with under 50% predicted chance"/>
         <QualityMetric label="Score MAE" value={fmt(score?.meanAbsoluteError)} unit="pts" detail={(score?.allianceCount??0)+" predicted alliance scores"}/>
         <QualityMetric label="High-confidence misses" value={String(highConfidenceMisses.length)} detail="Predicted winner had at least 80% probability but lost"/>
       </div>
