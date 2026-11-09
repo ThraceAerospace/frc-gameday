@@ -59,6 +59,7 @@ export type QualificationAnalysis = {
   predictionCalibration: {
     matchCount: number;
     correctCount: number;
+    underdogWins: number;
     accuracy: number | null;
     brierScore: number | null;
     highConfidenceMisses: { matchKey: string; matchLabel: string; predictedWinner: "red" | "blue"; probability: number }[];
