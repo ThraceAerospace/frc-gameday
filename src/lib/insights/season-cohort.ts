@@ -112,6 +112,8 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
   try {
     let job = await readJob(eventKey);
     if (!job) return;
+    // Completed historical cohorts do not need discovery on subsequent opens.
+    if (!forceRefresh && job.discoveryQueue.length === 0) return;
     if (forceRefresh) {
       job.discoveryQueue = [...job.teamNumbers];
       job.discoveryAttempts = {};
