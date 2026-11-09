@@ -409,6 +409,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 
 function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
+  const officialAllianceName=(teamKeys:string[])=>playoff?data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??null:null;
   const scopeKeys=new Set(records.map(({match})=>match.key));
   const scopeResults=data.allianceResults.filter((item)=>scopeKeys.has(item.matchKey));
   const absoluteDeltas=scopeResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]).sort((a,b)=>a-b);
@@ -445,6 +446,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       const isWinner=match.winning_alliance===color||(!match.winning_alliance&&scoreWinner===color);
       return <td key={color} className="py-1.5 pr-2 align-middle"><div className={"grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-2 rounded-md border px-2 py-1.5 "+(color==="red"?(isWinner?"border-rose-500 bg-rose-100 ring-1 ring-rose-300":"border-rose-100 bg-rose-50/40"):(isWinner?"border-blue-500 bg-blue-100 ring-1 ring-blue-300":"border-blue-100 bg-blue-50/40"))}>
         <div className="min-w-0">
+          {officialAllianceName(alliance.team_keys)?<p className={"mb-0.5 text-[10px] font-bold "+(color==="red"?"text-rose-800":"text-blue-800")}>{officialAllianceName(alliance.team_keys)}</p>:null}
           <div className={"flex min-w-0 flex-wrap gap-x-1.5 text-sm font-bold tabular-nums "+(color==="red"?"text-rose-950":"text-blue-950")}>{alliance.team_keys.map((key)=><span key={key}>{teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)}</span>)}</div>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
             {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+(color==="red"?"bg-rose-700 text-white":"bg-blue-700 text-white")}>Win</span>:null}
