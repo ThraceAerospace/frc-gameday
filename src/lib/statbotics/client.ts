@@ -209,7 +209,7 @@ export class StatboticsClient {
       now - cached.lastRefreshAt < MIN_REQUEST_INTERVAL_SECONDS * 1000;
 
     if (cached && !options.refresh && now < cached.expiresAt) return cached.data;
-    if (cached && withinRequestFloor) return cached.data;
+    if (cached && withinRequestFloor && !options.refresh) return cached.data;
 
     const key = lockKey(endpoint);
     const token = randomUUID();
@@ -232,7 +232,7 @@ export class StatboticsClient {
       const latestWithinFloor = latest !== null &&
         refreshedAt - latest.lastRefreshAt < MIN_REQUEST_INTERVAL_SECONDS * 1000;
 
-      if (latest && ((!options.refresh && refreshedAt < latest.expiresAt) || latestWithinFloor)) {
+      if (latest && ((!options.refresh && refreshedAt < latest.expiresAt) || (latestWithinFloor && !options.refresh))) {
         return latest.data;
       }
 
