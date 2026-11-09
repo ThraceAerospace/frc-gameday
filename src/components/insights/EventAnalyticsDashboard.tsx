@@ -759,8 +759,8 @@ function ResidualPatternPanel({analysis}:{analysis:TeamMatchAnalysis}) {
       <p className="mt-2 text-[11px] text-slate-500">Positive means the team's alliances outscored the matched baseline; negative means they scored below it. This is an alliance-level comparison, not an individual-robot rating. Small event counts describe direction, not statistical certainty.</p>
     </> : <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
       <p className="font-semibold">Not enough usable match data yet.</p>
-      <p className="mt-1">An event needs at least 3 scored team matches and 6 strength-matched opponent-alliance samples.</p>
-      {result.diagnostics?.length ? <div className="mt-2 space-y-1">{result.diagnostics.map((item)=><div key={item.event.key} className="flex flex-wrap justify-between gap-x-3"><span>{item.event.name}</span><span className="font-mono tabular-nums">{item.matches} matches · {item.scoredMatches} scored · {item.teamResidualSamples} team residuals · {item.baselineAllianceSamples}/6 peer samples</span></div>)}</div> : null}
+      <p className="mt-1">An event needs at least 3 scored team matches and at least 1 strength-matched opponent-alliance sample. Small peer samples are shown with their counts and should be treated cautiously.</p>
+      {result.diagnostics?.length ? <div className="mt-2 space-y-1">{result.diagnostics.map((item)=><div key={item.event.key} className="flex flex-wrap justify-between gap-x-3"><span>{item.event.name}</span><span className="font-mono tabular-nums">{item.matches} matches · {item.scoredMatches} scored · {item.teamResidualSamples} team residuals · {item.baselineAllianceSamples} peer samples</span></div>)}</div> : null}
     </div>}
   </section>;
 }
