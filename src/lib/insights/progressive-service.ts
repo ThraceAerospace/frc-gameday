@@ -11,7 +11,6 @@ const JOB_TTL_SECONDS = 12 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
 const LOCK_PREFIX = "lock:insights:progressive:";
 const JOB_PREFIX = "insights:progressive:";
-const MAX_ATTEMPTS = 3;
 
 type Job = {
   event: TBAEvent;
@@ -27,6 +26,7 @@ type Job = {
   updatedAt: number;
   scheduleRefreshedAt?: number;
   statboticsFetchError?: string | null;
+  statboticsLoadedAt?: number;
 };
 
 function jobKey(eventKey: string) {
@@ -154,24 +154,7 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
   return buildPayload(job);
 }
 
-async function refreshLiveMatch(eventKey: string, job: Job, matchKey: string) {
-  if (!matchKey.startsWith(eventKey + "_")) return;
-  const [match, statbotics] = await Promise.all([
-    TBA.getMatch(matchKey),
-    Statbotics.getMatch(matchKey, { refresh: true }),
-  ]);
-  const index = job.matches.findIndex((item) => item.key === matchKey);
-  if (index === -1) job.matches.push(match);
-  else job.matches[index] = match;
-  job.matches = sortMatches(job.matches);
-  job.records[matchKey] = {
-    match,
-    statbotics,
-    statboticsStatus: statbotics ? "ready" : "unavailable",
-  };
-}
-
-export async function advanceEventAnalytics(eventKey: string, liveMatchKey: string | null = null): Promise<void> {
+export async function advanceEventAnalytics(eventKey: string, forceRefresh = false): Promise<void> {
   const lockKey = LOCK_PREFIX + eventKey;
   const token = randomUUID();
   const acquired = await redis.set(lockKey, token, "EX", LOCK_TTL_SECONDS, "NX");
@@ -180,6 +163,12 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
   try {
     let job = await readJob(eventKey);
     if (!job) return;
+    if (forceRefresh) {
+      job.records = {};
+      job.attempts = {};
+      job.statboticsLoadedAt = undefined;
+      job.statboticsFetchError = null;
+    }
     job.state = "collecting";
     // Refresh the event's canonical match list periodically. Existing
     // analytics records survive schedule changes and only new matches queue.
@@ -207,15 +196,6 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
       }
     }
 
-    if (liveMatchKey) {
-      try {
-        await refreshLiveMatch(eventKey, job, liveMatchKey);
-        await writeJob(eventKey, job);
-      } catch (error) {
-        console.error("[Insights] live match analytics refresh failed", eventKey, liveMatchKey, error);
-      }
-    }
-
     // Keep collected model records paired with the latest TBA match object.
     const latestMatchByKey = new Map(job.matches.map((match) => [match.key, match]));
     for (const [key, record] of Object.entries(job.records)) {
@@ -223,60 +203,45 @@ export async function advanceEventAnalytics(eventKey: string, liveMatchKey: stri
       if (latestMatch) record.match = latestMatch;
     }
 
-    // Process no more than 20 matches per invocation. Each persisted batch is
-    // included in the next snapshot; later invocations continue until complete.
-    // Never-attempted matches sort ahead of retries so failures cannot starve
-    // the rest of the event.
-    const pendingMatches = job.matches
-      .filter((match) => !job.records[match.key] && (job.attempts[match.key] ?? 0) < MAX_ATTEMPTS)
-      .sort((a, b) => (job.attempts[a.key] ?? 0) - (job.attempts[b.key] ?? 0))
-      .slice(0, 20);
-
-    const batchResults: (Error | null)[] = [];
-    for (let offset = 0; offset < pendingMatches.length; offset += 4) {
-      const batch = pendingMatches.slice(offset, offset + 4);
-      const results = await Promise.all(batch.map(async (match) => {
-        const attempt = (job!.attempts[match.key] ?? 0) + 1;
-        try {
-          const statbotics = await Statbotics.getMatch(match.key, { refresh: true });
-          if (statbotics) {
-            job!.records[match.key] = { match, statbotics, statboticsStatus: "ready" };
-            job!.statboticsFetchError = null;
-          } else if (attempt >= MAX_ATTEMPTS) {
-            job!.records[match.key] = { match, statbotics: null, statboticsStatus: "unavailable" };
-          } else {
-            job!.attempts[match.key] = attempt;
-          }
-          return null;
-        } catch (error) {
-          job!.attempts[match.key] = attempt;
-          return error instanceof Error ? error : new Error(String(error));
+    // Statbotics is acquired once per event, using its event-filtered
+    // qualification and elimination collections. Never issue one request per
+    // match or refresh automatically as the event progresses.
+    if (!job.statboticsLoadedAt) {
+      try {
+        const [qualificationRecords, eliminationRecords] = await Promise.all([
+          Statbotics.getMatches({ event: eventKey, elim: false }, { refresh: forceRefresh }),
+          Statbotics.getMatches({ event: eventKey, elim: true }, { refresh: forceRefresh }),
+        ]);
+        const statboticsByKey = new Map(
+          [...qualificationRecords, ...eliminationRecords]
+            .filter((record) => typeof record.key === "string")
+            .map((record) => [record.key, record]),
+        );
+        for (const match of job.matches) {
+          const statbotics = statboticsByKey.get(match.key) ?? null;
+          job.records[match.key] = {
+            match,
+            statbotics,
+            statboticsStatus: statbotics ? "ready" : "unavailable",
+          };
         }
-      }));
-      batchResults.push(...results);
-      // Persist after each small group so the next snapshot can use all
-      // successfully collected records even if a later group fails.
-      await writeJob(eventKey, job);
-    }
-
-    const batchErrors = batchResults.filter((error): error is Error => error instanceof Error);
-    if (batchErrors.length) {
-      job.statboticsFetchError = batchErrors[0].message;
-      console.warn("[Insights] Statbotics batch collection had failures", eventKey, batchErrors.length);
-      for (const match of pendingMatches) {
-        if ((job.attempts[match.key] ?? 0) >= MAX_ATTEMPTS && !job.records[match.key]) {
-          job.records[match.key] = { match, statbotics: null, statboticsStatus: "unavailable" };
+        job.statboticsFetchError = null;
+      } catch (error) {
+        job.statboticsFetchError = error instanceof Error ? error.message : String(error);
+        console.warn("[Insights] Statbotics event collection failed", eventKey, error);
+        for (const match of job.matches) {
+          job.records[match.key] = {
+            match,
+            statbotics: null,
+            statboticsStatus: "unavailable",
+          };
         }
       }
+      job.statboticsLoadedAt = Date.now();
     }
 
-    const remaining = job.matches.some(
-      (match) => !job!.records[match.key] && (job!.attempts[match.key] ?? 0) < MAX_ATTEMPTS,
-    );
-    if (remaining) job.state = "collecting";
-    else job.state = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable")
-      ? "partial"
-      : "complete";
+    const unavailable = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable");
+    job.state = unavailable ? "partial" : "complete";
     await writeJob(eventKey, job);
   } catch (error) {
     console.error("[Insights] progressive event analytics worker failed", eventKey, error);
