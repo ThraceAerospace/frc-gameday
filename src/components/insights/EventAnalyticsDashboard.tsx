@@ -723,15 +723,39 @@ function TeamPerformanceHeadline({team,insight}:{data:EventAnalyticsResponse;tea
   </section>;
 }
 function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null;data:EventAnalyticsResponse}) {
+  const [selectorOpen,setSelectorOpen]=useState(false);
+  const [teamSearch,setTeamSearch]=useState("");
+  const selectorRef=useRef<HTMLDivElement>(null);
+  const selectedOption=teams.find((item)=>String(item.teamNumber)===selectedTeam);
+  const filteredTeams=teams.filter((item)=>(String(item.teamNumber)+" "+item.name).toLowerCase().includes(teamSearch.trim().toLowerCase()));
+  useEffect(()=>{
+    if(!selectorOpen)return;
+    const closeOnOutsidePointer=(event:PointerEvent)=>{
+      if(event.target instanceof Node&&!selectorRef.current?.contains(event.target))setSelectorOpen(false);
+    };
+    document.addEventListener("pointerdown",closeOnOutsidePointer);
+    return ()=>document.removeEventListener("pointerdown",closeOnOutsidePointer);
+  },[selectorOpen]);
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2><p className="mt-1 text-sm text-slate-500">A quick read on the team's standing. Detailed model and match analysis follows below.</p></div>
-      <label className="block w-full max-w-sm text-xs font-semibold text-slate-600 dark:text-slate-300">Select team
-        <select value={selectedTeam} onChange={(event)=>onSelect(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-          <option value="">Choose a team…</option>
-          {teams.map((item)=><option key={item.teamKey} value={String(item.teamNumber)}>{item.teamNumber} · {item.name}</option>)}
-        </select>
-      </label>
+      <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2><p className="mt-1 text-sm text-slate-500">A quick read on the team standing. Detailed model and match analysis follows below.</p></div>
+      <div ref={selectorRef} className={"relative w-full max-w-sm text-xs font-semibold text-slate-600 dark:text-slate-300 "+(selectorOpen?"z-[60]":"")}>
+        <label className="block">Select team</label>
+        <button type="button" aria-haspopup="listbox" aria-expanded={selectorOpen} onClick={()=>{setSelectorOpen((open)=>!open);setTeamSearch("");}} className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-normal text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+          <span className="min-w-0 truncate">{selectedOption?String(selectedOption.teamNumber)+" · "+selectedOption.name:"Choose a team…"}</span>
+          <span aria-hidden="true" className="shrink-0 text-slate-400">{selectorOpen?"▴":"▾"}</span>
+        </button>
+        {selectorOpen?<div className="absolute right-0 top-full z-[70] mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 p-2 dark:border-slate-700">
+            <input autoFocus value={teamSearch} onChange={(event)=>setTeamSearch(event.target.value)} placeholder="Search teams…" aria-label="Search teams" className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"/>
+          </div>
+          <div role="listbox" aria-label="Teams" className="max-h-64 overflow-y-auto overscroll-contain p-1">
+            {filteredTeams.length?filteredTeams.map((item)=><button key={item.teamKey} type="button" role="option" aria-selected={selectedTeam===String(item.teamNumber)} onClick={()=>{onSelect(String(item.teamNumber));setSelectorOpen(false);setTeamSearch("");}} className={"block w-full rounded-md px-3 py-2 text-left text-sm font-normal "+(selectedTeam===String(item.teamNumber)?"bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200":"text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800")}>
+              <span className="font-semibold tabular-nums">{item.teamNumber}</span><span className="text-slate-500"> · {item.name}</span>
+            </button>):<p className="px-3 py-4 text-center text-sm font-normal text-slate-500">No teams match that search.</p>}
+          </div>
+        </div>:null}
+      </div>
     </div>
     {!selectedTeam ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p> : !team || !insight ? <p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p> : <>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
