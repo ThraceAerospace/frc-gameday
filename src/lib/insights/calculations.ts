@@ -542,22 +542,27 @@ export function buildQualificationAnalysis(
   };
 }
 
-/** Playoff alliance combinations are separate from qualification combinations. */
-function officialPlayoffAllianceName(
+/** Resolve a played three-team match roster to the complete official TBA alliance roster. */
+function officialPlayoffAlliance(
   teamKeys: string[],
   alliances: TBAEliminationAlliance[] | null,
-): string | null {
+): { name: string | null; teamKeys: string[] } | null {
   if (!alliances?.length || teamKeys.length !== 3) return null;
-  const teamSet = new Set(teamKeys.map((key) => key.toLowerCase()));
-  const candidates = alliances.filter((alliance) => {
-    if (typeof alliance.name !== "string" || !alliance.name.trim()) return false;
-    const selected = new Set([
-      ...(alliance.picks ?? []),
-      ...(alliance.backup?.in ? [alliance.backup.in] : []),
-    ].map((key) => key.toLowerCase()));
-    return [...teamSet].every((key) => selected.has(key));
+  const played = new Set(teamKeys.map((key) => key.toLowerCase()));
+  const candidates = alliances.flatMap((alliance) => {
+    const picks = [...(alliance.picks ?? [])];
+    // A backup replaces the team listed in "out"; preserve the four-person roster.
+    if (alliance.backup?.in && alliance.backup?.out) {
+      const outIndex = picks.findIndex((key) => key.toLowerCase() === alliance.backup!.out!.toLowerCase());
+      if (outIndex >= 0) picks[outIndex] = alliance.backup.in;
+      else if (!picks.some((key) => key.toLowerCase() === alliance.backup!.in!.toLowerCase())) picks.push(alliance.backup.in);
+    }
+    const roster = [...new Map(picks.map((key) => [key.toLowerCase(), key])).values()];
+    return roster.length >= 3 && [...played].every((key) => roster.some((member) => member.toLowerCase() === key))
+      ? [{ name: typeof alliance.name === "string" && alliance.name.trim() ? alliance.name.trim() : null, teamKeys: roster }]
+      : [];
   });
-  return candidates.length === 1 ? candidates[0].name!.trim() : null;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 /** Group scored elimination results by official TBA alliance when available. */
@@ -572,21 +577,24 @@ export function buildPlayoffAnalysis(
     values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const groups = new Map<string, AllianceResult[]>();
   const names = new Map<string, string | null>();
+  const officialRosters = new Map<string, string[]>();
 
   for (const item of playoffs) {
     if (item.teamKeys.length !== 3) continue;
-    const sortedTeams = [...item.teamKeys].sort();
-    const name = officialPlayoffAllianceName(item.teamKeys, officialAlliances);
-    // Never invent an alliance number or infer a name from array position.
-    const key = name ? `name:${name.toLowerCase()}` : `teams:${sortedTeams.join("|")}`;
+    const official = officialPlayoffAlliance(item.teamKeys, officialAlliances);
+    const roster = official?.teamKeys ?? [...new Set(item.teamKeys)].sort();
+    const key = official
+      ? `official:${[...roster].map((team) => team.toLowerCase()).sort().join("|")}`
+      : `teams:${roster.join("|")}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
-    names.set(key, name);
+    names.set(key, official?.name ?? null);
+    if (official) officialRosters.set(key, roster);
   }
 
   const alliances = [...groups.entries()].map(([key, items]) => {
     const scored = items.filter((item) => item.predicted !== null && item.residual !== null);
     const residuals = scored.map((item) => item.residual as number);
-    const teamKeys = [...new Set(items.flatMap((item) => item.teamKeys))].sort();
+    const teamKeys = officialRosters.get(key) ?? [...new Set(items.flatMap((item) => item.teamKeys))].sort();
     return {
       name: names.get(key) ?? null,
       teamKeys,
