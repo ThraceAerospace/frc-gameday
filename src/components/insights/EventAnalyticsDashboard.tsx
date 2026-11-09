@@ -556,9 +556,7 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const signed=(value:number|null)=>value===null?"—":(value>0?"+":"")+fmt(value)+" pts";
 
   return <Panel title="Playoff alliance performance" description="Compare each alliance with the rest of the playoff field, alongside its performance against Statbotics predictions.">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <QualityMetric label="Alliances" value={String(playoff.alliances.length)} detail="Official playoff alliances"/>
-      <QualityMetric label="Elimination matches" value={String(playoff.matchCount)} detail="Matches represented in the analysis"/>
+    <div className="grid gap-3 sm:grid-cols-2">
       <QualityMetric label="Playoff field bias" value={signed(fieldMean)} detail={fieldSampleSize+" alliance scores · negative means predictions tended high"}/>
       <QualityMetric label="Residual spread (sample SD)" value={fieldSpread===null?"—":fmt(fieldSpread)+" pts"} detail="Sample standard deviation across playoff alliance scores"/>
     </div>
