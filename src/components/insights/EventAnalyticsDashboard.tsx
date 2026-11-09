@@ -643,7 +643,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
   const label = result.interpretation === "no-elimination-matches" ? "No elimination matches played"
     : result.interpretation === "single-event-shift" ? "Single-event comparison"
     : recurring ? "Recurring decline signal"
-    : result.interpretation === "insufficient-history" ? "More match data needed" : "No statistically clear recurring decline detected";
+    : result.interpretation === "insufficient-history" ? "More match data needed" : "No established recurring direction";
   const negativeCount = result.events.filter((item) => item.shift < 0).length;
   const positiveCount = result.events.filter((item) => item.shift > 0).length;
   const unchangedCount = result.events.length - negativeCount - positiveCount;
@@ -676,7 +676,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <p className="text-xs font-semibold text-slate-500">Recurrence test</p>
         <p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{fmt(result.signTestPValue, 3)}</p>
-        <p className="mt-1 text-xs text-slate-500">p-value; smaller means stronger evidence of a recurring pattern</p>
+        <p className="mt-1 text-xs text-slate-500">One-sided sign test across {result.directionalEventCount} non-tied events; smaller means stronger evidence of a recurring decline</p>
       </div>
     </div>
 
@@ -720,7 +720,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
 
     <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
       <p><span className="font-semibold text-slate-800">How to read this:</span> residual = actual alliance score − predicted alliance score. A negative shift means the alliance scored closer to (or further below) its prediction in eliminations than in qualifications. It does not mean the team necessarily scored fewer points.</p>
-      <p className="mt-1">The recurrence test only counts declines larger than one estimated standard error, and only at events where qualification residuals were above zero. p-values are not proof of cause. Partner and opponent strength are not adjusted for, and alliance results cannot isolate one robot's contribution. Treat this as exploratory evidence, not a team label.</p>
+      <p className="mt-1">The recurrence test uses the direction of every non-tied eligible event shift, regardless of qualification baseline or shift magnitude. The p-value tests whether declines recur more often than increases; it does not measure the size or certainty of any one event shift. Shift uncertainty is shown separately. p-values are not proof of cause. Partner and opponent strength are not adjusted for, and alliance results cannot isolate one robot's contribution. Treat this as exploratory evidence, not a team label.</p>
     </div>
   </section>;
 }
