@@ -14,7 +14,7 @@ const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
 const CONCURRENCY = 2;
 const MAX_ATTEMPTS = 1;
-const WORK_BUDGET_MS = 22_000;
+const WORK_BUDGET_MS = 45_000;
 
 type EventRef = { key: string; name: string; shortName: string; startDate: string };
 type Pair = { teamNumber: number; event: EventRef };
