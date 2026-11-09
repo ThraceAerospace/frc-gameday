@@ -522,6 +522,7 @@ export function buildQualificationAnalysis(
     predictionCalibration: {
       matchCount: validOutcomes.length,
       correctCount: validOutcomes.filter((item) => item.correct).length,
+      underdogWins: validOutcomes.filter((item) => !item.correct).length,
       accuracy: validOutcomes.length ? validOutcomes.filter((item) => item.correct).length / validOutcomes.length : null,
       brierScore: validOutcomes.length ? mean(validOutcomes.map((item) =>
         (item.probability - (item.winner === "red" ? 1 : 0)) ** 2)) : null,
