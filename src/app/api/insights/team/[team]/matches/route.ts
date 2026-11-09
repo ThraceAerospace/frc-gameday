@@ -77,9 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   if (!Number.isInteger(year) || year < 1992 || year > new Date().getFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
   const cacheKey = `cache:insights:team-match-analysis:${teamNumber}:${year}`;
-  const refresh = new URL(request.url).searchParams.get("refresh") === "1";
-  const liveMatchKey = new URL(request.url).searchParams.get("liveMatchKey");
-  const cached = refresh ? null : await redis.get(cacheKey);
+  const cached = await redis.get(cacheKey);
   if (cached) {
     try { return Response.json(JSON.parse(cached)); } catch { await redis.del(cacheKey); }
   }
@@ -98,12 +96,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
     const statboticsByMatch = new Map(statboticsMatches.flatMap((record) =>
       typeof record.key === "string" ? [[record.key, record] as const] : [],
     ));
-    if (liveMatchKey) {
-      try {
-        const liveRecord = await Statbotics.getMatch(liveMatchKey, { refresh: true });
-        if (liveRecord) statboticsByMatch.set(liveMatchKey, liveRecord);
-      } catch { /* retain the bulk record */ }
-    }
     const eventMatches = await withConcurrency(events, 4, async (event) => ({
       event,
       matches: sortMatches(await TBA.getTeamMatches(`frc${teamNumber}`, event.key)),
@@ -350,7 +342,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, anomalySummary, anomalies: teamAnomalies, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
-    await redis.set(cacheKey, JSON.stringify(payload), "EX", 60);
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 365 * 24 * 60 * 60);
     return Response.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error("[Insights] team match analysis failed", teamNumber, year, error);
