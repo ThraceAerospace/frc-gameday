@@ -156,6 +156,9 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
   try {
     let job = await readJob(eventKey);
     if (!job) return;
+    // A persisted historical snapshot is immutable until the user explicitly
+    // requests a refresh. Avoid even repeating collection work on page opens.
+    if (!forceRefresh && job.statboticsLoadedAt) return;
     if (forceRefresh) {
       job.records = {};
       job.attempts = {};
