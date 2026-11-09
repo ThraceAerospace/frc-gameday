@@ -381,10 +381,12 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
         </div>
       </div>
     </Panel>
-    <Panel title="Win-probability calibration" description="For each probability band, compare the model's average red-win probability with the actual red win rate. Sparse bands should be treated cautiously.">
-      {calibration?.bins.length?<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Predicted red chance</th><th>Matches</th><th>Mean predicted</th><th>Actual red wins</th><th>Observed − predicted</th></tr></thead><tbody>{calibration.bins.map((bin)=><tr key={bin.label} className="border-b border-slate-100"><th className="py-2 text-left">{bin.label}</th><td>{bin.count}</td><td>{fmtPct(bin.meanPredicted)}</td><td>{fmtPct(bin.observedRedWinRate)}</td><td className={bin.calibrationError>0.05?"text-emerald-700":bin.calibrationError< -0.05?"text-rose-700":"text-slate-600"}>{(bin.calibrationError>0?"+":"")+(bin.calibrationError*100).toFixed(1)+" pp"}</td></tr>)}</tbody></table></div>:<p className="text-sm text-slate-500">No completed qualification matches have both a win-probability prediction and a recorded winner.</p>}
-      <p className="mt-2 text-xs text-slate-500">{calibration?.matchCount??0} matches · accuracy {fmtPct(calibration?.accuracy)} · Brier score {fmt(calibration?.brierScore,3)}. Brier score evaluates probability quality, not score prediction.</p>
-    </Panel>
+    <details className="rounded-xl border border-slate-200 bg-white p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-slate-800">Model calibration details <span className="ml-1 text-xs font-normal text-slate-500">Optional model-quality diagnostic</span></summary>
+      <p className="mt-2 text-xs text-slate-500">This helps evaluate whether Statbotics' win probabilities are well calibrated over many matches. It is useful for validating the model, but less actionable for reviewing an individual match.</p>
+      {calibration?.bins.length?<div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Predicted red chance</th><th>Matches</th><th>Mean predicted</th><th>Actual red wins</th><th>Observed − predicted</th></tr></thead><tbody>{calibration.bins.map((bin)=><tr key={bin.label} className="border-b border-slate-100"><th className="py-2 text-left">{bin.label}</th><td>{bin.count}</td><td>{fmtPct(bin.meanPredicted)}</td><td>{fmtPct(bin.observedRedWinRate)}</td><td>{(bin.calibrationError>0?"+":"")+(bin.calibrationError*100).toFixed(1)+" pp"}</td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No calibration data available.</p>}
+      <p className="mt-2 text-xs text-slate-500">{calibration?.matchCount??0} matches · accuracy {fmtPct(calibration?.accuracy)} · Brier score {fmt(calibration?.brierScore,3)} (lower is better).</p>
+    </details>
     <Panel title="Prediction performance through qualifications" description="Score error is grouped by match order to show whether the model's event-specific accuracy changed over the qualification schedule.">
       {analysis?.progression.length?<div className="grid gap-3 md:grid-cols-3">{analysis.progression.map((period)=><div key={period.label} className="rounded-lg bg-slate-50 p-3"><h3 className="text-sm font-semibold text-slate-800">{period.label}</h3><p className="text-xs text-slate-500">Q{period.firstMatch}–Q{period.lastMatch} · {period.allianceCount} alliance scores</p><p className="mt-2 text-xl font-bold tabular-nums">{fmt(period.meanAbsoluteError)} <span className="text-xs font-medium text-slate-500">MAE pts</span></p><p className="text-xs text-slate-500">Mean residual {signed(period.meanResidual)}</p></div>)}</div>:<p className="text-sm text-slate-500">Not enough completed qualification predictions to compare match periods.</p>}
     </Panel>
@@ -407,6 +409,17 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 
 function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
+  const scopeKeys=new Set(records.map(({match})=>match.key));
+  const scopeResults=data.allianceResults.filter((item)=>scopeKeys.has(item.matchKey));
+  const absoluteDeltas=scopeResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]).sort((a,b)=>a-b);
+  const quantile=(values:number[],p:number)=>values.length?values[Math.min(values.length-1,Math.ceil(values.length*p)-1)]:null;
+  const largeDeltaThreshold=absoluteDeltas.length>=20?quantile(absoluteDeltas,0.9):null;
+  const matchEpaTotals=records.flatMap(({match})=>{
+    const red=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="red")?.preEpaTotal;
+    const blue=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="blue")?.preEpaTotal;
+    return red!==null&&red!==undefined&&blue!==null&&blue!==undefined?[{matchKey:match.key,total:red+blue}]:[];
+  }).sort((a,b)=>a.total-b.total);
+  const highEpaThreshold=matchEpaTotals.length>=8?quantile(matchEpaTotals,0.75):null;
   const threshold=data.residualStats.standardDeviation===null?null:2*data.residualStats.standardDeviation;
   const category=(matchKey:string,color:"red"|"blue",played:boolean)=>{
     const result=data.allianceResults.find((item)=>item.matchKey===matchKey&&item.color===color);
@@ -447,7 +460,21 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       </div></td>;
     };
     const penaltyFlag=!playoff&&(data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===match.key)??false);
-    return <tr key={match.key} className="border-b border-slate-100"><th className="py-1.5 pr-2 text-left whitespace-nowrap"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline">{matchShortName(match,data.event.playoff_type)}</a>{penaltyFlag?<span className="ml-1 inline-block rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold text-amber-800">Penalty review</span>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
+    const predictedRed=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
+    const actualWinner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:null;
+    const wrongPrediction=played&&predictedRed!==null&&actualWinner!==null&&((predictedRed>=0.5?"red":"blue")!==actualWinner);
+    const redEpa=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="red")?.preEpaTotal;
+    const blueEpa=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="blue")?.preEpaTotal;
+    const combinedEpa=redEpa!==null&&redEpa!==undefined&&blueEpa!==null&&blueEpa!==undefined?redEpa+blueEpa:null;
+    const highEpa=combinedEpa!==null&&highEpaThreshold!==null&&combinedEpa>=highEpaThreshold;
+    const matchDelta=scopeResults.filter((item)=>item.matchKey===match.key).some((item)=>item.residual!==null&&largeDeltaThreshold!==null&&Math.abs(item.residual)>=largeDeltaThreshold);
+    const matchFlags=[
+      ...(wrongPrediction?["Wrong prediction"]:[]),
+      ...(highEpa?["High total EPA"]:[]),
+      ...(matchDelta?["Large delta"]:[]),
+      ...(penaltyFlag?["Penalty review"]:[]),
+    ];
+    return <tr key={match.key} className="border-b border-slate-100"><th className="py-1.5 pr-2 text-left align-top"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline">{matchShortName(match,data.event.playoff_type)}</a>{matchFlags.length?<div className="mt-1 flex max-w-[180px] flex-wrap gap-1">{matchFlags.map((flag)=><span key={flag} className={"inline-block rounded px-1 py-0.5 text-[8px] font-bold "+(flag==="Penalty review"?"bg-amber-100 text-amber-800":flag==="Wrong prediction"?"bg-rose-100 text-rose-800":flag==="Large delta"?"bg-violet-100 text-violet-800":"bg-sky-100 text-sky-800")}>{flag}</span>)}</div>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
   })}</tbody></table></div>;
 }
 
