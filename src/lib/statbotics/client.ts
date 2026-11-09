@@ -307,7 +307,7 @@ export class StatboticsClient {
             etag: null,
             fetchedAt: failedAt,
             lastRefreshAt: failedAt,
-            expiresAt: failedAt + options.fallbackTtlSeconds * 1000,
+            expiresAt: failedAt + STATBOTICS_DATA_TTL_SECONDS * 1000,
           };
       await writeCache(endpoint, failedEntry, options.fallbackTtlSeconds);
       if (fallback) return fallback.data;
