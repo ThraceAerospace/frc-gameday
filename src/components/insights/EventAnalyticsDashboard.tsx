@@ -418,8 +418,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const outcomeTone=winProbability===null?"bg-slate-100 text-slate-600":"bg-slate-100 text-slate-700";
     if(playoff)return threshold!==null&&Math.abs(result.residual)>threshold?{label:"Anomalous Score",tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
     const anomaly=data.qualificationAnomalies?.find((item)=>item.matchKey===matchKey&&item.alliance===color);
-    const penaltyFlag=data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===matchKey)??false;
-    const labels=[...(anomaly?.highConfidenceMiss?["High-Confidence Miss"]:[]),...(anomaly?.outsideExpectedRange?["Anomalous Score"]:[]),...(penaltyFlag?["Penalty Review"]:[])];
+    const labels=[...(anomaly?.highConfidenceMiss?["High-Confidence Miss"]:[]),...(anomaly?.outsideExpectedRange?["Anomalous Score"]:[])];
     return labels.length?{label:labels.join(" · "),tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
   };
   if(!records.length)return <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{playoff?"No playoff matches are available yet.":"No qualification matches are available yet."}</p>;
@@ -447,7 +446,8 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
         </div>
       </div></td>;
     };
-    return <tr key={match.key} className="border-b border-slate-100"><th className="py-1.5 pr-2 text-left whitespace-nowrap"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline">{matchShortName(match,data.event.playoff_type)}</a></th>{allianceCell("red")}{allianceCell("blue")}</tr>;
+    const penaltyFlag=!playoff&&(data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===match.key)??false);
+    return <tr key={match.key} className="border-b border-slate-100"><th className="py-1.5 pr-2 text-left whitespace-nowrap"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline">{matchShortName(match,data.event.playoff_type)}</a>{penaltyFlag?<span className="ml-1 inline-block rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold text-amber-800">Penalty review</span>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
   })}</tbody></table></div>;
 }
 
