@@ -6,7 +6,8 @@ import type {
   StatboticsTeamYear,
 } from "./types";
 
-const DEFAULT_BASE_URL = "https://api.statbotics.io";
+// TEMPORARY DEMO OVERRIDE: revert to api.statbotics.io when the official API is reliable.
+const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
 const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
 const STATBOTICS_DATA_TTL_SECONDS = 365 * 24 * 60 * 60;
 const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
