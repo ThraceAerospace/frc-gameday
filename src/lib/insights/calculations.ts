@@ -475,6 +475,127 @@ export function buildQualificationAnomalies(records: AnalyticsMatch[], allianceR
   return anomalies.sort((a,b)=>Number(b.highConfidenceMiss)-Number(a.highConfidenceMiss)||Math.abs(b.standardizedResidual??0)-Math.abs(a.standardizedResidual??0));
 }
 
+/**
+ * Event-wide qualification diagnostics. Penalty points are credited to an alliance
+ * by TBA and are not attributed to a robot.
+ */
+export function buildQualificationAnalysis(
+  records: AnalyticsMatch[],
+  allEventMatches: TBAMatch[],
+  allianceResults: AllianceResult[],
+  playoffType?: number | null,
+): import("./types").QualificationAnalysis {
+  const qualifications = records
+    .filter(({ match }) => match.comp_level.toLowerCase() === "qm")
+    .sort((a, b) => a.match.match_number - b.match.match_number);
+  const validOutcomes = qualifications.flatMap((record) => {
+    const probability = numberOrNull(record.statbotics?.pred?.red_win_prob);
+    const winner = record.match.winning_alliance;
+    if (probability === null || probability < 0 || probability > 1 ||
+      (winner !== "red" && winner !== "blue") ||
+      record.match.alliances.red.score < 0 || record.match.alliances.blue.score < 0) return [];
+    const predictedWinner = probability >= 0.5 ? "red" as const : "blue" as const;
+    return [{
+      matchKey: record.match.key, matchLabel: matchLabel(record.match, playoffType),
+      probability, winner, predictedWinner,
+      correct: predictedWinner === winner,
+      confidence: Math.max(probability, 1 - probability),
+    }];
+  });
+  const binRanges = [
+    { label: "0–20%", min: 0, max: 0.2 },
+    { label: "20–40%", min: 0.2, max: 0.4 },
+    { label: "40–60%", min: 0.4, max: 0.6 },
+    { label: "60–80%", min: 0.6, max: 0.8 },
+    { label: "80–100%", min: 0.8, max: 1.000001 },
+  ];
+  const bins = binRanges.flatMap((range) => {
+    const items = validOutcomes.filter((item) => item.probability >= range.min && item.probability < range.max);
+    if (!items.length) return [];
+    const meanPredicted = mean(items.map((item) => item.probability)) ?? 0;
+    const observedRedWinRate = mean(items.map((item) => item.winner === "red" ? 1 : 0)) ?? 0;
+    return [{ label: range.label, count: items.length, meanPredicted, observedRedWinRate, calibrationError: observedRedWinRate - meanPredicted }];
+  });
+  const scoreResults = allianceResults.filter((item) =>
+    item.compLevel.toLowerCase() === "qm" && item.actual !== null && item.predicted !== null && item.residual !== null,
+  );
+  const residuals = scoreResults.map((item) => item.residual as number);
+  const scorePrediction = {
+    allianceCount: residuals.length,
+    meanAbsoluteError: mean(residuals.map(Math.abs)),
+    rootMeanSquareError: residuals.length ? Math.sqrt(mean(residuals.map((value) => value * value)) ?? 0) : null,
+    meanResidual: mean(residuals),
+  };
+  const thirds = [
+    { label: "Early qualifications", start: 0, end: Math.ceil(qualifications.length / 3) },
+    { label: "Middle qualifications", start: Math.ceil(qualifications.length / 3), end: Math.ceil(2 * qualifications.length / 3) },
+    { label: "Late qualifications", start: Math.ceil(2 * qualifications.length / 3), end: qualifications.length },
+  ];
+  const progression = thirds.flatMap((third) => {
+    const period = qualifications.slice(third.start, third.end);
+    if (!period.length) return [];
+    const keys = new Set(period.map((record) => record.match.key));
+    const values = scoreResults.filter((item) => keys.has(item.matchKey)).map((item) => item.residual as number);
+    return [{
+      label: third.label, firstMatch: period[0].match.match_number,
+      lastMatch: period[period.length - 1].match.match_number, allianceCount: values.length,
+      meanAbsoluteError: mean(values.map(Math.abs)), meanResidual: mean(values),
+    }];
+  });
+  const penaltyRows = allEventMatches
+    .filter((match) => match.comp_level.toLowerCase() === "qm" &&
+      match.alliances.red.score >= 0 && match.alliances.blue.score >= 0)
+    .flatMap((match) => {
+      const breakdown = match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
+      if (!breakdown?.red || !breakdown?.blue) return [];
+      const points = (color: "red" | "blue") => {
+        const values = breakdown[color];
+        const raw = numberOrNull(values.foulPoints) ?? numberOrNull(values.foul_points);
+        return raw !== null && raw >= 0 ? raw : null;
+      };
+      const redPenaltyPoints = points("red"), bluePenaltyPoints = points("blue");
+      if (redPenaltyPoints === null || bluePenaltyPoints === null) return [];
+      return [{
+        matchKey: match.key, matchLabel: matchLabel(match, playoffType), matchNumber: match.match_number,
+        redPenaltyPoints, bluePenaltyPoints, totalPenaltyPoints: redPenaltyPoints + bluePenaltyPoints,
+      }];
+    }).sort((a, b) => a.matchNumber - b.matchNumber);
+  const totals = penaltyRows.map((item) => item.totalPenaltyPoints).sort((a, b) => a - b);
+  const quantile = (values: number[], probability: number) => {
+    if (!values.length) return null;
+    const position = (values.length - 1) * probability;
+    const lower = Math.floor(position), upper = Math.ceil(position);
+    return values[lower] + (values[upper] - values[lower]) * (position - lower);
+  };
+  const median = quantile(totals, 0.5), q1 = quantile(totals, 0.25), q3 = quantile(totals, 0.75);
+  const iqr = q1 !== null && q3 !== null ? q3 - q1 : null;
+  const outlierThreshold = totals.length >= 10 && median !== null && iqr !== null
+    ? (iqr > 0 ? q3! + 1.5 * iqr : median) : null;
+  const flaggedMatches = outlierThreshold === null ? [] : penaltyRows
+    .filter((item) => item.totalPenaltyPoints > outlierThreshold).map((item) => ({ ...item }));
+  return {
+    predictionCalibration: {
+      matchCount: validOutcomes.length,
+      correctCount: validOutcomes.filter((item) => item.correct).length,
+      accuracy: validOutcomes.length ? validOutcomes.filter((item) => item.correct).length / validOutcomes.length : null,
+      brierScore: validOutcomes.length ? mean(validOutcomes.map((item) =>
+        (item.probability - (item.winner === "red" ? 1 : 0)) ** 2)) : null,
+      highConfidenceMisses: validOutcomes.filter((item) => item.confidence >= 0.8 && !item.correct)
+        .map((item) => ({ matchKey: item.matchKey, matchLabel: item.matchLabel, predictedWinner: item.predictedWinner, probability: item.confidence })),
+      bins,
+    },
+    scorePrediction,
+    progression,
+    penalties: {
+      sampleSize: penaltyRows.length,
+      matchesWithPenaltyPoints: penaltyRows.filter((item) => item.totalPenaltyPoints > 0).length,
+      totalPenaltyPoints: totals.reduce((sum, value) => sum + value, 0),
+      meanPenaltyPoints: mean(totals), medianPenaltyPoints: median, outlierThreshold,
+      flaggedMatches,
+    },
+  };
+}
+
 /** Playoff alliance combinations are separate from qualification combinations. */
 function officialPlayoffAllianceName(
   teamKeys: string[],
