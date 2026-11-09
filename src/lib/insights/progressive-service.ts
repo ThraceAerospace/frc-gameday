@@ -139,17 +139,10 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
       attempts: {},
       state: "queued",
       updatedAt: Date.now(),
+      scheduleRefreshedAt: Date.now(),
+      playoffAlliancesRefreshedAt: Date.now(),
     };
     await writeJob(eventKey, job);
-  }
-  if (forceRefresh || !job.playoffAlliancesRefreshedAt) {
-    try {
-      job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey);
-      job.playoffAlliancesRefreshedAt = Date.now();
-      await writeJob(eventKey, job);
-    } catch {
-      // Retain the last known official alliance list; a later snapshot retries.
-    }
   }
   return buildPayload(job);
 }
@@ -170,14 +163,16 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
       job.statboticsFetchError = null;
     }
     job.state = "collecting";
-    // Refresh the event's canonical match list periodically. Existing
-    // analytics records survive schedule changes and only new matches queue.
-    if (forceRefresh || !job.scheduleRefreshedAt || Date.now() - job.scheduleRefreshedAt > 60_000) {
+    // The dashboard is a persisted snapshot: TBA and Statbotics are only
+    // reacquired when the user explicitly presses Refresh data.
+    if (forceRefresh) {
       try {
         const [latestMatchesRaw, latestOprs, latestRankings] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey), TBA.getEventRankings(eventKey).catch(() => null)]);
         const latestMatches = sortMatches(latestMatchesRaw);
         job.oprs = latestOprs;
         job.rankings = latestRankings;
+        job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey).catch(() => job!.playoffAlliances ?? null);
+        job.playoffAlliancesRefreshedAt = Date.now();
         const existing = new Map(job.matches.map((match) => [match.key, match]));
         for (const match of latestMatches) {
           const prior = existing.get(match.key);
