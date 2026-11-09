@@ -509,13 +509,13 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const closest=[...completed].sort((a,b)=>a.margin-b.margin).slice(0,5);
   return <div className="space-y-4">
     <Panel title="Playoff upsets" description="Completed elimination matches where the pre-match favorite had at least a 60% win probability but lost.">
-      {upsets.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={upsets.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">No completed playoff matches meet the upset definition yet. Matches without a winner prediction are excluded.</p>}
+      {upsets.length?<div className="w-full min-w-0"><MatchAnalysisTable data={data} records={upsets.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">No completed playoff matches meet the upset definition yet. Matches without a winner prediction are excluded.</p>}
     </Panel>
     <Panel title="Unexpected results" description={unexpectedThreshold===null?"Alliance score residuals need a larger completed-match sample before unusual results can be highlighted.":"Matches where at least one alliance's absolute score residual falls in the top 10% of playoff alliance results in this event."}>
-      {unexpected.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={unexpected.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">{unexpectedThreshold===null?"Not enough scored alliance predictions are available to establish an event-relative threshold.":"No completed playoff match currently falls in the unusual-score range."}</p>}
+      {unexpected.length?<div className="w-full min-w-0"><MatchAnalysisTable data={data} records={unexpected.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">{unexpectedThreshold===null?"Not enough scored alliance predictions are available to establish an event-relative threshold.":"No completed playoff match currently falls in the unusual-score range."}</p>}
     </Panel>
     <Panel title="Closest matches" description="The five smallest final score margins among completed elimination matches.">
-      {closest.length?<div className="grid gap-3 md:grid-cols-2"><MatchAnalysisTable data={data} records={closest.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">Completed playoff scores are not available yet.</p>}
+      {closest.length?<div className="w-full min-w-0"><MatchAnalysisTable data={data} records={closest.map((item)=>item.record)} playoff/></div>:<p className="text-sm text-slate-500">Completed playoff scores are not available yet.</p>}
     </Panel>
     <Panel title="Playoff match explorer" description="Every elimination match record processed so far, with alliance-level score comparisons and the existing match review markers.">
       <MatchAnalysisTable data={data} records={matches} playoff/>
