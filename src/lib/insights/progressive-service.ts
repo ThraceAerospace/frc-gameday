@@ -3,7 +3,7 @@ import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
-import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
+import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
@@ -75,6 +75,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
     allianceResults,
     findings,
     qualificationAnomalies,
+    qualificationAnalysis: buildQualificationAnalysis(analyticsMatches, job.matches, allianceResults, job.event.playoff_type),
     playoffAnalysis,
     teamInsights,
     matchCount: job.matches.length,
