@@ -262,14 +262,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       const scoredRows = eventRows.filter((row) => row.actual !== null && row.opponentActual !== null);
       const items = scoredRows.filter((row) => row.residual !== null);
       const opponentResidualSamples = scoredRows.filter((row) => row.opponentResidual !== null).length;
-      const strengthRatedSamples = items.filter((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null).length;
-      const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
-      return { event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, matches: eventRows.length, scoredMatches: scoredRows.length, teamResidualSamples: items.length, opponentResidualSamples, strengthRatedSamples, baselineAllianceSamples: baseline.length, eligible: items.length >= 3 && baseline.length >= 1 };
+      const baseline = items.flatMap((row) => row.opponentResidual === null ? [] : [row.opponentResidual]);
+      return { event: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date }, matches: eventRows.length, scoredMatches: scoredRows.length, teamResidualSamples: items.length, opponentResidualSamples, baselineAllianceSamples: baseline.length, eligible: items.length > 0 && baseline.length > 0 };
     });
     const residualPatternEvents = eventMatches.flatMap(({ event }) => {
       const items = completed.filter((row) => row.event.key === event.key && row.residual !== null);
-      const baseline = items.flatMap((row) => row.opponentResidual !== null && row.alliancePreEPATotal !== null && row.opponentPreEPATotal !== null && Math.abs(row.opponentPreEPATotal-row.alliancePreEPATotal) <= Math.max(5, Math.abs(row.alliancePreEPATotal)*0.2) ? [row.opponentResidual] : []);
-      if (items.length < 3 || baseline.length < 1) return [];
+      const baseline = items.flatMap((row) => row.opponentResidual === null ? [] : [row.opponentResidual]);
+      if (items.length === 0 || baseline.length === 0) return [];
       const baselineMean = average(baseline) ?? 0;
       const baselineSd = Math.sqrt(baseline.reduce((sum, value) => sum + (value - baselineMean) ** 2, 0) / baseline.length);
       const teamMean = average(items.map((row) => row.residual as number)) ?? 0;
