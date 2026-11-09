@@ -309,7 +309,9 @@ export class StatboticsClient {
             lastRefreshAt: failedAt,
             expiresAt: failedAt + STATBOTICS_DATA_TTL_SECONDS * 1000,
           };
-      await writeCache(endpoint, failedEntry, options.fallbackTtlSeconds);
+      // Keep negative cache entries for the same long lifetime as successful
+      // historical snapshots. Manual refresh bypasses this cache explicitly.
+      await writeCache(endpoint, failedEntry, STATBOTICS_DATA_TTL_SECONDS);
       if (fallback) return fallback.data;
       throw error;
     } finally {
