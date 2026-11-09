@@ -7,7 +7,7 @@ import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis,
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
-const JOB_TTL_SECONDS = 12 * 60 * 60;
+const JOB_TTL_SECONDS = 365 * 24 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
 const LOCK_PREFIX = "lock:insights:progressive:";
 const JOB_PREFIX = "insights:progressive:";
@@ -142,7 +142,7 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
     };
     await writeJob(eventKey, job);
   }
-  if (!job.playoffAlliancesRefreshedAt || Date.now() - job.playoffAlliancesRefreshedAt > 10 * 60 * 1000) {
+  if (!job.playoffAlliancesRefreshedAt) {
     try {
       job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey);
       job.playoffAlliancesRefreshedAt = Date.now();
