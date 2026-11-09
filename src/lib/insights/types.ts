@@ -179,6 +179,7 @@ export type TeamSeasonComparison = {
   priorEvent: { key: string; name: string; startDate: string };
   priorEPA: number;
   currentEPA: number;
+  currentEpaPercentile: number | null;
   change: number;
   cohortRank: number;
   cohortSize: number;
