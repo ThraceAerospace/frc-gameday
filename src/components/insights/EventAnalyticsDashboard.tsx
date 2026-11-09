@@ -555,22 +555,48 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const playoff=data.playoffAnalysis;
   const teamsByKey=new Map(data.teams.map((team)=>[team.teamKey,team]));
   if(!playoff||!playoff.alliances.length)return <Panel title="Playoff alliance investigation" description="Compare official playoff alliances across their elimination performance."><p className="text-sm text-slate-500">Playoff alliance data will appear when TBA publishes the alliance selections and completed match results.</p></Panel>;
-  const status=(alliance:typeof playoff.alliances[number])=>{
-    if(alliance.scoredMatchCount<2||alliance.meanResidual===null||alliance.residualStandardDeviation===null)return {label:"Insufficient sample",tone:"bg-slate-100 text-slate-600"};
+
+  const eligible=playoff.alliances.filter((alliance)=>alliance.scoredMatchCount>0&&alliance.meanResidual!==null);
+  const fieldSampleSize=eligible.reduce((sum,alliance)=>sum+alliance.scoredMatchCount,0);
+  const fieldMean=fieldSampleSize?eligible.reduce((sum,alliance)=>sum+(alliance.meanResidual??0)*alliance.scoredMatchCount,0)/fieldSampleSize:null;
+  const fieldVariance=fieldMean===null||fieldSampleSize<2?null:eligible.reduce((sum,alliance)=>sum+(alliance.scoredMatchCount-1)*(alliance.residualStandardDeviation??0)**2+alliance.scoredMatchCount*((alliance.meanResidual??0)-fieldMean)**2,0)/(fieldSampleSize-1);
+  const fieldSpread=fieldVariance===null?null:Math.sqrt(fieldVariance);
+
+  const predictionAssessment=(alliance:typeof playoff.alliances[number])=>{
+    if(alliance.scoredMatchCount<2||alliance.meanResidual===null||alliance.residualStandardDeviation===null)return {label:"Insufficient sample",tone:"bg-slate-100 text-slate-600",lower:null as number|null,upper:null as number|null};
     const df=alliance.scoredMatchCount-1;
     const tCritical=[0,12.706,4.303,3.182,2.776,2.571,2.447,2.365,2.306,2.262,2.228,2.201,2.179,2.160,2.145,2.131,2.120,2.110,2.101,2.093,2.086,2.080,2.074,2.069,2.064,2.060,2.056,2.052,2.048,2.045,2.042];
     const margin=(df<=30?tCritical[df]??1.96:1.96)*alliance.residualStandardDeviation/Math.sqrt(alliance.scoredMatchCount);
-    if(alliance.meanResidual>margin)return {label:"Above prediction",tone:"bg-emerald-100 text-emerald-800"};
-    if(alliance.meanResidual< -margin)return {label:"Below prediction",tone:"bg-rose-100 text-rose-800"};
-    return {label:"Within expected range",tone:"bg-slate-100 text-slate-700"};
+    const lower=alliance.meanResidual-margin;
+    const upper=alliance.meanResidual+margin;
+    if(lower>0)return {label:"Above prediction",tone:"bg-emerald-100 text-emerald-800",lower,upper};
+    if(upper<0)return {label:"Below prediction",tone:"bg-rose-100 text-rose-800",lower,upper};
+    return {label:"Inconclusive",tone:"bg-slate-100 text-slate-700",lower,upper};
   };
-  return <Panel title="Playoff alliance performance" description="Alliance-level results across elimination matches. Residuals compare actual alliance scores with Statbotics predictions; they do not isolate individual team or robot contribution.">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><QualityMetric label="Alliances" value={String(playoff.alliances.length)} detail="Official playoff alliances"/><QualityMetric label="Elimination matches" value={String(playoff.matchCount)} detail="Matches represented in the analysis"/><QualityMetric label="Alliances above prediction" value={String(playoff.alliances.filter((a)=>status(a).label==="Above prediction").length)} detail="Mean residual clears uncertainty margin"/><QualityMetric label="Alliances below prediction" value={String(playoff.alliances.filter((a)=>status(a).label==="Below prediction").length)} detail="Mean residual clears uncertainty margin"/></div>
-    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[850px] text-sm"><thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Alliance</th><th className="px-3 py-3">Teams</th><th className="px-3 py-3">Record</th><th className="px-3 py-3">Mean residual</th><th className="px-3 py-3">Residual SD</th><th className="px-3 py-3">Matches</th><th className="px-3 py-3">Assessment</th></tr></thead><tbody>{playoff.alliances.map((alliance,index)=>{const result=status(alliance);return <tr key={alliance.name??alliance.teamKeys.join("|")+index} className="border-t border-slate-100 align-middle"><th className="px-3 py-3 text-left font-semibold text-slate-900">{alliance.name??`Alliance ${index+1}`}</th><td className="px-3 py-3"><div className="flex flex-wrap gap-x-2 gap-y-1">{alliance.teamKeys.map((key)=><span key={key} className="whitespace-nowrap">{teamsByKey.has(key)?teamLinkForNumber(teamsByKey.get(key)!.teamNumber,teamsByKey.get(key)!.name):formatTeamNumber(key)}</span>)}</div></td><td className="px-3 py-3 tabular-nums">{alliance.wins}–{alliance.losses}–{alliance.ties}</td><td className={"px-3 py-3 font-semibold tabular-nums "+(alliance.meanResidual===null?"text-slate-400":alliance.meanResidual>0?"text-emerald-700":alliance.meanResidual<0?"text-rose-700":"text-slate-700")}>{alliance.meanResidual===null?"—":(alliance.meanResidual>0?"+":"")+fmt(alliance.meanResidual)+" pts"}</td><td className="px-3 py-3 tabular-nums">{fmt(alliance.residualStandardDeviation)} pts</td><td className="px-3 py-3 tabular-nums">{alliance.scoredMatchCount}</td><td className="px-3 py-3"><span className={"inline-flex rounded-full px-2 py-1 text-[10px] font-bold "+result.tone}>{result.label}</span></td></tr>;})}</tbody></table></div>
-    <p className="mt-3 text-xs leading-5 text-slate-500">Assessment uses the alliance mean residual and a two-sided 95% t confidence margin, requiring at least two scored matches. Alliances with fewer than two scored matches are marked insufficient; the two-match interval remains very wide because of the small sample. Official alliance names are used when supplied by TBA; otherwise a neutral alliance number is shown.</p>
+  const fieldComparison=(alliance:typeof playoff.alliances[number])=>{
+    if(alliance.meanResidual===null)return null;
+    const otherCount=fieldSampleSize-alliance.scoredMatchCount;
+    if(otherCount<=0)return null;
+    const otherMean=eligible.filter((item)=>item!==alliance).reduce((sum,item)=>sum+(item.meanResidual??0)*item.scoredMatchCount,0)/otherCount;
+    return alliance.meanResidual-otherMean;
+  };
+  const signed=(value:number|null)=>value===null?"—":(value>0?"+":"")+fmt(value)+" pts";
+
+  return <Panel title="Playoff alliance performance" description="Compare each alliance with the rest of the playoff field, alongside its performance against Statbotics predictions.">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <QualityMetric label="Alliances" value={String(playoff.alliances.length)} detail="Official playoff alliances"/>
+      <QualityMetric label="Elimination matches" value={String(playoff.matchCount)} detail="Matches represented in the analysis"/>
+      <QualityMetric label="Playoff field bias" value={signed(fieldMean)} detail={fieldSampleSize+" alliance scores · negative means predictions tended high"}/>
+      <QualityMetric label="Residual spread" value={fieldSpread===null?"—":fmt(fieldSpread)+" pts"} detail="Standard deviation across playoff alliance scores"/>
+    </div>
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-sm font-semibold text-slate-900">Field-relative comparison</p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">The primary comparison is each alliance's mean residual against the match-count-weighted average residual of all other playoff alliances. Positive values indicate better-than-field results; negative values indicate worse-than-field results. The playoff field's overall bias is shown above so model-wide overprediction is not mistaken for alliance-specific underperformance.</p>
+    </div>
+    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1120px] text-sm"><thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Alliance</th><th className="px-3 py-3">Teams</th><th className="px-3 py-3">Record</th><th className="px-3 py-3">Mean residual</th><th className="px-3 py-3">Vs. rest of field</th><th className="px-3 py-3">95% prediction CI</th><th className="px-3 py-3">Residual SD</th><th className="px-3 py-3">Matches</th><th className="px-3 py-3">Prediction assessment</th></tr></thead><tbody>{playoff.alliances.map((alliance,index)=>{const prediction=predictionAssessment(alliance);const relative=fieldComparison(alliance);return <tr key={alliance.name??alliance.teamKeys.join("|")+index} className="border-t border-slate-100 align-middle"><th className="px-3 py-3 text-left font-semibold text-slate-900">{alliance.name??`Alliance ${index+1}`}</th><td className="px-3 py-3"><div className="flex flex-wrap gap-x-2 gap-y-1">{alliance.teamKeys.map((key)=><span key={key} className="whitespace-nowrap">{teamsByKey.has(key)?teamLinkForNumber(teamsByKey.get(key)!.teamNumber,teamsByKey.get(key)!.name):formatTeamNumber(key)}</span>)}</div></td><td className="px-3 py-3 tabular-nums">{alliance.wins}–{alliance.losses}–{alliance.ties}</td><td className={"px-3 py-3 font-semibold tabular-nums "+(alliance.meanResidual===null?"text-slate-400":alliance.meanResidual>0?"text-emerald-700":alliance.meanResidual<0?"text-rose-700":"text-slate-700")}>{signed(alliance.meanResidual)}</td><td className={"px-3 py-3 font-semibold tabular-nums "+(relative===null?"text-slate-400":relative>0?"text-emerald-700":relative<0?"text-rose-700":"text-slate-700")}>{signed(relative)}</td><td className="px-3 py-3 tabular-nums text-slate-600">{prediction.lower===null||prediction.upper===null?"—":fmt(prediction.lower)+" to "+fmt(prediction.upper)+" pts"}</td><td className="px-3 py-3 tabular-nums">{fmt(alliance.residualStandardDeviation)} pts</td><td className="px-3 py-3 tabular-nums">{alliance.scoredMatchCount}</td><td className="px-3 py-3"><span className={"inline-flex rounded-full px-2 py-1 text-[10px] font-bold "+prediction.tone}>{prediction.label}</span></td></tr>;})}</tbody></table></div>
+    <p className="mt-3 text-xs leading-5 text-slate-500">“Vs. rest of field” is a descriptive difference from the match-count-weighted mean of the other alliances; it is not a significance test. A match-level paired comparison would be needed for a defensible confidence interval because the two alliance scores in a match are related. The 95% prediction interval tests each alliance against zero residual and requires at least two scored matches; “Inconclusive” means the interval includes zero. Field residual spread is calculated across all available alliance scores. Official alliance names are used when supplied by TBA.</p>
   </Panel>;
 }
-
 
 function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;timezone:string|null}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey);
