@@ -3,7 +3,7 @@ import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import type { TBAEventSimple } from "@/lib/tba/types";
 
-const TEAM_HISTORY_TTL_SECONDS = 30 * 24 * 60 * 60;
+const TEAM_HISTORY_TTL_SECONDS = 365 * 24 * 60 * 60;
 
 
 export const maxDuration = 60;
