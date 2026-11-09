@@ -508,13 +508,18 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const unexpected=unexpectedThreshold===null?[]:completed.filter((item)=>[item.redResult?.residual,item.blueResult?.residual].some((value)=>typeof value==="number"&&Math.abs(value)>=unexpectedThreshold)).sort((a,b)=>Math.max(Math.abs(b.redResult?.residual??0),Math.abs(b.blueResult?.residual??0))-Math.max(Math.abs(a.redResult?.residual??0),Math.abs(a.blueResult?.residual??0)));
   const closest=[...completed].sort((a,b)=>a.margin-b.margin).slice(0,5);
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
+  const allianceName=(color:"red"|"blue",item:typeof completed[number])=>{
+    const teamKeys=item.match.alliances[color].team_keys;
+    return data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??(color==="red"?"Red alliance":"Blue alliance");
+  };
   const allianceTeams=(color:"red"|"blue",item:typeof completed[number])=>item.match.alliances[color].team_keys.map((key)=>teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)).join(" · ");
   const spotlight=(item:typeof completed[number],kind:"upset"|"unexpected"|"close")=>{
     const redResidual=item.redResult?.residual??null;
     const blueResidual=item.blueResult?.residual??null;
     const largestResidual=Math.abs(redResidual??0)>=Math.abs(blueResidual??0)?{color:"red" as const,value:redResidual}:{color:"blue" as const,value:blueResidual};
-    const detail=kind==="upset"?(item as typeof upsets[number]).favoriteProbability===null?"Favorite prediction unavailable":Math.round((item as typeof upsets[number]).favoriteProbability*100)+"% pre-match win chance for "+(((item as typeof upsets[number]).favorite)==="red"?"Red":"Blue")
-      :kind==="unexpected"?(largestResidual.color==="red"?"Red":"Blue")+" alliance: "+(largestResidual.value===null?"—":(largestResidual.value>0?"+":"")+fmt(largestResidual.value,0)+" pts vs prediction")
+    const favorite=(item as typeof upsets[number]).favorite;
+    const detail=kind==="upset"?Math.round((item as typeof upsets[number]).favoriteProbability*100)+"% pre-match win chance for "+allianceName(favorite,item)
+      :kind==="unexpected"?allianceName(largestResidual.color,item)+": "+(largestResidual.value===null?"—":(largestResidual.value>0?"+":"")+fmt(largestResidual.value,0)+" pts vs prediction")
       :item.margin+"-point final margin";
     return <article key={item.match.key} className="rounded-lg border border-slate-200 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -522,11 +527,11 @@ function PlayoffAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
         <span className="text-xs font-semibold text-slate-500">{detail}</span>
       </div>
       <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
-        <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-rose-700">Red</p><p className="truncate text-xs text-slate-600">{allianceTeams("red",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.redScore}</p></div>
+        <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-rose-700">{allianceName("red",item)}</p><p className="truncate text-xs text-slate-600">{allianceTeams("red",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.redScore}</p></div>
         <span className="text-xs text-slate-400">vs</span>
-        <div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase text-blue-700">Blue</p><p className="truncate text-xs text-slate-600">{allianceTeams("blue",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.blueScore}</p></div>
+        <div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase text-blue-700">{allianceName("blue",item)}</p><p className="truncate text-xs text-slate-600">{allianceTeams("blue",item)}</p><p className="text-lg font-black tabular-nums text-slate-900">{item.blueScore}</p></div>
       </div>
-      {kind==="unexpected"?<p className="mt-1 text-[11px] text-slate-500">Red delta: {redResidual===null?"—":(redResidual>0?"+":"")+fmt(redResidual,0)} pts · Blue delta: {blueResidual===null?"—":(blueResidual>0?"+":"")+fmt(blueResidual,0)} pts</p>:null}
+      {kind==="unexpected"?<p className="mt-1 text-[11px] text-slate-500">{allianceName("red",item)} delta: {redResidual===null?"—":(redResidual>0?"+":"")+fmt(redResidual,0)} pts · {allianceName("blue",item)} delta: {blueResidual===null?"—":(blueResidual>0?"+":"")+fmt(blueResidual,0)} pts</p>:null}
     </article>;
   };
   return <div className="space-y-4">
