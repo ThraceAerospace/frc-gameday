@@ -39,7 +39,7 @@ function teamNumberLink(teamNumber:number):ReactNode {
   return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-blue-700">{teamNumber}</Link>;
 }
 
-export default function EventAnalyticsDashboard({ eventKey, eventName, liveMatchKey, liveMatchSignature, websocketStatus, websocketStale }: { eventKey: string; eventName: string; liveMatchKey: string | null; liveMatchSignature: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
+export default function EventAnalyticsDashboard({ eventKey, eventName, websocketStatus, websocketStale }: { eventKey: string; eventName: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
   const [data, setData] = useState<EventAnalyticsResponse | null>(null);
   const loadGeneration = useRef(0);
   const [tab, setTab] = useState<Tab>("overview");
