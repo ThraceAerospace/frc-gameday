@@ -128,7 +128,7 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
         try {
           const [events, statboticsEvents] = await Promise.all([
             TBA.getTeamEvents("frc" + teamNumber, Number(job.target.key.slice(0, 4))),
-            Statbotics.getTeamEvents({ team: teamNumber, year: Number(job.target.key.slice(0, 4)) }),
+            Statbotics.getTeamEvents({ team: teamNumber, year: Number(job.target.key.slice(0, 4)) }, { refresh: forceRefresh }),
           ]);
           const relevant = events.filter((event) =>
             event.event_type !== 99 && event.event_type !== 100 &&
