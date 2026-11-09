@@ -30,6 +30,7 @@ type Job = {
   updatedAt: number;
   currentEventRefreshedAt: number | null;
   rosterRefreshedAt?: number;
+  discoveryAttemptedAt?: number;
 };
 
 function key(eventKey: string) { return PREFIX + eventKey; }
@@ -112,8 +113,10 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
   try {
     let job = await readJob(eventKey);
     if (!job) return;
-    // Completed historical cohorts do not need discovery on subsequent opens.
-    if (!forceRefresh && job.discoveryQueue.length === 0) return;
+    // Historical cohort discovery is a one-shot dashboard-load operation.
+    // If it exhausts its request budget, the partial result stays cached until
+    // the user explicitly refreshes rather than resuming on every page open.
+    if (!forceRefresh && job.discoveryAttemptedAt) return;
     if (forceRefresh) {
       job.discoveryQueue = [...job.teamNumbers];
       job.discoveryAttempts = {};
@@ -122,8 +125,11 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
       job.records = {};
       job.discoveryFailures = [];
       job.currentEventRefreshedAt = null;
+      job.discoveryAttemptedAt = undefined;
       await writeJob(eventKey, job);
     }
+    job.discoveryAttemptedAt = Date.now();
+    await writeJob(eventKey, job);
     while (Date.now() < deadline && job.discoveryQueue.length) {
       const batch = job.discoveryQueue.slice(0, DISCOVERY_BATCH);
       await withConcurrency(batch, CONCURRENCY, async (teamNumber) => {
