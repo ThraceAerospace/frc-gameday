@@ -436,6 +436,15 @@ function predictionTone(label:string):string {
   }
 }
 
+function predictionClassification(redWinProbability:number|null):string|null {
+  if(redWinProbability===null||!Number.isFinite(redWinProbability))return null;
+  if(redWinProbability>=0.8)return "Strong Red";
+  if(redWinProbability>=0.6)return "Lean Red";
+  if(redWinProbability<=0.2)return "Strong Blue";
+  if(redWinProbability<=0.4)return "Lean Blue";
+  return "Toss-up";
+}
+
 function phaseAnomalyBand(data:EventAnalyticsResponse,compLevel:string):{median:number;margin:number}|null {
   const residuals=data.allianceResults.filter((item)=>item.compLevel.toLowerCase()===compLevel.toLowerCase()&&item.residual!==null).map((item)=>item.residual as number).sort((a,b)=>a-b);
   if(residuals.length<8)return null;
@@ -748,7 +757,6 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
       {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1120px] text-xs">
         <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
-          const allianceClass=teamAllianceClass(match.alliance);
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
           return <tr key={match.key} className="border-t border-slate-100 align-middle">
             <th className="whitespace-nowrap px-3 py-2.5 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer">{match.label} ↗</a></th>
