@@ -411,3 +411,10 @@ Add appropriate tests for shared calculations and reusable components. Changes t
 
 **Guiding principle: Build an insight once. Make it available everywhere.**
 
+## Shared layout and page data boundaries
+
+- `SiteShell` is a presentation/layout component for shared site chrome (navigation, theme controls, and the page content frame). It must not fetch TBA data, require event/team collections as props, or make individual pages load data solely to satisfy the shell.
+- Pages and route-level data services fetch only the data their own content requires. Do not call `TBA.getEvents(year)` globally or on every page to populate shared navigation.
+- If navigation genuinely needs contextual information, derive it from the current route or pass the smallest already-available value. Do not introduce a full event-list fetch for navigation state.
+- Keep page-specific collections local to the page that uses them. Do not pass unused data through shared layout components.
+
