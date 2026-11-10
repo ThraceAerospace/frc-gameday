@@ -73,13 +73,33 @@ export function buildTeamRows(
       latest.set(id, { epa: epaFor(record, key, "epas") ?? epaFor(record, key, "pre_epas") ?? previous?.epa, matchesSeen: (previous?.matchesSeen ?? 0) + 1 });
     }
   }
+  const contributionByTeam = new Map<string, number[]>();
+  for (const record of records) {
+    for (const color of ["red", "blue"] as const) {
+      const teamKeys = record.match.alliances[color].team_keys ?? [];
+      if (teamKeys.length !== 3) continue;
+      const values = teamKeys.map((teamKey) => numberOrNull(epaFor(record, teamKey, "pre_epas")?.epa));
+      if (values.some((value) => value === null)) continue;
+      const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+      if (!(total > 0)) continue;
+      teamKeys.forEach((teamKey, index) => {
+        const value = values[index];
+        if (value === null) return;
+        const samples = contributionByTeam.get(teamKey) ?? [];
+        samples.push(value / total * 100);
+        contributionByTeam.set(teamKey, samples);
+      });
+    }
+  }
   const rows = teams.map((team) => {
     const current = latest.get(String(team.team_number));
+    const contributionSamples = contributionByTeam.get(String(team.team_number)) ?? [];
     return {
       teamKey: team.key, teamNumber: team.team_number, name: team.nickname || team.name || `Team ${team.team_number}`,
       opr: numberOrNull(oprs?.oprs?.[team.key]), dpr: numberOrNull(oprs?.dprs?.[team.key]), ccwm: numberOrNull(oprs?.ccwms?.[team.key]),
       epa: numberOrNull(current?.epa?.epa), autoEpa: numberOrNull(current?.epa?.auto_epa), teleopEpa: numberOrNull(current?.epa?.teleop_epa), endgameEpa: numberOrNull(current?.epa?.endgame_epa),
       matchesSeen: current?.matchesSeen ?? 0, epaPercentile: null as number | null,
+      epaContributionPercent: mean(contributionSamples), epaContributionSamples: contributionSamples.length,
     };
   });
   const epaValues = rows.flatMap((row) => row.epa === null ? [] : [row.epa]);
