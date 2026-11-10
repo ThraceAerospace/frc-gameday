@@ -55,6 +55,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
   const [matchAnalysisB, setMatchAnalysisB] = useState<TeamMatchAnalysis | null>(null);
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
+  const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
 
   const load = useCallback(async (forceRefresh = false) => {
     const generation = ++loadGeneration.current;
@@ -114,7 +115,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
     let active = true;
     setMatchAnalysisA(null);
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    const query = `year=${data.event.year}`;
+    const query = `year=${data.event.year}${matchAnalysisRefreshKey > 0 ? "&refresh=1" : ""}`;
     fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
@@ -123,7 +124,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
       if (active) { setMatchAnalysisA(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
     return () => { active = false; };
-  }, [teamA,data?.event.year]);
+  }, [teamA,data?.event.year,matchAnalysisRefreshKey]);
 
   const teams = data?.teams ?? [];
   const selectedFocus = teams.find((team) => String(team.teamNumber) === teamFocus);
@@ -146,7 +147,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
           <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
           <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event feed connected" : websocketStatus === "connecting" ? "Connecting to live event feed…" : "Live event feed disconnected"}{websocketStale ? " · live feed delayed" : ""}</p>
         </div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void load(true)} disabled={loading} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (teamA) setMatchAnalysisRefreshKey((value) => value + 1); void load(true); }} disabled={loading} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
       </div>
 
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
