@@ -76,7 +76,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
     event: job.event,
     rankings: job.rankings,
     teams,
-    teamColors: Object.fromEntries((job.teamColors ?? []).flatMap((team) => team.primaryHex ? [[String(team.teamNumber), team.primaryHex] as const] : [])),
+    teamColors: Object.fromEntries((job.teamColors ?? []).map((team) => [String(team.teamNumber), { primaryHex: team.primaryHex, secondaryHex: team.secondaryHex }] as const)),
     matches: analyticsMatches,
     allianceResults,
     findings,
