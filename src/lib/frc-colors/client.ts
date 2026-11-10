@@ -90,12 +90,16 @@ export class FRCColorsClient {
       if (cached) return cached;
       throw error;
     } finally {
-      await redis.eval(
-        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-        1,
-        lock,
-        token,
-      );
+      try {
+        await redis.eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          1,
+          lock,
+          token,
+        );
+      } catch (error) {
+        console.warn("[FRC Colors] failed to release event cache lock", eventCode, error);
+      }
     }
   }
 }
