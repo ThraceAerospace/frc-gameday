@@ -12,6 +12,7 @@ import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, T
 const JOB_TTL_SECONDS = 365 * 24 * 60 * 60;
 const LOCK_TTL_SECONDS = 55;
 const LOCK_PREFIX = "lock:insights:progressive:";
+const TEAM_COLOR_REFRESH_MS = 24 * 60 * 60 * 1000;
 const JOB_PREFIX = "insights:progressive:";
 
 type Job = {
@@ -163,7 +164,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     if (!job) return;
     // A persisted historical snapshot is immutable until the user explicitly
     // requests a refresh. Avoid even repeating collection work on page opens.
-    if (!forceRefresh && job.statboticsLoadedAt && job.teamColorsLoadedAt) return;
+    if (!forceRefresh && job.statboticsLoadedAt && job.teamColorsLoadedAt && Date.now() - job.teamColorsLoadedAt < TEAM_COLOR_REFRESH_MS) return;
     if (forceRefresh) {
       job.records = {};
       job.attempts = {};
@@ -247,7 +248,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
 
     // Team colors are acquired once per event through the provider's cached
     // event endpoint, alongside the existing analytics collection job.
-    if (!job.teamColorsLoadedAt) {
+    if (!job.teamColorsLoadedAt || Date.now() - job.teamColorsLoadedAt >= TEAM_COLOR_REFRESH_MS) {
       try {
         job.teamColors = await FRCColors.getEvent(eventKey, { refresh: forceRefresh });
         job.teamColorsLoadedAt = Date.now();
