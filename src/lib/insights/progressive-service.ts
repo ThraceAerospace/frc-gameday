@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
+import { FRCColors } from "@/lib/frc-colors/service";
+import type { FRCColor } from "@/lib/frc-colors/client";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
@@ -27,6 +29,8 @@ type Job = {
   scheduleRefreshedAt?: number;
   statboticsFetchError?: string | null;
   statboticsLoadedAt?: number;
+  teamColors?: FRCColor[];
+  teamColorsLoadedAt?: number;
 };
 
 function jobKey(eventKey: string) {
@@ -71,6 +75,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
     event: job.event,
     rankings: job.rankings,
     teams,
+    teamColors: Object.fromEntries((job.teamColors ?? []).flatMap((team) => team.primaryHex ? [[String(team.teamNumber), team.primaryHex] as const] : [])),
     matches: analyticsMatches,
     allianceResults,
     findings,
@@ -164,6 +169,8 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
       job.attempts = {};
       job.statboticsLoadedAt = undefined;
       job.statboticsFetchError = null;
+      job.teamColors = undefined;
+      job.teamColorsLoadedAt = undefined;
     }
     job.state = "collecting";
     // The dashboard is a persisted snapshot: TBA and Statbotics are only
@@ -236,6 +243,19 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
         }
       }
       job.statboticsLoadedAt = Date.now();
+    }
+
+    // Team colors are acquired once per event through the provider's cached
+    // event endpoint, alongside the existing analytics collection job.
+    if (!job.teamColorsLoadedAt) {
+      try {
+        job.teamColors = await FRCColors.getEvent(eventKey, { refresh: forceRefresh });
+      } catch (error) {
+        console.warn("[Insights] FRC Colors event collection failed", eventKey, error);
+        job.teamColors = job.teamColors ?? [];
+      }
+      job.teamColorsLoadedAt = Date.now();
+      await writeJob(eventKey, job);
     }
 
     const unavailable = Object.values(job.records).some((record) => record.statboticsStatus === "unavailable");
