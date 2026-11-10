@@ -192,7 +192,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} timezone={data.event.timezone ?? null} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -633,17 +633,6 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   </Panel>;
 }
 
-function EpaShareBar({share,alliance}:{share:number|null;alliance:"red"|"blue"}) {
-  if(share===null)return <span className="text-slate-400">—</span>;
-  const width=Math.max(0,Math.min(100,share));
-  return <div className="min-w-[76px]" title="Selected team's pre-match EPA divided by the combined pre-match EPA of its alliance">
-    <span className="block text-right text-[11px] font-semibold tabular-nums text-slate-700">{fmt(share)}%</span>
-    <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100">
-      <span className={`block h-full rounded-full ${alliance==="red"?"bg-rose-500":"bg-blue-500"}`} style={{width:`${width}%`}}/>
-    </span>
-  </div>;
-}
-
 function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey&&match.compLevel==="qm");
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
@@ -858,7 +847,7 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
 
-function TeamAnalysisTabs({analysis,records,eventKey,timezone,name}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;timezone:string|null;name:string}) {
+function TeamAnalysisTabs({analysis,records,eventKey,name}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string}) {
   const [activeTab,setActiveTab]=useState<TeamAnalysisTab>("qualification");
   const tabs:{id:TeamAnalysisTab;label:string}[]=[
     {id:"qualification",label:"Qualification Analysis"},
