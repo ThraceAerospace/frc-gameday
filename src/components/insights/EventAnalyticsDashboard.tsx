@@ -219,7 +219,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
           {tab === "alliances" && <PlayoffAllianceAnalysisPanel data={data} />}
           {tab === "scouting" && <section className="space-y-4">
-            <ReviewQueue findings={findings} />
+            <ReviewQueue data={data} />
             <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Statistical diagnostics and alliance patterns</summary><div className="space-y-4 p-4">
               <Panel title="Unexpected alliance results" description="Alliance-level score differences from the Statbotics prediction. These are review context, not robot attribution."><ResidualBars residuals={residuals} /></Panel>
               <Panel title="Prediction quality" description="Event-specific score error and winner accuracy across available completed matches."><PredictionQuality stats={data.predictionStats} residualStats={data.residualStats} /></Panel>
@@ -428,77 +428,125 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   </div>;
 }
 
+type MatchReviewFlag = "model-upset" | "anomalous-score" | "large-residual" | "high-penalties" | "high-alliance-epa";
+type MatchFlagSummary = {
+  prediction: { label: string; tone: string } | null;
+  predictedWinner: "red" | "blue" | null;
+  winner: "red" | "blue" | null;
+  modelUpset: boolean;
+  anomalousScore: boolean;
+  largeResidual: boolean;
+  highPenalties: boolean;
+  highAllianceEpa: { red: boolean; blue: boolean };
+  reviewFlags: MatchReviewFlag[];
+};
+
+function quantile(values:number[],p:number):number|null {
+  if(!values.length)return null;
+  const sorted=[...values].sort((a,b)=>a-b);
+  return sorted[Math.min(sorted.length-1,Math.ceil(sorted.length*p)-1)];
+}
+
+function predictionTone(label:string):string {
+  switch(label){
+    case "Strong Red": return "bg-rose-800 text-white dark:bg-rose-700";
+    case "Lean Red": return "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200";
+    case "Toss-up": return "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100";
+    case "Lean Blue": return "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200";
+    default: return "bg-blue-800 text-white dark:bg-blue-700";
+  }
+}
+
+function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalyticsResponse["matches"][number]):MatchFlagSummary {
+  const {match,statbotics}=record;
+  const redProbability=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
+  const prediction=predictionClassification(redProbability);
+  const predictedWinner=redProbability===null?null:redProbability>=0.5?"red":"blue";
+  const redScore=match.alliances.red.score,blueScore=match.alliances.blue.score;
+  const completed=redScore>=0&&blueScore>=0;
+  const winner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:completed&&redScore!==blueScore?(redScore>blueScore?"red":"blue"):null;
+  const favoriteProbability=redProbability===null?null:Math.max(redProbability,1-redProbability);
+  const modelUpset=completed&&winner!==null&&predictedWinner!==null&&winner!==predictedWinner&&favoriteProbability!==null&&favoriteProbability>=0.6;
+  const matchResults=data.allianceResults.filter((item)=>item.matchKey===match.key);
+  const allianceEpaValues=data.allianceResults.flatMap((item)=>item.preEpaTotal===null?[]:[item.preEpaTotal]);
+  const highEpaThreshold=allianceEpaValues.length>=8?quantile(allianceEpaValues,0.75):null;
+  const highAllianceEpa={
+    red:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.preEpaTotal??-Infinity)>=highEpaThreshold,
+    blue:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.preEpaTotal??-Infinity)>=highEpaThreshold,
+  };
+  const qualification=match.comp_level.toLowerCase()==="qm";
+  const anomalousScore=qualification
+    ?(data.qualificationAnomalies??[]).some((item)=>item.matchKey===match.key&&item.outsideExpectedRange)
+    :data.residualStats.standardDeviation!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>2*data.residualStats.standardDeviation!);
+  const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
+  const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
+  const largeResidual=largeResidualThreshold!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>=largeResidualThreshold);
+  const highPenalties=qualification&&(data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===match.key)??false);
+  const reviewFlags:MatchReviewFlag[]=[
+    ...(modelUpset?["model-upset" as const]:[]),
+    ...(anomalousScore?["anomalous-score" as const]:[]),
+    ...(largeResidual?["large-residual" as const]:[]),
+    ...(highPenalties?["high-penalties" as const]:[]),
+    ...(highAllianceEpa.red||highAllianceEpa.blue?["high-alliance-epa" as const]:[]),
+  ];
+  return {prediction:prediction?{label:prediction,tone:predictionTone(prediction)}:null,predictedWinner,winner,modelUpset,anomalousScore,largeResidual,highPenalties,highAllianceEpa,reviewFlags};
+}
+
 function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
   const officialAllianceName=(teamKeys:string[])=>playoff?data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??null:null;
-  const scopeKeys=new Set(records.map(({match})=>match.key));
-  const scopeResults=data.allianceResults.filter((item)=>scopeKeys.has(item.matchKey));
-  const absoluteDeltas=scopeResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]).sort((a,b)=>a-b);
-  const quantile=(values:number[],p:number)=>values.length?values[Math.min(values.length-1,Math.ceil(values.length*p)-1)]:null;
-  const largeDeltaThreshold=absoluteDeltas.length>=20?quantile(absoluteDeltas,0.9):null;
-  const matchEpaTotals=records.flatMap(({match})=>{
-    const red=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="red")?.preEpaTotal;
-    const blue=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="blue")?.preEpaTotal;
-    return red!==null&&red!==undefined&&blue!==null&&blue!==undefined?[{matchKey:match.key,total:red+blue}]:[];
-  }).sort((a,b)=>a.total-b.total);
-  const highEpaThreshold=matchEpaTotals.length>=8?quantile(matchEpaTotals.map(({total})=>total),0.75):null;
-  const threshold=data.residualStats.standardDeviation===null?null:2*data.residualStats.standardDeviation;
-  const category=(matchKey:string,color:"red"|"blue",played:boolean)=>{
-    const result=data.allianceResults.find((item)=>item.matchKey===matchKey&&item.color===color);
-    if(!played)return {label:"Not played",tone:"bg-slate-50 text-slate-400",result};
-    if(!result||result.actual===null||result.predicted===null||result.residual===null)return {label:"Statbotics unavailable",tone:"bg-slate-100 text-slate-600",result};
-    const prediction=data.matches.find((item)=>item.match.key===matchKey)?.statbotics?.pred?.red_win_prob;
-    const predictedOutcome=predictionClassification(typeof prediction==="number"?prediction:null)??"Win prediction unavailable";
-    const outcomeTone="bg-slate-100 text-slate-700";
-    if(playoff)return threshold!==null&&Math.abs(result.residual)>threshold?{label:"Anomalous Score",tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
-    const anomaly=data.qualificationAnomalies?.find((item)=>item.matchKey===matchKey&&item.alliance===color);
-    const labels=[...(anomaly?.highConfidenceMiss?["High-Confidence Miss"]:[]),...(anomaly?.outsideExpectedRange?["Anomalous Score"]:[])];
-    return labels.length?{label:labels.join(" · "),tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
+  const summaries=new Map(records.map((record)=>[record.match.key,buildMatchFlagSummary(data,record)]));
+  const allianceCell=(record:EventAnalyticsResponse["matches"][number],color:"red"|"blue")=>{
+    const {match}=record;
+    const alliance=match.alliances[color];
+    const summary=summaries.get(match.key)!;
+    const result=data.allianceResults.find((item)=>item.matchKey===match.key&&item.color===color);
+    const actual=alliance.score>=0?alliance.score:null;
+    const residual=result?.residual;
+    const isWinner=summary.winner===color;
+    const isPredictedWinner=summary.predictedWinner===color;
+    const isHighEpa=summary.highAllianceEpa[color];
+    const winnerSurface=color==="red"?"border-rose-500 border-l-4 bg-rose-100 ring-2 ring-rose-300 dark:border-rose-400 dark:bg-rose-900 dark:ring-rose-400/60":"border-blue-500 border-l-4 bg-blue-100 ring-2 ring-blue-300 dark:border-blue-400 dark:bg-blue-900 dark:ring-blue-400/60";
+    const regularSurface="border-slate-200 bg-transparent dark:border-slate-700";
+    const allianceTone=color==="red"?"text-rose-950 dark:text-rose-100":"text-blue-950 dark:text-blue-100";
+    const darkAllianceFlag=color==="red"?"bg-rose-800 text-white dark:bg-rose-700":"bg-blue-800 text-white dark:bg-blue-700";
+    const lightAllianceFlag=color==="red"?"bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200":"bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200";
+    return <td key={color} className="py-1.5 pr-2 align-middle"><div className={"grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-2 rounded-md border px-2 py-1.5 "+(isWinner?winnerSurface:regularSurface)}>
+      <div className="min-w-0">
+        {officialAllianceName(alliance.team_keys)?<p className={"mb-0.5 text-[10px] font-bold "+(color==="red"?"text-rose-800 dark:text-rose-200":"text-blue-800 dark:text-blue-200")}>{officialAllianceName(alliance.team_keys)}</p>:null}
+        <div className={"flex min-w-0 flex-wrap gap-x-1.5 text-sm font-bold tabular-nums "+allianceTone}>{alliance.team_keys.map((key)=><span key={key}>{teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)}</span>)}</div>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+          {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+darkAllianceFlag}>Win</span>:null}
+          {isPredictedWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Win</span>:null}
+          {isHighEpa?<span title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Alliance EPA</span>:null}
+        </div>
+      </div>
+      <div className="grid min-w-0 grid-cols-4 gap-1 border-l border-slate-200/70 pl-2 text-center dark:border-slate-700">
+        <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500 dark:text-slate-400">Win Chance</p><strong className="block truncate text-sm font-semibold leading-5 tabular-nums text-slate-700 dark:text-slate-200">{typeof record.statbotics?.pred?.red_win_prob==="number"?Math.round((color==="red"?record.statbotics.pred.red_win_prob:1-record.statbotics.pred.red_win_prob)*100)+"%":"—"}</strong></div>
+        <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Pred. Score</p><strong className="block truncate text-sm font-semibold leading-5 tabular-nums text-slate-800 dark:text-slate-100">{result?.predicted===null||result?.predicted===undefined?"—":fmt(result.predicted,0)}</strong></div>
+        <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Actual Score</p><strong className={"block truncate text-sm font-bold leading-5 tabular-nums "+(color==="red"?"text-red-600 dark:text-rose-300":"text-blue-600 dark:text-blue-300")}>{actual===null?"—":fmt(actual,0)}</strong></div>
+        <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Score Delta</p><strong className={"block truncate text-sm font-semibold leading-5 tabular-nums "+(residual===null||residual===undefined?"text-slate-400":residual>0?"text-emerald-600 dark:text-emerald-400":residual<0?"text-rose-600 dark:text-rose-400":"text-slate-500 dark:text-slate-400")}>{residual===null||residual===undefined?"—":(residual>0?"+":"")+fmt(residual,0)}</strong></div>
+      </div>
+    </div></td>;
   };
   if(!records.length)return <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{playoff?"No playoff matches are available yet.":"No qualification matches are available yet."}</p>;
-  return <div className="overflow-x-auto"><table className="w-full min-w-[760px] table-fixed text-xs"><colgroup><col className="w-[13%]"/><col className="w-[43.5%]"/><col className="w-[43.5%]"/></colgroup><thead><tr className="border-b text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-2">Match</th><th className="py-2 pr-2 text-rose-800">Red alliance</th><th className="py-2 text-blue-800">Blue alliance</th></tr></thead><tbody>{records.map(({match,statbotics})=>{
-    const played=match.alliances.red.score>=0&&match.alliances.blue.score>=0;
-    const allianceCell=(color:"red"|"blue")=>{
-      const alliance=match.alliances[color],status=category(match.key,color,played),result=status.result,actual=alliance.score>=0?alliance.score:null,residual=result?.residual;
-      const redWinProbability=statbotics?.pred?.red_win_prob;
-      const winProbability=typeof redWinProbability==="number"?(color==="red"?redWinProbability:1-redWinProbability):null;
-      const scoreWinner=played&&match.alliances.red.score!==match.alliances.blue.score?(match.alliances.red.score>match.alliances.blue.score?"red":"blue"):null;
-      const isWinner=match.winning_alliance===color||(!match.winning_alliance&&scoreWinner===color);
-      const winnerSurface=color==="red"?"border-rose-500 border-l-4 bg-rose-100 ring-2 ring-rose-300 dark:border-rose-400 dark:bg-rose-900 dark:ring-rose-400/60":"border-blue-500 border-l-4 bg-blue-100 ring-2 ring-blue-300 dark:border-blue-400 dark:bg-blue-900 dark:ring-blue-400/60";
-      const regularSurface="border-slate-200 bg-transparent dark:border-slate-700";
-      return <td key={color} className="py-1.5 pr-2 align-middle"><div className={"grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-2 rounded-md border px-2 py-1.5 "+(isWinner?winnerSurface:regularSurface)}>
-        <div className="min-w-0">
-          {officialAllianceName(alliance.team_keys)?<p className={"mb-0.5 text-[10px] font-bold "+(color==="red"?"text-rose-800 dark:text-rose-200":"text-blue-800 dark:text-blue-200")}>{officialAllianceName(alliance.team_keys)}</p>:null}
-          <div className={"flex min-w-0 flex-wrap gap-x-1.5 text-sm font-bold tabular-nums "+(color==="red"?"text-rose-950 dark:text-rose-100":"text-blue-950 dark:text-blue-100")}>{alliance.team_keys.map((key)=><span key={key}>{teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)}</span>)}</div>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
-            {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+(color==="red"?"bg-rose-700 text-white dark:bg-rose-400 dark:text-rose-950":"bg-blue-700 text-white dark:bg-blue-400 dark:text-blue-950")}>Win</span>:null}
-            <span title={status.label} aria-label={`${color} alliance: ${status.label}`} className={"inline-flex max-w-full whitespace-normal rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+status.tone}>{status.label}</span>
-          </div>
-        </div>
-        <div className="grid min-w-0 grid-cols-4 gap-1 border-l border-slate-200/70 pl-2 text-center dark:border-slate-700">
-          <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500 dark:text-slate-400">Win Chance</p><strong className="block truncate text-sm font-semibold leading-5 tabular-nums text-slate-700 dark:text-slate-200">{winProbability===null?"—":`${Math.round(winProbability*100)}%`}</strong></div>
-          <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Pred. Score</p><strong className="block truncate text-sm font-semibold leading-5 tabular-nums text-slate-800 dark:text-slate-100">{result?.predicted===null||result?.predicted===undefined?"—":fmt(result.predicted,0)}</strong></div>
-          <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Actual Score</p><strong className={"block truncate text-sm font-bold leading-5 tabular-nums "+(color==="red"?"text-red-600 dark:text-rose-300":"text-blue-600 dark:text-blue-300")}>{actual===null?"—":fmt(actual,0)}</strong></div>
-          <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500">Score Delta</p><strong className={"block truncate text-sm font-semibold leading-5 tabular-nums "+(residual===null||residual===undefined?"text-slate-400":residual>0?"text-emerald-600 dark:text-emerald-400":residual<0?"text-rose-600 dark:text-rose-400":"text-slate-500 dark:text-slate-400")}>{residual===null||residual===undefined?"—":(residual>0?"+":"")+fmt(residual,0)}</strong></div>
-        </div>
-      </div></td>;
-    };
-    const penaltyFlag=!playoff&&(data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===match.key)??false);
-    const predictedRed=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
-    const actualWinner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:null;
-    const wrongPrediction=played&&predictedRed!==null&&actualWinner!==null&&((predictedRed>=0.5?"red":"blue")!==actualWinner);
-    const redEpa=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="red")?.preEpaTotal;
-    const blueEpa=scopeResults.find((item)=>item.matchKey===match.key&&item.color==="blue")?.preEpaTotal;
-    const combinedEpa=redEpa!==null&&redEpa!==undefined&&blueEpa!==null&&blueEpa!==undefined?redEpa+blueEpa:null;
-    const highEpa=combinedEpa!==null&&highEpaThreshold!==null&&combinedEpa>=highEpaThreshold;
-    const matchDelta=scopeResults.filter((item)=>item.matchKey===match.key).some((item)=>item.residual!==null&&largeDeltaThreshold!==null&&Math.abs(item.residual)>=largeDeltaThreshold);
+  return <div className="overflow-x-auto"><table className="w-full min-w-[820px] table-fixed text-xs"><colgroup><col className="w-[16%]"/><col className="w-[42%]"/><col className="w-[42%]"/></colgroup><thead><tr className="border-b text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-2">Match flags</th><th className="py-2 pr-2 text-rose-800">Red alliance</th><th className="py-2 text-blue-800">Blue alliance</th></tr></thead><tbody>{records.map((record)=>{
+    const {match}=record;
+    const summary=summaries.get(match.key)!;
     const matchFlags=[
-      ...(wrongPrediction?["Wrong prediction"]:[]),
-      ...(highEpa?["High total EPA"]:[]),
-      ...(matchDelta?["Large delta"]:[]),
-      ...(penaltyFlag?["High penalties"]:[]),
+      ...(summary.prediction?[{label:summary.prediction.label,tone:summary.prediction.tone}]:[]),
+      ...(summary.modelUpset?[{label:"Model Upset",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
+      ...(summary.anomalousScore?[{label:"Anomalous Score",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
+      ...(summary.largeResidual?[{label:"Large Residual",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
+      ...(summary.highPenalties?[{label:"High Penalties",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
     ];
-    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800"><th className="py-1.5 pr-2 text-left align-top"><a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>{matchFlags.length?<div className="mt-1 flex max-w-[180px] flex-wrap gap-1">{matchFlags.map((flag)=><span key={flag} className={"inline-block rounded px-1 py-0.5 text-[8px] font-bold "+(flag==="High penalties"?"bg-amber-100 text-amber-800":flag==="Wrong prediction"?"bg-rose-100 text-rose-800":flag==="Large delta"?"bg-violet-100 text-violet-800":"bg-sky-100 text-sky-800")}>{flag}</span>)}</div>:null}</th>{allianceCell("red")}{allianceCell("blue")}</tr>;
+    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
+      <th className="py-2 pr-2 text-left align-middle">
+        <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>
+        <div className="mt-1 flex flex-wrap gap-1">{matchFlags.map((flag,index)=><span key={flag.label+"-"+index} title={flag.label} className={"inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 "+flag.tone}>{flag.label}</span>)}</div>
+      </th>
+      {allianceCell(record,"red")}{allianceCell(record,"blue")}
+    </tr>;
   })}</tbody></table></div>;
 }
 
@@ -1281,15 +1329,108 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
 }
 
 
-function ReviewQueue({findings}:{findings:ReviewFinding[]}) {
-  const [reviewed,setReviewed] = useState<string[]>([]);
-  const [dismissed,setDismissed] = useState<string[]>([]);
-  const visible = findings.filter((finding)=>!dismissed.includes(finding.id));
-  return <Panel title="Suggested review" description="Evidence-backed leads worth a human scout investigating. These are not robot-performance verdicts. Review and dismissal state is local to this browser in this prototype.">
-    <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-500"><span>{visible.length} findings</span><span>{reviewed.length} reviewed</span><span>{dismissed.length} dismissed</span></div>
-    {!visible.length ? <p className="text-sm text-slate-500">No findings met the current prototype thresholds in this sample.</p> : <div className="space-y-3">{visible.map((finding)=><article key={finding.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-700">{finding.category === "score-residual" ? "Anomalous Score" : finding.category === "penalty-frequency" ? "Penalty Frequency" : "Repeated Alliance Pattern"}</span><span className="text-xs text-slate-400">{finding.sampleCoverage} sample coverage · n={finding.sampleSize}</span></div><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-500">{finding.subject}</p>{finding.category === "score-residual" ? <a className="text-xs font-semibold text-blue-700 hover:underline" href={"https://www.thebluealliance.com/match/" + finding.id.split(":")[1]} target="_blank" rel="noreferrer">Open match ↗</a> : null}</div><h3 className="mt-1 font-bold text-slate-900">{finding.title}</h3><p className="mt-1 text-sm text-slate-600">{finding.description}</p><ul className="mt-2 list-disc pl-5 text-xs text-slate-500">{finding.evidence.map((item)=><li key={item}>{item}</li>)}</ul><p className="mt-2 text-xs font-medium text-slate-700">Suggested follow-up: {finding.suggestedAction}</p><div className="mt-3 flex gap-2"><button onClick={()=>setReviewed((current)=>current.includes(finding.id)?current:[...current,finding.id])} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold">{reviewed.includes(finding.id)?"Reviewed":"Mark reviewed"}</button><button onClick={()=>setDismissed((current)=>[...current,finding.id])} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100">Dismiss</button></div></article>)}</div>}
+function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
+  const tabs:{id:"all"|MatchReviewFlag;label:string}[]=[
+    {id:"all",label:"All flags"},
+    {id:"model-upset",label:"Model upsets"},
+    {id:"anomalous-score",label:"Anomalous scores"},
+    {id:"large-residual",label:"Large residuals"},
+    {id:"high-penalties",label:"High penalties"},
+    {id:"high-alliance-epa",label:"High alliance EPA"},
+  ];
+  const [active,setActive]=useState<"all"|MatchReviewFlag>("all");
+  const records=[...data.matches].map((record)=>({record,summary:buildMatchFlagSummary(data,record)}))
+    .filter(({summary})=>summary.reviewFlags.length>0)
+    .sort((a,b)=>{
+      const at=a.record.match.time??a.record.match.actual_time??a.record.match.predicted_time;
+      const bt=b.record.match.time??b.record.match.actual_time??b.record.match.predicted_time;
+      if(at!==null&&at!==undefined&&bt!==null&&bt!==undefined&&at!==bt)return at-bt;
+      const order=["qm","ef","qf","sf","f"];
+      return order.indexOf(a.record.match.comp_level)-order.indexOf(b.record.match.comp_level)||a.record.match.set_number-b.record.match.set_number||a.record.match.match_number-b.record.match.match_number;
+    });
+  const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
+  const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.includes(tab.id)).length]));
+  const timezone=data.event.timezone??null;
+  const formatTime=(timestamp:number|null|undefined)=>{
+    if(timestamp===null||timestamp===undefined||!timezone)return null;
+    try{return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:timezone}).format(new Date(timestamp*1000));}
+    catch{return null;}
+  };
+  const teamLabel=(key:string)=>{const team=data.teams.find((item)=>item.teamKey===key);return team?String(team.teamNumber)+" · "+team.name:formatTeamNumber(key);};
+  const flagLabels:Record<MatchReviewFlag,string>={
+    "model-upset":"Model Upset",
+    "anomalous-score":"Anomalous Score",
+    "large-residual":"Large Residual",
+    "high-penalties":"High Penalties",
+    "high-alliance-epa":"High Alliance EPA",
+  };
+  const flagReasons=(record:EventAnalyticsResponse["matches"][number],summary:MatchFlagSummary)=>{
+    const reasons:string[]=[];
+    const {match,statbotics}=record;
+    if(summary.modelUpset&&summary.predictedWinner&&summary.winner){
+      const p=statbotics?.pred?.red_win_prob??0;
+      const favorite=summary.predictedWinner==="red"?"Red":"Blue";
+      reasons.push(favorite+" was favored at "+Math.round(Math.max(p,1-p)*100)+"%, but "+(summary.winner==="red"?"Red":"Blue")+" won.");
+    }
+    if(summary.anomalousScore){
+      if(match.comp_level.toLowerCase()==="qm"){
+        for(const item of data.qualificationAnomalies??[])if(item.matchKey===match.key&&item.outsideExpectedRange)reasons.push((item.alliance==="red"?"Red":"Blue")+" alliance residual "+(item.residual>0?"+":"")+fmt(item.residual)+" pts fell outside the event-calibrated range.");
+      }else{
+        for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&data.residualStats.standardDeviation!==null&&Math.abs(result.residual)>2*data.residualStats.standardDeviation))reasons.push((item.color==="red"?"Red":"Blue")+" alliance residual "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts exceeded 2× the event residual standard deviation.");
+      }
+    }
+    if(summary.largeResidual){
+      const values=data.allianceResults.filter((item)=>item.matchKey===match.key&&item.residual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0));
+      if(values.length)reasons.push("Largest alliance residual: "+values[0].color+" "+(values[0].residual!>0?"+":"")+fmt(values[0].residual)+" pts (top decile of available alliance residuals).");
+    }
+    if(summary.highPenalties){
+      const item=data.qualificationAnalysis?.penalties.flaggedMatches.find((entry)=>entry.matchKey===match.key);
+      if(item)reasons.push(item.totalPenaltyPoints+" combined penalty points: Red "+item.redPenaltyPoints+", Blue "+item.bluePenaltyPoints+".");
+    }
+    if(summary.highAllianceEpa.red||summary.highAllianceEpa.blue){
+      const high=data.allianceResults.filter((item)=>item.matchKey===match.key&&summary.highAllianceEpa[item.color]);
+      for(const item of high)reasons.push((item.color==="red"?"Red":"Blue")+" alliance pre-match EPA: "+fmt(item.preEpaTotal)+" (top quartile).");
+    }
+    return reasons;
+  };
+  return <Panel title="Suggested review" description="Flagged matches in event schedule order. Tabs group the matches by the reason they deserve a closer look; a match can appear in more than one group.">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{records.length} flagged matches · {data.matches.length} matches evaluated</p><a href={"https://www.thebluealliance.com/event/"+data.event.key+"#matches"} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Full event schedule ↗</a></div>
+    <div role="tablist" aria-label="Review flags by type" className="no-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200">
+      {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
+    </div>
+    {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3 space-y-3">
+      {visible.map(({record,summary})=>{
+        const {match}=record;
+        const timestamp=match.time??match.actual_time??match.predicted_time;
+        const timeLabel=formatTime(timestamp);
+        const youtube=match.videos.find((video)=>video.type.toLowerCase()==="youtube");
+        const videoUrl=youtube?"https://www.youtube.com/watch?v="+encodeURIComponent(youtube.key):null;
+        const red=match.alliances.red,blue=match.alliances.blue;
+        const reasons=flagReasons(record,summary);
+        const displayedFlags=active==="all"?summary.reviewFlags:summary.reviewFlags.filter((flag)=>flag===active);
+        return <article key={match.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-bold text-slate-950 dark:text-white">{matchShortName(match,data.event.playoff_type)}</h3>{timeLabel?<span className="text-xs tabular-nums text-slate-500">{timeLabel} <span className="text-slate-400">{timezone}</span></span>:null}</div><p className="mt-1 text-xs text-slate-500">{data.event.name}</p></div>
+            <div className="flex flex-wrap gap-2">
+              <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Match details ↗</a>
+              {videoUrl?<a href={videoUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800">Watch video ↗</a>:<a href={"https://www.thebluealliance.com/match/"+match.key+"#videos"} target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300">Match videos ↗</a>}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-3 dark:bg-rose-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">Red alliance · {red.score>=0?red.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{red.team_keys.map(teamLabel).join(" · ")}</p></div>
+            <div className="rounded-lg border-l-4 border-blue-500 bg-blue-50 p-3 dark:bg-blue-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">Blue alliance · {blue.score>=0?blue.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{blue.team_keys.map(teamLabel).join(" · ")}</p></div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {summary.prediction?<span className={"rounded-full px-2 py-1 text-[10px] font-bold "+summary.prediction.tone}>{summary.prediction.label}</span>:null}
+            {displayedFlags.map((flag)=><span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{flagLabels[flag]}</span>)}
+          </div>
+          {reasons.length?<ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm leading-5 text-slate-700 dark:border-slate-800 dark:text-slate-300">{reasons.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul>:null}
+        </article>;
+      })}
+    </div>}
   </Panel>;
 }
+
 function ResidualBars({residuals}:{residuals:{matchKey:string;matchLabel:string;color:string;teamKeys:string[];predicted:number|null;actual:number|null;residual:number|null}[]}) {
   const points=[...residuals].filter((item)=>item.residual!==null&&item.predicted!==null&&item.actual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0)).slice(0,15);
   if (!points.length) return <p className="text-sm text-slate-500">No completed alliances with both a prediction and an actual score are available in the loaded sample.</p>;
