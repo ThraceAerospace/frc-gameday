@@ -101,6 +101,8 @@ export type EventAnalyticsResponse = {
   event: TBAEvent;
   rankings?: TBAEventRanking | null;
   teams: TeamAnalyticsRow[];
+  /** Primary FRC team colors keyed by team number; missing colors use UI fallbacks. */
+  teamColors?: Record<string, string>;
   matches: AnalyticsMatch[];
   allianceResults: AllianceResult[];
   findings: ReviewFinding[];
