@@ -6,7 +6,7 @@ import type {
   StatboticsTeamYear,
 } from "./types";
 
-// TEMPORARY DEMO OVERRIDE: revert to api.statbotics.io when the official API is reliable.
+// Default to the API-compatible Statbotics mirror; the official-schema-compatible endpoint can be overridden by environment.
 const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
 const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
 const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
