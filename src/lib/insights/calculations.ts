@@ -518,26 +518,39 @@ export function buildQualificationAnalysis(
         const raw = numberOrNull(values.foulPoints) ?? numberOrNull(values.foul_points);
         return raw !== null && raw >= 0 ? raw : null;
       };
+      const count = (color: "red" | "blue") => {
+        const values = breakdown[color];
+        const fouls = numberOrNull(values.foulCount) ?? numberOrNull(values.foul_count);
+        const technical = numberOrNull(values.techFoulCount) ?? numberOrNull(values.tech_foul_count);
+        return fouls === null && technical === null ? null : Math.max(0, fouls ?? 0) + Math.max(0, technical ?? 0);
+      };
       const redPenaltyPoints = points("red"), bluePenaltyPoints = points("blue");
       if (redPenaltyPoints === null || bluePenaltyPoints === null) return [];
       return [{
         matchKey: match.key, matchLabel: matchLabel(match, playoffType), matchNumber: match.match_number,
+        redPenaltyCount: count("red"), bluePenaltyCount: count("blue"),
         redPenaltyPoints, bluePenaltyPoints, totalPenaltyPoints: redPenaltyPoints + bluePenaltyPoints,
       }];
     }).sort((a, b) => a.matchNumber - b.matchNumber);
-  const totals = penaltyRows.map((item) => item.totalPenaltyPoints).sort((a, b) => a - b);
+  const alliancePenaltyValues = penaltyRows.flatMap((item) => [item.redPenaltyPoints, item.bluePenaltyPoints]).sort((a, b) => a - b);
   const quantile = (values: number[], probability: number) => {
     if (!values.length) return null;
     const position = (values.length - 1) * probability;
     const lower = Math.floor(position), upper = Math.ceil(position);
     return values[lower] + (values[upper] - values[lower]) * (position - lower);
   };
-  const median = quantile(totals, 0.5), q1 = quantile(totals, 0.25), q3 = quantile(totals, 0.75);
+  const median = quantile(alliancePenaltyValues, 0.5), q1 = quantile(alliancePenaltyValues, 0.25), q3 = quantile(alliancePenaltyValues, 0.75);
   const iqr = q1 !== null && q3 !== null ? q3 - q1 : null;
-  const outlierThreshold = totals.length >= 10 && median !== null && iqr !== null
+  const outlierThreshold = alliancePenaltyValues.length >= 10 && median !== null && iqr !== null
     ? (iqr > 0 ? q3! + 1.5 * iqr : median) : null;
   const flaggedMatches = outlierThreshold === null ? [] : penaltyRows
-    .filter((item) => item.totalPenaltyPoints > outlierThreshold).map((item) => ({ ...item }));
+    .filter((item) => item.redPenaltyPoints > outlierThreshold || item.bluePenaltyPoints > outlierThreshold)
+    .map((item) => ({
+      ...item,
+      redFlagged: item.redPenaltyPoints > outlierThreshold,
+      blueFlagged: item.bluePenaltyPoints > outlierThreshold,
+    }));
+  const totalPenaltyPoints = penaltyRows.reduce((sum, item) => sum + item.totalPenaltyPoints, 0);
   return {
     predictionCalibration: {
       matchCount: validOutcomes.length,
@@ -555,8 +568,8 @@ export function buildQualificationAnalysis(
     penalties: {
       sampleSize: penaltyRows.length,
       matchesWithPenaltyPoints: penaltyRows.filter((item) => item.totalPenaltyPoints > 0).length,
-      totalPenaltyPoints: totals.reduce((sum, value) => sum + value, 0),
-      meanPenaltyPoints: mean(totals), medianPenaltyPoints: median, outlierThreshold,
+      totalPenaltyPoints,
+      meanPenaltyPoints: penaltyRows.length ? totalPenaltyPoints / penaltyRows.length : null, medianPenaltyPoints: median, outlierThreshold,
       flaggedMatches,
     },
   };
