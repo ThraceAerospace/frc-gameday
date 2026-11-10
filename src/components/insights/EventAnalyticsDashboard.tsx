@@ -192,7 +192,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} name={selectedA?.name ?? `Team ${teamA}`} team={selectedA} data={data} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -730,7 +730,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{eventRecord.wins}–{eventRecord.losses}–{eventRecord.ties}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Unplayed matches</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{unplayedCount}</p><p className="text-[11px] text-slate-500">Remaining qualification schedule</p></div>
-      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">% EPA contribution</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{epaContributionPercent===null?"—":epaContributionPercent.toFixed(1)+"%"}</p><p className="text-[11px] text-slate-500">Average across {epaContributionSamples} loaded qual + playoff alliance appearances</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">% EPA contribution to matches</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{epaContributionPercent===null?"—":epaContributionPercent.toFixed(1)+"%"}</p><p className="text-[11px] text-slate-500">Average across {epaContributionSamples} loaded qual + playoff alliance appearances</p></div>
     </div>
     <div className="mt-4 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Standout matches at this event</h4><p className="text-xs text-slate-500">Largest win and strongest prediction upsets in this event's completed matches</p></div>
       {highlights.length?<div className="mt-3 grid gap-3 lg:grid-cols-2">{highlights}</div>:<p className="mt-2 text-sm text-slate-500">No completed match with a standout margin or strong prediction upset is available at this event yet.</p>}
@@ -740,7 +740,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
       {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1120px] text-xs">
         <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
-          
+          const allianceClass=teamAllianceClass(match.alliance);
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
           return <tr key={match.key} className="border-t border-slate-100 align-middle">
             <th className="whitespace-nowrap px-3 py-2.5 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer">{match.label} ↗</a></th>
@@ -884,7 +884,7 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
 
-function TeamAnalysisTabs({analysis,records,eventKey,name}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string}) {
+function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string;team:TeamAnalyticsRow|undefined;data:EventAnalyticsResponse}) {
   const [activeTab,setActiveTab]=useState<TeamAnalysisTab>("qualification");
   const tabs:{id:TeamAnalysisTab;label:string}[]=[
     {id:"qualification",label:"Qualification Analysis"},
