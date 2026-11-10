@@ -1369,7 +1369,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
             const teleop=comparison?.components.teleop??null;
             const endgame=comparison?.components.endgame??null;
             const status=performanceStatus(team.teamKey);
-            const trend=(change:number|null)=>change===null?<span aria-label="Previous event comparison unavailable" className="text-slate-400">—</span>:change===0?<span aria-label="No change since last event" className="text-slate-400">−</span>:<span aria-label={change>0?"Increased since last event":"Decreased since last event"} className={change>0?"text-emerald-600":"text-rose-600"}>{change>0?"↑":"↓"}</span>;
+            const trend=(change:number|null)=>change===null?<span aria-label="Previous event comparison unavailable" className="text-slate-400">—</span>:change===0?<span aria-label="No change since last event" className="text-slate-400">−</span>:<span aria-label={change>0?"Increased since last event":"Decreased since last event"} className={change>0?"text-emerald-600":"text-rose-600"}>{change>0?<ChevronUp className="h-3.5 w-3.5"/>:<ChevronDown className="h-3.5 w-3.5"/>}</span>;
             return <tr key={team.teamKey} className="border-b border-slate-100 last:border-0">
               <td className="whitespace-nowrap px-1 py-2 text-center font-bold tabular-nums">{ranking?.rank??"—"}</td>
               <td className="whitespace-nowrap px-1 text-center tabular-nums">{epaRank??"—"}</td>
