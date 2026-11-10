@@ -439,7 +439,7 @@ This rule applies to all agents and all future work. Existing page fetches may b
 
 ## Match flags and Suggested Review presentation
 
-- Keep alliance-level and match-level indicators separate. Inside each alliance panel, show only applicable alliance flags: **Win** (dark alliance color), **Predicted Win** (light alliance color), and **High Alliance EPA** (shared amber review color). Do not render placeholder badges for unavailable or inapplicable states.
+- Keep alliance-level and match-level indicators separate. Inside each alliance panel, show only applicable alliance flags: **Win** (dark alliance color), **Predicted Win** or **Predicted Loss** (light alliance color, according to the model's favored side), **High Alliance EPA**, and **High Penalties** (shared amber review color). Do not render placeholder badges for unavailable or inapplicable states.
 - The match-flags row owns the five-band election-style win-probability classification (Strong Red, Lean Red, Toss-up, Lean Blue, Strong Blue) and match-level review flags. Use the five red-to-blue classification colors for the probability label; use the shared amber highlight color for review flags.
 - **Model Upset** means a completed match where the pre-match favorite had at least 60% win probability and lost.
 - **Anomalous Score** means an alliance actual-minus-predicted residual outside the match-phase event baseline of median ± max(20 points, 3 × 1.4826 × MAD), requiring at least eight usable alliance residuals in that phase. This is an event-relative review signal, not a model-provided confidence interval.
