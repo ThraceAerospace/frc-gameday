@@ -30,8 +30,8 @@ function predictionClassification(redProbability: number | null): string | null 
   if (redProbability === null || !Number.isFinite(redProbability) || redProbability < 0 || redProbability > 1) return null;
   if (redProbability >= 0.8) return "Strong Red";
   if (redProbability >= 0.6) return "Lean Red";
-  if (redProbability > 0.4) return "Toss-up";
-  if (redProbability > 0.2) return "Lean Blue";
+  if (redProbability >= 0.4) return "Toss-up";
+  if (redProbability >= 0.2) return "Lean Blue";
   return "Strong Blue";
 }
 
@@ -1060,7 +1060,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
         <p className="mt-1 text-[11px] text-slate-500">Statbotics endgame EPA after the match minus before the match. Positive and negative changes indicate model movement, not actual endgame points scored.</p>
         {endgameSeries.length?<div className="mt-2 overflow-x-auto"><svg viewBox={`0 0 ${Math.max(900,endgameSeries.length*42+80)} 220`} role="img" aria-label={`${name} endgame EPA change by match`} className="w-full min-w-[900px]">
           {(() => {const width=Math.max(900,endgameSeries.length*42+80),maxAbs=Math.max(1,...endgameSeries.map((item)=>Math.abs(item.delta))),zero=92;return <><line x1="50" x2={width-20} y1={zero} y2={zero} stroke="var(--insights-muted)" strokeWidth="1.5"/>{endgameSeries.map((item,index)=>{const x=60+index*42,h=Math.abs(item.delta)/maxAbs*65,y=item.delta>=0?zero-h:zero;return <g key={item.match.matchKey}><rect x={x} y={y} width="20" height={Math.max(1,h)} rx="2" fill={item.delta>=0?"#0d9488":"#e11d48"}><title>{item.match.event.name} · {item.match.matchLabel}: endgame EPA {item.before.toFixed(2)} → {item.after.toFixed(2)} ({item.delta>0?"+":""}{item.delta.toFixed(2)})</title></rect><text transform={`translate(${x+10},180) rotate(-48)`} textAnchor="end" fontSize="9" fill="var(--insights-muted)">{item.match.matchLabel}</text></g>;})}</>;})()}
-        </svg></div>:<p className="mt-2 text-xs text-slate-500">Statbotics endgame EPA snapshots are unavailable for these matches.</p>}
+        </svg></div>:<p className="mt-2 text-xs text-slate-500">{selectedComponents.includes("endgame")?"Statbotics endgame EPA snapshots are unavailable for these matches.":"Endgame is hidden by the component filter."}</p>}
       </div>
     </div>
     <details className="mt-3 rounded-lg border border-slate-200"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">Inspect match records ({matches.length})</summary><div className="max-h-96 overflow-auto"><table className="w-full min-w-[760px] text-xs"><thead className="sticky top-0 bg-white text-left text-slate-400"><tr><th className="p-2">Match</th><th>Partners / opponents</th><th>Pre → post EPA</th><th>Predicted / actual</th><th>Residual</th><th>Win chance</th></tr></thead><tbody>{matches.map((m)=><tr key={m.matchKey} className="border-t border-slate-100"><td className="p-2"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${m.matchKey}`} target="_blank" rel="noreferrer">{m.matchLabel}</a><span className="block text-[10px] text-slate-400">{m.event.name}</span></td><td><div className="flex flex-wrap gap-x-1"><span className={m.alliance==="red"?"font-semibold text-rose-700":"font-semibold text-blue-700"}>{allianceTeamNumbers(analysis.team,m.partners).join(", ")}</span><span className="text-slate-400">/</span><span className={m.alliance==="red"?"font-semibold text-blue-700":"font-semibold text-rose-700"}>{m.opponents.join(", ")||"—"}</span></div></td><td className="tabular-nums">{fmt(m.preEPA,2)} → {fmt(m.postEPA,2)}</td><td className="tabular-nums">{fmt(m.predicted)} / {fmt(m.actual)}</td><td className="tabular-nums">{fmt(m.residual)}</td><td className="tabular-nums">{m.teamWinProbability===null?"—":`${(m.teamWinProbability*100).toFixed(0)}%`}</td></tr>)}</tbody></table></div></details>
