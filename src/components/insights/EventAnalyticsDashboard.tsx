@@ -1366,7 +1366,7 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
       return order.indexOf(a.record.match.comp_level)-order.indexOf(b.record.match.comp_level)||a.record.match.set_number-b.record.match.set_number||a.record.match.match_number-b.record.match.match_number;
     });
   const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
-  const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.includes(tab.id)).length]));
+  const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
   const timezone=data.event.timezone??null;
   const formatTime=(timestamp:number|null|undefined)=>{
     if(timestamp===null||timestamp===undefined||!timezone)return null;
