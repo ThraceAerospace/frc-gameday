@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Bars3Icon, MoonIcon, SunIcon, TvIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
-export default function SiteShell({ children }: { children: React.ReactNode; events?: unknown[]; selectedEventKey?: string }) {
+export default function SiteShell({ children }: { children: React.ReactNode }) {
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
