@@ -8,7 +8,7 @@ import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 
 const TTL_SECONDS = 24 * 60 * 60;
 const LOCK_SECONDS = 45;
-const PREFIX = "insights:season-cohort:v3:";
+const PREFIX = "insights:season-cohort:v2:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
 const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
@@ -16,7 +16,7 @@ const CONCURRENCY = 2;
 const MAX_ATTEMPTS = 3;
 const WORK_BUDGET_MS = 20_000;
 
-type EventRef = { key: string; name: string; shortName: string; startDate: string };
+type EventRef = { key: string; name: string; short_name: string | null; startDate: string };
 type Pair = { teamNumber: number; event: EventRef };
 type Job = {
   target: EventRef;
@@ -35,7 +35,7 @@ type Job = {
 function key(eventKey: string) { return PREFIX + eventKey; }
 function pairKey(pair: Pair) { return pair.teamNumber + ":" + pair.event.key; }
 function eventRef(event: TBAEvent): EventRef {
-  return { key: event.key, name: event.name, shortName: event.short_name ?? event.name, startDate: event.start_date };
+  return { key: event.key, name: event.name, short_name: event.short_name, startDate: event.start_date };
 }
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -92,9 +92,8 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
     // Remove the former year-retained snapshot the first time this event is
     // initialized under the bounded 24-hour retention policy.
     await redis.del("insights:season-cohort:v1:" + eventKey);
-    await redis.del("insights:season-cohort:v2:" + eventKey);
     job = {
-      target: { key: event.key, name: event.name, shortName: event.short_name ?? event.name, startDate: event.start_date },
+      target: { key: event.key, name: event.name, short_name: event.short_name, startDate: event.start_date },
       teamNumbers: teams.map((team) => team.teamNumber).filter(Number.isFinite),
       discoveryQueue: teams.map((team) => team.teamNumber).filter(Number.isFinite),
       discoveryAttempts: {}, recordQueue: [], recordAttempts: {}, records: {},
