@@ -200,7 +200,6 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
             {matchAnalysisA ? <div className="space-y-4">
-              {selectedA && focusedInsight ? <TeamModelDetailPanel team={selectedA} insight={focusedInsight}/> : null}
               <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} eventKey={eventKey} timezone={data.event.timezone ?? null} />
               <TeamRiskPanel analysis={matchAnalysisA} />
               <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
@@ -768,56 +767,6 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
   </section>;
 }
 
-function TeamPerformanceHeadline({team,insight}:{data:EventAnalyticsResponse;team:TeamAnalyticsRow;insight:TeamInsight}) {
-  const comparison=insight.seasonComparison;
-  if(!comparison) return <section className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
-    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Prior-event comparison unavailable</p>
-    <p className="mt-1 text-xs leading-5 text-slate-500">A usable Statbotics EPA record is not available for this team's most recent prior official event and the current event. The analysis does not substitute an older event or treat missing data as zero.</p>
-  </section>;
-
-  const components=[
-    {key:"auto" as const,label:"Autonomous",value:comparison.components.auto},
-    {key:"teleop" as const,label:"Teleop",value:comparison.components.teleop},
-    {key:"endgame" as const,label:"Endgame",value:comparison.components.endgame},
-  ];
-  const rankedComponents=components.filter((item)=>item.value!==null);
-  const best=rankedComponents.filter((item)=>item.value!.change>0).sort((a,b)=>b.value!.change-a.value!.change)[0]??null;
-  const worst=rankedComponents.filter((item)=>item.value!.change<0).sort((a,b)=>a.value!.change-b.value!.change)[0]??null;
-  const rankLabel=(rank:number,size:number)=>`#${rank} of ${size}`;
-  const movement=(item:typeof best,kind:"gain"|"decline")=>item
-    ? <><strong>{item.label} EPA</strong> {kind==="gain"?"increased":"decreased"} by <strong className="tabular-nums">{Math.abs(item.value!.change).toFixed(1)}</strong></>
-    : kind==="gain"?"No EPA component increased.":"No EPA component decreased.";
-  return <section className="space-y-3">
-    <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Overall event EPA change</p>
-        <p className="text-xs text-slate-500">Since {comparison.priorEvent.name}</p>
-      </div>
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <p className={`text-2xl font-black tabular-nums ${comparison.change>=0?"text-emerald-700":"text-rose-700"}`}>{comparison.change>0?"+":""}{comparison.change.toFixed(1)} EPA</p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{comparison.priorEPA.toFixed(1)} → {comparison.currentEPA.toFixed(1)} · {comparison.currentEpaPercentile===null?"current event percentile unavailable":`current ${percentileLabel(comparison.currentEpaPercentile)} percentile`}</p>
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{rankLabel(comparison.cohortRank,comparison.cohortSize)} by change</p>
-      </div>
-    </div>
-    <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Component EPA movement</h4>
-        <p className="text-[11px] text-slate-500">Model estimate changes · not measured scoring</p>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        {components.map((item) => <div key={item.key} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
-          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{item.label}</p>
-          {item.value ? <>
-            <p className={`mt-1 text-xl font-black tabular-nums ${item.value.change>0?"text-emerald-700":item.value.change<0?"text-rose-700":"text-slate-700"}`}>{item.value.change>0?"+":""}{item.value.change.toFixed(1)}</p>
-            <p className="text-[11px] text-slate-500">{item.value.prior.toFixed(1)} → {item.value.current.toFixed(1)}</p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">{rankLabel(item.value.cohortRank,item.value.cohortSize)}</p>
-          </> : <p className="mt-1 text-sm text-slate-500">Comparison unavailable</p>}
-        </div>)}
-      </div>
-    </div>
-    <p className="text-[11px] leading-5 text-slate-500">Each team is compared with its own most recent prior official event, which may differ from this team's prior event. Ranks include all event teams with usable current and prior records; component ranks use the subset with that component available. EPA changes are model updates, not measured scoring changes.</p>
-  </section>;
-}
 function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:TeamAnalyticsRow[];selectedTeam:string;onSelect:(value:string)=>void;team:TeamAnalyticsRow|undefined;insight:TeamInsight|null;data:EventAnalyticsResponse}) {
   const [selectorOpen,setSelectorOpen]=useState(false);
   const [teamSearch,setTeamSearch]=useState("");
@@ -826,77 +775,104 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
   const filteredTeams=teams.filter((item)=>(String(item.teamNumber)+" "+item.name).toLowerCase().includes(teamSearch.trim().toLowerCase()));
   useEffect(()=>{
     if(!selectorOpen)return;
-    const closeOnOutsidePointer=(event:PointerEvent)=>{
-      if(event.target instanceof Node&&!selectorRef.current?.contains(event.target))setSelectorOpen(false);
-    };
+    const closeOnOutsidePointer=(event:PointerEvent)=>{if(event.target instanceof Node&&!selectorRef.current?.contains(event.target))setSelectorOpen(false);};
     document.addEventListener("pointerdown",closeOnOutsidePointer);
     return ()=>document.removeEventListener("pointerdown",closeOnOutsidePointer);
   },[selectorOpen]);
+
+  const comparison=insight?.seasonComparison??null;
+  const currentComponents=[
+    {key:"auto",label:"Auto",value:comparison?.components.auto?.current??team?.autoEpa??null},
+    {key:"teleop",label:"Teleop",value:comparison?.components.teleop?.current??team?.teleopEpa??null},
+    {key:"endgame",label:"Endgame",value:comparison?.components.endgame?.current??team?.endgameEpa??null},
+  ];
+  const priorComponents=[
+    {key:"auto",label:"Auto",value:comparison?.components.auto?.prior??null},
+    {key:"teleop",label:"Teleop",value:comparison?.components.teleop?.prior??null},
+    {key:"endgame",label:"Endgame",value:comparison?.components.endgame?.prior??null},
+  ];
+  const componentChanges=[
+    {key:"auto",label:"Auto",value:comparison?.components.auto?.change??null},
+    {key:"teleop",label:"Teleop",value:comparison?.components.teleop?.change??null},
+    {key:"endgame",label:"Endgame",value:comparison?.components.endgame?.change??null},
+  ];
+  const currentTotal=currentComponents.reduce((sum,item)=>sum+Math.max(0,item.value??0),0);
+  const playoffAlliance=data.playoffAnalysis?.alliances.find((alliance)=>alliance.teamKeys.includes(team?.teamKey??""));
+  const metric=(value:number|null|undefined)=>value===null||value===undefined?"—":fmt(value);
+  const componentList=(items:typeof currentComponents)=> <div className="mt-2 grid grid-cols-3 gap-2">{items.map((item)=><div key={item.key} className="min-w-0"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.label}</p><p className="mt-0.5 text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{metric(item.value)}</p></div>)}</div>;
+
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2><p className="mt-1 text-sm text-slate-500">A quick read on the team standing. Detailed model and match analysis follows below.</p></div>
+      <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2></div>
       <div ref={selectorRef} className={"relative w-full max-w-sm text-xs font-semibold text-slate-600 dark:text-slate-300 "+(selectorOpen?"z-[60]":"")}>
         <label className="block">Select team</label>
         <button type="button" aria-haspopup="listbox" aria-expanded={selectorOpen} onClick={()=>{setSelectorOpen((open)=>!open);setTeamSearch("");}} className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-normal text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
-          <span className="min-w-0 truncate">{selectedOption?String(selectedOption.teamNumber)+" · "+selectedOption.name:"Choose a team…"}</span>
-          <span aria-hidden="true" className="shrink-0 text-slate-400">{selectorOpen?"▴":"▾"}</span>
+          <span className="min-w-0 truncate">{selectedOption?String(selectedOption.teamNumber)+" · "+selectedOption.name:"Choose a team…"}</span><span aria-hidden="true" className="shrink-0 text-slate-400">{selectorOpen?"▴":"▾"}</span>
         </button>
         {selectorOpen?<div className="absolute right-0 top-full z-[70] mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="border-b border-slate-100 p-2 dark:border-slate-700">
-            <input autoFocus value={teamSearch} onChange={(event)=>setTeamSearch(event.target.value)} placeholder="Search teams…" aria-label="Search teams" className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"/>
-          </div>
+          <div className="border-b border-slate-100 p-2 dark:border-slate-700"><input autoFocus value={teamSearch} onChange={(event)=>setTeamSearch(event.target.value)} placeholder="Search teams…" aria-label="Search teams" className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"/></div>
           <div role="listbox" aria-label="Teams" className="max-h-64 overflow-y-auto overscroll-contain p-1">
-            {filteredTeams.length?filteredTeams.map((item)=><button key={item.teamKey} type="button" role="option" aria-selected={selectedTeam===String(item.teamNumber)} onClick={()=>{onSelect(String(item.teamNumber));setSelectorOpen(false);setTeamSearch("");}} className={"block w-full rounded-md px-3 py-2 text-left text-sm font-normal "+(selectedTeam===String(item.teamNumber)?"bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200":"text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800")}>
-              <span className="font-semibold tabular-nums">{item.teamNumber}</span><span className="text-slate-500"> · {item.name}</span>
-            </button>):<p className="px-3 py-4 text-center text-sm font-normal text-slate-500">No teams match that search.</p>}
+            {filteredTeams.length?filteredTeams.map((item)=><button key={item.teamKey} type="button" role="option" aria-selected={selectedTeam===String(item.teamNumber)} onClick={()=>{onSelect(String(item.teamNumber));setSelectorOpen(false);setTeamSearch("");}} className={"block w-full rounded-md px-3 py-2 text-left text-sm font-normal "+(selectedTeam===String(item.teamNumber)?"bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200":"text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800")}><span className="font-semibold tabular-nums">{item.teamNumber}</span><span className="text-slate-500"> · {item.name}</span></button>):<p className="px-3 py-4 text-center text-sm font-normal text-slate-500">No teams match that search.</p>}
           </div>
         </div>:null}
       </div>
     </div>
-    {!selectedTeam ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p> : !team || !insight ? <p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p> : <>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <h3 className="text-xl font-black text-slate-950 dark:text-slate-50">{team.teamNumber} · {team.name}</h3>
-        <a href={"https://www.thebluealliance.com/team/" + team.teamNumber} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a>
+    {!selectedTeam?<p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p>:!team||!insight?<p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p>:<>
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="min-w-0 flex-1"><h3 className="text-lg font-black text-slate-950 dark:text-slate-50">{team.teamNumber} · {team.name}</h3><a href={"https://www.thebluealliance.com/team/"+team.teamNumber} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a></div>
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          <div><p className="text-[10px] font-semibold uppercase text-slate-500">Qual Rank</p><p className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{insight.metrics.rank===null?"—":"#"+insight.metrics.rank}</p></div>
+          <div><p className="text-[10px] font-semibold uppercase text-slate-500">Qual Record</p><p className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{insight.metrics.wins===null||insight.metrics.losses===null||insight.metrics.ties===null?"—":insight.metrics.wins+"–"+insight.metrics.losses+"–"+insight.metrics.ties}</p></div>
+          <div><p className="text-[10px] font-semibold uppercase text-slate-500">Playoff Alliance</p><p className="font-bold text-slate-900 dark:text-slate-100">{playoffAlliance?.name??"—"}</p></div>
+        </div>
       </div>
-      <div className="mt-4"><TeamPerformanceHeadline data={data} team={team} insight={insight}/></div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Traditional team ratings</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {([{label:"OPR",value:team.opr},{label:"DPR",value:team.dpr},{label:"CCWM",value:team.ccwm}] as const).map((item)=><div key={item.label}><p className="text-[10px] font-semibold text-slate-500">{item.label}</p><p className="text-base font-black tabular-nums text-slate-900 dark:text-slate-100">{metric(item.value)}</p></div>)}
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-slate-500">Separate statistical estimates; not directly comparable measurements.</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current-event comparable alliances</p>
+          <p className="mt-2 text-sm leading-5 text-slate-700 dark:text-slate-200">{insight.peerPerformance.interpretation==="insufficient-sample"?"Not enough qualification results to compare this team's alliances with the event field.":<>Team alliances averaged <strong className="tabular-nums">{metric(insight.peerPerformance.teamMeanResidual)} pts</strong> residual versus <strong className="tabular-nums">{metric(insight.peerPerformance.peerMeanResidual)} pts</strong> for {insight.peerPerformance.peerAllianceCount} other strength-matched alliances. Difference: <strong className="tabular-nums">{insight.peerPerformance.difference===null?"—":(insight.peerPerformance.difference>0?"+":"")+fmt(insight.peerPerformance.difference)+" pts"}</strong> across {insight.peerPerformance.teamMatches} team matches.</>}</p>
+          <p className="mt-1 text-[10px] leading-4 text-slate-500">Qualification alliances matched within ±20% of combined pre-match EPA; alliance-level results cannot isolate an individual robot.</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Last Event</p>
+          <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{comparison?.priorEvent.name??"Prior event unavailable"}</p>
+          <p className="mt-2 text-xl font-black tabular-nums text-slate-900 dark:text-slate-100">{comparison?fmt(comparison.priorEPA)+" EPA":"—"}</p>
+          {componentList(priorComponents)}
+        </div>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">EPA Change</p>
+          <p className={"mt-1 text-2xl font-black tabular-nums "+(comparison===null?"text-slate-400":comparison.change>=0?"text-emerald-700 dark:text-emerald-400":"text-rose-700 dark:text-rose-400")}>{comparison?(comparison.change>0?"+":"")+fmt(comparison.change)+" EPA":"—"}</p>
+          <p className="text-[11px] text-slate-500">{comparison?"Total EPA change · "+ordinal(comparison.cohortRank)+" of "+comparison.cohortSize+" teams with history":"No usable prior-event comparison"}</p>
+          <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">{componentChanges.map((item)=><div key={item.key} className="flex items-center justify-between gap-2 py-0.5 text-xs"><span className="text-slate-500">{item.label}</span><strong className={"tabular-nums "+(item.value===null?"text-slate-400":item.value>0?"text-emerald-700 dark:text-emerald-400":item.value<0?"text-rose-700 dark:text-rose-400":"text-slate-700 dark:text-slate-200")}>{item.value===null?"—":(item.value>0?"+":"")+fmt(item.value)}</strong></div>)}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Event</p>
+          <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{data.event.name}</p>
+          <p className="mt-2 text-xl font-black tabular-nums text-slate-900 dark:text-slate-100">{metric(comparison?.currentEPA??team.epa)} EPA</p>
+          {componentList(currentComponents)}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current-event component EPA breakdown</p><p className="text-[10px] text-slate-500">Model estimates · not measured scoring</p></div>
+        <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" aria-label="Current event EPA component proportions">
+          {currentComponents.map((item,index)=><span key={item.key} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:currentTotal>0&&item.value!==null?Math.max(0,item.value??0)/currentTotal*100+"%":"0%"}} title={item.label+": "+metric(item.value)}/>)}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">{currentComponents.map((item,index)=><span key={item.key} className="inline-flex items-center gap-1.5"><span className={"h-2 w-2 rounded-sm "+(index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500")}/>{item.label} {metric(item.value)}</span>)}</div>
+      </div>
+      <p className="mt-2 text-[10px] leading-4 text-slate-500">Each team is compared with its own most recent prior official event. EPA and component changes are model estimate updates, not measured scoring changes. Traditional ratings, comparable-alliance results, and EPA describe different aspects of performance.</p>
     </>}
   </section>;
-}
-
-function TeamModelDetailPanel({team,insight}:{team:TeamAnalyticsRow;insight:TeamInsight}) {
-  const change=insight.seasonComparison;
-  const currentEPA=change?.currentEPA??team.epa;
-  const currentAuto=change?.components.auto?.current??team.autoEpa;
-  const currentTeleop=change?.components.teleop?.current??team.teleopEpa;
-  const currentEndgame=change?.components.endgame?.current??team.endgameEpa;
-  return <details className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
-    <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Team model details and comparisons</summary>
-    <div className="space-y-4 border-t border-slate-100 p-4 dark:border-slate-800">
-      <section>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Estimated scoring profile</h3>
-        <p className="mt-1 text-xs text-slate-500">Statbotics EPA estimates, not measured points scored by the robot.</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">Overall EPA</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(currentEPA)} <span className="text-xs font-medium">EPA</span></p><p className="text-xs text-slate-500">{change?.currentEpaPercentile===null||change?.currentEpaPercentile===undefined?"Event percentile unavailable":`${ordinal(Math.round(change.currentEpaPercentile*100))} percentile at this event`}</p></div>
-          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-semibold text-slate-500">EPA components</p><div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">{[currentAuto,currentTeleop,currentEndgame].map((value,index)=>{const total=[currentAuto,currentTeleop,currentEndgame].reduce<number>((sum,item)=>sum+(item??0),0);return <span key={index} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:total>0&&value!==null?`${Math.max(0,value)/total*100}%`:"0%"}}/>;})}</div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span>Auto {fmt(currentAuto)}</span><span>Teleop {fmt(currentTeleop)}</span><span>Endgame {fmt(currentEndgame)}</span></div></div>
-        </div>
-      </section>
-      <section>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Traditional team ratings</h3>
-        <div className="mt-2 grid gap-3 sm:grid-cols-3">
-          <div><p className="text-xs font-semibold text-slate-500">OPR · Offensive Power Rating</p><p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(team.opr)}</p></div>
-          <div><p className="text-xs font-semibold text-slate-500">DPR · Defensive Power Rating</p><p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(team.dpr)}</p></div>
-          <div><p className="text-xs font-semibold text-slate-500">CCWM · Contribution to Winning Margin</p><p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(team.ccwm)}</p></div>
-        </div>
-        <p className="mt-2 text-xs leading-5 text-slate-500">These are separate statistical estimates and should not be treated as directly comparable measurements or proof of individual robot contribution.</p>
-      </section>
-      {change ? <section className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Change since previous event</h3><p className="mt-1 text-sm text-slate-700 dark:text-slate-200">EPA {change.change>0?"increased":change.change<0?"decreased":"was unchanged"} by {fmt(Math.abs(change.change))} points, from {fmt(change.priorEPA)} at {change.priorEvent.name} to {fmt(change.currentEPA)} now.</p><p className="mt-1 text-xs text-slate-500">This was the {ordinal(change.cohortRank)} largest change among {change.cohortSize} event teams with usable records. EPA is a predictive estimate, not measured scoring improvement.</p></section> : null}
-      <section>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Current-event comparable alliances</h3>
-        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{insight.peerPerformance.interpretation==="insufficient-sample"?"There are not enough qualification results to compare this team's alliances with the event field.":`At this event, this team's qualification alliances averaged ${fmt(insight.peerPerformance.teamMeanResidual)} points of residual versus ${fmt(insight.peerPerformance.peerMeanResidual)} for ${insight.peerPerformance.peerAllianceCount} other strength-matched alliances. The descriptive gap was ${insight.peerPerformance.difference===null?"—":(insight.peerPerformance.difference>0?"+":"")+fmt(insight.peerPerformance.difference)} points (${insight.peerPerformance.teamMatches} team matches).`}</p>
-        <p className="mt-1 text-xs text-slate-500">The comparison sample includes other qualification alliances at this event, not necessarily the selected team's opponents. Peers are selected within ±20% of the team's alliance pre-match combined EPA. This is separate from the season-wide, same-match opposing-alliance baseline below.</p>
-      </section>
-    </div>
-  </details>;
 }
 
 function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
