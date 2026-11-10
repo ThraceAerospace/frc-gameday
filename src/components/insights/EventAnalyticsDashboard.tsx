@@ -643,24 +643,36 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 }
 
 function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
-  const fallback=["#0F766E","#7C3AED","#D97706"];
+  // These bars and swatches render on white/slate-50 surfaces. Reject provider
+  // colors that blend into either surface before checking team-to-team contrast.
+  const fallback=["#0F766E","#7C3AED","#B45309"];
+  const backgrounds=["#FFFFFF","#F8FAFC"];
   const distance=(left:string,right:string)=>{
     const a=[1,3,5].map((index)=>parseInt(left.slice(index,index+2),16));
     const b=[1,3,5].map((index)=>parseInt(right.slice(index,index+2),16));
     return Math.sqrt(a.reduce((sum,value,index)=>sum+(value-b[index])**2,0));
   };
+  const luminance=(hex:string)=>{
+    const channels=[1,3,5].map((index)=>parseInt(hex.slice(index,index+2),16)/255)
+      .map((value)=>value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4);
+    return 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2];
+  };
+  const contrastsWithSurface=(color:string)=>backgrounds.every((background)=>{
+    const values=[luminance(color),luminance(background)].sort((a,b)=>b-a);
+    return (values[0]+0.05)/(values[1]+0.05)>=3;
+  });
   const raw=teams.map((team)=>team.primaryColor&&/^#[0-9a-f]{6}$/i.test(team.primaryColor)?team.primaryColor.toUpperCase():null);
-  const needsFallback=raw.map((color,index)=>!color||raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95));
+  const needsFallback=raw.map((color,index)=>!color||!contrastsWithSurface(color)||raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95));
   const used=raw.flatMap((color,index)=>color&&!needsFallback[index]?[color]:[]);
   const resolved=raw.map((color,index)=>{
     if(!needsFallback[index])return color!;
-    const candidate=fallback.find((choice)=>used.every((existing)=>distance(choice,existing)>=95));
+    const candidate=fallback.find((choice)=>contrastsWithSurface(choice)&&used.every((existing)=>distance(choice,existing)>=95));
     if(!candidate)return null;
     used.push(candidate);
     return candidate;
   });
-  // If the remaining provider colors leave no distinct fallback available,
-  // use the three-color fallback set consistently for the whole alliance.
+  // A fixed, high-contrast palette is safer than rendering a provider color
+  // that disappears against the active alliance cell background.
   return resolved.some((color)=>color===null)?fallback:resolved as string[];
 }
 
