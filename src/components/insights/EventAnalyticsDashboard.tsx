@@ -633,7 +633,21 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   </Panel>;
 }
 
-function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string}) {
+function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
+  const fallback=["#0F766E","#7C3AED","#D97706"];
+  const distance=(left:string,right:string)=>{
+    const a=[1,3,5].map((index)=>parseInt(left.slice(index,index+2),16));
+    const b=[1,3,5].map((index)=>parseInt(right.slice(index,index+2),16));
+    return Math.sqrt(a.reduce((sum,value,index)=>sum+(value-b[index])**2,0));
+  };
+  const raw=teams.map((team)=>team.primaryColor&&/^#[0-9a-f]{6}$/i.test(team.primaryColor)?team.primaryColor.toUpperCase():null);
+  return raw.map((color,index)=>{
+    const collision=color!==null&&raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95);
+    return color&&!collision?color:fallback[index]??fallback[0];
+  });
+}
+
+function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContributionPercent,epaContributionSamples,teamColors}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;epaContributionPercent:number|null;epaContributionSamples:number;teamColors:EventAnalyticsResponse["teamColors"]}) {{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey&&match.compLevel==="qm");
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   const scored=ordered.filter((match)=>match.actual!==null&&match.opponentActual!==null);
@@ -675,7 +689,17 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysi
     const opponentScore=alliance==="red"?match.alliances.blue.score:match.alliances.red.score;
     const predictedTeamScore=alliance==="red"?stat?.pred?.red_score??null:stat?.pred?.blue_score??null;
     const predictedOpponentScore=alliance==="red"?stat?.pred?.blue_score??null:stat?.pred?.red_score??null;
-    return [{key:match.key,label:matchShortName(match),matchNumber:match.match_number,alliance,partners:alliance==="red"?red.filter((key)=>key!==String(teamNumber)):blue.filter((key)=>key!==String(teamNumber)),opponents:alliance==="red"?blue:red,played,teamScore:played?teamScore:null,opponentScore:played?opponentScore:null,predictedTeamScore,predictedOpponentScore,teamWinProbability}];
+    const allianceTeams=(color:"red"|"blue")=>{
+      const keys=match.alliances[color].team_keys;
+      const values=keys.map((key)=>{
+        const number=Number(key.replace(/^frc/i,""));
+        const epa=record.statbotics?.pre_epas?.[String(number)]?.epa;
+        return {teamNumber:number,epa:typeof epa==="number"&&Number.isFinite(epa)&&epa>=0?epa:null,primaryColor:data.teamColors?.[String(number)]??null};
+      });
+      const total=values.every((item)=>item.epa!==null)?values.reduce((sum,item)=>sum+(item.epa??0),0):null;
+      return values.map((item)=>({...item,share:total!==null&&total>0&&item.epa!==null?item.epa/total*100:null}));
+    };
+    return [{key:match.key,label:matchShortName(match),matchNumber:match.match_number,alliance,partners:alliance==="red"?red.filter((key)=>key!==String(teamNumber)):blue.filter((key)=>key!==String(teamNumber)),opponents:alliance==="red"?blue:red,redTeams:allianceTeams("red"),blueTeams:allianceTeams("blue"),played,teamScore:played?teamScore:null,opponentScore:played?opponentScore:null,predictedTeamScore,predictedOpponentScore,teamWinProbability}];
   }).sort((a,b)=>a.matchNumber-b.matchNumber);
   const unplayedCount=schedule.filter((match)=>!match.played).length;
   const teamAllianceClass=(alliance:"red"|"blue")=>alliance==="red"?"text-rose-700":"text-blue-700";
@@ -702,10 +726,11 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysi
   ].filter((item):item is NonNullable<typeof item>=>item!==null);
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-bold text-slate-900">Current event match outlook</h3><p className="mt-1 text-xs text-slate-500">How the team has performed at this event, which results stand out, and what its remaining matchups look like.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{streakResult===null?"No current streak":`${streakCount}-match ${streakResult?"win":"loss"} streak`}</span></div>
-    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{eventRecord.wins}–{eventRecord.losses}–{eventRecord.ties}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Unplayed matches</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{unplayedCount}</p><p className="text-[11px] text-slate-500">Remaining qualification schedule</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">% EPA contribution</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{epaContributionPercent===null?"—":epaContributionPercent.toFixed(1)+"%"}</p><p className="text-[11px] text-slate-500">Average across {epaContributionSamples} loaded qual + playoff alliance appearances</p></div>
     </div>
     <div className="mt-4 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Standout matches at this event</h4><p className="text-xs text-slate-500">Largest win and strongest prediction upsets in this event's completed matches</p></div>
       {highlights.length?<div className="mt-3 grid gap-3 lg:grid-cols-2">{highlights}</div>:<p className="mt-2 text-sm text-slate-500">No completed match with a standout margin or strong prediction upset is available at this event yet.</p>}
@@ -713,16 +738,28 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysi
     <div className="mt-4 border-t border-slate-100 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Qualification match schedule</h4><p className="text-xs text-slate-500">Completed results and remaining matchups, in match order</p></div>
       {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[680px] text-xs">
-        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Alliance</th><th className="px-3 py-2.5">Partners</th><th className="px-3 py-2.5">Opponents</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
+        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
           const allianceClass=teamAllianceClass(match.alliance);
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
           return <tr key={match.key} className="border-t border-slate-100 align-middle">
             <th className="whitespace-nowrap px-3 py-2.5 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer">{match.label} ↗</a></th>
             <td className="whitespace-nowrap px-3 py-2.5">{match.played?<span className="font-semibold text-slate-700">Played · <span className={result==="Win"?"text-emerald-700":result==="Loss"?"text-rose-700":"text-slate-600"}>{result}</span></span>:<span className="rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-900">Unplayed</span>}</td>
-            <td className={`whitespace-nowrap px-3 py-2.5 font-bold uppercase ${allianceClass}`}>{match.alliance}</td>
-            <td className={`whitespace-nowrap px-3 py-2.5 font-semibold ${allianceClass}`}>{match.partners.join(" · ")||"—"}</td>
-            <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-600">{match.opponents.join(" · ")}</td>
+            {([["red",match.redTeams],["blue",match.blueTeams]] as const).map(([color,teams])=>{
+              const segmentColors=resolveTeamSegmentColors(teams);
+              const total=teams.every((item)=>item.epa!==null)?teams.reduce((sum,item)=>sum+(item.epa??0),0):null;
+              const allianceTone=color==="red"?"text-rose-700":"text-blue-700";
+              return <td key={color} className="min-w-[230px] px-3 py-2.5 align-top">
+                <div className={`flex flex-wrap gap-x-2 gap-y-1 font-bold tabular-nums ${allianceTone}`}>{teams.map((item)=><Link key={item.teamNumber} href={`/team/${item.teamNumber}`} className="hover:underline">{item.teamNumber}</Link>)}</div>
+                {total!==null&&total>0&&teams.every((item)=>item.share!==null)?<>
+                  <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label={`${color} alliance total EPA ${fmt(total)}`}>
+                    {teams.map((item,index)=><div key={item.teamNumber} title={`Team ${item.teamNumber}: ${fmt(item.epa)} EPA · ${fmt(item.share)}% of alliance EPA`} style={{width:`${item.share}%`,backgroundColor:segmentColors[index]}} className="h-full min-w-0 border-r border-white/50 last:border-r-0"/>)}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1">{teams.map((item,index)=><div key={item.teamNumber} className="min-w-0 text-[10px] leading-4"><p className="truncate font-bold tabular-nums" style={{color:segmentColors[index]}}>#{item.teamNumber}</p><p className="tabular-nums text-slate-600">{fmt(item.share)}%</p><p className="tabular-nums text-slate-400">EPA {fmt(item.epa)}</p></div>)}</div>
+                  <p className="mt-1 text-[10px] font-semibold tabular-nums text-slate-500">Alliance EPA {fmt(total)}</p>
+                </>:<p className="mt-2 text-[10px] text-slate-400">Pre-match team EPA unavailable for this alliance.</p>}
+              </td>;
+            })}
             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.played?<><span className={allianceClass}>{fmt(match.teamScore,0)}</span><span className="px-1 text-slate-400">–</span><span className="text-slate-600">{fmt(match.opponentScore,0)}</span>{match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="ml-2 text-[10px] text-slate-400">(pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)})</span>:null}</>:match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="text-slate-600">Pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span>:<span className="text-slate-400">No prediction available</span>}</td>
             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</td>
           </tr>;
@@ -865,7 +902,7 @@ function TeamAnalysisTabs({analysis,records,eventKey,name}:{analysis:TeamMatchAn
     </div>
     <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
       {activeTab==="qualification"?<>
-        <TeamCurrentEventOutlook analysis={analysis} records={records} teamNumber={analysis.team} eventKey={eventKey}/>
+        <TeamCurrentEventOutlook analysis={analysis} records={records} teamNumber={analysis.team} eventKey={eventKey} epaContributionPercent={team?.epaContributionPercent??null} epaContributionSamples={team?.epaContributionSamples??0} teamColors={data.teamColors}/>
         <PhasePerformancePanel analysis={analysis} phase="qualification"/>
       </>:null}
       {activeTab==="playoffs"?<>
