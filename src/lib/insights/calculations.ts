@@ -320,7 +320,7 @@ export function buildSeasonAwareTeamInsights(
     };
     return [{
       teamNumber: team.teamNumber,
-      priorEvent: { key: prior.event.key, name: prior.event.name, shortName: prior.event.shortName, startDate: prior.event.startDate },
+      priorEvent: { key: prior.event.key, name: prior.event.name, short_name: prior.event.short_name, startDate: prior.event.startDate },
       priorEPA: prior.epaTotal,
       currentEPA: current.epaTotal,
       currentEpaPercentile: percentile(currentEventEPAValues, current.epaTotal),
