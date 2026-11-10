@@ -45,8 +45,16 @@ async function readJob(eventKey: string): Promise<Job | null> {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Job;
+    const hasShortName = (event: unknown) =>
+      !!event && typeof event === "object" && Object.prototype.hasOwnProperty.call(event, "short_name");
+    const hasCurrentEventShape =
+      hasShortName(value.target) &&
+      Array.isArray(value.recordQueue) && value.recordQueue.every((pair) => hasShortName(pair.event)) &&
+      !!value.records && Object.values(value.records).every((record) => hasShortName(record.event));
     if (!value.target || !Array.isArray(value.teamNumbers) || !Array.isArray(value.discoveryQueue) ||
-      !Array.isArray(value.recordQueue) || !value.records) {
+      !Array.isArray(value.recordQueue) || !value.records || !hasCurrentEventShape) {
+      // Older snapshots stored the event label under a different property. Rebuild
+      // them through the existing team-events collection so TBA short_name is retained.
       await redis.del(key(eventKey));
       return null;
     }
