@@ -8,7 +8,7 @@ import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 
 const TTL_SECONDS = 24 * 60 * 60;
 const LOCK_SECONDS = 45;
-const PREFIX = "insights:season-cohort:v1:";
+const PREFIX = "insights:season-cohort:v2:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
 const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
@@ -89,6 +89,9 @@ export async function getSeasonCohortSnapshot(event: TBAEvent, teams: { teamNumb
   const eventKey = event.key;
   let job = await readJob(eventKey);
   if (!job) {
+    // Remove the former year-retained snapshot the first time this event is
+    // initialized under the bounded 24-hour retention policy.
+    await redis.del("insights:season-cohort:v1:" + eventKey);
     job = {
       target: { key: event.key, name: event.name, shortName: event.event_code, startDate: event.start_date },
       teamNumbers: teams.map((team) => team.teamNumber).filter(Number.isFinite),
