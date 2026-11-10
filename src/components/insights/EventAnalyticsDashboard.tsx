@@ -516,6 +516,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const actual=alliance.score>=0?alliance.score:null;
     const residual=result?.residual;
     const isWinner=summary.winner===color;
+    const isLoser=summary.winner!==null&&summary.winner!==color;
     const isPredictedWinner=summary.predictedWinner===color;
     const isPredictedLoser=summary.predictedWinner!==null&&summary.predictedWinner!==color;
     const isHighEpa=summary.highAllianceEpa[color];
@@ -536,7 +537,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
         <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500 dark:text-slate-400">Actual Score</p><strong className={"block truncate text-sm font-bold leading-5 tabular-nums "+(color==="red"?"text-red-600 dark:text-rose-300":"text-blue-600 dark:text-blue-300")}>{actual===null?"—":fmt(actual,0)}</strong></div>
       </div>
       <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1 border-t border-slate-200/70 pt-1 dark:border-slate-700">
-        {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+darkAllianceFlag}>Win</span>:null}
+        {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+darkAllianceFlag}>Win</span>:isLoser?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+darkAllianceFlag}>Loss</span>:null}
         {isPredictedWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Win</span>:null}
         {isPredictedLoser?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Loss</span>:null}
         {isHighEpa?<span title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Alliance EPA</span>:null}
