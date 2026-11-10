@@ -418,7 +418,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
         <QualityMetric label="Total penalty points" value={String(penalties?.totalPenaltyPoints??0)} detail="Red + blue alliance credits"/>
         <QualityMetric label="Unusual-penalty matches" value={String(penalties?.flaggedMatches.length??0)} detail={penalties?.outlierThreshold===null||penalties?.outlierThreshold===undefined?"Outlier test needs at least 10 matches":"Above "+fmt(penalties.outlierThreshold,1)+" point event threshold"}/>
       </div>
-      {penalties?.flaggedMatches.length?<div className="mt-4 overflow-x-auto"><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Match</th><th>Red points credited</th><th>Blue points credited</th><th>Combined</th></tr></thead><tbody>{penalties.flaggedMatches.map((item)=><tr key={item.matchKey} className="border-b border-amber-100 bg-amber-50/60"><th className="py-2 text-left"><a className="font-semibold text-slate-900 hover:underline" href={"https://www.thebluealliance.com/match/"+item.matchKey} target="_blank" rel="noreferrer">{item.matchLabel}</a></th><td>{item.redPenaltyPoints}</td><td>{item.bluePenaltyPoints}</td><td className="font-bold">{item.totalPenaltyPoints}</td></tr>)}</tbody></table></div>:<p className="mt-3 text-sm text-slate-500">{(penalties?.sampleSize??0)<10?"Penalty outlier flags will be evaluated after at least 10 completed matches have usable TBA score breakdowns.":"No completed qualification match exceeded the event's upper outlier fence."}</p>}
+      {penalties?.flaggedMatches.length?<div className="mt-4 overflow-x-auto"><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-[10px] uppercase text-slate-400"><th className="py-2">Match</th><th>Red count</th><th>Red points</th><th>Blue count</th><th>Blue points</th><th>Combined points</th></tr></thead><tbody>{penalties.flaggedMatches.map((item)=><tr key={item.matchKey} className="border-b border-amber-100 bg-amber-50/60"><th className="py-2 text-left"><a className="font-semibold text-slate-900 hover:underline" href={"https://www.thebluealliance.com/match/"+item.matchKey} target="_blank" rel="noreferrer">{item.matchLabel}</a></th><td>{item.redPenaltyCount??"—"}{item.redFlagged?<span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-900">High</span>:null}</td><td>{item.redPenaltyPoints}</td><td>{item.bluePenaltyCount??"—"}{item.blueFlagged?<span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-900">High</span>:null}</td><td>{item.bluePenaltyPoints}</td><td className="font-bold">{item.totalPenaltyPoints}</td></tr>)}</tbody></table></div>:<p className="mt-3 text-sm text-slate-500">{(penalties?.sampleSize??0)<10?"Penalty outlier flags will be evaluated after at least 10 completed matches have usable TBA score breakdowns.":"No completed qualification match exceeded the event's upper outlier fence."}</p>}
       <p className="mt-2 text-xs text-slate-500">Flag rule: Tukey upper fence (Q3 + 1.5 × IQR); when the middle 50% is tied, values above the median are flagged. Flags are review leads, not judgments about responsibility.</p>
     </Panel>
     <Panel title="Qualification match explorer" description="Inspect every qualification match with prediction context. Match flags are independent: one match can have a winner miss, score anomaly, penalty flag, multiple flags, or none.">
@@ -436,7 +436,7 @@ type MatchFlagSummary = {
   modelUpset: boolean;
   anomalousScore: boolean;
   largeResidual: boolean;
-  highPenalties: boolean;
+  highPenalties: { red: boolean; blue: boolean };
   highAllianceEpa: { red: boolean; blue: boolean };
   reviewFlags: MatchReviewFlag[];
 };
@@ -489,12 +489,13 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
   const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
   const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
   const largeResidual=largeResidualThreshold!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>=largeResidualThreshold);
-  const highPenalties=qualification&&(data.qualificationAnalysis?.penalties.flaggedMatches.some((item)=>item.matchKey===match.key)??false);
+  const penaltyRow=qualification?data.qualificationAnalysis?.penalties.flaggedMatches.find((item)=>item.matchKey===match.key):undefined;
+  const highPenalties={red:penaltyRow?.redFlagged??false,blue:penaltyRow?.blueFlagged??false};
   const reviewFlags:MatchReviewFlag[]=[
     ...(modelUpset?["model-upset" as const]:[]),
     ...(anomalousScore?["anomalous-score" as const]:[]),
     ...(largeResidual?["large-residual" as const]:[]),
-    ...(highPenalties?["high-penalties" as const]:[]),
+    ...(highPenalties.red||highPenalties.blue?["high-penalties" as const]:[]),
     ...(highAllianceEpa.red||highAllianceEpa.blue?["high-alliance-epa" as const]:[]),
   ];
   return {prediction:prediction?{label:prediction,tone:predictionTone(prediction)}:null,predictedWinner,winner,modelUpset,anomalousScore,largeResidual,highPenalties,highAllianceEpa,reviewFlags};
@@ -513,6 +514,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const residual=result?.residual;
     const isWinner=summary.winner===color;
     const isPredictedWinner=summary.predictedWinner===color;
+    const isPredictedLoser=summary.predictedWinner!==null&&summary.predictedWinner!==color;
     const isHighEpa=summary.highAllianceEpa[color];
     const winnerSurface=color==="red"?"border-rose-500 border-l-4 bg-rose-100 ring-2 ring-rose-300 dark:border-rose-400 dark:bg-rose-900 dark:ring-rose-400/60":"border-blue-500 border-l-4 bg-blue-100 ring-2 ring-blue-300 dark:border-blue-400 dark:bg-blue-900 dark:ring-blue-400/60";
     const regularSurface="border-slate-200 bg-transparent dark:border-slate-700";
@@ -526,7 +528,9 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           {isWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase leading-3 "+darkAllianceFlag}>Win</span>:null}
           {isPredictedWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Win</span>:null}
+          {isPredictedLoser?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Loss</span>:null}
           {isHighEpa?<span title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Alliance EPA</span>:null}
+          {summary.highPenalties[color]?<span title="This alliance's credited penalty points exceed the event-level alliance penalty outlier threshold." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Penalties</span>:null}
         </div>
       </div>
       <div className="grid min-w-0 grid-cols-4 gap-1 border-l border-slate-200/70 pl-2 text-center dark:border-slate-700">
@@ -546,7 +550,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       ...(summary.modelUpset?[{label:"Model Upset",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
       ...(summary.anomalousScore?[{label:"Anomalous Score",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
       ...(summary.largeResidual?[{label:"Large Residual",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
-      ...(summary.highPenalties?[{label:"High Penalties",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
+
     ];
     return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
       <th className="py-2 pr-2 text-left align-middle">
@@ -1388,9 +1392,12 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
       const values=data.allianceResults.filter((item)=>item.matchKey===match.key&&item.residual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0));
       if(values.length)reasons.push("Largest alliance residual: "+values[0].color+" "+(values[0].residual!>0?"+":"")+fmt(values[0].residual)+" pts (top decile of available alliance residuals).");
     }
-    if(summary.highPenalties){
+    if(summary.highPenalties.red||summary.highPenalties.blue){
       const item=data.qualificationAnalysis?.penalties.flaggedMatches.find((entry)=>entry.matchKey===match.key);
-      if(item)reasons.push(item.totalPenaltyPoints+" combined penalty points: Red "+item.redPenaltyPoints+", Blue "+item.bluePenaltyPoints+".");
+      if(item){
+        if(item.redFlagged)reasons.push("Red alliance: "+(item.redPenaltyCount===null?"penalty count unavailable":item.redPenaltyCount+" penalties")+", "+item.redPenaltyPoints+" credited penalty points (above the alliance outlier threshold).");
+        if(item.blueFlagged)reasons.push("Blue alliance: "+(item.bluePenaltyCount===null?"penalty count unavailable":item.bluePenaltyCount+" penalties")+", "+item.bluePenaltyPoints+" credited penalty points (above the alliance outlier threshold).");
+      }
     }
     if(summary.highAllianceEpa.red||summary.highAllianceEpa.blue){
       const high=data.allianceResults.filter((item)=>item.matchKey===match.key&&summary.highAllianceEpa[item.color]);
