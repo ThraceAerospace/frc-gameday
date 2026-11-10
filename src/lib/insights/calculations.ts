@@ -520,9 +520,18 @@ export function buildQualificationAnalysis(
       };
       const count = (color: "red" | "blue") => {
         const values = breakdown[color];
-        const fouls = numberOrNull(values.foulCount) ?? numberOrNull(values.foul_count);
-        const technical = numberOrNull(values.techFoulCount) ?? numberOrNull(values.tech_foul_count);
-        return fouls === null && technical === null ? null : Math.max(0, fouls ?? 0) + Math.max(0, technical ?? 0);
+        const sumAvailable = (keys: string[]) => {
+          const counts = keys
+            .map((key) => numberOrNull(values[key]))
+            .filter((value): value is number => value !== null);
+          return counts.length ? counts.reduce((sum, value) => sum + Math.max(0, value), 0) : null;
+        };
+        // TBA's 2026 score breakdown renamed the legacy foul/tech-foul pair.
+        // Prefer the season's modern pair when either modern field is present;
+        // otherwise fall back to the legacy pair used through 2025.
+        return sumAvailable(["minorFoulCount", "minor_foul_count"]) ??
+          sumAvailable(["majorFoulCount", "major_foul_count"]) ??
+          sumAvailable(["foulCount", "foul_count", "techFoulCount", "tech_foul_count"]);
       };
       const redPenaltyPoints = points("red"), bluePenaltyPoints = points("blue");
       if (redPenaltyPoints === null || bluePenaltyPoints === null) return [];
