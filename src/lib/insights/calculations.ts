@@ -269,10 +269,16 @@ export function buildSeasonAwareTeamInsights(
     }
     return null;
   };
-  const currentEventEPAValues = cohort.records.flatMap((record) =>
-    record.event.key === targetEventKey && record.status === "ready" && finite(record.epaTotal)
-      ? [record.epaTotal] : [],
+  const valuesForEvent = (eventKey: string) => cohort.records.flatMap((record) =>
+    record.event.key === eventKey && record.status === "ready" && finite(record.epaTotal)
+      ? [{ teamNumber: record.teamNumber, epa: record.epaTotal }] : [],
   );
+  const currentEventEPARecords = valuesForEvent(targetEventKey);
+  const currentEventEPAValues = currentEventEPARecords.map((record) => record.epa);
+  const epaRank = (records: { teamNumber: number; epa: number }[], teamNumber: number, epa: number) => ({
+    rank: 1 + records.filter((record) => record.epa > epa).length,
+    size: records.length,
+  });
   const componentDefinitions = {
     auto: ["auto_epa", "auto", "auto_points"],
     teleop: ["teleop_epa", "teleop", "teleop_points"],
@@ -292,6 +298,9 @@ export function buildSeasonAwareTeamInsights(
     if (!current || current.status !== "ready" || !finite(current.epaTotal) ||
         !prior || prior.status !== "ready" || !finite(prior.epaTotal)) return [];
 
+    const priorEventEPARecords = valuesForEvent(prior.event.key);
+    const priorEpaStanding = epaRank(priorEventEPARecords, team.teamNumber, prior.epaTotal);
+    const currentEpaStanding = epaRank(currentEventEPARecords, team.teamNumber, current.epaTotal);
     const components = {
       auto: (() => {
         const before = componentValue(prior, [...componentDefinitions.auto]);
@@ -315,6 +324,10 @@ export function buildSeasonAwareTeamInsights(
       priorEPA: prior.epaTotal,
       currentEPA: current.epaTotal,
       currentEpaPercentile: percentile(currentEventEPAValues, current.epaTotal),
+      priorEpaRank: priorEpaStanding.rank,
+      priorEpaCohortSize: priorEpaStanding.size,
+      currentEpaRank: currentEpaStanding.rank,
+      currentEpaCohortSize: currentEpaStanding.size,
       change: current.epaTotal - prior.epaTotal,
       components,
     }];
