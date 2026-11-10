@@ -76,16 +76,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   const year = Number(new URL(request.url).searchParams.get("year") ?? new Date().getFullYear());
   if (!Number.isInteger(year) || year < 1992 || year > new Date().getFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
-  const cacheKey = `cache:insights:team-match-analysis:${teamNumber}:${year}`;
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    try { return Response.json(JSON.parse(cached)); } catch { await redis.del(cacheKey); }
+  const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
+  // Version the key so old year-long snapshots from the prototype cannot keep
+  // masking the corrected freshness policy.
+  const cacheKey = `cache:insights:team-match-analysis:v2:${teamNumber}:${year}`;
+  if (!forceRefresh) {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      try { return Response.json(JSON.parse(cached)); } catch { await redis.del(cacheKey); }
+    }
   }
 
   try {
     const [rawEvents, statboticsMatches] = await Promise.all([
       TBA.getTeamEvents(`frc${teamNumber}`, year),
-      Statbotics.getMatches({ team: teamNumber, year }).catch((error) => {
+      Statbotics.getMatches({ team: teamNumber, year }, { refresh: forceRefresh }).catch((error) => {
         console.warn("[Insights] bulk Statbotics team-match request failed", teamNumber, year, error);
         return [];
       }),
@@ -342,7 +347,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
       summary: summarize(completed), eventSummaries, phaseSummaries, eliminationShift, residualPattern, anomalySummary, anomalies: teamAnomalies, matches: completed,
       collection: { state: completed.every((row) => row.statboticsAvailable) ? "complete" : "partial", statboticsMatches: completed.filter((row) => row.statboticsAvailable).length, totalMatches: completed.length, updatedAt: Date.now() },
     };
-    await redis.set(cacheKey, JSON.stringify(payload), "EX", 365 * 24 * 60 * 60);
+    // Current-season data can change as matches are played; older seasons are
+    // stable history and can retain the long cache lifetime.
+    const cacheTtlSeconds = year === new Date().getFullYear() ? 10 * 60 : 365 * 24 * 60 * 60;
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", cacheTtlSeconds);
     return Response.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error("[Insights] team match analysis failed", teamNumber, year, error);
