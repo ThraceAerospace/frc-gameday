@@ -72,7 +72,7 @@ export type QualificationAnalysis = {
   penalties: {
     sampleSize: number; matchesWithPenaltyPoints: number; totalPenaltyPoints: number;
     meanPenaltyPoints: number | null; medianPenaltyPoints: number | null; outlierThreshold: number | null;
-    flaggedMatches: { matchKey: string; matchLabel: string; matchNumber: number; redPenaltyPoints: number; bluePenaltyPoints: number; totalPenaltyPoints: number }[];
+    flaggedMatches: { matchKey: string; matchLabel: string; matchNumber: number; redPenaltyCount: number | null; bluePenaltyCount: number | null; redPenaltyPoints: number; bluePenaltyPoints: number; totalPenaltyPoints: number; redFlagged: boolean; blueFlagged: boolean }[];
   };
 };
 
