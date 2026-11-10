@@ -163,7 +163,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     if (!job) return;
     // A persisted historical snapshot is immutable until the user explicitly
     // requests a refresh. Avoid even repeating collection work on page opens.
-    if (!forceRefresh && job.statboticsLoadedAt) return;
+    if (!forceRefresh && job.statboticsLoadedAt && job.teamColorsLoadedAt) return;
     if (forceRefresh) {
       job.records = {};
       job.attempts = {};
@@ -250,11 +250,11 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     if (!job.teamColorsLoadedAt) {
       try {
         job.teamColors = await FRCColors.getEvent(eventKey, { refresh: forceRefresh });
+        job.teamColorsLoadedAt = Date.now();
       } catch (error) {
         console.warn("[Insights] FRC Colors event collection failed", eventKey, error);
-        job.teamColors = job.teamColors ?? [];
+        // Leave the timestamp unset so a later snapshot request can retry.
       }
-      job.teamColorsLoadedAt = Date.now();
       await writeJob(eventKey, job);
     }
 
