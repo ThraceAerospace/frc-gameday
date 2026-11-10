@@ -847,18 +847,20 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Last Event</p>
           <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{comparison?.priorEvent.name??"Prior event unavailable"}</p>
           <p className="mt-2 text-xl font-black tabular-nums text-slate-900 dark:text-slate-100">{comparison?fmt(comparison.priorEPA)+" EPA":"—"}</p>
+          <p className="mt-0.5 text-base font-bold tabular-nums text-slate-700 dark:text-slate-200">{comparison?ordinal(comparison.priorEpaRank)+" of "+comparison.priorEpaCohortSize:"—"}</p>
           {componentList(priorComponents)}
         </div>
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">EPA Change</p>
           <p className={"mt-1 text-2xl font-black tabular-nums "+(comparison===null?"text-slate-400":comparison.change>=0?"text-emerald-700 dark:text-emerald-400":"text-rose-700 dark:text-rose-400")}>{comparison?(comparison.change>0?"+":"")+fmt(comparison.change)+" EPA":"—"}</p>
-          <p className="text-[11px] text-slate-500">{comparison?"Total EPA change · "+ordinal(comparison.cohortRank)+" of "+comparison.cohortSize+" teams with history":"No usable prior-event comparison"}</p>
-          <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">{componentChanges.map((item)=><div key={item.key} className="flex items-center justify-between gap-2 py-0.5 text-xs"><span className="text-slate-500">{item.label}</span><strong className={"tabular-nums "+(item.value===null?"text-slate-400":item.value>0?"text-emerald-700 dark:text-emerald-400":item.value<0?"text-rose-700 dark:text-rose-400":"text-slate-700 dark:text-slate-200")}>{item.value===null?"—":(item.value>0?"+":"")+fmt(item.value)}</strong></div>)}</div>
+          <p className="mt-0.5 text-base font-bold tabular-nums text-slate-700 dark:text-slate-200">{comparison?ordinal(comparison.cohortRank)+" of "+comparison.cohortSize:"—"}</p>
+          <div className="mt-2 grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 dark:border-slate-700">{componentChanges.map((item)=><div key={item.key} className="min-w-0"><p className="text-[10px] font-semibold uppercase text-slate-500">{item.label}</p><p className={"mt-0.5 text-sm font-bold tabular-nums "+(item.value===null?"text-slate-400":item.value>0?"text-emerald-700 dark:text-emerald-400":item.value<0?"text-rose-700 dark:text-rose-400":"text-slate-700 dark:text-slate-200")}>{item.value===null?"—":(item.value>0?"+":"")+fmt(item.value)}</p></div>)}</div>
         </div>
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Event</p>
           <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{data.event.name}</p>
           <p className="mt-2 text-xl font-black tabular-nums text-slate-900 dark:text-slate-100">{metric(comparison?.currentEPA??team.epa)} EPA</p>
+          <p className="mt-0.5 text-base font-bold tabular-nums text-slate-700 dark:text-slate-200">{comparison?ordinal(comparison.currentEpaRank)+" of "+comparison.currentEpaCohortSize:"—"}</p>
           {componentList(currentComponents)}
         </div>
       </div>
