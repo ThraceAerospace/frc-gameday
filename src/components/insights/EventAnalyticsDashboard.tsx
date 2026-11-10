@@ -423,7 +423,7 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
     </Panel>
     <Panel title="Qualification match explorer" description="Inspect every qualification match with prediction context. Match flags are independent: one match can have a winner miss, score anomaly, penalty flag, multiple flags, or none.">
       <MatchAnalysisTable data={data} records={matches} playoff={false}/>
-      <p className="mt-3 text-xs text-slate-500">Marker guide: Election-style prediction shows the five win-probability bands; Predicted Win/Loss identifies the favored alliance; High Alliance EPA = combined pre-match alliance EPA in the event top quartile; Large Residual = an alliance score residual in the event top decile; High Penalties = that alliance's credited penalty points exceed the alliance-level outlier threshold. Anomaly and residual markers are review signals, not claims that a score was impossible. Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
+      <p className="mt-3 text-xs text-slate-500">Marker guide: Election-style prediction shows the five win-probability bands; Predicted Win/Loss identifies the favored alliance; High Alliance EPA = combined pre-match alliance EPA in the event top quartile; Large Score Delta = an alliance's absolute actual-minus-predicted score delta in the event top decile; High Penalties = that alliance's credited penalty points exceed the alliance-level outlier threshold. Anomaly and residual markers are review signals, not claims that a score was impossible. Alliance residuals include all three robots and cannot isolate an individual robot's contribution.</p>
     </Panel>
   </div>;
 }
@@ -435,7 +435,7 @@ type MatchFlagSummary = {
   winner: "red" | "blue" | null;
   modelUpset: boolean;
   anomalousScore: boolean;
-  largeResidual: boolean;
+  largeResidual: { red: boolean; blue: boolean };
   highPenalties: { red: boolean; blue: boolean };
   highAllianceEpa: { red: boolean; blue: boolean };
   reviewFlags: MatchReviewFlag[];
@@ -488,13 +488,16 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
   const qualification=match.comp_level.toLowerCase()==="qm";
   const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
   const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
-  const largeResidual=largeResidualThreshold!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>=largeResidualThreshold);
+  const largeResidual={
+    red:largeResidualThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.residual!==null&&matchResults.find((item)=>item.color==="red")?.residual!==undefined)&&Math.abs(matchResults.find((item)=>item.color==="red")!.residual!)>=largeResidualThreshold,
+    blue:largeResidualThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.residual!==null&&matchResults.find((item)=>item.color==="blue")?.residual!==undefined)&&Math.abs(matchResults.find((item)=>item.color==="blue")!.residual!)>=largeResidualThreshold,
+  };
   const penaltyRow=qualification?data.qualificationAnalysis?.penalties.flaggedMatches.find((item)=>item.matchKey===match.key):undefined;
   const highPenalties={red:penaltyRow?.redFlagged??false,blue:penaltyRow?.blueFlagged??false};
   const reviewFlags:MatchReviewFlag[]=[
     ...(modelUpset?["model-upset" as const]:[]),
     ...(anomalousScore?["anomalous-score" as const]:[]),
-    ...(largeResidual?["large-residual" as const]:[]),
+    ...(largeResidual.red||largeResidual.blue?["large-residual" as const]:[]),
     ...(highPenalties.red||highPenalties.blue?["high-penalties" as const]:[]),
     ...(highAllianceEpa.red||highAllianceEpa.blue?["high-alliance-epa" as const]:[]),
   ];
@@ -530,6 +533,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
           {isPredictedWinner?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Win</span>:null}
           {isPredictedLoser?<span className={"shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-3 "+lightAllianceFlag}>Predicted Loss</span>:null}
           {isHighEpa?<span title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Alliance EPA</span>:null}
+          {summary.largeResidual[color]?<span title="This alliance's absolute actual-minus-predicted score delta is in the event-wide top decile." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">Large Score Delta</span>:null}
           {summary.highPenalties[color]?<span title="This alliance's credited penalty points exceed the event-level alliance penalty outlier threshold." className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200">High Penalties</span>:null}
         </div>
       </div>
@@ -549,7 +553,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
       ...(summary.prediction?[{label:summary.prediction.label,tone:summary.prediction.tone}]:[]),
       ...(summary.modelUpset?[{label:"Model Upset",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
       ...(summary.anomalousScore?[{label:"Anomalous Score",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
-      ...(summary.largeResidual?[{label:"Large Residual",tone:"bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}]:[]),
+ 
 
     ];
     return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
@@ -1372,7 +1376,7 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   const flagLabels:Record<MatchReviewFlag,string>={
     "model-upset":"Model Upset",
     "anomalous-score":"Anomalous Score",
-    "large-residual":"Large Residual",
+    "large-residual":"Large Score Delta",
     "high-penalties":"High Penalties",
     "high-alliance-epa":"High Alliance EPA",
   };
@@ -1388,9 +1392,10 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
       const band=phaseAnomalyBand(data,match.comp_level);
       if(band)for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&Math.abs(result.residual-band.median)>band.margin))reasons.push((item.color==="red"?"Red":"Blue")+" alliance residual "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts fell outside the phase baseline ("+(band.median>0?"+":"")+fmt(band.median)+" ± "+fmt(band.margin)+" pts).");
     }
-    if(summary.largeResidual){
-      const values=data.allianceResults.filter((item)=>item.matchKey===match.key&&item.residual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0));
-      if(values.length)reasons.push("Largest alliance residual: "+values[0].color+" "+(values[0].residual!>0?"+":"")+fmt(values[0].residual)+" pts (top decile of available alliance residuals).");
+    if(summary.largeResidual.red||summary.largeResidual.blue){
+      for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&summary.largeResidual[result.color])){
+        reasons.push((item.color==="red"?"Red":"Blue")+" alliance score delta: "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts (absolute delta in the event-wide top decile).");
+      }
     }
     if(summary.highPenalties.red||summary.highPenalties.blue){
       const item=data.qualificationAnalysis?.penalties.flaggedMatches.find((entry)=>entry.matchKey===match.key);
@@ -1407,7 +1412,7 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   };
   return <Panel title="Suggested review" description="Flagged matches in event schedule order. Tabs group the matches by the reason they deserve a closer look; a match can appear in more than one group.">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{records.length} flagged matches · {data.matches.length} matches evaluated</p><a href={"https://www.thebluealliance.com/event/"+data.event.key+"#matches"} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Full event schedule ↗</a></div>
-    <p className="mb-3 text-xs leading-5 text-slate-500">Anomalous Score uses an event- and match-phase baseline: actual-minus-predicted alliance residuals outside the median ± max(20 points, 3 × 1.4826 × MAD), with at least 8 usable alliance scores in that phase. Large Residual is separate: a residual in the event-wide top decile, requiring at least 20 usable alliance scores. Model Upset means the pre-match favorite had at least 60% win probability and lost. These are review signals, not robot-level diagnoses.</p>
+    <p className="mb-3 text-xs leading-5 text-slate-500">Anomalous Score uses an event- and match-phase baseline: actual-minus-predicted alliance residuals outside the median ± max(20 points, 3 × 1.4826 × MAD), with at least 8 usable alliance scores in that phase. Large Score Delta is alliance-specific: an absolute actual-minus-predicted score delta in the event-wide top decile, requiring at least 20 usable alliance scores. Model Upset means the pre-match favorite had at least 60% win probability and lost. These are review signals, not robot-level diagnoses.</p>
     <div role="tablist" aria-label="Review flags by type" className="no-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200">
       {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
     </div>
