@@ -696,7 +696,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
     if(match.event_key!==eventKey||match.comp_level!=="qm")return [];
     const red=match.alliances.red.team_keys.map((key)=>key.replace(/^frc/i,""));
     const blue=match.alliances.blue.team_keys.map((key)=>key.replace(/^frc/i,""));
-    const alliance=red.includes(String(teamNumber))?"red":blue.includes(String(teamNumber))?"blue":null;
+    const alliance: "red" | "blue" | null = red.includes(String(teamNumber))?"red":blue.includes(String(teamNumber))?"blue":null;
     if(!alliance)return [];
     const played=match.alliances.red.score>=0&&match.alliances.blue.score>=0;
     const stat=record.statbotics as unknown as {pred?:{red_score?:number|null;blue_score?:number|null;red_win_prob?:number|null}|null}|null;
@@ -758,6 +758,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
         <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
+          const allianceClass=teamAllianceClass(match.alliance);
           return <tr key={match.key} className="border-t border-slate-100 align-middle">
             <th className="whitespace-nowrap px-3 py-2.5 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer">{match.label} ↗</a></th>
             <td className="whitespace-nowrap px-3 py-2.5">{match.played?<span className="font-semibold text-slate-700">Played · <span className={result==="Win"?"text-emerald-700":result==="Loss"?"text-rose-700":"text-slate-600"}>{result}</span></span>:<span className="rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-900">Unplayed</span>}</td>
