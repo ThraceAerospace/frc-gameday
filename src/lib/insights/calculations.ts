@@ -93,7 +93,7 @@ export function buildTeamRows(
   }
   const rows = teams.map((team) => {
     const current = latest.get(String(team.team_number));
-    const contributionSamples = contributionByTeam.get(String(team.team_number)) ?? [];
+    const contributionSamples = contributionByTeam.get(team.key) ?? [];
     return {
       teamKey: team.key, teamNumber: team.team_number, name: team.nickname || team.name || `Team ${team.team_number}`,
       opr: numberOrNull(oprs?.oprs?.[team.key]), dpr: numberOrNull(oprs?.dprs?.[team.key]), ccwm: numberOrNull(oprs?.ccwms?.[team.key]),
