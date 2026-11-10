@@ -6,7 +6,7 @@ import type { TBAEvent } from "@/lib/tba/types";
 import type { TBAEventSimple } from "@/lib/tba/types";
 import type { SeasonCohortRecord, SeasonCohortSnapshot } from "./types";
 
-const TTL_SECONDS = 365 * 24 * 60 * 60;
+const TTL_SECONDS = 24 * 60 * 60;
 const LOCK_SECONDS = 45;
 const PREFIX = "insights:season-cohort:v1:";
 const LOCK_PREFIX = "lock:insights:season-cohort:";
