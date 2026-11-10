@@ -46,14 +46,14 @@ const getHomepageSnapshot = unstable_cache(
       }),
     );
 
-    return { allEvents, eventSummaries };
+    return { eventSummaries };
   },
   ["homepage-event-snapshot"],
   { revalidate: 3600, tags: ["homepage-events"] },
 );
 
 export default async function HomePage() {
-  const { allEvents, eventSummaries } = await getHomepageSnapshot();
+  const { eventSummaries } = await getHomepageSnapshot();
   const now = new Date();
   const statusOrder = { inProgress: 0, upcoming: 1, completed: 2 } as const;
   const sortedEventSummaries = [...eventSummaries].sort((a, b) =>
@@ -73,7 +73,7 @@ export default async function HomePage() {
   );
 
   return (
-    <SiteShell events={allEvents}>
+    <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FIRST Robotics Competition</p>
