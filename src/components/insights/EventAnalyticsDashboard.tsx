@@ -457,6 +457,15 @@ function predictionTone(label:string):string {
   }
 }
 
+function phaseAnomalyBand(data:EventAnalyticsResponse,compLevel:string):{median:number;margin:number}|null {
+  const residuals=data.allianceResults.filter((item)=>item.compLevel.toLowerCase()===compLevel.toLowerCase()&&item.residual!==null).map((item)=>item.residual as number).sort((a,b)=>a-b);
+  if(residuals.length<8)return null;
+  const median=residuals[Math.floor(residuals.length/2)];
+  const deviations=residuals.map((value)=>Math.abs(value-median)).sort((a,b)=>a-b);
+  const mad=deviations[Math.floor(deviations.length/2)];
+  return {median,margin:Math.max(20,3*1.4826*mad)};
+}
+
 function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalyticsResponse["matches"][number]):MatchFlagSummary {
   const {match,statbotics}=record;
   const redProbability=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
@@ -474,12 +483,8 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
     red:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.preEpaTotal??-Infinity)>=highEpaThreshold,
     blue:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.preEpaTotal??-Infinity)>=highEpaThreshold,
   };
-  const phaseResiduals=data.allianceResults.filter((item)=>item.compLevel.toLowerCase()===match.comp_level.toLowerCase()&&item.residual!==null).map((item)=>item.residual as number).sort((a,b)=>a-b);
-  const median=phaseResiduals.length%2===0?(phaseResiduals[phaseResiduals.length/2-1]+phaseResiduals[phaseResiduals.length/2])/2:phaseResiduals[Math.floor(phaseResiduals.length/2)];
-  const deviations=phaseResiduals.map((value)=>Math.abs(value-median)).sort((a,b)=>a-b);
-  const mad=deviations.length%2===0?(deviations[deviations.length/2-1]+deviations[deviations.length/2])/2:deviations[Math.floor(deviations.length/2)];
-  const anomalyBand=Math.max(20,3*1.4826*mad);
-  const anomalousScore=phaseResiduals.length>=8&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual-median)>anomalyBand);
+  const anomalyBand=phaseAnomalyBand(data,match.comp_level);
+  const anomalousScore=anomalyBand!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual-anomalyBand.median)>anomalyBand.margin);
   const qualification=match.comp_level.toLowerCase()==="qm";
   const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
   const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
@@ -1376,11 +1381,8 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
       reasons.push(favorite+" was favored at "+Math.round(Math.max(p,1-p)*100)+"%, but "+(summary.winner==="red"?"Red":"Blue")+" won.");
     }
     if(summary.anomalousScore){
-      if(match.comp_level.toLowerCase()==="qm"){
-        for(const item of data.qualificationAnomalies??[])if(item.matchKey===match.key&&item.outsideExpectedRange)reasons.push((item.alliance==="red"?"Red":"Blue")+" alliance residual "+(item.residual>0?"+":"")+fmt(item.residual)+" pts fell outside the event-calibrated range.");
-      }else{
-        for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&data.residualStats.standardDeviation!==null&&Math.abs(result.residual)>2*data.residualStats.standardDeviation))reasons.push((item.color==="red"?"Red":"Blue")+" alliance residual "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts exceeded 2× the event residual standard deviation.");
-      }
+      const band=phaseAnomalyBand(data,match.comp_level);
+      if(band)for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&Math.abs(result.residual-band.median)>band.margin))reasons.push((item.color==="red"?"Red":"Blue")+" alliance residual "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts fell outside the phase baseline ("+(band.median>0?"+":"")+fmt(band.median)+" ± "+fmt(band.margin)+" pts).");
     }
     if(summary.largeResidual){
       const values=data.allianceResults.filter((item)=>item.matchKey===match.key&&item.residual!==null).sort((a,b)=>Math.abs(b.residual??0)-Math.abs(a.residual??0));
