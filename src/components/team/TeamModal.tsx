@@ -29,6 +29,21 @@ function getDisplayTeamNumber(
     : String(team.team_number);
 }
 
+function getDisplayTeamName(
+  team: TBATeam,
+  displayTeamNumber: string,
+  isRemapped: boolean,
+) {
+  if (!isRemapped) return team.nickname || "Unknown team";
+
+  const formattedNumber = displayTeamNumber.replace(
+    /^(\\d+)([A-Za-z]+)$/,
+    "$1 $2",
+  );
+
+  return `Team ${formattedNumber} (${team.team_number})`;
+}
+
 export default function TeamModal({
   open,
   onClose,
@@ -82,6 +97,11 @@ export default function TeamModal({
 
         return [
           getDisplayTeamNumber(team, remapTeams),
+          getDisplayTeamName(
+            team,
+            getDisplayTeamNumber(team, remapTeams),
+            getDisplayTeamNumber(team, remapTeams) !== String(team.team_number),
+          ),
           team.key,
           team.team_number,
           team.nickname,
@@ -160,14 +180,8 @@ export default function TeamModal({
                     {displayTeamNumber}
                   </span>
 
-                  {isRemapped && (
-                    <span className="text-[10px] font-mono opacity-50">
-                      TBA {team.team_number}
-                    </span>
-                  )}
-
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                    {team.nickname || "Unknown team"}
+                    {getDisplayTeamName(team, displayTeamNumber, isRemapped)}
                   </span>
 
                   {selected && (
