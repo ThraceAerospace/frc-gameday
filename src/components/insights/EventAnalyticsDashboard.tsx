@@ -1341,7 +1341,7 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
             return ar-br||a.teamNumber-b.teamNumber;
           }).map((team)=>{
             const ranking=rankings.find((item)=>item.team_key===team.teamKey);
-            const epaRank=team.epa===null?null:epaTeams.findIndex((item)=>item.teamKey===team.teamKey)+1;
+            const epaRank=team.epa===null?null:1+epaTeams.filter((item)=>item.epa!==null&&item.epa>team.epa!).length;
             const comparison=insights.find((item)=>item.teamNumber===team.teamNumber)?.seasonComparison;
             const auto=comparison?.components.auto??null;
             const teleop=comparison?.components.teleop??null;
