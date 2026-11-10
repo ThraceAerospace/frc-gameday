@@ -339,3 +339,75 @@ The selected-team match-history endpoint adds an event-normalized residual patte
 - Qualification Analysis is event-wide and includes qualification matches only. Flag alliance score residuals outside a robust event-calibrated band (median ± max(20 points, 3 × 1.4826 × MAD)) and high-confidence win-probability misses (at least 80% predicted win probability but the alliance lost). The score band is estimated from observed event residuals; Statbotics does not provide a score prediction interval in this integration. Do not call it a model-provided confidence interval.
 - Playoff Analysis is separate from qualification analysis. It groups completed elimination alliance results by three-team composition and summarizes residuals by elimination round. Team elimination progression remains season-wide and event-balanced, requiring at least three scored qualification matches and two scored elimination matches per event. A recurring-negative pattern requires at least three eligible events and an exact one-sided sign-test p-value ≤ 0.05 after positive qualification baselines; it is an alliance-level association, not proof of robot-level choking.
 - Every anomaly and conclusion must link to supporting match evidence, expose sample coverage, and distinguish observed alliance outcomes from robot-specific scouting observations.
+
+## Reusable insight components — core architectural principle
+
+**Reusability, Reusability, Reusability.**
+
+FieldView must be built around independently reusable insight components. This is a core architectural requirement for all future analytics development and the continued refactoring of existing dashboards.
+
+### Insights are independent of dashboards
+
+The dashboard is a composition of insights, not the exclusive home of those insights. Every metric, statistic, value, comparison, visualization, indicator, review flag, summary, and other discrete analytical element should be implemented as a self-contained React component that can be placed anywhere in the application.
+
+A component must work when supplied with the appropriate data through its props. It must not depend on being rendered inside a particular dashboard, tab, page, or parent component.
+
+### Build from the smallest useful units
+
+Break analytics down into reusable components at every appropriate level, including:
+
+- Individual metric values and formatted statistics.
+- Performance indicators, trends, and comparisons.
+- Win-probability classifications and prediction summaries.
+- Team and alliance contribution indicators.
+- Statistical distributions, confidence intervals, and error measurements.
+- Charts and their filtering controls.
+- Match review flags and anomaly indicators.
+- Summaries and higher-level analytical insights.
+
+Components should be composable: larger insight components should be assembled from smaller reusable components rather than reimplementing their functionality.
+
+### Separate data, calculations, and presentation
+
+Reusable insight components must have clear, explicit data contracts.
+
+- Data acquisition belongs in appropriate data services and application-level data flows, not in individual presentation components.
+- Calculations and analytical methodology belong in reusable, independently testable functions or services.
+- Presentation belongs in reusable React components that receive the data they need through props.
+
+Do not duplicate calculations or analytical methodology across different pages. The same metric must mean the same thing wherever it appears.
+
+### Avoid dashboard-specific dependencies
+
+Insight components must not assume dashboard-specific state, routing, layout, navigation, or data-fetching behavior.
+
+Where an insight requires configuration, filtering, or interaction, expose the necessary behavior through explicit props and well-defined interfaces. Components should support different presentation contexts, including compact and expanded layouts, without duplicating the underlying analytical implementation.
+
+### Compose dashboards from reusable insights
+
+Dashboards should primarily be composition layers. Their responsibility is to organize, arrange, and contextualize existing insight components. They should not become monolithic implementations containing analytics that cannot be reused elsewhere.
+
+When a new insight is developed for a dashboard, it must be designed for reuse from the beginning.
+
+### Make insights available throughout FieldView
+
+The long-term goal is to distribute useful analytical information throughout the entire application. The same insight should be usable on:
+
+- Team pages.
+- Event pages.
+- District pages.
+- Match cards and match detail views.
+- Event and team dashboards.
+- Remote displays and single-field presentations.
+- Other future application surfaces.
+
+A user should not need to open a dedicated analytics dashboard to benefit from FieldView's analytical capabilities.
+
+### Maintain and verify reusability
+
+Before implementing a new metric or insight, check whether an existing component or analytical function can be reused or extended. Avoid duplicate components that represent the same underlying metric. Prefer shared components with explicit props and sensible configuration over separate implementations for individual pages.
+
+Add appropriate tests for shared calculations and reusable components. Changes to an insight's methodology or presentation must remain consistent across every place that uses it.
+
+**Guiding principle: Build an insight once. Make it available everywhere.**
+
