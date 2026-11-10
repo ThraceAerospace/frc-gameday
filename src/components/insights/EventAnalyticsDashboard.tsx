@@ -641,10 +641,18 @@ function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
     return Math.sqrt(a.reduce((sum,value,index)=>sum+(value-b[index])**2,0));
   };
   const raw=teams.map((team)=>team.primaryColor&&/^#[0-9a-f]{6}$/i.test(team.primaryColor)?team.primaryColor.toUpperCase():null);
-  return raw.map((color,index)=>{
-    const collision=color!==null&&raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95);
-    return color&&!collision?color:fallback[index]??fallback[0];
+  const needsFallback=raw.map((color,index)=>!color||raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95));
+  const used=raw.flatMap((color,index)=>color&&!needsFallback[index]?[color]:[]);
+  const resolved=raw.map((color,index)=>{
+    if(!needsFallback[index])return color!;
+    const candidate=fallback.find((choice)=>used.every((existing)=>distance(choice,existing)>=95));
+    if(!candidate)return null;
+    used.push(candidate);
+    return candidate;
   });
+  // If the remaining provider colors leave no distinct fallback available,
+  // use the three-color fallback set consistently for the whole alliance.
+  return resolved.some((color)=>color===null)?fallback:resolved as string[];
 }
 
 function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContributionPercent,epaContributionSamples,teamColors}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;epaContributionPercent:number|null;epaContributionSamples:number;teamColors:EventAnalyticsResponse["teamColors"]}) {
@@ -755,7 +763,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
                   <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label={`${color} alliance total EPA ${fmt(total)}`}>
                     {teams.map((item,index)=><div key={item.teamNumber} title={`Team ${item.teamNumber}: ${fmt(item.epa)} EPA · ${fmt(item.share)}% of alliance EPA`} style={{width:`${item.share}%`,backgroundColor:segmentColors[index]}} className="h-full min-w-0 border-r border-white/50 last:border-r-0"/>)}
                   </div>
-                  <div className="mt-1.5 grid grid-cols-3 gap-1">{teams.map((item,index)=><div key={item.teamNumber} className="min-w-0 text-[10px] leading-4"><p className="truncate font-bold tabular-nums" style={{color:segmentColors[index]}}>#{item.teamNumber}</p><p className="tabular-nums text-slate-600">{fmt(item.share)}%</p><p className="tabular-nums text-slate-400">EPA {fmt(item.epa)}</p></div>)}</div>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1">{teams.map((item,index)=><div key={item.teamNumber} className="min-w-0 text-[10px] leading-4"><p className="flex items-center gap-1 truncate font-bold tabular-nums text-slate-700"><span className="h-2 w-2 shrink-0 rounded-sm" style={{backgroundColor:segmentColors[index]}}/>#{item.teamNumber}</p><p className="tabular-nums text-slate-600">{fmt(item.share)}%</p><p className="tabular-nums text-slate-400">EPA {fmt(item.epa)}</p></div>)}</div>
                   <p className="mt-1 text-[10px] font-semibold tabular-nums text-slate-500">Alliance EPA {fmt(total)}</p>
                 </>:<p className="mt-2 text-[10px] text-slate-400">Pre-match team EPA unavailable for this alliance.</p>}
               </td>;
