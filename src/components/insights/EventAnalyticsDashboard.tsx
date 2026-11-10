@@ -766,7 +766,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
     </div>
     <div className="mt-4 border-t border-slate-100 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Qualification match schedule</h4><p className="text-xs text-slate-500">Completed results and remaining matchups, in match order</p></div>
-      {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1120px] text-xs">
+      {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1280px] text-xs">
         <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
@@ -778,10 +778,10 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
               const segmentColors=resolveTeamSegmentColors(teams);
               const total=teams.every((item)=>item.epa!==null)?teams.reduce((sum,item)=>sum+(item.epa??0),0):null;
               const allianceTone=color==="red"?"text-rose-700":"text-blue-700";
-              return <td key={color} className="min-w-[230px] px-3 py-2.5 align-top">
+              return <td key={color} className="min-w-[320px] px-3 py-2.5 align-top">
                 {total!==null&&total>0&&teams.every((item)=>item.share!==null)?<>
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] leading-5 tabular-nums">
-                    {teams.map((item,index)=><div key={item.teamNumber} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <div className="mb-2 flex flex-nowrap items-center justify-between gap-x-2 text-[10px] leading-5 tabular-nums">
+                    {teams.map((item,index)=><div key={item.teamNumber} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
                       <Link href={`/team/${item.teamNumber}`} className={`inline-flex items-center gap-1 font-bold hover:underline ${allianceTone}`}><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor:segmentColors[index]}}/><span>{item.teamNumber}</span></Link>
                       <span className="font-semibold text-slate-600">{fmt(item.share)}%</span>
                       <span className="text-slate-500">EPA {fmt(item.epa)}</span>
@@ -797,7 +797,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
                 </>}
               </td>;
             })}
-            <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.played?<><span className={allianceClass}>{fmt(match.teamScore,0)}</span><span className="px-1 text-slate-400">–</span><span className="text-slate-600">{fmt(match.opponentScore,0)}</span>{match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="ml-2 text-[10px] text-slate-400">(pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)})</span>:null}</>:match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="text-slate-600">Pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span>:<span className="text-slate-400">No prediction available</span>}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.played?<div className="space-y-1"><div><span className="mr-1 text-[9px] uppercase tracking-wide text-slate-400">Actual</span><span className={allianceClass}>{fmt(match.teamScore,0)}</span><span className="px-1 text-slate-400">–</span><span className="text-slate-600">{fmt(match.opponentScore,0)}</span></div>{match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<div><span className="mr-1 text-[9px] uppercase tracking-wide text-slate-400">Pred.</span><span className="text-slate-500">{fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span></div>:null}</div>:match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<div><span className="mr-1 text-[9px] uppercase tracking-wide text-slate-400">Pred.</span><span className="text-slate-600">{fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span></div>:<span className="text-slate-400">No prediction available</span>}</td>
             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</td>
           </tr>;
         })}</tbody>
