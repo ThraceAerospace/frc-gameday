@@ -79,7 +79,7 @@ export function buildTeamRows(
       const teamKeys = record.match.alliances[color].team_keys ?? [];
       if (teamKeys.length !== 3) continue;
       const values = teamKeys.map((teamKey) => numberOrNull(epaFor(record, teamKey, "pre_epas")?.epa));
-      if (values.some((value) => value === null)) continue;
+      if (values.some((value) => value === null || value < 0)) continue;
       const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
       if (!(total > 0)) continue;
       teamKeys.forEach((teamKey, index) => {
