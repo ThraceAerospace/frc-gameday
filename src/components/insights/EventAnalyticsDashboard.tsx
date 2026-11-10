@@ -56,6 +56,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
   const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
+  const lastMatchAnalysisRefreshKey = useRef(0);
 
   const load = useCallback(async (forceRefresh = false) => {
     const generation = ++loadGeneration.current;
@@ -115,7 +116,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
     let active = true;
     setMatchAnalysisA(null);
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    const query = `year=${data.event.year}${matchAnalysisRefreshKey > 0 ? "&refresh=1" : ""}`;
+    const shouldRefresh = matchAnalysisRefreshKey > lastMatchAnalysisRefreshKey.current;
+    if (shouldRefresh) lastMatchAnalysisRefreshKey.current = matchAnalysisRefreshKey;
+    const query = `year=${data.event.year}${shouldRefresh ? "&refresh=1" : ""}`;
     fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
