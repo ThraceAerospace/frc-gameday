@@ -275,7 +275,7 @@ export function buildSeasonAwareTeamInsights(
   );
   const currentEventEPARecords = valuesForEvent(targetEventKey);
   const currentEventEPAValues = currentEventEPARecords.map((record) => record.epa);
-  const epaRank = (records: { teamNumber: number; epa: number }[], teamNumber: number, epa: number) => ({
+  const epaRank = (records: { teamNumber: number; epa: number }[], epa: number) => ({
     rank: 1 + records.filter((record) => record.epa > epa).length,
     size: records.length,
   });
@@ -299,8 +299,8 @@ export function buildSeasonAwareTeamInsights(
         !prior || prior.status !== "ready" || !finite(prior.epaTotal)) return [];
 
     const priorEventEPARecords = valuesForEvent(prior.event.key);
-    const priorEpaStanding = epaRank(priorEventEPARecords, team.teamNumber, prior.epaTotal);
-    const currentEpaStanding = epaRank(currentEventEPARecords, team.teamNumber, current.epaTotal);
+    const priorEpaStanding = epaRank(priorEventEPARecords, prior.epaTotal);
+    const currentEpaStanding = epaRank(currentEventEPARecords, current.epaTotal);
     const components = {
       auto: (() => {
         const before = componentValue(prior, [...componentDefinitions.auto]);
