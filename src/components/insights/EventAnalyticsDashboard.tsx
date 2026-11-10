@@ -767,7 +767,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
     <div className="mt-4 border-t border-slate-100 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Qualification match schedule</h4><p className="text-xs text-slate-500">Completed results and remaining matchups, in match order</p></div>
       {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[900px] table-fixed text-xs">
-        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Red alliance · teams / EPA</th><th className="px-3 py-2.5">Blue alliance · teams / EPA</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
+        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="w-[10%] px-2 py-2.5">Match</th><th className="w-[12%] px-2 py-2.5">Status</th><th className="w-[26%] px-2 py-2.5">Red alliance · teams / EPA</th><th className="w-[26%] px-2 py-2.5">Blue alliance · teams / EPA</th><th className="w-[16%] px-2 py-2.5">Score · team–opponents</th><th className="w-[10%] px-2 py-2.5">Win probability</th></tr></thead>
         <tbody>{schedule.map((match)=>{
           const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
           const allianceClass=teamAllianceClass(match.alliance);
@@ -778,7 +778,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
               const segmentColors=resolveTeamSegmentColors(teams);
               const total=teams.every((item)=>item.epa!==null)?teams.reduce((sum,item)=>sum+(item.epa??0),0):null;
               const allianceTone=color==="red"?"text-rose-700":"text-blue-700";
-              return <td key={color} className="w-[24%] px-2 py-2.5 align-top">
+              return <td key={color} className="w-[26%] px-2 py-2.5 align-top">
                 {total!==null&&total>0&&teams.every((item)=>item.share!==null)?<>
                   <div className="mb-2 flex flex-nowrap items-center justify-between gap-x-1 text-sm leading-5 tabular-nums">
                     {teams.map((item,index)=><div key={item.teamNumber} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
