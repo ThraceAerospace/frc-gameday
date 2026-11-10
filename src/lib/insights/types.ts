@@ -202,6 +202,10 @@ export type TeamSeasonComparison = {
   priorEPA: number;
   currentEPA: number;
   currentEpaPercentile: number | null;
+  priorEpaRank: number;
+  priorEpaCohortSize: number;
+  currentEpaRank: number;
+  currentEpaCohortSize: number;
   change: number;
   cohortRank: number;
   cohortSize: number;
