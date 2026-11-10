@@ -13,8 +13,8 @@ const LOCK_PREFIX = "lock:insights:season-cohort:";
 const DISCOVERY_BATCH = 6;
 const RECORD_BATCH = 10;
 const CONCURRENCY = 2;
-const MAX_ATTEMPTS = 1;
-const WORK_BUDGET_MS = 45_000;
+const MAX_ATTEMPTS = 3;
+const WORK_BUDGET_MS = 20_000;
 
 type EventRef = { key: string; name: string; shortName: string; startDate: string };
 type Pair = { teamNumber: number; event: EventRef };
@@ -30,7 +30,6 @@ type Job = {
   updatedAt: number;
   currentEventRefreshedAt: number | null;
   rosterRefreshedAt?: number;
-  discoveryAttemptedAt?: number;
 };
 
 function key(eventKey: string) { return PREFIX + eventKey; }
@@ -113,10 +112,6 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
   try {
     let job = await readJob(eventKey);
     if (!job) return;
-    // Historical cohort discovery is a one-shot dashboard-load operation.
-    // If it exhausts its request budget, the partial result stays cached until
-    // the user explicitly refreshes rather than resuming on every page open.
-    if (!forceRefresh && job.discoveryAttemptedAt) return;
     if (forceRefresh) {
       job.discoveryQueue = [...job.teamNumbers];
       job.discoveryAttempts = {};
@@ -125,10 +120,10 @@ export async function advanceSeasonCohort(eventKey: string, forceRefresh = false
       job.records = {};
       job.discoveryFailures = [];
       job.currentEventRefreshedAt = null;
-      job.discoveryAttemptedAt = undefined;
       await writeJob(eventKey, job);
     }
-    job.discoveryAttemptedAt = Date.now();
+    // Leave unfinished teams queued when the bounded work window expires.
+    // The next request resumes from that queue instead of freezing a partial cohort.
     await writeJob(eventKey, job);
     while (Date.now() < deadline && job.discoveryQueue.length) {
       const batch = job.discoveryQueue.slice(0, DISCOVERY_BATCH);
