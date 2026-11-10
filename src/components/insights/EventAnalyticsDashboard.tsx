@@ -1264,6 +1264,9 @@ function TeamTable({teams}:{teams:TeamAnalyticsRow[]}) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase text-slate-400"><th className="py-2">Team</th><th>EPA</th><th>OPR</th><th>DPR</th><th>CCWM</th><th>EPA %ile</th></tr></thead><tbody>{teams.map((team)=><tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 text-left"><Link className="font-semibold text-slate-800 hover:text-blue-700" href={`/team/${team.teamNumber}`}>{team.teamNumber} · {team.name}</Link></th><td>{fmt(team.epa)}</td><td>{fmt(team.opr)}</td><td>{fmt(team.dpr)}</td><td>{fmt(team.ccwm)}</td><td>{percentileLabel(team.epaPercentile)}</td></tr>)}</tbody></table></div>;
 }
 function EventOverview({ data }: { data: EventAnalyticsResponse }) {
+  type SortKey = "qualRank" | "epaRank" | "teamNumber" | "qualRecord" | "epa" | "epaShare" | "auto" | "teleop" | "endgame" | "performance";
+  type SortRule = { key: SortKey; direction: "asc" | "desc" };
+  const [sortRules, setSortRules] = useState<SortRule[]>([{ key: "qualRank", direction: "asc" }]);
   const teamByKey=new Map(data.teams.map((team)=>[team.teamKey,team]));
   const rankings=data.rankings?.rankings??[];
   const completedMatches=data.matches.filter(({match})=>match.alliances.red.score>=0&&match.alliances.blue.score>=0).length;
@@ -1306,6 +1309,27 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
     if(item.mean!==null&&item.mean<0)return {label:"Below · inconclusive",tone:"bg-rose-50 text-rose-800"};
     return {label:"Near prediction",tone:"bg-slate-100 text-slate-700"};
   };
+  const sortValue=(team:TeamAnalyticsRow,key:SortKey):number|string|null=>{
+    const ranking=rankings.find((item)=>item.team_key===team.teamKey);
+    const comparison=insights.find((item)=>item.teamNumber===team.teamNumber)?.seasonComparison;
+    if(key==="qualRank")return ranking?.rank??null;
+    if(key==="epaRank")return team.epa===null?null:1+epaTeams.filter((item)=>item.epa!==null&&item.epa>team.epa!).length;
+    if(key==="teamNumber")return team.teamNumber;
+    if(key==="qualRecord"){if(!ranking?.record)return null;const {wins,losses,ties}=ranking.record;const games=wins+losses+ties;return games?wins/games*1000000+wins*1000+ties:null;}
+    if(key==="epa")return comparison?.currentEPA??team.epa;
+    if(key==="epaShare")return team.epaContributionPercent;
+    if(key==="auto")return comparison?.components.auto?.current??team.autoEpa;
+    if(key==="teleop")return comparison?.components.teleop?.current??team.teleopEpa;
+    if(key==="endgame")return comparison?.components.endgame?.current??team.endgameEpa;
+    return residualDiagnostics.find((item)=>item.team.teamKey===team.teamKey)?.mean??null;
+  };
+  const sortedTeams=[...data.teams].sort((a,b)=>{
+    for(const rule of sortRules){const av=sortValue(a,rule.key),bv=sortValue(b,rule.key);if(av===null||av===undefined){if(bv===null||bv===undefined)continue;return 1;}if(bv===null||bv===undefined)return -1;const result=typeof av==="string"&&typeof bv==="string"?av.localeCompare(bv):Number(av)-Number(bv);if(result!==0)return result*(rule.direction==="asc"?1:-1);}
+    return a.teamNumber-b.teamNumber;
+  });
+  const sortLabels:Record<SortKey,string>={qualRank:"Qual Rank",epaRank:"EPA Rank",teamNumber:"Team Number",qualRecord:"Qual Record",epa:"EPA",epaShare:"Avg EPA Share",auto:"Auto",teleop:"Teleop",endgame:"Endgame",performance:"Performance"};
+  const changeSort=(key:SortKey,additive:boolean)=>setSortRules((current)=>{const existing=current.find((rule)=>rule.key===key);const nextDirection=existing?.direction==="asc"?"desc":"asc";if(!additive)return [{key,direction:existing?nextDirection:"asc"}];if(!existing)return [...current,{key,direction:"asc"}];return current.map((rule)=>rule.key===key?{...rule,direction:nextDirection}:rule);});
+  const sortHeader=(key:SortKey)=>{const index=sortRules.findIndex((rule)=>rule.key===key);const rule=sortRules[index];return <button type="button" onClick={(event)=>changeSort(key,event.shiftKey)} title={index>=0?"Sort priority "+(index+1)+"; Shift-click to change secondary sorting":"Click to sort; Shift-click to add as a secondary sort"} className="inline-flex items-center gap-1 text-left hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><span>{sortLabels[key]}</span>{rule?<span aria-hidden="true">{rule.direction==="asc"?"↑":"↓"}{index>0?<sup>{index+1}</sup>:null}</span>:<span aria-hidden="true" className="text-slate-300">↕</span>}</button>;};
   const movement=(items:typeof comparisons,empty:string)=><ol className="space-y-2">{items.length?items.map(({teamNumber,comparison})=><li key={teamNumber} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0">{teamNumberLink(teamNumber)}<span className="ml-2 text-[10px] text-slate-400">{comparison.priorEvent.name}</span></div><div className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">#{comparison.cohortRank} of {comparison.cohortSize}</span><strong className={"tabular-nums "+(comparison.change>=0?"text-emerald-700":"text-rose-700")}>{comparison.change>0?"+":""}{fmt(comparison.change)}</strong></div></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   const residualList=(items:typeof residuals,empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=><li key={item.team.teamKey} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.team.teamNumber)}</div><strong className={"shrink-0 tabular-nums "+(item.mean>0?"text-emerald-700":"text-rose-700")}>{item.mean>0?"+":""}{fmt(item.mean)} pts</strong></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   return <div className="space-y-5">
@@ -1330,15 +1354,12 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
         <span className="text-xs text-slate-500">{data.teams.length} event teams</span>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-sm">
-          <thead className="bg-white"><tr className="border-b text-left text-[10px] uppercase tracking-wide text-slate-400">
-            <th className="w-16 py-2 px-1 text-center">Qual Rank</th><th className="w-16 px-1 text-center">EPA Rank</th><th className="px-3">Team Number</th><th className="px-2">Qual Record</th><th className="px-2 text-right">EPA</th><th className="px-2 text-right">Avg EPA Share</th><th className="px-2 text-right">Auto</th><th className="px-2 text-right">Teleop</th><th className="px-2 text-right">Endgame</th><th className="py-2 pl-3">Performance</th>
+        <table className="w-full min-w-[1120px] table-fixed text-sm">
+          <colgroup>{Array.from({length:10},(_,index)=><col key={index} style={{width:"10%"}} />)}</colgroup>
+          <thead className="bg-white"><tr className="border-b text-[10px] uppercase tracking-wide text-slate-400">
+            <th aria-sort={sortRules[0]?.key==="qualRank"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="py-2 px-1 text-center">{sortHeader("qualRank")}</th><th aria-sort={sortRules[0]?.key==="epaRank"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-1 text-center">{sortHeader("epaRank")}</th><th aria-sort={sortRules[0]?.key==="teamNumber"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-left">{sortHeader("teamNumber")}</th><th aria-sort={sortRules[0]?.key==="qualRecord"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-left">{sortHeader("qualRecord")}</th><th aria-sort={sortRules[0]?.key==="epa"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-right">{sortHeader("epa")}</th><th aria-sort={sortRules[0]?.key==="epaShare"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-right">{sortHeader("epaShare")}</th><th aria-sort={sortRules[0]?.key==="auto"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-right">{sortHeader("auto")}</th><th aria-sort={sortRules[0]?.key==="teleop"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-right">{sortHeader("teleop")}</th><th aria-sort={sortRules[0]?.key==="endgame"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="px-2 text-right">{sortHeader("endgame")}</th><th aria-sort={sortRules[0]?.key==="performance"?(sortRules[0].direction==="asc"?"ascending":"descending"):"none"} className="py-2 px-2 text-left">{sortHeader("performance")}</th>
           </tr></thead>
-          <tbody>{[...data.teams].sort((a,b)=>{
-            const ar=rankings.find((item)=>item.team_key===a.teamKey)?.rank??Infinity;
-            const br=rankings.find((item)=>item.team_key===b.teamKey)?.rank??Infinity;
-            return ar-br||a.teamNumber-b.teamNumber;
-          }).map((team)=>{
+          <tbody>{sortedTeams.map((team)=>{
             const ranking=rankings.find((item)=>item.team_key===team.teamKey);
             const epaRank=team.epa===null?null:1+epaTeams.filter((item)=>item.epa!==null&&item.epa>team.epa!).length;
             const comparison=insights.find((item)=>item.teamNumber===team.teamNumber)?.seasonComparison;
@@ -1348,21 +1369,21 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
             const status=performanceStatus(team.teamKey);
             const trend=(change:number|null)=>change===null?<span aria-label="Previous event comparison unavailable" className="text-slate-400">—</span>:change===0?<span aria-label="No change since last event" className="text-slate-400">−</span>:<span aria-label={change>0?"Increased since last event":"Decreased since last event"} className={change>0?"text-emerald-600":"text-rose-600"}>{change>0?"↑":"↓"}</span>;
             return <tr key={team.teamKey} className="border-b border-slate-100 last:border-0">
-              <td className="w-16 py-2 px-1 text-center font-bold tabular-nums">{ranking?.rank??"—"}</td>
-              <td className="w-16 px-1 text-center tabular-nums">{epaRank??"—"}</td>
-              <th className="px-3 text-left">{teamNumberLink(team.teamNumber)}</th>
+              <td className="px-1 py-2 text-center font-bold tabular-nums">{ranking?.rank??"—"}</td>
+              <td className="px-1 text-center tabular-nums">{epaRank??"—"}</td>
+              <th className="px-2 text-left">{teamNumberLink(team.teamNumber)}</th>
               <td className="px-2 whitespace-nowrap tabular-nums">{ranking?.record?ranking.record.wins+"–"+ranking.record.losses+"–"+ranking.record.ties:"—"}</td>
               <td className="px-2 text-right font-semibold tabular-nums">{fmt(comparison?.currentEPA??team.epa)}</td>
               <td className="px-2 text-right tabular-nums" title={`Based on ${team.epaContributionSamples} matches with complete pre-match EPA for all three alliance teams`}>{team.epaContributionPercent===null?"—":`${fmt(team.epaContributionPercent)}%`}<span className="block text-[9px] text-slate-400">n={team.epaContributionSamples}</span></td>
               <td className="px-2 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(auto?.current??team.autoEpa)}{trend(auto?.change??null)}</span></td>
               <td className="px-2 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(teleop?.current??team.teleopEpa)}{trend(teleop?.change??null)}</span></td>
               <td className="px-2 text-right tabular-nums"><span className="inline-flex items-center justify-end gap-1">{fmt(endgame?.current??team.endgameEpa)}{trend(endgame?.change??null)}</span></td>
-              <td className="py-2 pl-3"><span className={"inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold "+status.tone}>{status.label}</span></td>
+              <td className="px-2 py-2"><span className={"inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold "+status.tone}>{status.label}</span></td>
             </tr>;
           })}</tbody>
         </table>
       </div>
-      <p className="mt-3 text-[11px] leading-5 text-slate-500">Teams are ordered by official qualification rank; teams without a published rank appear afterward. EPA rank is ordered by current event EPA and is separate from qualification rank. Component arrows compare with the team's most recent preceding official event. Average EPA share is based on matches with complete pre-match EPA for all three alliance teams. Performance describes alliance score residuals versus Statbotics predictions and cannot isolate an individual robot.</p>
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">All ten columns have equal width. Click a column heading to sort by it; Shift-click additional headings to add secondary sort priorities. Click a selected heading again to reverse its direction. Component arrows compare with the team's most recent preceding official event. Average EPA share is based on matches with complete pre-match EPA for all three alliance teams. Performance describes alliance score residuals versus Statbotics predictions and cannot isolate an individual robot.</p>
     </section>
     <Panel title="Prediction diagnostics" description="How well Statbotics predictions aligned with actual alliance scores and match winners in the loaded sample."><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><QualityMetric label="Mean absolute error" value={fmt(data.predictionStats.meanAbsoluteError)} unit="pts" detail="Average size of an alliance score miss"/><QualityMetric label="Root mean square error" value={fmt(data.predictionStats.rootMeanSquareError)} unit="pts" detail="Weights larger misses more heavily"/><QualityMetric label="Within ±25 points" value={data.predictionStats.allianceCount?(data.predictionStats.within25Count/data.predictionStats.allianceCount*100).toFixed(1)+"%":"—"} detail={data.predictionStats.within25Count+" of "+data.predictionStats.allianceCount+" alliance scores"}/><QualityMetric label="Winner accuracy" value={data.predictionStats.winPredictionAccuracy===null?"—":(data.predictionStats.winPredictionAccuracy*100).toFixed(1)+"%"} detail={data.predictionStats.winPredictionCount+" decided matches"}/></div><div className="mt-4 rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-600">Prediction bias</p><p className="mt-1 text-xl font-black tabular-nums">{data.predictionStats.meanResidual===null?"—":(data.predictionStats.meanResidual>0?"+":"")+fmt(data.predictionStats.meanResidual)+" pts"}</p><p className="text-xs text-slate-500">Positive means predictions tended low; negative means predictions tended high. Sample residual SD: {fmt(predictionResidualSampleSd)} pts across {predictionResidualValues.length} alliance results.</p></div></Panel>
   </div>;
