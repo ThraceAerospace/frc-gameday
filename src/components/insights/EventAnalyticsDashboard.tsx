@@ -27,14 +27,6 @@ const ordinal = (value: number) => {
   return `${value}${suffix}`;
 };
 const percentileLabel = (value: number | null) => value === null ? "—" : ordinal(Math.round(value * 100));
-function predictionClassification(redProbability: number | null): string | null {
-  if (redProbability === null || !Number.isFinite(redProbability) || redProbability < 0 || redProbability > 1) return null;
-  if (redProbability >= 0.8) return "Strong Red";
-  if (redProbability >= 0.6) return "Lean Red";
-  if (redProbability >= 0.4) return "Toss-up";
-  if (redProbability >= 0.2) return "Lean Blue";
-  return "Strong Blue";
-}
 
 function allianceTeamNumbers(teamNumber: number, otherTeams: string[]): string[] {
   return [...new Set([String(teamNumber), ...otherTeams])];
@@ -652,8 +644,8 @@ function EpaShareBar({share,alliance}:{share:number|null;alliance:"red"|"blue"})
   </div>;
 }
 
-function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;timezone:string|null}) {
-  const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey);
+function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string}) {
+  const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey&&match.compLevel==="qm");
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   const scored=ordered.filter((match)=>match.actual!==null&&match.opponentActual!==null);
   const completed=scored.filter((match)=>match.won!==null);
@@ -884,7 +876,7 @@ function TeamAnalysisTabs({analysis,records,eventKey,timezone,name}:{analysis:Te
     </div>
     <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
       {activeTab==="qualification"?<>
-        <TeamCurrentEventOutlook analysis={analysis} records={records} teamNumber={analysis.team} eventKey={eventKey} timezone={timezone}/>
+        <TeamCurrentEventOutlook analysis={analysis} records={records} teamNumber={analysis.team} eventKey={eventKey}/>
         <PhasePerformancePanel analysis={analysis} phase="qualification"/>
       </>:null}
       {activeTab==="playoffs"?<>
