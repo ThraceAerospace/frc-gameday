@@ -166,7 +166,7 @@ export type TeamInsight = {
 
 export type SeasonCohortRecord = {
   teamNumber: number;
-  event: { key: string; name: string; shortName: string; startDate: string };
+  event: { key: string; name: string; short_name: string | null; startDate: string };
   epaTotal: number | null;
   epaUnitless: number | null;
   breakdown: Record<string, number>;
@@ -198,7 +198,7 @@ export type TeamSeasonComponentComparison = {
 };
 
 export type TeamSeasonComparison = {
-  priorEvent: { key: string; name: string; shortName: string; startDate: string };
+  priorEvent: { key: string; name: string; short_name: string | null; startDate: string };
   priorEPA: number;
   currentEPA: number;
   currentEpaPercentile: number | null;
