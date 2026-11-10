@@ -892,11 +892,14 @@ function TeamAnalysisTabs({analysis,records,eventKey,timezone,name}:{analysis:Te
         <PhasePerformancePanel analysis={analysis} phase="elimination"/>
         <EliminationShiftPanel analysis={analysis}/>
       </>:null}
-      {activeTab==="season"?<>
-        <MatchAnalysisSummary analysis={analysis} name={name}/>
-        <TeamMatchEpaLedger analysis={analysis} name={name}/>
+      {activeTab==="season"?<MatchAnalysisSummary analysis={analysis} name={name}/>:null}
+      {activeTab==="review"?<>
+        <TeamRiskPanel analysis={analysis}/>
+        <details className="rounded-lg border border-slate-200 dark:border-slate-700">
+          <summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200">Match-by-match EPA and score evidence</summary>
+          <div className="p-3"><TeamMatchEpaLedger analysis={analysis} name={name}/></div>
+        </details>
       </>:null}
-      {activeTab==="review"?<TeamRiskPanel analysis={analysis}/>:null}
     </div>
   </section>;
 }
