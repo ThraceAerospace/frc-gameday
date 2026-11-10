@@ -1047,6 +1047,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
       <h4 className="text-sm font-semibold text-slate-800">Alliance component estimates vs actual</h4>
       <p className="mt-1 text-[10px] text-slate-500">Select any combination of Auto, Teleop, and Endgame above. Phase selection filters all match-based charts and records.</p>
       <p className="text-[11px] text-slate-500">Auto and teleop compare pre-match alliance EPA estimates with TBA's recorded alliance scores. Endgame is shown separately as a change in the selected team's Statbotics EPA estimate.</p>
+      {componentSeries.length===0&&!selectedComponents.includes("endgame")?<p className="mt-3 text-xs text-slate-500">Select at least one EPA component to display its match comparison.</p>:null}
       <div className="mt-3 space-y-5">{componentSeries.map((series)=><div key={series.key} className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">{series.label}</span><span className="text-[10px] text-slate-400">n={series.points.length}</span></div>
         {series.points.length?<div className="overflow-x-auto"><svg viewBox={`0 0 ${componentChartWidth} 250`} role="img" aria-label={`${series.label} alliance EPA estimates versus actual scores by match`} className="w-full min-w-[900px]">
