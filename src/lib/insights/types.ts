@@ -198,7 +198,7 @@ export type TeamSeasonComponentComparison = {
 };
 
 export type TeamSeasonComparison = {
-  priorEvent: { key: string; name: string; startDate: string };
+  priorEvent: { key: string; name: string; shortName: string; startDate: string };
   priorEPA: number;
   currentEPA: number;
   currentEpaPercentile: number | null;
