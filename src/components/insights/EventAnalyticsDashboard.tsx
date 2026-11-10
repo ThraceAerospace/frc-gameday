@@ -26,6 +26,14 @@ const ordinal = (value: number) => {
   return `${value}${suffix}`;
 };
 const percentileLabel = (value: number | null) => value === null ? "—" : ordinal(Math.round(value * 100));
+function predictionClassification(redProbability: number | null): string | null {
+  if (redProbability === null || !Number.isFinite(redProbability) || redProbability < 0 || redProbability > 1) return null;
+  if (redProbability >= 0.8) return "Strong Red";
+  if (redProbability >= 0.6) return "Lean Red";
+  if (redProbability > 0.4) return "Toss-up";
+  if (redProbability > 0.2) return "Lean Blue";
+  return "Strong Blue";
+}
 
 function allianceTeamNumbers(teamNumber: number, otherTeams: string[]): string[] {
   return [...new Set([String(teamNumber), ...otherTeams])];
@@ -346,6 +354,17 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   const anomalies=data.qualificationAnomalies??[];
   const scoreFlags=anomalies.filter((item)=>item.outsideExpectedRange);
   const highConfidenceMisses=calibration?.highConfidenceMisses??[];
+  const modelUpsets=matches.flatMap(({match,statbotics})=>{
+    const probability=statbotics?.pred?.red_win_prob;
+    const winner=match.winning_alliance;
+    if(typeof probability!=="number"||probability<0||probability>1||
+      (winner!=="red"&&winner!=="blue")||match.alliances.red.score<0||match.alliances.blue.score<0) return [];
+    const favorite=probability>=0.5?"red" as const:"blue" as const;
+    const favoriteProbability=Math.max(probability,1-probability);
+    return winner!==favorite&&favoriteProbability>=0.6
+      ?[{matchKey:match.key,matchLabel:matchShortName(match,data.event.playoff_type),favorite,favoriteProbability}]
+      :[];
+  }).sort((a,b)=>b.favoriteProbability-a.favoriteProbability);
   const fmtPct=(value:number|null|undefined)=>value===null||value===undefined?"—":(value*100).toFixed(1)+"%";
   const signed=(value:number|null)=>value===null?"—":(value>0?"+":"")+fmt(value)+" pts";
   return <div className="space-y-4">
@@ -368,6 +387,19 @@ function QualificationAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
           <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{signed(score?.meanResidual??null)}</p>
           <p className="mt-1 text-xs text-slate-500">RMSE {fmt(score?.rootMeanSquareError)} pts · separate from whether the model picked the winner.</p>
         </div>
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-100 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">Model upsets</h3>
+          <span className="text-xs text-slate-500">Favorite had at least 60% predicted win probability</span>
+        </div>
+        {modelUpsets.length ? <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+          {modelUpsets.map((item)=><li key={item.matchKey} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm">
+            <a className="font-semibold text-slate-800 hover:underline" href={"https://www.thebluealliance.com/match/"+item.matchKey} target="_blank" rel="noreferrer">{item.matchLabel}</a>
+            <span className="text-right text-xs text-slate-500">{item.favorite} favored · {fmtPct(item.favoriteProbability)} · {item.favorite==="red"?"Blue":"Red"} won</span>
+          </li>)}
+        </ul> : <p className="mt-2 text-sm text-slate-500">No completed qualification match meets the upset threshold in the available sample.</p>}
+        <p className="mt-2 text-[11px] text-slate-500">This is a probability-based upset flag, separate from score-residual anomalies. It does not imply that the model was poorly calibrated overall.</p>
       </div>
     </Panel>
     <details className="rounded-xl border border-slate-200 bg-white p-4">
@@ -416,8 +448,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     if(!played)return {label:"Not played",tone:"bg-slate-50 text-slate-400",result};
     if(!result||result.actual===null||result.predicted===null||result.residual===null)return {label:"Statbotics unavailable",tone:"bg-slate-100 text-slate-600",result};
     const prediction=data.matches.find((item)=>item.match.key===matchKey)?.statbotics?.pred?.red_win_prob;
-    const winProbability=typeof prediction==="number"?(color==="red"?prediction:1-prediction):null;
-    const predictedOutcome=winProbability===null?"Win prediction unavailable":winProbability>=0.5?"Pred. Win":"Pred. Loss";
+    const predictedOutcome=predictionClassification(typeof prediction==="number"?prediction:null)??"Win prediction unavailable";
     const outcomeTone=winProbability===null?"bg-slate-100 text-slate-600":"bg-slate-100 text-slate-700";
     if(playoff)return threshold!==null&&Math.abs(result.residual)>threshold?{label:"Anomalous Score",tone:"bg-amber-100 text-amber-800",result}:{label:predictedOutcome,tone:outcomeTone,result};
     const anomaly=data.qualificationAnomalies?.find((item)=>item.matchKey===matchKey&&item.alliance===color);
