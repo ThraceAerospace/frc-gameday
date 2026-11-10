@@ -461,7 +461,7 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
   const {match,statbotics}=record;
   const redProbability=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
   const prediction=predictionClassification(redProbability);
-  const predictedWinner=redProbability===null?null:redProbability>=0.5?"red":"blue";
+  const predictedWinner=redProbability===null||redProbability===0.5?null:redProbability>0.5?"red":"blue";
   const redScore=match.alliances.red.score,blueScore=match.alliances.blue.score;
   const completed=redScore>=0&&blueScore>=0;
   const winner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:completed&&redScore!==blueScore?(redScore>blueScore?"red":"blue"):null;
@@ -474,10 +474,13 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
     red:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.preEpaTotal??-Infinity)>=highEpaThreshold,
     blue:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.preEpaTotal??-Infinity)>=highEpaThreshold,
   };
+  const phaseResiduals=data.allianceResults.filter((item)=>item.compLevel.toLowerCase()===match.comp_level.toLowerCase()&&item.residual!==null).map((item)=>item.residual as number).sort((a,b)=>a-b);
+  const median=phaseResiduals.length%2===0?(phaseResiduals[phaseResiduals.length/2-1]+phaseResiduals[phaseResiduals.length/2])/2:phaseResiduals[Math.floor(phaseResiduals.length/2)];
+  const deviations=phaseResiduals.map((value)=>Math.abs(value-median)).sort((a,b)=>a-b);
+  const mad=deviations.length%2===0?(deviations[deviations.length/2-1]+deviations[deviations.length/2])/2:deviations[Math.floor(deviations.length/2)];
+  const anomalyBand=Math.max(20,3*1.4826*mad);
+  const anomalousScore=phaseResiduals.length>=8&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual-median)>anomalyBand);
   const qualification=match.comp_level.toLowerCase()==="qm";
-  const anomalousScore=qualification
-    ?(data.qualificationAnomalies??[]).some((item)=>item.matchKey===match.key&&item.outsideExpectedRange)
-    :data.residualStats.standardDeviation!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>2*data.residualStats.standardDeviation!);
   const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
   const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
   const largeResidual=largeResidualThreshold!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual)>=largeResidualThreshold);
@@ -543,7 +546,7 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
       <th className="py-2 pr-2 text-left align-middle">
         <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>
-        <div className="mt-1 flex flex-wrap gap-1">{matchFlags.map((flag,index)=><span key={flag.label+"-"+index} title={flag.label} className={"inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 "+flag.tone}>{flag.label}</span>)}</div>
+        {matchFlags.length?<div className="mt-1 flex flex-wrap gap-1">{matchFlags.map((flag,index)=><span key={flag.label+"-"+index} title={flag.label} className={"inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 "+flag.tone}>{flag.label}</span>)}</div>:null}
       </th>
       {allianceCell(record,"red")}{allianceCell(record,"blue")}
     </tr>;
@@ -1395,6 +1398,7 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   };
   return <Panel title="Suggested review" description="Flagged matches in event schedule order. Tabs group the matches by the reason they deserve a closer look; a match can appear in more than one group.">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{records.length} flagged matches · {data.matches.length} matches evaluated</p><a href={"https://www.thebluealliance.com/event/"+data.event.key+"#matches"} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Full event schedule ↗</a></div>
+    <p className="mb-3 text-xs leading-5 text-slate-500">Anomalous Score uses an event- and match-phase baseline: actual-minus-predicted alliance residuals outside the median ± max(20 points, 3 × 1.4826 × MAD), with at least 8 usable alliance scores in that phase. Large Residual is separate: a residual in the event-wide top decile, requiring at least 20 usable alliance scores. Model Upset means the pre-match favorite had at least 60% win probability and lost. These are review signals, not robot-level diagnoses.</p>
     <div role="tablist" aria-label="Review flags by type" className="no-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200">
       {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
     </div>
@@ -1407,7 +1411,7 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
         const videoUrl=youtube?"https://www.youtube.com/watch?v="+encodeURIComponent(youtube.key):null;
         const red=match.alliances.red,blue=match.alliances.blue;
         const reasons=flagReasons(record,summary);
-        const displayedFlags=active==="all"?summary.reviewFlags:summary.reviewFlags.filter((flag)=>flag===active);
+        const displayedFlags=summary.reviewFlags;
         return <article key={match.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-bold text-slate-950 dark:text-white">{matchShortName(match,data.event.playoff_type)}</h3>{timeLabel?<span className="text-xs tabular-nums text-slate-500">{timeLabel} <span className="text-slate-400">{timezone}</span></span>:null}</div><p className="mt-1 text-xs text-slate-500">{data.event.name}</p></div>
