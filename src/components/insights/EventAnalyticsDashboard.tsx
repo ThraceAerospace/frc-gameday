@@ -694,7 +694,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
       const values=keys.map((key)=>{
         const number=Number(key.replace(/^frc/i,""));
         const epa=record.statbotics?.pre_epas?.[String(number)]?.epa;
-        return {teamNumber:number,epa:typeof epa==="number"&&Number.isFinite(epa)&&epa>=0?epa:null,primaryColor:data.teamColors?.[String(number)]??null};
+        return {teamNumber:number,epa:typeof epa==="number"&&Number.isFinite(epa)&&epa>=0?epa:null,primaryColor:teamColors?.[String(number)]??null};
       });
       const total=values.every((item)=>item.epa!==null)?values.reduce((sum,item)=>sum+(item.epa??0),0):null;
       return values.map((item)=>({...item,share:total!==null&&total>0&&item.epa!==null?item.epa/total*100:null}));
