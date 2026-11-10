@@ -199,20 +199,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <div className="space-y-4">
-              <TeamCurrentEventOutlook analysis={matchAnalysisA} records={data.matches} teamNumber={matchAnalysisA.team} eventKey={eventKey} timezone={data.event.timezone ?? null} />
-              <TeamRiskPanel analysis={matchAnalysisA} />
-              <MatchAnalysisSummary analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} />
-              <PhasePerformancePanel analysis={matchAnalysisA} phase="qualification" />
-              <section className="rounded-xl border border-slate-200 bg-white p-4">
-                <PhasePerformancePanel analysis={matchAnalysisA} phase="elimination" />
-                <EliminationShiftPanel analysis={matchAnalysisA} />
-              </section>
-              <details className="rounded-xl border border-slate-200 bg-white">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Season charts and match-by-match evidence</summary>
-                <div className="p-4"><TeamMatchEpaLedger analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`}/></div>
-              </details>
-            </div> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} timezone={data.event.timezone ?? null} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -874,6 +861,43 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
       </div>
       <p className="mt-2 text-[10px] leading-4 text-slate-500">Each team is compared with its own most recent prior official event. EPA and component changes are model estimate updates, not measured scoring changes. Traditional ratings, comparable-alliance results, and EPA describe different aspects of performance.</p>
     </>}
+  </section>;
+}
+
+
+type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
+
+function TeamAnalysisTabs({analysis,records,eventKey,timezone,name}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;timezone:string|null;name:string}) {
+  const [activeTab,setActiveTab]=useState<TeamAnalysisTab>("qualification");
+  const tabs:{id:TeamAnalysisTab;label:string}[]=[
+    {id:"qualification",label:"Qualification Analysis"},
+    {id:"playoffs",label:"Playoff Analysis"},
+    {id:"season",label:"Season Analysis"},
+    {id:"review",label:"Team Match Review"},
+  ];
+  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
+    <div className="border-b border-slate-200 px-4 pt-4 dark:border-slate-700 sm:px-5">
+      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
+      <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
+      <div role="tablist" aria-label="Team analysis sections" className="no-scrollbar mt-3 -mb-px flex gap-1 overflow-x-auto">
+        {tabs.map((tab)=><button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab===tab.id} onClick={()=>setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors "+(activeTab===tab.id?"border-blue-600 text-blue-700 dark:text-blue-300":"border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
+      </div>
+    </div>
+    <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
+      {activeTab==="qualification"?<>
+        <TeamCurrentEventOutlook analysis={analysis} records={records} teamNumber={analysis.team} eventKey={eventKey} timezone={timezone}/>
+        <PhasePerformancePanel analysis={analysis} phase="qualification"/>
+      </>:null}
+      {activeTab==="playoffs"?<>
+        <PhasePerformancePanel analysis={analysis} phase="elimination"/>
+        <EliminationShiftPanel analysis={analysis}/>
+      </>:null}
+      {activeTab==="season"?<>
+        <MatchAnalysisSummary analysis={analysis} name={name}/>
+        <TeamMatchEpaLedger analysis={analysis} name={name}/>
+      </>:null}
+      {activeTab==="review"?<TeamRiskPanel analysis={analysis}/>:null}
+    </div>
   </section>;
 }
 
