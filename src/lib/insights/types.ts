@@ -34,6 +34,8 @@ export type TeamAnalyticsRow = {
   endgameEpa: number | null;
   matchesSeen: number;
   epaPercentile: number | null;
+  epaContributionPercent: number | null;
+  epaContributionSamples: number;
 };
 
 export type ReviewFinding = {
