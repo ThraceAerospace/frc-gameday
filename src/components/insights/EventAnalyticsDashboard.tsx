@@ -679,28 +679,24 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
     streakCount++;
   }
   const streakLabel=streakResult===null||streakCount===0?"No active streak":`${streakCount} ${streakResult?"win":"loss"}${streakCount===1?"":"s"}`;
-  const upcoming=records.flatMap((record)=>{
+  const schedule=records.flatMap((record)=>{
     const match=record.match;
-    if(match.event_key!==eventKey)return [];
+    if(match.event_key!==eventKey||match.comp_level!=="qm")return [];
     const red=match.alliances.red.team_keys.map((key)=>key.replace(/^frc/i,""));
     const blue=match.alliances.blue.team_keys.map((key)=>key.replace(/^frc/i,""));
     const alliance=red.includes(String(teamNumber))?"red":blue.includes(String(teamNumber))?"blue":null;
-    if(!alliance || match.alliances.red.score>=0 || match.alliances.blue.score>=0) return [];
-    const stat=record.statbotics as unknown as {predicted_time?:number|null;pred?:{red_score?:number|null;blue_score?:number|null;red_win_prob?:number|null}|null}|null;
-    if(!stat?.pred) return [];
-    const probability=stat.pred.red_win_prob;
+    if(!alliance)return [];
+    const played=match.alliances.red.score>=0&&match.alliances.blue.score>=0;
+    const stat=record.statbotics as unknown as {pred?:{red_score?:number|null;blue_score?:number|null;red_win_prob?:number|null}|null}|null;
+    const probability=stat?.pred?.red_win_prob;
     const teamWinProbability=typeof probability==="number"?(alliance==="red"?probability:1-probability):null;
-    return [{key:match.key,label:matchShortName(match),alliance,redTeams:red,blueTeams:blue,redScore:stat.pred.red_score??null,blueScore:stat.pred.blue_score??null,teamWinProbability,time:stat.predicted_time??match.time??null}];
-  }).sort((a,b)=>(a.time??Number.MAX_SAFE_INTEGER)-(b.time??Number.MAX_SAFE_INTEGER));
-  const formatEventTime=(timestamp:number|null)=>{
-    if(timestamp===null||!timezone)return "Time unavailable";
-    return new Intl.DateTimeFormat("en-US",{timeZone:timezone,weekday:"short",hour:"numeric",minute:"2-digit"}).format(new Date(timestamp*1000));
-  };
-  const past=[...scored].reverse().slice(0,8);
-  const estimatedShare=(match:TeamMatchRow)=>{
-    if(match.preEPA===null||match.alliancePreEPATotal===null||match.alliancePreEPATotal<=0||match.preEPA<0||match.preEPA>match.alliancePreEPATotal)return null;
-    return match.preEPA/match.alliancePreEPATotal*100;
-  };
+    const teamScore=alliance==="red"?match.alliances.red.score:match.alliances.blue.score;
+    const opponentScore=alliance==="red"?match.alliances.blue.score:match.alliances.red.score;
+    const predictedTeamScore=alliance==="red"?stat?.pred?.red_score??null:stat?.pred?.blue_score??null;
+    const predictedOpponentScore=alliance==="red"?stat?.pred?.blue_score??null:stat?.pred?.red_score??null;
+    return [{key:match.key,label:matchShortName(match),matchNumber:match.match_number,alliance,partners:alliance==="red"?red.filter((key)=>key!==String(teamNumber)):blue.filter((key)=>key!==String(teamNumber)),opponents:alliance==="red"?blue:red,played,teamScore:played?teamScore:null,opponentScore:played?opponentScore:null,predictedTeamScore,predictedOpponentScore,teamWinProbability}];
+  }).sort((a,b)=>a.matchNumber-b.matchNumber);
+  const unplayedCount=schedule.filter((match)=>!match.played).length;
   const teamAllianceClass=(alliance:"red"|"blue")=>alliance==="red"?"text-rose-700":"text-blue-700";
   const opponentAllianceClass=(alliance:"red"|"blue")=>alliance==="red"?"text-blue-700":"text-rose-700";
   const standout=(match:TeamMatchRow,label:string,tone:"win"|"loss"|"surprise",description:string)=>{
@@ -728,28 +724,30 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,timezone}
     <div className="mt-3 grid gap-2 sm:grid-cols-3">
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Event record</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{eventRecord.wins}–{eventRecord.losses}–{eventRecord.ties}</p><p className="text-[11px] text-slate-500">{scored.length} scored matches</p></div>
       <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Recent form</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{streakLabel}</p><p className="text-[11px] text-slate-500">Current consecutive result streak</p></div>
-      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Remaining schedule</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{upcoming.length}</p><p className="text-[11px] text-slate-500">Upcoming matches with model predictions</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] font-semibold text-slate-500">Unplayed matches</p><p className="mt-1 text-xl font-black tabular-nums text-slate-900">{unplayedCount}</p><p className="text-[11px] text-slate-500">Remaining qualification schedule</p></div>
     </div>
     <div className="mt-4 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Standout matches at this event</h4><p className="text-xs text-slate-500">Largest win and strongest prediction upsets in this event's completed matches</p></div>
       {highlights.length?<div className="mt-3 grid gap-3 lg:grid-cols-2">{highlights}</div>:<p className="mt-2 text-sm text-slate-500">No completed match with a standout margin or strong prediction upset is available at this event yet.</p>}
     </div>
-    <div className="mt-4 grid gap-4 xl:grid-cols-2">
-      <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Recent matches</h4>
-        {past.length?<div className="mt-2 overflow-x-auto"><table className="w-full min-w-[510px] text-xs"><thead className="text-left text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="py-2">Match</th><th>Alliance teams</th><th>Alliance score<br/>predicted → actual</th><th>Auto</th><th>Teleop</th><th>Endgame EPA Δ</th><th>EPA share*</th></tr></thead><tbody>{past.map((match)=><tr key={match.matchKey} className="border-t border-slate-100"><th className="py-2 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.matchKey}`} target="_blank" rel="noreferrer">{match.matchLabel}</a><span className={`block text-[10px] font-semibold ${match.alliance==="red"?"text-rose-700":"text-blue-700"}`}>{match.alliance==="red"?"Red":"Blue"} alliance · {match.won===null?(match.actual===match.opponentActual?"Tie":"—"):match.won?"Win":"Loss"}</span></th><td><div className="min-w-[105px] space-y-1"><p className={`font-semibold ${teamAllianceClass(match.alliance === "red" ? "red" : "blue")}`}>{allianceTeamNumbers(teamNumber,match.partners).join(" · ")}</p><p className={`font-semibold ${opponentAllianceClass(match.alliance)}`}>{match.opponents.join(" · ")}</p></div></td><td className="whitespace-nowrap tabular-nums"><span className={teamAllianceClass(match.alliance === "red" ? "red" : "blue")}>{fmt(match.predicted)}</span><span className="px-1 text-slate-400">→</span><span className={teamAllianceClass(match.alliance === "red" ? "red" : "blue")}>{fmt(match.actual)}</span></td>{(["auto","teleop"] as const).map((component)=>{const estimate=match.alliancePreComponents[`${component}_epa`];const actual=match.actualComponents[component];return <td key={component} className={`whitespace-nowrap tabular-nums ${teamAllianceClass(match.alliance === "red" ? "red" : "blue")}`}>{fmt(estimate)} → {fmt(actual)}</td>;})}<td className="whitespace-nowrap tabular-nums">{typeof match.preComponents.endgame_epa==="number"&&typeof match.postComponents.endgame_epa==="number"?<span className={match.postComponents.endgame_epa-match.preComponents.endgame_epa>=0?"text-emerald-700":"text-rose-700"}>{match.preComponents.endgame_epa.toFixed(1)} → {match.postComponents.endgame_epa.toFixed(1)} ({match.postComponents.endgame_epa-match.preComponents.endgame_epa>0?"+":""}{(match.postComponents.endgame_epa-match.preComponents.endgame_epa).toFixed(1)})</span>:"—"}</td><td><EpaShareBar share={estimatedShare(match)} alliance={match.alliance}/></td></tr>)}</tbody></table></div>:<p className="mt-2 text-sm text-slate-500">No completed matches for this team are available at this event yet.</p>}
-        <p className="mt-2 text-[10px] leading-5 text-slate-500">Predicted and actual scores are alliance totals. Auto and teleop compare alliance EPA estimates with TBA's recorded component scores. Endgame shows this team's Statbotics endgame EPA before → after the match and the change; it is an inferred model update, not measured match points. EPA share is the team's pre-match EPA divided by its alliance's combined pre-match EPA.</p>
-      </div>
-      <div className="min-w-0"><h4 className="text-sm font-semibold text-slate-800">Upcoming matches</h4>
-        {upcoming.length?<div className="mt-2 space-y-2">{upcoming.map((match)=>{
-          const close=match.teamWinProbability!==null&&Math.abs(match.teamWinProbability-0.5)<=0.15;
-          const opposing: "red" | "blue" = match.alliance === "red" ? "blue" : "red";
-          return <a key={match.key} href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-200 p-3 hover:border-slate-400">
-            <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-900">{match.label}</span><span className="text-[10px] text-slate-500">{formatEventTime(match.time)} · event time</span></div>
-            <div className="mt-2 space-y-1 text-xs"><p className="font-semibold text-rose-700">{match.redTeams.join(" · ")}</p><p className="font-semibold text-blue-700">{match.blueTeams.join(" · ")}</p></div><div className="mt-2 flex items-center justify-between gap-3 text-sm"><span className={`font-bold tabular-nums ${teamAllianceClass(match.alliance === "red" ? "red" : "blue")}`}>{match.alliance==="red"?"RED":"BLUE"} · {match.alliance==="red"?fmt(match.redScore):fmt(match.blueScore)}</span><span className="text-slate-400">vs</span><span className={`font-bold tabular-nums ${teamAllianceClass(opposing)}`}>{opposing.toUpperCase()} · {match.alliance==="red"?fmt(match.blueScore):fmt(match.redScore)}</span></div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Team alliance win probability: {match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</span><span className="font-semibold text-slate-600">{predictionClassification(match.alliance==="red"?match.teamWinProbability===null?null:match.teamWinProbability:match.teamWinProbability===null?null:1-match.teamWinProbability)??"Prediction unavailable"}</span><span className={close?"font-semibold text-amber-700":"text-slate-500"}>{close?"Closest projected matchup":"Model projection"}</span></div>
-          </a>;
-        })}</div>:<p className="mt-2 text-sm text-slate-500">No upcoming match with a published Statbotics prediction is available at this event.</p>}
-        <p className="mt-2 text-[10px] leading-5 text-slate-500">Projected scores and win probability are alliance-level Statbotics predictions. A close matchup means the model sees a relatively even contest; it does not establish tournament or ranking-point importance.</p>
-      </div>
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Qualification match schedule</h4><p className="text-xs text-slate-500">Completed results and remaining matchups, in match order</p></div>
+      {schedule.length?<div className="mt-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[680px] text-xs">
+        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Match</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Alliance</th><th className="px-3 py-2.5">Partners</th><th className="px-3 py-2.5">Opponents</th><th className="px-3 py-2.5">Score · team–opponents</th><th className="px-3 py-2.5">Win probability</th></tr></thead>
+        <tbody>{schedule.map((match)=>{
+          const allianceClass=teamAllianceClass(match.alliance);
+          const result=match.played?(match.teamScore??0)>(match.opponentScore??0)?"Win":(match.teamScore??0)<(match.opponentScore??0)?"Loss":"Tie":null;
+          return <tr key={match.key} className="border-t border-slate-100 align-middle">
+            <th className="whitespace-nowrap px-3 py-2.5 text-left"><a className="font-semibold text-slate-800 hover:underline" href={`https://www.thebluealliance.com/match/${match.key}`} target="_blank" rel="noreferrer">{match.label} ↗</a></th>
+            <td className="whitespace-nowrap px-3 py-2.5">{match.played?<span className="font-semibold text-slate-700">Played · <span className={result==="Win"?"text-emerald-700":result==="Loss"?"text-rose-700":"text-slate-600"}>{result}</span></span>:<span className="rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-900">Unplayed</span>}</td>
+            <td className={`whitespace-nowrap px-3 py-2.5 font-bold uppercase ${allianceClass}`}>{match.alliance}</td>
+            <td className={`whitespace-nowrap px-3 py-2.5 font-semibold ${allianceClass}`}>{match.partners.join(" · ")||"—"}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-600">{match.opponents.join(" · ")}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.played?<><span className={allianceClass}>{fmt(match.teamScore,0)}</span><span className="px-1 text-slate-400">–</span><span className="text-slate-600">{fmt(match.opponentScore,0)}</span>{match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="ml-2 text-[10px] text-slate-400">(pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)})</span>:null}</>:match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="text-slate-600">Pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span>:<span className="text-slate-400">No prediction available</span>}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.teamWinProbability===null?"—":(match.teamWinProbability*100).toFixed(0)+"%"}</td>
+          </tr>;
+        })}</tbody>
+      </table></div>:<p className="mt-2 text-sm text-slate-500">No qualification matches for this team are available in the event schedule.</p>}
+      <p className="mt-2 text-[10px] leading-5 text-slate-500">Scores are shown from this team's alliance perspective. Played matches show actual scores and, when available, the pre-match Statbotics projection in parentheses. Unplayed matches stay in the same schedule and show a projection when one is published. Win probability is the model's pre-match estimate for this team's alliance, not an observed performance metric.</p>
     </div>
 
   </section>;
