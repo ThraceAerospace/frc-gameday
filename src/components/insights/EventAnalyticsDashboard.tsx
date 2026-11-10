@@ -974,7 +974,11 @@ function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAna
 }
 
 function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:string}) {
-  const matches=[...analysis.matches].sort((a,b)=>a.event.startDate.localeCompare(b.event.startDate)||a.event.key.localeCompare(b.event.key)||a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
+  const [phaseFilter,setPhaseFilter]=useState<"all"|"qualification"|"playoffs">("all");
+  const [selectedComponents,setSelectedComponents]=useState<Array<"auto"|"teleop"|"endgame">>(["auto","teleop","endgame"]);
+  const allMatches=[...analysis.matches].sort((a,b)=>a.event.startDate.localeCompare(b.event.startDate)||a.event.key.localeCompare(b.event.key)||a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
+  const matches=allMatches.filter((match)=>phaseFilter==="all"||
+    (phaseFilter==="qualification"?match.compLevel.toLowerCase()==="qm":["ef","qf","sf","f"].includes(match.compLevel.toLowerCase())));
   const epaValues=matches.flatMap((m)=>[m.preEPA,m.postEPA]).filter((v):v is number=>v!==null);
   const epaMin=Math.min(0,...epaValues), epaMax=Math.max(1,...epaValues);
   const epaRange=Math.max(1,epaMax-epaMin);
@@ -982,9 +986,12 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
   const y=(v:number)=>214-(v-epaMin)/epaRange*166;
   const residuals=matches.filter((m)=>m.residual!==null);
   const residualMax=Math.max(1,...residuals.map((m)=>Math.abs(m.residual??0)));
-  const componentRows=[{key:"auto_epa",actual:"auto",label:"Auto"},{key:"teleop_epa",actual:"teleop",label:"Teleop"}];
+  const componentRows=[
+    {key:"auto_epa",actual:"auto",label:"Auto",id:"auto" as const},
+    {key:"teleop_epa",actual:"teleop",label:"Teleop",id:"teleop" as const},
+  ].filter((row)=>selectedComponents.includes(row.id));
   const componentSeries=componentRows.map((row)=>({...row,points:matches.flatMap((m,i)=>{const estimate=m.alliancePreComponents[row.key],actual=m.actualComponents[row.actual];return typeof estimate==="number"&&typeof actual==="number"?[{i,estimate,actual,match:m}]:[];})}));
-  const endgameSeries=matches.flatMap((match)=>{const before=match.preComponents.endgame_epa,after=match.postComponents.endgame_epa;return typeof before==="number"&&typeof after==="number"?[{match,before,after,delta:after-before}]:[];});
+  const endgameSeries=selectedComponents.includes("endgame")?matches.flatMap((match)=>{const before=match.preComponents.endgame_epa,after=match.postComponents.endgame_epa;return typeof before==="number"&&typeof after==="number"?[{match,before,after,delta:after-before}]:[]}):[];
   const eventGroups=matches.reduce<{key:string;label:string;items:{match:TeamMatchRow;index:number}[]}[]>((groups,match,index)=>{
     let group=groups[groups.length-1];
     if(!group||group.key!==match.event.key){group={key:match.event.key,label:match.event.name,items:[]};groups.push(group);}
@@ -994,7 +1001,11 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
   const allianceColor=(alliance:"red"|"blue")=>alliance==="red"?"#e11d48":"#2563eb";
   const componentChartWidth=Math.max(900,componentSeries.reduce((max,s)=>Math.max(max,s.points.length*54+80),900));
   return <section className="min-w-0 rounded-xl border border-slate-200 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">{name}</h3><p className="text-xs text-slate-500">Season match analysis · {matches.length} matches across {analysis.eventCount} events</p></div><a className="text-xs font-semibold text-slate-600 hover:underline" href={`https://www.thebluealliance.com/team/${analysis.team}/${analysis.year}`} target="_blank" rel="noreferrer">TBA history ↗</a></div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">{name}</h3><p className="text-xs text-slate-500">Season match analysis · {matches.length} of {allMatches.length} matches shown across {analysis.eventCount} events</p></div><a className="text-xs font-semibold text-slate-600 hover:underline" href={`https://www.thebluealliance.com/team/${analysis.team}/${analysis.year}`} target="_blank" rel="noreferrer">TBA history ↗</a></div>
+    <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 p-3">
+      <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Match phase</p><div className="flex flex-wrap gap-1">{([{id:"all",label:"All"},{id:"qualification",label:"Qualifications"},{id:"playoffs",label:"Playoffs"}] as const).map((option)=><button key={option.id} type="button" aria-pressed={phaseFilter===option.id} onClick={()=>setPhaseFilter(option.id)} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold ${phaseFilter===option.id?"border-blue-300 bg-blue-100 text-blue-800":"border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>{option.label}</button>)}</div></div>
+      <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">EPA components</p><div className="flex flex-wrap gap-1">{([{id:"auto",label:"Auto"},{id:"teleop",label:"Teleop"},{id:"endgame",label:"Endgame"}] as const).map((option)=><button key={option.id} type="button" aria-pressed={selectedComponents.includes(option.id)} onClick={()=>setSelectedComponents((current)=>current.includes(option.id)?current.filter((item)=>item!==option.id):[...current,option.id])} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold ${selectedComponents.includes(option.id)?"border-teal-300 bg-teal-50 text-teal-800":"border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>{option.label}</button>)}</div></div>
+    </div>
     <div className="mt-4 rounded-lg border border-slate-100 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-800">EPA progression</h4><p className="text-[11px] text-slate-500">Every point is labeled by match; vertical dividers mark event changes. Pre-match is dashed gray; post-match markers use the team's alliance color for that match.</p></div><div className="flex gap-3 text-[11px]"><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-slate-400"/>Pre-match</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-slate-700"/>Post-match</span></div></div>
       <div className="mt-2 overflow-x-auto"><svg viewBox={`0 0 900 ${matches.length>18?310:270}`} role="img" aria-label={`${name} EPA progression across ${matches.length} matches`} className="w-full min-w-[900px] overflow-visible">
@@ -1023,6 +1034,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
     </div>
     <div className="mt-3 rounded-lg border border-slate-100 p-3">
       <h4 className="text-sm font-semibold text-slate-800">Alliance component estimates vs actual</h4>
+      <p className="mt-1 text-[10px] text-slate-500">Select any combination of Auto, Teleop, and Endgame above. Phase selection filters all match-based charts and records.</p>
       <p className="text-[11px] text-slate-500">Auto and teleop compare pre-match alliance EPA estimates with TBA's recorded alliance scores. Endgame is shown separately as a change in the selected team's Statbotics EPA estimate.</p>
       <div className="mt-3 space-y-5">{componentSeries.map((series)=><div key={series.key} className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">{series.label}</span><span className="text-[10px] text-slate-400">n={series.points.length}</span></div>
