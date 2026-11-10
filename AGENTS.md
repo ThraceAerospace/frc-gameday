@@ -418,3 +418,18 @@ Add appropriate tests for shared calculations and reusable components. Changes t
 - If navigation genuinely needs contextual information, derive it from the current route or pass the smallest already-available value. Do not introduce a full event-list fetch for navigation state.
 - Keep page-specific collections local to the page that uses them. Do not pass unused data through shared layout components.
 
+## Explicit authorization required for new page data fetches
+
+**No agent may add a data fetch to any page without explicit authorization from the user. This is a hard requirement.**
+
+- Do not add a new TBA, Statbotics, database, Redis, internal API, external API, or other data request to a page or page-specific data-loading path unless the user has explicitly authorized that fetch.
+- This applies whether the request is made directly by a Server Component, through a helper/service, in a client effect or hook, or indirectly through a shared layout or component.
+- Before proposing or implementing a new fetch, inspect the page's existing data flow and determine whether the required data is already available through an existing snapshot, service result, cache, or shared state.
+- Never add a broad collection fetch (for example, `TBA.getEvents(year)`) merely to supply navigation, shared layout, or unrelated page context. Fetch only the narrow resource the page actually needs, and only when that fetch has been explicitly authorized.
+- Reusing, relocating, or refactoring an existing authorized fetch is not permission to introduce additional upstream requests or expand its scope.
+- If a feature appears to require new data acquisition, stop before changing code and ask the user for explicit authorization. Explain the proposed source, scope, trigger/frequency, and why existing data flows cannot satisfy the requirement.
+- Do not interpret a general feature request, bug report, or instruction to improve a page as authorization to add new data fetching. Authorization must specifically cover the proposed fetch.
+- When authorized, keep acquisition in the appropriate shared service/data layer, preserve existing caching and freshness rules, and avoid duplicating requests across pages or components.
+
+This rule applies to all agents and all future work. Existing page fetches may be maintained or corrected; this requirement governs adding new fetches.
+
