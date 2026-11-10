@@ -780,16 +780,18 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
               const allianceTone=color==="red"?"text-rose-700":"text-blue-700";
               return <td key={color} className="min-w-[230px] px-3 py-2.5 align-top">
                 {total!==null&&total>0&&teams.every((item)=>item.share!==null)?<>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] leading-5 tabular-nums">
+                    {teams.map((item,index)=><div key={item.teamNumber} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <Link href={`/team/${item.teamNumber}`} className={`inline-flex items-center gap-1 font-bold hover:underline ${allianceTone}`}><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor:segmentColors[index]}}/><span>{item.teamNumber}</span></Link>
+                      <span className="font-semibold text-slate-600">{fmt(item.share)}%</span>
+                      <span className="text-slate-500">EPA {fmt(item.epa)}</span>
+                    </div>)}
+                  </div>
                   <div className="flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label={`${color} alliance total EPA ${fmt(total)}`}>
                     {teams.map((item,index)=><div key={item.teamNumber} title={`Team ${item.teamNumber}: ${fmt(item.epa)} EPA · ${fmt(item.share)}% of alliance EPA`} style={{width:`${item.share}%`,backgroundColor:segmentColors[index]}} className="h-full min-w-0 border-r border-white/50 last:border-r-0"/>)}
                   </div>
-                  <div className="mt-2 space-y-1">{teams.map((item,index)=><div key={item.teamNumber} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 text-[11px] leading-5 tabular-nums">
-                    <Link href={`/team/${item.teamNumber}`} className={`flex min-w-0 items-center gap-1.5 font-bold hover:underline ${allianceTone}`}><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor:segmentColors[index]}}/><span>{item.teamNumber}</span></Link>
-                    <span className="text-right font-semibold text-slate-600">{fmt(item.share)}%</span>
-                    <span className="whitespace-nowrap text-right text-slate-500">EPA {fmt(item.epa)}</span>
-                  </div>)}</div>
                   <p className="mt-1.5 text-[10px] font-semibold tabular-nums text-slate-500">Alliance EPA {fmt(total)}</p>
-                </>:<>
+                                </>:<>
                   <div className={`flex flex-wrap gap-x-2 gap-y-1 font-bold tabular-nums ${allianceTone}`}>{teams.map((item)=><Link key={item.teamNumber} href={`/team/${item.teamNumber}`} className="hover:underline">{item.teamNumber}</Link>)}</div>
                   <p className="mt-2 text-[10px] text-slate-400">Pre-match team EPA unavailable for this alliance.</p>
                 </>}
