@@ -526,9 +526,9 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
     const darkAllianceFlag=color==="red"?"bg-rose-800 text-white dark:bg-rose-700":"bg-blue-800 text-white dark:bg-blue-700";
     const lightAllianceFlag=color==="red"?"bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200":"bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200";
     return <td key={color} className="py-1.5 pr-2 align-middle"><div className={"grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 "+(isWinner?winnerSurface:regularSurface)}>
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-col justify-end">
         {officialAllianceName(alliance.team_keys)?<p className={"mb-0.5 text-[10px] font-bold "+(color==="red"?"text-rose-800 dark:text-rose-200":"text-blue-800 dark:text-blue-200")}>{officialAllianceName(alliance.team_keys)}</p>:null}
-        <div className={"flex min-w-0 flex-wrap gap-x-1.5 text-sm font-bold tabular-nums "+allianceTone}>{alliance.team_keys.map((key)=><span key={key}>{teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)}</span>)}</div>
+        <div className={"flex min-w-0 flex-wrap gap-x-1.5 text-xl font-bold leading-6 tabular-nums "+allianceTone}>{alliance.team_keys.map((key)=><span key={key}>{teams.has(key)?String(teams.get(key)!.teamNumber):formatTeamNumber(key)}</span>)}</div>
       </div>
       <div className="grid min-w-0 grid-cols-4 gap-1 border-l border-slate-200/70 pl-2 text-center dark:border-slate-700">
         <div className="min-w-0"><p className="truncate text-[8px] uppercase tracking-tight text-slate-500 dark:text-slate-400">Win Chance</p><strong className="block truncate text-sm font-semibold leading-5 tabular-nums text-slate-700 dark:text-slate-200">{typeof record.statbotics?.pred?.red_win_prob==="number"?Math.round((color==="red"?record.statbotics.pred.red_win_prob:1-record.statbotics.pred.red_win_prob)*100)+"%":"—"}</strong></div>
