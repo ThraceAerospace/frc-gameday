@@ -647,7 +647,7 @@ function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
   });
 }
 
-function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContributionPercent,epaContributionSamples,teamColors}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;epaContributionPercent:number|null;epaContributionSamples:number;teamColors:EventAnalyticsResponse["teamColors"]}) {{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string}) {
+function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContributionPercent,epaContributionSamples,teamColors}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];teamNumber:number;eventKey:string;epaContributionPercent:number|null;epaContributionSamples:number;teamColors:EventAnalyticsResponse["teamColors"]}) {
   const currentMatches=analysis.matches.filter((match)=>match.event.key===eventKey&&match.compLevel==="qm");
   const ordered=[...currentMatches].sort((a,b)=>a.matchKey.localeCompare(b.matchKey,undefined,{numeric:true}));
   const scored=ordered.filter((match)=>match.actual!==null&&match.opponentActual!==null);
