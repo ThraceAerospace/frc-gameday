@@ -642,7 +642,7 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
   </Panel>;
 }
 
-function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
+function resolveTeamSegmentColors(teams:{primaryColor:string|null;secondaryColor:string|null}[]):string[] {
   // These bars and swatches render on white/slate-50 surfaces. Reject provider
   // colors that blend into either surface before checking team-to-team contrast.
   const fallback=["#0F766E","#7C3AED","#B45309"];
@@ -661,18 +661,18 @@ function resolveTeamSegmentColors(teams:{primaryColor:string|null}[]):string[] {
     const values=[luminance(color),luminance(background)].sort((a,b)=>b-a);
     return (values[0]+0.05)/(values[1]+0.05)>=3;
   });
-  const raw=teams.map((team)=>team.primaryColor&&/^#[0-9a-f]{6}$/i.test(team.primaryColor)?team.primaryColor.toUpperCase():null);
-  const needsFallback=raw.map((color,index)=>!color||!contrastsWithSurface(color)||raw.some((other,otherIndex)=>otherIndex!==index&&other!==null&&distance(color,other)<95));
-  const used=raw.flatMap((color,index)=>color&&!needsFallback[index]?[color]:[]);
-  const resolved=raw.map((color,index)=>{
-    if(!needsFallback[index])return color!;
-    const candidate=fallback.find((choice)=>contrastsWithSurface(choice)&&used.every((existing)=>distance(choice,existing)>=95));
-    if(!candidate)return null;
-    used.push(candidate);
-    return candidate;
+  const valid=(color:string|null)=>color&&/^#[0-9a-f]{6}$/i.test(color)?color.toUpperCase():null;
+  const used:string[]=[];
+  const resolved=teams.map((team)=>{
+    // Prefer the team's primary; try its secondary only when primary is
+    // missing, low-contrast, or too similar to an already assigned segment.
+    const candidate=[valid(team.primaryColor),valid(team.secondaryColor)].find((color):color is string=>
+      color!==null&&contrastsWithSurface(color)&&used.every((existing)=>distance(color,existing)>=95));
+    if(candidate)used.push(candidate);
+    return candidate??null;
   });
   // A fixed, high-contrast palette is safer than rendering a provider color
-  // that disappears against the active alliance cell background.
+  // that disappears against the alliance cell background.
   return resolved.some((color)=>color===null)?fallback:resolved as string[];
 }
 
@@ -723,7 +723,7 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
       const values=keys.map((key)=>{
         const number=Number(key.replace(/^frc/i,""));
         const epa=record.statbotics?.pre_epas?.[String(number)]?.epa;
-        return {teamNumber:number,epa:typeof epa==="number"&&Number.isFinite(epa)&&epa>=0?epa:null,primaryColor:teamColors?.[String(number)]??null};
+        return {teamNumber:number,epa:typeof epa==="number"&&Number.isFinite(epa)&&epa>=0?epa:null,primaryColor:teamColors?.[String(number)]?.primaryHex??null,secondaryColor:teamColors?.[String(number)]?.secondaryHex??null};
       });
       const total=values.every((item)=>item.epa!==null)?values.reduce((sum,item)=>sum+(item.epa??0),0):null;
       return values.map((item)=>({...item,share:total!==null&&total>0&&item.epa!==null?item.epa/total*100:null}));
