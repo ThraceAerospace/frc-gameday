@@ -437,3 +437,14 @@ Add appropriate tests for shared calculations and reusable components. Changes t
 
 This rule applies to all agents and all future work. Existing page fetches may be maintained or corrected; this requirement governs adding new fetches.
 
+## Match flags and Suggested Review presentation
+
+- Keep alliance-level and match-level indicators separate. Inside each alliance panel, show only applicable alliance flags: **Win** (dark alliance color), **Predicted Win** (light alliance color), and **High Alliance EPA** (shared amber review color). Do not render placeholder badges for unavailable or inapplicable states.
+- The match-flags row owns the five-band election-style win-probability classification (Strong Red, Lean Red, Toss-up, Lean Blue, Strong Blue) and match-level review flags. Use the five red-to-blue classification colors for the probability label; use the shared amber highlight color for review flags.
+- **Model Upset** means a completed match where the pre-match favorite had at least 60% win probability and lost.
+- **Anomalous Score** means an alliance actual-minus-predicted residual outside the match-phase event baseline of median ± max(20 points, 3 × 1.4826 × MAD), requiring at least eight usable alliance residuals in that phase. This is an event-relative review signal, not a model-provided confidence interval.
+- **Large Residual** is distinct from Anomalous Score: an absolute alliance residual in the event-wide top decile, requiring at least 20 usable alliance residuals.
+- **High Alliance EPA** marks an alliance whose combined pre-match EPA estimate is in the top quartile of available alliance estimates, with at least eight usable estimates. It is a strength indicator, not an anomaly.
+- **High Penalties** uses the existing qualification penalty outlier rule and remains alliance-level; do not attribute penalty points to an individual robot.
+- Suggested Review contains flagged matches, sorted by scheduled match time in the event timezone (then competition-level/match-number fallback). Group the same matches into tabs by flag type; a match with multiple flags may appear in multiple tabs. Each card should retain all of its applicable flags, show both alliances and scores, and expose the match/video links without a reviewed/dismissed workflow.
+- Do not add data acquisition for this presentation. Derive flags from the existing event analytics response and its current match/video fields.
