@@ -779,14 +779,20 @@ function TeamCurrentEventOutlook({analysis,records,teamNumber,eventKey,epaContri
               const total=teams.every((item)=>item.epa!==null)?teams.reduce((sum,item)=>sum+(item.epa??0),0):null;
               const allianceTone=color==="red"?"text-rose-700":"text-blue-700";
               return <td key={color} className="min-w-[230px] px-3 py-2.5 align-top">
-                <div className={`flex flex-wrap gap-x-2 gap-y-1 font-bold tabular-nums ${allianceTone}`}>{teams.map((item)=><Link key={item.teamNumber} href={`/team/${item.teamNumber}`} className="hover:underline">{item.teamNumber}</Link>)}</div>
                 {total!==null&&total>0&&teams.every((item)=>item.share!==null)?<>
-                  <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label={`${color} alliance total EPA ${fmt(total)}`}>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label={`${color} alliance total EPA ${fmt(total)}`}>
                     {teams.map((item,index)=><div key={item.teamNumber} title={`Team ${item.teamNumber}: ${fmt(item.epa)} EPA · ${fmt(item.share)}% of alliance EPA`} style={{width:`${item.share}%`,backgroundColor:segmentColors[index]}} className="h-full min-w-0 border-r border-white/50 last:border-r-0"/>)}
                   </div>
-                  <div className="mt-1.5 grid grid-cols-3 gap-1">{teams.map((item,index)=><div key={item.teamNumber} className="min-w-0 text-[10px] leading-4"><p className="flex items-center gap-1 truncate font-bold tabular-nums text-slate-700"><span className="h-2 w-2 shrink-0 rounded-sm" style={{backgroundColor:segmentColors[index]}}/>#{item.teamNumber}</p><p className="tabular-nums text-slate-600">{fmt(item.share)}%</p><p className="tabular-nums text-slate-400">EPA {fmt(item.epa)}</p></div>)}</div>
-                  <p className="mt-1 text-[10px] font-semibold tabular-nums text-slate-500">Alliance EPA {fmt(total)}</p>
-                </>:<p className="mt-2 text-[10px] text-slate-400">Pre-match team EPA unavailable for this alliance.</p>}
+                  <div className="mt-2 space-y-1">{teams.map((item,index)=><div key={item.teamNumber} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 text-[11px] leading-5 tabular-nums">
+                    <Link href={`/team/${item.teamNumber}`} className={`flex min-w-0 items-center gap-1.5 font-bold hover:underline ${allianceTone}`}><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor:segmentColors[index]}}/><span>{item.teamNumber}</span></Link>
+                    <span className="text-right font-semibold text-slate-600">{fmt(item.share)}%</span>
+                    <span className="whitespace-nowrap text-right text-slate-500">EPA {fmt(item.epa)}</span>
+                  </div>)}</div>
+                  <p className="mt-1.5 text-[10px] font-semibold tabular-nums text-slate-500">Alliance EPA {fmt(total)}</p>
+                </>:<>
+                  <div className={`flex flex-wrap gap-x-2 gap-y-1 font-bold tabular-nums ${allianceTone}`}>{teams.map((item)=><Link key={item.teamNumber} href={`/team/${item.teamNumber}`} className="hover:underline">{item.teamNumber}</Link>)}</div>
+                  <p className="mt-2 text-[10px] text-slate-400">Pre-match team EPA unavailable for this alliance.</p>
+                </>}
               </td>;
             })}
             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{match.played?<><span className={allianceClass}>{fmt(match.teamScore,0)}</span><span className="px-1 text-slate-400">–</span><span className="text-slate-600">{fmt(match.opponentScore,0)}</span>{match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="ml-2 text-[10px] text-slate-400">(pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)})</span>:null}</>:match.predictedTeamScore!==null&&match.predictedOpponentScore!==null?<span className="text-slate-600">Pred. {fmt(match.predictedTeamScore,0)}–{fmt(match.predictedOpponentScore,0)}</span>:<span className="text-slate-400">No prediction available</span>}</td>
