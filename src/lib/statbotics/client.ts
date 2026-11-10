@@ -9,7 +9,6 @@ import type {
 // TEMPORARY DEMO OVERRIDE: revert to api.statbotics.io when the official API is reliable.
 const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
 const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
-const STATBOTICS_DATA_TTL_SECONDS = 365 * 24 * 60 * 60;
 const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
 const TEAM_YEAR_FALLBACK_TTL_SECONDS = 10 * 60;
 const TEAM_EVENT_FALLBACK_TTL_SECONDS = 24 * 60 * 60;
@@ -56,10 +55,10 @@ function getEffectiveTtlSeconds(
   fallbackTtlSeconds: number,
 ): number {
   const upstreamMaxAge = getMaxAge(cacheControl);
-  // Statbotics model records are treated as snapshots in this prototype.
-  // Keep them until an explicit user refresh rather than silently refreshing
-  // historical event data whenever the upstream max-age expires.
-  return Math.max(STATBOTICS_DATA_TTL_SECONDS, upstreamMaxAge ?? fallbackTtlSeconds);
+  // Use the upstream freshness when supplied, otherwise the endpoint fallback.
+  // The shared request floor prevents refresh storms without freezing live-season
+  // match collections and team-event records for an entire year.
+  return Math.max(MIN_REQUEST_INTERVAL_SECONDS, upstreamMaxAge ?? fallbackTtlSeconds);
 }
 
 function parseCached<T>(raw: string): CachedResponse<T> | null {
@@ -297,22 +296,23 @@ export class StatboticsClient {
       // Failed refreshes are throttled too. Preserve stale data if available,
       // and otherwise retain a short negative entry to prevent retry storms.
       const failedAt = Date.now();
+      const retryTtlSeconds = Math.max(MIN_REQUEST_INTERVAL_SECONDS, options.fallbackTtlSeconds);
       const failedEntry: CachedResponse<T> = fallback
         ? {
             ...fallback,
             lastRefreshAt: failedAt,
-            expiresAt: failedAt + STATBOTICS_DATA_TTL_SECONDS * 1000,
+            expiresAt: failedAt + retryTtlSeconds * 1000,
           }
         : {
             data: null,
             etag: null,
             fetchedAt: failedAt,
             lastRefreshAt: failedAt,
-            expiresAt: failedAt + STATBOTICS_DATA_TTL_SECONDS * 1000,
+            expiresAt: failedAt + retryTtlSeconds * 1000,
           };
-      // Keep negative cache entries for the same long lifetime as successful
-      // historical snapshots. Manual refresh bypasses this cache explicitly.
-      await writeCache(endpoint, failedEntry, STATBOTICS_DATA_TTL_SECONDS);
+      // Preserve stale data on failure, but retry after a bounded cooldown.
+      // Negative cache entries must not suppress recovery for a year.
+      await writeCache(endpoint, failedEntry, retryTtlSeconds);
       if (fallback) return fallback.data;
       throw error;
     } finally {
