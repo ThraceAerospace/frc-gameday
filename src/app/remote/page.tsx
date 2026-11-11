@@ -18,6 +18,7 @@ function createId() {
 export default function RemotePage() {
   const sessionController = useTileSurfaceController({ events: [] });
   const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [displays, setDisplays] = useState<DisplaySession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -77,9 +78,12 @@ export default function RemotePage() {
               maxLength={6}
               placeholder="000000"
               aria-label="Display pairing code"
-              className="mt-3 w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-white/30"
+              aria-invalid={Boolean(codeError)}
+              aria-describedby={codeError ? "display-code-error" : undefined}
+              className="mt-3 w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-[var(--fv-brand)]"
             />
-            <button type="submit" disabled={codeInput.length !== 6} className="mt-3 w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-30">Connect display</button>
+            {codeError ? <p id="display-code-error" role="alert" className="mt-2 text-xs text-[var(--fv-review)]">{codeError}</p> : null}
+            <button type="submit" className="mt-3 w-full rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--fv-brand-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fv-brand)]">Connect display</button>
           </form>
 
           <section className="space-y-2">
