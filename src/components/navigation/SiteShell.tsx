@@ -36,7 +36,7 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={`site-theme ${darkMode ? "site-theme-dark" : "site-theme-light"} flex h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--fv-surface)] text-[var(--fv-text)]`}>
       <header className="z-40 shrink-0 border-b border-[var(--fv-border)] bg-[var(--fv-surface-raised)]/95 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-[1600px] min-w-0 items-center gap-3 px-4 lg:px-6">
+        <div className="flex h-16 w-full min-w-0 items-center gap-3 px-4 lg:px-6">
           <button
             type="button"
             aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -66,7 +66,7 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
 
         {mobileMenuOpen && (
           <nav id="mobile-navigation" aria-label="Mobile navigation" className="border-t border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-3 md:hidden">
-            <div className="mx-auto grid max-w-[1600px] grid-cols-2 gap-1">
+            <div className="grid w-full grid-cols-2 gap-1">
               <MobileNavLink href="/events" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Events</MobileNavLink>
               <MobileNavLink href="/teams" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Teams</MobileNavLink>
               <MobileNavLink href="/districts" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Districts</MobileNavLink>
@@ -78,7 +78,7 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      <main data-scroll-container className="mx-auto min-h-0 w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
+      <main data-scroll-container className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
     </div>
   );
 }
