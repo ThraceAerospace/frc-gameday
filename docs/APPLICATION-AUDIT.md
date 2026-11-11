@@ -1050,3 +1050,12 @@ After loading a team's season event list, `src/app/team/[team]/page.tsx` uses `P
 This differs from the selected-team match-analysis route, which at least bounds event schedule and match-row concurrency. The team page has no equivalent limit or per-event outcome collection.
 
 **Action:** bound event-section concurrency and collect per-event results independently. Preserve completed sections when one event's optional resource fails, expose which resource/event is incomplete, and keep a reasonable cap on concurrent TBA requests during cold-cache team-page loads. Add tests with many events and one failing optional request, verifying that request concurrency remains bounded and successful sections still render.
+
+
+### FV-AUD-096 — Qualification model-upset flags are derived in the dashboard instead of the analytics service
+
+**Severity: Low / analytical calculation ownership and consistency**
+
+`QualificationAnalysisPanel` in `EventAnalyticsDashboard.tsx` derives the `modelUpsets` list directly in the browser by reading each match's Statbotics `red_win_prob`, choosing the favorite alliance, calculating the favorite probability, comparing it with the 60% upset threshold, and checking the winning alliance. This is an analytical classification rather than display-only formatting. It is separate from the server-provided 80% `highConfidenceMisses` list and from the Suggested Review client calculations tracked in FV-AUD-014. Keeping this threshold and classification in the dashboard makes the result unavailable to other consumers and creates another place where probability validation and upset semantics can diverge.
+
+**Action:** calculate the 60% model-upset classification in the server-side EventAnalytics service, return a typed list with match key, favored alliance, favored probability, and actual winner, and have the dashboard render that result. Share the same probability-boundary validation used by other Statbotics-derived calculations. Add tests for 50/50, exactly 60%, below/above threshold, invalid probabilities, and each winning alliance.
