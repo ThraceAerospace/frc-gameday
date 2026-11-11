@@ -125,6 +125,9 @@
   --fv-tile-brand-glow: rgb(167 139 232 / 14%);
   --fv-tile-text: var(--fv-neutral-muted-dark);
   --fv-tile-surface: #000000;
+  --fv-insights-surface: #07090d;
+  --fv-alliance-red-surface: #1a0b0d;
+  --fv-alliance-blue-surface: #091321;
 
   --tracked-accent: var(--fv-brand);
 }
