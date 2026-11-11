@@ -265,7 +265,7 @@ function TabLink({
       aria-current={selected ? "page" : undefined}
       className={`border-b-2 px-1 py-3 text-sm font-semibold ${
         selected
-          ? "border-[#7656C9] text-[#5D3FB1]"
+          ? "border-[#7656C9] text-[var(--fv-brand-strong)]"
           : "border-transparent text-slate-500 hover:text-slate-800"
       }`}
     >

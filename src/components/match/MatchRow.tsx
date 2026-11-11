@@ -92,7 +92,7 @@ export default function MatchRow({
         <div>
           <Link
             href={`/event/${eventKey}/match/${match.key}`}
-            className={`font-semibold text-slate-900 hover:text-[#7656C9] ${compact ? "whitespace-nowrap text-xs" : ""}`}
+            className={`font-semibold text-slate-900 hover:text-[var(--fv-brand)] ${compact ? "whitespace-nowrap text-xs" : ""}`}
           >
             {compact
               ? matchShortName(match, playoffType)
