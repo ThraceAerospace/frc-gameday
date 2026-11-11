@@ -166,14 +166,14 @@ The repository currently has no top-level `src/types/` directory and has establi
 
 - [x] Add `npm test` using Node's built-in test runner; this avoids introducing a second test framework before the first contracts are mapped.
 - [x] Add AST-based architecture checks that prevent application/component modules from importing low-level TBA/Statbotics clients and prevent raw generated provider schemas from bypassing their application type adapters.
-- [x] Add deterministic unit coverage for the pure TBA match helpers: played/scored state, time selection, stable sorting without input mutation, next/last match selection, and team filtering.\n- [x] Inventory existing component-local type declarations and add an AST guard that prevents new declarations or additions to the legacy baseline; migrate existing declarations into central types in deliberate, test-backed steps.
+- [x] Add deterministic unit coverage for the pure TBA match helpers: played/scored state, time selection, stable sorting without input mutation, next/last match selection, and team filtering.\n- [x] Add analytics calculation tests for population statistics, alliance result provenance, missing-value semantics, and three-team EPA completeness. These tests exposed partial/duplicate-roster EPA totals; the minimum production correction now requires three distinct teams before returning a complete alliance EPA total or contribution sample.\n- [x] Add EventAnalytics integration tests covering TBA acquisition, schedule ordering, Redis job persistence, versioned response/provenance, and reuse of a persisted job without re-fetching provider data.\n- [x] Inventory existing component-local type declarations and add an AST guard that prevents new declarations or additions to the legacy baseline; migrate existing declarations into central types in deliberate, test-backed steps.
 - [x] Wire the suite into GitHub Actions for pushes to `main`/testing branches and pull requests targeting `main`. The workflow installed dependencies and passed all 19 tests on commit `3db8614c2972f1f678c502cbc06087ca90de9f80`. A local checkout was not available in this execution environment; CI is the verified execution source.
 - [ ] Add unit tests for TBA cache/ETag/reconciliation behavior.
 - [ ] Add unit tests for Statbotics cache/locking/pagination behavior.
-- [ ] Add normalization, calculation, persistence, and full pipeline coverage.
+- [ ] Expand normalized DTO validation beyond the current EventAnalytics v1 envelope; add source-specific partial/failure metadata and serialization round-trip coverage.\n- [ ] Expand integration coverage through the API route/consumer boundary, including lock contention, retries, refreshes, and corrupt persisted-job migrations.
 - [ ] Add enforcement for the central FieldView type ownership policy after the existing inline declarations have been inventoried.
 
-The TypeScript test loader is deliberately limited to dependency-free modules with type-only imports. It transpiles the source using the repository's existing TypeScript dependency; it is not a replacement for the eventual integration-test strategy.
+The TypeScript test loaders use the repository's existing TypeScript dependency. The standalone loader is limited to dependency-free modules with type-only imports; the mock loader injects deterministic Redis/provider boundaries for client and service tests. These are Node test-runner helpers, not production runtime code.
 
 ## Initial implementation order
 
