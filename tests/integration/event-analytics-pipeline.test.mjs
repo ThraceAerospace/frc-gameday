@@ -131,6 +131,12 @@ test("EventAnalytics snapshot initializes from TBA, persists the job, and emits 
     derived: "fieldview",
   });
   assert.equal(snapshot.sources.tba.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.event.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.teams.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.matches.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.oprs.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.rankings.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.status, "ready");
   assert.equal(snapshot.sources.statbotics.status, "pending");
   assert.equal(snapshot.sources.frcColors.status, "pending");
   assert.equal(snapshot.matchCount, 2);
