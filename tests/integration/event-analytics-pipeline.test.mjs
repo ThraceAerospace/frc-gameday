@@ -184,3 +184,22 @@ test("EventAnalytics snapshot reads the persisted job without reacquiring provid
   assert.equal(snapshot.collection.state, "partial");
   assert.equal(harness.calls.length, 0);
 });
+
+
+test("EventAnalytics serialization preserves identity, provenance, freshness, and missing-value semantics", async () => {
+  const harness = await createHarness("2026ctser");
+  const original = await harness.getEventAnalyticsSnapshot("2026ctser");
+  const serialized = JSON.stringify(original);
+  const restored = JSON.parse(serialized);
+
+  assert.equal(restored.schemaVersion, original.schemaVersion);
+  assert.equal(restored.eventKey, original.eventKey);
+  assert.deepEqual(restored.provenance, original.provenance);
+  assert.deepEqual(restored.sources, original.sources);
+  assert.equal(restored.event.timezone, "America/New_York");
+  assert.equal(restored.rankings, null);
+  assert.equal(restored.loadedMatchCount, 0);
+  assert.equal(restored.matchCount, 2);
+  assert.equal(restored.residualStats.mean, null);
+  assert.equal(restored.predictionStats.meanAbsoluteError, null);
+});
