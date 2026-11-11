@@ -791,3 +791,13 @@ A structurally invalid but syntactically valid upstream response can therefore b
 `StatboticsClient.getCollection` assumes each successful `getCached<T[]>` result is an array, but the shared HTTP client parses JSON and casts it to `T` without runtime validation. The pagination loop checks `page === null`, `page.length === 0`, and `page.length < pageSize`, but never verifies `Array.isArray(page)`. If the provider returns a successful but structurally invalid object (or another non-array JSON value), `page.length` is typically `undefined`; both termination comparisons are false, so the loop increments offset and continues requesting pages until the serverless execution is terminated. A provider regression can therefore turn one team-match or team-event collection request into an unbounded sequence of requests rather than a bounded acquisition failure.
 
 **Action:** validate that every collection page is an array before appending or inspecting its length, fail the collection with an explicit invalid-response error otherwise, and add a maximum-page/maximum-record guard. Test object, null, malformed, empty, short, and full-sized page responses, including a provider that repeats the same full page for successive offsets.
+
+### FV-AUD-069 — Statbotics lock-release errors can turn successful data acquisition into request failure
+
+**Severity: Medium / false provider failure and avoidable data loss at callers**
+
+`StatboticsClient.getCached` writes the successful provider response to Redis and returns the data from inside a `try`, but its `finally` block awaits `releaseLock(key, token)` without catching cleanup errors. If the Redis `eval` used to release the lock fails after the cache write succeeds, the finally rejection overrides the successful return value and the caller observes a failed Statbotics request. The cache may already contain the fresh response, but callers such as the team-match analysis route catch the error and substitute an empty Statbotics collection; the single-match API route returns 502. The finite lock TTL already provides eventual cleanup if explicit release is unavailable.
+
+This differs from the FRC Colors client, which catches and logs lock-release failures so cleanup does not mask a successful provider result.
+
+**Action:** make Statbotics lock cleanup best-effort, log release failures, and preserve the provider result once its cache write succeeds. Add a test where provider fetch and cache write succeed but lock-release `eval` rejects; assert the caller still receives the acquired data and the lock expires naturally.
