@@ -521,3 +521,17 @@ In the Team Investigation match schedule inside `EventAnalyticsDashboard.tsx`, a
 EPA is a centered contribution estimate and can legitimately be negative for teams below the model's reference level. Treating negative EPA as unavailable suppresses valid source data, can make alliance totals disappear, and silently reduces the contribution-share sample to only all-nonnegative alliances. Contribution share may need a positive-total constraint, but that is distinct from treating negative individual estimates as missing.
 
 **Action:** validate EPA by numeric finiteness, not nonnegativity. Keep negative values in the displayed team estimate and alliance sum. If an EPA-share visualization requires a positive denominator or has a different mathematical interpretation, handle that constraint explicitly and document the resulting sample rather than discarding underlying EPA observations.
+
+### FV-AUD-043 — Statbotics win probabilities are range-validated inconsistently
+
+**Severity: Low / prediction diagnostics integrity**
+
+The qualification calibration path in `buildQualificationAnalysis` correctly excludes `red_win_prob` values outside the inclusive `[0, 1]` range. Other consumers do not apply the same domain check:
+
+- `buildQualificationAnomalies` accepts any finite number and can classify an out-of-range value as a high-confidence miss.
+- `buildTeamInsights` converts any finite red probability into a team-side probability and can surface misleading review reasons.
+- The dashboard's `predictionClassification` checks finiteness but not the probability range; `buildMatchFlagSummary` also derives a favorite and upset from the unbounded value.
+
+A malformed or unexpected provider value can therefore be excluded from calibration while still appearing as a valid 100%+ prediction or generating anomaly/review flags elsewhere in the same analytics snapshot.
+
+**Action:** validate probability values once at the provider-normalization boundary (finite and between 0 and 1 inclusive), preserve invalid raw values only as source diagnostics if useful, and have all calculations/UI consumers use the normalized nullable probability. Add shared tests for negative, greater-than-one, NaN, and boundary values.
