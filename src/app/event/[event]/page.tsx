@@ -61,7 +61,7 @@ export default async function EventPage({
     return (
       <SiteShell>
         <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
-          <div className="mx-auto max-w-5xl">
+          <div className="w-full">
             <h1 className="text-2xl font-semibold">Event unavailable</h1>
             <p className="mt-2 text-[var(--fv-muted)]">
               Could not load event <code>{eventKey}</code>.
@@ -109,7 +109,7 @@ export default async function EventPage({
   return (
     <SiteShell>
       <div className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
-        <PageContainer className="max-w-5xl">
+        <PageContainer>
           <SurfaceCard className="overflow-hidden rounded-2xl">
             <div className="p-5 sm:p-8">
               <PageHeader
@@ -187,7 +187,7 @@ export default async function EventPage({
           ) : (
             <section id="matches" className="mt-6">
               <SectionHeading title="Match Schedule" description={`${matches.length} matches scheduled or recorded.`} className="mb-3" />
-              <div className="mt-3 grid items-start gap-5 xl:grid-cols-2">
+              <div className="mt-3 grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(24rem,0.85fr)]">
                 {qualificationMatches.length > 0 ? (
                   <MatchGroup
                     title="Qualification Matches"
