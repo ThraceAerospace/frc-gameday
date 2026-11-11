@@ -76,6 +76,14 @@ The teams directory currently renders at most the first 200 teams and explicitly
 - The season cohort is separately persisted with a 24-hour TTL and advances within a 20-second work budget.
 - The selected-team history endpoint and selected-team match-analysis endpoint are separate HTTP resources.
 
+## Verified behavior that matches the data-analysis requirements
+
+The season-cohort comparison logic in `src/lib/insights/calculations.ts` matches the intended comparison rule: it selects each event-roster team's most recent preceding official event before checking whether the Statbotics record is usable; a missing record at that latest event excludes that team's change ranking rather than silently falling back to an older event. Teams without a usable baseline remain in the event roster/current-event views. Total-EPA ranks use the eligible comparison cohort, while Auto, Teleop, and Endgame ranks each use their own valid prior/current component denominator.
+
+The cohort discovery path filters TBA event types 99 and 100, obtains each team's TBA event history and Statbotics team-event collection concurrently, and records unavailable event snapshots instead of dropping those events from the baseline history. This preserves the distinction between the latest preceding event and the latest preceding event with data.
+
+The qualification anomaly calculation is server-side and uses an event-relative median/MAD band with a minimum of eight usable alliance residuals. The selected-team peer comparison is also server-side and compares qualification alliance residuals against other same-event alliances within the documented ±20% pre-match EPA band, with minimum sample requirements.
+
 ## Findings
 
 ### FV-AUD-001 — Statbotics runtime defaults to a community mirror
@@ -185,6 +193,30 @@ The event analytics worker lock has a 55-second TTL, while the API route allows 
 `src/app/api/insights/team/[team]/route.ts` converts a failed `Statbotics.getTeamEvents` request into an empty array. The response then labels individual events without a record as `unavailable`, without exposing whether the collection request failed or Statbotics successfully returned no record for that event.
 
 **Action:** preserve collection-level failure metadata separately from per-event record absence, and expose it in the response so consumers do not mistake a provider outage for missing upstream coverage.
+
+### FV-AUD-014 — Suggested Review recomputes analytical flags in the browser
+
+**Severity: Medium / calculation ownership**
+
+`buildMatchFlagSummary` in `EventAnalyticsDashboard.tsx` derives model upsets, phase-specific median/MAD anomaly bands, event-wide large-residual thresholds, and high-alliance-EPA flags in the client. These are analytical classifications, not merely formatting. The API response already contains some related server-derived diagnostics, but the dashboard independently derives additional flags from the payload.
+
+**Action:** move review classifications and their thresholds into the server-side analytics service, return typed flags/evidence in EventAnalytics, and keep the component responsible for presentation and filtering only.
+
+### FV-AUD-015 — Robust median calculations use the upper middle value for even samples
+
+**Severity: Low / statistical convention**
+
+Both `buildQualificationAnomalies` and the dashboard's `phaseAnomalyBand` sort values and select index `Math.floor(n / 2)`. For an even-sized sample this selects the upper middle observation rather than the conventional median (the mean of the two middle observations). The same convention is used for the MAD.
+
+**Action:** choose and document one median convention, centralize it in a shared server-side helper, and cover odd/even sample sizes with tests before changing historical thresholds.
+
+### FV-AUD-016 — Underdog-win count includes exact 50/50 predictions
+
+**Severity: Low / edge-case label accuracy**
+
+`buildQualificationAnalysis` counts every incorrect predicted winner as an `underdogWin`. The UI describes this as a match won by the side with less than 50% predicted chance. When the model probability is exactly 50%, neither side is an underdog, but the implementation resolves the tie to red and can count a blue win as an underdog win.
+
+**Action:** count an underdog win only when the actual winner's pre-match probability is strictly below 0.5; keep 50/50 outcomes in the overall accuracy sample but outside the underdog count.
 
 ## Audit verification limits
 
