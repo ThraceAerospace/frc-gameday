@@ -93,7 +93,7 @@ The standalone `/insights/event/<event>` analytics workspace participates in the
 
 ## Analytics architecture
 
-The event analytics workspace has distinct scopes: **Event Overview**, **Team Investigation** (one selected team at a time: strength, expectations, development, peer-relative performance, and season anomaly history), **Qualification Analysis** (event-wide qualification match review), **Playoff Analysis** (elimination match review), **Playoff Alliances** (three-team composition and elimination progression), and **Suggested Review** (evidence-backed scouting leads). These scopes share server-calculated event data; team season match history is fetched only for the selected team. See [ANALYTICS-REDESIGN.md](ANALYTICS-REDESIGN.md) for metric definitions, baselines, and limitations.
+The event analytics workspace has distinct scopes: **Event Overview**, **Team Investigation** (one selected team at a time: strength, expectations, development, peer-relative performance, and season anomaly history), **Qualification Analysis** (event-wide qualification match review), **Playoff Analysis** (elimination match review), **Playoff Alliances** (three-team composition and elimination progression), and **Suggested Review** (evidence-backed scouting leads). These scopes share server-calculated event data; team season match history is fetched only for the selected team. See [ANALYTICS-REDESIGN.md](docs/ANALYTICS-REDESIGN.md) for metric definitions, baselines, and limitations.
 
 TBA and Statbotics acquisition, normalization, statistical calculations, and analytical conclusions remain server-side. The browser selects views and presents the resulting data; it does not call upstream providers or implement a parallel statistical model. Official qualification rank and Statbotics EPA are displayed side by side as distinct measures, not treated as interchangeable scores.
 
@@ -236,11 +236,11 @@ npm run generate:tba-types
 
 The generated schema may contain endpoints or schemas that FieldView does not currently use. That is expected; removing an unused generated schema belongs in the OpenAPI generation process, not in the generated file.
 
-See [README-TBA-TYPES.md](README-TBA-TYPES.md) for the type-generation workflow.
+See [README-TBA-TYPES.md](docs/TBA-TYPES.md) for the type-generation workflow.
 
 ## Statbotics types
 
-`src/lib/statbotics/generated.ts` is generated from the live official Statbotics OpenAPI document. Run `npm run generate:statbotics-types` to refresh it; `predev` and `prebuild` do this automatically. The generator applies fallback response schemas only where upstream definitions are missing or generic, and automatically defers to concrete upstream schemas when Statbotics publishes them. See [README-STATBOTICS-TYPES.md](README-STATBOTICS-TYPES.md).
+`src/lib/statbotics/generated.ts` is generated from the live official Statbotics OpenAPI document. Run `npm run generate:statbotics-types` to refresh it; `predev` and `prebuild` do this automatically. The generator applies fallback response schemas only where upstream definitions are missing or generic, and automatically defers to concrete upstream schemas when Statbotics publishes them. See [README-STATBOTICS-TYPES.md](docs/STATBOTICS-TYPES.md).
 
 ## Development
 

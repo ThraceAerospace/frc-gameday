@@ -1,6 +1,6 @@
 # FieldView Color System
 
-> Status: Proposed design direction — documented for future implementation, not implemented in the application.
+> Status: Implementing on `ui-cleanup`. Semantic roles and core brand tokens are being introduced; exact theme surfaces and contrast pairings remain subject to visual and accessibility validation.
 >
 > The palette is a working baseline, not a finalized design-system contract. Revisit exact values after testing in light and dark themes, chart contexts, and accessibility/contrast checks.
 
@@ -73,11 +73,9 @@ Individual team colors are dynamic team metadata, sourced from the FRC Colors se
 
 A component may show multiple roles together (for example, a team-colored marker beside a percentile-colored metric), but each color must have a clear, separate visual target. Avoid using a single colored background to encode multiple meanings.
 
-## Implementation guidance (future work only)
+## Implementation guidance
 
-This document records design intent; it does not authorize implementation in this change.
-
-When the palette is implemented later:
+The application is adopting this palette incrementally. Shared semantic tokens are being introduced first; page and component styling will migrate in focused passes. Continue to:
 
 - Centralize semantic tokens rather than scattering raw hex values through components.
 - Define light- and dark-theme variants and accessible foreground/surface pairings.
@@ -90,4 +88,4 @@ When the palette is implemented later:
 
 ## Current status
 
-**Documentation only.** No application components, CSS variables, Tailwind configuration, chart palettes, or existing colors are changed by this proposal.
+**In progress.** Shared theme tokens and the application shell have been migrated on `ui-cleanup`. Individual page and analytics components still require review. The palette remains provisional until light/dark visual checks and contrast testing are complete.
