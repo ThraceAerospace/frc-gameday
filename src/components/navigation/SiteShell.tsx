@@ -45,7 +45,7 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
               {darkMode ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
             </button>
             <Link href="/remote/display" className="hidden items-center gap-1.5 rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold text-[var(--fv-muted)] transition-colors hover:border-[var(--fv-brand-border)] hover:text-[var(--fv-brand)] sm:flex"><TvIcon className="h-4 w-4" />Remote Display</Link>
-            <Link href="/remote" className="rounded-lg bg-[#7656C9] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#5D3FB1]">Remote Controller</Link>
+            <Link href="/remote" className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[var(--fv-brand-strong)]">Remote Controller</Link>
           </div>
         </div>
 

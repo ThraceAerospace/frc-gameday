@@ -196,7 +196,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#7656C9]">Events</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">Events</p>
             <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">FIRST events</h1>
             <p className="mt-2 text-sm text-slate-500">{filtered.length} of {events.length} events</p>
           </div>
@@ -234,10 +234,10 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                         setActiveOffseasonMonth("");
                       }}
                       aria-current={isActive ? "location" : undefined}
-                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-[#F1EDFA] text-[#5D3FB1]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
                     >
                       <span>{group}</span>
-                      <span className={`text-xs tabular-nums ${isActive ? "text-[#7656C9]" : "text-slate-400"}`}>{groupEvents.length}</span>
+                      <span className={`text-xs tabular-nums ${isActive ? "text-[var(--fv-brand)]" : "text-slate-400"}`}>{groupEvents.length}</span>
                     </a>
                     {group === "Off-Season" && isActive && offseasonMonths.length > 0 && (
                       <div className="mt-1 flex gap-1 overflow-x-auto whitespace-nowrap px-1 pb-1 lg:ml-3 lg:flex-col lg:space-y-0.5 lg:overflow-visible lg:border-l lg:border-slate-200 lg:pl-2">
@@ -252,10 +252,10 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                                 setActiveOffseasonMonth(monthId);
                               }}
                               aria-current={monthIsActive ? "location" : undefined}
-                              className={`flex shrink-0 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${monthIsActive ? "bg-[#F1EDFA] text-[#5D3FB1]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                              className={`flex shrink-0 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${monthIsActive ? "bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
                             >
                               <span>{label}</span>
-                              <span className={`tabular-nums ${monthIsActive ? "text-[#7656C9]" : "text-slate-400"}`}>{monthEvents.length}</span>
+                              <span className={`tabular-nums ${monthIsActive ? "text-[var(--fv-brand)]" : "text-slate-400"}`}>{monthEvents.length}</span>
                             </a>
                           );
                         })}
@@ -286,7 +286,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                           {monthEvents.map((event, index) => {
                             const webcastStatus = getEventWebcastStatus(event);
                             return (
-                              <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-[#F1EDFA]/60 ${index ? "border-t border-slate-100" : ""}`}>
+                              <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-[var(--fv-brand-soft)]/60 ${index ? "border-t border-slate-100" : ""}`}>
                                 <div className="min-w-0">
                                   <p className="truncate font-semibold text-slate-900">{event.name}</p>
                                   <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
@@ -296,7 +296,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                                     <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
                                   </p>
                                 </div>
-                                <span className="shrink-0 text-xs font-semibold text-[#7656C9]">View →</span>
+                                <span className="shrink-0 text-xs font-semibold text-[var(--fv-brand)]">View →</span>
                               </Link>
                             );
                           })}
@@ -309,7 +309,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                     {groupEvents.map((event, index) => {
                       const webcastStatus = getEventWebcastStatus(event);
                       return (
-                        <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-[#F1EDFA]/60 ${index ? "border-t border-slate-100" : ""}`}>
+                        <Link key={event.key} href={`/event/${event.key}`} className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-[var(--fv-brand-soft)]/60 ${index ? "border-t border-slate-100" : ""}`}>
                           <div className="min-w-0">
                             <p className="truncate font-semibold text-slate-900">{event.name}</p>
                             <p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
@@ -319,7 +319,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
                               <span className={webcastStatus === "Live" ? "text-emerald-600" : "text-slate-500"}>{webcastStatus}</span>
                             </p>
                           </div>
-                          <span className="shrink-0 text-xs font-semibold text-[#7656C9]">View →</span>
+                          <span className="shrink-0 text-xs font-semibold text-[var(--fv-brand)]">View →</span>
                         </Link>
                       );
                     })}

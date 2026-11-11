@@ -20,7 +20,7 @@ export default async function InsightsPage() {
   return (
     <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#7656C9]">Data Explorer</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">Data Explorer</p>
         <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">FIRST Insights</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">A season-wide overview of event distribution and team participation. This is the starting point for FieldView's deeper statistical comparisons across events, teams, and districts.</p>
 
@@ -34,7 +34,7 @@ export default async function InsightsPage() {
         <div className="mt-6 grid min-w-0 gap-5 xl:grid-cols-2">
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Events by type</h2>
-            <div className="mt-5 space-y-4">{byType.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#7656C9]" style={{width:`${count/maxType*100}%`}} /></div></div>)}</div>
+            <div className="mt-5 space-y-4">{byType.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[var(--fv-brand)]" style={{width:`${count/maxType*100}%`}} /></div></div>)}</div>
           </section>
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Events by district</h2>
@@ -59,5 +59,5 @@ function Metric({label,value,detail}:{label:string;value:string|number;detail:st
   return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-3xl font-black tabular-nums text-slate-950">{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div>;
 }
 function InsightLink({href,title,detail}:{href:string;title:string;detail:string}) {
-  return <Link href={href} className="rounded-xl bg-slate-50 p-4 hover:bg-[#F1EDFA]"><p className="font-semibold text-slate-900">{title}</p><p className="mt-1 text-sm leading-5 text-slate-500">{detail}</p></Link>;
+  return <Link href={href} className="rounded-xl bg-slate-50 p-4 hover:bg-[var(--fv-brand-soft)]"><p className="font-semibold text-slate-900">{title}</p><p className="mt-1 text-sm leading-5 text-slate-500">{detail}</p></Link>;
 }
