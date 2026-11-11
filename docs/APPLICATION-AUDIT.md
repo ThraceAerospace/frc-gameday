@@ -84,6 +84,8 @@ The cohort discovery path filters TBA event types 99 and 100, obtains each team'
 
 The qualification anomaly calculation is server-side and uses an event-relative median/MAD band with a minimum of eight usable alliance residuals. The selected-team peer comparison is also server-side and compares qualification alliance residuals against other same-event alliances within the documented ±20% pre-match EPA band, with minimum sample requirements.
 
+The inspected match-time presentation paths pass the event's IANA timezone into their formatters/components: EventView, EventFooter, HomeEventCard, and MatchCard. Date-only event ranges remain date-only values. This is consistent with the event-timezone invariant, although a complete component-wide timezone sweep remains part of the UI audit.
+
 ## Findings
 
 ### FV-AUD-001 — Statbotics runtime defaults to a community mirror
@@ -217,6 +219,16 @@ Both `buildQualificationAnomalies` and the dashboard's `phaseAnomalyBand` sort v
 `buildQualificationAnalysis` counts every incorrect predicted winner as an `underdogWin`. The UI describes this as a match won by the side with less than 50% predicted chance. When the model probability is exactly 50%, neither side is an underdog, but the implementation resolves the tie to red and can count a blue win as an underdog win.
 
 **Action:** count an underdog win only when the actual winner's pre-match probability is strictly below 0.5; keep 50/50 outcomes in the overall accuracy sample but outside the underdog count.
+
+### FV-AUD-017 — EventState and EventAnalytics are not yet companion normalized data models
+
+**Severity: Medium / foundational architecture gap**
+
+The current `EventStateSnapshot` directly embeds provider types such as `TBAEvent`, `TBATeam`, `TBAMatch`, TBA rankings/OPRs/alliances, and `StatboticsMatch`. It also mixes the data snapshot with client-runtime state such as loading, errors, WebSocket status, and stale indicators. EventAnalytics v1 wraps the existing `EventAnalyticsResponse`, which also retains provider-shaped records. EventState lives in SharedWorker memory and is rebuilt from the server APIs; it is not a durable server-side model.
+
+Consequently, EventState and EventAnalytics are currently separate acquisition and delivery paths, not two normalized companion models served by one FieldView-owned data layer. Existing `/api/event/*` routes also largely expose TBA-shaped responses.
+
+**Action:** treat the current types as compatibility contracts, not the final model. Define FieldView-owned event, team, match, ranking, result, and analytics DTOs; separate provider response types from normalized data and from client delivery/runtime status. Then make the existing HTTP routes and SharedWorker consume the same application services without forcing a simultaneous client rewrite.
 
 ## Audit verification limits
 
