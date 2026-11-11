@@ -449,3 +449,13 @@ The homepage snapshot catches each event's match-schedule failure and returns `l
 This means a successful upstream schedule response cannot remove a match that was previously cached. If TBA removes or corrects a schedule entry, FieldView can continue serving that obsolete match indefinitely through subsequent refreshes. The protection for completed match results is broader than necessary and conflates preserving result data with preserving deleted schedule records.
 
 **Action:** define explicit reconciliation rules for same-key result regression versus absent-key deletion. Preserve completed result fields only when the match remains in the canonical schedule; remove absent matches unless a documented provider-consistency exception applies. Add tests for completed-match regression, scheduled-match deletion, completed-match deletion, and normal schedule additions.
+
+### FV-AUD-036 — One district advancement failure aborts the all-district CMP result
+
+**Severity: Medium / cross-district data availability**
+
+`TBA.getAllDistrictTeamsAdvancedToCMP(year)` fetches every district's advancement response concurrently with `Promise.all`. If any one district request rejects, the entire operation rejects and `GET /api/district/all/cmp` cannot return teams from the districts whose responses succeeded. The route has no per-district failure representation or partial-result behavior.
+
+This makes a cross-district summary depend on every district endpoint being available at once. A transient provider/cache failure for one district can hide all otherwise successfully acquired advancement data.
+
+**Action:** acquire district advancement responses with per-district outcomes (for example, `Promise.allSettled`), preserve successful district results, and expose which districts failed plus the overall completeness state. Do not represent a failed district as having zero qualifying teams. Add tests for all-success, one-failure, and all-failure cases.
