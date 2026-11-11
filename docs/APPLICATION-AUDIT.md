@@ -587,3 +587,13 @@ This differs from the FRC Colors failure path in the same worker: on failure, it
 
 **Action:** distinguish attempted-at from successfully collected-at state. Use a bounded retry policy/backoff for failed Statbotics acquisition, while retaining explicit refresh as an override. Do not mark a failed source as successfully loaded merely to suppress repeated requests; expose the next retry eligibility or retry state in source metadata. Add tests proving that a failed attempt can recover on a later eligible request without deleting unrelated successful analytics data.
 
+### FV-AUD-049 — Season-cohort discovery couples TBA and Statbotics into one per-team success
+
+**Severity: Medium / historical comparison coverage**
+
+In `advanceSeasonCohort`, each team's TBA event history and Statbotics team-event collection are fetched together with `Promise.all`. The team is removed from `discoveryQueue` and its event history is processed only when both requests succeed. If either provider request fails, the catch path retries the whole team discovery; after three attempts it removes that team from the queue and records only the team number in `discoveryFailures`.
+
+This couples two distinct acquisition responsibilities. A transient Statbotics failure can discard a successful TBA event-history response, even though that history is useful for establishing which event is the team's latest preceding event. Conversely, a TBA failure prevents processing a successfully acquired Statbotics collection. After the third failure, the cohort retains no per-team error or provider-specific outcome, and that team is not retried during ordinary requests.
+
+**Action:** track TBA event discovery and Statbotics team-event acquisition as separate per-team outcomes. Preserve successful TBA history even when Statbotics is unavailable, and preserve any Statbotics collection that can be used once the corresponding event history is known. Store provider-specific attempt counts, last errors, and retry eligibility; keep exhausted teams visible as incomplete rather than silently dropping their acquisition state. Add tests for TBA-only failure, Statbotics-only failure, recovery on a later request, and terminal/exhausted status.
+
