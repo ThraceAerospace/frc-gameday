@@ -973,3 +973,12 @@ This violates the documented idle-teardown invariant. The normal SharedWorker-ow
 `sharedWorkerClient.connect` catches synchronous `new SharedWorker(...)` construction failures and switches to the per-tab fallback, but errors emitted asynchronously by the worker are handled differently: the `error` listener calls `recover()`, and `recover()` immediately calls `connect()` again whenever listeners or live-runtime leases remain. There is no retry delay, attempt counter, or fallback threshold for repeated worker-script startup/runtime errors. If the worker bundle consistently fails after construction (for example, a deployment asset mismatch or module-load error), the tab can repeatedly create and tear down workers in a tight loop rather than reaching the existing fallback path.
 
 **Action:** apply bounded exponential backoff to asynchronous worker recovery and switch to per-tab fallback after a small number of consecutive startup failures. Reset the failure counter only after a worker has demonstrated health (for example, a successful ready/pong handshake). Add tests for transient recovery and persistent worker-script failure without rapid recreation.
+
+
+### FV-AUD-088 — Homepage match summaries remain cached after TBA webhook updates
+
+**Severity: Low / homepage data freshness**
+
+The homepage wraps its event list and per-event `lastMatch`/`nextMatch` summaries in Next.js `unstable_cache` with a one-hour revalidation interval and the `homepage-events` tag. The TBA webhook handler mutates the underlying Redis TBA cache and broadcasts live-event notifications, but it does not revalidate the Next.js `homepage-events` cache tag. The homepage does not subscribe to the event WebSocket either. Consequently, a match-score or schedule webhook can update the canonical TBA cache and live EventState consumers while the homepage continues serving its previously cached last/next match summary until the one-hour ISR cache expires. This is separate from the homepage's inability to distinguish a match-fetch failure from an empty schedule (FV-AUD-034).
+
+**Action:** decide and document the homepage freshness target. If match summaries should reflect important live updates, revalidate the `homepage-events` tag after relevant webhook cache mutations (or update the cached summary through a safe event-specific mechanism). If one-hour staleness is intentional to protect SSR/provider cost, expose the snapshot's generated-at time and keep the limitation explicit. Add a test proving the chosen behavior after a match-score and schedule webhook.
