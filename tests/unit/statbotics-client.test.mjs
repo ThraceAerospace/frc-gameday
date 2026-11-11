@@ -359,6 +359,32 @@ test("Statbotics releases its request lock after an upstream failure", async () 
   assert.equal(await redis.get(lockKey), null);
 });
 
+test("Statbotics does not release a request lock now owned by a newer worker", async () => {
+  const { client, redis } = await createClient();
+  const matchKey = "2026ctabc_qm-expired-lock";
+  const lockKey = `lock:statbotics:v3::match:${matchKey}`;
+  let resolveResponse;
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  const pendingResponse = new Promise((resolve) => { resolveResponse = resolve; });
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => {
+      markStarted();
+      return pendingResponse;
+    },
+  }, async () => {
+    const request = client.getMatch(matchKey);
+    await started;
+    await redis.set(lockKey, "new-worker-token");
+    resolveResponse(new Response("upstream unavailable", { status: 503 }));
+    await assert.rejects(request, /Statbotics request failed: 503/);
+  });
+
+  assert.equal(await redis.get(lockKey), "new-worker-token");
+});
+
 test("Statbotics collection cache keys remain isolated by query filters", async () => {
   const { client, redis } = await createClient();
   const requestedUrls = [];
