@@ -52,12 +52,12 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
         {mobileMenuOpen && (
           <nav id="mobile-navigation" aria-label="Mobile navigation" className="border-t border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-3 md:hidden">
             <div className="mx-auto grid max-w-[1600px] grid-cols-2 gap-1">
-              <MobileNavLink href="/" onNavigate={() => setMobileMenuOpen(false)}>Events</MobileNavLink>
-              <MobileNavLink href="/teams" onNavigate={() => setMobileMenuOpen(false)}>Teams</MobileNavLink>
-              <MobileNavLink href="/districts" onNavigate={() => setMobileMenuOpen(false)}>Districts</MobileNavLink>
-              <MobileNavLink href="/insights" onNavigate={() => setMobileMenuOpen(false)}>Insights</MobileNavLink>
-              <MobileNavLink href="/gameday" onNavigate={() => setMobileMenuOpen(false)}>Gameday</MobileNavLink>
-              <MobileNavLink href="/remote/display" onNavigate={() => setMobileMenuOpen(false)}>Remote Display</MobileNavLink>
+              <MobileNavLink href="/events" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Events</MobileNavLink>
+              <MobileNavLink href="/teams" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Teams</MobileNavLink>
+              <MobileNavLink href="/districts" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Districts</MobileNavLink>
+              <MobileNavLink href="/insights" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Insights</MobileNavLink>
+              <MobileNavLink href="/gameday" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Gameday</MobileNavLink>
+              <MobileNavLink href="/remote/display" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Remote Display</MobileNavLink>
             </div>
           </nav>
         )}
@@ -73,6 +73,7 @@ function NavLink({ href, pathname, children }: { href: string; pathname: string;
   return <Link href={href} aria-current={active ? "page" : undefined} className={["relative rounded-lg px-3 py-2 text-sm font-semibold transition-colors", active ? "bg-[var(--fv-brand-soft)] text-[var(--fv-brand)]" : "text-[var(--fv-muted)] hover:bg-[var(--fv-brand-soft)] hover:text-[var(--fv-text)]"].join(" ")}>{children}{active && <span aria-hidden="true" className="absolute inset-x-3 -bottom-1 h-0.5 rounded-full bg-[var(--fv-brand)]" />}</Link>;
 }
 
-function MobileNavLink({ href, onNavigate, children }: { href: string; onNavigate: () => void; children: React.ReactNode }) {
-  return <Link href={href} onClick={onNavigate} className="rounded-lg px-3 py-3 text-sm font-semibold text-[var(--fv-text)] hover:bg-[var(--fv-brand-soft)]">{children}</Link>;
+function MobileNavLink({ href, pathname, onNavigate, children }: { href: string; pathname: string; onNavigate: () => void; children: React.ReactNode }) {
+  const active = pathname === href || pathname.startsWith(`${href}/`);
+  return <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={["rounded-lg px-3 py-3 text-sm font-semibold transition-colors", active ? "bg-[var(--fv-brand-soft)] text-[var(--fv-brand)]" : "text-[var(--fv-text)] hover:bg-[var(--fv-brand-soft)]"].join(" ")}>{children}</Link>;
 }

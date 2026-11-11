@@ -229,7 +229,8 @@ Current major boundaries:
 - `src/lib/gameday` — match and stream utilities.
 - `src/lib/multiview` — pure Multiview layouts.
 - `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
-- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.\n- `docs` — architecture, analytics, API typing, and design-system documentation.
+- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
+- `docs` — architecture, analytics, API typing, and design-system documentation.
 
 ## Legacy areas
 

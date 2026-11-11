@@ -197,8 +197,8 @@ button:disabled {
 }
 
 .site-theme-dark header {
-  background: rgba(24, 26, 27, 0.98);
-  border-color: #3f4245;
+  background: var(--fv-surface-raised);
+  border-color: var(--fv-border);
 }
 
 .site-theme-dark aside {
