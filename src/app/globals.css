@@ -39,8 +39,8 @@ body {
   width: 100%;
   min-height: 100%;
   overflow: hidden;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--fv-surface);
+  color: var(--fv-text);
 }
 
 body {
@@ -182,8 +182,18 @@ button:disabled {
 
 
 .site-theme-dark {
-  background: #111315;
-  color: #e5e5e5;
+  color-scheme: dark;
+  --fv-brand: #A78BE8;
+  --fv-brand-strong: #B9A3F0;
+  --fv-brand-soft: #302641;
+  --fv-brand-border: #554477;
+  --fv-surface: #111015;
+  --fv-surface-raised: #1B1822;
+  --fv-text: #F3F0F8;
+  --fv-muted: #B6AEC4;
+  --fv-border: #383242;
+  background: var(--fv-surface);
+  color: var(--fv-text);
 }
 
 .site-theme-dark header {
@@ -359,8 +369,8 @@ button:disabled {
   --insights-muted: #6F6B7D;
 }
 
-.insights-dashboard :focus-visible {
-  outline: 2px solid #60a5fa;
+ .insights-dashboard :focus-visible {
+  outline: 2px solid var(--fv-brand);
   outline-offset: 2px;
 }
 

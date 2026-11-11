@@ -134,7 +134,7 @@ export default async function TeamPage({
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                 {team.rookie_year != null && <span>Rookie {team.rookie_year}</span>}
-                {team.website && <><span aria-hidden="true">·</span><a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:text-blue-700">Team website</a></>}
+                {team.website && <><span aria-hidden="true">·</span><a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-[#7656C9] hover:text-[#5D3FB1]">Team website</a></>}
               </div>
             </div>
           </div>
@@ -157,7 +157,7 @@ export default async function TeamPage({
               <h2 className="text-xl font-black tracking-tight text-slate-950">{year} Results</h2>
               <p className="mt-1 text-sm text-slate-500">Event information and match results for this season.</p>
             </div>
-            {district && <Link href={`/district/${district.key}`} className="hidden text-sm font-semibold text-blue-600 hover:text-blue-700 sm:block">View district</Link>}
+            {district && <Link href={`/district/${district.key}`} className="hidden text-sm font-semibold text-[#7656C9] hover:text-[#5D3FB1] sm:block">View district</Link>}
           </div>
 
           {eventSections.length === 0 ? (
@@ -200,7 +200,7 @@ export default async function TeamPage({
                           {event.week != null && <p className="mt-1 text-xs font-medium text-slate-500">Week {event.week + 1}</p>}
                           {event.district?.display_name && <p className="mt-2 text-xs font-medium text-slate-500">{event.district.display_name}</p>}
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href={`/event/${event.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700">Event page</Link>
+                            <Link href={`/event/${event.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-200 hover:text-[#5D3FB1]">Event page</Link>
                             <Link href={`/gameday?event=${event.key}`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Gameday</Link>
                           </div>
                           <div className="mt-4 space-y-3 border-t border-slate-200 pt-3">

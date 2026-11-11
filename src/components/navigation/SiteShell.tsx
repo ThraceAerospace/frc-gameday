@@ -28,11 +28,11 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
             aria-controls="mobile-navigation"
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen((open) => !open)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 md:hidden"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--fv-border)] text-[var(--fv-muted)] md:hidden"
           >
             {mobileMenuOpen ? <XMarkIcon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
           </button>
-          <Link href="/" aria-label="FieldView home" className="flex shrink-0 items-center gap-2.5 text-xl font-extrabold tracking-tight text-[var(--fv-text)]"><svg aria-hidden="true" viewBox="0 0 40 40" className="h-8 w-8 text-[#7656C9]"><path d="M17 3h13L13 20H0L17 3Z" fill="currentColor"/><path d="M27 20h13L23 37H10l17-17Z" fill="currentColor"/><path d="M27 3h13L23 20H10L27 3Z" fill="currentColor" opacity=".72"/></svg><span>FieldView</span></Link>
+          <Link href="/" aria-label="FieldView home" className="flex shrink-0 items-center gap-2.5 text-xl font-extrabold tracking-tight text-[var(--fv-text)]"><svg aria-hidden="true" viewBox="0 0 40 40" className="h-8 w-8 text-[var(--fv-brand)]"><path d="M17 3h13L13 20H0L17 3Z" fill="currentColor"/><path d="M27 20h13L23 37H10l17-17Z" fill="currentColor"/><path d="M27 3h13L23 20H10L27 3Z" fill="currentColor" opacity=".72"/></svg><span>FieldView</span></Link>
           <nav aria-label="Main navigation" className="hidden shrink-0 items-center gap-1 md:flex">
             <NavLink href="/events" pathname={pathname}>Events</NavLink>
             <NavLink href="/teams" pathname={pathname}>Teams</NavLink>
@@ -41,16 +41,16 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
             <NavLink href="/gameday" pathname={pathname}>Gameday</NavLink>
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <button type="button" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] text-[var(--fv-muted)] hover:bg-[var(--fv-brand-soft)]">
               {darkMode ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
             </button>
-            <Link href="/remote/display" className="hidden items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 sm:flex"><TvIcon className="h-4 w-4" />Remote Display</Link>
+            <Link href="/remote/display" className="hidden items-center gap-1.5 rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold text-[var(--fv-muted)] transition-colors hover:border-[var(--fv-brand-border)] hover:text-[var(--fv-brand)] sm:flex"><TvIcon className="h-4 w-4" />Remote Display</Link>
             <Link href="/remote" className="rounded-lg bg-[#7656C9] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#5D3FB1]">Remote Controller</Link>
           </div>
         </div>
 
         {mobileMenuOpen && (
-          <nav id="mobile-navigation" aria-label="Mobile navigation" className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
+          <nav id="mobile-navigation" aria-label="Mobile navigation" className="border-t border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-3 md:hidden">
             <div className="mx-auto grid max-w-[1600px] grid-cols-2 gap-1">
               <MobileNavLink href="/" onNavigate={() => setMobileMenuOpen(false)}>Events</MobileNavLink>
               <MobileNavLink href="/teams" onNavigate={() => setMobileMenuOpen(false)}>Teams</MobileNavLink>
