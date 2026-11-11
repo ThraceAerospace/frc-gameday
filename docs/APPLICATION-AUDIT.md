@@ -606,3 +606,10 @@ The TBA client reads an expired Redis representation and uses its ETag for a con
 This differs from the Statbotics client, which returns its cached representation when a refresh fails and records a retry cooldown. For a data application, freshness and availability should be represented separately: a stale schedule or event record may still be more useful than no data, provided consumers can see that it is stale and do not mistake it for current live state.
 
 **Action:** define a deliberate TBA stale-on-error policy. When an expired representation exists, consider returning it with explicit stale/error/fetched-at metadata while preserving the refresh failure for observability. Keep endpoints that require authoritative freshness able to opt out. Do not silently extend the freshness claim or present stale data as live; test network failure, 5xx, no-cache cold failure, and successful recovery.
+### FV-AUD-051 — Match webhooks leave standalone match-detail cache stale
+
+**Severity: Medium / cross-surface data consistency**
+
+The TBA webhook handler passes complete match_score and match_video payloads to TBAClient.mutateMatchCaches. Despite its comment describing event/team match caches, that method only mutates `/event/<eventKey>/matches`. The match-detail page at `/event/[event]/match/[match]` independently loads its match through `TBA.getMatch(matchKey)`, which reads the separate `/match/<matchKey>` Redis cache entry. The page does not subscribe to the event WebSocket. Consequently, a webhook can update the event schedule and trigger live EventState reconciliation while the match-detail page continues to receive the old standalone match representation until its own cache expires or is refreshed.
+
+**Action:** make webhook cache mutation cover every canonical cached representation that the application serves for the changed match, including `/match/<matchKey>`, or invalidate the standalone entry so its next read fetches current data. Ensure the mutation is safe when the standalone cache does not yet exist. Add an integration test proving a score/video webhook makes both event-schedule and match-detail reads observe the updated match.
