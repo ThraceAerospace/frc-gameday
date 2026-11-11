@@ -489,3 +489,13 @@ The homepage determines which events belong in “This week” with `getCalendar
 On a server whose timezone differs from an event's timezone, an event near the Sunday/Monday boundary can be included in or excluded from “This week” according to the server's calendar rather than the event's calendar. This is inconsistent with the project rule that event dates and times are interpreted in the event's timezone.
 
 **Action:** calculate the current calendar date and week membership in each event's IANA timezone (with a documented fallback for missing/invalid zones), or explicitly define “This week” as a single reference timezone and use that same rule consistently for filtering and display.
+
+### FV-AUD-040 — Remote EventState snapshots do not preserve Error details
+
+**Severity: Low / remote diagnostics and contract correctness**
+
+`EventStateSnapshot.error` is typed as `Error | null`. The remote controller sends the complete snapshot through `RemotePeer.sendMessage`, which serializes messages with `JSON.stringify`; the display parses that JSON and treats the result as an `EventStateSnapshot`. Native JavaScript `Error` properties such as `message` and `stack` are non-enumerable by default, so an actual Error normally serializes as an empty object. The remote display can still see a truthy error value, but it cannot recover the message or other diagnostic context.
+
+This also means the TypeScript snapshot type does not accurately describe the wire representation for this field.
+
+**Action:** define an explicit serializable event-state wire DTO and normalize errors to structured data (at minimum `name` and `message`, with stack omitted or restricted as appropriate). Validate and reconstruct presentation state at the receiving boundary rather than asserting parsed JSON is already an `EventStateSnapshot`.
