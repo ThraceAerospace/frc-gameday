@@ -202,8 +202,8 @@ button:disabled {
 }
 
 .site-theme-dark aside {
-  background: #181a1b;
-  border-color: #3f4245;
+  background: var(--fv-surface-raised);
+  border-color: var(--fv-border);
 }
 
 .site-theme-dark aside .border-slate-100 {
@@ -211,8 +211,8 @@ button:disabled {
 }
 
 .site-theme-dark main {
-  background: #111315;
-  color: #e5e5e5;
+  background: var(--fv-surface);
+  color: var(--fv-text);
 }
 
 .site-theme-dark .text-slate-950,
