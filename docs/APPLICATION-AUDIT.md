@@ -743,3 +743,13 @@ Both workers mutate their own in-memory copy of the cohort job and persist the c
 This is distinct from the event-analytics refresh path, which explicitly reacquires the TBA event, teams, matches, OPRs, rankings, and playoff alliances when forced.
 
 **Action:** define refresh semantics for the assembled team-match resource and pass them through every source dependency. Expose a controlled TBA refresh option at the service boundary (or invalidate the exact TBA resources before rebuilding), while retaining normal cache behavior for ordinary requests. Return per-source acquisition/freshness metadata so a refreshed response does not imply every input was refreshed. Add tests with stale TBA schedule data and fresh Statbotics data, then verify that `refresh=1` refreshes both sources.
+
+### FV-AUD-064 — Event Analytics “Refresh data” does not force-refresh TBA resources
+
+**Severity: Medium / refresh semantics and snapshot correctness**
+
+The Event Analytics refresh path calls `TBA.getEventMatches`, `TBA.getEventOPRs`, `TBA.getEventRankings`, and `TBA.getEventPlayoffAlliances` without a force-refresh option. These service methods call the TBA client with its default cache behavior, which returns a still-fresh Redis representation without contacting The Blue Alliance. The lower-level TBA client supports `forceRefresh`, but the inspected service methods do not expose it. Thus the dashboard's explicit “Refresh data” action reliably clears/reacquires the Statbotics and FRC Colors collections, but for TBA it only re-reads resources through the normal cache and may preserve the existing TBA snapshot.
+
+The refresh also leaves the persisted event record and team roster untouched; only matches, OPRs, rankings, and playoff alliances are reconsidered. A changed event roster or event metadata therefore cannot be reconciled by this action. This compounds the season-cohort roster issue documented in FV-AUD-060.
+
+**Action:** define what “Refresh data” promises per source. If it is intended to request current provider data, expose force-refresh controls through the TBA service and refresh all mutable resources required by the snapshot, including event metadata and team roster. If upstream request limits require honoring still-valid TBA cache entries, label the action as rebuilding from available cached sources and expose each resource's fetched-at/freshness state. Test a changed TBA response while the old Redis entry is still within max-age.
