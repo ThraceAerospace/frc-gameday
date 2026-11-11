@@ -193,7 +193,7 @@ The TBA client has a concurrent-write guard, but no in-flight request map or dis
 
 **Severity: Medium / maintenance risk**
 
-The root README duplicates the homepage section and contains older descriptions of Event Analytics delivery and footer modes. AGENTS.md repeats the homepage section and describes a `waitUntil`/polling workflow that is not present in the current code. Architecture docs also need to distinguish current implementation from target architecture more explicitly.
+The root README duplicates the homepage section and contains older descriptions of Event Analytics delivery and footer modes. AGENTS.md repeats the homepage section and describes a `waitUntil`/polling workflow that is not present in the current code. Architecture docs also need to distinguish current implementation from target architecture more explicitly. AGENTS.md also names stale implementation paths/components: it points to `src/lib/gameday/matchUtils.ts` although the live canonical helpers are in `src/lib/tba/matchUtils.ts`, and describes `MultiviewView` ownership while the current surface implementation is `TileView`/`TileSurfaceController` under `src/components/surface`. The missing `EventDataPanel` and `dataPanel` tile support is tracked separately in FV-AUD-076.
 
 **Action:** make README a concise project entry point, keep implementation rules in AGENTS.md, and use the architecture/lifecycle documents for detailed current and target behavior.
 
