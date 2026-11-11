@@ -78,7 +78,7 @@ export default function RemoteEventCard({
                   "h-1.5 w-1.5 shrink-0 rounded-full " +
                   (websocketStatus === "connected"
                     ? websocketStale
-                      ? "bg-blue-700"
+                      ? "bg-[var(--fv-review)]"
                       : "bg-green-500"
                     : websocketStatus === "connecting"
                       ? "bg-yellow-500"
