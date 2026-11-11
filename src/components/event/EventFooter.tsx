@@ -82,7 +82,7 @@ export default function EventFooter({
             type="button"
             onClick={onToggleActive}
             disabled={!onToggleActive}
-            className={`relative z-30 box-border flex h-3 shrink-0 items-end pb-0 pt-px rounded-t-lg border-x border-t ${priorityEditing ? "border-[var(--fv-tile-brand-border)] shadow-[0_0_12px_var(--fv-tile-brand-glow)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_rgba(255,255,255,0.12)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
+            className={`relative z-30 box-border flex h-3 shrink-0 items-end pb-0 pt-px rounded-t-lg border-x border-t ${priorityEditing ? "border-[var(--fv-tile-brand-border)] shadow-[0_0_12px_var(--fv-tile-brand-glow)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_0_12px_var(--fv-neutral-focus-shadow)]" : "border-white/10"} bg-neutral-950 px-2 shadow-lg ${
               onToggleActive
                 ? "cursor-pointer transition-colors hover:border-white/25 hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 : "cursor-default"
@@ -125,7 +125,7 @@ export default function EventFooter({
         </div>
 
         <div
-          className={`pointer-events-auto border-x border-t ${priorityEditing ? "border-[var(--fv-tile-brand-border)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_-1px_0_rgba(255,255,255,0.35)]" : "border-white/10"} ${
+          className={`pointer-events-auto border-x border-t ${priorityEditing ? "border-[var(--fv-tile-brand-border)]" : imminentMatch ? "!border-[var(--tracked-accent)] tracked-accent-pill-glow" : activeHighlighted ? "border-white shadow-[0_-1px_0_var(--fv-neutral-focus-shadow)]" : "border-white/10"} ${
             contentHidden
               ? "absolute inset-x-0 bottom-0 translate-y-full"
               : "relative translate-y-0"

@@ -72,7 +72,7 @@ export default function MatchInsightsPanel({ match, statbotics, oprs }: Props) {
     <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#A78BE8]">FieldView Insights</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--fv-brand)]">FieldView Insights</p>
           <h2 className="mt-1 text-xl font-semibold">Match analytics</h2>
           <p className="mt-1 text-sm text-neutral-400">Pre-match model estimates compared with the official result and the model's rating update.</p>
         </div>

@@ -67,7 +67,7 @@ export default function TileViewSurface({
         onMouseMove={actions.showControls}
         onFocus={actions.showControls}
       >
-        <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 px-1.5 py-1.5 shadow-[0_8px_30px_var(--fv-tile-shadow),inset_0_1px_0_var(--fv-tile-inset-highlight)] backdrop-blur-xl">
           <button type="button" onClick={() => router.push("/")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-[var(--fv-tile-brand-soft)] hover:text-[var(--fv-tile-brand-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fv-tile-brand)]" title="Home" aria-label="Home">
             <HomeIcon className="h-[18px] w-[18px]" />
           </button>
