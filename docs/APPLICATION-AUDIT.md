@@ -733,3 +733,13 @@ The Event Analytics worker treats these fallback returns as successful acquisiti
 Both workers mutate their own in-memory copy of the cohort job and persist the complete serialized job through unconditional `writeJob` calls. If the later worker writes progress first and the expired-lock owner writes afterward, the older snapshot can overwrite the newer worker's discovery results, attempts, or records. The token-checked lock release prevents an old worker from deleting a newer lock, but it does not fence the old worker's job writes.
 
 **Action:** ensure the provider request deadline and total batch execution time fit safely inside the lease, renew the lease while work is active, or add a fencing/generation token checked atomically when committing the job. A worker that no longer owns the current generation must not write. Add a deterministic test where one discovery request exceeds the lease, a second worker completes, and the first worker attempts a late write.
+
+### FV-AUD-063 — Selected-team match-analysis refresh leaves TBA inputs cached
+
+**Severity: Medium / refresh completeness**
+
+`GET /api/insights/team/[team]/matches?refresh=1` bypasses the assembled team-match-analysis Redis snapshot and passes `refresh: true` to `Statbotics.getMatches`. It does not refresh the TBA inputs: `TBA.getTeamEvents` and each `TBA.getTeamMatches` call use the ordinary cached service methods. Those service methods do not expose a refresh option, even though the lower-level TBA client supports `forceRefresh`. Consequently, an explicit refresh can rebuild the analysis with newly acquired Statbotics predictions while retaining an old TBA event roster and match schedule/results. This is especially relevant when the user is attempting to correct a stale or incomplete match history.
+
+This is distinct from the event-analytics refresh path, which explicitly reacquires the TBA event, teams, matches, OPRs, rankings, and playoff alliances when forced.
+
+**Action:** define refresh semantics for the assembled team-match resource and pass them through every source dependency. Expose a controlled TBA refresh option at the service boundary (or invalidate the exact TBA resources before rebuilding), while retaining normal cache behavior for ordinary requests. Return per-source acquisition/freshness metadata so a refreshed response does not imply every input was refreshed. Add tests with stale TBA schedule data and fresh Statbotics data, then verify that `refresh=1` refreshes both sources.
