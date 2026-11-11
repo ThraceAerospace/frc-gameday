@@ -268,6 +268,62 @@ test("TBA tag invalidation removes only cache entries owned by the requested tag
   assert.deepEqual(await redis.smembers("tag:event:2026ctabc"), []);
 });
 
+test("TBA derives cache tags for event, team, team-event, and match resource families", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoints = [
+    "/event/2026cttagstest",
+    "/event/2026cttagstest/teams",
+    "/team/frc3461",
+    "/team/frc3461/event/2026cttagstest",
+    "/match/2026cttagstest_qm1",
+  ];
+
+  await withFetch(async (url) => new Response(JSON.stringify({ endpoint: new URL(url).pathname }), {
+    status: 200,
+    headers: { "Cache-Control": "max-age=60" },
+  }), async () => {
+    for (const endpoint of endpoints) await client.get(endpoint);
+  });
+
+  const expectedTags = {
+    "tag:event:2026cttagstest": [cacheKey(endpoints[0]), cacheKey(endpoints[1])],
+    "tag:event:2026cttagstest:teams": [cacheKey(endpoints[1])],
+    "tag:team:frc3461": [cacheKey(endpoints[2]), cacheKey(endpoints[3])],
+    "tag:team:frc3461:event:2026cttagstest": [cacheKey(endpoints[3])],
+    "tag:match:2026cttagstest_qm1": [cacheKey(endpoints[4])],
+  };
+
+  for (const [tag, expectedMembers] of Object.entries(expectedTags)) {
+    assert.deepEqual(new Set(await redis.smembers(tag)), new Set(expectedMembers), tag);
+  }
+});
+
+test("TBA cache mutation failures return false and preserve the previous cached value", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/event/2026ctmutation";
+  const key = cacheKey(endpoint);
+  const original = { data: { value: 1 }, etag: '"original"', expiresAt: Date.now() + 60_000 };
+  await redis.set(key, JSON.stringify(original));
+
+  assert.equal(await client.mutateCached(endpoint, () => {
+    throw new Error("mutator failed");
+  }), false);
+  assert.deepEqual(JSON.parse(await redis.get(key)), original);
+
+  const originalSet = redis.set;
+  redis.set = async (candidate, value) => {
+    if (candidate === key) throw new Error("Redis write failed");
+    return originalSet.call(redis, candidate, value);
+  };
+  try {
+    assert.equal(await client.mutateCached(endpoint, (data) => ({ ...data, value: 2 })), false);
+  } finally {
+    redis.set = originalSet;
+  }
+
+  assert.deepEqual(JSON.parse(await redis.get(key)), original);
+});
+
 test("TBA malformed cache entries are discarded before fetching a valid response", async () => {
   const client = new TBAClient("test-auth-key");
   const endpoint = "/event/2026ctmalformed/teams";
