@@ -764,15 +764,15 @@ Consequently, a schedule update can trigger a visible reload that simply returns
 
 **Action:** map each webhook type to the exact TBA resource keys it invalidates or updates before broadcasting. For schedule changes, invalidate the event match schedule and any dependent team-scoped schedule representations; for alliance selection, invalidate the event alliance resource and any dependent derived resources. Keep the normal cache policy for unrelated resources. Add integration tests with unexpired Redis entries proving that each webhook makes the next relevant API read observe updated provider data.
 
-### FV-AUD-066 — TBA provider requests have no client-side deadline
+### FV-AUD-066 — External provider requests have no client-side deadline
 
 **Severity: Medium / request reliability and serverless execution budget**
 
-The shared `TBAClient.get` performs upstream `fetch` calls without an `AbortSignal`, timeout, or caller-provided deadline. The same unbounded request path is used for all TBA resources, including event schedules, team histories, rankings, OPRs, alliances, and match details. A provider connection that stalls rather than promptly rejecting can therefore hold an API route, server-rendered page, or background analytics worker open until the hosting platform terminates the execution. The team-history and analytics routes declare 60-second maximum durations, but the provider client does not enforce a smaller per-request budget or leave time for fallback, persistence, and response serialization.
+The shared TBA client, Statbotics client, and FRC Colors client perform upstream `fetch` calls without an `AbortSignal`, timeout, or caller-provided deadline. The YouTube oEmbed lookup in `buildStreams` is also unbounded. These paths serve event schedules, team histories, rankings, OPRs, alliances, match predictions, team EPA, event colors, and webcast metadata. A provider connection that stalls rather than promptly rejecting can therefore hold an API route, server-rendered page, or background analytics worker open until the hosting platform terminates the execution. Team-history and analytics routes declare 60-second maximum durations, while Statbotics and FRC Colors also hold finite Redis request locks around these fetches.
 
-This also amplifies lock-expiry risks in the analytics jobs (FV-AUD-057 and FV-AUD-062): the worker's work budget is not a provider request deadline, so an in-flight TBA fetch can continue beyond the nominal budget and lock lease.
+This amplifies the lock-expiry risks in the analytics jobs (FV-AUD-057 and FV-AUD-062) and provider cache clients (FV-AUD-057 and FV-AUD-059): a worker's nominal work budget or a lock TTL is not a provider request deadline, so an in-flight request can outlive its owner lease and execution budget.
 
-**Action:** add a configurable TBA request timeout and propagate cancellation/deadline budgets from callers where appropriate. Choose a provider timeout comfortably below the shortest relevant route/job budget, distinguish timeout from authoritative not-found and other provider failures, and ensure workers stop or safely abandon work when their deadline expires. Add tests for a never-resolving fetch, timeout cleanup, and preservation of previously cached data.
+**Action:** add configurable per-provider request timeouts and propagate cancellation/deadline budgets from callers where appropriate. Choose timeouts comfortably below the shortest relevant route/job budget, distinguish timeout from authoritative not-found and other provider failures, and ensure workers stop or safely abandon work when their deadline expires. Add tests for never-resolving fetches, timeout cleanup, and preservation of previously cached data.
 
 ### FV-AUD-067 — TBA responses and cached payloads are trusted without runtime schema validation
 
