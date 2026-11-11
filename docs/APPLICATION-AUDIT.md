@@ -546,3 +546,13 @@ The team-match analysis route fetches each team's event schedule through `withCo
 This is especially problematic for a season-wide endpoint: a temporary TBA failure for one event makes the team's entire match history unavailable even though other events could still be analyzed. The current payload has no per-event TBA collection status or completeness metadata to distinguish a partial season from a complete one.
 
 **Action:** collect per-event outcomes independently, preserve successful event matches, and include explicit per-event failure status plus aggregate completeness in the response. Keep a fully failed request distinguishable from a successful response with zero matches.
+
+### FV-AUD-045 — Team-match Statbotics collection status can report complete after acquisition failure
+
+**Severity: Medium / source completeness and diagnostics**
+
+The team-match route catches a failed bulk `Statbotics.getMatches` request and substitutes an empty array. It then derives `collection.state` exclusively from whether every completed TBA match row has `statboticsAvailable === true`.
+
+This loses the distinction between a successful Statbotics collection containing no matching records and a failed collection request. With completed TBA matches, a failed request is reported only as generic `partial`, indistinguishable from successful acquisition with some missing per-match Statbotics records. With zero completed TBA matches, `[].every(...)` is true, so the route reports `complete` even when the Statbotics collection request failed.
+
+**Action:** track the bulk Statbotics request outcome separately from per-match record coverage. Expose request status/error/freshness and record coverage as distinct fields. A successful empty collection may be complete with zero records; a failed request must remain unavailable/failed even when there are no completed TBA matches. Add tests for failed request with zero matches, failed request with scored matches, successful empty collection, and successful partial record coverage.
