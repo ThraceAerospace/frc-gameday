@@ -926,3 +926,12 @@ In `TBAClient.get`, the successful upstream response is written to the primary R
 `package.json` wires both type generators into `predev` and `prebuild`, so every `npm run dev` and `npm run build` fetches the current TBA and Statbotics OpenAPI documents before Next.js starts. The generated TypeScript files are committed to the repository, but the normal startup/build path does not use those checked-in artifacts as a fallback. The Statbotics generator has a 20-second fetch timeout; the TBA `openapi-typescript` command is invoked directly against the live Swagger URL without an explicit timeout/retry/fallback in the project script. A temporary documentation endpoint outage, DNS/network restriction, or upstream schema-service change can therefore prevent local development startup or production deployment even when the application source and last-known generated contracts are otherwise buildable.
 
 **Action:** separate routine build/start from explicit schema regeneration. Keep generated artifacts committed and have ordinary `predev`/`prebuild` consume them; run generators in a deliberate update command or CI workflow, review the generated diff, and fail that update workflow if upstream schemas are unavailable. If automatic regeneration is a deliberate policy, add bounded retries and a clearly documented last-known-good fallback. Test builds with network access to the schema endpoints disabled.
+
+
+### FV-AUD-083 — Team-history provenance hardcodes the Statbotics mirror regardless of configured runtime host
+
+**Severity: Low / source attribution accuracy**
+
+The selected-team history route emits `source: "Statbotics mirror + The Blue Alliance"` in every successful payload. The Statbotics client chooses its runtime host from `STATBOTICS_API_BASE_URL` when configured and otherwise uses its current default mirror. If the deployment is switched to the official Statbotics API or a FieldView-operated compatible endpoint, the response continues to attribute the data to the community mirror. Consumers therefore receive incorrect provenance precisely when the project changes its provider configuration to satisfy the official-provider requirement.
+
+**Action:** derive source attribution from the actual configured provider identity at the service boundary, or expose a stable provider identifier that is resolved from configuration without leaking credentials. Keep TBA provenance separate. Add tests for default, official, and FieldView-operated base URL configurations.
