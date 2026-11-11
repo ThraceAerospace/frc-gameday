@@ -2,65 +2,6 @@
 @custom-variant dark (&:where(.site-theme-dark, .site-theme-dark *));
 
 :root {
-  --fv-color-7656c9: #7656C9;
-  --fv-color-5d3fb1: #5D3FB1;
-  --fv-color-f1edfa: #F1EDFA;
-  --fv-color-d9cff2: #D9CFF2;
-  --fv-color-f7f6fa: #F7F6FA;
-  --fv-color-ffffff: #FFFFFF;
-  --fv-color-17152a: #17152A;
-  --fv-color-6f6b7d: #6F6B7D;
-  --fv-color-e4e0ec: #E4E0EC;
-  --fv-color-c74747: #C74747;
-  --fv-color-397bc5: #397BC5;
-  --fv-color-c29a38: #C29A38;
-  --fv-color-79a65a: #79A65A;
-  --fv-color-287a4b: #287A4B;
-  --fv-color-e58b35: #E58B35;
-  --fv-color-4f8f8a: #4F8F8A;
-  --fv-color-8b91a1: #8B91A1;
-  --fv-color-0f172a: #0f172a;
-  --fv-color-64748b: #64748b;
-  --fv-color-94a3b8: #94a3b8;
-  --fv-color-f1f5f9: #f1f5f9;
-  --fv-color-f8fafc: #f8fafc;
-  --fv-color-ffffff: #ffffff;
-  --fv-color-171717: #171717;
-  --fv-color-f5f5f5: #f5f5f5;
-  --fv-color-rgb15234245: rgb(15 23 42 / 45%);
-  --fv-color-rgb00065: rgb(0 0 0 / 65%);
-  --fv-color-rgb00050: rgb(0 0 0 / 50%);
-  --fv-color-rgb1523425: rgb(15 23 42 / 5%);
-  --fv-color-rgb15234210: rgb(15 23 42 / 10%);
-  --fv-color-rgb2552552556: rgb(255 255 255 / 6%);
-  --fv-color-rgb25525525512: rgb(255 255 255 / 12%);
-  --fv-color-rgb2552552555: rgb(255 255 255 / 5%);
-  --fv-color-rgb25525525510: rgb(255 255 255 / 10%);
-  --fv-color-rgb28303295: rgb(28 30 32 / 95%);
-  --fv-color-rgb30589542: rgb(30 58 95 / 42%);
-  --fv-color-e11d48: #e11d48;
-  --fv-color-2563eb: #2563eb;
-  --fv-color-rgb25525525540: rgb(255 255 255 / 40%);
-  --fv-color-rgb00028: rgb(0 0 0 / 28%);
-  --fv-color-rgb5913024635: rgb(59 130 246 / 35%);
-  --fv-color-rgb5913024612: rgb(59 130 246 / 12%);
-  --fv-color-a78be8: #A78BE8;
-  --fv-color-b9a3f0: #B9A3F0;
-  --fv-color-rgb16713923210: rgb(167 139 232 / 10%);
-  --fv-color-rgb16713923238: rgb(167 139 232 / 38%);
-  --fv-color-rgb16713923214: rgb(167 139 232 / 14%);
-  --fv-color-000000: #000000;
-  --fv-color-71717a: #71717a;
-  --fv-color-3f454b: #3f454b;
-  --fv-color-302641: #302641;
-  --fv-color-554477: #554477;
-  --fv-color-111015: #111015;
-  --fv-color-1b1822: #1B1822;
-  --fv-color-f3f0f8: #F3F0F8;
-  --fv-color-b6aec4: #B6AEC4;
-  --fv-color-383242: #383242;
-  --fv-color-69b4a8: #69B4A8;
-  --fv-color-a1a1aa: #A1A1AA;
   color-scheme: light;
   --fv-brand: #7656C9;
   --fv-brand-strong: #5D3FB1;
@@ -185,7 +126,6 @@
   --fv-tile-text: var(--fv-neutral-muted-dark);
   --fv-tile-surface: #000000;
 
-  --fv-neutral-link-hover: var(--fv-brand);
   --tracked-accent: var(--fv-brand);
 }
 
