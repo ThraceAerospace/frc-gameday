@@ -1036,3 +1036,14 @@ The Event Analytics dashboard loads the two selected teams' season-history endpo
 The progressive Event Analytics job is stored under the unversioned key prefix `insights:progressive:<event>` with a one-year Redis TTL. The `Job` record itself has no `schemaVersion`; `readJob` accepts it after only checking that `event` is truthy, `matches` is an array, and `records`/`attempts` are truthy. It then backfills one freshness field, but does not validate nested event/match/record/attempt shapes or migrate other fields. The response envelope has `schemaVersion: 1`, but that does not version the persisted job that is read and mutated across deployments. A deployment that changes the internal job shape can therefore accept an older persisted job and either silently misinterpret missing fields or fail later during calculation/refresh. The one-year retention extends this compatibility window.
 
 **Action:** add an explicit persisted-job schema version and a deliberate migration/rebuild policy. Validate required nested structures before accepting a job; if a migration is not supported, discard/rebuild the incompatible job rather than partially casting it. Keep the public EventAnalytics response schema version separate from the Redis job schema version. Add fixtures for the current job and each supported prior version.
+
+
+### FV-AUD-095 — Team detail page fans out every event's data requests without a concurrency bound
+
+**Severity: Medium / provider load and team-page reliability**
+
+After loading a team's season event list, `src/app/team/[team]/page.tsx` uses `Promise.all(teamEvents.map(...))` to build every event section concurrently. Each event section then issues its own parallel requests for the event record, the team's match schedule, team event status, awards, advancement points, and event rankings (with playoff alliances also loaded for the section). A team with many official events can therefore trigger dozens of simultaneous TBA service calls on a cold cache. One slow/failing request also rejects the outer `Promise.all` and prevents every other successfully loaded event section from rendering (the latter page-level failure mode is tracked in FV-AUD-030).
+
+This differs from the selected-team match-analysis route, which at least bounds event schedule and match-row concurrency. The team page has no equivalent limit or per-event outcome collection.
+
+**Action:** bound event-section concurrency and collect per-event results independently. Preserve completed sections when one event's optional resource fails, expose which resource/event is incomplete, and keep a reasonable cap on concurrent TBA requests during cold-cache team-page loads. Add tests with many events and one failing optional request, verifying that request concurrency remains bounded and successful sections still render.
