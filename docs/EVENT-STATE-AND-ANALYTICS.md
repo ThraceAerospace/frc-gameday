@@ -37,7 +37,7 @@ When the first EventState subscriber arrives, `EventState.start()`:
 - fetches OPR/DPR/CCWM data;
 - acquires Statbotics match predictions for the current next match and most recently completed match.
 
-Each resource has request-generation protection so an older response cannot overwrite a newer request. A failed resource refresh preserves the previous usable snapshot where possible.
+Each resource has request-generation protection so an older response cannot overwrite a newer request. A failed resource refresh preserves the previous usable snapshot where possible. The current snapshot still exposes only coarse global loading/error/WebSocket-stale state, not per-resource pending/fresh/failed outcomes. The global loading flag is cleared by event-metadata acquisition even while other resources may still be loading; several malformed successful collection responses are also converted to empty arrays. See FV-AUD-029 and FV-AUD-067.
 
 ### 3. Server acquisition and cache
 
@@ -75,7 +75,7 @@ Every EventState update notifies its listeners. The SharedWorker forwards snapsh
 
 Remote displays are read-only consumers of controller-published EventState snapshots; they do not independently acquire event data.
 
-When an event has no remaining subscribers, EventState stops its timers and WebSocket subscriptions. When the final live client/lease disappears, the SharedWorker releases the physical WebSocket and stops its watchdog. Worker memory is disposable; Redis/server caches are the recovery source.
+When an event has no remaining subscribers, EventState stops its timers and WebSocket subscriptions. When the final live client/lease disappears, the SharedWorker releases the physical WebSocket and stops its watchdog. Worker memory is disposable; Redis/server caches are the recovery source. The per-tab fallback path does not currently have equivalent idle socket teardown: its browser WebSocket manager remains connected/reconnecting after its final consumer leaves (FV-AUD-086).
 
 ## Current EventAnalytics lifecycle
 
