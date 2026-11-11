@@ -64,7 +64,7 @@ The event-data WebSocket carries invalidation messages, not authoritative match 
 - Alliance-selection notifications refresh playoff alliances.
 - Other and unknown message types trigger a broader reconciliation.
 
-Fallback polling runs on the existing five-minute cadence for matches, statuses, alliances, and OPRs. Webhook-triggered authoritative reconciliation is one-shot and delayed by 65 seconds so TBA has time to catch up with webhook-mutated cache data. These timers are event-scoped.
+Fallback polling runs on the existing five-minute cadence for matches, statuses, alliances, and OPRs. A webhook causes an immediate API re-read followed by a one-shot re-read after 65 seconds. The 65-second timer does not modify the Redis cache entry's `expiresAt` or force an upstream TBA request; whether a read revalidates with TBA depends on the existing TBA cache freshness. These timers are event-scoped.
 
 The worker's heartbeat detects abandoned tabs. A disconnected worker can be reconstructed; tabs reconnect and re-register their subscriptions, and EventState is rebuilt from the server APIs and Redis-backed caches.
 
