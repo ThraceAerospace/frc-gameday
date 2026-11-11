@@ -773,3 +773,13 @@ The shared `TBAClient.get` performs upstream `fetch` calls without an `AbortSign
 This also amplifies lock-expiry risks in the analytics jobs (FV-AUD-057 and FV-AUD-062): the worker's work budget is not a provider request deadline, so an in-flight TBA fetch can continue beyond the nominal budget and lock lease.
 
 **Action:** add a configurable TBA request timeout and propagate cancellation/deadline budgets from callers where appropriate. Choose a provider timeout comfortably below the shortest relevant route/job budget, distinguish timeout from authoritative not-found and other provider failures, and ensure workers stop or safely abandon work when their deadline expires. Add tests for a never-resolving fetch, timeout cleanup, and preservation of previously cached data.
+
+### FV-AUD-067 — TBA responses and cached payloads are trusted without runtime schema validation
+
+**Severity: Medium / provider-boundary data integrity**
+
+The TBA client parses successful upstream JSON and immediately casts it to the caller's generic type (`as T`), then caches it. The generated OpenAPI types in `src/lib/tba/types.ts` provide compile-time contracts only; they do not validate the response at runtime. Redis cache parsing is similarly shallow: it checks only that the parsed value is an object containing `data` and `expiresAt`, then casts the entire envelope to `CacheEntry<T>`. It does not validate the expiry value, ETag, or the resource-specific data shape.
+
+A structurally invalid but syntactically valid upstream response can therefore be stored and served as if it satisfied the TBA contract for the full provider max-age. Downstream service methods and pages assume nested fields and array/object shapes exist; malformed data can cause runtime exceptions, silently degrade calculations, or poison repeated reads from Redis. A malformed-but-envelope-shaped cache value can pass the current cache parser as well.
+
+**Action:** introduce runtime validation at the TBA provider boundary for the resource shapes actually consumed by FieldView, and validate cache envelopes before trusting them. Reject or quarantine invalid provider responses rather than caching them; preserve stale known-good data where policy allows and expose validation failures distinctly from not-found. Add fixture tests for missing nested fields, wrong top-level collection types, nullability, and invalid cache metadata. Keep generated OpenAPI types as the static contract, but do not treat TypeScript casts as runtime validation.
