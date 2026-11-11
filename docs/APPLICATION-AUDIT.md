@@ -566,3 +566,24 @@ In `buildTeamInsights`, the EPA trend includes each appearance's `postEPA ?? pre
 This makes the summary inconsistent with the trend and with `buildTeamRows`, which also carries forward the latest `post_epas` or falls back to `pre_epas`. For a team whose latest available observation is pre-match (or whose event has no completed Statbotics update), the trend can contain a valid latest EPA while the endpoint/change says no value is available.
 
 **Action:** define the intended endpoint as the latest usable observation, preserving its phase and match provenance. If the metric specifically requires a post-match endpoint, label it as such and expose the latest pre-match observation separately rather than silently omitting it. Add cases with only pre-match records and with a final match lacking post-match EPA.
+
+### FV-AUD-047 — Statbotics phase collection is all-or-nothing
+
+**Severity: Medium / partial data loss**
+
+The event analytics worker requests qualification and elimination Statbotics collections together with `Promise.all`. If either request rejects, control enters one shared catch block and the worker marks every TBA match in the event unavailable. Any successful collection from the other phase is discarded rather than retained. For example, an elimination endpoint failure can erase usable qualification predictions from the resulting EventAnalytics snapshot, and vice versa.
+
+This unnecessarily couples two independently useful datasets. It also makes the source status less informative: consumers see a failed event-wide collection rather than usable data for one phase and an acquisition failure for the other.
+
+**Action:** collect qualification and elimination results independently, preserve whichever phase succeeds, and track status/error/freshness per phase. Derive aggregate Statbotics status as partial when one phase is usable and the other is unavailable. Add tests for both-success, qualification-only success, elimination-only success, and both-failure cases.
+
+### FV-AUD-048 — Failed event Statbotics collection is marked loaded and will not retry automatically
+
+**Severity: Medium / recovery and data freshness**
+
+In `advanceEventAnalytics`, `job.statboticsLoadedAt` is assigned after the Statbotics collection try/catch regardless of whether acquisition succeeded. The normal early-return condition then treats that timestamp as completed collection work. Since the API route invokes `advanceEventAnalytics(event)` on subsequent page opens, but the persisted timestamp is already set, those requests do not retry a failed Statbotics collection. The failure remains in the one-year Redis job until a user explicitly requests `refresh=1`, which resets the timestamp and triggers another attempt.
+
+This differs from the FRC Colors failure path in the same worker: on failure, its loaded timestamp remains unset, allowing a later snapshot request to retry it. A transient Statbotics outage can therefore leave an otherwise reusable historical analytics snapshot permanently unavailable to ordinary viewers, with recovery depending on someone knowing to force-refresh it.
+
+**Action:** distinguish attempted-at from successfully collected-at state. Use a bounded retry policy/backoff for failed Statbotics acquisition, while retaining explicit refresh as an override. Do not mark a failed source as successfully loaded merely to suppress repeated requests; expose the next retry eligibility or retry state in source metadata. Add tests proving that a failed attempt can recover on a later eligible request without deleting unrelated successful analytics data.
+
