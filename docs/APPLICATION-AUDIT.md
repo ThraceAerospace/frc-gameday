@@ -135,9 +135,9 @@ This conflicts with the project requirement to use the official Statbotics API o
 
 **Severity: High / data-freshness defect**
 
-`src/app/api/insights/team/[team]/route.ts` stores the assembled team-history response under `cache:insights:team-history:<team>:<year>` with a 365-day TTL. The route has no `refresh=1` handling. This applies to the current season as well as completed seasons, even though the underlying Statbotics team-event cache has a much shorter freshness policy.
+`src/app/api/insights/team/[team]/route.ts` stores the assembled team-history response under `cache:insights:team-history:<team>:<year>` with a 365-day TTL. The route has no `refresh=1` handling. This applies to the current season as well as completed seasons, even though the underlying Statbotics team-event cache has a much shorter freshness policy. The cache key has no response-schema version, and a cache hit is returned after `JSON.parse` without validating the payload shape. A team-history contract change can therefore leave an older response shape in circulation for up to a year, with no explicit refresh path to migrate it; this differs from the team-match analysis route, which uses a versioned `v2` cache key.
 
-**Action:** use a current-season TTL appropriate to changing competition data, preserve longer retention only for completed seasons where justified, and provide an explicit refresh/invalidation path.
+**Action:** use a current-season TTL appropriate to changing competition data, preserve longer retention only for completed seasons where justified, provide an explicit refresh/invalidation path, and version/validate the cached response contract so deployments cannot silently serve incompatible historical payload shapes.
 
 ### FV-AUD-003 — Event Analytics runtime is documented incorrectly
 
