@@ -84,9 +84,12 @@ test("raw generated provider schemas are imported only by their application type
 
   for (const filePath of files) {
     for (const specifier of await getImports(filePath)) {
-      if (!specifier.startsWith(".")) continue;
-
-      const target = path.resolve(path.dirname(filePath), specifier);
+      const target = specifier.startsWith("@/")
+        ? path.join(sourceRoot, specifier.slice(2))
+        : specifier.startsWith(".")
+          ? path.resolve(path.dirname(filePath), specifier)
+          : null;
+      if (!target) continue;
       const isGeneratedSchema =
         target === tbaGenerated || target === statboticsGenerated;
 
