@@ -64,11 +64,11 @@ async function createHarness(eventKey = "2026ctabc") {
     getEventOPRs: async (key) => { calls.push(["getEventOPRs", key]); return null; },
     getEventRankings: async (key) => {
       calls.push(["getEventRankings", key]);
-      throw new Error("rankings temporarily unavailable");
+      return null;
     },
     getEventPlayoffAlliances: async (key) => {
       calls.push(["getEventPlayoffAlliances", key]);
-      throw new Error("alliances not published");
+      return null;
     },
   };
 
@@ -116,6 +116,7 @@ test("EventAnalytics snapshot initializes from TBA, persists the job, and emits 
   assert.equal(snapshot.eventKey, eventKey);
   assert.equal(snapshot.event.key, eventKey);
   assert.equal(snapshot.event.timezone, "America/New_York");
+  assert.equal(snapshot.rankings, null);
   assert.deepEqual(snapshot.provenance, {
     event: "tba",
     teams: "tba",
