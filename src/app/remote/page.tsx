@@ -24,8 +24,12 @@ export default function RemotePage() {
 
   function addDisplay(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const code = codeInput.trim();
-    if (!/^\d{6}$/.test(code)) return;
+    const code = codeInput.replace(/\D/g, "").slice(0, 6);
+    if (!/^\d{6}$/.test(code)) {
+      setCodeError("Enter the six-digit code shown on the display.");
+      return;
+    }
+    setCodeError(null);
     if (displays.some((display) => display.code === code)) {
       setActiveId(displays.find((display) => display.code === code)?.id ?? null);
       setCodeInput("");
@@ -72,7 +76,11 @@ export default function RemotePage() {
             <p className="mt-1 text-xs leading-5 text-neutral-500">Enter the six-digit pairing code shown on the display you want to control.</p>
             <input
               value={codeInput}
-              onChange={(event) => setCodeInput(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              type="text"
+              onChange={(event) => {
+                setCodeInput(event.target.value.replace(/\D/g, "").slice(0, 6));
+                setCodeError(null);
+              }}
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
