@@ -163,7 +163,7 @@ function buildPayload(job: Job): EventAnalytics {
   };
 }
 
-export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalyticsResponse> {
+export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalytics> {
   let job = await readJob(eventKey);
   if (!job) {
     const [event, teams, matches, oprs, rankings, playoffAlliances] = await Promise.all([
