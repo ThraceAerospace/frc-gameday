@@ -81,7 +81,7 @@ Do not replace this with a naive `setInterval` implementation.
 
 ## Match semantics
 
-The client-side canonical match helpers are in `src/lib/gameday/matchUtils.ts`.
+The client-side canonical match helpers are in `src/lib/tba/matchUtils.ts`.
 
 The presentation chain is:
 
@@ -96,9 +96,9 @@ Team presentation rules:
 - Show teams in their red or blue alliance color only when displaying a match; outside match context, use neutral black styling.
 - When a match's alliance data includes a team in `dq_team_keys`, render that team's number with a strikethrough.
 
-## Multiview
+## Tile View / Multiview
 
-MultiviewView owns:
+The current surface implementation is `TileView` and `TileSurfaceController` under `src/components/surface/`. Together they own:
 
 - stable streams;
 - priority;
