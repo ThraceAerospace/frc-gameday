@@ -753,3 +753,13 @@ The Event Analytics refresh path calls `TBA.getEventMatches`, `TBA.getEventOPRs`
 The refresh also leaves the persisted event record and team roster untouched; only matches, OPRs, rankings, and playoff alliances are reconsidered. A changed event roster or event metadata therefore cannot be reconciled by this action. This compounds the season-cohort roster issue documented in FV-AUD-060.
 
 **Action:** define what “Refresh data” promises per source. If it is intended to request current provider data, expose force-refresh controls through the TBA service and refresh all mutable resources required by the snapshot, including event metadata and team roster. If upstream request limits require honoring still-valid TBA cache entries, label the action as rebuilding from available cached sources and expose each resource's fetched-at/freshness state. Test a changed TBA response while the old Redis entry is still within max-age.
+
+### FV-AUD-065 — Schedule and alliance webhooks refetch through still-fresh TBA cache entries
+
+**Severity: High / live event data freshness**
+
+The TBA webhook handler treats `schedule_updated` and `starting_comp_level` as refetch signals without invalidating or mutating the relevant Redis resources. It then broadcasts the event to EventState, whose default handler calls `reloadAll(true)`. Similarly, `alliance_selection` causes `reloadAlliances(true)`. Those client reloads call the ordinary event API routes, which call TBA service methods using the normal cache policy. The TBA client returns any unexpired cached response immediately; the reload does not force an upstream request or invalidate the cache.
+
+Consequently, a schedule update can trigger a visible reload that simply returns the old cached match schedule. Alliance selection can likewise reload the old cached alliance response. The same issue applies to any other webhook type routed through the generic full-reload path when its corresponding TBA resource cache has not expired. This is separate from the match payload cache mutation gaps documented in FV-AUD-051 and FV-AUD-055: these webhook types do not directly patch the affected resource at all.
+
+**Action:** map each webhook type to the exact TBA resource keys it invalidates or updates before broadcasting. For schedule changes, invalidate the event match schedule and any dependent team-scoped schedule representations; for alliance selection, invalidate the event alliance resource and any dependent derived resources. Keep the normal cache policy for unrelated resources. Add integration tests with unexpired Redis entries proving that each webhook makes the next relevant API read observe updated provider data.
