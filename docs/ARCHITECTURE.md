@@ -12,6 +12,7 @@ This document describes both the architecture currently present in the repositor
 - The normal live browser path uses one origin-wide SharedWorker. It owns the event WebSocket and per-event EventState instances; tabs receive snapshots through MessagePorts. When SharedWorker is unavailable, the client falls back to per-tab EventState/WebSocket ownership.
 - EventState owns live TBA event acquisition, refresh, freshness, and reconciliation. Remote displays consume controller-published snapshots rather than starting another acquisition lifecycle.
 - Event Analytics is currently a separate server-side Redis job and HTTP API. The dashboard fetches that payload itself; EventAnalytics is not yet owned or distributed by the SharedWorker.
+- Both current snapshot types remain provider-shaped: `EventStateSnapshot` embeds TBA/Statbotics records and client-runtime status, while EventAnalytics v1 wraps the existing provider-shaped analytics response. EventState is volatile SharedWorker memory, not a durable canonical model. A normalized, provider-independent FieldView DTO layer is still target work.
 
 ### Not implemented yet
 
