@@ -953,3 +953,14 @@ The selected-team history route emits `source: "Statbotics mirror + The Blue All
 `RemotePeer.createPeerConnection` configures only Google's public STUN server (`stun:stun.l.google.com:19302`) and does not provide any TURN server. STUN helps peers discover public-facing address candidates, but it does not relay media/data when the peers' NATs or network policies prevent a direct ICE path. Displays and controllers behind restrictive/symmetric NAT, UDP-blocking firewalls, or some enterprise networks can therefore fail to establish the data channel even though their signaling WebSockets connect successfully. The current code restarts the peer after an explicit failed/closed connection state, but it has no relay candidate to fall back to.
 
 **Action:** decide whether remote connectivity is expected to work across arbitrary public networks. If so, configure a credentialed TURN service (with UDP and TCP/TLS relay options) and include it in the ICE server list; keep credentials short-lived and server-issued. Add connectivity tests across same-LAN, typical home NAT, and restrictive-network/TURN-only scenarios, and expose a clear connection failure reason rather than leaving the user at an indefinite “Connecting” state.
+
+
+### FV-AUD-086 — Per-tab fallback WebSocket never shuts down when its final consumer leaves
+
+**Severity: Medium / idle connection and reconnect lifecycle**
+
+When SharedWorker is unavailable, `sharedWorkerClient` switches to fallback mode and creates per-tab `EventState` instances that use the singleton `eventWebSocket` from `src/lib/realtime/client.ts`. EventState unsubscribes its event handlers when its final subscriber leaves, and `registerSharedLiveRuntime` removes its status subscription when the final live-runtime lease is released. However, `EventWebSocketManager` has no stop/release lifecycle: removing the last event handler does not close its socket, cancel a pending reconnect timer, or reset `started`. Its `close` handler schedules reconnect unconditionally, even when both the event-handler and status-handler sets are empty. A tab that used the fallback can therefore retain an idle WebSocket and continue reconnecting after all live pages and event subscriptions have gone away.
+
+This violates the documented idle-teardown invariant. The normal SharedWorker-owned path has its own lease/watchdog cleanup; the leak is specific to the per-tab fallback path and can multiply across tabs when SharedWorker is unavailable.
+
+**Action:** give `EventWebSocketManager` explicit consumer/lease accounting and an idle shutdown path. When no event subscriptions or runtime leases remain, cancel reconnect timers, close the socket, clear its started state, and avoid reconnecting. Add tests for last-event unsubscribe, last-runtime-lease release, disconnect while idle, and subsequent fresh subscription/reconnect.
