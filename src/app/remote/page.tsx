@@ -3,13 +3,12 @@
 import { useState } from "react";
 import RemoteSession from "@/components/remote/RemoteSession";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
-import type { RemotePeerStatus, RemoteSignalingStatus } from "@/lib/remote/webrtc";
+import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 
 type DisplaySession = {
   id: string;
   code: string;
   status: RemotePeerStatus;
-  signalingStatus: RemoteSignalingStatus;
 };
 
 function createId() {
@@ -19,34 +18,23 @@ function createId() {
 export default function RemotePage() {
   const sessionController = useTileSurfaceController({ events: [] });
   const [codeInput, setCodeInput] = useState("");
-  const [codeError, setCodeError] = useState<string | null>(null);
   const [displays, setDisplays] = useState<DisplaySession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   function addDisplay(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const code = codeInput.replace(/\D/g, "").slice(0, 6);
-    if (!/^\d{6}$/.test(code)) {
-      setCodeError("Enter the six-digit code shown on the display.");
-      return;
-    }
-    setCodeError(null);
+    const code = codeInput.trim();
+    if (!/^\d{6}$/.test(code)) return;
     if (displays.some((display) => display.code === code)) {
       setActiveId(displays.find((display) => display.code === code)?.id ?? null);
       setCodeInput("");
       return;
     }
 
-    const display = { id: createId(), code, status: "connecting" as const, signalingStatus: "connecting" as const };
+    const display = { id: createId(), code, status: "connecting" as const };
     setDisplays((current) => [...current, display]);
     setActiveId(display.id);
     setCodeInput("");
-  }
-
-  function updateSignalingStatus(id: string, signalingStatus: RemoteSignalingStatus) {
-    setDisplays((current) =>
-      current.map((display) => display.id === id ? { ...display, signalingStatus } : display),
-    );
   }
 
   function updateStatus(id: string, status: RemotePeerStatus) {
@@ -65,7 +53,7 @@ export default function RemotePage() {
   const activeDisplay = displays.find((display) => display.id === activeId) ?? null;
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="h-[100dvh] overflow-y-auto overscroll-y-contain bg-black text-white [touch-action:pan-y]">
       <header className="border-b border-white/10 bg-neutral-950 px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
@@ -83,48 +71,32 @@ export default function RemotePage() {
             <p className="mt-1 text-xs leading-5 text-neutral-500">Enter the six-digit pairing code shown on the display you want to control.</p>
             <input
               value={codeInput}
-              type="text"
-              onChange={(event) => {
-                setCodeInput(event.target.value.replace(/\D/g, "").slice(0, 6));
-                setCodeError(null);
-              }}
+              onChange={(event) => setCodeInput(event.target.value.replace(/\D/g, "").slice(0, 6))}
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
               placeholder="000000"
               aria-label="Display pairing code"
-              aria-invalid={Boolean(codeError)}
-              aria-describedby={codeError ? "display-code-error" : undefined}
               className="mt-3 w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-[var(--fv-brand)]"
             />
-            {codeError ? <p id="display-code-error" role="alert" className="mt-2 text-xs text-[var(--fv-review)]">{codeError}</p> : null}
-            <button type="submit" className="mt-3 w-full rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--fv-brand-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fv-brand)]">Connect display</button>
+            <button type="submit" disabled={codeInput.length !== 6} className="mt-3 w-full rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-30">Connect display</button>
           </form>
 
           <section className="space-y-2">
             <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-neutral-500">Displays</h2>
-            {displays.map((display, index) => {
-              const connectionLabel = display.status === "connected"
-                ? "Connected"
-                : display.signalingStatus === "error"
-                  ? "Signaling error — check the code and display"
-                  : display.signalingStatus === "connected"
-                    ? "Waiting for display…"
-                    : "Connecting…";
-              return (
+            {displays.map((display, index) => (
               <div key={display.id} className={`rounded-xl border p-3 ${display.id === activeId ? "border-white/30 bg-white/[0.07]" : "border-white/10 bg-white/[0.02]"}`}>
                 <button type="button" onClick={() => setActiveId(display.id)} className="flex w-full items-center gap-3 text-left">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${display.status === "connected" ? "bg-green-400" : display.status === "error" ? "bg-red-400" : "bg-amber-400"}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">Display {index + 1}</span>
-                    <span className="mt-0.5 block text-xs text-neutral-500">Code {display.code} · {connectionLabel}</span>
+                    <span className="mt-0.5 block text-xs text-neutral-500">Code {display.code} · {display.status}</span>
                   </span>
                   <span className="text-neutral-600">{display.id === activeId ? "●" : "○"}</span>
                 </button>
                 <button type="button" onClick={() => removeDisplay(display.id)} className="mt-2 w-full rounded-lg border border-white/10 px-3 py-1.5 text-xs text-neutral-400 hover:bg-white/[0.05] hover:text-white">Disconnect display</button>
               </div>
-              );
-            })}
+            ))}
             {displays.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-neutral-600">No displays connected yet.</p> : null}
           </section>
         </aside>
@@ -145,7 +117,6 @@ export default function RemotePage() {
                     code={display.code}
                     hidden={display.id !== activeId}
                     onStatus={(status) => updateStatus(display.id, status)}
-                    onSignalingStatus={(status) => updateSignalingStatus(display.id, status)}
                   />
                 </div>
               ))}
