@@ -16,7 +16,7 @@ FieldView already has a meaningful data architecture: TBA acquisition is central
 
 The largest risks found in this pass are not visual. They concern source correctness, freshness, completeness, and the reliability of the data-delivery path:
 
-1. The Statbotics runtime defaults to a community-operated mirror rather than the project's required official/FieldView-operated source.
+1. The Statbotics runtime default previously pointed to a community-operated mirror rather than the official API. The code default is now corrected; deployed environment overrides still require verification.
 2. The currently dormant team-history API can retain current-season data or a transient provider failure for a year if called; active analytics consumers also hide stale-on-error provider fallbacks behind fresh-looking timestamps/status.
 3. Webhook handling does not consistently update or invalidate every cached representation and dependent resource; some failed cache mutations are still acknowledged as successful updates.
 4. Redis lock leases can expire during provider/job work, concurrent workers can overwrite progress, and explicit refreshes can silently return the old snapshot when a lock is held.
@@ -66,7 +66,7 @@ The teams directory currently renders at most the first 200 teams and explicitly
 ### Statbotics and FRC Colors
 
 - Statbotics requests are centralized through `src/lib/statbotics/client.ts` and `src/lib/statbotics/service.ts`. The client supports ETags, upstream cache headers, a ten-minute minimum request interval, endpoint fallbacks, stale-on-error behavior, and retry backoff. However, stale fallback provenance/freshness is not propagated to consumers, the minimum interval can override a shorter upstream max-age, and successful resource payloads are not runtime-schema-validated.
-- The generated Statbotics type document is fetched from the official Statbotics OpenAPI endpoint. This is separate from the runtime data host: the runtime client currently defaults to `https://api-statbotics.iterativerefinement.com`, a community-operated mirror.
+- The generated Statbotics type document is fetched from the official Statbotics OpenAPI endpoint. The runtime client now defaults to `https://api.statbotics.io`; `STATBOTICS_API_BASE_URL` remains an explicit temporary override. The deployed environment value is not established by this source audit.
 - FRC Colors is accessed through `src/lib/frc-colors/` and caches event colors in Redis for 24 hours.
 
 ### Event Analytics
@@ -124,15 +124,15 @@ This is not a recommendation to wrap every TBA response in a new DTO immediately
 
 ## Findings
 
-### FV-AUD-001 — Statbotics runtime defaults to a community mirror
+### FV-AUD-001 — Statbotics runtime defaulted to a community mirror (code default corrected)
 
 **Severity: High / provider-compliance blocker**
 
-`src/lib/statbotics/client.ts` sets `DEFAULT_BASE_URL` to `https://api-statbotics.iterativerefinement.com`. `STATBOTICS_API_BASE_URL` can override it, but the default is not the official API. The team-history response also labels its source as `Statbotics mirror + The Blue Alliance`.
+`src/lib/statbotics/client.ts` previously set `DEFAULT_BASE_URL` to `https://api-statbotics.iterativerefinement.com`. The default now points to `https://api.statbotics.io`. `STATBOTICS_API_BASE_URL` remains available as a temporary override for Chondl's compatible fork (`https://api-statbotics.popcornpenguins.com`) while the official API is unavailable. The deployed environment value must be checked separately. The team-history response's source label should also be checked against the active provider configuration.
 
 This conflicts with the project requirement to use the official Statbotics API or a FieldView-operated fork, not a community mirror. The generated type schema being sourced from the official OpenAPI document does not change the runtime data host.
 
-**Action:** change the runtime default to the official API or a FieldView-operated endpoint, then validate endpoint compatibility, cache behavior, and the deployed environment configuration.
+**Action/status:** the runtime code default has been changed to the official API and provider-default/override behavior is covered by automated tests. Still verify the deployed `STATBOTICS_API_BASE_URL` value and exercise the live official endpoint; this repository change cannot establish deployment configuration or live service health.
 
 ### FV-AUD-002 — Current-season team history can remain stale for a year
 
