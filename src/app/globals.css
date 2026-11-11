@@ -441,12 +441,6 @@ button:disabled {
   background-color: var(--fv-neutral-surface-mid-dark);
 }
 
-.site-theme-dark .hover\:bg-blue-50:hover,
-.site-theme-dark .hover\:bg-blue-50\/40:hover,
-.site-theme-dark .hover\:bg-blue-50\/60:hover {
-  background-color: var(--fv-neutral-surface-hover-dark);
-}
-
 .site-theme-dark .border-slate-100 {
   border-color: var(--fv-neutral-surface-mid-dark);
 }
@@ -484,8 +478,7 @@ button:disabled {
 .site-theme-dark .text-blue-600,
 .site-theme-dark .text-blue-700,
 .site-theme-dark .text-blue-800,
-.site-theme-dark .text-blue-900,
-.site-theme-dark .hover\:text-blue-900:hover {
+.site-theme-dark .text-blue-900 {
   color: var(--fv-neutral-blue-text-dark);
 }
 

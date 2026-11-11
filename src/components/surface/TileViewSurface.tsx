@@ -79,7 +79,7 @@ export default function TileViewSurface({
             )}
           </div>
         </div>
-        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_var(--fv-tile-shadow),inset_0_1px_0_var(--fv-tile-inset-highlight)] backdrop-blur-xl">
           <TileSurfaceSettingsView state={state} actions={actions} triggerClassName="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40" open={settingsOpen} onOpenChange={setSettingsOpen} />
         </div>
       </header>
