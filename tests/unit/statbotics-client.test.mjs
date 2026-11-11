@@ -165,3 +165,116 @@ test("Statbotics collection pagination uses stable filters and offsets", async (
   assert.equal(requestedUrls[0].searchParams.get("offset"), "0");
   assert.equal(requestedUrls[1].searchParams.get("offset"), "1000");
 });
+
+
+test("Statbotics malformed cache entries are discarded before a successful fetch", async () => {
+  const { client, redis } = await createClient();
+  const cacheKey = "cache:statbotics:v3::match:2026ctabc_qm88";
+  await redis.set(cacheKey, JSON.stringify({ data: { wrong: true }, fetchedAt: "not-a-timestamp" }));
+  let requests = 0;
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({ key: "2026ctabc_qm88" }), {
+        status: 200,
+        headers: { "Cache-Control": "max-age=60" },
+      });
+    },
+  }, async () => {
+    assert.deepEqual(await client.getMatch("2026ctabc_qm88"), { key: "2026ctabc_qm88" });
+  });
+
+  assert.equal(requests, 1);
+  assert.equal(await redis.get(cacheKey) !== null, true);
+});
+
+test("Statbotics 304 responses retain the cached representation and renew ETag freshness", async () => {
+  const { client, redis } = await createClient();
+  const cacheKey = "cache:statbotics:v3::match:2026ctabc_qm89";
+  const data = { key: "2026ctabc_qm89", pred: { red_score: 101 } };
+  await redis.set(cacheKey, JSON.stringify({
+    data,
+    etag: '"before"',
+    fetchedAt: Date.now() - 1_000_000,
+    lastRefreshAt: Date.now() - 1_000_000,
+    expiresAt: Date.now() - 1,
+  }));
+  let headers;
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async (_url, options) => {
+      headers = options.headers;
+      return new Response(null, {
+        status: 304,
+        headers: { "Cache-Control": "max-age=30", ETag: '"after"' },
+      });
+    },
+  }, async () => {
+    assert.deepEqual(await client.getMatch("2026ctabc_qm89"), data);
+  });
+
+  assert.equal(headers["If-None-Match"], '"before"');
+  const renewed = JSON.parse(await redis.get(cacheKey));
+  assert.deepEqual(renewed.data, data);
+  assert.equal(renewed.etag, '"after"');
+  assert.ok(renewed.expiresAt - renewed.fetchedAt >= 10 * 60 * 1000);
+});
+
+test("Statbotics lock contention serves an existing stale value without starting another request", async () => {
+  const { client, redis } = await createClient();
+  const cacheKey = "cache:statbotics:v3::match:2026ctabc_q90";
+  const lockKey = "lock:statbotics:v3::match:2026ctabc_q90";
+  const stale = { key: "2026ctabc_q90" };
+  await redis.set(cacheKey, JSON.stringify({
+    data: stale,
+    etag: null,
+    fetchedAt: Date.now() - 1_000_000,
+    lastRefreshAt: Date.now() - 1_000_000,
+    expiresAt: Date.now() - 1,
+  }));
+  await redis.set(lockKey, "another-worker", "EX", 20, "NX");
+  let requests = 0;
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => {
+      requests += 1;
+      throw new Error("must not fetch while another worker owns the lock");
+    },
+  }, async () => {
+    assert.deepEqual(await client.getMatch("2026ctabc_q90"), stale);
+  });
+
+  assert.equal(requests, 0);
+  assert.equal(await redis.get(lockKey), "another-worker");
+});
+
+test("Statbotics failed later pagination pages reject instead of returning a partial collection", async () => {
+  const { client } = await createClient();
+  let requests = 0;
+  const firstPage = Array.from({ length: 1000 }, (_, index) => ({ key: `page-one-${index}` }));
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => {
+      requests += 1;
+      if (requests === 1) {
+        return new Response(JSON.stringify(firstPage), {
+          status: 200,
+          headers: { "Cache-Control": "max-age=60" },
+        });
+      }
+      return new Response("upstream unavailable", { status: 503 });
+    },
+  }, async () => {
+    await assert.rejects(
+      client.getMatches({ event: "2026ctabc" }),
+      /Statbotics request failed: 503/,
+    );
+  });
+
+  assert.equal(requests, 2);
+});
