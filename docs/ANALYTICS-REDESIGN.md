@@ -45,5 +45,8 @@ This document defines intended analytical behavior; it is not proof that every c
 - The elimination-decline signal does not currently require positive qualification residual performance, although the specification defines the signal as a decline after positive qualification performance.
 - The qualification prediction-calibration summary currently counts every incorrect winner prediction as an underdog win, including the 50/50 edge case. This is a miss count, not an underdog-win count; count an underdog win only when the actual winner's pre-match probability is strictly below 0.5.
 - The selected-team match-analysis API route still contains substantial calculation logic instead of delegating to a reusable server-side service.
+- The shared event-percentile helper reports the sole usable team in a one-observation cohort as the 100th percentile; insufficient peer coverage should be labeled insufficient or use an explicit one-sample convention.
+- EPA contribution calculations discard an entire alliance when any team's pre-match EPA is negative, even when all values are present and the alliance total is positive. Negative EPA is a valid model value, not missing data.
+- Statbotics stale-on-error fallbacks are not surfaced to the analytics consumers, and an explicit Event Analytics refresh can be skipped when the event job lock is held without returning an in-progress state.
 
 See [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md) for the corresponding findings and priorities. Keep this specification as the intended methodology while those implementation gaps are resolved.
