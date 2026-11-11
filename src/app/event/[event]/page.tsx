@@ -31,7 +31,7 @@ export default async function EventPage({
 
   if (!eventKey) {
     return (
-      <SiteShell events={[]}>
+      <SiteShell>
         <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
           <p className="text-slate-500">Missing event key.</p>
         </main>
@@ -43,19 +43,19 @@ export default async function EventPage({
   let teams;
   let matches;
   let alliances;
-  let navigationEvents;
 
   try {
-    [event, teams, matches, alliances, navigationEvents] = await Promise.all([
+    [event, teams, matches] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
-      TBA.getEventPlayoffAlliances(eventKey),
-      TBA.getEvents(new Date().getFullYear()),
     ]);
+    alliances = activeTab === "matches"
+      ? await TBA.getEventPlayoffAlliances(eventKey)
+      : null;
   } catch {
     return (
-      <SiteShell events={[]}>
+      <SiteShell>
         <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
           <div className="mx-auto max-w-5xl">
             <h1 className="text-2xl font-semibold">Event unavailable</h1>
@@ -83,7 +83,7 @@ export default async function EventPage({
   });
   const qualificationMatches = matches.filter((match: TBAMatch) => match.comp_level === "qm");
   const playoffMatches = matches.filter((match: TBAMatch) => isEliminationMatch(match.comp_level));
-  const playoffMatchesPanel = (
+  const playoffMatchesPanel = playoffMatches.length > 0 ? (
     <MatchGroup
       title="Playoff Matches"
       eventKey={event.key}
@@ -92,26 +92,29 @@ export default async function EventPage({
       playoffAlliances={alliances}
       groupPlayoffsByRound
     />
-  );
+  ) : null;
+  const playoffAlliancesPanel = alliances?.length ? (
+    <PlayoffAlliances
+      alliances={alliances}
+      playoffType={event.playoff_type}
+    />
+  ) : null;
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
 
   return (
-    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+    <SiteShell>
       <main className="min-h-full bg-slate-50 text-slate-900">
         <div className="mx-auto max-w-5xl px-6 py-10">
           <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="p-6 sm:p-8">
               <div className="flex flex-wrap items-start justify-between gap-6">
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-mono text-sm text-slate-400">{event.key}</p>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                  <h1 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-bold tracking-tight sm:text-4xl">
+                    <span>{event.name}</span>
+                    <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-sm font-medium leading-none text-slate-600">
                       {event.event_type_string ?? event.event_type}
                     </span>
-                  </div>
-                  <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                    {event.name}
                   </h1>
                   <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
                     {dates && <span>{dates}</span>}
@@ -125,7 +128,6 @@ export default async function EventPage({
                     {location && <span>{location}</span>}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-                    {event.timezone && <span>{event.timezone}</span>}
                     {event.district?.display_name && <span>{event.district.display_name}</span>}
                   </div>
                 </div>
@@ -160,6 +162,12 @@ export default async function EventPage({
                 label="Teams"
                 count={sortedTeams.length}
               />
+              <Link
+                href={`/insights/event/${event.key}`}
+                className="border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-500 hover:text-slate-800"
+              >
+                Analytics
+              </Link>
             </nav>
           </header>
 
@@ -222,18 +230,14 @@ export default async function EventPage({
                   playoffMatchesPanel
                 )}
                 {qualificationMatches.length > 0 ? (
-                  <div className="space-y-5">
-                    <PlayoffAlliances
-                      alliances={alliances}
-                      playoffType={event.playoff_type}
-                    />
-                    {playoffMatchesPanel}
-                  </div>
+                  playoffAlliancesPanel || playoffMatchesPanel ? (
+                    <div className="space-y-5">
+                      {playoffAlliancesPanel}
+                      {playoffMatchesPanel}
+                    </div>
+                  ) : null
                 ) : (
-                  <PlayoffAlliances
-                    alliances={alliances}
-                    playoffType={event.playoff_type}
-                  />
+                  playoffAlliancesPanel
                 )}
               </div>
             </section>

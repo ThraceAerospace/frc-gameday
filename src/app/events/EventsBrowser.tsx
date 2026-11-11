@@ -192,7 +192,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   }, [groups, offseasonMonths]);
 
   return (
-    <SiteShell events={events}>
+    <SiteShell>
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

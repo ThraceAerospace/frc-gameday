@@ -1,6 +1,8 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
+import { Statbotics } from "@/lib/statbotics/service";
+import MatchInsightsPanel from "@/components/match/MatchInsightsPanel";
 import type { TBAMatch } from "@/lib/tba/types";
 import { formatMatchEventTime, formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
@@ -24,13 +26,11 @@ export default async function MatchPage({
 
   let match;
   let event;
-  let navigationEvents;
 
   try {
-    [match, event, navigationEvents] = await Promise.all([
+    [match, event] = await Promise.all([
       TBA.getMatch(matchKey),
       TBA.getEvent(eventKey),
-      TBA.getEvents(new Date().getFullYear()),
     ]);
   } catch {
     return (
@@ -53,8 +53,15 @@ export default async function MatchPage({
     );
   }
 
+  const [statboticsResult, oprsResult] = await Promise.allSettled([
+    Statbotics.getMatch(matchKey),
+    TBA.getEventOPRs(eventKey),
+  ]);
+  const statbotics = statboticsResult.status === "fulfilled" ? statboticsResult.value : null;
+  const eventOprs = oprsResult.status === "fulfilled" ? oprsResult.value : null;
+
   return (
-    <SiteShell events={navigationEvents} selectedEventKey={event.key}>
+    <SiteShell>
       <main className="min-h-full bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-5xl px-6 py-10">
         {/* Breadcrumb */}
@@ -176,6 +183,8 @@ export default async function MatchPage({
             </div>
           </section>
         )}
+
+        <MatchInsightsPanel match={match} statbotics={statbotics} oprs={eventOprs} />
 
         {/* Match information */}
         <section className="mt-8">

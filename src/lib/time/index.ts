@@ -34,6 +34,31 @@ export function formatEventTime(timestampSeconds: number | null | undefined, eve
   return sameDay ? time : `${parts.weekday} ${time}`;
 }
 
+export type EventCompetitionStatus = "inProgress" | "upcoming" | "completed";
+
+export function getEventCompetitionStatus(
+  startDate: string,
+  endDate: string,
+  eventTimeZone?: string | null,
+  now = new Date(),
+): EventCompetitionStatus {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: eventTimeZone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(now)
+      .map(({ type, value }) => [type, value]),
+  );
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
+
+  if (today < startDate) return "upcoming";
+  if (today > endDate) return "completed";
+  return "inProgress";
+}
+
 export function formatEventDate(timestampSeconds: number, timeZone: string): string {
   const date = new Date(timestampSeconds * 1000);
 

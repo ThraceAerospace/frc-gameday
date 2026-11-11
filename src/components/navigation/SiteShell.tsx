@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Bars3Icon, MoonIcon, SunIcon, TvIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
-export default function SiteShell({ children }: { children: React.ReactNode; events?: unknown[]; selectedEventKey?: string }) {
+export default function SiteShell({ children }: { children: React.ReactNode }) {
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -32,7 +32,7 @@ export default function SiteShell({ children }: { children: React.ReactNode; eve
           </button>
           <Link href="/" className="shrink-0 text-xl font-black tracking-tight text-slate-900">Field<span className="text-blue-600">View</span></Link>
           <nav aria-label="Main navigation" className="hidden shrink-0 items-center gap-1 md:flex">
-            <NavLink href="/">Events</NavLink>
+            <NavLink href="/events">Events</NavLink>
             <NavLink href="/teams">Teams</NavLink>
             <NavLink href="/districts">Districts</NavLink>
             <NavLink href="/insights">Insights</NavLink>

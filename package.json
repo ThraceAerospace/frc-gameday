@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "generate:tba-types": "openapi-typescript https://www.thebluealliance.com/swagger/api_v3.json -o src/lib/tba/generated.ts",
-    "predev": "npm run generate:tba-types",
-    "prebuild": "npm run generate:tba-types"
+    "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
+    "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
+    "generate:statbotics-types": "node scripts/generate-statbotics-types.mjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

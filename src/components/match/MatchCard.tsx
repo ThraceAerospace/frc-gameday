@@ -113,7 +113,7 @@ export default function MatchCard({
 
             <span
               className={[
-                "mt-1 whitespace-nowrap font-mono text-[9px] tabular-nums",
+                "mt-1 whitespace-nowrap font-mono text-[10px] tabular-nums",
                 isNext
                   ? "font-semibold text-zinc-200"
                   : "text-zinc-500",

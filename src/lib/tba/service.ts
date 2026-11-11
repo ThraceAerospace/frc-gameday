@@ -9,6 +9,10 @@ import type {
   TBAEventWithTeams,
   TBAEventOPRs,
   TBAEventRanking,
+  TBAEventAdvancementPoints,
+  TBAAward,
+  TBAMedia,
+  TBATeamAvatar,
   TBADistrict,
   TBADistrictAdvancementMap,
   TBADistrictAdvancementResponse,
@@ -51,14 +55,22 @@ export const TBA = {
   getTeam: (teamKey: string): Promise<TBATeam> =>
     tba.get<TBATeam>(`/team/${teamKey}`),
 
+  getTeamAvatar: async (
+    teamKey: string,
+    year: number,
+  ): Promise<TBATeamAvatar | null> => {
+    const media = await tba.get<TBAMedia[]>(`/team/${teamKey}/media/${year}`);
+    return media.find((item): item is TBATeamAvatar => item.type === "avatar") ?? null;
+  },
+
   getTeams: (year: number): Promise<TBATeam[]> =>
     tba.get<TBATeam[]>(`/teams/${year}`),
 
   getTeamDistricts: (teamKey: string): Promise<TBADistrict[]> =>
     tba.get<TBADistrict[]>(`/team/${teamKey}/districts`),
 
-  getTeamEvents: (teamKey: string, year: number): Promise<TBAEventSimple[]> =>
-    tba.get<TBAEventSimple[]>(`/team/${teamKey}/events/${year}`),
+  getTeamEvents: (teamKey: string, year: number): Promise<TBAEvent[]> =>
+    tba.get<TBAEvent[]>(`/team/${teamKey}/events/${year}`),
 
   getTeamEventStatus: (
     teamKey: string,
@@ -67,6 +79,12 @@ export const TBA = {
     tba.get<TBATeamEventStatus | null>(
       `/team/${teamKey}/event/${eventKey}/status`
     ),
+
+  getTeamEventAwards: (
+    teamKey: string,
+    eventKey: string
+  ): Promise<TBAAward[]> =>
+    tba.get<TBAAward[]>(`/team/${teamKey}/event/${eventKey}/awards`),
 
   getTeamMatches: (
     teamKey: string,
@@ -87,6 +105,13 @@ export const TBA = {
 
   getEventSimple: (eventKey: string): Promise<TBAEventSimple> =>
     tba.get<TBAEventSimple>(`/event/${eventKey}/simple`),
+
+  getEventAdvancementPoints: (
+    eventKey: string
+  ): Promise<TBAEventAdvancementPoints | null> =>
+    tba.get<TBAEventAdvancementPoints | null>(
+      `/event/${eventKey}/advancement_points`
+    ),
 
   getEvents: (year: number): Promise<TBAEvent[]> =>
     tba.get<TBAEvent[]>(`/events/${year}`),

@@ -8,13 +8,13 @@ const REWARD_FIELDS = [
   ["traversal_rp", "Traversal RP"],
 ] as const;
 
-function formatScore(value: number | undefined): string {
+function formatScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value)
     ? String(Math.trunc(value))
     : "—";
 }
 
-function formatProbability(value: number | undefined): string {
+function formatProbability(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value)
     ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value * 100)}%`
     : "—";
@@ -24,7 +24,7 @@ function getAllianceValue(
   prediction: StatboticsPrediction | undefined,
   color: "red" | "blue",
   field: "score" | "energized_rp" | "supercharged_rp" | "traversal_rp",
-): number | undefined {
+): number | null | undefined {
   if (!prediction) return undefined;
   if (color === "red") {
     switch (field) {

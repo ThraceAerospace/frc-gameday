@@ -27,7 +27,7 @@ const PRE_EPA_FIELDS = [
   ["endgame_epa", "Endgame EPA"],
 ] as const;
 
-function formatMetric(value: number | undefined): string {
+function formatMetric(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value)
     ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)
     : "—";
@@ -37,7 +37,7 @@ function teamNumberKey(teamKey: string): string {
   return teamKey.replace(/^frc/i, "");
 }
 
-function sumAvailableValues(values: (number | undefined)[]): number | undefined {
+function sumAvailableValues(values: (number | null | undefined)[]): number | undefined {
   if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
     return undefined;
   }
@@ -215,7 +215,7 @@ export default function EventInsightView({
   const statboticsState = displayMatch ? snapshot.statboticsMatches[displayMatch.key] : undefined;
   const statboticsData = statboticsState?.data ?? null;
   const statboticsStatus = statboticsState?.status ?? "loading";
-  const prediction: StatboticsPrediction | undefined = statboticsData?.pred ?? statboticsData?.prediction;
+  const prediction: StatboticsPrediction | undefined = statboticsData?.pred ?? undefined;
   const preEpas = statboticsData?.pre_epas;
 
   const isPostMatch = Boolean(

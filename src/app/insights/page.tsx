@@ -18,7 +18,7 @@ export default async function InsightsPage() {
   const maxDistrict = Math.max(1, ...byDistrict.map(([,n])=>n));
 
   return (
-    <SiteShell events={events}>
+    <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Data Explorer</p>
         <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">FIRST Insights</h1>
