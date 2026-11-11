@@ -19,7 +19,7 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 - The Blue Alliance is the authoritative source for official event schedules, match results, teams, rankings, and OPR/DPR/CCWM data.
 - TBA requests pass through `src/lib/tba/client.ts` and `src/lib/tba/service.ts`, with Redis-backed response caching, ETag validation, and upstream `Cache-Control` freshness.
 - TBA webhooks authenticate through `X-TBA-HMAC`, attempt to update existing cached match data, and publish event-scoped updates through Redis Pub/Sub and `/api/ws`. Cache coherence is not yet complete across standalone/team-scoped matches and dependent status/alliance/OPR resources; see the [application audit](docs/APPLICATION-AUDIT.md).
-- Statbotics and FRC Colors are enrichment providers behind server-side clients/services. The current Statbotics runtime host and its mismatch with the project's official-provider requirement are recorded in the [application audit](docs/APPLICATION-AUDIT.md).
+- Statbotics and FRC Colors are enrichment providers behind server-side clients/services. Statbotics defaults to the official API; `STATBOTICS_API_BASE_URL` supports an explicit temporary compatible-provider override. Provider authority and known audit findings are recorded in the [application audit](docs/APPLICATION-AUDIT.md).
 
 ### Live event state
 
