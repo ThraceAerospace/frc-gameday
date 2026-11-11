@@ -23,7 +23,7 @@ function getCompetitionStatus(event: TBAEvent) {
     event.timezone,
   );
 
-  if (status === "upcoming") return { label: "Upcoming", className: "bg-blue-50 text-blue-700 ring-blue-200" };
+  if (status === "upcoming") return { label: "Upcoming", className: "bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)] ring-[var(--fv-brand-border)]" };
   if (status === "completed") return { label: "Completed", className: "bg-slate-100 text-slate-600 ring-slate-200" };
   return { label: "In progress", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
 }

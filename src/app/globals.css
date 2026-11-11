@@ -116,6 +116,9 @@
   --fv-neutral-control-dark: rgb(255 255 255 / 6%);
   --fv-neutral-control-dark-hover: rgb(255 255 255 / 12%);
   --fv-neutral-control-dark-active: #404040;
+  --fv-neutral-upcoming-bg: var(--fv-brand-soft);
+  --fv-neutral-upcoming-text: var(--fv-brand-strong);
+  --fv-neutral-upcoming-border: var(--fv-brand-border);
   --fv-neutral-input: rgb(255 255 255 / 5%);
   --fv-neutral-modal-border: rgb(255 255 255 / 10%);
   --fv-neutral-event-divider: #aeb5bf;

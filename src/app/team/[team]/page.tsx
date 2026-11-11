@@ -200,8 +200,8 @@ export default async function TeamPage({
                           {event.week != null && <p className="mt-1 text-xs font-medium text-slate-500">Week {event.week + 1}</p>}
                           {event.district?.display_name && <p className="mt-2 text-xs font-medium text-slate-500">{event.district.display_name}</p>}
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href={`/event/${event.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-200 hover:text-[var(--fv-brand-strong)]">Event page</Link>
-                            <Link href={`/gameday?event=${event.key}`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Gameday</Link>
+                            <Link href={`/event/${event.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-[var(--fv-brand-border)] hover:text-[var(--fv-brand-strong)]">Event page</Link>
+                            <Link href={`/gameday?event=${event.key}`} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--fv-brand-strong)]">Gameday</Link>
                           </div>
                           <div className="mt-4 space-y-3 border-t border-slate-200 pt-3">
                             <section className="rounded-lg border border-slate-200 bg-white p-3">
