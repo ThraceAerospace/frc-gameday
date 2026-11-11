@@ -480,17 +480,11 @@ button:disabled {
    colors and tinted surfaces that are intentionally distinct from Gameday. */
 .insights-dashboard {
   --insights-gridline: var(--fv-neutral-insights-grid);
-  --insights-muted: #6F6B7D;
-}
-
- .insights-dashboard :focus-visible {
-  outline: 2px solid var(--fv-brand);
-  outline-offset: 2px;
+  --insights-muted: var(--fv-muted);
 }
 
 .site-theme-dark .insights-dashboard {
   --insights-gridline: var(--fv-neutral-insights-grid-dark);
-  --insights-muted: #B6AEC4;
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-white/95"] {
@@ -579,6 +573,13 @@ button:disabled {
 
 .site-theme-dark .insights-dashboard [class~="text-slate-300"] {
   color: var(--fv-neutral-insights-muted-dark);
+}
+
+/* Shared keyboard focus treatment for site controls. Theme changes update the
+   ring automatically; TileSurface overrides the color with its dark-only token. */
+.site-theme :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--fv-brand);
+  outline-offset: 2px;
 }
 
 /* Interactive links share the FieldView identity throughout the site. */

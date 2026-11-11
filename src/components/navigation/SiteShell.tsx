@@ -18,6 +18,21 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem("fieldview-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileMenuOpen]);
+
   return (
     <div className={`site-theme ${darkMode ? "site-theme-dark" : "site-theme-light"} flex h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--fv-surface)] text-[var(--fv-text)]`}>
       <header className="z-40 shrink-0 border-b border-[var(--fv-border)] bg-[var(--fv-surface-raised)]/95 backdrop-blur">
