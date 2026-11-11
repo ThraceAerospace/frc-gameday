@@ -438,3 +438,14 @@ The pairing flow is the trust boundary for these messages, and the current pairi
 The homepage snapshot catches each event's match-schedule failure and returns `lastMatch: null` and `nextMatch: null`. `HomeEventCard` renders a null last match as “No completed matches yet.” A TBA outage, cache failure, or malformed schedule is therefore presented as a factual absence of completed matches. The card has no way to distinguish an event that has not started from one whose match data could not be loaded.
 
 **Action:** retain per-event match-source status/error/freshness in the homepage snapshot and render an unavailable/stale state separately from an empty schedule. Keep the event card itself available when match data fails.
+
+
+### FV-AUD-035 — TBA schedule reconciliation re-adds every cached match omitted upstream
+
+**Severity: Medium / canonical schedule correctness**
+
+`reconcileMatchData` in `src/lib/tba/client.ts` merges incoming match arrays with cached arrays. It correctly protects a cached completed result when an incoming representation of the same match has no result, but it also appends every cached match whose key is absent from the incoming array, regardless of whether the match is completed, scheduled, canceled, or otherwise stale.
+
+This means a successful upstream schedule response cannot remove a match that was previously cached. If TBA removes or corrects a schedule entry, FieldView can continue serving that obsolete match indefinitely through subsequent refreshes. The protection for completed match results is broader than necessary and conflates preserving result data with preserving deleted schedule records.
+
+**Action:** define explicit reconciliation rules for same-key result regression versus absent-key deletion. Preserve completed result fields only when the match remains in the canonical schedule; remove absent matches unless a documented provider-consistency exception applies. Add tests for completed-match regression, scheduled-match deletion, completed-match deletion, and normal schedule additions.
