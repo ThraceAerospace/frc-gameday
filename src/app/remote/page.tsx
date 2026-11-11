@@ -3,12 +3,13 @@
 import { useState } from "react";
 import RemoteSession from "@/components/remote/RemoteSession";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
-import type { RemotePeerStatus } from "@/lib/remote/webrtc";
+import type { RemotePeerStatus, RemoteSignalingStatus } from "@/lib/remote/webrtc";
 
 type DisplaySession = {
   id: string;
   code: string;
   status: RemotePeerStatus;
+  signalingStatus: RemoteSignalingStatus;
 };
 
 function createId() {
@@ -36,10 +37,16 @@ export default function RemotePage() {
       return;
     }
 
-    const display = { id: createId(), code, status: "connecting" as const };
+    const display = { id: createId(), code, status: "connecting" as const, signalingStatus: "connecting" as const };
     setDisplays((current) => [...current, display]);
     setActiveId(display.id);
     setCodeInput("");
+  }
+
+  function updateSignalingStatus(id: string, signalingStatus: RemoteSignalingStatus) {
+    setDisplays((current) =>
+      current.map((display) => display.id === id ? { ...display, signalingStatus } : display),
+    );
   }
 
   function updateStatus(id: string, status: RemotePeerStatus) {
@@ -96,19 +103,28 @@ export default function RemotePage() {
 
           <section className="space-y-2">
             <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-neutral-500">Displays</h2>
-            {displays.map((display, index) => (
+            {displays.map((display, index) => {
+              const connectionLabel = display.status === "connected"
+                ? "Connected"
+                : display.signalingStatus === "error"
+                  ? "Signaling error — check the code and display"
+                  : display.signalingStatus === "connected"
+                    ? "Waiting for display…"
+                    : "Connecting…";
+              return (
               <div key={display.id} className={`rounded-xl border p-3 ${display.id === activeId ? "border-white/30 bg-white/[0.07]" : "border-white/10 bg-white/[0.02]"}`}>
                 <button type="button" onClick={() => setActiveId(display.id)} className="flex w-full items-center gap-3 text-left">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${display.status === "connected" ? "bg-green-400" : display.status === "error" ? "bg-red-400" : "bg-amber-400"}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">Display {index + 1}</span>
-                    <span className="mt-0.5 block text-xs text-neutral-500">Code {display.code} · {display.status}</span>
+                    <span className="mt-0.5 block text-xs text-neutral-500">Code {display.code} · {connectionLabel}</span>
                   </span>
                   <span className="text-neutral-600">{display.id === activeId ? "●" : "○"}</span>
                 </button>
                 <button type="button" onClick={() => removeDisplay(display.id)} className="mt-2 w-full rounded-lg border border-white/10 px-3 py-1.5 text-xs text-neutral-400 hover:bg-white/[0.05] hover:text-white">Disconnect display</button>
               </div>
-            ))}
+              );
+            })}
             {displays.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-neutral-600">No displays connected yet.</p> : null}
           </section>
         </aside>
@@ -129,6 +145,7 @@ export default function RemotePage() {
                     code={display.code}
                     hidden={display.id !== activeId}
                     onStatus={(status) => updateStatus(display.id, status)}
+                    onSignalingStatus={(status) => updateSignalingStatus(display.id, status)}
                   />
                 </div>
               ))}
