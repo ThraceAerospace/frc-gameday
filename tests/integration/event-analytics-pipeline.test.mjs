@@ -241,6 +241,34 @@ test("EventAnalytics snapshot reads the persisted job without reacquiring provid
 });
 
 
+test("EventAnalytics recognizes populated optional TBA data in legacy snapshots", async () => {
+  const eventKey = "2026ctlegacydata";
+  const harness = await createHarness(eventKey);
+  await harness.redis.set(
+    `insights:progressive:${eventKey}`,
+    JSON.stringify({
+      event: harness.event,
+      teams: harness.teams,
+      oprs: null,
+      rankings: { rankings: [] },
+      playoffAlliances: [{ name: "Alliance 1" }],
+      matches: [createMatch(eventKey, 1, 100)],
+      records: {},
+      attempts: {},
+      state: "partial",
+      updatedAt: Date.now(),
+      tbaLoadedAt: Date.now(),
+    }),
+  );
+
+  const snapshot = await harness.getEventAnalyticsSnapshot(eventKey);
+
+  assert.equal(snapshot.sources.tba.resources.rankings.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.rankings.updatedAt, null);
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.updatedAt, null);
+});
+
 test("EventAnalytics serialization preserves identity, provenance, freshness, and missing-value semantics", async () => {
   const harness = await createHarness("2026ctser");
   const original = await harness.getEventAnalyticsSnapshot("2026ctser");
