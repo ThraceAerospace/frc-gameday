@@ -531,7 +531,8 @@ The qualification calibration path in `buildQualificationAnalysis` correctly exc
 - `buildQualificationAnomalies` accepts any finite number and can classify an out-of-range value as a high-confidence miss.
 - `buildTeamInsights` converts any finite red probability into a team-side probability and can surface misleading review reasons.
 - The dashboard's `predictionClassification` checks finiteness but not the probability range; `buildMatchFlagSummary` also derives a favorite and upset from the unbounded value.
+- The team-match API similarly converts any finite red win probability into a team-side probability, and accepts any finite RP prediction in its accuracy/Brier calculations without checking the `[0, 1]` domain.
 
-A malformed or unexpected provider value can therefore be excluded from calibration while still appearing as a valid 100%+ prediction or generating anomaly/review flags elsewhere in the same analytics snapshot.
+A malformed or unexpected provider value can therefore be excluded from calibration while still appearing as a valid 100%+ prediction or generating anomaly/review flags elsewhere in the same analytics snapshot. Out-of-range RP probabilities can also distort the team-match RP diagnostics.
 
 **Action:** validate probability values once at the provider-normalization boundary (finite and between 0 and 1 inclusive), preserve invalid raw values only as source diagnostics if useful, and have all calculations/UI consumers use the normalized nullable probability. Add shared tests for negative, greater-than-one, NaN, and boundary values.
