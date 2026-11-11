@@ -390,3 +390,14 @@ This can leave WebSocket clients connected but unable to receive TBA invalidatio
 As a result, a consumer cannot distinguish a current resource from an old retained snapshot after a failed refresh, and the global stale indicator can be cleared without successful reconciliation of all event data.
 
 **Action:** add resource-level acquisition metadata to the runtime delivery envelope (status, last successful update, last attempt, error, and stale state). Clear staleness only for a resource after its own successful reconciliation. Keep this runtime metadata separate from the normalized event data contract.
+
+
+### FV-AUD-030 — Event and team pages fail as a unit when optional data requests fail
+
+**Severity: Medium / page-level data availability**
+
+The event detail page loads event metadata, roster, and matches together, then also awaits playoff alliances when the Matches tab is selected. Any one of those requests—including the playoff-alliance request, which is supplementary to the core event page—causes the entire page to render “Event unavailable.”
+
+The team detail page has a wider failure domain. It first requires both team metadata and district history, then requires team events and avatar, and for every event uses one `Promise.all` across event metadata, team matches, team status, awards, advancement points, and rankings. A failure from one event or one supplementary resource rejects the outer `Promise.all` and prevents the entire team page from rendering, even if the team's core identity and most match history are available.
+
+**Action:** define required versus optional resources per page. Keep core event/team identity and match history available when supplementary resources fail; render unavailable sections with source-specific error/freshness metadata. Avoid silently substituting empty arrays for failed resources, because “no records” and “provider unavailable” must remain distinct.
