@@ -459,3 +459,13 @@ This means a successful upstream schedule response cannot remove a match that wa
 This makes a cross-district summary depend on every district endpoint being available at once. A transient provider/cache failure for one district can hide all otherwise successfully acquired advancement data.
 
 **Action:** acquire district advancement responses with per-district outcomes (for example, `Promise.allSettled`), preserve successful district results, and expose which districts failed plus the overall completeness state. Do not represent a failed district as having zero qualifying teams. Add tests for all-success, one-failure, and all-failure cases.
+
+### FV-AUD-037 — Event OPR acquisition is a hard dependency for the analytics snapshot
+
+**Severity: Medium / analytics data availability**
+
+The initial `getEventAnalyticsSnapshot` acquisition uses one `Promise.all` for event metadata, team roster, match schedule, OPRs, rankings, and playoff alliances. Rankings and playoff alliances are individually caught and downgraded to `null`, but `TBA.getEventOPRs(eventKey)` is not. A rejected OPR request therefore aborts snapshot initialization even though OPR/DPR/CCWM are supplementary comparison metrics and the other event analytics calculations can run without them.
+
+The explicit-refresh path has the same dependency: `latestOprs` is fetched in the schedule-refresh `Promise.all` without an independent failure outcome. An OPR failure prevents the refreshed schedule and rankings from being applied in that block.
+
+**Action:** model OPR acquisition as an independently tracked optional resource. Preserve existing OPR values on refresh failure, record its status/error/freshness separately, and continue building analytics from available event, match, Statbotics, ranking, and alliance data. Do not label missing OPR data as zero or as a successful empty response.
