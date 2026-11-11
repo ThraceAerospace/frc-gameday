@@ -53,7 +53,7 @@ export default function TileViewSurface({
 
   return (
     <div
-      className="flex h-screen w-screen flex-col overflow-hidden bg-black text-white"
+      className="tile-surface flex h-screen w-screen flex-col overflow-hidden bg-[var(--fv-tile-surface)] text-white"
       onMouseEnter={actions.showControls}
       onMouseMove={actions.showControls}
     >
@@ -67,19 +67,19 @@ export default function TileViewSurface({
         onMouseMove={actions.showControls}
         onFocus={actions.showControls}
       >
-        <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
-          <button type="button" onClick={() => router.push("/")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40" title="Home" aria-label="Home">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 px-1.5 py-1.5 shadow-[0_8px_30px_var(--fv-tile-shadow),inset_0_1px_0_var(--fv-tile-inset-highlight)] backdrop-blur-xl">
+          <button type="button" onClick={() => router.push("/")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-[var(--fv-tile-brand-soft)] hover:text-[var(--fv-tile-brand-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fv-tile-brand)]" title="Home" aria-label="Home">
             <HomeIcon className="h-[18px] w-[18px]" />
           </button>
           <div className="min-w-0 px-2 leading-tight">
             {isDivisional && parentEvent ? (
               <><div className="max-w-52 truncate text-xs font-bold text-white sm:max-w-72 sm:text-sm">{parentEvent.name}</div><div className="text-[9px] text-neutral-500 sm:text-[10px]"><EventLocalTime timezone={parentEvent.timezone} /></div></>
             ) : (
-              <><div className="text-xs font-bold text-white sm:text-sm">FieldView</div><div className="text-[9px] text-neutral-500 sm:text-[10px]">Powered by The Blue Alliance</div></>
+              <><div className="tile-brand-accent text-xs font-bold sm:text-sm">FieldView</div><div className="text-[9px] text-neutral-500 sm:text-[10px]">Powered by The Blue Alliance</div></>
             )}
           </div>
         </div>
-        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_var(--fv-tile-shadow),inset_0_1px_0_var(--fv-tile-inset-highlight)] backdrop-blur-xl">
           <TileSurfaceSettingsView state={state} actions={actions} triggerClassName="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40" open={settingsOpen} onOpenChange={setSettingsOpen} />
         </div>
       </header>

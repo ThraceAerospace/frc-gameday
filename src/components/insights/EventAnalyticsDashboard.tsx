@@ -37,11 +37,11 @@ function highlightedTeamNumbers(teamNumber: number, otherTeams: string[], separa
 }
 
 function teamLinkForNumber(teamNumber:number,name:string):ReactNode {
-  return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-blue-700">{teamNumber} · {name}</Link>;
+  return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-[var(--fv-brand-strong)]">{teamNumber} · {name}</Link>;
 }
 
 function teamNumberLink(teamNumber:number):ReactNode {
-  return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-blue-700">{teamNumber}</Link>;
+  return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-[var(--fv-brand-strong)]">{teamNumber}</Link>;
 }
 
 export default function EventAnalyticsDashboard({ eventKey, eventName, websocketStatus, websocketStale }: { eventKey: string; eventName: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
@@ -150,12 +150,12 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
     <div className="insights-dashboard mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FieldView · Event analytics</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView · Event analytics</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{eventName}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
           <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event feed connected" : websocketStatus === "connecting" ? "Connecting to live event feed…" : "Live event feed disconnected"}{websocketStale ? " · live feed delayed" : ""}</p>
         </div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (teamA) setMatchAnalysisRefreshKey((value) => value + 1); void load(true); }} disabled={loading} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (teamA) setMatchAnalysisRefreshKey((value) => value + 1); void load(true); }} disabled={loading} className="rounded-lg border border-[var(--fv-brand-border)] bg-[var(--fv-brand-soft)] px-3 py-2 text-sm font-semibold text-[var(--fv-brand-strong)] hover:bg-[var(--fv-brand-border)] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
       </div>
 
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -172,7 +172,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
               </div>
               <span className="text-sm font-semibold tabular-nums text-slate-700">{percent}%</span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-[width] duration-500" style={{width:`${percent}%`}} /></div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[var(--fv-brand)] transition-[width] duration-500" style={{width:`${percent}%`}} /></div>
             {data.collection.statboticsFetchError ? <p className="mt-2 text-xs leading-5 text-amber-800">
               The bulk Statbotics request failed: {data.collection.statboticsFetchError}. TBA schedule and scores remain available. Use Refresh data to retry the model-data request; model-dependent metrics may be incomplete until it succeeds.
             </p> : unavailable > 0 ? <p className="mt-2 text-xs leading-5 text-amber-800">
@@ -182,13 +182,13 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
         })() : <div aria-live="polite">
           <p className="text-sm font-semibold text-slate-900">Loading event analytics</p>
           <p className="mt-0.5 text-xs text-slate-600">Retrieving the event schedule, teams, rankings, and available model records in parallel.</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/3 animate-pulse rounded-full bg-blue-600" /></div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--fv-brand)]" /></div>
         </div>}
       </div>
       {error && <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       {loading && !data ? <div className="mt-8 rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Loading event analytics…</div> : null}
       {data ? <>
-        <nav aria-label="Analytics views" className="no-scrollbar mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">          {TABS.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === item.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{item.label}</button>)}
+        <nav aria-label="Analytics views" className="no-scrollbar mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">          {TABS.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === item.id ? "border-[var(--fv-brand)] text-[var(--fv-brand-strong)]" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{item.label}</button>)}
         </nav>
         <div className="mt-5">
           {tab === "overview" && <EventOverview data={data} />}
@@ -271,7 +271,7 @@ function MatchAnalysisSummary({analysis,name}:{analysis:TeamMatchAnalysis;name:s
         </div>
         <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Event-by-event results</h4>
-          {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-blue-200 bg-blue-50 text-blue-800 dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"}`}>{item.event.name}</button>)}</div>
+          {analysis.eventSummaries.length?<><div role="tablist" aria-label="Season events" className="mt-3 flex flex-wrap gap-2">{analysis.eventSummaries.map((item)=><button key={item.event.key} type="button" role="tab" aria-selected={activeEvent?.event.key===item.event.key} onClick={()=>setSelectedEvent(item.event.key)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeEvent?.event.key===item.event.key?"border-[var(--fv-brand-border)] bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)] dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900":"border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"}`}>{item.event.name}</button>)}</div>
           {activeEvent?<div role="tabpanel" className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Alliance record</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{activeEvent.wins}–{activeEvent.losses}–{activeEvent.ties}</p></div><div><p className="text-xs text-slate-500">Win rate</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{rate(activeEvent.winRate)}</p></div><div><p className="text-xs text-slate-500">Mean absolute error</p><p className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{fmt(activeEvent.meanAbsoluteError)} pts</p></div></div>:null}</>:<p className="mt-3 text-sm text-slate-500">No event-level match summaries are available.</p>}
         </div>
       </div>
@@ -496,7 +496,7 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
   return {prediction:prediction?{label:prediction,tone:predictionTone(prediction)}:null,predictedWinner,winner,modelUpset,anomalousScore,largeResidual,highPenalties,highAllianceEpa,reviewFlags};
 }
 
-function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
+function MatchAnalysisTable({data,records,playoff,reviewReasons}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean;reviewReasons?:Map<string,string[]>}) {
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
   const officialAllianceName=(teamKeys:string[])=>playoff?data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??null:null;
   const summaries=new Map(records.map((record)=>[record.match.key,buildMatchFlagSummary(data,record)]));
@@ -549,13 +549,13 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
  
 
     ];
-    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
+    return [<tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
       <th className="py-2 pr-2 text-left align-middle">
         <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>
         {matchFlags.length?<div className="mt-1 flex flex-wrap gap-1">{matchFlags.map((flag,index)=><span key={flag.label+"-"+index} title={flag.label} className={"inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 "+flag.tone}>{flag.label}</span>)}</div>:null}
       </th>
       {allianceCell(record,"red")}{allianceCell(record,"blue")}
-    </tr>;
+    </tr>, reviewReasons?.get(match.key)?.length ? <tr key={match.key+"-review-reasons"}><td colSpan={3} className="border-b border-slate-100 px-3 pb-3 pt-1 dark:border-slate-800"><ul className="space-y-1.5 text-xs leading-5 text-slate-600 dark:text-slate-300">{reviewReasons.get(match.key)!.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul></td></tr> : null];
   })}</tbody></table></div>;
 }
 
@@ -641,7 +641,7 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
       <p className="text-sm font-semibold text-slate-900">Field-relative comparison</p>
       <p className="mt-1 text-xs leading-5 text-slate-600">The primary comparison is each alliance's mean residual against the match-count-weighted average residual of all other playoff alliances. Positive values indicate better-than-field results; negative values indicate worse-than-field results. The playoff field's overall bias is shown above so model-wide overprediction is not mistaken for alliance-specific underperformance.</p>
     </div>
-    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full table-auto text-xs"><thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Alliance</th><th className="px-3 py-3">Teams</th><th className="px-3 py-3">Record</th><th className="px-3 py-3">Vs. rest of field <span className="ml-1 text-blue-600">· primary</span></th><th className="px-3 py-3">Mean residual</th><th className="px-3 py-3">95% CI for mean residual</th><th className="px-3 py-3">Sample residual SD</th><th className="px-3 py-3">Matches</th><th className="px-3 py-3">Prediction assessment</th></tr></thead><tbody>{playoff.alliances.map((alliance,index)=>{const prediction=predictionAssessment(alliance);const relative=fieldComparison(alliance);return <tr key={alliance.name??alliance.teamKeys.join("|")+index} className="border-t border-slate-100 align-middle"><th className="px-3 py-3 text-left font-semibold text-slate-900">{alliance.name??`Alliance ${index+1}`}</th><td className="px-3 py-3"><div className="flex flex-wrap gap-x-2 gap-y-1">{alliance.teamKeys.map((key)=><a key={key} href={`/team/${teamsByKey.get(key)?.teamNumber??formatTeamNumber(key)}`} className="whitespace-nowrap font-semibold tabular-nums text-blue-700 hover:underline">{teamsByKey.has(key)?teamsByKey.get(key)!.teamNumber:formatTeamNumber(key)}</a>)}</div></td><td className="px-3 py-3 tabular-nums">{alliance.wins}–{alliance.losses}–{alliance.ties}</td><td className={"px-3 py-3 text-base font-black tabular-nums "+(relative===null?"text-slate-500 dark:text-slate-400":relative>0?"text-emerald-700 dark:text-emerald-300":relative<0?"text-rose-700 dark:text-rose-300":"text-slate-700 dark:text-slate-200")}>{signed(relative)}</td><td className={"px-3 py-3 font-semibold tabular-nums "+(alliance.meanResidual===null?"text-slate-400":alliance.meanResidual>0?"text-emerald-700":alliance.meanResidual<0?"text-rose-700":"text-slate-700")}>{signed(alliance.meanResidual)}</td><td className="px-3 py-3 tabular-nums text-slate-600">{prediction.lower===null||prediction.upper===null?"—":fmt(prediction.lower)+" to "+fmt(prediction.upper)+" pts"}</td><td className="px-3 py-3 tabular-nums">{fmt(alliance.residualStandardDeviation)} pts</td><td className="px-3 py-3 tabular-nums">{alliance.scoredMatchCount}</td><td className="px-3 py-3"><span className={"inline-flex rounded-full px-2 py-1 text-[10px] font-bold "+prediction.tone}>{prediction.label}</span></td></tr>;})}</tbody></table></div>
+    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full table-auto text-xs"><thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Alliance</th><th className="px-3 py-3">Teams</th><th className="px-3 py-3">Record</th><th className="px-3 py-3">Vs. rest of field <span className="ml-1 text-[var(--fv-brand)]">· primary</span></th><th className="px-3 py-3">Mean residual</th><th className="px-3 py-3">95% CI for mean residual</th><th className="px-3 py-3">Sample residual SD</th><th className="px-3 py-3">Matches</th><th className="px-3 py-3">Prediction assessment</th></tr></thead><tbody>{playoff.alliances.map((alliance,index)=>{const prediction=predictionAssessment(alliance);const relative=fieldComparison(alliance);return <tr key={alliance.name??alliance.teamKeys.join("|")+index} className="border-t border-slate-100 align-middle"><th className="px-3 py-3 text-left font-semibold text-slate-900">{alliance.name??`Alliance ${index+1}`}</th><td className="px-3 py-3"><div className="flex flex-wrap gap-x-2 gap-y-1">{alliance.teamKeys.map((key)=><a key={key} href={`/team/${teamsByKey.get(key)?.teamNumber??formatTeamNumber(key)}`} className="whitespace-nowrap font-semibold tabular-nums text-[var(--fv-brand)] hover:underline">{teamsByKey.has(key)?teamsByKey.get(key)!.teamNumber:formatTeamNumber(key)}</a>)}</div></td><td className="px-3 py-3 tabular-nums">{alliance.wins}–{alliance.losses}–{alliance.ties}</td><td className={"px-3 py-3 text-base font-black tabular-nums "+(relative===null?"text-slate-500 dark:text-slate-400":relative>0?"text-emerald-700 dark:text-emerald-300":relative<0?"text-rose-700 dark:text-rose-300":"text-slate-700 dark:text-slate-200")}>{signed(relative)}</td><td className={"px-3 py-3 font-semibold tabular-nums "+(alliance.meanResidual===null?"text-slate-400":alliance.meanResidual>0?"text-emerald-700":alliance.meanResidual<0?"text-rose-700":"text-slate-700")}>{signed(alliance.meanResidual)}</td><td className="px-3 py-3 tabular-nums text-slate-600">{prediction.lower===null||prediction.upper===null?"—":fmt(prediction.lower)+" to "+fmt(prediction.upper)+" pts"}</td><td className="px-3 py-3 tabular-nums">{fmt(alliance.residualStandardDeviation)} pts</td><td className="px-3 py-3 tabular-nums">{alliance.scoredMatchCount}</td><td className="px-3 py-3"><span className={"inline-flex rounded-full px-2 py-1 text-[10px] font-bold "+prediction.tone}>{prediction.label}</span></td></tr>;})}</tbody></table></div>
     <p className="mt-3 text-xs leading-5 text-slate-500">“Vs. rest of field” is a descriptive difference from the match-count-weighted mean of the other alliances; it is not a significance test. A match-level paired comparison would be needed for a defensible confidence interval because the two alliance scores in a match are related. The 95% confidence interval estimates each alliance mean residual against zero and requires at least two scored matches; “Inconclusive” means the interval includes zero. Residual spread uses sample standard deviation (n−1). Official alliance names are used when supplied by TBA.</p>
   </Panel>;
 }
@@ -649,8 +649,8 @@ function PlayoffAllianceAnalysisPanel({data}:{data:EventAnalyticsResponse}) {
 function resolveTeamSegmentColors(teams:{primaryColor:string|null;secondaryColor:string|null}[]):string[] {
   // These bars and swatches render on white/slate-50 surfaces. Reject provider
   // colors that blend into either surface before checking team-to-team contrast.
-  const fallback=["#0F766E","#7C3AED","#B45309"];
-  const backgrounds=["#FFFFFF","#F8FAFC"];
+  const fallback=["var(--fv-chart-secondary)","var(--fv-chart-tertiary)","var(--fv-chart-warning)"];
+  const backgrounds=["var(--fv-neutral-inverse)","var(--fv-neutral-50)"];
   const distance=(left:string,right:string)=>{
     const a=[1,3,5].map((index)=>parseInt(left.slice(index,index+2),16));
     const b=[1,3,5].map((index)=>parseInt(right.slice(index,index+2),16));
@@ -846,23 +846,23 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2></div>
+      <div><p className="text-xs font-bold uppercase tracking-wide text-[var(--fv-brand)]">Team investigation</p><h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Team overview</h2></div>
       <div ref={selectorRef} className={"relative w-full max-w-sm text-xs font-semibold text-slate-600 dark:text-slate-300 "+(selectorOpen?"z-[60]":"")}>
         <label className="block">Select team</label>
-        <button type="button" aria-haspopup="listbox" aria-expanded={selectorOpen} onClick={()=>{setSelectorOpen((open)=>!open);setTeamSearch("");}} className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-normal text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+        <button type="button" aria-haspopup="listbox" aria-expanded={selectorOpen} onClick={()=>{setSelectorOpen((open)=>!open);setTeamSearch("");}} className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-normal text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--fv-brand)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
           <span className="min-w-0 truncate">{selectedOption?<><span className="underline decoration-2 underline-offset-2">{selectedOption.teamNumber}</span>{" · "+selectedOption.name}</>:"Choose a team…"}</span><span aria-hidden="true" className="shrink-0 text-slate-400">{selectorOpen?"▴":"▾"}</span>
         </button>
         {selectorOpen?<div className="absolute right-0 top-full z-[70] mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="border-b border-slate-100 p-2 dark:border-slate-700"><input autoFocus value={teamSearch} onChange={(event)=>setTeamSearch(event.target.value)} placeholder="Search teams…" aria-label="Search teams" className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"/></div>
+          <div className="border-b border-slate-100 p-2 dark:border-slate-700"><input autoFocus value={teamSearch} onChange={(event)=>setTeamSearch(event.target.value)} placeholder="Search teams…" aria-label="Search teams" className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-[var(--fv-brand)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"/></div>
           <div role="listbox" aria-label="Teams" className="max-h-64 overflow-y-auto overscroll-contain p-1">
-            {filteredTeams.length?filteredTeams.map((item)=><button key={item.teamKey} type="button" role="option" aria-selected={selectedTeam===String(item.teamNumber)} onClick={()=>{onSelect(String(item.teamNumber));setSelectorOpen(false);setTeamSearch("");}} className={"block w-full rounded-md px-3 py-2 text-left text-sm font-normal "+(selectedTeam===String(item.teamNumber)?"bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200":"text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800")}><span className={`font-semibold tabular-nums ${selectedTeam===String(item.teamNumber)?"underline decoration-2 underline-offset-2":""}`}>{item.teamNumber}</span><span className="text-slate-500"> · {item.name}</span></button>):<p className="px-3 py-4 text-center text-sm font-normal text-slate-500">No teams match that search.</p>}
+            {filteredTeams.length?filteredTeams.map((item)=><button key={item.teamKey} type="button" role="option" aria-selected={selectedTeam===String(item.teamNumber)} onClick={()=>{onSelect(String(item.teamNumber));setSelectorOpen(false);setTeamSearch("");}} className={"block w-full rounded-md px-3 py-2 text-left text-sm font-normal "+(selectedTeam===String(item.teamNumber)?"bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)] dark:bg-[var(--fv-brand-soft)] dark:text-[var(--fv-chart-purple-text)]":"text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800")}><span className={`font-semibold tabular-nums ${selectedTeam===String(item.teamNumber)?"underline decoration-2 underline-offset-2":""}`}>{item.teamNumber}</span><span className="text-slate-500"> · {item.name}</span></button>):<p className="px-3 py-4 text-center text-sm font-normal text-slate-500">No teams match that search.</p>}
           </div>
         </div>:null}
       </div>
     </div>
     {!selectedTeam?<p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">Choose a team to see its event standing, season development, comparable-alliance context, and matches worth reviewing.</p>:!team||!insight?<p className="mt-4 text-sm text-slate-500">The team overview is still being assembled from the available event data.</p>:<>
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <div className="min-w-0 flex-1"><h3 className="text-lg font-black text-slate-950 dark:text-slate-50"><span className="underline decoration-2 underline-offset-2">{team.teamNumber}</span> · {team.name}</h3><a href={"https://www.thebluealliance.com/team/"+team.teamNumber} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700 hover:underline">Team history on TBA ↗</a></div>
+        <div className="min-w-0 flex-1"><h3 className="text-lg font-black text-slate-950 dark:text-slate-50"><span className="underline decoration-2 underline-offset-2">{team.teamNumber}</span> · {team.name}</h3><a href={"https://www.thebluealliance.com/team/"+team.teamNumber} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-[var(--fv-brand)] hover:underline">Team history on TBA ↗</a></div>
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
           <div><p className="text-[10px] font-semibold uppercase text-slate-500">Qual Rank</p><p className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{insight.metrics.rank===null?"—":"#"+insight.metrics.rank}</p></div>
           <div><p className="text-[10px] font-semibold uppercase text-slate-500">Qual Record</p><p className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{insight.metrics.wins===null||insight.metrics.losses===null||insight.metrics.ties===null?"—":insight.metrics.wins+"–"+insight.metrics.losses+"–"+insight.metrics.ties}</p></div>
@@ -911,9 +911,9 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
       <div className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
         <div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current-event component EPA breakdown</p><p className="text-[10px] text-slate-500">Model estimates · not measured scoring</p></div>
         <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" aria-label="Current event EPA component proportions">
-          {currentComponents.map((item,index)=><span key={item.key} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:currentTotal>0&&item.value!==null?Math.max(0,item.value??0)/currentTotal*100+"%":"0%"}} title={item.label+": "+metric(item.value)}/>)}
+          {currentComponents.map((item,index)=><span key={item.key} className={index===0?"bg-[var(--fv-chart-auto)]":index===1?"bg-[var(--fv-chart-teleop)]":"bg-[var(--fv-chart-endgame)]"} style={{width:currentTotal>0&&item.value!==null?Math.max(0,item.value??0)/currentTotal*100+"%":"0%"}} title={item.label+": "+metric(item.value)}/>)}
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">{currentComponents.map((item,index)=><span key={item.key} className="inline-flex items-center gap-1.5"><span className={"h-2 w-2 rounded-sm "+(index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500")}/>{item.label} {metric(item.value)}</span>)}</div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">{currentComponents.map((item,index)=><span key={item.key} className="inline-flex items-center gap-1.5"><span className={"h-2 w-2 rounded-sm "+(index===0?"bg-[var(--fv-chart-auto)]":index===1?"bg-[var(--fv-chart-teleop)]":"bg-[var(--fv-chart-endgame)]")}/>{item.label} {metric(item.value)}</span>)}</div>
       </div>
       <p className="mt-2 text-[10px] leading-4 text-slate-500">Each team is compared with its own most recent prior official event. EPA and component changes are model estimate updates, not measured scoring changes. Traditional ratings, comparable-alliance results, and EPA describe different aspects of performance.</p>
     </>}
@@ -936,7 +936,7 @@ function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:T
       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
       <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
       <div role="tablist" aria-label="Team analysis sections" className="no-scrollbar mt-3 -mb-px flex gap-1 overflow-x-auto">
-        {tabs.map((tab)=><button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab===tab.id} onClick={()=>setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors "+(activeTab===tab.id?"border-blue-600 text-blue-700 dark:text-blue-300":"border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
+        {tabs.map((tab)=><button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab===tab.id} onClick={()=>setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors "+(activeTab===tab.id?"border-[var(--fv-brand)] text-[var(--fv-brand-strong)] dark:text-[var(--fv-brand)]":"border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
       </div>
     </div>
     <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
@@ -1013,7 +1013,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
           const declined = item.shift < 0;
           return <article key={item.event.key} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <a className="font-bold text-blue-700 hover:underline" href={"https://www.thebluealliance.com/event/" + item.event.key} target="_blank" rel="noreferrer">{item.event.name}</a>
+              <a className="font-bold text-[var(--fv-brand)] hover:underline" href={"https://www.thebluealliance.com/event/" + item.event.key} target="_blank" rel="noreferrer">{item.event.name}</a>
               <span className={"rounded-md px-2 py-1 text-xs font-bold tabular-nums " + (declined ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800")}>{declined ? "Down " : "Up "}{signed(item.shift)}</span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1032,7 +1032,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
               <p className="text-xs text-slate-500">Shift uncertainty: ±{fmt(item.shiftStandardError)} pts (1 SE)</p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold text-slate-500">Matches:</span>
-                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-50" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchCode(key)}</a>)}
+                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-[var(--fv-brand)] hover:bg-[var(--fv-brand-soft)]" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchCode(key)}</a>)}
                 {item.eliminationMatchKeys.map((key) => <a key={key} className="rounded bg-amber-50 px-1.5 py-1 font-semibold text-amber-800 hover:bg-amber-100" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open elimination match">{matchCode(key)}</a>)}
               </div>
             </div>
@@ -1099,11 +1099,11 @@ function SharedMatchEpaComparison({first,second,nameA,nameB}:{first:TeamMatchAna
   const lineB=shared.map(({b},i)=>`${x(i)},${y(b.preEPA as number)}`).join(" ");
   const mid=Math.floor((shared.length-1)/2);
   return <section className="rounded-xl border border-slate-200 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Same-match EPA comparison</h3><p className="text-xs text-slate-500">Pre-match ratings for both teams in the exact same matches · {shared.length} shared matches</p></div><div className="flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1"><i className="h-0.5 w-4 bg-slate-500"/>{nameA} · solid line</span><span className="flex items-center gap-1"><i className="h-0.5 w-4 border-t-2 border-dashed border-slate-400"/>{nameB} · dashed line</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-600"/>Red alliance</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600"/>Blue alliance</span></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Same-match EPA comparison</h3><p className="text-xs text-slate-500">Pre-match ratings for both teams in the exact same matches · {shared.length} shared matches</p></div><div className="flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1"><i className="h-0.5 w-4 bg-slate-500"/>{nameA} · solid line</span><span className="flex items-center gap-1"><i className="h-0.5 w-4 border-t-2 border-dashed border-slate-400"/>{nameB} · dashed line</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-600"/>Red alliance</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[var(--fv-alliance-blue)]"/>Blue alliance</span></div></div>
     <svg viewBox="0 0 900 260" role="img" aria-label={`Pre-match EPA comparison between ${nameA} and ${nameB} across ${shared.length} common matches`} className="mt-3 w-full">
       {[0,1,2,3].map((n)=><g key={n}><line x1="48" x2="858" y1={40+n*56} y2={40+n*56} stroke="var(--insights-gridline)" strokeDasharray="3 4"/><text x="40" y={44+n*56} textAnchor="end" fontSize="10" fill="var(--insights-muted)">{(max-range*n/3).toFixed(0)}</text></g>)}
-      <polyline points={lineA} fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinejoin="round"/><polyline points={lineB} fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="5 4" strokeLinejoin="round"/>
-      {shared.map(({a,b},i)=><g key={a.matchKey}><circle cx={x(i)} cy={y(a.preEPA as number)} r="4" fill={a.alliance==="red"?"#e11d48":"#2563eb"}><title>{a.event.name} · {a.matchLabel} · {nameA}: {a.preEPA?.toFixed(2)} EPA · {a.alliance} alliance</title></circle><circle cx={x(i)} cy={y(b.preEPA as number)} r="4" fill={b.alliance==="red"?"#e11d48":"#2563eb"}><title>{b.event.name} · {b.matchLabel} · {nameB}: {b.preEPA?.toFixed(2)} EPA · {b.alliance} alliance</title></circle></g>)}
+      <polyline points={lineA} fill="none" stroke="var(--fv-neutral-slate-line)" strokeWidth="2.5" strokeLinejoin="round"/><polyline points={lineB} fill="none" stroke="var(--fv-neutral-slate-line-light)" strokeWidth="2.5" strokeDasharray="5 4" strokeLinejoin="round"/>
+      {shared.map(({a,b},i)=><g key={a.matchKey}><circle cx={x(i)} cy={y(a.preEPA as number)} r="4" fill={a.alliance==="red"?"var(--fv-alliance-red)":"var(--fv-alliance-blue)"}><title>{a.event.name} · {a.matchLabel} · {nameA}: {a.preEPA?.toFixed(2)} EPA · {a.alliance} alliance</title></circle><circle cx={x(i)} cy={y(b.preEPA as number)} r="4" fill={b.alliance==="red"?"var(--fv-alliance-red)":"var(--fv-alliance-blue)"}><title>{b.event.name} · {b.matchLabel} · {nameB}: {b.preEPA?.toFixed(2)} EPA · {b.alliance} alliance</title></circle></g>)}
       <text x="50" y="246" fontSize="10" fill="var(--insights-muted)">{shared[0].a.matchLabel}</text><text x={x(mid)} y="246" textAnchor="middle" fontSize="10" fill="var(--insights-muted)">{shared[mid].a.matchLabel}</text><text x="850" y="246" textAnchor="end" fontSize="10" fill="var(--insights-muted)">{shared[shared.length-1].a.matchLabel}</text>
     </svg>
     <p className="text-[10px] text-slate-500">Comparing ratings at the same point in the season controls for match and event timing. EPA is a model estimate, not a direct measure of robot performance. Hover points for exact values.</p>
@@ -1135,12 +1135,12 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
     group.items.push({match,index});return groups;
   },[]);
   const eventBoundaries=eventGroups.slice(1).map((group)=>x(group.items[0].index)-800/(Math.max(1,matches.length-1))/2);
-  const allianceColor=(alliance:"red"|"blue")=>alliance==="red"?"#e11d48":"#2563eb";
+  const allianceColor=(alliance:"red"|"blue")=>alliance==="red"?"var(--fv-alliance-red)":"var(--fv-alliance-blue)";
   const componentChartWidth=Math.max(900,componentSeries.reduce((max,s)=>Math.max(max,s.points.length*54+80),900));
   return <section className="min-w-0 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">{name}</h3><p className="text-xs text-slate-500">Season match analysis · {matches.length} of {allMatches.length} matches shown across {analysis.eventCount} events</p></div><a className="text-xs font-semibold text-slate-600 hover:underline" href={`https://www.thebluealliance.com/team/${analysis.team}/${analysis.year}`} target="_blank" rel="noreferrer">TBA history ↗</a></div>
     <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 p-3">
-      <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Match phase</p><div className="flex flex-wrap gap-1">{([{id:"all",label:"All"},{id:"qualification",label:"Qualifications"},{id:"playoffs",label:"Playoffs"}] as const).map((option)=><button key={option.id} type="button" aria-pressed={phaseFilter===option.id} onClick={()=>setPhaseFilter(option.id)} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold ${phaseFilter===option.id?"border-blue-300 bg-blue-100 text-blue-800":"border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>{option.label}</button>)}</div></div>
+      <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Match phase</p><div className="flex flex-wrap gap-1">{([{id:"all",label:"All"},{id:"qualification",label:"Qualifications"},{id:"playoffs",label:"Playoffs"}] as const).map((option)=><button key={option.id} type="button" aria-pressed={phaseFilter===option.id} onClick={()=>setPhaseFilter(option.id)} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold ${phaseFilter===option.id?"border-[var(--fv-brand-border)] bg-[var(--fv-brand-soft)] text-[var(--fv-brand-strong)]":"border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>{option.label}</button>)}</div></div>
       <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">EPA components</p><div className="flex flex-wrap gap-1">{([{id:"auto",label:"Auto"},{id:"teleop",label:"Teleop"},{id:"endgame",label:"Endgame"}] as const).map((option)=><button key={option.id} type="button" aria-pressed={selectedComponents.includes(option.id)} onClick={()=>setSelectedComponents((current)=>current.includes(option.id)?current.filter((item)=>item!==option.id):[...current,option.id])} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold ${selectedComponents.includes(option.id)?"border-teal-300 bg-teal-50 text-teal-800":"border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>{option.label}</button>)}</div></div>
     </div>
     <div className="mt-4 rounded-lg border border-slate-100 p-3">
@@ -1150,11 +1150,11 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
         {eventBoundaries.map((boundary,index)=><g key={index}><line x1={boundary} x2={boundary} y1="24" y2="246" stroke="var(--insights-muted)" strokeWidth="1.5" strokeDasharray="4 3"/><text x={boundary+5} y="17" fontSize="10" fill="var(--insights-muted)">{eventGroups[index+1].label}</text></g>)}
         {eventGroups.length>0&&<text x={Math.max(60,x(eventGroups[0].items[0].index))} y="17" fontSize="10" fill="var(--insights-muted)">{eventGroups[0].label}</text>}
         {eventGroups.map((group)=><g key={group.key}>
-          <polyline points={group.items.flatMap(({match,index})=>match.preEPA===null?[]:[`${x(index)},${y(match.preEPA)}`]).join(" ")} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="5 4"/>
-          <polyline points={group.items.flatMap(({match,index})=>match.postEPA===null?[]:[`${x(index)},${y(match.postEPA)}`]).join(" ")} fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinejoin="round"/>
+          <polyline points={group.items.flatMap(({match,index})=>match.preEPA===null?[]:[`${x(index)},${y(match.preEPA)}`]).join(" ")} fill="none" stroke="var(--fv-neutral-slate-line-light)" strokeWidth="2" strokeDasharray="5 4"/>
+          <polyline points={group.items.flatMap(({match,index})=>match.postEPA===null?[]:[`${x(index)},${y(match.postEPA)}`]).join(" ")} fill="none" stroke="var(--fv-neutral-slate-line)" strokeWidth="2.5" strokeLinejoin="round"/>
         </g>)}
         {matches.map((m,i)=><g key={m.matchKey}>
-          {m.preEPA!==null&&<circle cx={x(i)} cy={y(m.preEPA)} r="3.5" fill="#94a3b8"><title>{m.event.name} · {m.matchLabel}: pre-match EPA {m.preEPA.toFixed(2)}</title></circle>}
+          {m.preEPA!==null&&<circle cx={x(i)} cy={y(m.preEPA)} r="3.5" fill="var(--fv-neutral-slate-line-light)"><title>{m.event.name} · {m.matchLabel}: pre-match EPA {m.preEPA.toFixed(2)}</title></circle>}
           {m.postEPA!==null&&<circle cx={x(i)} cy={y(m.postEPA)} r="4.5" fill={allianceColor(m.alliance)} stroke="white" strokeWidth="1"><title>{m.event.name} · {m.matchLabel}: post-match EPA {m.postEPA.toFixed(2)}{m.sharedAllianceUpdate?" · shared alliance update":""} · {m.alliance} alliance</title></circle>}
           <text transform={`translate(${x(i)-2},258) rotate(-48)`} textAnchor="end" fontSize={matches.length>35?"7":"9"} fill="var(--insights-muted)">{m.matchLabel}</text>
         </g>)}
@@ -1165,7 +1165,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-slate-800">Alliance score prediction residual</h4><p className="text-[11px] text-slate-500">Actual score minus predicted score; positive means the alliance scored above prediction</p></div><span className="text-xs text-slate-500">n={residuals.length}</span></div>
       <div className="mt-2 overflow-x-auto"><svg viewBox={`0 0 900 ${Math.max(190,Math.ceil(residuals.length/30)*35+150)}`} role="img" aria-label={`${name} alliance score prediction residuals by match`} className="w-full min-w-[900px]">
         <line x1="48" x2="866" y1="88" y2="88" stroke="var(--insights-muted)" strokeWidth="1.5"/>
-        {residuals.map((m,i)=>{const step=812/Math.max(1,residuals.length);const barW=Math.max(4,Math.min(16,step-3));const bx=50+i*step;const h=Math.abs(m.residual??0)/residualMax*65;const positive=(m.residual??0)>=0;return <g key={m.matchKey}><rect x={bx} y={positive?88-h:88} width={barW} height={Math.max(1,h)} rx="1" fill={positive?"#0d9488":"#e11d48"}><title>{m.event.name} · {m.matchLabel}: predicted {fmt(m.predicted)}, actual {fmt(m.actual)}, residual {fmt(m.residual)}</title></rect><text transform={`translate(${bx+barW/2},164) rotate(-55)`} textAnchor="end" fontSize="8" fill="var(--insights-muted)">{m.matchLabel}</text></g>;})}
+        {residuals.map((m,i)=>{const step=812/Math.max(1,residuals.length);const barW=Math.max(4,Math.min(16,step-3));const bx=50+i*step;const h=Math.abs(m.residual??0)/residualMax*65;const positive=(m.residual??0)>=0;return <g key={m.matchKey}><rect x={bx} y={positive?88-h:88} width={barW} height={Math.max(1,h)} rx="1" fill={positive?"var(--fv-chart-teleop)":"var(--fv-alliance-red)"}><title>{m.event.name} · {m.matchLabel}: predicted {fmt(m.predicted)}, actual {fmt(m.actual)}, residual {fmt(m.residual)}</title></rect><text transform={`translate(${bx+barW/2},164) rotate(-55)`} textAnchor="end" fontSize="8" fill="var(--insights-muted)">{m.matchLabel}</text></g>;})}
       </svg></div>
       <div className="flex gap-4 text-[10px] text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-teal-600"/>Above prediction</span><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-rose-600"/>Below prediction</span></div>
     </div>
@@ -1177,7 +1177,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
       <div className="mt-3 space-y-5">{componentSeries.map((series)=><div key={series.key} className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">{series.label}</span><span className="text-[10px] text-slate-400">n={series.points.length}</span></div>
         {series.points.length?<div className="overflow-x-auto"><svg viewBox={`0 0 ${componentChartWidth} 250`} role="img" aria-label={`${series.label} alliance EPA estimates versus actual scores by match`} className="w-full min-w-[900px]">
-          {(() => {const values=series.points.flatMap((point)=>[point.estimate,point.actual]);const min=Math.min(0,...values),max=Math.max(1,...values),range=Math.max(1,max-min),baseline=190-(0-min)/range*140;const y=(value:number)=>190-(value-min)/range*140;return <>{[0,1,2,3].map((n)=>{const value=max-range*n/3,gridY=y(value);return <g key={n}><line x1="55" x2={componentChartWidth-20} y1={gridY} y2={gridY} stroke="var(--insights-gridline)" strokeDasharray="3 4"/><text x="48" y={gridY+4} textAnchor="end" fontSize="10" fill="var(--insights-muted)">{value.toFixed(0)}</text></g>;})}<line x1="55" x2={componentChartWidth-20} y1={baseline} y2={baseline} stroke="var(--insights-muted)" strokeWidth="1.5"/>{series.points.map((point,index)=>{const step=(componentChartWidth-90)/Math.max(1,series.points.length);const bw=Math.min(17,step*0.34);const base=60+index*step;const estimateY=y(point.estimate),actualY=y(point.actual);return <g key={point.match.matchKey}><rect x={base} y={Math.min(baseline,estimateY)} width={bw} height={Math.max(1,Math.abs(baseline-estimateY))} rx="2" fill={allianceColor(point.match.alliance)}><title>{point.match.event.shortName??point.match.event.name} · {point.match.matchLabel}: EPA estimate {point.estimate.toFixed(1)}</title></rect><rect x={base+bw+2} y={Math.min(baseline,actualY)} width={bw} height={Math.max(1,Math.abs(baseline-actualY))} rx="2" fill="#94a3b8"><title>{point.match.event.shortName??point.match.event.name} · {point.match.matchLabel}: actual {point.actual.toFixed(1)}</title></rect><text transform={`translate(${base+bw},210) rotate(-45)`} textAnchor="end" fontSize="9" fill="var(--insights-muted)">{point.match.matchLabel}</text></g>;})}</>;})()}
+          {(() => {const values=series.points.flatMap((point)=>[point.estimate,point.actual]);const min=Math.min(0,...values),max=Math.max(1,...values),range=Math.max(1,max-min),baseline=190-(0-min)/range*140;const y=(value:number)=>190-(value-min)/range*140;return <>{[0,1,2,3].map((n)=>{const value=max-range*n/3,gridY=y(value);return <g key={n}><line x1="55" x2={componentChartWidth-20} y1={gridY} y2={gridY} stroke="var(--insights-gridline)" strokeDasharray="3 4"/><text x="48" y={gridY+4} textAnchor="end" fontSize="10" fill="var(--insights-muted)">{value.toFixed(0)}</text></g>;})}<line x1="55" x2={componentChartWidth-20} y1={baseline} y2={baseline} stroke="var(--insights-muted)" strokeWidth="1.5"/>{series.points.map((point,index)=>{const step=(componentChartWidth-90)/Math.max(1,series.points.length);const bw=Math.min(17,step*0.34);const base=60+index*step;const estimateY=y(point.estimate),actualY=y(point.actual);return <g key={point.match.matchKey}><rect x={base} y={Math.min(baseline,estimateY)} width={bw} height={Math.max(1,Math.abs(baseline-estimateY))} rx="2" fill={allianceColor(point.match.alliance)}><title>{point.match.event.shortName??point.match.event.name} · {point.match.matchLabel}: EPA estimate {point.estimate.toFixed(1)}</title></rect><rect x={base+bw+2} y={Math.min(baseline,actualY)} width={bw} height={Math.max(1,Math.abs(baseline-actualY))} rx="2" fill="var(--fv-neutral-slate-line-light)"><title>{point.match.event.shortName??point.match.event.name} · {point.match.matchLabel}: actual {point.actual.toFixed(1)}</title></rect><text transform={`translate(${base+bw},210) rotate(-45)`} textAnchor="end" fontSize="9" fill="var(--insights-muted)">{point.match.matchLabel}</text></g>;})}</>;})()}
         </svg></div>:<p className="text-xs text-slate-500">No complete {series.label.toLowerCase()} estimate/outcome pairs.</p>}
       </div>)}</div>
       <div className="flex flex-wrap gap-4 text-[10px] text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-rose-600"/>EPA estimate · red alliance</span><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-blue-600"/>EPA estimate · blue alliance</span><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-slate-400"/>Actual alliance score</span></div>
@@ -1186,7 +1186,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold text-slate-800">Endgame EPA change by match</h4><span className="text-[10px] text-slate-400">n={endgameSeries.length} · team-level estimate</span></div>
         <p className="mt-1 text-[11px] text-slate-500">Statbotics endgame EPA after the match minus before the match. Positive and negative changes indicate model movement, not actual endgame points scored.</p>
         {endgameSeries.length?<div className="mt-2 overflow-x-auto"><svg viewBox={`0 0 ${Math.max(900,endgameSeries.length*42+80)} 220`} role="img" aria-label={`${name} endgame EPA change by match`} className="w-full min-w-[900px]">
-          {(() => {const width=Math.max(900,endgameSeries.length*42+80),maxAbs=Math.max(1,...endgameSeries.map((item)=>Math.abs(item.delta))),zero=92;return <><line x1="50" x2={width-20} y1={zero} y2={zero} stroke="var(--insights-muted)" strokeWidth="1.5"/>{endgameSeries.map((item,index)=>{const x=60+index*42,h=Math.abs(item.delta)/maxAbs*65,y=item.delta>=0?zero-h:zero;return <g key={item.match.matchKey}><rect x={x} y={y} width="20" height={Math.max(1,h)} rx="2" fill={item.delta>=0?"#0d9488":"#e11d48"}><title>{item.match.event.name} · {item.match.matchLabel}: endgame EPA {item.before.toFixed(2)} → {item.after.toFixed(2)} ({item.delta>0?"+":""}{item.delta.toFixed(2)})</title></rect><text transform={`translate(${x+10},180) rotate(-48)`} textAnchor="end" fontSize="9" fill="var(--insights-muted)">{item.match.matchLabel}</text></g>;})}</>;})()}
+          {(() => {const width=Math.max(900,endgameSeries.length*42+80),maxAbs=Math.max(1,...endgameSeries.map((item)=>Math.abs(item.delta))),zero=92;return <><line x1="50" x2={width-20} y1={zero} y2={zero} stroke="var(--insights-muted)" strokeWidth="1.5"/>{endgameSeries.map((item,index)=>{const x=60+index*42,h=Math.abs(item.delta)/maxAbs*65,y=item.delta>=0?zero-h:zero;return <g key={item.match.matchKey}><rect x={x} y={y} width="20" height={Math.max(1,h)} rx="2" fill={item.delta>=0?"var(--fv-chart-teleop)":"var(--fv-alliance-red)"}><title>{item.match.event.name} · {item.match.matchLabel}: endgame EPA {item.before.toFixed(2)} → {item.after.toFixed(2)} ({item.delta>0?"+":""}{item.delta.toFixed(2)})</title></rect><text transform={`translate(${x+10},180) rotate(-48)`} textAnchor="end" fontSize="9" fill="var(--insights-muted)">{item.match.matchLabel}</text></g>;})}</>;})()}
         </svg></div>:<p className="mt-2 text-xs text-slate-500">{selectedComponents.includes("endgame")?"Statbotics endgame EPA snapshots are unavailable for these matches.":"Endgame is hidden by the component filter."}</p>}
       </div>
     </div>
@@ -1196,7 +1196,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
 function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
   return <div className="mt-4 space-y-5">
     <div className="grid gap-4 xl:grid-cols-2">
-      <TeamSeasonProfile history={first} accent="blue" />
+      <TeamSeasonProfile history={first} accent="brand" />
       <TeamSeasonProfile history={second} accent="teal" />
     </div>
     <SharedEventComparison first={first} second={second} />
@@ -1230,12 +1230,12 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
       const label=a.event.name;
       return <div key={a.event.key} className="grid grid-cols-[minmax(78px,110px)_1fr_1fr] items-center gap-3 text-xs">
         <span className="truncate font-medium text-slate-600" title={label}>{label}</span>
-        {[{value:av,color:"bg-blue-600"},{value:bv,color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,Math.abs(item.value)/max*100)}%`}} /></div></div>)}
+        {[{value:av,color:"bg-[var(--fv-chart-team-a)]"},{value:bv,color:"bg-[var(--fv-chart-team-b)]"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,Math.abs(item.value)/max*100)}%`}} /></div></div>)}
       </div>;
     })}</div>
   </section>;
 }
-function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
+function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"brand"|"teal"}) {
   const events=history.events.filter((item)=>typeof item.statbotics?.epa?.total_points==="number").sort((a,b)=>a.event.start_date.localeCompare(b.event.start_date));
   const first=events[0], last=events[events.length-1];
   const firstValue=first?.statbotics?.epa?.total_points ?? null;
@@ -1244,7 +1244,7 @@ function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"b
   const record=history.season?.record?.total;
   const qual=history.season?.record?.qual;
   const name=history.team.nickname || history.team.name || "Team";
-  const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
+  const color=accent==="brand"?"bg-[var(--fv-chart-team-a)]":"bg-[var(--fv-chart-team-b)]";
   const changeText=delta===null?"Not enough event snapshots":delta===0?"EPA was unchanged across the available event snapshots":`EPA ${delta>0?"increased":"decreased"} by ${fmt(Math.abs(delta))} points from the first to last available event snapshot.`;
   const largest=events.reduce<{label:string;value:number}|null>((best,item)=>{
     const value=item.statbotics?.epa?.total_points;
@@ -1260,7 +1260,7 @@ function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"b
       <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Current season EPA</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{fmt(history.season?.epa?.total_points)}</p></div>
       <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Overall record</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-950">{record?`${record.wins??0}-${record.losses??0}-${record.ties??0}`:"—"}</p></div>
     </div>
-    <div className="mt-4 rounded-lg border-l-4 border-blue-500 bg-blue-50/60 p-3"><p className="text-sm font-semibold text-slate-900">{changeText}</p><p className="mt-1 text-xs text-slate-600">This is a change in Statbotics' rating estimate, not a direct measurement of robot performance.</p></div>
+    <div className="mt-4 rounded-lg border-l-4 border-[var(--fv-brand)] bg-[var(--fv-brand-soft)]/70 p-3"><p className="text-sm font-semibold text-slate-900">{changeText}</p><p className="mt-1 text-xs text-slate-600">This is a change in Statbotics' rating estimate, not a direct measurement of robot performance.</p></div>
     <div className="mt-4">
       <div className="mb-2 flex items-center justify-between"><h5 className="text-xs font-bold uppercase tracking-wide text-slate-500">Rating progression</h5><span className="text-[11px] text-slate-400">Earlier → later events</span></div>
       <EventEpaBars events={events} color={color} />
@@ -1301,7 +1301,7 @@ function EpaBreakdownComparison({first,second}:{first:TeamSeasonHistory;second:T
   const max=Math.max(1,...keys.flatMap((key)=>[Math.abs(a[key] ?? 0),Math.abs(b[key] ?? 0)]));
   return <div className="mt-3 space-y-3">{keys.map((key)=><div key={key} className="grid grid-cols-[110px_1fr_1fr] items-center gap-3 text-xs">
     <span className="break-words font-medium text-slate-600">{key.replaceAll("_"," ")}</span>
-    {[{value:a[key],color:"bg-blue-600"},{value:b[key],color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?first.team.nickname || first.team.name || "Team A":second.team.nickname || second.team.name || "Team B"}</span><span className="font-semibold tabular-nums">{fmt(item.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.abs(item.value ?? 0)/max*100}%`}} /></div></div>)}
+    {[{value:a[key],color:"bg-[var(--fv-chart-team-a)]"},{value:b[key],color:"bg-[var(--fv-chart-team-b)]"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?first.team.nickname || first.team.name || "Team A":second.team.nickname || second.team.name || "Team B"}</span><span className="font-semibold tabular-nums">{fmt(item.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.abs(item.value ?? 0)/max*100}%`}} /></div></div>)}
   </div>)}</div>;
 }
 function Metric({label,value,detail}:{label:string;value:string|number;detail:string}) {
@@ -1317,7 +1317,7 @@ function TeamCard({team}:{team:TeamAnalyticsRow}) {
   return <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Team {team.teamNumber}</div><div className="mt-1 text-xl font-bold text-slate-900">{team.name}</div><div className="mt-3 grid grid-cols-2 gap-3"><div><div className="text-xs text-slate-500">Statbotics EPA</div><div className="text-2xl font-black tabular-nums">{fmt(team.epa)}</div></div><div><div className="text-xs text-slate-500">TBA OPR</div><div className="text-2xl font-black tabular-nums">{fmt(team.opr)}</div></div></div><div className="mt-2 text-xs text-slate-500">{team.matchesSeen} matches represented · EPA event percentile {percentileLabel(team.epaPercentile)}</div></div>;
 }
 function TeamTable({teams}:{teams:TeamAnalyticsRow[]}) {
-  return <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase text-slate-400"><th className="py-2">Team</th><th>EPA</th><th>OPR</th><th>DPR</th><th>CCWM</th><th>EPA %ile</th></tr></thead><tbody>{teams.map((team)=><tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 text-left"><Link className="font-semibold text-slate-800 hover:text-blue-700" href={`/team/${team.teamNumber}`}>{team.teamNumber} · {team.name}</Link></th><td>{fmt(team.epa)}</td><td>{fmt(team.opr)}</td><td>{fmt(team.dpr)}</td><td>{fmt(team.ccwm)}</td><td>{percentileLabel(team.epaPercentile)}</td></tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-left text-[11px] uppercase text-slate-400"><th className="py-2">Team</th><th>EPA</th><th>OPR</th><th>DPR</th><th>CCWM</th><th>EPA %ile</th></tr></thead><tbody>{teams.map((team)=><tr key={team.teamKey} className="border-b border-slate-100"><th className="py-2 text-left"><Link className="font-semibold text-slate-800 hover:text-[var(--fv-brand-strong)]" href={`/team/${team.teamNumber}`}>{team.teamNumber} · {team.name}</Link></th><td>{fmt(team.epa)}</td><td>{fmt(team.opr)}</td><td>{fmt(team.dpr)}</td><td>{fmt(team.ccwm)}</td><td>{percentileLabel(team.epaPercentile)}</td></tr>)}</tbody></table></div>;
 }
 function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   type SortKey = "qualRank" | "epaRank" | "teamNumber" | "qualRecord" | "epa" | "epaShare" | "auto" | "teleop" | "endgame" | "performance";
@@ -1386,11 +1386,11 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   const sortLabels:Record<SortKey,string>={qualRank:"Qual Rank",epaRank:"EPA Rank",teamNumber:"Team Number",qualRecord:"Qual Record",epa:"EPA",epaShare:"Avg EPA Share",auto:"Auto",teleop:"Teleop",endgame:"Endgame",performance:"Performance"};
   const defaultSortDirection=(key:SortKey):"asc"|"desc"=>["epa","epaShare","auto","teleop","endgame","performance","qualRecord"].includes(key)?"desc":"asc";
   const changeSort=(key:SortKey,additive:boolean)=>setSortRules((current)=>{const existing=current.find((rule)=>rule.key===key);const nextDirection=existing?(existing.direction==="asc"?"desc":"asc"):defaultSortDirection(key);if(!additive)return [{key,direction:nextDirection}];if(!existing)return [...current,{key,direction:nextDirection}];return current.map((rule)=>rule.key===key?{...rule,direction:nextDirection}:rule);});
-  const sortHeader=(key:SortKey)=>{const index=sortRules.findIndex((rule)=>rule.key===key);const rule=sortRules[index];return <button type="button" onClick={(event)=>changeSort(key,event.shiftKey)} title={index>=0?"Sort priority "+(index+1)+"; Shift-click to change secondary sorting":"Click to sort; Shift-click to add as a secondary sort"} className="inline-flex items-center justify-center gap-1 whitespace-nowrap text-center hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><span>{sortLabels[key]}</span>{rule?<span aria-hidden="true" className="inline-flex items-center gap-0.5">{rule.direction==="asc"?<ChevronUpIcon className="h-4 w-4"/>:<ChevronDownIcon className="h-4 w-4"/>}{index>0?<sup>{index+1}</sup>:null}</span>:<span aria-hidden="true" className="text-slate-300">↕</span>}</button>;};
+  const sortHeader=(key:SortKey)=>{const index=sortRules.findIndex((rule)=>rule.key===key);const rule=sortRules[index];return <button type="button" onClick={(event)=>changeSort(key,event.shiftKey)} title={index>=0?"Sort priority "+(index+1)+"; Shift-click to change secondary sorting":"Click to sort; Shift-click to add as a secondary sort"} className="inline-flex items-center justify-center gap-1 whitespace-nowrap text-center hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--fv-brand)]"><span>{sortLabels[key]}</span>{rule?<span aria-hidden="true" className="inline-flex items-center gap-0.5">{rule.direction==="asc"?<ChevronUpIcon className="h-4 w-4"/>:<ChevronDownIcon className="h-4 w-4"/>}{index>0?<sup>{index+1}</sup>:null}</span>:<span aria-hidden="true" className="text-slate-300">↕</span>}</button>;};
   const movement=(items:typeof comparisons,empty:string)=><ol className="space-y-2">{items.length?items.map(({teamNumber,comparison})=><li key={teamNumber} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0">{teamNumberLink(teamNumber)}<span className="ml-2 text-[10px] text-slate-400">{comparison.priorEvent.short_name ?? comparison.priorEvent.name}</span></div><div className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">#{comparison.cohortRank} of {comparison.cohortSize}</span><strong className={"tabular-nums "+(comparison.change>=0?"text-emerald-700":"text-rose-700")}>{comparison.change>0?"+":""}{fmt(comparison.change)}</strong></div></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   const residualList=(items:typeof residuals,empty:string)=><ol className="space-y-2">{items.length?items.map((item,index)=><li key={item.team.teamKey} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><div className="min-w-0"><span className="mr-2 text-xs text-slate-400">#{index+1}</span>{teamNumberLink(item.team.teamNumber)}</div><strong className={"shrink-0 tabular-nums "+(item.mean>0?"text-emerald-700":"text-rose-700")}>{item.mean>0?"+":""}{fmt(item.mean)} pts</strong></li>):<li className="text-sm text-slate-500">{empty}</li>}</ol>;
   return <div className="space-y-5">
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Event overview</p><h2 className="mt-1 text-lg font-bold text-slate-900">The competitive picture</h2><p className="mt-1 text-sm text-slate-500">Who is gaining ground, who is falling behind expectations, and where the model is being surprised.</p></div><span className="text-xs text-slate-500">{data.teams.length} teams · {completedMatches} scored matches represented</span></div>
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--fv-brand)]">Event overview</p><h2 className="mt-1 text-lg font-bold text-slate-900">The competitive picture</h2><p className="mt-1 text-sm text-slate-500">Who is gaining ground, who is falling behind expectations, and where the model is being surprised.</p></div><span className="text-xs text-slate-500">{data.teams.length} teams · {completedMatches} scored matches represented</span></div>
       <div className="mt-4 rounded-lg bg-slate-50 p-3">
         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">At a glance</h3>
         <ul className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
@@ -1468,20 +1468,6 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
     });
   const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
   const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
-  const timezone=data.event.timezone??null;
-  const formatTime=(timestamp:number|null|undefined)=>{
-    if(timestamp===null||timestamp===undefined||!timezone)return null;
-    try{return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:timezone}).format(new Date(timestamp*1000));}
-    catch{return null;}
-  };
-  const teamLabel=(key:string)=>{const team=data.teams.find((item)=>item.teamKey===key);return team?String(team.teamNumber)+" · "+team.name:formatTeamNumber(key);};
-  const flagLabels:Record<MatchReviewFlag,string>={
-    "model-upset":"Model Upset",
-    "anomalous-score":"Anomalous Score",
-    "large-residual":"Large Score Delta",
-    "high-penalties":"High Penalties",
-    "high-alliance-epa":"High Alliance EPA",
-  };
   const flagReasons=(record:EventAnalyticsResponse["matches"][number],summary:MatchFlagSummary)=>{
     const reasons:string[]=[];
     const {match,statbotics}=record;
@@ -1513,40 +1499,18 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
     return reasons;
   };
   return <Panel title="Suggested review" description="Flagged matches in event schedule order. Tabs group the matches by the reason they deserve a closer look; a match can appear in more than one group.">
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{records.length} flagged matches · {data.matches.length} matches evaluated</p><a href={"https://www.thebluealliance.com/event/"+data.event.key+"#matches"} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Full event schedule ↗</a></div>
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{records.length} flagged matches · {data.matches.length} matches evaluated</p><a href={"https://www.thebluealliance.com/event/"+data.event.key+"#matches"} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--fv-brand)] hover:underline">Full event schedule ↗</a></div>
     <p className="mb-3 text-xs leading-5 text-slate-500">Anomalous Score uses an event- and match-phase baseline: actual-minus-predicted alliance residuals outside the median ± max(20 points, 3 × 1.4826 × MAD), with at least 8 usable alliance scores in that phase. Large Score Delta is alliance-specific: an absolute actual-minus-predicted score delta in the event-wide top decile, requiring at least 20 usable alliance scores. Model Upset means the pre-match favorite had at least 60% win probability and lost. These are review signals, not robot-level diagnoses.</p>
     <div role="tablist" aria-label="Review flags by type" className="no-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200">
-      {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
+      {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-[var(--fv-brand)] text-[var(--fv-brand-strong)]":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
     </div>
-    {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3 space-y-3">
-      {visible.map(({record,summary})=>{
-        const {match}=record;
-        const timestamp=match.time??match.actual_time??match.predicted_time;
-        const timeLabel=formatTime(timestamp);
-        const youtube=match.videos.find((video)=>video.type.toLowerCase()==="youtube");
-        const videoUrl=youtube?"https://www.youtube.com/watch?v="+encodeURIComponent(youtube.key):null;
-        const red=match.alliances.red,blue=match.alliances.blue;
-        const reasons=flagReasons(record,summary);
-        const displayedFlags=summary.reviewFlags;
-        return <article key={match.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-bold text-slate-950 dark:text-white">{matchShortName(match,data.event.playoff_type)}</h3>{timeLabel?<span className="text-xs tabular-nums text-slate-500">{timeLabel} <span className="text-slate-400">{timezone}</span></span>:null}</div><p className="mt-1 text-xs text-slate-500">{data.event.name}</p></div>
-            <div className="flex flex-wrap gap-2">
-              <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Match details ↗</a>
-              {videoUrl?<a href={videoUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800">Watch video ↗</a>:<a href={"https://www.thebluealliance.com/match/"+match.key+"#videos"} target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300">Match videos ↗</a>}
-            </div>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-3 dark:bg-rose-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">Red alliance · {red.score>=0?red.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{red.team_keys.map(teamLabel).join(" · ")}</p></div>
-            <div className="rounded-lg border-l-4 border-blue-500 bg-blue-50 p-3 dark:bg-blue-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">Blue alliance · {blue.score>=0?blue.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{blue.team_keys.map(teamLabel).join(" · ")}</p></div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {summary.prediction?<span className={"rounded-full px-2 py-1 text-[10px] font-bold "+summary.prediction.tone}>{summary.prediction.label}</span>:null}
-            {displayedFlags.map((flag)=><span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{flagLabels[flag]}</span>)}
-          </div>
-          {reasons.length?<ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm leading-5 text-slate-700 dark:border-slate-800 dark:text-slate-300">{reasons.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul>:null}
-        </article>;
-      })}
+    {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3">
+      <MatchAnalysisTable
+        data={data}
+        records={visible.map(({record})=>record)}
+        playoff={visible.some(({record})=>record.match.comp_level!=="qm")}
+        reviewReasons={new Map(visible.map(({record,summary})=>[record.match.key,flagReasons(record,summary)]))}
+      />
     </div>}
   </Panel>;
 }

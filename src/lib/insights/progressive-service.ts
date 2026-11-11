@@ -6,7 +6,8 @@ import { FRCColors } from "@/lib/frc-colors/service";
 import type { FRCColor } from "@/lib/frc-colors/client";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
-import type { AnalyticsMatch, EventAnalyticsResponse } from "./types";
+import type { AnalyticsMatch } from "./types";
+import type { EventAnalytics } from "./event-analytics";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
 
 const JOB_TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -27,11 +28,13 @@ type Job = {
   attempts: Record<string, number>;
   state: "queued" | "collecting" | "complete" | "partial";
   updatedAt: number;
+  tbaLoadedAt?: number;
   scheduleRefreshedAt?: number;
   statboticsFetchError?: string | null;
   statboticsLoadedAt?: number;
   teamColors?: FRCColor[];
   teamColorsLoadedAt?: number;
+  teamColorsFetchError?: string | null;
 };
 
 function jobKey(eventKey: string) {
@@ -47,6 +50,10 @@ async function readJob(eventKey: string): Promise<Job | null> {
       await redis.del(jobKey(eventKey));
       return null;
     }
+    // Backfill source freshness for jobs persisted before EventAnalytics v1.
+    // The schedule timestamp is the closest existing record of the TBA load;
+    // updatedAt is a final fallback for older snapshots without it.
+    value.tbaLoadedAt ??= value.scheduleRefreshedAt ?? value.updatedAt;
     return value;
   } catch {
     await redis.del(jobKey(eventKey));
@@ -59,7 +66,7 @@ async function writeJob(eventKey: string, job: Job) {
   await redis.set(jobKey(eventKey), JSON.stringify(job), "EX", JOB_TTL_SECONDS);
 }
 
-function buildPayload(job: Job): EventAnalyticsResponse {
+function buildPayload(job: Job): EventAnalytics {
   const matchOrder = new Map(job.matches.map((match, index) => [match.key, index]));
   const analyticsMatches = Object.values(job.records).sort(
     (a, b) => (matchOrder.get(a.match.key) ?? 0) - (matchOrder.get(b.match.key) ?? 0),
@@ -72,7 +79,40 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   const teamInsights = buildTeamInsights(analyticsMatches, allianceResults, teams, job.rankings, job.event.playoff_type);
   const residuals = allianceResults.flatMap((result) => result.residual === null ? [] : [result.residual]);
   const unavailableMatchCount = analyticsMatches.filter((record) => record.statboticsStatus === "unavailable").length;
+  const statboticsStatus = !job.statboticsLoadedAt
+    ? "pending"
+    : job.statboticsFetchError
+      ? "unavailable"
+      : unavailableMatchCount === 0
+        ? "ready"
+        : unavailableMatchCount >= analyticsMatches.length && analyticsMatches.length > 0
+          ? "unavailable"
+          : "partial";
+  const frcColorsStatus = job.teamColorsLoadedAt
+    ? "ready"
+    : job.teamColorsFetchError
+      ? "unavailable"
+      : "pending";
   return {
+    schemaVersion: 1,
+    eventKey: job.event.key,
+    generatedAt: Date.now(),
+    provenance: {
+      event: "tba",
+      teams: "tba",
+      matches: "tba",
+      rankings: "tba",
+      oprs: "tba",
+      playoffAlliances: "tba",
+      statboticsMatches: "statbotics",
+      teamColors: "frc-colors",
+      derived: "fieldview",
+    },
+    sources: {
+      tba: { status: job.tbaLoadedAt ? "ready" : "unavailable", updatedAt: job.tbaLoadedAt ?? null },
+      statbotics: { status: statboticsStatus, updatedAt: job.statboticsLoadedAt ?? null, error: job.statboticsFetchError ?? null },
+      frcColors: { status: frcColorsStatus, updatedAt: job.teamColorsLoadedAt ?? null, error: job.teamColorsFetchError ?? null },
+    },
     event: job.event,
     rankings: job.rankings,
     teams,
@@ -123,7 +163,7 @@ function buildPayload(job: Job): EventAnalyticsResponse {
   };
 }
 
-export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalyticsResponse> {
+export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalytics> {
   let job = await readJob(eventKey);
   if (!job) {
     const [event, teams, matches, oprs, rankings, playoffAlliances] = await Promise.all([
@@ -145,6 +185,7 @@ export async function getEventAnalyticsSnapshot(eventKey: string): Promise<Event
       attempts: {},
       state: "queued",
       updatedAt: Date.now(),
+      tbaLoadedAt: Date.now(),
       scheduleRefreshedAt: Date.now(),
       playoffAlliancesRefreshedAt: Date.now(),
     };
@@ -172,6 +213,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
       job.statboticsFetchError = null;
       job.teamColors = undefined;
       job.teamColorsLoadedAt = undefined;
+      job.teamColorsFetchError = null;
     }
     job.state = "collecting";
     // The dashboard is a persisted snapshot: TBA and Statbotics are only
@@ -196,6 +238,7 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
         }
         job.matches = sortMatches([...existing.values()]);
         job.scheduleRefreshedAt = Date.now();
+        job.tbaLoadedAt = Date.now();
         await writeJob(eventKey, job);
       } catch (error) {
         console.warn("[Insights] event schedule refresh failed", eventKey, error);
@@ -252,7 +295,9 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
       try {
         job.teamColors = await FRCColors.getEvent(eventKey, { refresh: forceRefresh });
         job.teamColorsLoadedAt = Date.now();
+        job.teamColorsFetchError = null;
       } catch (error) {
+        job.teamColorsFetchError = error instanceof Error ? error.message : String(error);
         console.warn("[Insights] FRC Colors event collection failed", eventKey, error);
         // Leave the timestamp unset so a later snapshot request can retry.
       }

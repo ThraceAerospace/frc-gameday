@@ -53,7 +53,7 @@ export default function RemotePage() {
   const activeDisplay = displays.find((display) => display.id === activeId) ?? null;
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="h-[100dvh] overflow-y-auto overscroll-y-contain bg-black text-white [touch-action:pan-y]">
       <header className="border-b border-white/10 bg-neutral-950 px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
@@ -77,9 +77,9 @@ export default function RemotePage() {
               maxLength={6}
               placeholder="000000"
               aria-label="Display pairing code"
-              className="mt-3 w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-white/30"
+              className="mt-3 w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-[var(--fv-brand)]"
             />
-            <button type="submit" disabled={codeInput.length !== 6} className="mt-3 w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-30">Connect display</button>
+            <button type="submit" disabled={codeInput.length !== 6} className="mt-3 w-full rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-30">Connect display</button>
           </form>
 
           <section className="space-y-2">

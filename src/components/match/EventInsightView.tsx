@@ -85,8 +85,8 @@ function AllianceCard({
   const winner = match.winning_alliance === color;
   const tied = match.winning_alliance === "";
   const colorClasses = color === "red"
-    ? { border: "border-red-400/30", header: "border-red-400/20", text: "text-red-300", tint: "bg-red-950/20", sticky: "bg-[#1a0b0d]" }
-    : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[#091321]" };
+    ? { border: "border-red-400/30", header: "border-red-400/20", text: "text-red-300", tint: "bg-red-950/20", sticky: "bg-[var(--fv-alliance-red-surface)]" }
+    : { border: "border-blue-400/30", header: "border-blue-400/20", text: "text-blue-300", tint: "bg-blue-950/20", sticky: "bg-[var(--fv-alliance-blue-surface)]" };
 
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border ${colorClasses.border} ${colorClasses.tint}`}>
@@ -229,7 +229,7 @@ export default function EventInsightView({
   const eventTitle = event?.short_name || event?.name || eventKey;
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[#07090d] text-white">
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--fv-insights-surface)] text-white">
       <header className="shrink-0 border-b border-white/10 bg-neutral-950/80 px-5 py-4 sm:px-7">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">FieldView · Match Insights</div>
         <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">

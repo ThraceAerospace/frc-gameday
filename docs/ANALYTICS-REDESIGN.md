@@ -34,3 +34,19 @@ For team season progression, calculate qualification-to-elimination residual shi
 ## Shared presentation contract
 
 Every view follows takeaway → evidence → investigation. Show plain-language conclusions first, then relevant metrics and visualizations, then match/event evidence. Keep sample size, source coverage, model provenance, and caveats close to conclusions. Never attribute alliance residuals or shared EPA updates to an individual robot.
+
+## Current implementation audit notes
+
+This document defines intended analytical behavior; it is not proof that every calculation is already implemented in the server service layer. The first application audit identified these implementation gaps:
+
+- Suggested Review still calculates model-upset, phase-specific median/MAD, large-residual, and high-alliance-EPA flags in the browser. These classifications should move into the server-side analytics service and become part of the EventAnalytics response.
+- Event qualification anomaly calculations and the dashboard phase-band helper use the upper middle value for even-sized samples, while selected-team history uses the conventional average of the two middle values. Centralize and test one convention before changing thresholds or historical results.
+- Selected-team season anomaly flags currently begin at four scored observations per side; the documented minimum is eight.
+- The elimination-decline signal does not currently require positive qualification residual performance, although the specification defines the signal as a decline after positive qualification performance.
+- The qualification prediction-calibration summary currently counts every incorrect winner prediction as an underdog win, including the 50/50 edge case. This is a miss count, not an underdog-win count; count an underdog win only when the actual winner's pre-match probability is strictly below 0.5.
+- The selected-team match-analysis API route still contains substantial calculation logic instead of delegating to a reusable server-side service.
+- The shared event-percentile helper reports the sole usable team in a one-observation cohort as the 100th percentile; insufficient peer coverage should be labeled insufficient or use an explicit one-sample convention.
+- EPA contribution calculations discard an entire alliance when any team's pre-match EPA is negative, even when all values are present and the alliance total is positive. Negative EPA is a valid model value, not missing data.
+- Statbotics stale-on-error fallbacks are not surfaced to the analytics consumers, and an explicit Event Analytics refresh can be skipped when the event job lock is held without returning an in-progress state.
+
+See [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md) for the corresponding findings and priorities. Keep this specification as the intended methodology while those implementation gaps are resolved.

@@ -19,3 +19,11 @@ EPA breakdowns remain string-keyed numeric-or-null maps because their component 
 ## Application aliases
 
 Import named types from `src/lib/statbotics/types.ts` rather than coupling application code to generated schema names.
+
+## Generated schema versus runtime provider
+
+This guide describes the source of generated TypeScript definitions only. It does not determine which host the application contacts at runtime.
+
+Runtime requests are configured independently in `src/lib/statbotics/client.ts`, with `STATBOTICS_API_BASE_URL` as the deployment override. As recorded in [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md), the current code default still points to a community-operated mirror even though the generated schema comes from the official Statbotics OpenAPI document. These are separate concerns: official generated types do not make a community mirror an approved runtime provider.
+
+The project requirement is to use the official Statbotics API or a FieldView-operated compatible fork. Do not treat the current mirror default as an approved long-term configuration.

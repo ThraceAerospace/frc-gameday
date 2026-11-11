@@ -1,5 +1,29 @@
 # FieldView Architecture
 
+## Implementation status — 2026-11-10
+
+This document describes both the architecture currently present in the repository and constraints for its continued evolution. The vocabulary and target diagrams are architectural guidance; they must not be read as proof that every target capability is already implemented.
+
+### Implemented today
+
+- The application is a Next.js App Router application deployed around Vercel route handlers and Redis-backed server services.
+- TBA acquisition is centralized in `src/lib/tba/client.ts` and `src/lib/tba/service.ts`. Redis stores response data and upstream freshness/ETag metadata.
+- TBA webhooks attempt to mutate existing cached match data, then publish event-scoped updates through Redis Pub/Sub and `/api/ws`. The current mutation/invalidation coverage is incomplete across match representations and dependent resources, and some mutation failures are swallowed; see the application audit.
+- The normal live browser path uses one origin-wide SharedWorker. It owns the event WebSocket and per-event EventState instances; tabs receive snapshots through MessagePorts. When SharedWorker is unavailable, the client falls back to per-tab EventState/WebSocket ownership.
+- EventState owns live TBA event acquisition, refresh, and reconciliation. Its current freshness/error state is coarse rather than per-resource, and the per-tab fallback WebSocket does not yet tear down when its final consumer leaves. Remote displays consume controller-published snapshots rather than starting another acquisition lifecycle.
+- Event Analytics is currently a separate server-side Redis job and HTTP API. The dashboard fetches that payload itself; EventAnalytics is not yet owned or distributed by the SharedWorker.
+- Both current snapshot types remain provider-shaped: `EventStateSnapshot` embeds TBA/Statbotics records and client-runtime status, while EventAnalytics v1 wraps the existing provider-shaped analytics response. EventState is volatile SharedWorker memory, not a durable canonical model. A normalized, provider-independent FieldView DTO layer is still target work.
+
+### Not implemented yet
+
+- SharedWorker-owned EventAnalytics subscriptions and unified EventState/EventAnalytics snapshot delivery.
+- A fully provider-independent, validated FieldView DTO layer for all client-facing data, including per-resource loading/freshness/failure state.
+- The reusable `EventDataPanel` and `dataPanel` tile type/URL behavior described in the target view architecture; current `TileView` supports only EventView tiles.
+- A dedicated Cloudflare acquisition/persistence implementation. Cloudflare remains a possible future infrastructure adapter, not the current runtime.
+- A public developer API product, public API versioning policy, or OpenAPI/Swagger surface.
+
+The current Statbotics runtime host and the freshness behavior of assembled team-history responses are documented as audit findings in [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md). Do not infer runtime provider compliance from the fact that generated types come from the official Statbotics OpenAPI document.
+
 ## Purpose
 
 This document defines the architectural model for the complete FieldView rebuild.

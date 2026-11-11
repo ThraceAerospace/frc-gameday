@@ -1,6 +1,6 @@
 # FieldView Color System
 
-> Status: Proposed design direction — documented for future implementation, not implemented in the application.
+> Status: Implementing on `ui-cleanup`. Semantic roles and core brand tokens are being introduced; exact theme surfaces and contrast pairings remain subject to visual and accessibility validation.
 >
 > The palette is a working baseline, not a finalized design-system contract. Revisit exact values after testing in light and dark themes, chart contexts, and accessibility/contrast checks.
 
@@ -45,6 +45,18 @@ Notes:
 - Missing or insufficient data should use a neutral missing-data treatment, not the below-typical color.
 - Do not imply that a metric's raw sign (positive/negative) determines its color.
 
+### Categorical chart series
+
+Charts that compare distinct components or teams use a separate categorical series palette. These colors identify series only; they do not represent performance quality, alliance membership, or review status.
+
+| Series | Light theme | Dark theme |
+|---|---:|---:|
+| Auto / Team A | `#7656C9` | `#A78BE8` |
+| Teleop / Team B | `#4F8F8A` | `#69B4A8` |
+| Endgame | `#8B91A1` | `#A1A1AA` |
+
+Use the corresponding `--fv-chart-*` tokens. Do not borrow alliance red/blue or metric percentile colors for categorical series.
+
 ### Review indicators
 
 | Role | Color | Hex | Usage |
@@ -73,11 +85,9 @@ Individual team colors are dynamic team metadata, sourced from the FRC Colors se
 
 A component may show multiple roles together (for example, a team-colored marker beside a percentile-colored metric), but each color must have a clear, separate visual target. Avoid using a single colored background to encode multiple meanings.
 
-## Implementation guidance (future work only)
+## Implementation guidance
 
-This document records design intent; it does not authorize implementation in this change.
-
-When the palette is implemented later:
+The application is adopting this palette incrementally. Shared semantic tokens are being introduced first; page and component styling will migrate in focused passes. Continue to:
 
 - Centralize semantic tokens rather than scattering raw hex values through components.
 - Define light- and dark-theme variants and accessible foreground/surface pairings.
@@ -90,4 +100,13 @@ When the palette is implemented later:
 
 ## Current status
 
-**Documentation only.** No application components, CSS variables, Tailwind configuration, chart palettes, or existing colors are changed by this proposal.
+**In progress.** Shared theme tokens and the application shell have been migrated on `ui-cleanup`. Individual page and analytics components still require review. The palette remains provisional until light/dark visual checks and contrast testing are complete.
+
+
+## TileSurface broadcast treatment
+
+TileSurface is a dark-only broadcast surface and does not participate in the site's light/dark theme switch. Its base surface remains near-black so the empty areas and gaps between tiles visually disappear. Purple branding is intentionally restrained: use subtle purple only for FieldView identification and interactive hover, focus, or selected states. Avoid prominent brand backgrounds, gradients, or decorative chrome. Do not create a light TileSurface variant.
+
+## CSS variable contract
+
+All custom styling values outside Tailwind utilities must be centralized as semantic CSS custom properties. This includes colors, opacity variants, shadows, gradients, borders, typography constants, and any reusable non-Tailwind design value. Component-specific inline styles may still calculate geometry (for example, percentage widths and tile positions), but visual colors and effects must reference semantic tokens. Theme variants override tokens, not individual component declarations.

@@ -65,7 +65,7 @@ export default function RemoteEventCard({
         upcomingAlert
           ? "tracked-accent-glow"
           : selected
-            ? "border-blue-500/50 bg-white/[0.09] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+            ? "border-[var(--fv-tile-brand-border)] bg-[var(--fv-tile-brand-soft)] shadow-[0_0_0_1px_var(--fv-tile-brand-glow)]"
             : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
       }`}
     >
@@ -78,7 +78,7 @@ export default function RemoteEventCard({
                   "h-1.5 w-1.5 shrink-0 rounded-full " +
                   (websocketStatus === "connected"
                     ? websocketStale
-                      ? "bg-blue-700"
+                      ? "bg-[var(--fv-review)]"
                       : "bg-green-500"
                     : websocketStatus === "connecting"
                       ? "bg-yellow-500"
@@ -105,7 +105,7 @@ export default function RemoteEventCard({
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-            selected ? "bg-white text-black" : "bg-neutral-800 text-neutral-400"
+            selected ? "bg-[var(--fv-tile-brand)] text-black" : "bg-neutral-800 text-neutral-400"
           }`}
         >
           {selected ? "Focused" : `Event ${position + 1}`}

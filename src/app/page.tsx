@@ -76,7 +76,7 @@ export default async function HomePage() {
     <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">FIRST Robotics Competition</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FIRST Robotics Competition</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">This week in FIRST</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
             Browse events, teams, matches, and live Gameday views. FieldView starts with The Blue Alliance data and builds richer live-event tools on top of it.
@@ -86,13 +86,13 @@ export default async function HomePage() {
         <section className="mt-8">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-blue-600">
+              <div className="flex items-center gap-2 text-[var(--fv-brand)]">
                 <CalendarDaysIcon className="h-5 w-5" />
                 <span className="text-xs font-bold uppercase tracking-[0.16em]">Events this week</span>
               </div>
               <h2 className="mt-1 text-2xl font-bold text-slate-900">{eventSummaries.length} {eventSummaries.length === 1 ? "event" : "events"}</h2>
             </div>
-            <Link href="/events" className="hidden text-sm font-semibold text-blue-600 hover:text-blue-700 sm:block">Browse all events →</Link>
+            <Link href="/events" className="hidden text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)] sm:block">Browse all events →</Link>
           </div>
 
           {eventSummaries.length ? (
@@ -105,7 +105,7 @@ export default async function HomePage() {
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">There are no events scheduled for this week.</div>
           )}
 
-          <Link href="/events" className="mt-4 block text-center text-sm font-semibold text-blue-600 sm:hidden">Browse all events →</Link>
+          <Link href="/events" className="mt-4 block text-center text-sm font-semibold text-[var(--fv-brand)] sm:hidden">Browse all events →</Link>
         </section>
       </div>
     </SiteShell>

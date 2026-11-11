@@ -6,6 +6,10 @@ FieldView / FRC Gameday is a Next.js application for live FIRST Robotics Competi
 
 The codebase is in a stabilization and cleanup phase after the Multiview/EventView refactor.
 
+## Product and data principles
+
+FieldView is a **data application with a first-class web application to serve and explain its data**. Prioritize trustworthy acquisition, normalization, derivation, provenance, freshness, and reliable access. The web application is a primary product surface, but it consumes FieldView-owned data contracts; presentation components must not become the owners of data acquisition or analytical calculations. Build data capabilities once and make them reusable across pages, remote displays, and future consumers. Do not expand public API infrastructure or move hosting providers unless explicitly requested.
+
 ## Branch
 
 Use `main` unless the user explicitly requests another branch.
@@ -33,7 +37,7 @@ Rules:
 1. Redis is the server-side cache.
 2. TBA webhooks are the preferred realtime invalidation path.
 3. TBA webhooks mutate existing Redis cache entries first, then broadcast an event-scoped WSS invalidation.
-4. EventState refetches Redis immediately after the webhook mutation. Webhook-mutated match caches keep the new data available to the UI while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before ETag/304 validation.
+4. EventState immediately re-reads the API after a webhook mutation, which normally returns the updated Redis entry while that entry is still fresh. It also schedules a one-shot re-read after 65 seconds. This timer does not change the Redis entry's `expiresAt` or force an upstream TBA request; whether the later read reaches TBA depends on the existing TBA cache freshness.
 5. WSS messages are invalidation signals, not data payloads.
 6. Polling reconciles missed webhooks and every explicit reload restarts the polling generation.
 7. Do not introduce another cache layer to support webhooks.
@@ -58,7 +62,7 @@ Mutate the relevant existing Redis cache after authentication/parsing, then broa
 
 Live route layouts under `src/app/gameday`, `src/app/event`, and `src/app/insights` register a shared live-runtime lease. One origin-wide SharedWorker owns the physical WebSocket at `/api/ws`, its event-key subscriptions, the EventState map, and all event acquisition. Tabs receive EventState snapshots over MessagePorts; a tab must not create its own EventState or per-tab WebSocket when SharedWorker is available.
 
-The worker sends `subscribe`/`unsubscribe` messages for event keys, reconnects with exponential backoff, and resubscribes active keys after reconnect. EventState still owns the per-event refresh and reconciliation policy, but its instances live in the worker. WSS messages remain invalidation signals. Preserve the 65-second authoritative refetch delay, request-race protection, tag invalidation, ETag/304 behavior, and the manual `r` refresh behavior. Remote displays consuming EventStateSnapshotsProvider remain read-only and must not subscribe to worker event acquisition. When all live clients leave, close the socket and stop event timers; do not keep an idle worker connection open.
+The worker sends `subscribe`/`unsubscribe` messages for event keys, reconnects with exponential backoff, and resubscribes active keys after reconnect. EventState still owns the per-event refresh and reconciliation policy, but its instances live in the worker. When SharedWorker is unavailable, the client deliberately falls back to per-tab EventState/WebSocket ownership; preserve that fallback unless support requirements change. WSS messages are invalidation signals, not authoritative match payloads. Keep them minimal: the current webhook path still forwards the original `messageData` and this is tracked in `docs/APPLICATION-AUDIT.md`. Preserve the 65-second one-shot authoritative refetch delay, request-race protection, tag invalidation, ETag/304 behavior, and the manual `r` refresh behavior. Remote displays consuming EventStateSnapshotsProvider remain read-only and must not subscribe to worker event acquisition. When all live clients leave, close the socket and stop event timers; do not keep an idle worker connection open.
 
 ## Polling
 
@@ -77,7 +81,7 @@ Do not replace this with a naive `setInterval` implementation.
 
 ## Match semantics
 
-The client-side canonical match helpers are in `src/lib/gameday/matchUtils.ts`.
+The client-side canonical match helpers are in `src/lib/tba/matchUtils.ts`.
 
 The presentation chain is:
 
@@ -92,9 +96,9 @@ Team presentation rules:
 - Show teams in their red or blue alliance color only when displaying a match; outside match context, use neutral black styling.
 - When a match's alliance data includes a team in `dq_team_keys`, render that team's number with a strikethrough.
 
-## Multiview
+## Tile View / Multiview
 
-MultiviewView owns:
+The current surface implementation is `TileView` and `TileSurfaceController` under `src/components/surface/`. Together they own:
 
 - stable streams;
 - priority;
@@ -119,11 +123,13 @@ Layouts are pure data in `src/lib/multiview/layouts.ts`.
 
 Do not restore old positional TeamPill modes.
 
-## Reusable event data panels
+## Planned reusable event data panels
 
-`src/components/eventdata/EventDataPanel.tsx` is an event-scoped presentation component, not a tile-only implementation. It consumes the shared `useEventState` snapshot and can be rendered from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+The reusable `EventDataPanel` described in the target architecture is **not yet implemented** on this branch; the documented component and `/event/<event>/data` route are absent. This section records the requirements for that future capability, not a description of current files. See FV-AUD-076 in `docs/APPLICATION-AUDIT.md`.
 
-Tile identity is distinct from event identity. `TileSurfaceState.streams` and `priority` contain stable tile IDs; `tileEvents` maps each tile to its event key, and `tileTypes` distinguishes `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event may be represented by both tile types. All displays connected to one session share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
+When implemented, the panel must be an event-scoped presentation component, not a tile-only implementation. It should consume the shared `useEventState` snapshot and be renderable from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+
+The target tile model keeps tile identity distinct from event identity. `TileSurfaceState.streams` and `priority` should contain stable tile IDs; `tileEvents` should map each tile to its event key, and `tileTypes` should distinguish `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event should be representable by both tile types. All displays connected to one session should share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
 
 ## Match Insights surfaces
 
@@ -208,6 +214,20 @@ npm run generate:statbotics-types
 
 Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas fill only missing fields and generic response definitions; existing upstream fields and types always take precedence. When Statbotics adds or corrects response models in OpenAPI, generation adopts those definitions automatically, after which the corresponding fallback fields can be removed. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
 
+## Data contracts and API boundaries
+
+FieldView-owned data contracts are foundational even when the current delivery mechanism is an internal HTTP route, SharedWorker snapshot, or remote-session message. Keep provider acquisition behind server-side clients/services, normalize at the boundary, and keep calculations outside presentation components. Treat `/api` routes as interfaces to application services rather than places to duplicate business logic. EventAnalytics v1 is currently a compatibility envelope over provider-shaped response data; `EventStateSnapshot` is also still provider-shaped and mixes data with client delivery/runtime status. EventState currently lives in disposable SharedWorker memory rather than a durable server-side model. Neither is yet a final provider-independent DTO, and they are not yet companion models delivered through one shared data service. See FV-AUD-017. Do not claim a public developer API, OpenAPI surface, or Cloudflare runtime exists until implemented.
+
+## Documentation and design system
+
+- Keep `AGENTS.md`, `README.md`, and the `CLAUDE.md` pointer at the repository root.
+- Keep architecture references, analytics specifications, API typing guides, and design-system documentation under `docs/`.
+- Follow `docs/COLOR-SYSTEM.md` for semantic color roles. Purple is FieldView branding; red/blue are reserved for alliance identity in match context; gold/greens are metric percentile tiers; orange is a human-review indicator; team colors remain provider metadata.
+- Do not use generic blue utility colors for product branding, navigation, links, selection, or focus states. Preserve blue where it specifically represents the blue alliance or an explicitly defined probability band.
+- Centralize all non-Tailwind design values in semantic CSS custom properties. This includes colors, theme surfaces, shadows, gradients, borders, typography values, and other reusable visual constants in custom CSS or inline styles; do not scatter literal values through components. Use Tailwind utilities for standard layout and styling when available, and CSS variables for custom values.
+- All site link hover and focus states use FieldView purple, never generic blue. Keep red/blue alliance identity only where semantically required.
+- TileSurface is a deliberately dark-only broadcast surface. Never add a light theme variant or apply the normal site surfaces to it. Keep branding restrained and unobtrusive; use only subtle purple accents for selected, focused, and hovered controls.
+
 ## File organization
 
 Current major boundaries:
@@ -222,6 +242,7 @@ Current major boundaries:
 - `src/lib/multiview` — pure Multiview layouts.
 - `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
 - `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
+- `docs` — architecture, analytics, API typing, and design-system documentation.
 
 ## Legacy areas
 
@@ -262,27 +283,21 @@ Prefer small, focused cleanup commits.
 - `src/lib/insights` contains server-side calculations and orchestration. It consumes TBA/Statbotics services; Views must not call upstream APIs directly.
 - FRC team colors use the provider in `src/lib/frc-colors/`. The progressive event analytics collection job acquires the event's colors through the FRC Colors batch event endpoint, caches them in Redis for 24 hours, and persists the result in the event job. Do not add a browser/page-level color request or a request per match. Use primary colors only for robot EPA-bar segments; missing or colliding colors must use distinct fallbacks. A manual analytics refresh may refresh the provider cache.
 - `% EPA Contribution to Matches` is the team's pre-match total EPA divided by the sum of all three alliance robots' pre-match total EPAs, averaged across every usable qualification and elimination appearance. Keep the reusable metric and sample count phase-inclusive; qualification match rows may show the per-match share prominently. This is a model-estimate composition measure, not a share of actual match points or an attribution of scoring to a robot.
-- Statbotics uses `https://api.statbotics.io` by default. Keep `STATBOTICS_API_BASE_URL` as an explicit override for a compatible self-hosted instance. All upstream requests must go through `src/lib/statbotics/client.ts` and the application-facing `src/lib/statbotics/service.ts`; consumers must not fetch Statbotics directly. Honor upstream `Cache-Control: max-age` when present, with a conservative 10-minute minimum between requests for the same resource. If max-age is absent, use a 10-minute fallback for match/team-year records and 24 hours for team-event records. Preserve stale data on failures and back off failed requests. Event-level analytics workers are limited to two concurrent Statbotics match requests.
-- Event analytics collection is a resumable server-side job stored in Redis. The route returns the current complete-so-far snapshot and uses Vercel `waitUntil` to advance bounded Statbotics match batches; the browser polls only collection status/results and never requests a "next page". Preserve the worker lock, execution budget, retry limits, and bounded concurrency. Refresh the TBA match schedule and OPR periodically; WebSocket/EventState updates trigger immediate refresh of the latest completed match. Do not create a second WebSocket or move calculations into the browser.
-- Derived event pages use a short Redis cache and a request lock. Do not turn Redis into permanent season-history storage.
+- Statbotics runtime data must come from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. **Do not use a community-operated mirror.** The current `src/lib/statbotics/client.ts` default still points to `https://api-statbotics.iterativerefinement.com`; this violates the provider requirement and is tracked as FV-AUD-001 in `docs/APPLICATION-AUDIT.md`. Keep `STATBOTICS_API_BASE_URL` as an explicit override for a compatible approved endpoint. All upstream requests must go through `src/lib/statbotics/client.ts` and the application-facing `src/lib/statbotics/service.ts`; consumers must not fetch Statbotics directly. Honor upstream `Cache-Control: max-age` when present, with a conservative 10-minute minimum between requests for the same resource. If max-age is absent, use a 10-minute fallback for match/team-year records and 24 hours for team-event records. Preserve stale data on failures and back off failed requests. Event-level analytics workers are limited to two concurrent Statbotics match requests.
+- Event analytics state is stored in a Redis job, but the current event route awaits `advanceEventAnalytics` and `advanceSeasonCohort` before returning (`maxDuration = 60`). It does not currently use Vercel `waitUntil`, and the dashboard does not poll for progress; it loads on mount and explicit refresh. Do not document this as background execution or automatic progress polling until that behavior is implemented. Event schedule/OPR/ranking/alliance inputs are refreshed by explicit analytics refresh; EventState updates currently provide live connection status to the analytics surface, not an automatic analytics rebuild. The event job has a one-year TTL; the season cohort has a 24-hour TTL and a bounded 20-second work budget.
+- Derived event pages should use freshness appropriate to whether the season is active or complete; do not retain current-season data for a year. Known exception/defect: `src/app/api/insights/team/[team]/route.ts` currently caches assembled team history for 365 days, including the current season, and has no refresh parameter. Track this as FV-AUD-002 and correct it before relying on that endpoint for live-season comparisons. The event analytics job itself currently has a one-year TTL; the season cohort has a 24-hour TTL.
 - Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
 - Every event team should receive the same concise, bullet-first team brief, followed by supporting analytics, graphs, match pointers, and review flags. Review flags identify correlations/anomalies for a human scout to investigate; they are not causal determinations. Never attribute alliance score residuals, win-probability mismatches, partner patterns, or shared EPA updates to an individual robot.
 - Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
 - Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
+- Known calculation-boundary gaps: `buildMatchFlagSummary` / `phaseAnomalyBand` still derive Suggested Review flags in `EventAnalyticsDashboard.tsx`, and `src/app/api/insights/team/[team]/matches/route.ts` still contains substantial calculation logic. Do not add more analytical rules to the dashboard or route; move them behind server-side services when those areas are next changed. See FV-AUD-010 and FV-AUD-014.
+- The current robust-median implementations select the upper middle value for even samples; see FV-AUD-015. Preserve/document that behavior until a deliberate correction is covered by tests. `predictionCalibration.underdogWins` also counts a miss at exactly 50% as an underdog win; see FV-AUD-016.
 
 - Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
 
 - Prefer Statbotics bulk collection endpoints whenever a filtered collection can satisfy the request: `/v3/matches?event=...`, `/v3/matches?team=...&year=...`, and `/v3/team_events?team=...&year=...`. Use paginated collection methods (up to 1000 records per page) through the shared Statbotics client/service; preserve per-query caching, upstream Cache-Control, and the shared request floor. Use single-record endpoints for targeted live-match refreshes or when a collection endpoint cannot express the lookup.
 - Start independent TBA and Statbotics collection requests concurrently. Do not serialize unrelated event metadata, schedule, rankings, OPR, match collection, or team-event collection fetches. Merge bulk Statbotics records into the canonical TBA schedule by match/event key; TBA remains authoritative for schedule and actual results.
 - Persist usable bulk results and retain previously collected records if a later refresh fails or omits a record. Distinguish a failed collection request from a successful collection response that contains no record for a scheduled match. The browser must keep displaying the latest complete-so-far analytics snapshot while polling, reject stale overlapping responses, and show a sticky progress/status area at the top of the analytics page with explicit missing-data explanations.
-
-
-## Homepage event snapshot
-
-- The homepage (`src/app/page.tsx`) is a Server Component with one-hour ISR (`revalidate = 3600`). It renders the current Sunday–Saturday event list and event summaries into the initial HTML.
-- Retrieve each event's canonical full match schedule through `TBA.getEventMatches`; derive last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
-- Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a homepage-specific match cache, browser polling, or a homepage WebSocket subscription.
-- Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
 
 
 ## Homepage event snapshot
@@ -321,7 +336,7 @@ The season-long team match analysis calculates a qualification-to-elimination sc
 
 ## Season-wide cohort analytics
 
-Event Insights builds a Redis-backed, resumable season cohort for every team on the target event roster. For each team, it discovers all official-season events (excluding TBA event types 99 offseason and 100 preseason), then retrieves Statbotics team-event snapshots through the configured Statbotics API endpoint (the API-compatible mirror is the default; response contracts use the official Statbotics v3 generated schema). Work is bounded by a 20-second execution budget, two concurrent upstream requests, small batches, up to three discovery attempts per team, a finite lock, and a 24-hour job TTL. Team-event snapshots use the shared Statbotics cache policy (24-hour fallback); the current target event is collected during discovery and is refreshed only by an explicit cohort refresh. This avoids fan-out requests from the browser and avoids collecting every season match for every event team.
+Event Insights builds a Redis-backed, resumable season cohort for every team on the target event roster. For each team, it discovers all official-season events (excluding TBA event types 99 offseason and 100 preseason), then retrieves Statbotics team-event snapshots through the configured Statbotics API endpoint (the runtime default currently violates the official-provider requirement; see FV-AUD-001. The generated response types are based on the official Statbotics v3 schema, which does not make the mirror an approved runtime source). Work is bounded by a 20-second execution budget, two concurrent upstream requests, small batches, up to three discovery attempts per team, a finite lock, and a 24-hour job TTL. Team-event snapshots use the shared Statbotics cache policy (24-hour fallback); the current target event is collected during discovery and is refreshed only by an explicit cohort refresh. This avoids fan-out requests from the browser and avoids collecting every season match for every event team.
 
 The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Every event-roster team is eligible regardless of which prior event it attended; do not require a shared prior event. Select the most recent preceding official event by date before checking Statbotics availability. If that event has no usable Statbotics team-event record, do not silently fall back to an older event: leave that team's change/rank unavailable while retaining the team in all current-event views. Overall EPA and each EPA component are ranked independently; each component rank's denominator includes only teams with both current and prior values for that component. Always display the eligible comparison count and make clear that teams may have different prior-event baselines. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
 
