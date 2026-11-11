@@ -53,7 +53,10 @@ export function buildAllianceResults(records: AnalyticsMatch[], playoffType?: nu
     const actual = rawActual !== null && rawActual >= 0 ? rawActual : null;
     const teamKeys = alliance.team_keys ?? [];
     const values = teamKeys.map((key) => numberOrNull(statbotics?.pre_epas?.[statboticsTeamKey(key)]?.epa));
-    const preEpaTotal = values.every((value) => value !== null) ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0) : null;
+    const hasCompleteRoster = teamKeys.length === 3 && new Set(teamKeys).size === 3;
+    const preEpaTotal = hasCompleteRoster && values.every((value) => value !== null)
+      ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+      : null;
     const outcome = match.winning_alliance === color ? "win" as const
       : match.winning_alliance === (color === "red" ? "blue" : "red") ? "loss" as const
       : match.winning_alliance === "" ? "tie" as const : "unknown" as const;
@@ -77,7 +80,7 @@ export function buildTeamRows(
   for (const record of records) {
     for (const color of ["red", "blue"] as const) {
       const teamKeys = record.match.alliances[color].team_keys ?? [];
-      if (teamKeys.length !== 3) continue;
+      if (teamKeys.length !== 3 || new Set(teamKeys).size !== 3) continue;
       const values = teamKeys.map((teamKey) => numberOrNull(epaFor(record, teamKey, "pre_epas")?.epa));
       if (values.some((value) => value === null || value < 0)) continue;
       const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
