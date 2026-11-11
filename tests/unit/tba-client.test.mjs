@@ -287,3 +287,73 @@ test("TBA malformed cache entries are discarded before fetching a valid response
   assert.equal(requests, 1);
   assert.deepEqual(JSON.parse(await redis.get(cacheKey(endpoint))).data, [{ key: "frc1" }]);
 });
+
+
+test("TBA accepts quoted and zero max-age values without substituting a local TTL", async () => {
+  const client = new TBAClient("test-auth-key");
+  const quotedEndpoint = "/event/2026ctabc/teams";
+  const zeroEndpoint = "/event/2026ctabc/robots";
+  await withFetch(async () => new Response(JSON.stringify([]), {
+    status: 200,
+    headers: { "Cache-Control": 'public, max-age="45"' },
+  }), async () => {
+    await client.get(quotedEndpoint);
+  });
+  const quoted = JSON.parse(await redis.get(cacheKey(quotedEndpoint)));
+  assert.ok(quoted.expiresAt - Date.now() > 40_000);
+
+  await withFetch(async () => new Response(JSON.stringify([]), {
+    status: 200,
+    headers: { "Cache-Control": "max-age=0" },
+  }), async () => {
+    await client.get(zeroEndpoint);
+  });
+  const zero = JSON.parse(await redis.get(cacheKey(zeroEndpoint)));
+  assert.ok(zero.expiresAt - Date.now() <= 100);
+});
+
+test("TBA rejects malformed max-age values rather than inventing cache freshness", async () => {
+  const client = new TBAClient("test-auth-key");
+  for (const [index, cacheControl] of [
+    "public, max-age=invalid",
+    "public, max-age=-1",
+    'public, max-age="invalid"',
+  ].entries()) {
+    const endpoint = `/event/2026ctabc/malformed-${index}`;
+    await assert.rejects(
+      withFetch(async () => new Response(JSON.stringify({ key: "2026ctabc" }), {
+        status: 200,
+        headers: { "Cache-Control": cacheControl },
+      }), () => client.get(endpoint)),
+      /did not provide Cache-Control max-age/,
+    );
+    assert.equal(await redis.get(cacheKey(endpoint)), null);
+  }
+});
+
+test("TBA does not overwrite a webhook-updated cache entry with an in-flight stale response", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/event/2026ctabc/matches";
+  const key = cacheKey(endpoint);
+  const staleResponse = [{ key: "2026ctabc_qm1", predicted_time: 100 }];
+  const webhookValue = [{ key: "2026ctabc_qm1", predicted_time: 250 }];
+  let requests = 0;
+
+  await withFetch(async () => {
+    requests += 1;
+    await redis.set(key, JSON.stringify({
+      data: webhookValue,
+      etag: '"webhook"',
+      expiresAt: Date.now() + 60_000,
+    }));
+    return new Response(JSON.stringify(staleResponse), {
+      status: 200,
+      headers: { "Cache-Control": "max-age=60" },
+    });
+  }, async () => {
+    assert.deepEqual(await client.get(endpoint), webhookValue);
+  });
+
+  assert.equal(requests, 1);
+  assert.deepEqual(JSON.parse(await redis.get(key)).data, webhookValue);
+});
