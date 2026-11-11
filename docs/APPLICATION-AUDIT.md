@@ -479,3 +479,13 @@ The explicit-refresh path has the same dependency: `latestOprs` is fetched in th
 Consequently, a team row can show a large `matchesSeen` count alongside an EPA value last observed several matches earlier. The EventAnalytics source status is event-wide, so it does not identify which team's EPA was last updated from which match. Consumers cannot distinguish a current team estimate from a retained older estimate.
 
 **Action:** attach per-team EPA observation metadata (source match, observed phase, and timestamp/order) and expose the number of usable EPA observations separately from total match appearances. Mark carried-forward values as stale/last-known rather than presenting them as equally current.
+
+### FV-AUD-039 — Homepage event-week membership uses the server timezone
+
+**Severity: Low / date-boundary consistency**
+
+The homepage determines which events belong in “This week” with `getCalendarWeekEvents`. It constructs Sunday-to-Saturday boundaries from `new Date()` using the server's local timezone, then parses TBA's date-only event dates with `parseLocalDate`, which also uses the server's local timezone. The same page correctly uses each event's IANA timezone when sorting events as upcoming, in progress, or completed, and the event cards use the event timezone for competition status.
+
+On a server whose timezone differs from an event's timezone, an event near the Sunday/Monday boundary can be included in or excluded from “This week” according to the server's calendar rather than the event's calendar. This is inconsistent with the project rule that event dates and times are interpreted in the event's timezone.
+
+**Action:** calculate the current calendar date and week membership in each event's IANA timezone (with a documented fallback for missing/invalid zones), or explicitly define “This week” as a single reference timezone and use that same rule consistently for filtering and display.
