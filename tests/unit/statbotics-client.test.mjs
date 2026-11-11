@@ -54,13 +54,34 @@ function withGlobals({ fetch: fetchImplementation, baseUrl }, run) {
     });
 }
 
-test("Statbotics client uses the configured API base and preserves encoded match keys", async () => {
+test("Statbotics defaults to the official API when no override is configured", async () => {
+  const { client } = await createClient();
+  let requestedUrl;
+
+  await withGlobals({
+    baseUrl: null,
+    fetch: async (url) => {
+      requestedUrl = url;
+      return new Response(JSON.stringify({ key: "2026ctabc_qm-default" }), {
+        status: 200,
+        headers: { "Cache-Control": "max-age=60" },
+      });
+    },
+  }, async () => {
+    const result = await client.getMatch("2026ctabc_qm-default");
+    assert.equal(result.key, "2026ctabc_qm-default");
+  });
+
+  assert.equal(requestedUrl, "https://api.statbotics.io/v3/match/2026ctabc_qm-default");
+});
+
+test("temporary Chondl override preserves encoded match keys", async () => {
   const { client, redis } = await createClient();
   let requestedUrl;
   const matchKey = "2026ctabc_qm 1";
 
   await withGlobals({
-    baseUrl: "https://statbotics.test/",
+    baseUrl: "https://api-statbotics.popcornpenguins.com/",
     fetch: async (url) => {
       requestedUrl = url;
       return new Response(JSON.stringify({ key: matchKey, pred: { red_score: 100 } }), {
@@ -73,7 +94,7 @@ test("Statbotics client uses the configured API base and preserves encoded match
     assert.equal(result.key, matchKey);
   });
 
-  assert.equal(requestedUrl, "https://statbotics.test/v3/match/2026ctabc_qm%201");
+  assert.equal(requestedUrl, "https://api-statbotics.popcornpenguins.com/v3/match/2026ctabc_qm%201");
   const entries = [...redis.values.values()].map((value) => {
     try { return JSON.parse(value); } catch { return null; }
   }).filter((value) => value && typeof value === "object" && "fetchedAt" in value);
