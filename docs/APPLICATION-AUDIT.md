@@ -637,3 +637,14 @@ The live-runtime documentation specifies that webhook-mutated match caches remai
 This is particularly risky for `upcoming_match`: `reconcileMatch` preserves cached data only when it contains a posted result and the incoming match does not. A stale upstream match response can therefore replace webhook-updated scheduled/predicted times or team assignments before the documented catch-up window has elapsed. The result-preservation rule does not protect these schedule-only changes.
 
 **Action:** implement the documented webhook freshness policy in the cache layer, not only in EventState's timer. A webhook mutation should establish an explicit short refresh deadline (or equivalent authoritative-refresh-not-before metadata), and ordinary reads during that window should serve the webhook-updated representation without prematurely accepting an older upstream response. Preserve a deliberate force-refresh path and distinguish this temporary freshness hold from a claim that upstream data is authoritative. Add tests for an already-expired cache followed by an upcoming-match webhook, immediate EventState reload, an outdated upstream response, and successful reconciliation after the 65-second window.
+
+
+### FV-AUD-054 — Match-score webhooks do not clear the upcoming-match marker
+
+**Severity: Medium / live alert correctness**
+
+The TBA webhook route broadcasts the original `message_data` object as `messageData`. For `match_score`, the webhook data type and handler use the complete match object at `message_data.match`; the match identifier is therefore `message_data.match.key`. In `EventState.handleWebSocketMessage`, however, the `match_score` handler attempts to read `message.messageData.match_key`. That field is not populated by the current webhook payload, so `matchKey` is null and the code does not clear `upcomingMatchKey` or `upcomingMatchTeamKeys`.
+
+The handler does reload the match schedule, but the upcoming marker is independent of the schedule-derived `eventNextMatch`. Consumers use the marker and its team list to drive tracked-team notifications and visual alerts: `useUpcomingMatchAlert`, TileView's upcoming-match banner source, and the remote event card. A scored match can consequently remain flagged as upcoming, and a tracked-team alert can persist after the match has finished.
+
+**Action:** normalize the webhook payload at the server boundary so every match-score notification includes a canonical `match_key`, or have EventState read the nested `match.key` shape with runtime validation. Clear the marker only when the completed match key matches the current upcoming key. Add a webhook-to-EventState integration test asserting that a match-score notification clears the marker and tracked-team alert for that match.
