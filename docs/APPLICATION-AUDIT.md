@@ -935,3 +935,12 @@ In `TBAClient.get`, the successful upstream response is written to the primary R
 The selected-team history route emits `source: "Statbotics mirror + The Blue Alliance"` in every successful payload. The Statbotics client chooses its runtime host from `STATBOTICS_API_BASE_URL` when configured and otherwise uses its current default mirror. If the deployment is switched to the official Statbotics API or a FieldView-operated compatible endpoint, the response continues to attribute the data to the community mirror. Consumers therefore receive incorrect provenance precisely when the project changes its provider configuration to satisfy the official-provider requirement.
 
 **Action:** derive source attribution from the actual configured provider identity at the service boundary, or expose a stable provider identifier that is resolved from configuration without leaking credentials. Keep TBA provenance separate. Add tests for default, official, and FieldView-operated base URL configurations.
+
+
+### FV-AUD-084 — Remote presence lease loss does not close the still-connected peer
+
+**Severity: Medium / remote session exclusivity and signaling integrity**
+
+`registerRemoteWebSocket` refreshes the role's Redis presence key every 30 seconds with a token-checked `EXPIRE`, but the interval only logs Redis errors and ignores the script's return value. If Redis is unavailable long enough for the 120-second presence TTL to expire, or the key is otherwise lost/replaced, a later refresh returns `0` because the token no longer owns the key. The existing WebSocket is not closed and its subscriber remains active. A new client can then acquire the now-free role key and connect under the same six-digit code while the old peer is still connected. Both peers can continue receiving/publishing signaling messages for that code, violating the one-controller/one-display presence invariant and potentially routing offers/candidates to multiple peers.
+
+**Action:** treat a failed or token-mismatched lease refresh as loss of session ownership. Close the socket and run idempotent cleanup when the refresh script does not confirm the token-owned key was extended; use a bounded retry only when there is still sufficient TTL to safely recover. Add tests for Redis outage beyond the lease, a refresh returning zero, and a new peer attempting to acquire the same role after lease loss.
