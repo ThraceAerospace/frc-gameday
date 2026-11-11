@@ -387,7 +387,7 @@ This can leave WebSocket clients connected but unable to receive TBA invalidatio
 
 `EventStateSnapshot` has a global `loading`, one `error` field used by event metadata, and a global `websocketStale` flag. Matches, team statuses, playoff alliances, and OPR requests log failures but retain their previous values without recording resource-specific error, last-success time, or stale status. A subsequent WebSocket message clears the global stale flag even though it only triggers selected resource refreshes and does not prove that every resource is current.
 
-As a result, a consumer cannot distinguish a current resource from an old retained snapshot after a failed refresh, and the global stale indicator can be cleared without successful reconciliation of all event data.
+As a result, a consumer cannot distinguish a current resource from an old retained snapshot after a failed refresh, and the global stale indicator can be cleared without successful reconciliation of all event data. The single `loading` flag is also driven by `loadEvent()` alone: it becomes false as soon as event metadata returns, even while teams, matches, statuses, alliances, and OPRs are still loading. Consumers can therefore render a successful event page with empty schedule/team sections before those resources have completed, but have no per-resource pending state to distinguish that transient condition from a genuinely empty result.
 
 **Action:** add resource-level acquisition metadata to the runtime delivery envelope (status, last successful update, last attempt, error, and stale state). Clear staleness only for a resource after its own successful reconciliation. Keep this runtime metadata separate from the normalized event data contract.
 
