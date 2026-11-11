@@ -1468,14 +1468,6 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
     });
   const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
   const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
-  const timezone=data.event.timezone??null;
-  const flagLabels:Record<MatchReviewFlag,string>={
-    "model-upset":"Model Upset",
-    "anomalous-score":"Anomalous Score",
-    "large-residual":"Large Score Delta",
-    "high-penalties":"High Penalties",
-    "high-alliance-epa":"High Alliance EPA",
-  };
   const flagReasons=(record:EventAnalyticsResponse["matches"][number],summary:MatchFlagSummary)=>{
     const reasons:string[]=[];
     const {match,statbotics}=record;
