@@ -506,7 +506,7 @@ This also means the TypeScript snapshot type does not accurately describe the wi
 
 The canonical match cache's `hasMatchResult` recognizes a result when `actual_time`, `post_result_time`, `score_breakdown`, or either alliance's nonnegative score is present. `getNextMatch` likewise considers a match no longer upcoming when either alliance score is not `-1`.
 
-However, `matchUtils.isPlayed` and the separate `isMatchPlayed` helper in `src/lib/tba/service.ts` use only `actual_time != null`. `getLastMatch` depends on `isPlayed`. Therefore a match with posted scores or another recognized result signal but no `actual_time` can be excluded from next-match selection while also being excluded from last-match selection.
+However, `matchUtils.isPlayed` and the separate `isMatchPlayed` helper in `src/lib/tba/service.ts` use only `actual_time != null`. The `getLastMatch` helper in `src/lib/tba/matchUtils.ts`, which EventState imports, depends on `isPlayed`; the separate `TBA.getLastMatch` implementation in `src/lib/tba/service.ts` instead selects by posted scores. The two last-match paths therefore disagree, and the EventState path can exclude a match with posted scores but no `actual_time`. The actual-time-only helper also affects `getActiveEventsWithMatches`, which can omit an event whose match scores are posted before `actual_time` is populated.
 
 In EventState this can leave `eventLastMatch` behind the latest result and consequently select the wrong match for the live Statbotics warm-cache behavior. Other consumers of the service helper can similarly misclassify a scored match.
 
