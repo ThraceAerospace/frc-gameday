@@ -123,11 +123,13 @@ Layouts are pure data in `src/lib/multiview/layouts.ts`.
 
 Do not restore old positional TeamPill modes.
 
-## Reusable event data panels
+## Planned reusable event data panels
 
-`src/components/eventdata/EventDataPanel.tsx` is an event-scoped presentation component, not a tile-only implementation. It consumes the shared `useEventState` snapshot and can be rendered from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+The reusable `EventDataPanel` described in the target architecture is **not yet implemented** on this branch; the documented component and `/event/<event>/data` route are absent. This section records the requirements for that future capability, not a description of current files. See FV-AUD-076 in `docs/APPLICATION-AUDIT.md`.
 
-Tile identity is distinct from event identity. `TileSurfaceState.streams` and `priority` contain stable tile IDs; `tileEvents` maps each tile to its event key, and `tileTypes` distinguishes `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event may be represented by both tile types. All displays connected to one session share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
+When implemented, the panel must be an event-scoped presentation component, not a tile-only implementation. It should consume the shared `useEventState` snapshot and be renderable from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+
+The target tile model keeps tile identity distinct from event identity. `TileSurfaceState.streams` and `priority` should contain stable tile IDs; `tileEvents` should map each tile to its event key, and `tileTypes` should distinguish `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event should be representable by both tile types. All displays connected to one session should share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
 
 ## Match Insights surfaces
 
