@@ -1115,3 +1115,12 @@ The FRC Colors client returns a per-team `verified` field alongside `primaryHex`
 `registerWebSocket` parses client messages and accepts any truthy `eventKey` for `subscribe` without validating its format/length, checking that the event exists, limiting the number of subscriptions per socket, or rate-limiting subscription changes. Each accepted value is retained in the connection's `eventKeys` set for the lifetime of that socket. The Redis Pub/Sub handler iterates every connected client for each event notification and performs a membership check against that set. A public WebSocket client can therefore accumulate an arbitrarily large number of unique subscription strings, consuming server memory and increasing per-message processing cost without needing a valid TBA event key.
 
 **Action:** validate event keys against the supported TBA key format and a strict length bound, cap subscriptions per connection, and rate-limit subscribe/unsubscribe messages. Reject or close abusive clients and add tests for malformed keys, duplicate subscriptions, cap enforcement, and high-rate subscription churn.
+
+
+### FV-AUD-103 — EventState controller registry retains every event ever viewed
+
+**Severity: Low / long-lived tab memory growth**
+
+`sharedWorkerClient.ts` keeps a module-level `controllers` map keyed by event key. `getEventStateController` creates and stores one controller object per event, but the final unsubscribe path removes the event listener, snapshot, and (in fallback mode) `EventState` instance without deleting the corresponding controller entry. The controller object closes over its event key and remains strongly reachable from the map for the lifetime of the tab. A long-lived user who browses many distinct events therefore accumulates one permanent controller entry per event, even after all event views have unmounted. This is separate from the fallback WebSocket lifecycle leak in FV-AUD-086.
+
+**Action:** delete the controller registry entry when the final subscriber for that event is removed and no other owner/lease requires it, or use a reference-counted controller lifecycle. Add a test that subscribes/unsubscribes many distinct event keys and verifies that the controller registry returns to its baseline size.
