@@ -435,7 +435,7 @@ The pairing flow is the trust boundary for these messages, and the current pairi
 
 **Severity: Low / data availability presentation**
 
-The homepage snapshot catches each event's match-schedule failure and returns `lastMatch: null` and `nextMatch: null`. `HomeEventCard` renders a null last match as “No completed matches yet.” A TBA outage, cache failure, or malformed schedule is therefore presented as a factual absence of completed matches. The card has no way to distinguish an event that has not started from one whose match data could not be loaded.
+The homepage snapshot catches each event's match-schedule failure and returns `lastMatch: null` and `nextMatch: null`. `HomeEventCard` renders a null last match as “No completed matches yet.” A TBA outage, cache failure, or malformed schedule is therefore presented as a factual absence of completed matches. The card has no way to distinguish an event that has not started from one whose match data could not be loaded. Because this per-event failure result is returned as part of the `unstable_cache`-wrapped homepage snapshot, the false-empty state can also be retained for the one-hour revalidation interval after the provider/cache failure has recovered.
 
 **Action:** retain per-event match-source status/error/freshness in the homepage snapshot and render an unavailable/stale state separately from an empty schedule. Keep the event card itself available when match data fails.
 
