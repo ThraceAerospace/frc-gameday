@@ -1106,3 +1106,12 @@ The team-history route catches Statbotics season and team-event acquisition fail
 The FRC Colors client returns a per-team `verified` field alongside `primaryHex` and `secondaryHex`. The Event Analytics payload builder maps `job.teamColors` into `teamColors` using only the two hex values and discards `verified`. Consumers of the EventAnalytics snapshot therefore cannot distinguish provider-verified team colors from unverified/submitted color records, even though the source provides that distinction. This is a provenance loss at the normalization boundary, separate from the response/cache validation gap in FV-AUD-078 and stale freshness metadata in FV-AUD-061.
 
 **Action:** preserve the `verified` flag in the FieldView team-color DTO and expose it to consumers that display or use team colors. Do not silently present unverified colors as equally authoritative; add mapping tests for verified, unverified, and missing verification values.
+
+
+### FV-AUD-102 — Event WebSocket accepts unbounded arbitrary event subscriptions per client
+
+**Severity: Medium / public realtime endpoint resource exhaustion**
+
+`registerWebSocket` parses client messages and accepts any truthy `eventKey` for `subscribe` without validating its format/length, checking that the event exists, limiting the number of subscriptions per socket, or rate-limiting subscription changes. Each accepted value is retained in the connection's `eventKeys` set for the lifetime of that socket. The Redis Pub/Sub handler iterates every connected client for each event notification and performs a membership check against that set. A public WebSocket client can therefore accumulate an arbitrarily large number of unique subscription strings, consuming server memory and increasing per-message processing cost without needing a valid TBA event key.
+
+**Action:** validate event keys against the supported TBA key format and a strict length bound, cap subscriptions per connection, and rate-limit subscribe/unsubscribe messages. Reject or close abusive clients and add tests for malformed keys, duplicate subscriptions, cap enforcement, and high-rate subscription churn.
