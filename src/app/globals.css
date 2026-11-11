@@ -494,13 +494,13 @@ button:disabled {
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-white/95"] {
-  background-color: var(--fv-color-rgb28303295);
+  background-color: var(--fv-neutral-insights-surface-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-blue-50/40"],
 .site-theme-dark .insights-dashboard [class~="bg-blue-50/50"],
 .site-theme-dark .insights-dashboard [class~="bg-blue-50/60"] {
-  background-color: var(--fv-color-rgb30589542);
+  background-color: var(--fv-neutral-insights-blue-tint-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-rose-50"],
