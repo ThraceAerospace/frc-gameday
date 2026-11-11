@@ -18,6 +18,11 @@
   --fv-metric-above: #79A65A;
   --fv-metric-exceptional: #287A4B;
   --fv-review: #E58B35;
+  --fv-chart-auto: #7656C9;
+  --fv-chart-teleop: #4F8F8A;
+  --fv-chart-endgame: #8B91A1;
+  --fv-chart-team-a: #7656C9;
+  --fv-chart-team-b: #4F8F8A;
   --tracked-accent: var(--fv-brand);
 }
 
@@ -192,6 +197,12 @@ button:disabled {
   --fv-text: #F3F0F8;
   --fv-muted: #B6AEC4;
   --fv-border: #383242;
+  --fv-chart-auto: #A78BE8;
+  --fv-chart-teleop: #69B4A8;
+  --fv-chart-endgame: #A1A1AA;
+  --fv-chart-team-a: #A78BE8;
+  --fv-chart-team-b: #69B4A8;
+  --tracked-accent: var(--fv-brand);
   background: var(--fv-surface);
   color: var(--fv-text);
 }

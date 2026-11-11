@@ -911,9 +911,9 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
       <div className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
         <div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current-event component EPA breakdown</p><p className="text-[10px] text-slate-500">Model estimates · not measured scoring</p></div>
         <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" aria-label="Current event EPA component proportions">
-          {currentComponents.map((item,index)=><span key={item.key} className={index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500"} style={{width:currentTotal>0&&item.value!==null?Math.max(0,item.value??0)/currentTotal*100+"%":"0%"}} title={item.label+": "+metric(item.value)}/>)}
+          {currentComponents.map((item,index)=><span key={item.key} className={index===0?"bg-[var(--fv-chart-auto)]":index===1?"bg-[var(--fv-chart-teleop)]":"bg-[var(--fv-chart-endgame)]"} style={{width:currentTotal>0&&item.value!==null?Math.max(0,item.value??0)/currentTotal*100+"%":"0%"}} title={item.label+": "+metric(item.value)}/>)}
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">{currentComponents.map((item,index)=><span key={item.key} className="inline-flex items-center gap-1.5"><span className={"h-2 w-2 rounded-sm "+(index===0?"bg-amber-400":index===1?"bg-blue-500":"bg-emerald-500")}/>{item.label} {metric(item.value)}</span>)}</div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">{currentComponents.map((item,index)=><span key={item.key} className="inline-flex items-center gap-1.5"><span className={"h-2 w-2 rounded-sm "+(index===0?"bg-[var(--fv-chart-auto)]":index===1?"bg-[var(--fv-chart-teleop)]":"bg-[var(--fv-chart-endgame)]")}/>{item.label} {metric(item.value)}</span>)}</div>
       </div>
       <p className="mt-2 text-[10px] leading-4 text-slate-500">Each team is compared with its own most recent prior official event. EPA and component changes are model estimate updates, not measured scoring changes. Traditional ratings, comparable-alliance results, and EPA describe different aspects of performance.</p>
     </>}
@@ -936,7 +936,7 @@ function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:T
       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
       <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
       <div role="tablist" aria-label="Team analysis sections" className="no-scrollbar mt-3 -mb-px flex gap-1 overflow-x-auto">
-        {tabs.map((tab)=><button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab===tab.id} onClick={()=>setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors "+(activeTab===tab.id?"border-[#7656C9] text-[var(--fv-brand-strong)] dark:text-blue-300":"border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
+        {tabs.map((tab)=><button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab===tab.id} onClick={()=>setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors "+(activeTab===tab.id?"border-[#7656C9] text-[var(--fv-brand-strong)] dark:text-[var(--fv-brand)]":"border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
       </div>
     </div>
     <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
@@ -1032,7 +1032,7 @@ function EliminationShiftPanel({analysis}:{analysis:TeamMatchAnalysis}) {
               <p className="text-xs text-slate-500">Shift uncertainty: ±{fmt(item.shiftStandardError)} pts (1 SE)</p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold text-slate-500">Matches:</span>
-                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-50" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchCode(key)}</a>)}
+                {item.qualificationMatchKeys.map((key) => <a key={key} className="rounded bg-slate-100 px-1.5 py-1 font-semibold text-[var(--fv-brand)] hover:bg-[var(--fv-brand-soft)]" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open qualification match">{matchCode(key)}</a>)}
                 {item.eliminationMatchKeys.map((key) => <a key={key} className="rounded bg-amber-50 px-1.5 py-1 font-semibold text-amber-800 hover:bg-amber-100" href={"https://www.thebluealliance.com/match/" + key} target="_blank" rel="noreferrer" title="Open elimination match">{matchCode(key)}</a>)}
               </div>
             </div>
@@ -1196,7 +1196,7 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
 function TeamHistoryComparison({first,second}:{first:TeamSeasonHistory;second:TeamSeasonHistory}) {
   return <div className="mt-4 space-y-5">
     <div className="grid gap-4 xl:grid-cols-2">
-      <TeamSeasonProfile history={first} accent="blue" />
+      <TeamSeasonProfile history={first} accent="brand" />
       <TeamSeasonProfile history={second} accent="teal" />
     </div>
     <SharedEventComparison first={first} second={second} />
@@ -1230,12 +1230,12 @@ function SharedEventComparison({first,second}:{first:TeamSeasonHistory;second:Te
       const label=a.event.name;
       return <div key={a.event.key} className="grid grid-cols-[minmax(78px,110px)_1fr_1fr] items-center gap-3 text-xs">
         <span className="truncate font-medium text-slate-600" title={label}>{label}</span>
-        {[{value:av,color:"bg-blue-600"},{value:bv,color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,Math.abs(item.value)/max*100)}%`}} /></div></div>)}
+        {[{value:av,color:"bg-[var(--fv-chart-team-a)]"},{value:bv,color:"bg-[var(--fv-chart-team-b)]"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?nameA:nameB}</span><strong className="tabular-nums">{fmt(item.value)}</strong></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.max(1,Math.abs(item.value)/max*100)}%`}} /></div></div>)}
       </div>;
     })}</div>
   </section>;
 }
-function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"blue"|"teal"}) {
+function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"brand"|"teal"}) {
   const events=history.events.filter((item)=>typeof item.statbotics?.epa?.total_points==="number").sort((a,b)=>a.event.start_date.localeCompare(b.event.start_date));
   const first=events[0], last=events[events.length-1];
   const firstValue=first?.statbotics?.epa?.total_points ?? null;
@@ -1244,7 +1244,7 @@ function TeamSeasonProfile({history,accent}:{history:TeamSeasonHistory;accent:"b
   const record=history.season?.record?.total;
   const qual=history.season?.record?.qual;
   const name=history.team.nickname || history.team.name || "Team";
-  const color=accent==="blue"?"bg-blue-600":"bg-teal-600";
+  const color=accent==="brand"?"bg-[var(--fv-chart-team-a)]":"bg-[var(--fv-chart-team-b)]";
   const changeText=delta===null?"Not enough event snapshots":delta===0?"EPA was unchanged across the available event snapshots":`EPA ${delta>0?"increased":"decreased"} by ${fmt(Math.abs(delta))} points from the first to last available event snapshot.`;
   const largest=events.reduce<{label:string;value:number}|null>((best,item)=>{
     const value=item.statbotics?.epa?.total_points;
@@ -1301,7 +1301,7 @@ function EpaBreakdownComparison({first,second}:{first:TeamSeasonHistory;second:T
   const max=Math.max(1,...keys.flatMap((key)=>[Math.abs(a[key] ?? 0),Math.abs(b[key] ?? 0)]));
   return <div className="mt-3 space-y-3">{keys.map((key)=><div key={key} className="grid grid-cols-[110px_1fr_1fr] items-center gap-3 text-xs">
     <span className="break-words font-medium text-slate-600">{key.replaceAll("_"," ")}</span>
-    {[{value:a[key],color:"bg-blue-600"},{value:b[key],color:"bg-teal-600"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?first.team.nickname || first.team.name || "Team A":second.team.nickname || second.team.name || "Team B"}</span><span className="font-semibold tabular-nums">{fmt(item.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.abs(item.value ?? 0)/max*100}%`}} /></div></div>)}
+    {[{value:a[key],color:"bg-[var(--fv-chart-team-a)]"},{value:b[key],color:"bg-[var(--fv-chart-team-b)]"}].map((item,index)=><div key={index} className="min-w-0"><div className="mb-1 flex justify-between gap-1"><span className="text-[10px] text-slate-400">{index===0?first.team.nickname || first.team.name || "Team A":second.team.nickname || second.team.name || "Team B"}</span><span className="font-semibold tabular-nums">{fmt(item.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={"h-full rounded-full "+item.color} style={{width:`${Math.abs(item.value ?? 0)/max*100}%`}} /></div></div>)}
   </div>)}</div>;
 }
 function Metric({label,value,detail}:{label:string;value:string|number;detail:string}) {

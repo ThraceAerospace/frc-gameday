@@ -45,6 +45,18 @@ Notes:
 - Missing or insufficient data should use a neutral missing-data treatment, not the below-typical color.
 - Do not imply that a metric's raw sign (positive/negative) determines its color.
 
+### Categorical chart series
+
+Charts that compare distinct components or teams use a separate categorical series palette. These colors identify series only; they do not represent performance quality, alliance membership, or review status.
+
+| Series | Light theme | Dark theme |
+|---|---:|---:|
+| Auto / Team A | `#7656C9` | `#A78BE8` |
+| Teleop / Team B | `#4F8F8A` | `#69B4A8` |
+| Endgame | `#8B91A1` | `#A1A1AA` |
+
+Use the corresponding `--fv-chart-*` tokens. Do not borrow alliance red/blue or metric percentile colors for categorical series.
+
 ### Review indicators
 
 | Role | Color | Hex | Usage |
