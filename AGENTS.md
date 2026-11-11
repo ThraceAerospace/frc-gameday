@@ -214,7 +214,7 @@ Both generators fetch the current upstream OpenAPI documents. Statbotics fallbac
 
 ## Data contracts and API boundaries
 
-FieldView-owned data contracts are foundational even when the current delivery mechanism is an internal HTTP route, SharedWorker snapshot, or remote-session message. Keep provider acquisition behind server-side clients/services, normalize at the boundary, and keep calculations outside presentation components. Treat `/api` routes as interfaces to application services rather than places to duplicate business logic. EventAnalytics v1 is currently a compatibility envelope over provider-shaped response data; it is not yet a provider-independent DTO. Do not claim a public developer API, OpenAPI surface, or Cloudflare runtime exists until implemented.
+FieldView-owned data contracts are foundational even when the current delivery mechanism is an internal HTTP route, SharedWorker snapshot, or remote-session message. Keep provider acquisition behind server-side clients/services, normalize at the boundary, and keep calculations outside presentation components. Treat `/api` routes as interfaces to application services rather than places to duplicate business logic. EventAnalytics v1 is currently a compatibility envelope over provider-shaped response data; `EventStateSnapshot` is also still provider-shaped and mixes data with client delivery/runtime status. EventState currently lives in disposable SharedWorker memory rather than a durable server-side model. Neither is yet a final provider-independent DTO, and they are not yet companion models delivered through one shared data service. See FV-AUD-017. Do not claim a public developer API, OpenAPI surface, or Cloudflare runtime exists until implemented.
 
 ## Documentation and design system
 
