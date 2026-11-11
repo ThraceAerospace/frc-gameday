@@ -154,6 +154,38 @@ The root README duplicates the homepage section and contains older descriptions 
 
 **Action:** make README a concise project entry point, keep implementation rules in AGENTS.md, and use the architecture/lifecycle documents for detailed current and target behavior.
 
+### FV-AUD-010 — Team match analytics logic is embedded in an API route
+
+**Severity: Medium / service-boundary drift**
+
+`src/app/api/insights/team/[team]/matches/route.ts` is a large route module (approximately 26 KB) containing data acquisition, row construction, residual calculations, elimination-shift analysis, and response assembly. This logic is server-side, but it is coupled to the HTTP handler rather than living behind an application service under `src/lib/insights/`.
+
+**Action:** move calculation/orchestration behind a service boundary when this endpoint is next changed. Keep the route responsible for input validation, invoking the service, and translating results/errors into HTTP responses.
+
+### FV-AUD-011 — Event Analytics dashboard remains monolithic
+
+**Severity: Medium / maintainability**
+
+`src/components/insights/EventAnalyticsDashboard.tsx` is approximately 197 KB and owns the dashboard's data loading, state, tab composition, and substantial presentation logic. This is out of step with the documented goal of independently reusable insight components.
+
+**Action:** do not perform arbitrary extraction during the data-contract audit. Once the EventAnalytics contract and delivery lifecycle are stable, extract coherent reusable insight surfaces and keep the dashboard as composition.
+
+### FV-AUD-012 — Event analytics lock may expire before the route execution limit
+
+**Severity: Medium / concurrency risk to validate**
+
+The event analytics worker lock has a 55-second TTL, while the API route allows up to 60 seconds and awaits the worker. The worker does not renew its lock while it runs. If collection takes longer than the lock TTL, another request could acquire the expired lock before the first invocation has finished.
+
+**Action:** measure actual worst-case execution time and either keep the worker safely below the lock TTL or add ownership-checked lock renewal/heartbeat behavior. Add a concurrency test before changing this mechanism.
+
+### FV-AUD-013 — Team-history provider failure is indistinguishable from missing records
+
+**Severity: Medium / data completeness metadata**
+
+`src/app/api/insights/team/[team]/route.ts` converts a failed `Statbotics.getTeamEvents` request into an empty array. The response then labels individual events without a record as `unavailable`, without exposing whether the collection request failed or Statbotics successfully returned no record for that event.
+
+**Action:** preserve collection-level failure metadata separately from per-event record absence, and expose it in the response so consumers do not mistake a provider outage for missing upstream coverage.
+
 ## Audit verification limits
 
 - `package.json` defines development, lint, build, and type-generation scripts, but no test script.
