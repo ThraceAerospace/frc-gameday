@@ -1097,3 +1097,12 @@ The team-history route catches Statbotics season and team-event acquisition fail
 `PhasePerformancePanel` builds the elimination phase from `phaseSummaries` ordered as `ef`, `qf`, `sf`, `f`. It then derives `epaStart` from the first phase summary with a value and `epaEnd` from the last phase summary with a value. The server's `summarize(items)` takes the first available `preEPA` and last available `postEPA` within each competition level, but the dashboard combines the phase summaries in fixed competition-level order rather than chronological event/match order. Across a season with multiple events, an earlier event's quarterfinal can precede a later event's elimination-final, yet the display will prefer the earliest available `ef` as the start and the latest available `f` as the end. The label “Model EPA at first → last match” can therefore show a non-chronological comparison for elimination matches.
 
 **Action:** derive elimination EPA start/end from the underlying elimination match rows sorted by event start date and actual match chronology, not from competition-level summary order. If a season-wide sequence is not meaningful across events, label the values as phase-specific snapshots rather than first/last match. Add a fixture where an earlier event has QF/SF/F matches and a later event has EF/QF matches to verify chronological selection.
+
+
+### FV-AUD-101 — Event Analytics drops the FRC Colors verification flag
+
+**Severity: Low / enrichment provenance**
+
+The FRC Colors client returns a per-team `verified` field alongside `primaryHex` and `secondaryHex`. The Event Analytics payload builder maps `job.teamColors` into `teamColors` using only the two hex values and discards `verified`. Consumers of the EventAnalytics snapshot therefore cannot distinguish provider-verified team colors from unverified/submitted color records, even though the source provides that distinction. This is a provenance loss at the normalization boundary, separate from the response/cache validation gap in FV-AUD-078 and stale freshness metadata in FV-AUD-061.
+
+**Action:** preserve the `verified` flag in the FieldView team-color DTO and expose it to consumers that display or use team colors. Do not silently present unverified colors as equally authoritative; add mapping tests for verified, unverified, and missing verification values.
