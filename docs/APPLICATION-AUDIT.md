@@ -375,11 +375,11 @@ The Team Investigation peer comparison in `buildTeamInsights` compares selected-
 
 **Severity: Medium / realtime availability**
 
-`src/lib/realtime/websocket.ts` sets the process-level `subscriberStarted` flag to `true` before awaiting `subscriber.subscribe(TBA_WEBSOCKET_CHANNEL)`. If the initial Redis subscription rejects or fails, the flag remains true. Subsequent WebSocket connections skip initialization, and this process does not attempt to establish another Redis subscriber. The current call site also invokes `ensureSubscriber()` without handling its rejected promise.
+`src/lib/realtime/websocket.ts` sets the process-level `subscriberStarted` flag to `true` before awaiting `subscriber.subscribe(TBA_WEBSOCKET_CHANNEL)`. If the initial Redis subscription rejects or fails, the flag remains true. Subsequent WebSocket connections skip initialization, and this process does not attempt to establish another Redis subscriber. The current call site also invokes `ensureSubscriber()` without handling its rejected promise. In addition, the message handler is registered only after `await subscriber.subscribe(...)` resolves. A webhook publication arriving after Redis has acknowledged the subscription but before the `message` listener is attached can be delivered into the gap and dropped, even when initialization otherwise succeeds.
 
 This can leave WebSocket clients connected but unable to receive TBA invalidations for the lifetime of that server process after a transient startup/subscription failure. The browser's periodic reconciliation is a fallback, but it does not restore push delivery.
 
-**Action:** make subscriber initialization stateful (idle/connecting/ready), reset it on failure, handle rejected initialization, and retry with bounded backoff. Add a test for an initial subscribe failure followed by successful recovery.
+**Action:** make subscriber initialization stateful (idle/connecting/ready), reset it on failure, handle rejected initialization, and retry with bounded backoff. Attach the message handler before awaiting subscription so no publication can fall between the subscribe acknowledgement and listener registration. Add tests for initial subscribe failure/recovery and a publication delivered immediately after subscription acknowledgement.
 
 ### FV-AUD-029 — EventState exposes no per-resource freshness or failure state
 
