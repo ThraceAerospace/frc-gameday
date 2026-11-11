@@ -270,7 +270,7 @@ test("TBA tag invalidation removes only cache entries owned by the requested tag
 
 test("TBA malformed cache entries are discarded before fetching a valid response", async () => {
   const client = new TBAClient("test-auth-key");
-  const endpoint = "/event/2026ctabc/teams";
+  const endpoint = "/event/2026ctquote/teams";
   await redis.set(cacheKey(endpoint), JSON.stringify({ unexpected: true }));
   let requests = 0;
 
@@ -291,8 +291,8 @@ test("TBA malformed cache entries are discarded before fetching a valid response
 
 test("TBA accepts quoted and zero max-age values without substituting a local TTL", async () => {
   const client = new TBAClient("test-auth-key");
-  const quotedEndpoint = "/event/2026ctabc/teams";
-  const zeroEndpoint = "/event/2026ctabc/robots";
+  const quotedEndpoint = "/event/2026ctquote/teams";
+  const zeroEndpoint = "/event/2026ctzero/robots";
   await withFetch(async () => new Response(JSON.stringify([]), {
     status: 200,
     headers: { "Cache-Control": 'public, max-age="45"' },
