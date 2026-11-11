@@ -299,6 +299,16 @@ The thin TBA routes return provider-shaped payloads directly, which is acceptabl
 
 **Action:** after the normalized data contract boundary is defined, standardize identifier schemas, error codes/bodies, source freshness/completeness metadata, and cache behavior across FieldView-owned endpoints. Keep raw provider passthroughs explicitly internal until then.
 
+### FV-AUD-022 — A legacy paginated Event Analytics service remains alongside the progressive implementation
+
+**Severity: Low / dead-code and architecture clarity**
+
+`src/lib/insights/service.ts` still exports `getEventAnalytics`, a separate page-at-a-time analytics implementation with its own Redis cache, lock, Statbotics match acquisition, and response assembly. Repository code search found no caller of this exported function outside the file itself. The active event analytics route uses `progressive-service.ts` instead.
+
+This leaves two competing implementations and two different caching/collection models in the same domain. It increases the chance that a future developer updates the unused path or mistakes it for the active service.
+
+**Action:** confirm there are no external/indirect consumers, then remove the unused implementation or clearly archive it. Keep one authoritative EventAnalytics application service and one documented lifecycle.
+
 ## Audit verification limits
 
 - `package.json` defines development, lint, build, and type-generation scripts, but no test script.
