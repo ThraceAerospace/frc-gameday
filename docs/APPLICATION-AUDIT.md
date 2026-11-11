@@ -6,9 +6,9 @@
 
 ## Status and scope
 
-This is the first architecture, data-flow, API, and documentation-consistency pass. It inspects the main application surfaces, the TBA/Statbotics/FRC Colors integrations, Redis caching, webhook/WebSocket delivery, SharedWorker/EventState ownership, Event Analytics orchestration, and the corresponding project documentation.
+The audit has expanded beyond the initial architecture pass into targeted source-level reviews of the main data paths: TBA and Statbotics provider clients, FRC Colors acquisition, Redis cache envelopes and lock lifecycles, webhook mutation and realtime fan-out, SharedWorker/EventState lifecycle and resource reloads, remote WebRTC snapshot delivery, event/team/district API routes, event and team analytics orchestration, season-cohort comparisons, metric calculations, and date/time formatting. The API route inventory and the principal architecture/type/analytics documentation have also been checked against the implementation.
 
-A second pass has now inspected the core event-analytics calculations, season-cohort comparison, selected-team match analysis, and the dashboard's remaining client-side review logic. It is still not a line-by-line review of every presentation component or every route's accessibility and error states. No local lint, build, automated test, or live-provider validation was run during this pass. Findings below are based on source inspection.
+The audit currently contains 75 individually numbered findings (FV-AUD-001 through FV-AUD-075). The findings are implementation observations and recommended follow-ups, not a claim that every issue has been fixed. The review is still in progress: not every presentation component, route edge case, deployment configuration, or browser/runtime behavior has received a line-by-line or live validation pass. No local lint, build, automated test, or live-provider validation has been run during this source-only review. The repository currently has no automated test command or test-runner dependency (FV-AUD-071).
 
 ## Executive summary
 
