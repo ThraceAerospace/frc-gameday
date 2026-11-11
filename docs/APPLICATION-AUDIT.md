@@ -499,3 +499,15 @@ On a server whose timezone differs from an event's timezone, an event near the S
 This also means the TypeScript snapshot type does not accurately describe the wire representation for this field.
 
 **Action:** define an explicit serializable event-state wire DTO and normalize errors to structured data (at minimum `name` and `message`, with stack omitted or restricted as appropriate). Validate and reconstruct presentation state at the receiving boundary rather than asserting parsed JSON is already an `EventStateSnapshot`.
+
+### FV-AUD-041 — “Last played match” and “has result” use different TBA signals
+
+**Severity: Medium / live match selection and result visibility**
+
+The canonical match cache's `hasMatchResult` recognizes a result when `actual_time`, `post_result_time`, `score_breakdown`, or either alliance's nonnegative score is present. `getNextMatch` likewise considers a match no longer upcoming when either alliance score is not `-1`.
+
+However, `matchUtils.isPlayed` and the separate `isMatchPlayed` helper in `src/lib/tba/service.ts` use only `actual_time != null`. `getLastMatch` depends on `isPlayed`. Therefore a match with posted scores or another recognized result signal but no `actual_time` can be excluded from next-match selection while also being excluded from last-match selection.
+
+In EventState this can leave `eventLastMatch` behind the latest result and consequently select the wrong match for the live Statbotics warm-cache behavior. Other consumers of the service helper can similarly misclassify a scored match.
+
+**Action:** define one canonical match-result predicate and use it consistently for cache reconciliation, next/last match selection, and service helpers. Keep “result posted” distinct from “match physically played at a known timestamp” if both concepts are needed; do not make the latter the sole criterion for whether a result exists. Add fixtures where scores, `post_result_time`, or `score_breakdown` exist while `actual_time` is null.
