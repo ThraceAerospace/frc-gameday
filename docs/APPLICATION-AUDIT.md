@@ -369,3 +369,24 @@ The current Statbotics status similarly treats the existence of a Statbotics mat
 The Team Investigation peer comparison in `buildTeamInsights` compares selected-team qualification alliances with strength-matched qualification alliances elsewhere in the event, but excludes every alliance from the same match as the selected alliance. The written specification says to compare against other same-event alliances in the ±20% pre-match combined-EPA band and does not document this same-match exclusion. This changes the peer population and can reduce coverage, particularly at smaller events.
 
 **Action:** decide and document whether direct opponents should be included. If excluded to avoid dependence between two results from the same match, state that explicitly and expose the exclusion in the sample definition; otherwise include eligible opposing alliances and deduplicate them as currently done for other peer results.
+
+
+### FV-AUD-028 — Redis Pub/Sub subscriber initialization has no retry path
+
+**Severity: Medium / realtime availability**
+
+`src/lib/realtime/websocket.ts` sets the process-level `subscriberStarted` flag to `true` before awaiting `subscriber.subscribe(TBA_WEBSOCKET_CHANNEL)`. If the initial Redis subscription rejects or fails, the flag remains true. Subsequent WebSocket connections skip initialization, and this process does not attempt to establish another Redis subscriber. The current call site also invokes `ensureSubscriber()` without handling its rejected promise.
+
+This can leave WebSocket clients connected but unable to receive TBA invalidations for the lifetime of that server process after a transient startup/subscription failure. The browser's periodic reconciliation is a fallback, but it does not restore push delivery.
+
+**Action:** make subscriber initialization stateful (idle/connecting/ready), reset it on failure, handle rejected initialization, and retry with bounded backoff. Add a test for an initial subscribe failure followed by successful recovery.
+
+### FV-AUD-029 — EventState exposes no per-resource freshness or failure state
+
+**Severity: Medium / live-data observability**
+
+`EventStateSnapshot` has a global `loading`, one `error` field used by event metadata, and a global `websocketStale` flag. Matches, team statuses, playoff alliances, and OPR requests log failures but retain their previous values without recording resource-specific error, last-success time, or stale status. A subsequent WebSocket message clears the global stale flag even though it only triggers selected resource refreshes and does not prove that every resource is current.
+
+As a result, a consumer cannot distinguish a current resource from an old retained snapshot after a failed refresh, and the global stale indicator can be cleared without successful reconciliation of all event data.
+
+**Action:** add resource-level acquisition metadata to the runtime delivery envelope (status, last successful update, last attempt, error, and stale state). Clear staleness only for a resource after its own successful reconciliation. Keep this runtime metadata separate from the normalized event data contract.
