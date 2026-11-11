@@ -30,12 +30,45 @@ type Job = {
   updatedAt: number;
   tbaLoadedAt?: number;
   scheduleRefreshedAt?: number;
+  rankingsLoadedAt?: number;
+  rankingsFetchError?: string | null;
+  playoffAlliancesLoadedAt?: number;
+  playoffAlliancesFetchError?: string | null;
   statboticsFetchError?: string | null;
   statboticsLoadedAt?: number;
   teamColors?: FRCColor[];
   teamColorsLoadedAt?: number;
   teamColorsFetchError?: string | null;
 };
+
+type OptionalAcquisition<T> = {
+  data: T | null;
+  loadedAt: number | null;
+  error: string | null;
+};
+
+async function acquireOptional<T>(request: Promise<T>): Promise<OptionalAcquisition<T>> {
+  try {
+    return { data: await request, loadedAt: Date.now(), error: null };
+  } catch (error) {
+    return {
+      data: null,
+      loadedAt: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function optionalSource(
+  loadedAt: number | undefined,
+  error: string | null | undefined,
+): { status: "ready" | "partial" | "unavailable" | "unknown"; updatedAt: number | null; error: string | null } {
+  return {
+    status: error ? (loadedAt ? "partial" : "unavailable") : loadedAt ? "ready" : "unknown",
+    updatedAt: loadedAt ?? null,
+    error: error ?? null,
+  };
+}
 
 function jobKey(eventKey: string) {
   return JOB_PREFIX + eventKey;
@@ -93,6 +126,19 @@ function buildPayload(job: Job): EventAnalytics {
     : job.teamColorsFetchError
       ? "unavailable"
       : "pending";
+  const tbaResources = {
+    event: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
+    teams: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
+    matches: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
+    oprs: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
+    rankings: optionalSource(job.rankingsLoadedAt, job.rankingsFetchError),
+    playoffAlliances: optionalSource(job.playoffAlliancesLoadedAt, job.playoffAlliancesFetchError),
+  };
+  const tbaStatus = !job.tbaLoadedAt
+    ? "unavailable"
+    : Object.values(tbaResources).every((source) => source.status === "ready")
+      ? "ready"
+      : "partial";
   return {
     schemaVersion: 1,
     eventKey: job.event.key,
@@ -109,7 +155,11 @@ function buildPayload(job: Job): EventAnalytics {
       derived: "fieldview",
     },
     sources: {
-      tba: { status: job.tbaLoadedAt ? "ready" : "unavailable", updatedAt: job.tbaLoadedAt ?? null },
+      tba: {
+        status: tbaStatus,
+        updatedAt: job.tbaLoadedAt ?? null,
+        resources: tbaResources,
+      },
       statbotics: { status: statboticsStatus, updatedAt: job.statboticsLoadedAt ?? null, error: job.statboticsFetchError ?? null },
       frcColors: { status: frcColorsStatus, updatedAt: job.teamColorsLoadedAt ?? null, error: job.teamColorsFetchError ?? null },
     },
@@ -166,20 +216,24 @@ function buildPayload(job: Job): EventAnalytics {
 export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalytics> {
   let job = await readJob(eventKey);
   if (!job) {
-    const [event, teams, matches, oprs, rankings, playoffAlliances] = await Promise.all([
+    const [event, teams, matches, oprs, rankingsResult, playoffAlliancesResult] = await Promise.all([
       TBA.getEvent(eventKey),
       TBA.getTeamsAtEvent(eventKey),
       TBA.getEventMatches(eventKey),
       TBA.getEventOPRs(eventKey),
-      TBA.getEventRankings(eventKey).catch(() => null),
-      TBA.getEventPlayoffAlliances(eventKey).catch(() => null),
+      acquireOptional(TBA.getEventRankings(eventKey)),
+      acquireOptional(TBA.getEventPlayoffAlliances(eventKey)),
     ]);
     job = {
       event,
       teams,
       oprs,
-      rankings,
-      playoffAlliances,
+      rankings: rankingsResult.data,
+      rankingsLoadedAt: rankingsResult.loadedAt ?? undefined,
+      rankingsFetchError: rankingsResult.error,
+      playoffAlliances: playoffAlliancesResult.data,
+      playoffAlliancesLoadedAt: playoffAlliancesResult.loadedAt ?? undefined,
+      playoffAlliancesFetchError: playoffAlliancesResult.error,
       matches: sortMatches(matches),
       records: {},
       attempts: {},
@@ -220,11 +274,28 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     // reacquired when the user explicitly presses Refresh data.
     if (forceRefresh) {
       try {
-        const [latestMatchesRaw, latestOprs, latestRankings] = await Promise.all([TBA.getEventMatches(eventKey), TBA.getEventOPRs(eventKey), TBA.getEventRankings(eventKey).catch(() => null)]);
+        const [latestMatchesRaw, latestOprs, latestRankings, latestPlayoffAlliances] = await Promise.all([
+          TBA.getEventMatches(eventKey),
+          TBA.getEventOPRs(eventKey),
+          acquireOptional(TBA.getEventRankings(eventKey)),
+          acquireOptional(TBA.getEventPlayoffAlliances(eventKey)),
+        ]);
         const latestMatches = sortMatches(latestMatchesRaw);
         job.oprs = latestOprs;
-        job.rankings = latestRankings;
-        job.playoffAlliances = await TBA.getEventPlayoffAlliances(eventKey).catch(() => job!.playoffAlliances ?? null);
+        if (latestRankings.error) {
+          job.rankingsFetchError = latestRankings.error;
+        } else {
+          job.rankings = latestRankings.data;
+          job.rankingsLoadedAt = latestRankings.loadedAt ?? undefined;
+          job.rankingsFetchError = null;
+        }
+        if (latestPlayoffAlliances.error) {
+          job.playoffAlliancesFetchError = latestPlayoffAlliances.error;
+        } else {
+          job.playoffAlliances = latestPlayoffAlliances.data;
+          job.playoffAlliancesLoadedAt = latestPlayoffAlliances.loadedAt ?? undefined;
+          job.playoffAlliancesFetchError = null;
+        }
         job.playoffAlliancesRefreshedAt = Date.now();
         const existing = new Map(job.matches.map((match) => [match.key, match]));
         for (const match of latestMatches) {
