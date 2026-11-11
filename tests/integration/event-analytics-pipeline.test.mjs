@@ -212,6 +212,23 @@ test("EventAnalytics marks legacy optional TBA acquisition status as unknown", a
   assert.equal(snapshot.sources.tba.resources.playoffAlliances.status, "unknown");
 });
 
+test("EventAnalytics discards a corrupt persisted job and reacquires its TBA snapshot", async () => {
+  const eventKey = "2026ctcorrupt";
+  const harness = await createHarness(eventKey);
+  const key = `insights:progressive:${eventKey}`;
+  await harness.redis.set(key, "{malformed-json");
+
+  const snapshot = await harness.getEventAnalyticsSnapshot(eventKey);
+
+  assert.equal(snapshot.eventKey, eventKey);
+  assert.equal(snapshot.sources.tba.status, "ready");
+  assert.ok(harness.calls.some(([method]) => method === "getEvent"));
+  assert.ok(harness.calls.some(([method]) => method === "getEventMatches"));
+  const persisted = JSON.parse(await harness.redis.get(key));
+  assert.equal(persisted.event.key, eventKey);
+  assert.deepEqual(persisted.records, {});
+});
+
 test("EventAnalytics snapshot reads the persisted job without reacquiring provider data", async () => {
   const eventKey = "2026ctxyz";
   const harness = await createHarness(eventKey);
