@@ -429,7 +429,7 @@ The team detail page has a wider failure domain. It first requires both team met
 
 `RemotePeer.attachChannel` parses incoming data-channel payloads with `JSON.parse` and casts the result to `RemoteSessionMessage`; it does not validate the discriminant or payload shape at runtime. The action path passes the resulting object to `applyRemoteSessionAction`, which dispatches directly to controller methods. Snapshot messages are likewise accepted and applied to the display controller without schema/version or structural validation. TypeScript types protect compile-time callers, not messages received from another browser.
 
-The pairing flow is the trust boundary for these messages, and the current pairing design is separately tracked in FV-AUD-020. A malformed or incompatible peer message can therefore reach state mutation or rendering code.
+The pairing flow is the trust boundary for these messages, and the current pairing design is separately tracked in FV-AUD-020. A malformed or incompatible peer message can therefore reach state mutation or rendering code. The server-side `registerRemoteWebSocket` path has the same protocol-boundary weakness for signaling: it parses the message and validates only `type`/`target`, leaves `payload` as `unknown`, and republishes it to Redis for the other peer without validating SDP/ICE shape or imposing an application-level payload-size/rate limit.
 
 **Action:** define versioned runtime schemas for remote messages, actions, and snapshots; reject oversized and invalid payloads before dispatch; handle protocol-version mismatch explicitly; and test malformed, unknown, and old-version messages.
 
