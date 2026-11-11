@@ -49,20 +49,21 @@ For TBA:
 - TBA ETag and `Cache-Control: max-age` determine freshness; FieldView does not hardcode TBA max-age.
 - The full event match schedule is the canonical match cache.
 - A 304 renews Redis expiry using TBA's supplied cache lifetime.
-- Authenticated TBA webhooks mutate the relevant existing Redis cache before broadcasting invalidation.
+- Authenticated TBA webhooks attempt to mutate existing Redis cache entries before broadcasting. In the current implementation, match-score/video and upcoming-match mutations target only the event-wide full-match schedule; standalone match, team-scoped/simple match, and dependent status/alliance/OPR resources are not consistently updated or invalidated.
+- A failed `mutateCached` write can be converted to `false` and ignored by the webhook handler, which may still broadcast and return success. Webhook/cache consistency gaps and the required invalidation map are tracked in `APPLICATION-AUDIT.md`.
 - Webhook cache mutation does not create another cache layer.
 
-For Statbotics, the application-facing service owns requests and cache behavior. It honors upstream cache guidance and the documented fallback windows, preserves stale values on refresh failure, and backs off failed refreshes.
+For Statbotics, the application-facing service owns requests and cache behavior. It applies a ten-minute minimum request interval, preserves stale values on refresh failure, and backs off failed refreshes. The client does not currently propagate stale/fresh state to EventAnalytics, team-history, team-match, or season-cohort consumers, so a stale fallback can be presented as ready/fresh (FV-AUD-061).
 
 ### 4. Realtime invalidation and reconciliation
 
 The event-data WebSocket carries invalidation messages, not authoritative match payloads.
 
-- Upcoming-match notifications refresh the match schedule.
-- Match-score notifications refresh matches, statuses, playoff alliances, and OPRs.
-- Match-video notifications refresh matches.
-- Alliance-selection notifications refresh playoff alliances.
-- Other and unknown message types trigger a broader reconciliation.
+- Upcoming-match notifications trigger a match-schedule reload; the webhook currently patches only the event-wide full-match cache, while team-scoped/simple representations remain independently cached.
+- Match-score notifications trigger reload attempts for matches, statuses, playoff alliances, and OPRs. The match schedule may be updated by the webhook mutation, but the dependent resources use ordinary cache reads and can therefore return still-fresh pre-score values.
+- Match-video notifications trigger a match reload after attempting to mutate the event-wide match cache.
+- Alliance-selection notifications trigger a playoff-alliance reload, but the alliance cache is not invalidated first and may return its previous still-fresh value.
+- Other and unknown message types trigger a broader reconciliation; a reload is not proof that the corresponding provider resource was refreshed.
 
 Fallback polling runs on the existing five-minute cadence for matches, statuses, alliances, and OPRs. A webhook causes an immediate API re-read followed by a one-shot re-read after 65 seconds. The 65-second timer does not modify the Redis cache entry's `expiresAt` or force an upstream TBA request; whether a read revalidates with TBA depends on the existing TBA cache freshness. These timers are event-scoped.
 
@@ -84,7 +85,7 @@ The analytics acquisition path is server-side, but it is currently a separate HT
 2. `getEventAnalyticsSnapshot` reads the event's Redis job at `insights:progressive:<eventKey>`. If no job exists, it acquires the event, team roster, canonical full match schedule, OPRs, rankings, and playoff alliances from TBA. Rankings and playoff alliances are optional in this initialization path and failures are converted to `null`.
 3. The route initializes/reads the season-cohort job, then awaits `advanceEventAnalytics` and `advanceSeasonCohort` together.
 4. `advanceEventAnalytics` uses an event-scoped Redis lock, obtains event-filtered Statbotics qualification and elimination match collections, pairs them with the canonical TBA schedule, acquires FRC Colors event data, and runs the FieldView calculation functions.
-5. The event job is persisted in Redis with a one-year TTL. Normal opens reuse the persisted snapshot; an explicit `?refresh=1` request refreshes the TBA schedule/OPR/rankings/alliances and Statbotics/FRC Colors collection.
+5. The event job is persisted in Redis with a one-year TTL. Normal opens reuse the persisted snapshot. An explicit `?refresh=1` request re-reads the TBA schedule/OPR/rankings/alliances through their ordinary cache policy (it does not guarantee an upstream TBA request and does not refresh the event record or team roster), while requesting refreshes for the Statbotics/FRC Colors collection. See FV-AUD-064 for the incomplete TBA refresh contract.
 6. The season cohort is a separate Redis job with a 24-hour TTL, a 20-second work budget, bounded batches, and bounded concurrency. The route attaches its snapshot and the season-aware team insights before returning.
 
 **Execution behavior:** the current route declares `maxDuration = 60` and awaits both advancement functions before responding. It does not currently use Vercel `waitUntil` for this work. The dashboard fetches the event analytics endpoint on mount and on explicit user refresh; it does not currently poll for collection progress.
