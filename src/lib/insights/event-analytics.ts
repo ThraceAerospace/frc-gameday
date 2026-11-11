@@ -5,7 +5,8 @@ import type { EventAnalyticsResponse } from "./types";
  *
  * "pending" means acquisition has not completed yet. "unavailable" means an
  * acquisition was attempted but produced no usable source data. "partial"
- * means some, but not all, expected records are available.
+ * means some, but not all, expected records are available. "unknown" means a
+ * legacy persisted snapshot predates per-resource acquisition tracking.
  */
 export type EventAnalyticsSourceStatus =
   | "pending"
