@@ -86,6 +86,39 @@ The qualification anomaly calculation is server-side and uses an event-relative 
 
 The inspected match-time presentation paths pass the event's IANA timezone into their formatters/components: EventView, EventFooter, HomeEventCard, and MatchCard. Date-only event ranges remain date-only values. This is consistent with the event-timezone invariant, although a complete component-wide timezone sweep remains part of the UI audit.
 
+## API route audit
+
+The following 22 App Router API handlers were inspected on `ui-cleanup`:
+
+| Route | Current responsibility |
+|---|---|
+| `GET /api/district` | Current-year district list from TBA |
+| `GET /api/district/all/cmp` | District teams advanced to CMP |
+| `GET /api/district/[district]/advancement` | District advancement results |
+| `GET /api/district/[district]/advancement/cmp` | District CMP advancement |
+| `GET /api/team/[team]` | TBA team record |
+| `GET /api/team/[team]/district` | Team district history/current district |
+| `GET /api/events/active` | Current-year active/upcoming event summary |
+| `GET /api/event/[event]` | TBA event record |
+| `GET /api/event/[event]/teams` | TBA event team roster |
+| `GET /api/event/[event]/matches` | Canonical TBA event match schedule |
+| `GET /api/event/[event]/matches/next` | Derived next match |
+| `GET /api/event/[event]/matches/last` | Derived last completed match |
+| `GET /api/event/[event]/oprs` | TBA OPR/DPR/CCWM data |
+| `GET /api/event/[event]/webcasts` | TBA webcast list |
+| `GET /api/event/[event]/teams/statuses` | TBA team event statuses |
+| `GET /api/event/[event]/playoffs/alliances` | TBA playoff alliances |
+| `GET /api/statbotics/match/[match]` | Statbotics match prediction/record |
+| `GET /api/insights/event/[event]` | Assembled event analytics snapshot |
+| `GET /api/insights/team/[team]` | Assembled team season history |
+| `GET /api/insights/team/[team]/matches` | Derived team match history and review analysis |
+| `POST /api/tba/webhook` | Authenticated TBA webhook ingestion/cache mutation |
+| `GET /api/remote/ws` | Remote-session WebSocket signaling upgrade |
+
+The TBA proxy-style routes intentionally return upstream-shaped data for internal application use today. They are not yet a versioned public FieldView API. Several of the thin routes have inconsistent validation and failure handling: some only reject an empty event key, some interpolate team/event identifiers without validating their expected shape, and several allow upstream exceptions to escape rather than returning a consistent JSON error envelope. The two insights routes validate their primary identifiers and return controlled JSON errors; the Statbotics match route also validates its key and supports an explicit refresh query.
+
+This is not a recommendation to wrap every TBA response in a new DTO immediately. First define the normalized FieldView contract and decide which endpoints are internal provider adapters versus stable FieldView resources. Then make validation, error shape, freshness metadata, and cache semantics consistent at that boundary.
+
 ## Findings
 
 ### FV-AUD-001 — Statbotics runtime defaults to a community mirror
@@ -229,6 +262,42 @@ The current `EventStateSnapshot` directly embeds provider types such as `TBAEven
 Consequently, EventState and EventAnalytics are currently separate acquisition and delivery paths, not two normalized companion models served by one FieldView-owned data layer. Existing `/api/event/*` routes also largely expose TBA-shaped responses.
 
 **Action:** treat the current types as compatibility contracts, not the final model. Define FieldView-owned event, team, match, ranking, result, and analytics DTOs; separate provider response types from normalized data and from client delivery/runtime status. Then make the existing HTTP routes and SharedWorker consume the same application services without forcing a simultaneous client rewrite.
+
+### FV-AUD-018 — TBA cache entries have logical expiry but no Redis TTL
+
+**Severity: Medium / Redis memory lifecycle**
+
+The TBA client stores cache entries with an application-level `expiresAt`, but writes them with plain `redis.set(key, value)` and no Redis expiration. Expired entries remain physically stored until the same key is fetched and overwritten or an explicit tag invalidation deletes them. Tag membership sets are also written without expiration. This preserves stale representations for conditional ETag requests, but means the Redis 30 MB budget is not protected by upstream `max-age` alone.
+
+**Action:** measure key count and memory growth across an active season and offseason. Design bounded stale retention that preserves conditional revalidation where useful; ensure cache data and tag membership have a coherent cleanup lifecycle. Do not simply add a short Redis TTL if that would discard the stale representation needed for ETag/304 handling.
+
+### FV-AUD-019 — Active-events endpoint masks upstream failures as an empty success
+
+**Severity: Medium / API failure semantics**
+
+`GET /api/events/active` catches every failure from TBA acquisition or event-date processing and returns `200 []`. A client cannot distinguish “there are no active/upcoming events” from “TBA or the server-side transformation failed.” This can silently render an empty event list during an outage.
+
+The route also declares a `complete` state but filters out every event whose end date is before the current instant, so that state is unreachable in this endpoint's current result set.
+
+**Action:** return a non-2xx error with a stable JSON error body on failure. Either remove the unreachable state or include completed events if that is part of the endpoint's intended contract.
+
+### FV-AUD-020 — Remote pairing has a short, unthrottled code space
+
+**Severity: High / security review required**
+
+The display creates its six-digit pairing code with `Math.random()` in the browser. The signaling route accepts a code, a caller-selected role, and any non-empty caller-generated UUID token; the server's Redis presence lock prevents a second connection for the same role but does not establish that the caller is the intended peer. There is no visible server-side pairing-code issuance/expiry or attempt-rate limit in the inspected flow. The six-digit code is therefore the effective pairing secret, with only about one million possible values.
+
+The token is placed in the WebSocket URL query string. Query strings are commonly included in infrastructure/request logs, so this unnecessarily exposes a bearer-like connection token to logging surfaces.
+
+**Action:** review the full pairing threat model before public beta. Prefer server-issued cryptographically random, short-lived pairing challenges, enforce per-IP/code attempt limits and expiry, bind role credentials to the issued session, and avoid putting bearer credentials in query strings where the hosting platform supports a safer handshake. Also consider message-size and signaling-rate limits.
+
+### FV-AUD-021 — Thin provider routes lack a consistent validation/error contract
+
+**Severity: Medium / API reliability and future compatibility**
+
+The thin TBA routes return provider-shaped payloads directly, which is acceptable as an internal adapter for now, but input validation and exception behavior vary. For example, `/api/team/[team]` passes the path parameter directly into the TBA service; several event routes only check that the key is non-empty; and multiple routes allow provider errors to escape without a stable JSON error shape. In contrast, the analytics and Statbotics match routes perform stricter identifier validation and translate failures into JSON responses.
+
+**Action:** after the normalized data contract boundary is defined, standardize identifier schemas, error codes/bodies, source freshness/completeness metadata, and cache behavior across FieldView-owned endpoints. Keep raw provider passthroughs explicitly internal until then.
 
 ## Audit verification limits
 
