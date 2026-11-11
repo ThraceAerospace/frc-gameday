@@ -312,6 +312,79 @@ test("Statbotics lock contention serves an existing stale value without starting
   assert.equal(await redis.get(lockKey), "another-worker");
 });
 
+test("concurrent Statbotics callers share one in-flight upstream request", async () => {
+  const { client, redis } = await createClient();
+  let requests = 0;
+  let resolveResponse;
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  const pendingResponse = new Promise((resolve) => { resolveResponse = resolve; });
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => {
+      requests += 1;
+      markStarted();
+      return pendingResponse;
+    },
+  }, async () => {
+    const first = client.getMatch("2026ctabc_qm-concurrent");
+    await started;
+    const second = client.getMatch("2026ctabc_qm-concurrent");
+    resolveResponse(new Response(JSON.stringify({ key: "2026ctabc_qm-concurrent" }), {
+      status: 200,
+      headers: { "Cache-Control": "max-age=60" },
+    }));
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    assert.deepEqual(firstResult, { key: "2026ctabc_qm-concurrent" });
+    assert.deepEqual(secondResult, firstResult);
+  });
+
+  assert.equal(requests, 1);
+  assert.equal(await redis.get("lock:statbotics:v3::match:2026ctabc_qm-concurrent"), null);
+});
+
+test("Statbotics releases its request lock after an upstream failure", async () => {
+  const { client, redis } = await createClient();
+  const lockKey = "lock:statbotics:v3::match:2026ctabc_qm-lock-failure";
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async () => new Response("upstream unavailable", { status: 503 }),
+  }, async () => {
+    await assert.rejects(client.getMatch("2026ctabc_qm-lock-failure"), /Statbotics request failed: 503/);
+  });
+
+  assert.equal(await redis.get(lockKey), null);
+});
+
+test("Statbotics collection cache keys remain isolated by query filters", async () => {
+  const { client, redis } = await createClient();
+  const requestedUrls = [];
+
+  await withGlobals({
+    baseUrl: "https://statbotics.test",
+    fetch: async (url) => {
+      requestedUrls.push(new URL(url));
+      return new Response("[]", {
+        status: 200,
+        headers: { "Cache-Control": "max-age=600" },
+      });
+    },
+  }, async () => {
+    assert.deepEqual(await client.getMatches({ event: "2026ctabc" }), []);
+    assert.deepEqual(await client.getMatches({ team: 3461 }), []);
+  });
+
+  assert.equal(requestedUrls.length, 2);
+  assert.equal(requestedUrls[0].searchParams.get("event"), "2026ctabc");
+  assert.equal(requestedUrls[1].searchParams.get("team"), "3461");
+  const cacheKeys = [...redis.values.keys()].filter((key) => key.startsWith("cache:statbotics:v3:"));
+  assert.equal(cacheKeys.length, 2);
+  assert.notEqual(cacheKeys[0], cacheKeys[1]);
+});
+
 test("Statbotics failed later pagination pages reject instead of returning a partial collection", async () => {
   const { client } = await createClient();
   let requests = 0;
