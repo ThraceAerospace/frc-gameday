@@ -270,7 +270,7 @@ test("TBA tag invalidation removes only cache entries owned by the requested tag
 
 test("TBA malformed cache entries are discarded before fetching a valid response", async () => {
   const client = new TBAClient("test-auth-key");
-  const endpoint = "/event/2026ctquote/teams";
+  const endpoint = "/event/2026ctmalformed/teams";
   await redis.set(cacheKey(endpoint), JSON.stringify({ unexpected: true }));
   let requests = 0;
 
