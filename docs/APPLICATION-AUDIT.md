@@ -228,7 +228,7 @@ The event analytics worker lock has a 55-second TTL, while the API route allows 
 
 **Severity: Medium / data completeness metadata**
 
-`src/app/api/insights/team/[team]/route.ts` converts a failed `Statbotics.getTeamEvents` request into an empty array. The response then labels individual events without a record as `unavailable`, without exposing whether the collection request failed or Statbotics successfully returned no record for that event.
+`src/app/api/insights/team/[team]/route.ts` converts a failed `Statbotics.getTeamEvents` request into an empty array. The response then labels individual events without a record as `unavailable`, without exposing whether the collection request failed or Statbotics successfully returned no record for that event. The endpoint's only in-repository caller is the unfinished dual-team history effect, which is currently unreachable because `setTeamB` is never called (FV-AUD-093); this is a latent API contract issue rather than a currently exercised dashboard path.
 
 **Action:** preserve collection-level failure metadata separately from per-event record absence, and expose it in the response so consumers do not mistake a provider outage for missing upstream coverage.
 
