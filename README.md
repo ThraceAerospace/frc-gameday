@@ -43,6 +43,7 @@ All event-related dates and times displayed by FieldView must use the event's IA
 npm install
 npm run dev
 npm run lint
+npm test
 npm run build
 ```
 
@@ -55,7 +56,7 @@ npm run generate:statbotics-types
 
 Do not commit secrets. The application uses environment configuration for Redis, TBA authentication/webhook verification, and optional provider/runtime overrides.
 
-There is currently no dedicated test script in `package.json`; lint/build validation and focused automated data-contract tests remain part of stabilization work.
+`npm test` runs the automated test suite with Node's built-in test runner. The initial architecture checks protect provider-service and generated-type boundaries; the broader data-contract, calculation, and pipeline coverage is tracked in [TESTING-STRATEGY.md](docs/TESTING-STRATEGY.md).
 
 ## Documentation
 
