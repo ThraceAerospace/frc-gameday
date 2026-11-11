@@ -103,6 +103,45 @@ test("temporary Chondl override preserves encoded match keys", async () => {
   assert.ok(entries[0].expiresAt - entries[0].fetchedAt >= 10 * 60 * 1000);
 });
 
+test("Statbotics client uses the documented v3 team and collection routes", async () => {
+  const { client } = await createClient();
+  const requestedUrls = [];
+
+  await withGlobals({
+    baseUrl: "https://api-statbotics.popcornpenguins.com",
+    fetch: async (url) => {
+      requestedUrls.push(new URL(url));
+      const pathname = new URL(url).pathname;
+      const body = pathname.endsWith("/matches") || pathname.endsWith("/team_events")
+        ? []
+        : { team: 3461, year: 2026, event: "2026ctabc" };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Cache-Control": "max-age=60" },
+      });
+    },
+  }, async () => {
+    assert.equal((await client.getTeamYear(3461, 2026)).team, 3461);
+    assert.equal((await client.getTeamEvent(3461, "2026ctabc")).event, "2026ctabc");
+    assert.deepEqual(await client.getMatches({ event: "2026ctabc", year: 2026, elim: false }), []);
+    assert.deepEqual(await client.getTeamEvents({ team: 3461, year: 2026 }), []);
+  });
+
+  assert.deepEqual(requestedUrls.map((url) => url.pathname), [
+    "/v3/team_year/3461/2026",
+    "/v3/team_event/3461/2026ctabc",
+    "/v3/matches",
+    "/v3/team_events",
+  ]);
+  assert.equal(requestedUrls[2].searchParams.get("event"), "2026ctabc");
+  assert.equal(requestedUrls[2].searchParams.get("year"), "2026");
+  assert.equal(requestedUrls[2].searchParams.get("elim"), "false");
+  assert.equal(requestedUrls[2].searchParams.get("limit"), "1000");
+  assert.equal(requestedUrls[2].searchParams.get("offset"), "0");
+  assert.equal(requestedUrls[3].searchParams.get("team"), "3461");
+  assert.equal(requestedUrls[3].searchParams.get("year"), "2026");
+});
+
 test("Statbotics 404 responses are cached as a real null result", async () => {
   const { client, redis } = await createClient();
   let requests = 0;
