@@ -1000,3 +1000,12 @@ The generated TBA `Webcast` contract supports multiple types: `youtube`, `twitch
 `getEventWebcastStatus` returns `"Live"` if any webcast has status `online`; otherwise, if the event has at least one webcast entry, it always returns `"Offline"`. The generated TBA contract defines webcast status as `unknown`, `online`, or `offline`, and the status field may also be null when the provider cannot determine it. An event whose webcast status is unknown or unavailable is therefore presented in the Events Browser as definitively offline. This conflates a known negative state with missing/indeterminate provider information.
 
 **Action:** preserve the three-way status distinction in the formatter and UI (for example, Live, Offline, Status unavailable/Unknown). Only report Offline when all relevant webcast entries are explicitly offline; report Unknown when no stream is online and at least one status is unknown/null. Add tests for mixed online/offline, all offline, all unknown, null status, and no webcast entries.
+
+
+### FV-AUD-091 — Standalone TBA match refresh bypasses completed-result reconciliation
+
+**Severity: Medium / match-result persistence correctness**
+
+`isMatchEndpoint` explicitly classifies `/match/<matchKey>` as a match resource, but `reconcileMatchData` only performs reconciliation when both incoming and cached values are arrays. The standalone `TBA.getMatch(matchKey)` representation is a single match object, so it returns the incoming object unchanged and never calls `reconcileMatch`. If TBA returns a temporarily incomplete/regressed standalone match representation after a completed result was cached, the refresh can overwrite the known-good result fields. Event/team match-list endpoints receive the array reconciliation behavior, but the standalone match-detail endpoint does not. This matters independently of FV-AUD-051: that finding covers webhook updates not reaching the standalone cache, while this finding covers result regression when that standalone cache is later refreshed from TBA.
+
+**Action:** branch explicitly for standalone match objects and reconcile the incoming object against the cached object with the same result-preservation policy used for array entries. Keep schedule deletion semantics separate from same-key result preservation. Add tests for a cached completed standalone match followed by an incomplete incoming object, a normal newer result, and an unrelated match key.
