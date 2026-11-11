@@ -18,12 +18,12 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 
 - The Blue Alliance is the authoritative source for official event schedules, match results, teams, rankings, and OPR/DPR/CCWM data.
 - TBA requests pass through `src/lib/tba/client.ts` and `src/lib/tba/service.ts`, with Redis-backed response caching, ETag validation, and upstream `Cache-Control` freshness.
-- TBA webhooks authenticate through `X-TBA-HMAC`, update existing cached match data where possible, and publish event-scoped updates through Redis Pub/Sub and `/api/ws`.
+- TBA webhooks authenticate through `X-TBA-HMAC`, attempt to update existing cached match data, and publish event-scoped updates through Redis Pub/Sub and `/api/ws`. Cache coherence is not yet complete across standalone/team-scoped matches and dependent status/alliance/OPR resources; see the [application audit](docs/APPLICATION-AUDIT.md).
 - Statbotics and FRC Colors are enrichment providers behind server-side clients/services. The current Statbotics runtime host and its mismatch with the project's official-provider requirement are recorded in the [application audit](docs/APPLICATION-AUDIT.md).
 
 ### Live event state
 
-The normal browser live path uses one origin-wide SharedWorker to own the event WebSocket and one `EventState` per active event. Tabs receive snapshots through MessagePorts. EventState owns event acquisition, freshness, and reconciliation; presentation components consume its snapshots. If SharedWorker is unavailable, the client uses a per-tab fallback.
+The normal browser live path uses one origin-wide SharedWorker to own the event WebSocket and one `EventState` per active event. Tabs receive snapshots through MessagePorts. EventState owns event acquisition and reconciliation; its current snapshot exposes only coarse global loading/error/WebSocket-stale state rather than per-resource freshness/failure metadata. If SharedWorker is unavailable, the client uses a per-tab fallback (whose WebSocket idle teardown remains incomplete; see the audit).
 
 Remote displays consume controller-published snapshots and do not create independent event acquisition paths.
 
