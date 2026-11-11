@@ -1027,3 +1027,12 @@ The array reconciliation helper `reconcileMatch` preserves a cached match only w
 The Event Analytics dashboard loads the two selected teams' season-history endpoints together with `Promise.all`. It then requires both responses to be successful before parsing either payload; if either request fails, the catch path clears both `historyA` and `historyB`. A transient TBA/provider/cache failure for one selected team therefore hides the successfully retrieved history for the other team as well. This is separate from the all-or-nothing server-side team-match history acquisition in FV-AUD-044 and the event/team page dependency issue in FV-AUD-030.
 
 **Action:** handle each team's history request independently and preserve the successful side. Track per-team loading/error/availability state so the comparison can explain which side is missing without discarding usable data. Add tests for both-success, A-fails/B-succeeds, and B-fails/A-succeeds.
+
+
+### FV-AUD-094 — Persisted Event Analytics jobs have no job-schema version or complete migration boundary
+
+**Severity: Low / persisted snapshot compatibility**
+
+The progressive Event Analytics job is stored under the unversioned key prefix `insights:progressive:<event>` with a one-year Redis TTL. The `Job` record itself has no `schemaVersion`; `readJob` accepts it after only checking that `event` is truthy, `matches` is an array, and `records`/`attempts` are truthy. It then backfills one freshness field, but does not validate nested event/match/record/attempt shapes or migrate other fields. The response envelope has `schemaVersion: 1`, but that does not version the persisted job that is read and mutated across deployments. A deployment that changes the internal job shape can therefore accept an older persisted job and either silently misinterpret missing fields or fail later during calculation/refresh. The one-year retention extends this compatibility window.
+
+**Action:** add an explicit persisted-job schema version and a deliberate migration/rebuild policy. Validate required nested structures before accepting a job; if a migration is not supported, discard/rebuild the incompatible job rather than partially casting it. Keep the public EventAnalytics response schema version separate from the Redis job schema version. Add fixtures for the current job and each supported prior version.
