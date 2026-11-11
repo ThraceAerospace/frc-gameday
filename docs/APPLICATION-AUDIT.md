@@ -852,3 +852,12 @@ This makes remote delivery dependent on the size of the event snapshot and the n
 The shared `percentile(values, value)` helper in `src/lib/insights/calculations.ts` returns `1` whenever the comparison array contains exactly one value. The caller formats this as an event percentile in the Team Snapshot and also uses the helper for the selected team's current-event cohort comparison. If Statbotics EPA is available for only one event team, that sole observation is therefore reported as the 100th percentile, despite there being no peer observations against which to establish a relative standing. This can make incomplete provider coverage look like an exceptional rank rather than an insufficient sample.
 
 **Action:** define single-observation percentile semantics explicitly. Prefer `null`/“insufficient cohort” when fewer than two comparable teams have usable EPA, or use a documented median-rank convention such as 50th percentile for a one-member cohort. Add tests for empty, one-value, tied, and distinct multi-value cohorts, and ensure the UI labels the comparison coverage.
+
+
+### FV-AUD-075 — EPA contribution analysis drops otherwise usable alliances containing negative EPA
+
+**Severity: Medium / analytics sample completeness and metric fidelity**
+
+The documented `% EPA Contribution to Matches` definition uses a team's pre-match total EPA divided by the sum of all three alliance teams' pre-match total EPAs, averaged across usable appearances. In `buildTeamRows`, the contribution calculation skips an entire alliance whenever any of its three pre-match EPA values is negative (`values.some((value) => value === null || value < 0)`). Negative EPA is a valid model value, not a missing-data sentinel. When the three-team total remains positive, the documented ratio is still mathematically defined, including a negative contribution for a team below zero. The current guard therefore discards valid alliance observations and systematically excludes low-EPA teams from the contribution sample. This is distinct from the separate team-match schedule issue where negative EPA is treated as missing (FV-AUD-042).
+
+**Action:** distinguish missing/non-finite EPA from negative EPA. Compute the documented ratio whenever all three values are finite and the alliance total is strictly positive; if a non-positive denominator is considered unsuitable, exclude that sample for the denominator reason and expose the excluded-sample count. Add tests for negative numerator with positive alliance total, zero total, negative total, and missing team EPA.
