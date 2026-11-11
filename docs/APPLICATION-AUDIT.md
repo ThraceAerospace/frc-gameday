@@ -812,3 +812,14 @@ For `match_score`, `match_video`, and `upcoming_match`, the webhook handler awai
 A connected EventState then refetches through the ordinary TBA API route. If the existing cache entry is still within its provider max-age, that read can return the unchanged pre-webhook value. The webhook has therefore been acknowledged and delivered to clients even though the data update was not committed, and the stale cache can remain authoritative until expiry. This is distinct from webhook coverage gaps (FV-AUD-051 and FV-AUD-055) and read/write races (FV-AUD-052): this is an explicitly failed cache write that is swallowed as success.
 
 **Action:** distinguish “resource was not cached” from “mutation failed” in the cache mutation result. Propagate actual Redis/mutation failures to the webhook handler so it can return a retryable non-2xx response, or invalidate the affected cache key as a safe fallback before broadcasting. Do not send a success signal when the cache update failed. Add tests for absent cache entries, successful mutation, Redis write rejection, and mutation callback failure; verify that failed writes are retried or that the next API read cannot serve the stale entry.
+
+
+### FV-AUD-071 — Critical data paths have no automated test suite or test command
+
+**Severity: High / regression detection and data-contract reliability**
+
+The inspected repository has no test script in `package.json`, and the package manifest contains no test-runner dependency. Repository searches for common test declarations and test-directory conventions did not surface an automated unit/integration suite. The documented development checks are lint and build only; neither exercises behavioral contracts such as webhook-to-cache reconciliation, ETag/304 races, provider failure/stale fallback semantics, lock fencing, collection pagination, or analytics metric calculations.
+
+This leaves the most failure-prone parts of FieldView—provider clients, Redis cache behavior, asynchronous acquisition jobs, realtime delivery, and derived analytics—without an executable regression safety net. The audit has identified multiple interacting defects in these areas; source review alone cannot establish that fixes preserve behavior or that concurrency/failure scenarios are handled correctly.
+
+**Action:** establish a lightweight automated test harness and add focused tests around the data boundaries before broad implementation changes. Prioritize TBA cache/webhook integration (including races and failed writes), Statbotics/FRC Colors cache and lock behavior, analytics job recovery and source completeness, EventState snapshot validation/reconciliation, and pure metric calculations. Add a documented test command and ensure it runs in CI. Do not treat lint/build success as behavioral validation.
