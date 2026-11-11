@@ -152,7 +152,7 @@ export default async function EventPage({
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0 text-left text-sm">
-                      <thead className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] text-xs uppercase tracking-wide text-[var(--fv-muted)]">
+                      <thead className="event-divider event-header-surface border-b border-[var(--fv-border)] bg-[var(--fv-surface)] text-xs uppercase tracking-wide text-[var(--fv-muted)]">
                         <tr>
                           <th scope="col" className="px-5 py-3 font-medium">Team</th>
                           <th scope="col" className="px-5 py-3 font-medium">Location</th>
@@ -274,7 +274,7 @@ function MatchGroup({
 
   return (
     <section className="overflow-hidden rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)]">
-      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
+      <h3 className="event-divider event-header-surface border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
         {title} <span className="font-normal text-[var(--fv-muted)]">{matches.length}</span>
       </h3>
       {matches.length === 0 ? (
@@ -283,7 +283,7 @@ function MatchGroup({
         groupedMatches.map((group) => (
           <div key={group.title || "all-matches"}>
             {group.title && (
-              <div className="event-divider event-header-surface border-t border-slate-200 bg-[var(--fv-surface)] px-3 py-2 first:border-t-0 last:border-b-0">
+              <div className="event-divider event-header-surface border-t border-[var(--fv-border)] bg-[var(--fv-surface)] px-3 py-2 first:border-t-0 last:border-b-0">
                 <h4 className="text-center text-xs font-semibold uppercase tracking-wide text-[var(--fv-muted)]">
                   {group.title}
                 </h4>
@@ -316,7 +316,7 @@ function PlayoffAlliances({
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)]">
-      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
+      <h3 className="event-divider event-header-surface border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
         Playoff Alliances <span className="font-normal text-[var(--fv-muted)]">{alliances?.length ?? 0}</span>
       </h3>
       {!alliances?.length ? (

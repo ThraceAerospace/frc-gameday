@@ -135,7 +135,7 @@ export default async function TeamPage({
         />
         <SurfaceCard className="mt-5" padding>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <div><span className="font-black text-slate-950">{year}</span><span className="ml-1.5 text-slate-500">season</span></div>
+            <div><span className="font-black text-[var(--fv-text)]">{year}</span><span className="ml-1.5 text-[var(--fv-muted)]">season</span></div>
             <Stat label="District" value={district?.display_name || "None"} />
             <Stat label="Events" value={eventSections.length} />
             <Stat label="Matches" value={completedMatches.length} />
@@ -178,27 +178,27 @@ export default async function TeamPage({
                   return (
                     <SurfaceCard key={event.key} id={`event-section-${event.key}`} className="scroll-mt-5 overflow-hidden">
                       <div className="grid min-w-0 xl:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.7fr)]">
-                        <div className="border-b border-slate-200 bg-slate-50 p-4 xl:border-b-0 xl:border-r">
-                          <h3 className="mt-1 text-lg font-bold leading-snug text-slate-900">{event.name}</h3>
-                          <p className="mt-2 text-sm text-slate-600">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
-                          <p className="mt-1 text-xs text-slate-500">{formatEventDateRange(event.start_date, event.end_date)}</p>
-                          {event.week != null && <p className="mt-1 text-xs font-medium text-slate-500">Week {event.week + 1}</p>}
-                          {event.district?.display_name && <p className="mt-2 text-xs font-medium text-slate-500">{event.district.display_name}</p>}
+                        <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] p-4 xl:border-b-0 xl:border-r">
+                          <h3 className="mt-1 text-lg font-bold leading-snug text-[var(--fv-text)]">{event.name}</h3>
+                          <p className="mt-2 text-sm text-[var(--fv-muted)]">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""}{event.country ? `, ${event.country}` : ""}</p>
+                          <p className="mt-1 text-xs text-[var(--fv-muted)]">{formatEventDateRange(event.start_date, event.end_date)}</p>
+                          {event.week != null && <p className="mt-1 text-xs font-medium text-[var(--fv-muted)]">Week {event.week + 1}</p>}
+                          {event.district?.display_name && <p className="mt-2 text-xs font-medium text-[var(--fv-muted)]">{event.district.display_name}</p>}
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <Link href={`/event/${event.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-[var(--fv-brand-border)] hover:text-[var(--fv-brand-strong)]">Event page</Link>
+                            <Link href={`/event/${event.key}`} className="rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--fv-text)] hover:border-[var(--fv-brand-border)] hover:text-[var(--fv-brand-strong)]">Event page</Link>
                             <Link href={`/gameday?event=${event.key}`} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--fv-brand-strong)]">Gameday</Link>
                           </div>
-                          <div className="mt-4 space-y-3 border-t border-slate-200 pt-3">
-                            <section className="rounded-lg border border-slate-200 bg-white p-3">
-                              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Qualification</h4>
+                          <div className="mt-4 space-y-3 border-t border-[var(--fv-border)] pt-3">
+                            <section className="rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Qualification</h4>
                               <dl className="mt-2 grid grid-cols-2 gap-3 text-sm">
                                 <div>
-                                  <dt className="text-xs text-slate-400">Record</dt>
-                                  <dd className="font-semibold text-slate-800"><TeamRecord status={status} /></dd>
+                                  <dt className="text-xs text-[var(--fv-muted)]">Record</dt>
+                                  <dd className="font-semibold text-[var(--fv-text)]"><TeamRecord status={status} /></dd>
                                 </div>
                                 <div>
-                                  <dt className="text-xs text-slate-400">Rank</dt>
-                                  <dd className="font-semibold text-slate-800">
+                                  <dt className="text-xs text-[var(--fv-muted)]">Rank</dt>
+                                  <dd className="font-semibold text-[var(--fv-text)]">
                                     {ranking?.rank != null
                                       ? `#${ranking.rank}${status?.qual?.num_teams != null ? ` of ${status.qual.num_teams}` : ""}`
                                       : "—"}
@@ -206,17 +206,17 @@ export default async function TeamPage({
                                 </div>
                                 {totalRankingPoints != null && (
                                   <div>
-                                    <dt className="text-xs text-slate-400">Total Ranking Points</dt>
-                                    <dd className="font-semibold tabular-nums text-slate-800">
+                                    <dt className="text-xs text-[var(--fv-muted)]">Total Ranking Points</dt>
+                                    <dd className="font-semibold tabular-nums text-[var(--fv-text)]">
                                       {totalRankingPoints.toFixed(rankingPointsPrecision ?? 0)}
                                     </dd>
                                   </div>
                                 )}
                               </dl>
                             </section>
-                            <section className="rounded-lg border border-slate-200 bg-white p-3">
-                              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Alliance</h4>
-                              <p className="mt-2 text-sm font-semibold text-slate-800">{allianceName}</p>
+                            <section className="rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Alliance</h4>
+                              <p className="mt-2 text-sm font-semibold text-[var(--fv-text)]">{allianceName}</p>
                               {teamAlliance?.picks.length ? (
                                 <div className="mt-2 flex flex-wrap gap-1">
                                   {teamAlliance.picks.map((memberKey) => (
@@ -224,7 +224,7 @@ export default async function TeamPage({
                                       key={memberKey}
                                       href={`/team/${memberKey}?year=${year}`}
                                       aria-current={memberKey === teamKey ? "page" : undefined}
-                                      className={`rounded-full border px-2 py-0.5 font-mono text-xs ${memberKey === teamKey ? "border-slate-400 bg-slate-200 font-bold text-slate-900" : "border-slate-200 bg-white font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-50"}`}
+                                      className={`rounded-full border px-2 py-0.5 font-mono text-xs ${memberKey === teamKey ? "border-slate-400 bg-slate-200 font-bold text-[var(--fv-text)]" : "border-[var(--fv-border)] bg-[var(--fv-surface-raised)] font-medium text-[var(--fv-text)] hover:border-slate-400 hover:bg-[var(--fv-surface)]"}`}
                                     >
                                       {memberKey.replace(/^frc/i, "")}
                                     </Link>
@@ -232,20 +232,20 @@ export default async function TeamPage({
                                 </div>
                               ) : null}
                             </section>
-                            <section className="rounded-lg border border-slate-200 bg-white p-3">
-                              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Eliminations</h4>
+                            <section className="rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Eliminations</h4>
                               <dl className="mt-2 grid grid-cols-2 gap-3 text-sm">
                                 <div>
-                                  <dt className="text-xs text-slate-400">Record</dt>
-                                  <dd className="font-semibold text-slate-800">
+                                  <dt className="text-xs text-[var(--fv-muted)]">Record</dt>
+                                  <dd className="font-semibold text-[var(--fv-text)]">
                                     {teamAlliance?.status && allianceRecord
                                       ? `${allianceRecord.wins ?? 0}-${allianceRecord.losses ?? 0}-${allianceRecord.ties ?? 0}`
                                       : "—"}
                                   </dd>
                                 </div>
                                 <div>
-                                  <dt className="text-xs text-slate-400">Level</dt>
-                                  <dd className="font-semibold text-slate-800">
+                                  <dt className="text-xs text-[var(--fv-muted)]">Level</dt>
+                                  <dd className="font-semibold text-[var(--fv-text)]">
                                     {teamAlliance?.status ? formatPlayoffLevel(teamAlliance, event.playoff_type) : "—"}
                                   </dd>
                                 </div>
@@ -253,36 +253,36 @@ export default async function TeamPage({
                             </section>
                           </div>
                           {(ranking?.matches_played != null || ranking?.qual_average != null || (ranking?.dq != null && ranking.dq > 0)) && (
-                            <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 text-sm">
+                            <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--fv-border)] pt-3 text-sm">
                               {ranking?.matches_played != null && (
-                                <div><dt className="text-xs text-slate-400">Matches played</dt><dd className="font-semibold text-slate-800">{ranking.matches_played}</dd></div>
+                                <div><dt className="text-xs text-[var(--fv-muted)]">Matches played</dt><dd className="font-semibold text-[var(--fv-text)]">{ranking.matches_played}</dd></div>
                               )}
                               {ranking?.qual_average != null && (
-                                <div><dt className="text-xs text-slate-400">Qualification average</dt><dd className="font-semibold text-slate-800">{ranking.qual_average}</dd></div>
+                                <div><dt className="text-xs text-[var(--fv-muted)]">Qualification average</dt><dd className="font-semibold text-[var(--fv-text)]">{ranking.qual_average}</dd></div>
                               )}
                               {ranking?.dq != null && ranking.dq > 0 && (
-                                <div><dt className="text-xs text-slate-400">Disqualifications</dt><dd className="font-semibold text-slate-800">{ranking.dq}</dd></div>
+                                <div><dt className="text-xs text-[var(--fv-muted)]">Disqualifications</dt><dd className="font-semibold text-[var(--fv-text)]">{ranking.dq}</dd></div>
                               )}
                             </dl>
                           )}
                           {eventPoints && (
-                            <div className="mt-3 border-t border-slate-200 pt-3">
-                              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Advancement Points</h4>
-                              <table className="mt-2 w-full text-xs text-slate-700">
+                            <div className="mt-3 border-t border-[var(--fv-border)] pt-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Advancement Points</h4>
+                              <table className="mt-2 w-full text-xs text-[var(--fv-text)]">
                                 <tbody>
                                   <tr><th scope="row" className="py-0.5 text-left font-normal">Qualification</th><td className="py-0.5 text-right font-mono">{eventPoints.qual_points}</td></tr>
                                   <tr><th scope="row" className="py-0.5 text-left font-normal">Alliance selection</th><td className="py-0.5 text-right font-mono">{eventPoints.alliance_points}</td></tr>
                                   <tr><th scope="row" className="py-0.5 text-left font-normal">Elimination matches</th><td className="py-0.5 text-right font-mono">{eventPoints.elim_points}</td></tr>
                                   <tr><th scope="row" className="py-0.5 text-left font-normal">Awards</th><td className="py-0.5 text-right font-mono">{eventPoints.award_points}</td></tr>
-                                  <tr className="border-t border-slate-200 font-semibold"><th scope="row" className="pt-1 text-left">Total</th><td className="pt-1 text-right font-mono">{eventPoints.total}</td></tr>
+                                  <tr className="border-t border-[var(--fv-border)] font-semibold"><th scope="row" className="pt-1 text-left">Total</th><td className="pt-1 text-right font-mono">{eventPoints.total}</td></tr>
                                 </tbody>
                               </table>
                             </div>
                           )}
                           {awards.length > 0 && (
-                            <div className="mt-3 border-t border-slate-200 pt-3 text-sm">
-                              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Awards</span>
-                              <p className="mt-1 text-slate-700">{awards.map((award) => award.name).join(", ")}</p>
+                            <div className="mt-3 border-t border-[var(--fv-border)] pt-3 text-sm">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--fv-muted)]">Awards</span>
+                              <p className="mt-1 text-[var(--fv-text)]">{awards.map((award) => award.name).join(", ")}</p>
                             </div>
                           )}
                         </div>
@@ -301,5 +301,5 @@ export default async function TeamPage({
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
-  return <div><span className="text-slate-400">{label}</span><span className="ml-1.5 font-bold text-slate-700">{value}</span></div>;
+  return <div><span className="text-[var(--fv-muted)]">{label}</span><span className="ml-1.5 font-bold text-[var(--fv-text)]">{value}</span></div>;
 }
