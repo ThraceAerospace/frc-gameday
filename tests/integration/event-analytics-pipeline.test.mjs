@@ -47,7 +47,7 @@ function createMatch(eventKey, number, time) {
   };
 }
 
-async function createHarness(eventKey = "2026ctabc") {
+async function createHarness(eventKey = "2026ctabc", { rankingsError = null, playoffAlliancesError = null } = {}) {
   const redis = new FakeRedis();
   const calls = [];
   const event = createEvent(eventKey);
@@ -64,10 +64,12 @@ async function createHarness(eventKey = "2026ctabc") {
     getEventOPRs: async (key) => { calls.push(["getEventOPRs", key]); return null; },
     getEventRankings: async (key) => {
       calls.push(["getEventRankings", key]);
+      if (rankingsError) throw rankingsError;
       return null;
     },
     getEventPlayoffAlliances: async (key) => {
       calls.push(["getEventPlayoffAlliances", key]);
+      if (playoffAlliancesError) throw playoffAlliancesError;
       return null;
     },
   };
@@ -155,6 +157,53 @@ test("EventAnalytics snapshot initializes from TBA, persists the job, and emits 
       "getTeamsAtEvent",
     ].sort(),
   );
+});
+
+test("EventAnalytics marks failed optional TBA acquisitions as partial instead of ready", async () => {
+  const harness = await createHarness("2026ctfail", {
+    rankingsError: new Error("rankings endpoint unavailable"),
+    playoffAlliancesError: new Error("alliances endpoint unavailable"),
+  });
+
+  const snapshot = await harness.getEventAnalyticsSnapshot("2026ctfail");
+
+  assert.equal(snapshot.rankings, null);
+  assert.equal(snapshot.sources.tba.status, "partial");
+  assert.equal(snapshot.sources.tba.resources.rankings.status, "unavailable");
+  assert.equal(snapshot.sources.tba.resources.rankings.error, "rankings endpoint unavailable");
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.status, "unavailable");
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.error, "alliances endpoint unavailable");
+  assert.equal(snapshot.sources.tba.resources.event.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.teams.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.matches.status, "ready");
+  assert.equal(snapshot.sources.tba.resources.oprs.status, "ready");
+});
+
+test("EventAnalytics marks legacy optional TBA acquisition status as unknown", async () => {
+  const eventKey = "2026ctlegacy";
+  const harness = await createHarness(eventKey);
+  await harness.redis.set(
+    `insights:progressive:${eventKey}`,
+    JSON.stringify({
+      event: harness.event,
+      teams: harness.teams,
+      oprs: null,
+      rankings: null,
+      playoffAlliances: null,
+      matches: [createMatch(eventKey, 1, 100)],
+      records: {},
+      attempts: {},
+      state: "partial",
+      updatedAt: Date.now(),
+      tbaLoadedAt: Date.now(),
+    }),
+  );
+
+  const snapshot = await harness.getEventAnalyticsSnapshot(eventKey);
+
+  assert.equal(snapshot.sources.tba.status, "partial");
+  assert.equal(snapshot.sources.tba.resources.rankings.status, "unknown");
+  assert.equal(snapshot.sources.tba.resources.playoffAlliances.status, "unknown");
 });
 
 test("EventAnalytics snapshot reads the persisted job without reacquiring provider data", async () => {
