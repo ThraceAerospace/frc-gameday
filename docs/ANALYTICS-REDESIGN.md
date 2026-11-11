@@ -40,8 +40,10 @@ Every view follows takeaway → evidence → investigation. Show plain-language 
 This document defines intended analytical behavior; it is not proof that every calculation is already implemented in the server service layer. The first application audit identified these implementation gaps:
 
 - Suggested Review still calculates model-upset, phase-specific median/MAD, large-residual, and high-alliance-EPA flags in the browser. These classifications should move into the server-side analytics service and become part of the EventAnalytics response.
-- The current median/MAD implementations use the upper middle value for even-sized samples rather than the conventional average of the two middle values. Choose and test a single convention before changing thresholds or historical results.
-- The qualification prediction-calibration summary currently counts an incorrect prediction at exactly 50% as an underdog win. A 50/50 prediction has no underdog; this edge case should be corrected and tested.
+- Event qualification anomaly calculations and the dashboard phase-band helper use the upper middle value for even-sized samples, while selected-team history uses the conventional average of the two middle values. Centralize and test one convention before changing thresholds or historical results.
+- Selected-team season anomaly flags currently begin at four scored observations per side; the documented minimum is eight.
+- The elimination-decline signal does not currently require positive qualification residual performance, although the specification defines the signal as a decline after positive qualification performance.
+- The qualification prediction-calibration summary currently counts every incorrect winner prediction as an underdog win, including the 50/50 edge case. This is a miss count, not an underdog-win count; count an underdog win only when the actual winner's pre-match probability is strictly below 0.5.
 - The selected-team match-analysis API route still contains substantial calculation logic instead of delegating to a reusable server-side service.
 
 See [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md) for the corresponding findings and priorities. Keep this specification as the intended methodology while those implementation gaps are resolved.
