@@ -217,3 +217,55 @@ export type TeamSeasonComparison = {
     endgame: TeamSeasonComponentComparison | null;
   };
 };
+
+
+/** Source lifecycle state exposed by the EventAnalytics contract. */
+export type EventAnalyticsSourceStatus =
+  | "pending"
+  | "ready"
+  | "partial"
+  | "unavailable"
+  | "unknown";
+
+export type EventAnalyticsSource = {
+  status: EventAnalyticsSourceStatus;
+  /** Unix timestamp in milliseconds for the latest successful acquisition. */
+  updatedAt: number | null;
+  /** Provider error, when available. Never required for a usable snapshot. */
+  error?: string | null;
+};
+
+export type EventAnalyticsTbaResources = {
+  event: EventAnalyticsSource;
+  teams: EventAnalyticsSource;
+  matches: EventAnalyticsSource;
+  oprs: EventAnalyticsSource;
+  rankings: EventAnalyticsSource;
+  playoffAlliances: EventAnalyticsSource;
+};
+
+export type EventAnalyticsTbaSource = EventAnalyticsSource & {
+  resources: EventAnalyticsTbaResources;
+};
+
+export type EventAnalytics = EventAnalyticsResponse & {
+  schemaVersion: 1;
+  eventKey: string;
+  generatedAt: number;
+  provenance: {
+    event: "tba";
+    teams: "tba";
+    matches: "tba";
+    rankings: "tba";
+    oprs: "tba";
+    playoffAlliances: "tba";
+    statboticsMatches: "statbotics";
+    teamColors: "frc-colors";
+    derived: "fieldview";
+  };
+  sources: {
+    tba: EventAnalyticsTbaSource;
+    statbotics: EventAnalyticsSource;
+    frcColors: EventAnalyticsSource;
+  };
+};
