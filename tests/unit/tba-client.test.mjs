@@ -286,7 +286,7 @@ test("TBA derives cache tags for event, team, team-event, and match resource fam
   });
 
   const expectedTags = {
-    "tag:event:2026cttagstest": [cacheKey(endpoints[0]), cacheKey(endpoints[1])],
+    "tag:event:2026cttagstest": [cacheKey(endpoints[0]), cacheKey(endpoints[1]), cacheKey(endpoints[3])],
     "tag:event:2026cttagstest:teams": [cacheKey(endpoints[1])],
     "tag:team:frc3461": [cacheKey(endpoints[2]), cacheKey(endpoints[3])],
     "tag:team:frc3461:event:2026cttagstest": [cacheKey(endpoints[3])],
