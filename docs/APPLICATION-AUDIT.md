@@ -823,3 +823,12 @@ The inspected repository has no test script in `package.json`, and the package m
 This leaves the most failure-prone parts of FieldView—provider clients, Redis cache behavior, asynchronous acquisition jobs, realtime delivery, and derived analytics—without an executable regression safety net. The audit has identified multiple interacting defects in these areas; source review alone cannot establish that fixes preserve behavior or that concurrency/failure scenarios are handled correctly.
 
 **Action:** establish a lightweight automated test harness and add focused tests around the data boundaries before broad implementation changes. Prioritize TBA cache/webhook integration (including races and failed writes), Statbotics/FRC Colors cache and lock behavior, analytics job recovery and source completeness, EventState snapshot validation/reconciliation, and pure metric calculations. Add a documented test command and ensure it runs in CI. Do not treat lint/build success as behavioral validation.
+
+
+### FV-AUD-072 — Remote event cards render next-match dates in the viewer's timezone
+
+**Severity: Medium / event-time presentation correctness**
+
+`NextMatchCountdown` accepts an optional `eventTimezone` and uses it for both same-day comparison and the absolute date/time label when the next match is not on the current event-local day. If the prop is omitted, `Intl.DateTimeFormat` silently uses the browser's timezone. `RemoteEventCard` renders the shared component as `<NextMatchCountdown nextMatch={match} />` and has the event available from `eventState.event`, but does not pass `event.timezone`. On a remote display whose system timezone differs from the venue, a next-day match can therefore show the wrong calendar day and local clock time. This violates the event-timezone rule in AGENTS.md and differs from the other match-card call sites that pass the event timezone.
+
+**Action:** pass the event's IANA timezone from `eventState.event` into `NextMatchCountdown` in `RemoteEventCard`. Make the component's fallback explicit and deterministic (UTC or a clearly unavailable label), rather than silently using browser-local time when event timezone is absent. Add a test with a remote/browser timezone different from the event timezone, including a match crossing midnight in one of those zones.
