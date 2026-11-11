@@ -38,7 +38,7 @@ export default async function InsightsPage() {
           </section>
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Events by district</h2>
-            <div className="mt-5 space-y-4">{byDistrict.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-500" style={{width:`${count/maxDistrict*100}%`}} /></div></div>)}</div>
+            <div className="mt-5 space-y-4">{byDistrict.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[var(--fv-chart-teleop)]" style={{width:`${count/maxDistrict*100}%`}} /></div></div>)}</div>
           </section>
         </div>
 

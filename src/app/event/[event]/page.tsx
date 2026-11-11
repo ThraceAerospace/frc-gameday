@@ -133,7 +133,7 @@ export default async function EventPage({
                 </div>
                 <Link
                   href={`/gameday?event=${event.key}`}
-                  className="shrink-0 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  className="shrink-0 rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--fv-brand-strong)]"
                 >
                   Open Gameday
                 </Link>

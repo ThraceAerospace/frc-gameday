@@ -43,16 +43,16 @@ export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEvent
     : "border-slate-200 bg-slate-50 text-slate-500";
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
+    <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-[var(--fv-brand-border)] hover:shadow-md">
       <div className="p-4">
         <div className="flex items-center gap-2">
           <h3 className="min-w-0 text-sm font-bold leading-snug text-slate-900">
-            <Link href={`/event/${event.key}`} className="hover:text-blue-700">{eventName}</Link>
+            <Link href={`/event/${event.key}`} className="hover:text-[var(--fv-brand)]">{eventName}</Link>
           </h3>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1 ring-inset ${competitionStatus.className} ${competitionStatus.label === "In progress" ? "dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800" : ""}`}>
             {competitionStatus.label}
           </span>
-          <Link href={`/event/${event.key}`} aria-label={`View ${eventName}`} className="ml-auto shrink-0 text-slate-300 hover:text-blue-600">
+          <Link href={`/event/${event.key}`} aria-label={`View ${eventName}`} className="ml-auto shrink-0 text-slate-300 hover:text-[var(--fv-brand)]">
             <ChevronRightIcon className="h-4 w-4" />
           </Link>
         </div>
