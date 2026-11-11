@@ -208,6 +208,14 @@ npm run generate:statbotics-types
 
 Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas fill only missing fields and generic response definitions; existing upstream fields and types always take precedence. When Statbotics adds or corrects response models in OpenAPI, generation adopts those definitions automatically, after which the corresponding fallback fields can be removed. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
 
+## Documentation and design system
+
+- Keep `AGENTS.md`, `README.md`, and the `CLAUDE.md` pointer at the repository root.
+- Keep architecture references, analytics specifications, API typing guides, and design-system documentation under `docs/`.
+- Follow `docs/COLOR-SYSTEM.md` for semantic color roles. Purple is FieldView branding; red/blue are reserved for alliance identity in match context; gold/greens are metric percentile tiers; orange is a human-review indicator; team colors remain provider metadata.
+- Do not use generic blue utility colors for product branding, navigation, links, selection, or focus states. Preserve blue where it specifically represents the blue alliance or an explicitly defined probability band.
+- Centralize shared theme values as semantic CSS custom properties. Keep light and dark themes intentional and verify contrast before introducing new color combinations.
+
 ## File organization
 
 Current major boundaries:
@@ -221,7 +229,7 @@ Current major boundaries:
 - `src/lib/gameday` — match and stream utilities.
 - `src/lib/multiview` — pure Multiview layouts.
 - `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
-- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
+- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.\n- `docs` — architecture, analytics, API typing, and design-system documentation.
 
 ## Legacy areas
 
