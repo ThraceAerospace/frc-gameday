@@ -401,3 +401,12 @@ The event detail page loads event metadata, roster, and matches together, then a
 The team detail page has a wider failure domain. It first requires both team metadata and district history, then requires team events and avatar, and for every event uses one `Promise.all` across event metadata, team matches, team status, awards, advancement points, and rankings. A failure from one event or one supplementary resource rejects the outer `Promise.all` and prevents the entire team page from rendering, even if the team's core identity and most match history are available.
 
 **Action:** define required versus optional resources per page. Keep core event/team identity and match history available when supplementary resources fail; render unavailable sections with source-specific error/freshness metadata. Avoid silently substituting empty arrays for failed resources, because “no records” and “provider unavailable” must remain distinct.
+
+
+### FV-AUD-031 — District detail routes cannot serve districts added after build
+
+**Severity: Low / season lifecycle and route availability**
+
+`src/app/district/[district]/page.tsx` sets `dynamicParams = false` and generates its static parameter list from the current year's TBA districts at build time. The district directory at `/districts` is dynamically rendered and reads the current year's list at request time. If TBA adds a district after deployment, or the season changes before a new build, the directory can link to a district detail route that Next.js will reject because its parameter was not in the build-time list.
+
+**Action:** either permit dynamic district parameters and retain the one-hour revalidation policy, or ensure district-list changes/new-season transitions trigger a deployment. Add a route-level check that directory links resolve for all currently returned districts.
