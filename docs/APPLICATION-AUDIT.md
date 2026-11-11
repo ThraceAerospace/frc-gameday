@@ -275,7 +275,7 @@ The TBA client stores cache entries with an application-level `expiresAt`, but w
 
 **Severity: Medium / API failure semantics**
 
-`GET /api/events/active` catches every failure from TBA acquisition or event-date processing and returns `200 []`. A client cannot distinguish “there are no active/upcoming events” from “TBA or the server-side transformation failed.” This can silently render an empty event list during an outage.
+`GET /api/events/active` catches every failure from TBA acquisition or event-date processing and returns `200 []`. A client cannot distinguish “there are no active/upcoming events” from “TBA or the server-side transformation failed.” This can silently render an empty event list during an outage. The transformation is also all-or-nothing: it constructs an `Intl.DateTimeFormat` for each event's timezone inside a single array `map`. One malformed date or invalid IANA timezone throws out of the whole map, causing the catch to discard every otherwise valid event and return an empty list.
 
 The route also declares a `complete` state but filters out every event whose end date is before the current instant, so that state is unreachable in this endpoint's current result set.
 
