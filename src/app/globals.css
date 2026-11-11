@@ -23,6 +23,122 @@
   --fv-chart-endgame: #8B91A1;
   --fv-chart-team-a: #7656C9;
   --fv-chart-team-b: #4F8F8A;
+
+  /* Shared component tokens: edit these instead of adding one-off values. */
+  --fv-link-hover: var(--fv-brand);
+  --fv-neutral-950: var(--fv-neutral-950);
+  --fv-neutral-900: var(--fv-neutral-modal);
+  --fv-neutral-800: var(--fv-neutral-surface-hover-dark);
+  --fv-neutral-700: var(--fv-neutral-control-dark-active);
+  --fv-neutral-600: var(--fv-neutral-border-dark);
+  --fv-neutral-500: #64748b;
+  --fv-neutral-400: #94a3b8;
+  --fv-neutral-300: var(--fv-neutral-scrollbar);
+  --fv-neutral-200: var(--fv-neutral-event-header);
+  --fv-neutral-100: #f1f5f9;
+  --fv-neutral-50: #f8fafc;
+  --fv-neutral-inverse: var(--fv-neutral-inverse)fff;
+  --fv-neutral-text: var(--fv-neutral-text);
+  --fv-neutral-text-strong: var(--fv-neutral-950);
+  --fv-neutral-modal: var(--fv-neutral-modal);
+  --fv-neutral-modal-text: var(--fv-neutral-modal-text);
+  --fv-neutral-placeholder: var(--fv-neutral-placeholder);
+  --fv-neutral-overlay: rgb(15 23 42 / 45%);
+  --fv-neutral-overlay-strong: rgb(0 0 0 / 65%);
+  --fv-neutral-shadow: rgb(0 0 0 / 50%);
+  --fv-neutral-control: rgb(15 23 42 / 5%);
+  --fv-neutral-control-hover: rgb(15 23 42 / 10%);
+  --fv-neutral-control-dark: rgb(255 255 255 / 6%);
+  --fv-neutral-control-dark-hover: rgb(255 255 255 / 12%);
+  --fv-neutral-control-dark-active: var(--fv-neutral-control-dark-active);
+  --fv-neutral-input: rgb(255 255 255 / 5%);
+  --fv-neutral-modal-border: rgb(255 255 255 / 10%);
+  --fv-neutral-event-divider: var(--fv-neutral-event-divider);
+  --fv-neutral-event-header: var(--fv-neutral-event-header);
+  --fv-neutral-event-divider-dark: var(--fv-neutral-event-divider-dark);
+  --fv-neutral-scrollbar: var(--fv-neutral-scrollbar);
+  --fv-neutral-slate-border-dark: var(--fv-neutral-slate-border-dark);
+  --fv-neutral-text-dark: var(--fv-neutral-text-dark);
+  --fv-neutral-muted-dark: var(--fv-neutral-muted-dark);
+  --fv-neutral-subtle-dark: var(--fv-neutral-subtle-dark);
+  --fv-neutral-surface-dark: var(--fv-neutral-surface-dark);
+  --fv-neutral-surface-deep: var(--fv-neutral-surface-deep);
+  --fv-neutral-surface-raised-dark: var(--fv-neutral-surface-raised-dark);
+  --fv-neutral-surface-mid-dark: var(--fv-neutral-surface-mid-dark);
+  --fv-neutral-surface-hover-dark: var(--fv-neutral-surface-hover-dark);
+  --fv-neutral-surface-hover-strong-dark: var(--fv-neutral-surface-hover-strong-dark);
+  --fv-neutral-border-dark: var(--fv-neutral-border-dark);
+  --fv-neutral-border-strong-dark: var(--fv-neutral-border-strong-dark);
+  --fv-neutral-red-text-dark: var(--fv-neutral-red-text-dark);
+  --fv-neutral-red-surface-dark: var(--fv-neutral-red-surface-dark);
+  --fv-neutral-red-surface-strong-dark: var(--fv-neutral-red-surface-strong-dark);
+  --fv-neutral-red-border-dark: var(--fv-neutral-red-border-dark);
+  --fv-neutral-blue-text-dark: var(--fv-neutral-blue-text-dark);
+  --fv-neutral-blue-surface-dark: var(--fv-neutral-blue-surface-dark);
+  --fv-neutral-blue-surface-strong-dark: var(--fv-neutral-blue-surface-strong-dark);
+  --fv-neutral-blue-border-dark: var(--fv-neutral-blue-border-dark);
+  --fv-neutral-insights-grid: var(--fv-neutral-insights-grid);
+  --fv-neutral-insights-grid-dark: var(--fv-neutral-insights-grid-dark);
+  --fv-neutral-insights-surface-dark: rgb(28 30 32 / 95%);
+  --fv-neutral-insights-blue-tint-dark: rgb(30 58 95 / 42%);
+  --fv-neutral-insights-rose-dark: var(--fv-neutral-insights-rose-dark);
+  --fv-neutral-insights-rose-strong-dark: var(--fv-neutral-insights-rose-strong-dark);
+  --fv-neutral-insights-amber-dark: var(--fv-neutral-insights-amber-dark);
+  --fv-neutral-insights-amber-strong-dark: var(--fv-neutral-insights-amber-strong-dark);
+  --fv-neutral-insights-green-dark: var(--fv-neutral-insights-green-dark);
+  --fv-neutral-insights-green-strong-dark: var(--fv-neutral-insights-green-strong-dark);
+  --fv-neutral-insights-blue-strong-dark: var(--fv-neutral-insights-blue-strong-dark);
+  --fv-neutral-insights-blue-text-dark: var(--fv-neutral-insights-blue-text-dark);
+  --fv-neutral-insights-rose-text-dark: var(--fv-neutral-insights-rose-text-dark);
+  --fv-neutral-insights-amber-text-dark: var(--fv-neutral-insights-amber-text-dark);
+  --fv-neutral-insights-green-text-dark: var(--fv-neutral-insights-green-text-dark);
+  --fv-neutral-insights-blue-border-dark: var(--fv-neutral-insights-blue-border-dark);
+  --fv-neutral-insights-rose-border-dark: var(--fv-neutral-insights-rose-border-dark);
+  --fv-neutral-insights-blue-ring-dark: var(--fv-neutral-insights-blue-ring-dark);
+  --fv-neutral-insights-rose-ring-dark: var(--fv-neutral-insights-rose-ring-dark);
+  --fv-neutral-insights-muted-dark: var(--fv-neutral-insights-muted-dark);
+  --fv-neutral-insights-disabled-dark: var(--fv-neutral-insights-disabled-dark);
+  --fv-neutral-red: #e11d48;
+  --fv-neutral-blue: #2563eb;
+  --fv-neutral-slate-line: #64748b;
+  --fv-neutral-slate-line-light: #94a3b8;
+  --fv-neutral-focus-ring: rgb(255 255 255 / 40%);
+  --fv-neutral-focus-shadow: rgb(255 255 255 / 12%);
+  --fv-neutral-card-shadow: rgb(0 0 0 / 28%);
+  --fv-neutral-inset-highlight: rgb(255 255 255 / 6%);
+  --fv-neutral-outline: rgb(59 130 246 / 35%);
+  --fv-neutral-outline-glow: rgb(59 130 246 / 12%);
+  /* TileSurface is deliberately dark-only and uses a restrained brand accent. */
+  --fv-tile-brand: #A78BE8;
+  --fv-tile-brand-hover: #B9A3F0;
+  --fv-tile-brand-soft: rgb(167 139 232 / 10%);
+  --fv-tile-brand-border: rgb(167 139 232 / 38%);
+  --fv-tile-brand-glow: rgb(167 139 232 / 14%);
+  --fv-tile-text: var(--fv-neutral-muted-dark);
+  --fv-tile-surface: #000000;
+
+  --fv-neutral-link-hover: var(--fv-brand);
+  --fv-neutral-modal-border: rgb(255 255 255 / 10%);
+  --fv-neutral-overlay: rgb(15 23 42 / 45%);
+  --fv-neutral-overlay-strong: rgb(0 0 0 / 65%);
+  --fv-neutral-shadow: rgb(0 0 0 / 50%);
+  --fv-neutral-control: rgb(15 23 42 / 5%);
+  --fv-neutral-control-hover: rgb(15 23 42 / 10%);
+  --fv-neutral-control-dark: rgb(255 255 255 / 6%);
+  --fv-neutral-control-dark-hover: rgb(255 255 255 / 12%);
+  --fv-neutral-input: rgb(255 255 255 / 5%);
+  --fv-neutral-insights-surface-dark: rgb(28 30 32 / 95%);
+  --fv-neutral-insights-blue-tint-dark: rgb(30 58 95 / 42%);
+  --fv-neutral-insights-muted-dark: #71717a;
+  --fv-neutral-insights-grid-dark: #3f454b;
+  --fv-neutral-slate-line: #64748b;
+  --fv-neutral-slate-line-light: #94a3b8;
+  --fv-neutral-focus-ring: rgb(255 255 255 / 40%);
+  --fv-neutral-focus-shadow: rgb(255 255 255 / 12%);
+  --fv-neutral-card-shadow: rgb(0 0 0 / 28%);
+  --fv-neutral-inset-highlight: rgb(255 255 255 / 6%);
+  --fv-neutral-outline: rgb(59 130 246 / 35%);
+  --fv-neutral-outline-glow: rgb(59 130 246 / 12%);
   --tracked-accent: var(--fv-brand);
 }
 
@@ -84,7 +200,7 @@ button:disabled {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--fv-neutral-scrollbar);
   border-radius: 999px;
 }
 
@@ -96,19 +212,19 @@ button:disabled {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.05);
-  color: #475569;
+  background: var(--fv-neutral-control);
+  color: var(--fv-neutral-text);
   transition: background 0.15s, color 0.15s;
 }
 
 .icon-button:hover {
-  background: rgba(15, 23, 42, 0.1);
-  color: #0f172a;
+  background: var(--fv-neutral-control-hover);
+  color: var(--fv-neutral-950);
 }
 
 .icon-button.active {
-  background: #0f172a;
-  color: #fff;
+  background: var(--fv-neutral-950);
+  color: var(--fv-neutral-inverse);
 }
 
 .icon-button svg {
@@ -124,7 +240,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--fv-neutral-overlay);
   backdrop-filter: blur(8px);
 }
 
@@ -132,61 +248,62 @@ button:disabled {
   width: min(90vw, 520px);
   max-height: 88vh;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--fv-neutral-modal-border);
   border-radius: 16px;
-  background: #171717;
-  color: #f5f5f5;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  background: var(--fv-neutral-modal);
+  color: var(--fv-neutral-modal-text);
+  box-shadow: 0 24px 80px var(--fv-neutral-shadow);
 }
 
 .modal-backdrop {
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--fv-neutral-overlay-strong);
 }
 
 .modal-panel input {
-  color: #f5f5f5;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--fv-neutral-modal-text);
+  background: var(--fv-neutral-input);
 }
 
 .modal-panel input::placeholder {
-  color: #737373;
+  color: var(--fv-neutral-placeholder);
 }
 
 ::selection {
   background: var(--fv-brand);
-  color: #fff;
+  color: var(--fv-neutral-inverse);
 }
 
 .event-divider {
-  border-color: #aeb5bf;
+  border-color: var(--fv-neutral-event-divider);
 }
 
 .event-header-surface {
-  background-color: #e5e7eb;
+  background-color: var(--fv-neutral-event-header);
 }
 
 .site-theme-dark .event-divider {
-  border-color: #3f4245;
+  border-color: var(--fv-neutral-event-divider-dark);
 }
 
 /* Gameday remains a dark presentation surface even though the site shell is light. */
 .dark-surface .icon-button {
-  background: rgba(255, 255, 255, 0.06);
-  color: #d4d4d8;
+  background: var(--fv-neutral-control-dark);
+  color: var(--fv-neutral-muted-dark);
 }
 
 .dark-surface .icon-button:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--fv-neutral-control-dark-hover);
+  color: var(--fv-neutral-inverse);
 }
 
 .dark-surface .icon-button.active {
-  background: #404040;
-  color: #fff;
+  background: var(--fv-neutral-control-dark-active);
+  color: var(--fv-neutral-inverse);
 }
 
 
 .site-theme-dark {
+  --fv-neutral-link-hover: var(--fv-brand);
   color-scheme: dark;
   --fv-brand: #A78BE8;
   --fv-brand-strong: #B9A3F0;
@@ -218,7 +335,7 @@ button:disabled {
 }
 
 .site-theme-dark aside .border-slate-100 {
-  border-color: #303336;
+  border-color: var(--fv-neutral-slate-border-dark);
 }
 
 .site-theme-dark main {
@@ -229,52 +346,52 @@ button:disabled {
 .site-theme-dark .text-slate-950,
 .site-theme-dark .text-slate-900,
 .site-theme-dark .text-slate-800 {
-  color: #f4f4f5;
+  color: var(--fv-neutral-text-dark);
 }
 
 .site-theme-dark .text-slate-700,
 .site-theme-dark .text-slate-600 {
-  color: #d4d4d8;
+  color: var(--fv-neutral-muted-dark);
 }
 
 .site-theme-dark .text-slate-500 {
-  color: #a1a1aa;
+  color: var(--fv-neutral-subtle-dark);
 }
 
 .site-theme-dark .border-slate-200 {
-  border-color: #3f4245;
+  border-color: var(--fv-neutral-event-divider-dark);
 }
 
 .site-theme-dark .bg-white {
-  background-color: #1c1e20;
+  background-color: var(--fv-neutral-surface-dark);
 }
 
 .site-theme-dark .bg-slate-50 {
-  background-color: #111315;
+  background-color: var(--fv-neutral-surface-deep);
 }
 
 .site-theme-dark .event-header-surface {
-  background-color: #222527;
+  background-color: var(--fv-neutral-surface-raised-dark);
 }
 
 .site-theme-dark .bg-slate-100 {
-  background-color: #222527;
+  background-color: var(--fv-neutral-surface-raised-dark);
 }
 
 .site-theme-dark .bg-slate-200 {
-  background-color: #2b2e31;
+  background-color: var(--fv-neutral-surface-mid-dark);
 }
 
 .site-theme-dark .hover\:bg-slate-50:hover {
-  background-color: #26292b;
+  background-color: var(--fv-neutral-surface-hover-dark);
 }
 
 .site-theme-dark .hover\:bg-slate-100:hover {
-  background-color: #2d3033;
+  background-color: var(--fv-neutral-surface-hover-strong-dark);
 }
 
 .site-theme-dark .hover\:bg-slate-200:hover {
-  background-color: #383b3e;
+  background-color: var(--fv-neutral-surface-mid-dark);
 }
 
 .site-theme-dark .hover\:bg-blue-50:hover,
@@ -284,37 +401,37 @@ button:disabled {
 }
 
 .site-theme-dark .border-slate-100 {
-  border-color: #2b2e31;
+  border-color: var(--fv-neutral-surface-mid-dark);
 }
 
 .site-theme-dark .border-slate-300 {
-  border-color: #52565a;
+  border-color: var(--fv-neutral-border-dark);
 }
 
 .site-theme-dark .border-slate-500 {
-  border-color: #696e73;
+  border-color: var(--fv-neutral-border-strong-dark);
 }
 
 .site-theme-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #2b2e31;
+  border-color: var(--fv-neutral-surface-mid-dark);
 }
 
 .site-theme-dark .text-red-600,
 .site-theme-dark .text-red-700,
 .site-theme-dark .text-red-800 {
-  color: #fecaca;
+  color: var(--fv-neutral-red-text-dark);
 }
 
 .site-theme-dark .bg-red-50 {
-  background-color: #451a1a;
+  background-color: var(--fv-neutral-red-surface-dark);
 }
 
 .site-theme-dark .bg-red-100 {
-  background-color: #5f2222;
+  background-color: var(--fv-neutral-red-surface-strong-dark);
 }
 
 .site-theme-dark .border-red-200 {
-  border-color: #9f3a3a;
+  border-color: var(--fv-neutral-red-border-dark);
 }
 
 .site-theme-dark .text-blue-600,
@@ -322,25 +439,25 @@ button:disabled {
 .site-theme-dark .text-blue-800,
 .site-theme-dark .text-blue-900,
 .site-theme-dark .hover\:text-blue-900:hover {
-  color: #bfdbfe;
+  color: var(--fv-neutral-blue-text-dark);
 }
 
 .site-theme-dark .bg-blue-50 {
-  background-color: #172554;
+  background-color: var(--fv-neutral-blue-surface-dark);
 }
 
 .site-theme-dark .bg-blue-100 {
-  background-color: #1e3a5f;
+  background-color: var(--fv-neutral-blue-surface-strong-dark);
 }
 
 .site-theme-dark .border-blue-200 {
-  border-color: #3b6292;
+  border-color: var(--fv-neutral-blue-border-dark);
 }
 
 .site-theme-dark input,
 .site-theme-dark select {
-  background-color: #1c1e20;
-  border-color: #3f4245;
+  background-color: var(--fv-neutral-surface-dark);
+  border-color: var(--fv-neutral-event-divider-dark);
   color: #e5e5e5;
 }
 
@@ -376,7 +493,7 @@ button:disabled {
 /* Insights uses the same site theme, with explicit contrast for semantic chart
    colors and tinted surfaces that are intentionally distinct from Gameday. */
 .insights-dashboard {
-  --insights-gridline: #e2e8f0;
+  --insights-gridline: var(--fv-neutral-insights-grid);
   --insights-muted: #6F6B7D;
 }
 
@@ -386,7 +503,7 @@ button:disabled {
 }
 
 .site-theme-dark .insights-dashboard {
-  --insights-gridline: #3f454b;
+  --insights-gridline: var(--fv-neutral-insights-grid-dark);
   --insights-muted: #B6AEC4;
 }
 
@@ -402,78 +519,90 @@ button:disabled {
 
 .site-theme-dark .insights-dashboard [class~="bg-rose-50"],
 .site-theme-dark .insights-dashboard [class~="bg-rose-50/40"] {
-  background-color: #3b2028;
+  background-color: var(--fv-neutral-insights-rose-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-rose-100"] {
-  background-color: #542632;
+  background-color: var(--fv-neutral-insights-rose-strong-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-amber-50"] {
-  background-color: #3d3020;
+  background-color: var(--fv-neutral-insights-amber-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-amber-100"] {
-  background-color: #57401f;
+  background-color: var(--fv-neutral-insights-amber-strong-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-emerald-50"] {
-  background-color: #18392f;
+  background-color: var(--fv-neutral-insights-green-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-emerald-100"] {
-  background-color: #20503f;
+  background-color: var(--fv-neutral-insights-green-strong-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-blue-100"] {
-  background-color: #203d60;
+  background-color: var(--fv-neutral-insights-blue-strong-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="text-blue-950"] {
-  color: #dbeafe;
+  color: var(--fv-neutral-insights-blue-text-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="text-rose-950"],
 .site-theme-dark .insights-dashboard [class~="text-rose-800"],
 .site-theme-dark .insights-dashboard [class~="text-rose-700"],
 .site-theme-dark .insights-dashboard [class~="text-rose-600"] {
-  color: #fda4af;
+  color: var(--fv-neutral-insights-rose-text-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="text-amber-800"],
 .site-theme-dark .insights-dashboard [class~="text-amber-700"] {
-  color: #fcd34d;
+  color: var(--fv-neutral-insights-amber-text-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="text-emerald-800"],
 .site-theme-dark .insights-dashboard [class~="text-emerald-700"],
 .site-theme-dark .insights-dashboard [class~="text-emerald-600"] {
-  color: #6ee7b7;
+  color: var(--fv-neutral-insights-green-text-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="border-blue-100"],
 .site-theme-dark .insights-dashboard [class~="border-blue-200"] {
-  border-color: #35577d;
+  border-color: var(--fv-neutral-insights-blue-border-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="border-rose-100"],
 .site-theme-dark .insights-dashboard [class~="border-rose-500"] {
-  border-color: #85404e;
+  border-color: var(--fv-neutral-insights-rose-border-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="ring-blue-300"] {
-  --tw-ring-color: #6096ca;
+  --tw-ring-color: var(--fv-neutral-insights-blue-ring-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="ring-rose-300"] {
-  --tw-ring-color: #c46a7b;
+  --tw-ring-color: var(--fv-neutral-insights-rose-ring-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-slate-300"],
 .site-theme-dark .insights-dashboard [class~="bg-slate-400"] {
-  background-color: #626970;
+  background-color: var(--fv-neutral-insights-disabled-dark);
 }
 
 .site-theme-dark .insights-dashboard [class~="text-slate-300"] {
-  color: #71717a;
+  color: var(--fv-neutral-insights-muted-dark);
 }
+
+/* Interactive links share the FieldView identity throughout the site. */
+.site-theme a:hover,
+.site-theme a:focus-visible {
+  color: var(--fv-link-hover);
+}
+
+/* Broadcast surface stays dark; branding appears only on interaction. */
+.tile-surface .tile-brand-accent { color: var(--fv-tile-brand); }
+.tile-surface button:hover { border-color: var(--fv-tile-brand-border); }
+.tile-surface button:focus-visible { outline-color: var(--fv-tile-brand); }
+.tile-surface .tile-brand-hover:hover { color: var(--fv-tile-brand-hover); }

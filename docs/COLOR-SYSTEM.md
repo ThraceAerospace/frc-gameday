@@ -101,3 +101,12 @@ The application is adopting this palette incrementally. Shared semantic tokens a
 ## Current status
 
 **In progress.** Shared theme tokens and the application shell have been migrated on `ui-cleanup`. Individual page and analytics components still require review. The palette remains provisional until light/dark visual checks and contrast testing are complete.
+
+
+## TileSurface broadcast treatment
+
+TileSurface is a dark-only broadcast surface and does not participate in the site's light/dark theme switch. Its base surface remains near-black so the empty areas and gaps between tiles visually disappear. Purple branding is intentionally restrained: use subtle purple only for FieldView identification and interactive hover, focus, or selected states. Avoid prominent brand backgrounds, gradients, or decorative chrome. Do not create a light TileSurface variant.
+
+## CSS variable contract
+
+All custom styling values outside Tailwind utilities must be centralized as semantic CSS custom properties. This includes colors, opacity variants, shadows, gradients, borders, typography constants, and any reusable non-Tailwind design value. Component-specific inline styles may still calculate geometry (for example, percentage widths and tile positions), but visual colors and effects must reference semantic tokens. Theme variants override tokens, not individual component declarations.

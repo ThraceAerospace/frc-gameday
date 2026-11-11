@@ -225,7 +225,7 @@ export default function TileView({
             className={[
               visible ? "absolute rounded-[inherit]" : "pointer-events-none absolute invisible",
               state.priorityEditKey === tileId
-                ? "border border-blue-500/90 shadow-[0_0_0_1px_rgba(59,130,246,0.35),0_0_24px_rgba(59,130,246,0.12)]"
+                ? "border border-[var(--fv-tile-brand-border)] shadow-[0_0_0_1px_var(--fv-tile-brand-glow),0_0_24px_var(--fv-tile-brand-glow)]"
                 : "border border-transparent",
             ].join(" ")}
             style={
@@ -283,7 +283,7 @@ export default function TileView({
             key={`empty-slot-${slotIndex}`}
             type="button"
             onClick={controller.actions.openEventPicker}
-            className="absolute flex items-center justify-center border border-dashed border-neutral-700 bg-neutral-950/80 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
+            className="absolute flex items-center justify-center border border-dashed border-neutral-700 bg-neutral-950/80 transition-colors hover:border-[var(--fv-tile-brand-border)] hover:bg-[var(--fv-tile-brand-soft)]"
             style={{
               left: `${geometry.x}%`,
               top: `${geometry.y}%`,

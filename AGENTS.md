@@ -214,7 +214,7 @@ Both generators fetch the current upstream OpenAPI documents. Statbotics fallbac
 - Keep architecture references, analytics specifications, API typing guides, and design-system documentation under `docs/`.
 - Follow `docs/COLOR-SYSTEM.md` for semantic color roles. Purple is FieldView branding; red/blue are reserved for alliance identity in match context; gold/greens are metric percentile tiers; orange is a human-review indicator; team colors remain provider metadata.
 - Do not use generic blue utility colors for product branding, navigation, links, selection, or focus states. Preserve blue where it specifically represents the blue alliance or an explicitly defined probability band.
-- Centralize shared theme values as semantic CSS custom properties. Keep light and dark themes intentional and verify contrast before introducing new color combinations.
+- Centralize all non-Tailwind design values in semantic CSS custom properties. This includes colors, theme surfaces, shadows, gradients, borders, typography values, and other reusable visual constants in custom CSS or inline styles; do not scatter literal values through components. Use Tailwind utilities for standard layout and styling when available, and CSS variables for custom values.\n- All site link hover and focus states use FieldView purple, never generic blue. Keep red/blue alliance identity only where semantically required.\n- TileSurface is a deliberately dark-only broadcast surface. Never add a light theme variant or apply the normal site surfaces to it. Keep branding restrained and unobtrusive; use only subtle purple accents for selected, focused, and hovered controls.
 
 ## File organization
 
