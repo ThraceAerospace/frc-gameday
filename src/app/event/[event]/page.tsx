@@ -36,9 +36,9 @@ export default async function EventPage({
   if (!eventKey) {
     return (
       <SiteShell>
-        <main className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
+        <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <p className="text-[var(--fv-muted)]">Missing event key.</p>
-        </main>
+        </div>
       </SiteShell>
     );
   }
@@ -60,14 +60,14 @@ export default async function EventPage({
   } catch {
     return (
       <SiteShell>
-        <main className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
+        <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <div className="mx-auto max-w-5xl">
             <h1 className="text-2xl font-semibold">Event unavailable</h1>
             <p className="mt-2 text-[var(--fv-muted)]">
               Could not load event <code>{eventKey}</code>.
             </p>
           </div>
-        </main>
+        </div>
       </SiteShell>
     );
   }
@@ -108,7 +108,7 @@ export default async function EventPage({
 
   return (
     <SiteShell>
-      <main className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
+      <div className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
         <PageContainer className="max-w-5xl">
           <SurfaceCard className="overflow-hidden rounded-2xl">
             <div className="p-5 sm:p-8">
@@ -213,7 +213,7 @@ export default async function EventPage({
             </section>
           )}
         </PageContainer>
-      </main>
+      </div>
     </SiteShell>
   );
 }

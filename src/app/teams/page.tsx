@@ -17,8 +17,8 @@ export default async function TeamsPage() {
 
         {teams.length === 0 ? (
           <SurfaceCard className="mt-6 border-dashed p-8 text-center">
-            <p className="font-semibold text-slate-800">No teams were returned for {year}.</p>
-            <p className="mt-1 text-sm text-slate-500">The Blue Alliance may not have published this season's team directory yet.</p>
+            <p className="font-semibold text-[var(--fv-text)]">No teams were returned for {year}.</p>
+            <p className="mt-1 text-sm text-[var(--fv-muted)]">The Blue Alliance may not have published this season's team directory yet.</p>
           </SurfaceCard>
         ) : (
         <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -28,13 +28,13 @@ export default async function TeamsPage() {
               href={`/team/${team.key}`}
               className="min-w-0 rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 shadow-sm transition-colors hover:border-[var(--fv-brand-border)] hover:bg-[var(--fv-brand-soft)]/40"
             >
-              <p className="font-mono text-lg font-bold text-slate-900">
+              <p className="font-mono text-lg font-bold text-[var(--fv-text)]">
                 {formatTeamNumber(team.key)}
               </p>
-              <p className="mt-1 truncate text-sm font-semibold text-slate-700">
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--fv-text)]">
                 {team.nickname || team.name || "Team"}
               </p>
-              <p className="mt-1 truncate text-xs text-slate-400">
+              <p className="mt-1 truncate text-xs text-[var(--fv-muted)]">
                 {team.city}
                 {team.state_prov ? `, ${team.state_prov}` : ""}
               </p>
@@ -44,7 +44,7 @@ export default async function TeamsPage() {
 
         )}
         {teams.length > 200 && (
-          <p className="mt-6 text-center text-xs text-slate-400">
+          <p className="mt-6 text-center text-xs text-[var(--fv-muted)]">
             Showing the first 200 teams. Team search will be expanded in the
             next navigation pass.
           </p>
