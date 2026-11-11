@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -165,8 +165,25 @@ function ensureNamedSchema(spec, suffix, fallbackName, array = false) {
 }
 
 async function main() {
-  const response = await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(20000)});
-  if (!response.ok) throw new Error(`Statbotics OpenAPI fetch failed: HTTP ${response.status} (${url})`);
+  let response;
+  try {
+    response = await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(20000)});
+  } catch (error) {
+    const hasExistingTypes = existsSync("src/lib/statbotics/generated.ts") && existsSync("src/lib/statbotics/types.ts");
+    if (!hasExistingTypes) {
+      throw new Error(`Statbotics OpenAPI fetch failed and no existing generated types are available to use as a fallback: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    console.warn(`Statbotics OpenAPI fetch failed; keeping the existing generated types. ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  if (!response.ok) {
+    const hasExistingTypes = existsSync("src/lib/statbotics/generated.ts") && existsSync("src/lib/statbotics/types.ts");
+    if (!hasExistingTypes) {
+      throw new Error(`Statbotics OpenAPI fetch failed: HTTP ${response.status} (${url}), and no existing generated types are available to use as a fallback`);
+    }
+    console.warn(`Statbotics OpenAPI fetch failed with HTTP ${response.status}; keeping the existing generated types. (${url})`);
+    return;
+  }
   const spec = await response.json();
   if (!spec?.paths || !spec?.components) throw new Error("Statbotics OpenAPI document is missing paths/components");
   spec.components.schemas ??= {};
