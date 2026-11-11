@@ -843,3 +843,12 @@ The controller publishes each complete `EventStateSnapshot` as one JSON message 
 This makes remote delivery dependent on the size of the event snapshot and the negotiated browser transport limits. Large event schedules or rapid updates can exceed a data-channel message limit or accumulate a large send queue. A send exception can also escape the EventState subscription callback, whose listener dispatch does not isolate listener failures, potentially interrupting delivery to other listeners in that update cycle. The current implementation has no explicit maximum snapshot size or observable delivery-failure state.
 
 **Action:** define a bounded remote snapshot transport: measure/limit serialized payloads against the negotiated `maxMessageSize`, chunk/reassemble large snapshots with message IDs and versioning (or use a bounded alternate transfer path), coalesce superseded snapshots, and pause/resume sends based on `bufferedAmount`/low-water marks. Catch send failures without allowing one remote listener to interrupt EventState notification. Add tests with large championship-sized schedules, rapid successive snapshots, and a simulated send failure.
+
+
+### FV-AUD-074 — A one-team EPA sample is reported as the 100th percentile
+
+**Severity: Medium / analytics interpretation and sample coverage**
+
+The shared `percentile(values, value)` helper in `src/lib/insights/calculations.ts` returns `1` whenever the comparison array contains exactly one value. The caller formats this as an event percentile in the Team Snapshot and also uses the helper for the selected team's current-event cohort comparison. If Statbotics EPA is available for only one event team, that sole observation is therefore reported as the 100th percentile, despite there being no peer observations against which to establish a relative standing. This can make incomplete provider coverage look like an exceptional rank rather than an insufficient sample.
+
+**Action:** define single-observation percentile semantics explicitly. Prefer `null`/“insufficient cohort” when fewer than two comparable teams have usable EPA, or use a documented median-rank convention such as 50th percentile for a one-member cohort. Add tests for empty, one-value, tied, and distinct multi-value cohorts, and ensure the UI labels the comparison coverage.
