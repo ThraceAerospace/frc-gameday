@@ -3,9 +3,22 @@
 
 :root {
   color-scheme: light;
-
-  /* One shared accent for tracked-team and tracked-match indicators. */
-  --tracked-accent: #c084fc;
+  --fv-brand: #7656C9;
+  --fv-brand-strong: #5D3FB1;
+  --fv-brand-soft: #F1EDFA;
+  --fv-brand-border: #D9CFF2;
+  --fv-surface: #F7F6FA;
+  --fv-surface-raised: #FFFFFF;
+  --fv-text: #17152A;
+  --fv-muted: #6F6B7D;
+  --fv-border: #E4E0EC;
+  --fv-alliance-red: #C74747;
+  --fv-alliance-blue: #397BC5;
+  --fv-metric-below: #C29A38;
+  --fv-metric-above: #79A65A;
+  --fv-metric-exceptional: #287A4B;
+  --fv-review: #E58B35;
+  --tracked-accent: var(--fv-brand);
 }
 
 .tracked-accent-text {
@@ -31,7 +44,7 @@ body {
 }
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 button,
@@ -135,7 +148,7 @@ button:disabled {
 }
 
 ::selection {
-  background: #2563eb;
+  background: var(--fv-brand);
   color: #fff;
 }
 
@@ -343,7 +356,7 @@ button:disabled {
    colors and tinted surfaces that are intentionally distinct from Gameday. */
 .insights-dashboard {
   --insights-gridline: #e2e8f0;
-  --insights-muted: #64748b;
+  --insights-muted: #6F6B7D;
 }
 
 .insights-dashboard :focus-visible {
@@ -353,7 +366,7 @@ button:disabled {
 
 .site-theme-dark .insights-dashboard {
   --insights-gridline: #3f454b;
-  --insights-muted: #a1a1aa;
+  --insights-muted: #B6AEC4;
 }
 
 .site-theme-dark .insights-dashboard [class~="bg-white/95"] {
