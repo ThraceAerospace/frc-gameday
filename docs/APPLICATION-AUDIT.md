@@ -648,3 +648,14 @@ The TBA webhook route broadcasts the original `message_data` object as `messageD
 The handler does reload the match schedule, but the upcoming marker is independent of the schedule-derived `eventNextMatch`. Consumers use the marker and its team list to drive tracked-team notifications and visual alerts: `useUpcomingMatchAlert`, TileView's upcoming-match banner source, and the remote event card. A scored match can consequently remain flagged as upcoming, and a tracked-team alert can persist after the match has finished.
 
 **Action:** normalize the webhook payload at the server boundary so every match-score notification includes a canonical `match_key`, or have EventState read the nested `match.key` shape with runtime validation. Clear the marker only when the completed match key matches the current upcoming key. Add a webhook-to-EventState integration test asserting that a match-score notification clears the marker and tracked-team alert for that match.
+
+
+### FV-AUD-055 — Upcoming-match webhooks update only the event-wide full-match cache
+
+**Severity: Medium / schedule consistency across team views**
+
+The `upcoming_match` webhook is handled separately from full-match notifications. `TBAClient.mutateUpcomingMatch` patches only `/event/<eventKey>/matches`. It does not update the team-scoped `/team/<teamKey>/event/<eventKey>/matches` representations, which are independently cached and consumed by the team detail page and the season-wide team-match analysis route. It also does not update the event's `/matches/simple` representation, which is separately used by active-event discovery and active-event enrichment.
+
+As a result, the event-wide full schedule can reflect the webhook's new scheduled/predicted time or team assignment while team-scoped and simple schedule consumers continue to read their previous cached representations. The team detail page can therefore disagree with the event schedule immediately after an upcoming-match notification.
+
+**Action:** propagate the upcoming-match patch to every affected canonical schedule representation, including team-scoped and simple match caches, or invalidate those representations for refetch. Handle team membership changes by invalidating both old and new team-scoped caches when the affected team set is known; do not assume a map-only update can add a match to a team's schedule. Add tests covering timing-only updates and team-assignment changes across event, team, and simple schedule reads.
