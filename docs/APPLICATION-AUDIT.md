@@ -670,3 +670,14 @@ The Statbotics client accepts `refresh: true` to bypass the normal freshness and
 Consequently, a request explicitly made with `refresh=1` can return successfully with the old cached data while another request is still refreshing that resource. The caller receives no indication that its force-refresh request did not itself complete or observe the in-flight refresh. This behavior is reachable through the per-match Statbotics API and the bulk match/team-event collection refreshes used by Event Analytics and team-match analysis.
 
 **Action:** define force-refresh concurrency semantics explicitly. When a refresh is already in progress, either wait for a cache generation newer than the one observed at request start (bounded by the route's execution budget), join/share the in-flight result, or return an explicit refresh-in-progress outcome rather than silently presenting the old cache as refreshed. Keep ordinary stale-while-refresh reads fast. Add concurrent tests for normal-versus-force, force-versus-force, and lock timeout cases.
+
+
+### FV-AUD-057 — Statbotics request lock can expire while its provider fetch is still running
+
+**Severity: Medium / duplicate acquisition and cache ordering**
+
+The Statbotics client acquires a per-resource Redis lock with a fixed 20-second expiry, but the upstream `fetch` has no request timeout and the lock is not renewed while the request is in progress. If a provider request takes longer than 20 seconds, the lock can expire before its owner finishes. A second caller can then acquire the same lock and start another request for the same resource.
+
+Both callers write their results without a generation/fencing check at commit time. If the second request completes first and the original request completes later, the older request can overwrite the newer cache entry. The token-checked `releaseLock` prevents the first caller from deleting a newer owner's lock, but it does not prevent the first caller from writing after its lease has expired.
+
+**Action:** make the lock lifetime and request lifetime consistent. Apply a bounded provider timeout shorter than the lease, renew the lease while work is active, or use a fencing/generation token checked atomically when committing cache results. Ensure a request whose lease is no longer current cannot overwrite a later generation. Add a deterministic test where the first fetch exceeds the lease and completes after the second fetch.
