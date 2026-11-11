@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
 import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
-import MatchCard from "@/components/match/MatchCard";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
@@ -497,7 +496,7 @@ function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalytics
   return {prediction:prediction?{label:prediction,tone:predictionTone(prediction)}:null,predictedWinner,winner,modelUpset,anomalousScore,largeResidual,highPenalties,highAllianceEpa,reviewFlags};
 }
 
-function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean}) {
+function MatchAnalysisTable({data,records,playoff,reviewReasons}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean;reviewReasons?:Map<string,string[]>}) {
   const teams=new Map(data.teams.map((team)=>[team.teamKey,team]));
   const officialAllianceName=(teamKeys:string[])=>playoff?data.playoffAnalysis?.alliances.find((alliance)=>teamKeys.every((key)=>alliance.teamKeys.includes(key)))?.name??null:null;
   const summaries=new Map(records.map((record)=>[record.match.key,buildMatchFlagSummary(data,record)]));
@@ -550,13 +549,13 @@ function MatchAnalysisTable({data,records,playoff}:{data:EventAnalyticsResponse;
  
 
     ];
-    return <tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
+    return [<tr key={match.key} className="border-b border-slate-100 dark:border-slate-800">
       <th className="py-2 pr-2 text-left align-middle">
         <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-900 hover:text-slate-600 hover:underline dark:text-slate-100 dark:hover:text-white">{matchShortName(match,data.event.playoff_type)}</a>
         {matchFlags.length?<div className="mt-1 flex flex-wrap gap-1">{matchFlags.map((flag,index)=><span key={flag.label+"-"+index} title={flag.label} className={"inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 "+flag.tone}>{flag.label}</span>)}</div>:null}
       </th>
       {allianceCell(record,"red")}{allianceCell(record,"blue")}
-    </tr>;
+    </tr>, reviewReasons?.get(match.key)?.length ? <tr key={match.key+"-review-reasons"}><td colSpan={3} className="border-b border-slate-100 px-3 pb-3 pt-1 dark:border-slate-800"><ul className="space-y-1.5 text-xs leading-5 text-slate-600 dark:text-slate-300">{reviewReasons.get(match.key)!.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul></td></tr> : null];
   })}</tbody></table></div>;
 }
 
@@ -1513,28 +1512,13 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
     <div role="tablist" aria-label="Review flags by type" className="no-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200">
       {tabs.filter((tab)=>tab.id==="all"||counts.get(tab.id)!>0).map((tab)=><button key={tab.id} type="button" role="tab" aria-selected={active===tab.id} onClick={()=>setActive(tab.id)} className={"shrink-0 border-b-2 px-3 py-2.5 text-xs font-semibold "+(active===tab.id?"border-[var(--fv-brand)] text-[var(--fv-brand-strong)]":"border-transparent text-slate-500 hover:text-slate-800")}>{tab.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-600">{counts.get(tab.id)}</span></button>)}
     </div>
-    {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3 space-y-3">
-      {visible.map(({record,summary})=>{
-        const {match}=record;
-        const youtube=match.videos.find((video)=>video.type.toLowerCase()==="youtube");
-        const videoUrl=youtube?"https://www.youtube.com/watch?v="+encodeURIComponent(youtube.key):null;
-        const reasons=flagReasons(record,summary);
-        const displayedFlags=summary.reviewFlags;
-        return <div key={match.key} className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <MatchCard match={match} playoffType={data.event.playoff_type} eventTimezone={timezone??undefined}/>
-            <div className="flex flex-wrap gap-2">
-              <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Match details ↗</a>
-              {videoUrl?<a href={videoUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-[var(--fv-brand)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--fv-brand-strong)]">Watch video ↗</a>:<a href={"https://www.thebluealliance.com/match/"+match.key+"#videos"} target="_blank" rel="noreferrer" className="rounded-lg border border-[var(--fv-brand-border)] px-3 py-1.5 text-xs font-semibold text-[var(--fv-brand)] hover:bg-[var(--fv-brand-soft)] dark:border-[var(--fv-brand-border)] dark:text-[var(--fv-brand-strong)]">Match videos ↗</a>}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {summary.prediction?<span className={"rounded-full px-2 py-1 text-[10px] font-bold "+summary.prediction.tone}>{summary.prediction.label}</span>:null}
-            {displayedFlags.map((flag)=><span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{flagLabels[flag]}</span>)}
-          </div>
-          {reasons.length?<ul className="space-y-1.5 border-t border-slate-100 pt-2 text-sm leading-5 text-slate-700 dark:border-slate-800 dark:text-slate-300">{reasons.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul>:null}
-        </div>;
-      })}
+    {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3">
+      <MatchAnalysisTable
+        data={data}
+        records={visible.map(({record})=>record)}
+        playoff={visible.some(({record})=>record.match.comp_level!=="qm")}
+        reviewReasons={new Map(visible.map(({record,summary})=>[record.match.key,flagReasons(record,summary)]))}
+      />
     </div>}
   </Panel>;
 }
