@@ -556,3 +556,13 @@ The team-match route catches a failed bulk `Statbotics.getMatches` request and s
 This loses the distinction between a successful Statbotics collection containing no matching records and a failed collection request. With completed TBA matches, a failed request is reported only as generic `partial`, indistinguishable from successful acquisition with some missing per-match Statbotics records. With zero completed TBA matches, `[].every(...)` is true, so the route reports `complete` even when the Statbotics collection request failed.
 
 **Action:** track the bulk Statbotics request outcome separately from per-match record coverage. Expose request status/error/freshness and record coverage as distinct fields. A successful empty collection may be complete with zero records; a failed request must remain unavailable/failed even when there are no completed TBA matches. Add tests for failed request with zero matches, failed request with scored matches, successful empty collection, and successful partial record coverage.
+
+### FV-AUD-046 — Team EPA trend and reported endpoint use different observation rules
+
+**Severity: Low / metric consistency**
+
+In `buildTeamInsights`, the EPA trend includes each appearance's `postEPA ?? preEPA`, so a pre-match EPA observation is retained when that match has no post-match update. The reported `epaEnd`, however, searches backward for a non-null `postEPA` only and returns `null` if no post-match observation exists. The reported `epaChange` is then calculated from the first pre-match observation to that post-only endpoint.
+
+This makes the summary inconsistent with the trend and with `buildTeamRows`, which also carries forward the latest `post_epas` or falls back to `pre_epas`. For a team whose latest available observation is pre-match (or whose event has no completed Statbotics update), the trend can contain a valid latest EPA while the endpoint/change says no value is available.
+
+**Action:** define the intended endpoint as the latest usable observation, preserving its phase and match provenance. If the metric specifically requires a post-match endpoint, label it as such and expose the latest pre-match observation separately rather than silently omitting it. Add cases with only pre-match records and with a final match lacking post-match EPA.
