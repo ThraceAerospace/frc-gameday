@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
 import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
-import MatchCard from "@/components/match/MatchCard";
 
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
@@ -1470,6 +1469,12 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
   const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
   const timezone=data.event.timezone??null;
+  const formatTime=(timestamp:number|null|undefined)=>{
+    if(timestamp===null||timestamp===undefined||!timezone)return null;
+    try{return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:timezone}).format(new Date(timestamp*1000));}
+    catch{return null;}
+  };
+  const teamLabel=(key:string)=>{const team=data.teams.find((item)=>item.teamKey===key);return team?String(team.teamNumber)+" · "+team.name:formatTeamNumber(key);};
   const flagLabels:Record<MatchReviewFlag,string>={
     "model-upset":"Model Upset",
     "anomalous-score":"Anomalous Score",
@@ -1516,24 +1521,31 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
     {!visible.length?<p className="py-8 text-center text-sm text-slate-500">No matches currently carry this flag.</p>:<div className="mt-3 space-y-3">
       {visible.map(({record,summary})=>{
         const {match}=record;
+        const timestamp=match.time??match.actual_time??match.predicted_time;
+        const timeLabel=formatTime(timestamp);
         const youtube=match.videos.find((video)=>video.type.toLowerCase()==="youtube");
         const videoUrl=youtube?"https://www.youtube.com/watch?v="+encodeURIComponent(youtube.key):null;
+        const red=match.alliances.red,blue=match.alliances.blue;
         const reasons=flagReasons(record,summary);
         const displayedFlags=summary.reviewFlags;
-        return <div key={match.key} className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <MatchCard match={match} playoffType={data.event.playoff_type} eventTimezone={timezone??undefined}/>
+        return <article key={match.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-bold text-slate-950 dark:text-white">{matchShortName(match,data.event.playoff_type)}</h3>{timeLabel?<span className="text-xs tabular-nums text-slate-500">{timeLabel} <span className="text-slate-400">{timezone}</span></span>:null}</div><p className="mt-1 text-xs text-slate-500">{data.event.name}</p></div>
             <div className="flex flex-wrap gap-2">
               <a href={"https://www.thebluealliance.com/match/"+match.key} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Match details ↗</a>
               {videoUrl?<a href={videoUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800">Watch video ↗</a>:<a href={"https://www.thebluealliance.com/match/"+match.key+"#videos"} target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300">Match videos ↗</a>}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-3 dark:bg-rose-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">Red alliance · {red.score>=0?red.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{red.team_keys.map(teamLabel).join(" · ")}</p></div>
+            <div className="rounded-lg border-l-4 border-blue-500 bg-blue-50 p-3 dark:bg-blue-950/40"><p className="text-[10px] font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">Blue alliance · {blue.score>=0?blue.score:"—"}</p><p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{blue.team_keys.map(teamLabel).join(" · ")}</p></div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {summary.prediction?<span className={"rounded-full px-2 py-1 text-[10px] font-bold "+summary.prediction.tone}>{summary.prediction.label}</span>:null}
             {displayedFlags.map((flag)=><span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{flagLabels[flag]}</span>)}
           </div>
-          {reasons.length?<ul className="space-y-1.5 border-t border-slate-100 pt-2 text-sm leading-5 text-slate-700 dark:border-slate-800 dark:text-slate-300">{reasons.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul>:null}
-        </div>;
+          {reasons.length?<ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm leading-5 text-slate-700 dark:border-slate-800 dark:text-slate-300">{reasons.map((reason,index)=><li key={index} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"/><span>{reason}</span></li>)}</ul>:null}
+        </article>;
       })}
     </div>}
   </Panel>;
