@@ -703,3 +703,13 @@ The FRC Colors client uses a fixed 20-second Redis lock around an upstream fetch
 There is a related force-refresh ambiguity: when `refresh: true` is requested while another caller holds the lock, the client immediately returns the cached colors if present. The caller receives an ordinary successful result without knowing that its requested refresh did not run or observe the in-flight result. This is reachable from Event Analytics when its team-color source is explicitly refreshed.
 
 **Action:** apply bounded fetch timeouts and lease renewal or fencing to FRC Colors cache writes, and define explicit behavior when a force-refresh encounters an active lock (join/wait for the new result or return a refresh-in-progress outcome). Add deterministic tests for a fetch exceeding the lock lease and for force-refresh contention. Consider sharing a common provider-cache/lock implementation with Statbotics so these concurrency semantics cannot drift between clients.
+
+### FV-AUD-060 — Season-cohort refresh cannot reconcile event-roster changes
+
+**Severity: Medium / comparison coverage and refresh correctness**
+
+`getSeasonCohortSnapshot(event, teams)` uses the supplied event roster only when it creates a new cohort job. When a job already exists, it returns the persisted snapshot without comparing or reconciling `teams` against `job.teamNumbers`. The event analytics route calls this function with the current snapshot's team list on every request, but those later roster values are ignored. The manual refresh path in `advanceSeasonCohort` also only rebuilds `discoveryQueue` from the existing `job.teamNumbers`; it does not accept or replace the roster. Therefore, teams added to or removed from an event after the cohort job is initialized remain absent or present incorrectly in the season-cohort comparison, even after an explicit refresh. The cache's 24-hour TTL eventually causes a new job to be initialized, but the documented refresh action cannot correct the roster immediately.
+
+This affects the cohort's team count, discovery coverage, and season-aware team comparisons. It can also make the displayed comparison population disagree with the event roster supplied by the event analytics snapshot.
+
+**Action:** make roster reconciliation an explicit part of cohort refresh. Compare the latest event team numbers with the persisted roster, enqueue discovery for newly added teams, and remove or mark departed teams according to a documented historical-snapshot policy. Ensure manual refresh uses the latest roster rather than the original job roster. Add tests for team additions, removals, unchanged rosters, and a refresh after roster changes.
