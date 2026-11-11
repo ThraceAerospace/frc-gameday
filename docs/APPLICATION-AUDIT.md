@@ -801,3 +801,14 @@ A structurally invalid but syntactically valid upstream response can therefore b
 This differs from the FRC Colors client, which catches and logs lock-release failures so cleanup does not mask a successful provider result.
 
 **Action:** make Statbotics lock cleanup best-effort, log release failures, and preserve the provider result once its cache write succeeds. Add a test where provider fetch and cache write succeed but lock-release `eval` rejects; assert the caller still receives the acquired data and the lock expires naturally.
+
+
+### FV-AUD-070 — TBA webhook cache-mutation failures can be acknowledged as successful updates
+
+**Severity: High / live event data freshness and webhook reliability**
+
+For `match_score`, `match_video`, and `upcoming_match`, the webhook handler awaits the corresponding TBA cache mutation helper before broadcasting the WebSocket notification. However, `TBAClient.mutateCached` catches errors from the read-modify-write block (including a failed Redis `set`) and returns `false`. The higher-level `mutateMatchCaches` and `mutateUpcomingMatch` helpers ignore that boolean result, so the webhook handler cannot distinguish a successful cache update from a failed mutation. It proceeds to broadcast the event and returns HTTP 200.
+
+A connected EventState then refetches through the ordinary TBA API route. If the existing cache entry is still within its provider max-age, that read can return the unchanged pre-webhook value. The webhook has therefore been acknowledged and delivered to clients even though the data update was not committed, and the stale cache can remain authoritative until expiry. This is distinct from webhook coverage gaps (FV-AUD-051 and FV-AUD-055) and read/write races (FV-AUD-052): this is an explicitly failed cache write that is swallowed as success.
+
+**Action:** distinguish “resource was not cached” from “mutation failed” in the cache mutation result. Propagate actual Redis/mutation failures to the webhook handler so it can return a retryable non-2xx response, or invalidate the affected cache key as a safe fallback before broadcasting. Do not send a success signal when the cache update failed. Add tests for absent cache entries, successful mutation, Redis write rejection, and mutation callback failure; verify that failed writes are retried or that the next API read cannot serve the stale entry.
