@@ -429,3 +429,12 @@ The team detail page has a wider failure domain. It first requires both team met
 The pairing flow is the trust boundary for these messages, and the current pairing design is separately tracked in FV-AUD-020. A malformed or incompatible peer message can therefore reach state mutation or rendering code.
 
 **Action:** define versioned runtime schemas for remote messages, actions, and snapshots; reject oversized and invalid payloads before dispatch; handle protocol-version mismatch explicitly; and test malformed, unknown, and old-version messages.
+
+
+### FV-AUD-034 — Homepage hides match-schedule failures as “no completed matches”
+
+**Severity: Low / data availability presentation**
+
+The homepage snapshot catches each event's match-schedule failure and returns `lastMatch: null` and `nextMatch: null`. `HomeEventCard` renders a null last match as “No completed matches yet.” A TBA outage, cache failure, or malformed schedule is therefore presented as a factual absence of completed matches. The card has no way to distinguish an event that has not started from one whose match data could not be loaded.
+
+**Action:** retain per-event match-source status/error/freshness in the homepage snapshot and render an unavailable/stale state separately from an empty schedule. Keep the event card itself available when match data fails.
