@@ -85,9 +85,9 @@ test("EventAnalytics route composes the persisted snapshot with its season cohor
   assert.deepEqual(cohortAdvance, ["advanceSeasonCohort", "2026ctabc", true]);
 
   const buildCall = harness.calls.find(([name]) => name === "buildSeasonAwareTeamInsights");
-  assert.equal(buildCall[1], harness.snapshot.matches);
-  assert.equal(buildCall[2], harness.snapshot.allianceResults);
-  assert.equal(buildCall[3], harness.snapshot.teams);
+  assert.deepEqual(buildCall[1], harness.snapshot.matches);
+  assert.deepEqual(buildCall[2], harness.snapshot.allianceResults);
+  assert.deepEqual(buildCall[3], harness.snapshot.teams);
   assert.equal(buildCall[4], null);
   assert.equal(buildCall[5], harness.cohort);
 });
