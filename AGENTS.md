@@ -286,6 +286,8 @@ Prefer small, focused cleanup commits.
 - Every event team should receive the same concise, bullet-first team brief, followed by supporting analytics, graphs, match pointers, and review flags. Review flags identify correlations/anomalies for a human scout to investigate; they are not causal determinations. Never attribute alliance score residuals, win-probability mismatches, partner patterns, or shared EPA updates to an individual robot.
 - Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
 - Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
+- Known calculation-boundary gaps: `buildMatchFlagSummary` / `phaseAnomalyBand` still derive Suggested Review flags in `EventAnalyticsDashboard.tsx`, and `src/app/api/insights/team/[team]/matches/route.ts` still contains substantial calculation logic. Do not add more analytical rules to the dashboard or route; move them behind server-side services when those areas are next changed. See FV-AUD-010 and FV-AUD-014.
+- The current robust-median implementations select the upper middle value for even samples; see FV-AUD-015. Preserve/document that behavior until a deliberate correction is covered by tests. `predictionCalibration.underdogWins` also counts a miss at exactly 50% as an underdog win; see FV-AUD-016.
 
 - Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
 
