@@ -991,3 +991,12 @@ The homepage wraps its event list and per-event `lastMatch`/`nextMatch` summarie
 The generated TBA `Webcast` contract supports multiple types: `youtube`, `twitch`, `ustream`, `iframe`, `html5`, `rtmp`, `livestream`, `direct_link`, `mms`, `justin`, `stemtv`, and `dacast`. `buildStreams` handles `twitch` specially but sends every other type through the YouTube oEmbed lookup and constructs a `youtube.com/embed/<channel>` URL. The resulting `BuiltStream` type is restricted to only `"twitch" | "youtube"`. Valid TBA webcast entries using iframe, HTML5, direct-link, or other supported provider types are therefore misidentified as YouTube videos and will generally produce invalid metadata/embed URLs instead of a usable stream. The current fallback also makes an unsupported provider look like a broken YouTube stream rather than explicitly unavailable.
 
 **Action:** branch explicitly on the TBA webcast type. Implement safe, provider-specific adapters for the types FieldView intends to support, and deliberately omit/report unsupported types rather than coercing them to YouTube. For iframe or direct HTML content, use strict provider/domain allowlists and safe URL parsing; do not inject arbitrary provider-supplied HTML. Add fixtures for every TBA webcast type and verify unsupported types remain clearly unsupported without generating invalid YouTube URLs.
+
+
+### FV-AUD-090 — Unknown or unavailable webcast status is displayed as definitively offline
+
+**Severity: Low / provider-status accuracy**
+
+`getEventWebcastStatus` returns `"Live"` if any webcast has status `online`; otherwise, if the event has at least one webcast entry, it always returns `"Offline"`. The generated TBA contract defines webcast status as `unknown`, `online`, or `offline`, and the status field may also be null when the provider cannot determine it. An event whose webcast status is unknown or unavailable is therefore presented in the Events Browser as definitively offline. This conflates a known negative state with missing/indeterminate provider information.
+
+**Action:** preserve the three-way status distinction in the formatter and UI (for example, Live, Offline, Status unavailable/Unknown). Only report Offline when all relevant webcast entries are explicitly offline; report Unknown when no stream is online and at least one status is unknown/null. Add tests for mixed online/offline, all offline, all unknown, null status, and no webcast entries.
