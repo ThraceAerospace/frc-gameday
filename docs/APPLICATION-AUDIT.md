@@ -536,3 +536,13 @@ The qualification calibration path in `buildQualificationAnalysis` correctly exc
 A malformed or unexpected provider value can therefore be excluded from calibration while still appearing as a valid 100%+ prediction or generating anomaly/review flags elsewhere in the same analytics snapshot. Out-of-range RP probabilities can also distort the team-match RP diagnostics.
 
 **Action:** validate probability values once at the provider-normalization boundary (finite and between 0 and 1 inclusive), preserve invalid raw values only as source diagnostics if useful, and have all calculations/UI consumers use the normalized nullable probability. Add shared tests for negative, greater-than-one, NaN, and boundary values.
+
+### FV-AUD-044 — One failed event request aborts the entire team-match history
+
+**Severity: Medium / historical data availability**
+
+The team-match analysis route fetches each team's event schedule through `withConcurrency(events, 4, ...)`. The concurrency helper writes each worker result but does not catch individual failures. If `TBA.getTeamMatches` rejects for any one event, the aggregate `Promise.all` rejects, the route returns a 502, and match data successfully retrieved for every other event is discarded.
+
+This is especially problematic for a season-wide endpoint: a temporary TBA failure for one event makes the team's entire match history unavailable even though other events could still be analyzed. The current payload has no per-event TBA collection status or completeness metadata to distinguish a partial season from a complete one.
+
+**Action:** collect per-event outcomes independently, preserve successful event matches, and include explicit per-event failure status plus aggregate completeness in the response. Keep a fully failed request distinguishable from a successful response with zero matches.
