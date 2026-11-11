@@ -8,6 +8,10 @@ import type {
   TBATeam,
 } from "@/lib/tba/types";
 import MatchRow from "@/components/match/MatchRow";
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
+import SectionHeading from "@/components/ui/SectionHeading";
+import SurfaceCard from "@/components/ui/SurfaceCard";
 import { formatEventDateRange } from "@/lib/time";
 import {
   formatAllianceLongName,
@@ -32,8 +36,8 @@ export default async function EventPage({
   if (!eventKey) {
     return (
       <SiteShell>
-        <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
-          <p className="text-slate-500">Missing event key.</p>
+        <main className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
+          <p className="text-[var(--fv-muted)]">Missing event key.</p>
         </main>
       </SiteShell>
     );
@@ -56,10 +60,10 @@ export default async function EventPage({
   } catch {
     return (
       <SiteShell>
-        <main className="min-h-full bg-slate-50 px-6 py-10 text-slate-900">
+        <main className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <div className="mx-auto max-w-5xl">
             <h1 className="text-2xl font-semibold">Event unavailable</h1>
-            <p className="mt-2 text-slate-500">
+            <p className="mt-2 text-[var(--fv-muted)]">
               Could not load event <code>{eventKey}</code>.
             </p>
           </div>
@@ -104,52 +108,20 @@ export default async function EventPage({
 
   return (
     <SiteShell>
-      <main className="min-h-full bg-slate-50 text-slate-900">
-        <div className="mx-auto max-w-5xl px-6 py-10">
-          <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="p-6 sm:p-8">
-              <div className="flex flex-wrap items-start justify-between gap-6">
-                <div className="min-w-0">
-                  <h1 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                    <span>{event.name}</span>
-                    <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-sm font-medium leading-none text-slate-600">
-                      {event.event_type_string ?? event.event_type}
-                    </span>
-                  </h1>
-                  <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
-                    {dates && <span>{dates}</span>}
-                    {dates && (event.location_name || location) && (
-                      <span className="text-slate-300" aria-hidden="true">·</span>
-                    )}
-                    {event.location_name && <span>{event.location_name}</span>}
-                    {event.location_name && location && (
-                      <span className="text-slate-400">in</span>
-                    )}
-                    {location && <span>{location}</span>}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-                    {event.district?.display_name && <span>{event.district.display_name}</span>}
-                  </div>
-                </div>
-                <Link
-                  href={`/gameday?event=${event.key}`}
-                  className="shrink-0 rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--fv-brand-strong)]"
-                >
-                  Open Gameday
-                </Link>
-              </div>
-              <div className="mt-6 flex flex-wrap items-center gap-2">
-                {event.website && <ExternalLink href={event.website} label="Event Website" />}
-                <ExternalLink
-                  href={`https://www.thebluealliance.com/event/${event.key}`}
-                  label="The Blue Alliance"
-                />
-              </div>
+      <main className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
+        <PageContainer className="max-w-5xl">
+          <SurfaceCard className="overflow-hidden rounded-2xl">
+            <div className="p-5 sm:p-8">
+              <PageHeader
+                eyebrow={event.district?.display_name || "Competition event"}
+                title={<><span>{event.name}</span><span className="rounded-full bg-[var(--fv-brand-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--fv-brand-strong)]">{event.event_type_string ?? event.event_type}</span></>}
+                description={<div className="flex flex-wrap items-center gap-x-2 gap-y-1">{dates ? <span>{dates}</span> : null}{dates && (event.location_name || location) ? <span aria-hidden="true">·</span> : null}{event.location_name ? <span>{event.location_name}</span> : null}{event.location_name && location ? <span>in</span> : null}{location ? <span>{location}</span> : null}</div>}
+                actions={<Link href={`/gameday?event=${event.key}`} className="inline-flex min-h-10 items-center rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--fv-brand-strong)]">Open Gameday</Link>}
+                footer={<>{event.website ? <ExternalLink href={event.website} label="Event Website" /> : null}<ExternalLink href={`https://www.thebluealliance.com/event/${event.key}`} label="The Blue Alliance" /></>}
+                className="border-0 pb-0 sm:items-start"
+              />
             </div>
-            <nav
-              aria-label="Event information"
-              className="flex gap-6 border-t border-slate-200 px-6 sm:px-8"
-            >
+            <nav aria-label="Event information" className="flex min-w-0 gap-5 overflow-x-auto border-t border-[var(--fv-border)] px-5 sm:gap-6 sm:px-8">
               <TabLink
                 href={`/event/${event.key}?tab=matches`}
                 selected={activeTab === "matches"}
@@ -164,23 +136,23 @@ export default async function EventPage({
               />
               <Link
                 href={`/insights/event/${event.key}`}
-                className="border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-500 hover:text-slate-800"
+                className="border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-[var(--fv-muted)] hover:text-[var(--fv-text)]"
               >
                 Analytics
               </Link>
             </nav>
-          </header>
+          </SurfaceCard>
 
           {activeTab === "teams" ? (
             <section id="teams" className="mt-6">
-              <h2 className="text-lg font-semibold">Teams</h2>
-              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <SectionHeading title="Teams" description={`${sortedTeams.length} teams registered for this event.`} className="mb-3" />
+              <SurfaceCard className="overflow-hidden">
                 {sortedTeams.length === 0 ? (
-                  <p className="p-6 text-sm text-slate-400">No teams are currently listed for this event.</p>
+                  <p className="p-6 text-sm text-[var(--fv-muted)]">No teams are currently listed for this event.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0 text-left text-sm">
-                      <thead className="event-divider event-header-surface border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <thead className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] text-xs uppercase tracking-wide text-[var(--fv-muted)]">
                         <tr>
                           <th scope="col" className="px-5 py-3 font-medium">Team</th>
                           <th scope="col" className="px-5 py-3 font-medium">Location</th>
@@ -190,18 +162,18 @@ export default async function EventPage({
                         {sortedTeams.map((team: TBATeam) => (
                           <tr
                             key={team.key}
-                            className="event-divider border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
+                            className="event-divider border-b border-[var(--fv-border)] last:border-b-0 hover:bg-[var(--fv-surface)]"
                           >
                             <td className="whitespace-nowrap px-5 py-3">
                               <Link
                                 href={`/team/${team.team_number}?year=${event.year}`}
-                                className="font-medium text-slate-900 underline decoration-slate-400 underline-offset-4 hover:text-slate-700"
+                                className="font-medium text-[var(--fv-text)] underline decoration-[var(--fv-muted)] underline-offset-4 hover:text-[var(--fv-text)]"
                               >
                                 <span className="font-mono">{team.team_number}</span>
-                                <span className="ml-3 text-slate-700">{team.nickname || team.name}</span>
+                                <span className="ml-3 text-[var(--fv-text)]">{team.nickname || team.name}</span>
                               </Link>
                             </td>
-                            <td className="whitespace-nowrap px-5 py-3 text-slate-500">
+                            <td className="whitespace-nowrap px-5 py-3 text-[var(--fv-muted)]">
                               {[team.city, team.state_prov, team.country].filter(Boolean).join(", ") || "—"}
                             </td>
                           </tr>
@@ -210,13 +182,11 @@ export default async function EventPage({
                     </table>
                   </div>
                 )}
-              </div>
+              </SurfaceCard>
             </section>
           ) : (
             <section id="matches" className="mt-6">
-              <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-lg font-semibold">Match Schedule</h2>
-              </div>
+              <SectionHeading title="Match Schedule" description={`${matches.length} matches scheduled or recorded.`} className="mb-3" />
               <div className="mt-3 grid items-start gap-5 xl:grid-cols-2">
                 {qualificationMatches.length > 0 ? (
                   <MatchGroup
@@ -242,7 +212,7 @@ export default async function EventPage({
               </div>
             </section>
           )}
-        </div>
+        </PageContainer>
       </main>
     </SiteShell>
   );
@@ -265,11 +235,11 @@ function TabLink({
       aria-current={selected ? "page" : undefined}
       className={`border-b-2 px-1 py-3 text-sm font-semibold ${
         selected
-          ? "border-[#7656C9] text-[var(--fv-brand-strong)]"
-          : "border-transparent text-slate-500 hover:text-slate-800"
+          ? "border-[var(--fv-brand)] text-[var(--fv-brand-strong)]"
+          : "border-transparent text-[var(--fv-muted)] hover:text-[var(--fv-text)]"
       }`}
     >
-      {label} <span className="ml-1 text-slate-400">{count}</span>
+      {label} <span className="ml-1 text-[var(--fv-muted)]">{count}</span>
     </Link>
   );
 }
@@ -303,18 +273,18 @@ function MatchGroup({
     : [{ title: "", matches }];
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold">
-        {title} <span className="font-normal text-slate-400">{matches.length}</span>
+    <section className="overflow-hidden rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)]">
+      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
+        {title} <span className="font-normal text-[var(--fv-muted)]">{matches.length}</span>
       </h3>
       {matches.length === 0 ? (
-        <p className="px-3 py-4 text-sm text-slate-400">No matches are currently available.</p>
+        <p className="px-3 py-4 text-sm text-[var(--fv-muted)]">No matches are currently available.</p>
       ) : (
         groupedMatches.map((group) => (
           <div key={group.title || "all-matches"}>
             {group.title && (
-              <div className="event-divider event-header-surface border-t border-slate-200 bg-slate-50 px-3 py-2 first:border-t-0 last:border-b-0">
-                <h4 className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="event-divider event-header-surface border-t border-slate-200 bg-[var(--fv-surface)] px-3 py-2 first:border-t-0 last:border-b-0">
+                <h4 className="text-center text-xs font-semibold uppercase tracking-wide text-[var(--fv-muted)]">
                   {group.title}
                 </h4>
               </div>
@@ -345,12 +315,12 @@ function PlayoffAlliances({
   playoffType: number | null;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold">
-        Playoff Alliances <span className="font-normal text-slate-400">{alliances?.length ?? 0}</span>
+    <section className="overflow-hidden rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)]">
+      <h3 className="event-divider event-header-surface border-b border-slate-200 bg-[var(--fv-surface)] px-3 py-2 text-sm font-semibold">
+        Playoff Alliances <span className="font-normal text-[var(--fv-muted)]">{alliances?.length ?? 0}</span>
       </h3>
       {!alliances?.length ? (
-        <p className="px-3 py-4 text-sm text-slate-400">Playoff alliances are not available yet.</p>
+        <p className="px-3 py-4 text-sm text-[var(--fv-muted)]">Playoff alliances are not available yet.</p>
       ) : (
         <div>
           {alliances.map((alliance, index) => {
@@ -363,9 +333,9 @@ function PlayoffAlliances({
             return (
               <div
                 key={alliance.name ?? index}
-                className="event-divider flex items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"
+                className="event-divider flex items-center gap-3 border-b border-[var(--fv-border)] px-3 py-2 last:border-b-0"
               >
-                <span className="w-28 shrink-0 truncate text-xs font-semibold text-slate-500">
+                <span className="w-28 shrink-0 truncate text-xs font-semibold text-[var(--fv-muted)]">
                   {formatAllianceLongName(alliance.name, index)}
                 </span>
                 <div className="flex min-w-0 flex-wrap gap-1">
@@ -373,7 +343,7 @@ function PlayoffAlliances({
                     <Link
                       key={teamKey}
                       href={`/team/${teamKey}`}
-                      className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900 hover:bg-slate-200"
+                      className="rounded border border-[var(--fv-border)] bg-[var(--fv-surface)] px-1.5 py-0.5 font-mono text-xs font-semibold text-[var(--fv-text)] hover:bg-[var(--fv-surface)]"
                     >
                       {formatTeamNumber(teamKey)}
                     </Link>
@@ -387,7 +357,7 @@ function PlayoffAlliances({
                           aria-hidden="true"
                           viewBox="0 0 20 20"
                           className={`h-3.5 w-3.5 ${
-                            isWinner ? "text-amber-500" : "text-slate-400"
+                            isWinner ? "text-amber-500" : "text-[var(--fv-muted)]"
                           }`}
                           fill="currentColor"
                         >
@@ -401,11 +371,11 @@ function PlayoffAlliances({
                           }`}
                         />
                       )}
-                      <span className="font-medium capitalize text-slate-700">
+                      <span className="font-medium capitalize text-[var(--fv-text)]">
                         {status === "won" ? "Winner" : status}
                       </span>
                     </span>
-                    <span className="font-mono text-slate-500">{playoffLevel}</span>
+                    <span className="font-mono text-[var(--fv-muted)]">{playoffLevel}</span>
                   </div>
                 )}
               </div>
@@ -423,7 +393,7 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+      className="rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-2 text-sm text-[var(--fv-muted)] transition hover:bg-[var(--fv-surface)] hover:text-[var(--fv-text)]"
     >
       {label}
     </a>

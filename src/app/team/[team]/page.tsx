@@ -5,6 +5,10 @@ import TeamEventMatches from "@/components/team/TeamEventMatches";
 import TeamEventsSidebar from "@/components/team/TeamEventsSidebar";
 import TeamSeasonSelector from "@/components/team/TeamSeasonSelector";
 import TeamRecord from "@/components/team/Record";
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
+import SectionHeading from "@/components/ui/SectionHeading";
+import SurfaceCard from "@/components/ui/SurfaceCard";
 import { TBA } from "@/lib/tba/service";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
@@ -120,28 +124,16 @@ export default async function TeamPage({
 
   return (
     <SiteShell>
-      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
-        <header className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <TeamAvatar team={team} avatar={avatar} size="lg" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h1 className="text-4xl font-black tracking-tight text-slate-950">{team.team_number}</h1>
-                <p className="text-xl font-semibold text-slate-700">{team.nickname || team.name || "Team"}</p>
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                {team.city}{team.state_prov ? `, ${team.state_prov}` : ""}{team.country ? `, ${team.country}` : ""}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                {team.rookie_year != null && <span>Rookie {team.rookie_year}</span>}
-                {team.website && <><span aria-hidden="true">·</span><a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">Team website</a></>}
-              </div>
-            </div>
-          </div>
-          <TeamSeasonSelector years={years} selectedYear={year} />
-        </header>
-
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <PageContainer className="max-w-7xl">
+        <PageHeader
+          eyebrow="Team profile"
+          leading={<TeamAvatar team={team} avatar={avatar} size="lg" />}
+          title={<><span className="font-mono">{team.team_number}</span><span className="text-lg font-semibold text-[var(--fv-muted)] sm:text-xl">{team.nickname || team.name || "Team"}</span></>}
+          description={[team.city, team.state_prov, team.country].filter(Boolean).join(", ")}
+          actions={<TeamSeasonSelector years={years} selectedYear={year} />}
+          footer={<>{team.rookie_year != null ? <span>Rookie {team.rookie_year}</span> : null}{team.website ? <a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">Team website</a> : null}</>}
+        />
+        <SurfaceCard className="mt-5" padding>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <div><span className="font-black text-slate-950">{year}</span><span className="ml-1.5 text-slate-500">season</span></div>
             <Stat label="District" value={district?.display_name || "None"} />
@@ -149,19 +141,12 @@ export default async function TeamPage({
             <Stat label="Matches" value={completedMatches.length} />
             <Stat label="Record" value={`${wins}-${losses}-${ties}`} />
           </div>
-        </section>
-
+        </SurfaceCard>
         <div className="mt-8">
-          <div className="mb-5 flex items-baseline justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-slate-950">{year} Results</h2>
-              <p className="mt-1 text-sm text-slate-500">Event information and match results for this season.</p>
-            </div>
-            {district && <Link href={`/district/${district.key}`} className="hidden text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)] sm:block">View district</Link>}
-          </div>
+          <SectionHeading title={`${year} Results`} description="Event information and match results for this season." action={district ? <Link href={`/district/${district.key}`} className="text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">View district</Link> : null} className="mb-5" />
 
           {eventSections.length === 0 ? (
-            <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">No events found for {year}.</p>
+            <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">No events found for {year}.</SurfaceCard>
           ) : (
             <div className="grid items-start gap-5 lg:grid-cols-[210px_minmax(0,1fr)]">
               <TeamEventsSidebar events={eventSections.map(({ event }) => ({ id: `event-section-${event.key}`, key: event.key, name: event.short_name ?? event.name }))} />
@@ -191,7 +176,7 @@ export default async function TeamPage({
                     || (status?.alliance ? `Alliance ${status.alliance.number}` : "—");
 
                   return (
-                    <section key={event.key} id={`event-section-${event.key}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <SurfaceCard key={event.key} id={`event-section-${event.key}`} className="scroll-mt-5 overflow-hidden">
                       <div className="grid min-w-0 xl:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.7fr)]">
                         <div className="border-b border-slate-200 bg-slate-50 p-4 xl:border-b-0 xl:border-r">
                           <h3 className="mt-1 text-lg font-bold leading-snug text-slate-900">{event.name}</h3>
@@ -303,14 +288,14 @@ export default async function TeamPage({
                         </div>
                         <TeamEventMatches event={event} matches={matches} highlightedTeamKeys={[teamKey]} playoffAlliances={playoffAlliances} />
                       </div>
-                    </section>
+                    </SurfaceCard>
                   );
                 })}
               </div>
             </div>
           )}
         </div>
-      </div>
+      </PageContainer>
     </SiteShell>
   );
 }

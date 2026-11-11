@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { TBA } from "@/lib/tba/service";
 import SiteShell from "@/components/navigation/SiteShell";
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
+import SurfaceCard from "@/components/ui/SurfaceCard";
 import { formatTeamNumber } from "@/lib/tba/formatters";
 
 export default async function TeamsPage() {
@@ -9,29 +12,21 @@ export default async function TeamsPage() {
 
   return (
     <SiteShell>
-      <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">
-          Teams
-        </p>
-        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">
-          {year} teams
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Browse teams listed for the current season, then open a team page.
-        </p>
+      <PageContainer>
+        <PageHeader eyebrow="Teams" title={`${year} teams`} description="Browse teams listed for the current season, then open a team page." />
 
         {teams.length === 0 ? (
-          <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+          <SurfaceCard className="mt-6 border-dashed p-8 text-center">
             <p className="font-semibold text-slate-800">No teams were returned for {year}.</p>
             <p className="mt-1 text-sm text-slate-500">The Blue Alliance may not have published this season's team directory yet.</p>
-          </div>
+          </SurfaceCard>
         ) : (
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {teams.slice(0, 200).map((team) => (
             <Link
               key={team.key}
               href={`/team/${team.key}`}
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[var(--fv-brand-border)] hover:bg-[var(--fv-brand-soft)]/40"
+              className="min-w-0 rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 shadow-sm transition-colors hover:border-[var(--fv-brand-border)] hover:bg-[var(--fv-brand-soft)]/40"
             >
               <p className="font-mono text-lg font-bold text-slate-900">
                 {formatTeamNumber(team.key)}
@@ -54,7 +49,7 @@ export default async function TeamsPage() {
             next navigation pass.
           </p>
         )}
-      </div>
+      </PageContainer>
     </SiteShell>
   );
 }
