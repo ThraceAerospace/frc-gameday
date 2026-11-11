@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import { loadStandaloneTypeScriptModule } from "../helpers/load-standalone-typescript.mjs";
 
 const repositoryRoot = process.cwd();
 const componentRoot = path.join(repositoryRoot, "src/components");
@@ -50,7 +49,7 @@ const existingLocalTypes = {
 };
 
 async function collectTsxFiles(directory) {
-  const entries = await (await import("node:fs/promises")).readdir(directory, {
+  const entries = await readdir(directory, {
     withFileTypes: true,
   });
   const files = [];
