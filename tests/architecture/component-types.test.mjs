@@ -124,3 +124,35 @@ test("component-local type declarations cannot grow beyond the inventoried legac
     ].join("\n"),
   );
 });
+
+
+test("EventAnalytics source contract types are owned by the insights types module", async () => {
+  const typesPath = path.join(repositoryRoot, "src/lib/insights/types.ts");
+  const compatibilityPath = path.join(repositoryRoot, "src/lib/insights/event-analytics.ts");
+  const typesSource = await readFile(typesPath, "utf8");
+  const compatibilitySource = await readFile(compatibilityPath, "utf8");
+  const typesFile = ts.createSourceFile(typesPath, typesSource, ts.ScriptTarget.Latest, true);
+  const compatibilityFile = ts.createSourceFile(
+    compatibilityPath,
+    compatibilitySource,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const declarations = collectTypeDeclarationNames(typesFile);
+  const compatibilityDeclarations = collectTypeDeclarationNames(compatibilityFile);
+
+  for (const name of [
+    "EventAnalytics",
+    "EventAnalyticsSourceStatus",
+    "EventAnalyticsSource",
+    "EventAnalyticsTbaResources",
+    "EventAnalyticsTbaSource",
+  ]) {
+    assert.ok(declarations.includes(name), `${name} must be declared in insights/types.ts`);
+  }
+  assert.deepEqual(
+    compatibilityDeclarations,
+    [],
+    "event-analytics.ts must remain a compatibility re-export, not a second type owner",
+  );
+});
