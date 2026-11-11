@@ -194,3 +194,96 @@ test("TBA rejects successful responses without provider max-age instead of inven
   );
   assert.equal(await redis.get(cacheKey(endpoint)), null);
 });
+
+
+test("TBA standalone match responses are not reconciled using collection-only rules", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/match/2026ctabc_qm77";
+  const completed = match({
+    key: "2026ctabc_qm77",
+    redScore: 91,
+    blueScore: 84,
+    actualTime: 1_800_000_000,
+  });
+  const incomplete = match({
+    key: "2026ctabc_qm77",
+    redScore: -1,
+    blueScore: -1,
+  });
+  await redis.set(cacheKey(endpoint), JSON.stringify({
+    data: completed,
+    etag: '"old"',
+    expiresAt: Date.now() - 1_000,
+  }));
+
+  await withFetch(async () => new Response(JSON.stringify(incomplete), {
+    status: 200,
+    headers: { "Cache-Control": "max-age=60" },
+  }), async () => {
+    assert.deepEqual(await client.get(endpoint), incomplete);
+  });
+});
+
+test("TBA upcoming-match webhook patches only supplied fields and preserves unrelated cached matches", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/event/2026ctabc/matches";
+  const key = cacheKey(endpoint);
+  const first = {
+    ...match({ key: "2026ctabc_qm1", redScore: 80, blueScore: 70 }),
+    predicted_time: 100,
+    scheduled_time: 90,
+  };
+  const second = match({ key: "2026ctabc_qm2", redScore: -1, blueScore: -1 });
+  await redis.set(key, JSON.stringify({
+    data: [first, second],
+    etag: '"webhook"',
+    expiresAt: Date.now() + 60_000,
+  }));
+
+  await client.mutateUpcomingMatch({
+    event_key: "2026ctabc",
+    match_key: "2026ctabc_qm1",
+    predicted_time: 150,
+  });
+
+  const updated = JSON.parse(await redis.get(key));
+  assert.equal(updated.data[0].predicted_time, 150);
+  assert.equal(updated.data[0].scheduled_time, 90);
+  assert.deepEqual(updated.data[1], second);
+  assert.equal(updated.etag, '"webhook"');
+});
+
+test("TBA tag invalidation removes only cache entries owned by the requested tag", async () => {
+  const client = new TBAClient("test-auth-key");
+  const eventCache = cacheKey("/event/2026ctabc/matches");
+  const teamCache = cacheKey("/team/frc1");
+  await redis.set(eventCache, JSON.stringify({ data: [], etag: null, expiresAt: Date.now() }));
+  await redis.set(teamCache, JSON.stringify({ data: {}, etag: null, expiresAt: Date.now() }));
+  redis.sets.set("tag:event:2026ctabc", new Set([eventCache]));
+
+  await client.invalidateTag("event:2026ctabc");
+
+  assert.equal(await redis.get(eventCache), null);
+  assert.notEqual(await redis.get(teamCache), null);
+  assert.deepEqual(await redis.smembers("tag:event:2026ctabc"), []);
+});
+
+test("TBA malformed cache entries are discarded before fetching a valid response", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/event/2026ctabc/teams";
+  await redis.set(cacheKey(endpoint), JSON.stringify({ unexpected: true }));
+  let requests = 0;
+
+  await withFetch(async () => {
+    requests += 1;
+    return new Response(JSON.stringify([{ key: "frc1" }]), {
+      status: 200,
+      headers: { "Cache-Control": "max-age=30" },
+    });
+  }, async () => {
+    assert.deepEqual(await client.get(endpoint), [{ key: "frc1" }]);
+  });
+
+  assert.equal(requests, 1);
+  assert.deepEqual(JSON.parse(await redis.get(cacheKey(endpoint))).data, [{ key: "frc1" }]);
+});
