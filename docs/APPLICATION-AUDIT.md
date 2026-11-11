@@ -713,3 +713,13 @@ There is a related force-refresh ambiguity: when `refresh: true` is requested wh
 This affects the cohort's team count, discovery coverage, and season-aware team comparisons. It can also make the displayed comparison population disagree with the event roster supplied by the event analytics snapshot.
 
 **Action:** make roster reconciliation an explicit part of cohort refresh. Compare the latest event team numbers with the persisted roster, enqueue discovery for newly added teams, and remove or mark departed teams according to a documented historical-snapshot policy. Ensure manual refresh uses the latest roster rather than the original job roster. Add tests for team additions, removals, unchanged rosters, and a refresh after roster changes.
+
+### FV-AUD-061 — Stale-on-error provider fallbacks are reported as fresh data
+
+**Severity: Medium / source freshness and provenance**
+
+The Statbotics and FRC Colors clients deliberately return cached data when an upstream refresh fails, but their public service methods return only the data payload and do not expose whether it came from a successful refresh or a stale fallback. In the Statbotics client, the failure path preserves the previous `fetchedAt` but updates `lastRefreshAt` and `expiresAt` to establish a retry cooldown; callers receive only `fallback.data`. In the FRC Colors client, the cache stores only the color array, and the catch path returns that array without any fetch timestamp or stale marker. Neither service communicates the upstream error when a fallback exists.
+
+The Event Analytics worker treats these fallback returns as successful acquisitions. It sets `statboticsLoadedAt` after the collection calls complete and sets `teamColorsLoadedAt` after `FRCColors.getEvent` returns. The resulting source metadata can therefore report the source as ready with a recent `updatedAt`, even though the provider refresh failed and the displayed values are older. The Statbotics API route likewise returns the cached payload as an ordinary successful response, without freshness metadata. This hides an important distinction between “last known data is available” and “the provider was successfully refreshed.”
+
+**Action:** return a structured provider result that separates data availability from freshness and refresh outcome (for example, data, fetched-at, stale flag, last refresh attempt, and refresh error). Preserve stale-on-error availability, but propagate the stale state through API responses, EventState, and Event Analytics source metadata. Do not advance a successful-source timestamp when only a stale fallback was returned. Add tests for successful refresh, stale fallback after network/5xx failure, cold-cache failure, and subsequent recovery for both providers.
