@@ -1470,12 +1470,6 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   const visible=active==="all"?records:records.filter(({summary})=>summary.reviewFlags.includes(active));
   const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
   const timezone=data.event.timezone??null;
-  const formatTime=(timestamp:number|null|undefined)=>{
-    if(timestamp===null||timestamp===undefined||!timezone)return null;
-    try{return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:timezone}).format(new Date(timestamp*1000));}
-    catch{return null;}
-  };
-  const teamLabel=(key:string)=>{const team=data.teams.find((item)=>item.teamKey===key);return team?String(team.teamNumber)+" · "+team.name:formatTeamNumber(key);};
   const flagLabels:Record<MatchReviewFlag,string>={
     "model-upset":"Model Upset",
     "anomalous-score":"Anomalous Score",
