@@ -162,6 +162,19 @@ Add static checks (or lint rules where appropriate) to enforce:
 
 The repository currently has no top-level `src/types/` directory and has established provider-specific alias modules. Treat these as distinct concerns: generated raw provider schemas must remain with their generators, and provider adapter aliases should remain adjacent to their adapters unless a deliberate migration is approved. Shared FieldView-owned contracts should move toward a central `src/types/` structure. Do not perform a sweeping type relocation as incidental test setup; inventory existing declarations, define the target layout, and migrate in small test-backed steps. The immediate enforceable rule is that new shared types must not be invented inline in random components.
 
+## Current implementation status
+
+- [x] Add `npm test` using Node's built-in test runner; this avoids introducing a second test framework before the first contracts are mapped.
+- [x] Add AST-based architecture checks that prevent application/component modules from importing low-level TBA/Statbotics clients and prevent raw generated provider schemas from bypassing their application type adapters.
+- [x] Add deterministic unit coverage for the pure TBA match helpers: played/scored state, time selection, stable sorting without input mutation, next/last match selection, and team filtering.
+- [ ] Run the suite in a local checkout and wire it into CI. The current execution environment cannot clone the repository or install dependencies, so these tests have been committed but have not yet been executed here.
+- [ ] Add unit tests for TBA cache/ETag/reconciliation behavior.
+- [ ] Add unit tests for Statbotics cache/locking/pagination behavior.
+- [ ] Add normalization, calculation, persistence, and full pipeline coverage.
+- [ ] Add enforcement for the central FieldView type ownership policy after the existing inline declarations have been inventoried.
+
+The TypeScript test loader is deliberately limited to dependency-free modules with type-only imports. It transpiles the source using the repository's existing TypeScript dependency; it is not a replacement for the eventual integration-test strategy.
+
 ## Initial implementation order
 
 1. Establish the test runner and common test conventions (no live network/Redis in default test runs).
