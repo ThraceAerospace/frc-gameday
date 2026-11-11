@@ -8,21 +8,24 @@
 
 The audit has expanded beyond the initial architecture pass into targeted source-level reviews of the main data paths: TBA and Statbotics provider clients, FRC Colors acquisition, Redis cache envelopes and lock lifecycles, webhook mutation and realtime fan-out, SharedWorker/EventState lifecycle and resource reloads, remote WebRTC snapshot delivery, event/team/district API routes, event and team analytics orchestration, season-cohort comparisons, metric calculations, and date/time formatting. The API route inventory and the principal architecture/type/analytics documentation have also been checked against the implementation.
 
-The audit currently contains 75 individually numbered findings (FV-AUD-001 through FV-AUD-075). The findings are implementation observations and recommended follow-ups, not a claim that every issue has been fixed. The review is still in progress: not every presentation component, route edge case, deployment configuration, or browser/runtime behavior has received a line-by-line or live validation pass. No local lint, build, automated test, or live-provider validation has been run during this source-only review. The repository currently has no automated test command or test-runner dependency (FV-AUD-071).
+The audit currently contains 95 individually numbered findings (FV-AUD-001 through FV-AUD-095). The findings are implementation observations and recommended follow-ups, not a claim that every issue has been fixed. The review is still in progress: not every presentation component, route edge case, deployment configuration, or browser/runtime behavior has received a line-by-line or live validation pass. No local lint, build, automated test, or live-provider validation has been run during this source-only review. The repository currently has no automated test command or test-runner dependency (FV-AUD-071).
 
 ## Executive summary
 
 FieldView already has a meaningful data architecture: TBA acquisition is centralized behind a Redis-backed service; live event state is shared through an origin-wide SharedWorker; analytics calculations are server-side; and the application has distinct event, team, district, Gameday, Insights, and remote-display surfaces.
 
-The largest risks found in this pass are not visual. They concern provider compliance, data freshness, and differences between the documented and implemented analytics lifecycle:
+The largest risks found in this pass are not visual. They concern source correctness, freshness, completeness, and the reliability of the data-delivery path:
 
-1. The Statbotics client currently defaults to a community-operated mirror, contrary to the project's stated provider requirement.
-2. The assembled team-history API response is cached for one year even for the current season, and the route has no explicit refresh parameter.
-3. Event Analytics documentation describes a background/polling workflow that the current route and dashboard do not implement.
-4. The WebSocket bridge forwards the original webhook `messageData`, including full match payloads, even though clients primarily use the messages as invalidation signals.
-5. The EventAnalytics source envelope does not fully describe optional TBA source failures.
+1. The Statbotics runtime defaults to a community-operated mirror rather than the project's required official/FieldView-operated source.
+2. Current-season team history can remain cached for a year; multiple analytics consumers also hide stale-on-error provider fallbacks behind fresh-looking timestamps/status.
+3. Webhook handling does not consistently update or invalidate every cached representation and dependent resource; some failed cache mutations are still acknowledged as successful updates.
+4. Redis lock leases can expire during provider/job work, concurrent workers can overwrite progress, and explicit refreshes can silently return the old snapshot when a lock is held.
+5. TBA, Statbotics, and FRC Colors payloads are trusted with insufficient runtime validation; malformed data can be cached or converted into false-empty state.
+6. EventState has no per-resource loading/freshness/failure contract, while some consumers treat incomplete or malformed responses as empty data.
+7. Remote delivery has lifecycle, lease, payload-size, and network-connectivity gaps; the fallback WebSocket can remain open after its last consumer leaves.
+8. Several documented data surfaces/behaviors are not implemented as described, and the repository has no automated test harness for the provider/cache/concurrency/analytics paths.
 
-These should be resolved before treating the data layer as ready for a public beta.
+These should be resolved or explicitly accepted with documented freshness/completeness guarantees before treating the data layer as ready for a public beta.
 
 ## Application surfaces
 
@@ -46,7 +49,7 @@ The teams directory currently renders at most the first 200 teams and explicitly
 - The low-level client is `src/lib/tba/client.ts`; application-facing methods are in `src/lib/tba/service.ts`.
 - Redis stores TBA response data together with ETag and expiry metadata. The client honors upstream `Cache-Control: max-age`, sends conditional requests, refreshes expiry on 304 responses, and reconciles completed match results against older/incomplete upstream representations.
 - The full event match schedule (`/event/<event>/matches`) is the canonical schedule used by the live event path.
-- `POST /api/tba/webhook` authenticates `X-TBA-HMAC` before parsing JSON. It mutates an existing event match cache when a webhook contains usable match data, then publishes an event-scoped update through Redis Pub/Sub.
+- `POST /api/tba/webhook` authenticates `X-TBA-HMAC` before parsing JSON. It attempts to mutate the event-wide match cache for match/upcoming-match notifications, then publishes an event-scoped update through Redis Pub/Sub. This is not yet a complete cache-coherence strategy: standalone/team/simple match representations and dependent statuses/alliances/OPRs are not consistently updated or invalidated, and mutation-write failures can be swallowed before the webhook returns success.
 - `/api/ws` bridges Redis Pub/Sub channel `gameday:tba` to connected WebSocket clients. The server-side WebSocket message includes the webhook's `messageData`; it is not currently reduced to a minimal invalidation envelope.
 - The TBA client does not currently coalesce simultaneous cold-cache requests for the same endpoint. Its Redis re-read protects against overwriting a newer concurrent cache mutation, but multiple callers can still issue duplicate upstream requests on a cache miss.
 - The 65-second webhook-triggered EventState timer is a one-shot API re-read, not a change to Redis `expiresAt` and not a guarantee that an upstream TBA request will occur at that moment.
@@ -62,7 +65,7 @@ The teams directory currently renders at most the first 200 teams and explicitly
 
 ### Statbotics and FRC Colors
 
-- Statbotics requests are centralized through `src/lib/statbotics/client.ts` and `src/lib/statbotics/service.ts`. The client supports ETags, upstream cache headers, a ten-minute minimum request interval, endpoint fallbacks, stale-on-error behavior, and retry backoff.
+- Statbotics requests are centralized through `src/lib/statbotics/client.ts` and `src/lib/statbotics/service.ts`. The client supports ETags, upstream cache headers, a ten-minute minimum request interval, endpoint fallbacks, stale-on-error behavior, and retry backoff. However, stale fallback provenance/freshness is not propagated to consumers, the minimum interval can override a shorter upstream max-age, and successful resource payloads are not runtime-schema-validated.
 - The generated Statbotics type document is fetched from the official Statbotics OpenAPI endpoint. This is separate from the runtime data host: the runtime client currently defaults to `https://api-statbotics.iterativerefinement.com`, a community-operated mirror.
 - FRC Colors is accessed through `src/lib/frc-colors/` and caches event colors in Redis for 24 hours.
 
@@ -70,7 +73,7 @@ The teams directory currently renders at most the first 200 teams and explicitly
 
 - Calculations and orchestration live under `src/lib/insights/`; the dashboard is `src/components/insights/EventAnalyticsDashboard.tsx`.
 - `EventAnalytics` v1 adds schema version, event identity, generation time, provenance, and source status to the existing analytics response. It still extends `EventAnalyticsResponse`, so the compatibility payload retains provider-shaped TBA and Statbotics records. It is not yet a provider-independent DTO.
-- The event analytics job is stored in Redis with a one-year TTL. A normal open reuses the persisted event snapshot; explicit refresh reacquires the event schedule/OPR/rankings/alliances and the Statbotics/FRC Colors collections.
+- The event analytics job is stored in Redis with a one-year TTL. A normal open reuses the persisted event snapshot; explicit refresh re-reads the event schedule/OPR/rankings/alliances through the ordinary TBA cache policy (it does not guarantee an upstream TBA refresh) and requests refreshes for Statbotics/FRC Colors. Job-lock contention can also cause an explicit refresh to return the prior snapshot without an in-progress signal.
 - `GET /api/insights/event/[event]` awaits initial snapshot creation, `advanceEventAnalytics`, and `advanceSeasonCohort` before returning. The route has `maxDuration = 60`; it does not currently use Vercel `waitUntil` for these jobs.
 - The dashboard fetches the analytics endpoint on mount and on explicit refresh. It does not currently poll the endpoint for collection progress. `EventAnalyticsSurface` subscribes to EventState for live connection status, but the analytics payload itself is still acquired through the dashboard's HTTP request; it is not yet delivered by the SharedWorker.
 - The season cohort is separately persisted with a 24-hour TTL and advances within a 20-second work budget.
