@@ -692,3 +692,14 @@ When a Statbotics request fails and there is no prior cached representation, the
 A transient upstream outage on a cold cache is therefore converted into a successful “record not found” response for the negative-cache interval (normally at least ten minutes). Consumers cannot distinguish an actual provider 404 from a temporary provider failure after the first request.
 
 **Action:** preserve the distinction between negative-cache results caused by an authoritative upstream 404 and cooldown entries caused by acquisition failure. Store an explicit outcome/status in the cache entry; return null only for confirmed not-found results, and return an unavailable/error state (or retry after a short bounded cooldown) for failed acquisition. Add tests for genuine 404, cold-cache network failure followed by a second request, upstream 5xx, and recovery after the cooldown.
+
+
+### FV-AUD-059 — FRC Colors refresh lock has the same lease and force-refresh gaps
+
+**Severity: Low / enrichment freshness and cache ordering**
+
+The FRC Colors client uses a fixed 20-second Redis lock around an upstream fetch, but it does not set a request timeout or renew the lock. If the provider request outlives the lease, another request can acquire the lock and fetch the same event concurrently. Both callers write the resulting color array unconditionally, so a slower earlier request can overwrite a later response after its lock has expired. Token-checked lock release prevents deleting another request's lock, but it does not fence cache writes.
+
+There is a related force-refresh ambiguity: when `refresh: true` is requested while another caller holds the lock, the client immediately returns the cached colors if present. The caller receives an ordinary successful result without knowing that its requested refresh did not run or observe the in-flight result. This is reachable from Event Analytics when its team-color source is explicitly refreshed.
+
+**Action:** apply bounded fetch timeouts and lease renewal or fencing to FRC Colors cache writes, and define explicit behavior when a force-refresh encounters an active lock (join/wait for the new result or return a refresh-in-progress outcome). Add deterministic tests for a fetch exceeding the lock lease and for force-refresh contention. Consider sharing a common provider-cache/lock implementation with Statbotics so these concurrency semantics cannot drift between clients.
