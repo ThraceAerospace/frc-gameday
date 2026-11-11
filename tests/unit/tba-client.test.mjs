@@ -324,6 +324,36 @@ test("TBA cache mutation failures return false and preserve the previous cached 
   assert.deepEqual(JSON.parse(await redis.get(key)), original);
 });
 
+test("TBA tag invalidation propagates Redis pipeline failures without pretending success", async () => {
+  const client = new TBAClient("test-auth-key");
+  const endpoint = "/event/2026ctinvalidate";
+  const key = cacheKey(endpoint);
+  await redis.set(key, JSON.stringify({
+    data: { key: "2026ctinvalidate" },
+    etag: null,
+    expiresAt: Date.now() + 60_000,
+  }));
+  redis.sets.set("tag:event:2026ctinvalidate", new Set([key]));
+
+  const originalPipeline = redis.pipeline.bind(redis);
+  redis.pipeline = () => {
+    const pipeline = originalPipeline();
+    pipeline.exec = async () => { throw new Error("Redis pipeline unavailable"); };
+    return pipeline;
+  };
+  try {
+    await assert.rejects(
+      client.invalidateTag("event:2026ctinvalidate"),
+      /Redis pipeline unavailable/,
+    );
+  } finally {
+    redis.pipeline = originalPipeline;
+  }
+
+  assert.notEqual(await redis.get(key), null);
+  assert.deepEqual(await redis.smembers("tag:event:2026ctinvalidate"), [key]);
+});
+
 test("TBA malformed cache entries are discarded before fetching a valid response", async () => {
   const client = new TBAClient("test-auth-key");
   const endpoint = "/event/2026ctmalformed/teams";
