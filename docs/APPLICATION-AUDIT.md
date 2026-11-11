@@ -511,3 +511,13 @@ However, `matchUtils.isPlayed` and the separate `isMatchPlayed` helper in `src/l
 In EventState this can leave `eventLastMatch` behind the latest result and consequently select the wrong match for the live Statbotics warm-cache behavior. Other consumers of the service helper can similarly misclassify a scored match.
 
 **Action:** define one canonical match-result predicate and use it consistently for cache reconciliation, next/last match selection, and service helpers. Keep “result posted” distinct from “match physically played at a known timestamp” if both concepts are needed; do not make the latter the sole criterion for whether a result exists. Add fixtures where scores, `post_result_time`, or `score_breakdown` exist while `actual_time` is null.
+
+### FV-AUD-042 — Team match schedule treats negative EPA as missing data
+
+**Severity: Low / metric fidelity**
+
+In the Team Investigation match schedule inside `EventAnalyticsDashboard.tsx`, alliance member pre-match EPA is retained only when it is finite and `>= 0`; negative values are converted to `null`. The same dashboard then withholds the alliance EPA total unless every team has a retained value. Other consumers, such as `EventInsightView.sumAvailableValues`, accept any finite numeric EPA value, including negative values.
+
+EPA is a centered contribution estimate and can legitimately be negative for teams below the model's reference level. Treating negative EPA as unavailable suppresses valid source data and can make alliance totals disappear or become incomplete in this one consumer.
+
+**Action:** validate EPA by numeric finiteness, not nonnegativity. Keep negative values in the displayed team estimate and alliance sum. If an EPA-share visualization requires a positive denominator or has a different mathematical interpretation, handle that constraint in the share calculation without discarding the underlying EPA value.
