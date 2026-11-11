@@ -31,7 +31,7 @@ export default async function TeamsPage() {
             <Link
               key={team.key}
               href={`/team/${team.key}`}
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-[#F1EDFA]/40"
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D9CFF2] hover:bg-[#F1EDFA]/40"
             >
               <p className="font-mono text-lg font-bold text-slate-900">
                 {formatTeamNumber(team.key)}

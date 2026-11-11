@@ -34,7 +34,7 @@ export default async function InsightsPage() {
         <div className="mt-6 grid min-w-0 gap-5 xl:grid-cols-2">
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Events by type</h2>
-            <div className="mt-5 space-y-4">{byType.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{width:`${count/maxType*100}%`}} /></div></div>)}</div>
+            <div className="mt-5 space-y-4">{byType.map(([name,count])=><div key={name}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700">{name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#7656C9]" style={{width:`${count/maxType*100}%`}} /></div></div>)}</div>
           </section>
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Events by district</h2>
