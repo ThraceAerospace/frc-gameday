@@ -410,3 +410,22 @@ The team detail page has a wider failure domain. It first requires both team met
 `src/app/district/[district]/page.tsx` sets `dynamicParams = false` and generates its static parameter list from the current year's TBA districts at build time. The district directory at `/districts` is dynamically rendered and reads the current year's list at request time. If TBA adds a district after deployment, or the season changes before a new build, the directory can link to a district detail route that Next.js will reject because its parameter was not in the build-time list.
 
 **Action:** either permit dynamic district parameters and retain the one-hour revalidation policy, or ensure district-list changes/new-season transitions trigger a deployment. Add a route-level check that directory links resolve for all currently returned districts.
+
+
+### FV-AUD-032 — Remote signaling setup failures leak presence reservations
+
+**Severity: Medium / remote-session availability**
+
+`registerRemoteWebSocket` in `src/lib/remote/signalingServer.ts` acquires the role's Redis presence key before creating and subscribing its Pub/Sub client. The asynchronous `start()` call is launched with `void start()`, and failures from `redis.set`, `subscriber.subscribe`, or later setup steps have no encompassing catch/finally cleanup. In particular, a subscription failure after the presence key is acquired can leave the WebSocket open and the role reservation in Redis until its 120-second TTL expires. The normal close/error cleanup handlers are installed only after subscription succeeds.
+
+**Action:** install socket cleanup handlers before fallible setup, wrap initialization in try/catch/finally, release only the matching token-owned presence key on every failure, close the socket on setup failure, and test failures at each setup boundary.
+
+### FV-AUD-033 — Remote data-channel messages are trusted after JSON parsing only
+
+**Severity: Medium / remote protocol integrity**
+
+`RemotePeer.attachChannel` parses incoming data-channel payloads with `JSON.parse` and casts the result to `RemoteSessionMessage`; it does not validate the discriminant or payload shape at runtime. The action path passes the resulting object to `applyRemoteSessionAction`, which dispatches directly to controller methods. Snapshot messages are likewise accepted and applied to the display controller without schema/version or structural validation. TypeScript types protect compile-time callers, not messages received from another browser.
+
+The pairing flow is the trust boundary for these messages, and the current pairing design is separately tracked in FV-AUD-020. A malformed or incompatible peer message can therefore reach state mutation or rendering code.
+
+**Action:** define versioned runtime schemas for remote messages, actions, and snapshots; reject oversized and invalid payloads before dispatch; handle protocol-version mismatch explicitly; and test malformed, unknown, and old-version messages.
