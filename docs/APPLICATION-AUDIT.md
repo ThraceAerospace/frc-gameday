@@ -8,7 +8,7 @@
 
 This is the first architecture, data-flow, API, and documentation-consistency pass. It inspects the main application surfaces, the TBA/Statbotics/FRC Colors integrations, Redis caching, webhook/WebSocket delivery, SharedWorker/EventState ownership, Event Analytics orchestration, and the corresponding project documentation.
 
-It is not yet a line-by-line review of every presentation component, every analytics formula, or every route's accessibility and error states. No local lint, build, automated test, or live-provider validation was run during this pass. Findings below are based on source inspection.
+A second pass has now inspected the core event-analytics calculations, season-cohort comparison, selected-team match analysis, and the dashboard's remaining client-side review logic. It is still not a line-by-line review of every presentation component or every route's accessibility and error states. No local lint, build, automated test, or live-provider validation was run during this pass. Findings below are based on source inspection.
 
 ## Executive summary
 
@@ -319,8 +319,53 @@ This leaves two competing implementations and two different caching/collection m
 ## Recommended next audit passes
 
 1. Resolve the Statbotics runtime provider and team-history freshness defects.
-2. Review all analytics calculations against their documented definitions, sample requirements, and edge cases.
+2. Continue the analytics methodology review beyond the calculations inspected in this pass; resolve the verified median, underdog, elimination-shift, and anomaly sample-size mismatches.
 3. Audit every API route for validation, response contracts, cache behavior, failure semantics, and source provenance.
 4. Audit the main page surfaces and reusable components for data correctness, loading/empty/error states, responsive behavior, and accessibility.
 5. Review remote-session ownership, reconnect behavior, and mobile controller/display workflows.
 6. Add automated tests around the highest-risk data contracts, calculations, cache reconciliation, and realtime message handling.
+
+
+### FV-AUD-023 — Selected-team anomaly flags use a smaller sample than specified
+
+**Severity: Medium / statistical validity**
+
+The selected-team match endpoint in `src/app/api/insights/team/[team]/matches/route.ts` calculates season-wide team and opponent residual medians/MADs and begins flagging outliers when each side has only four scored observations. The Team Investigation specification requires at least eight scored observations for its robust median/MAD season anomaly bands. With four to seven observations, the current route can produce anomaly labels that the documented methodology says should remain unevaluated.
+
+**Action:** raise the minimum to the documented eight scored observations per side, expose the actual evaluated sample counts beside the flags, and add boundary tests for 7 versus 8 observations.
+
+### FV-AUD-024 — Elimination decline signal does not require positive qualification performance
+
+**Severity: Medium / analytical definition mismatch**
+
+The Team Investigation specification defines the exploratory elimination-decline signal as a qualification-to-elimination residual decline after positive qualification performance. The selected-team match route currently makes an event eligible with at least three scored qualification matches and two scored elimination matches, then calculates the shift as elimination mean residual minus qualification mean residual. It does not require the qualification mean residual to be positive. A team that underperformed expectations in qualifications and declined further in eliminations can therefore contribute to the signal described as a choking/decline pattern.
+
+The route correctly gives each eligible event one shift and uses a one-sided exact sign test, but its eligibility condition is weaker than the documented definition.
+
+**Action:** require positive qualification mean residual for this signal (or rename and separately expose a general phase-decline metric). Test positive, zero, and negative qualification baselines.
+
+### FV-AUD-025 — Event qualification anomaly median/MAD parity differs from the selected-team helper
+
+**Severity: Low / statistical consistency**
+
+`buildQualificationAnomalies` in `src/lib/insights/calculations.ts` selects the upper middle observation for even-sized samples when calculating both the residual median and MAD. The selected-team match route uses the conventional average of the two middle values. The dashboard's `phaseAnomalyBand` has the same upper-middle convention as the event calculation. The same statistical term therefore has different definitions across FieldView views.
+
+**Action:** centralize a tested conventional median/quantile helper in the server-side analytics layer, then migrate consumers deliberately and compare historical results before rollout.
+
+### FV-AUD-026 — Event source status can report ready when optional TBA resources failed
+
+**Severity: Medium / provenance and completeness accuracy**
+
+The EventAnalytics v1 envelope marks the TBA source `ready` whenever `tbaLoadedAt` is set. Initial snapshot creation catches failures for rankings and playoff alliances independently and substitutes `null`; the overall timestamp is still set. A later successful schedule refresh also sets the same timestamp even when the rankings or playoff-alliance refresh failed. Consumers can therefore see `sources.tba.status = ready` without knowing that one or both optional TBA resources are absent or stale.
+
+The current Statbotics status similarly treats the existence of a Statbotics match record as a ready match, without expressing whether the individual prediction, pre-match EPA, and post-match EPA fields needed by particular calculations are present.
+
+**Action:** track freshness/status per independently acquired resource (event, teams, matches, OPRs, rankings, playoff alliances, Statbotics match predictions/EPAs, colors). Distinguish request success from field-level analytical coverage; do not infer complete source coverage from a single aggregate timestamp.
+
+### FV-AUD-027 — Peer comparison excludes the selected team's direct opponents
+
+**Severity: Low / comparison-population decision**
+
+The Team Investigation peer comparison in `buildTeamInsights` compares selected-team qualification alliances with strength-matched qualification alliances elsewhere in the event, but excludes every alliance from the same match as the selected alliance. The written specification says to compare against other same-event alliances in the ±20% pre-match combined-EPA band and does not document this same-match exclusion. This changes the peer population and can reduce coverage, particularly at smaller events.
+
+**Action:** decide and document whether direct opponents should be included. If excluded to avoid dependence between two results from the same match, state that explicitly and expose the exclusion in the sample definition; otherwise include eligible opposing alliances and deduplicate them as currently done for other peer results.
