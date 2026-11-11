@@ -626,3 +626,14 @@ Webhook mutations have the same read-modify-write problem. `mutateCached` reads 
 These races can produce a cache representation older or less complete than the latest webhook state, even though each individual request completed successfully and the webhook handler broadcasts after its mutation call.
 
 **Action:** make cache updates concurrency-safe. Use an atomic Redis operation (such as a Lua script or compare-and-set/version check) to apply webhook mutations and to prevent an upstream refresh from replacing a cache entry changed since the refresh began. If the chosen Redis provider cannot support the needed atomic primitive, use a version/fencing strategy with a clearly defined retry path. Add deterministic concurrency tests for refresh-versus-webhook and webhook-versus-webhook interleavings, asserting that independent newer fields are not lost.
+
+
+### FV-AUD-053 — Webhook cache updates do not defer upstream refresh for the documented reconciliation window
+
+**Severity: Medium / live schedule consistency**
+
+The live-runtime documentation specifies that webhook-mutated match caches remain available while their TBA refresh deadline is deferred for 65 seconds, allowing upstream TBA to catch up before authoritative reconciliation. The implementation does not apply that cache policy. `TBAClient.mutateCached` preserves the existing `expiresAt` unchanged when it writes webhook-mutated data. `EventState.handleWebSocketMessage` immediately calls `reloadMatches(true)` for match-score, upcoming-match, and match-video notifications, so the subsequent API request can enter `TBAClient.get` and fetch upstream immediately whenever the pre-existing Redis entry is already expired. The 65-second EventState timer schedules a later reconciliation, but it does not prevent this immediate cache-layer refresh.
+
+This is particularly risky for `upcoming_match`: `reconcileMatch` preserves cached data only when it contains a posted result and the incoming match does not. A stale upstream match response can therefore replace webhook-updated scheduled/predicted times or team assignments before the documented catch-up window has elapsed. The result-preservation rule does not protect these schedule-only changes.
+
+**Action:** implement the documented webhook freshness policy in the cache layer, not only in EventState's timer. A webhook mutation should establish an explicit short refresh deadline (or equivalent authoritative-refresh-not-before metadata), and ordinary reads during that window should serve the webhook-updated representation without prematurely accepting an older upstream response. Preserve a deliberate force-refresh path and distinguish this temporary freshness hold from a claim that upstream data is authoritative. Add tests for an already-expired cache followed by an upcoming-match webhook, immediate EventState reload, an outdated upstream response, and successful reconciliation after the 65-second window.
