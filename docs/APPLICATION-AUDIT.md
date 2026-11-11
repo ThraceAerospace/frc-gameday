@@ -763,3 +763,13 @@ The TBA webhook handler treats `schedule_updated` and `starting_comp_level` as r
 Consequently, a schedule update can trigger a visible reload that simply returns the old cached match schedule. Alliance selection can likewise reload the old cached alliance response. The same issue applies to any other webhook type routed through the generic full-reload path when its corresponding TBA resource cache has not expired. This is separate from the match payload cache mutation gaps documented in FV-AUD-051 and FV-AUD-055: these webhook types do not directly patch the affected resource at all.
 
 **Action:** map each webhook type to the exact TBA resource keys it invalidates or updates before broadcasting. For schedule changes, invalidate the event match schedule and any dependent team-scoped schedule representations; for alliance selection, invalidate the event alliance resource and any dependent derived resources. Keep the normal cache policy for unrelated resources. Add integration tests with unexpired Redis entries proving that each webhook makes the next relevant API read observe updated provider data.
+
+### FV-AUD-066 — TBA provider requests have no client-side deadline
+
+**Severity: Medium / request reliability and serverless execution budget**
+
+The shared `TBAClient.get` performs upstream `fetch` calls without an `AbortSignal`, timeout, or caller-provided deadline. The same unbounded request path is used for all TBA resources, including event schedules, team histories, rankings, OPRs, alliances, and match details. A provider connection that stalls rather than promptly rejecting can therefore hold an API route, server-rendered page, or background analytics worker open until the hosting platform terminates the execution. The team-history and analytics routes declare 60-second maximum durations, but the provider client does not enforce a smaller per-request budget or leave time for fallback, persistence, and response serialization.
+
+This also amplifies lock-expiry risks in the analytics jobs (FV-AUD-057 and FV-AUD-062): the worker's work budget is not a provider request deadline, so an in-flight TBA fetch can continue beyond the nominal budget and lock lease.
+
+**Action:** add a configurable TBA request timeout and propagate cancellation/deadline budgets from callers where appropriate. Choose a provider timeout comfortably below the shortest relevant route/job budget, distinguish timeout from authoritative not-found and other provider failures, and ensure workers stop or safely abandon work when their deadline expires. Add tests for a never-resolving fetch, timeout cleanup, and preservation of previously cached data.
