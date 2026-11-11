@@ -597,3 +597,12 @@ This couples two distinct acquisition responsibilities. A transient Statbotics f
 
 **Action:** track TBA event discovery and Statbotics team-event acquisition as separate per-team outcomes. Preserve successful TBA history even when Statbotics is unavailable, and preserve any Statbotics collection that can be used once the corresponding event history is known. Store provider-specific attempt counts, last errors, and retry eligibility; keep exhausted teams visible as incomplete rather than silently dropping their acquisition state. Add tests for TBA-only failure, Statbotics-only failure, recovery on a later request, and terminal/exhausted status.
 
+### FV-AUD-050 — TBA cache does not serve stale data when upstream refresh fails
+
+**Severity: Medium / provider outage resilience and data availability**
+
+The TBA client reads an expired Redis representation and uses its ETag for a conditional request, but the network fetch and non-OK response handling have no stale-on-error fallback. If the upstream request rejects or returns an error status, TBAClient.get throws even though the prior cached representation is still available. Callers therefore receive an acquisition failure during a TBA outage rather than the last-known data with an explicit stale indicator. The Redis cache entry remains available for a later retry, but the current request does not use it.
+
+This differs from the Statbotics client, which returns its cached representation when a refresh fails and records a retry cooldown. For a data application, freshness and availability should be represented separately: a stale schedule or event record may still be more useful than no data, provided consumers can see that it is stale and do not mistake it for current live state.
+
+**Action:** define a deliberate TBA stale-on-error policy. When an expired representation exists, consider returning it with explicit stale/error/fetched-at metadata while preserving the refresh failure for observability. Keep endpoints that require authoritative freshness able to opt out. Do not silently extend the freshness claim or present stale data as live; test network failure, 5xx, no-cache cold failure, and successful recovery.
