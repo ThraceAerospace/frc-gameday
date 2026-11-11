@@ -88,7 +88,7 @@ Test:
 - The normalized response's schema version, event identity, generation time, provenance, and per-source status/freshness agree with the represented data.
 - Serialization and deserialization preserve the same normalized shape and value semantics.
 
-**Known metadata gap:** the current EventAnalytics envelope can report grouped TBA status as `ready` when optional rankings or playoff-alliance acquisition failed and the values are `null`. The current integration test covers successful optional absence only; it does not bless failed optional acquisition as ready. Add per-resource/partial source status coverage when the envelope is corrected.
+**Resolved metadata gap:** EventAnalytics now exposes per-resource TBA acquisition status for event metadata, teams, matches, OPRs, rankings, and playoff alliances. Successful optional absence (`null`) is `ready`; failed optional acquisition is `unavailable` (or `partial` when stale successful data remains); the grouped TBA source becomes `partial`. Legacy persisted snapshots without resource-level acquisition metadata are marked `unknown` rather than being silently treated as successful. Integration tests cover successful absence, optional-source failures, legacy snapshots, and serialization.
 - Provider-shaped fields that remain in the current EventAnalytics compatibility response are treated as a documented compatibility bridge, not mistaken for the final provider-independent DTO.
 
 ### D. Aggregation and calculation tests
