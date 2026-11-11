@@ -659,3 +659,14 @@ The `upcoming_match` webhook is handled separately from full-match notifications
 As a result, the event-wide full schedule can reflect the webhook's new scheduled/predicted time or team assignment while team-scoped and simple schedule consumers continue to read their previous cached representations. The team detail page can therefore disagree with the event schedule immediately after an upcoming-match notification.
 
 **Action:** propagate the upcoming-match patch to every affected canonical schedule representation, including team-scoped and simple match caches, or invalidate those representations for refetch. Handle team membership changes by invalidating both old and new team-scoped caches when the affected team set is known; do not assume a map-only update can add a match to a team's schedule. Add tests covering timing-only updates and team-assignment changes across event, team, and simple schedule reads.
+
+
+### FV-AUD-056 — Statbotics force-refresh can silently return the pre-refresh cache
+
+**Severity: Medium / refresh correctness and operator expectations**
+
+The Statbotics client accepts `refresh: true` to bypass the normal freshness and minimum-request-interval checks. However, if acquiring the per-resource Redis lock fails, `getCached` immediately returns the previously cached data whenever a cache entry exists. This branch does not distinguish an ordinary request from a force-refresh request and does not wait for the lock holder to publish a newer representation. The `waitForCache` path is used only when there is no cached entry.
+
+Consequently, a request explicitly made with `refresh=1` can return successfully with the old cached data while another request is still refreshing that resource. The caller receives no indication that its force-refresh request did not itself complete or observe the in-flight refresh. This behavior is reachable through the per-match Statbotics API and the bulk match/team-event collection refreshes used by Event Analytics and team-match analysis.
+
+**Action:** define force-refresh concurrency semantics explicitly. When a refresh is already in progress, either wait for a cache generation newer than the one observed at request start (bounded by the route's execution budget), join/share the in-flight result, or return an explicit refresh-in-progress outcome rather than silently presenting the old cache as refreshed. Keep ordinary stale-while-refresh reads fast. Add concurrent tests for normal-versus-force, force-versus-force, and lock timeout cases.
