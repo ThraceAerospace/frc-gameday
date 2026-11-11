@@ -1070,3 +1070,12 @@ The team-match API's `summarize(items)` reports `matches: items.length`, which c
 The dashboard already uses each RP metric's explicit `sampleSize` when combining RP accuracy/Brier scores, so the residual metrics need an equivalent denominator rather than reusing the match count.
 
 **Action:** return an explicit `predictionSampleSize` (or residual sample count) in each phase summary and use it to pool mean residual and MAE. Pool RMSE using the sum of squared-error totals or weight phase MSE by residual sample count before taking the square root. Keep `matches` for record/coverage display. Add tests with unequal Statbotics coverage across phases and within a phase, verifying the dashboard aggregation matches a direct calculation over all available residual observations.
+
+
+### FV-AUD-098 — Alliance EPA totals accept incomplete team rosters as complete three-team totals
+
+**Severity: Medium / alliance-comparison metric integrity**
+
+The documented alliance EPA total is the sum of the pre-match EPA values for all three robots on the alliance. `buildAllianceResults` in `src/lib/insights/calculations.ts` computes `preEpaTotal` by summing whatever `alliance.team_keys` contains, without requiring exactly three unique team keys. The selected-team match-analysis route applies the same pattern to `alliancePreEPATotal` and `opponentPreEPATotal`. If a successful but incomplete TBA match representation contains only one or two team keys, and Statbotics has EPA for those listed teams, the code produces a numeric partial sum that is treated as the full alliance total. That partial value can then feed peer-band matching, comparisons, and review output as if all three robots were represented. `buildTeamRows` already requires exactly three team keys for its separate contribution calculation, so the validation policy is inconsistent across analytics paths.
+
+**Action:** require exactly three distinct team keys and a finite pre-match EPA for each before emitting a complete alliance total. Otherwise return null and expose roster/coverage incompleteness rather than summing a partial alliance. Add tests for zero, one, two, three, four, and duplicate team keys, plus missing EPA for one of three teams.
