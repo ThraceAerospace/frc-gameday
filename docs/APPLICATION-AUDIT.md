@@ -1018,3 +1018,12 @@ The generated TBA `Webcast` contract supports multiple types: `youtube`, `twitch
 The array reconciliation helper `reconcileMatch` preserves a cached match only when `hasMatchResult(cached)` is true and `hasMatchResult(incoming)` is false. However, `hasMatchResult` returns true when either alliance has a non-negative score, even if the incoming object has null/missing `actual_time`, `post_result_time`, or `score_breakdown`. In that case the entire incoming match object replaces the cached object. A partial provider representation that retains a score but omits result metadata or score breakdown can therefore erase richer result fields already present in Redis. The full-object spread used by `mutateMatchCaches` has the same field-level overwrite behavior for webhook payloads. The boolean “has some result” check is not sufficient to establish that the incoming representation is at least as complete as the cached one.
 
 **Action:** define field-level result reconciliation for same-key matches, distinguishing an authoritative null from an omitted/not-yet-published field. Preserve known-good result metadata when an incoming update is partial, while still accepting genuinely newer score/result changes. Add fixtures for score-only, timestamp-only, breakdown-only, fully populated, and explicitly corrected result payloads; test both provider refresh and webhook mutation paths.
+
+
+### FV-AUD-093 — Team season comparison discards both histories when either request fails
+
+**Severity: Low / partial analytics availability**
+
+The Event Analytics dashboard loads the two selected teams' season-history endpoints together with `Promise.all`. It then requires both responses to be successful before parsing either payload; if either request fails, the catch path clears both `historyA` and `historyB`. A transient TBA/provider/cache failure for one selected team therefore hides the successfully retrieved history for the other team as well. This is separate from the all-or-nothing server-side team-match history acquisition in FV-AUD-044 and the event/team page dependency issue in FV-AUD-030.
+
+**Action:** handle each team's history request independently and preserve the successful side. Track per-team loading/error/availability state so the comparison can explain which side is missing without discarding usable data. Add tests for both-success, A-fails/B-succeeds, and B-fails/A-succeeds.
