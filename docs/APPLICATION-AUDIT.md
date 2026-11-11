@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-10  
 **Branch:** `ui-cleanup`  
-**Audit-start baseline:** `ui-cleanup` was 31 commits ahead of `main` and had no commits behind it. The current `main` baseline is `3c779a754c55eaacd8238fbc7fe83d4dee89530c`. This documentation pass added 11 commits; the branch is now 42 commits ahead of `main` with no commits behind it.
+**Audit-start baseline:** `ui-cleanup` was 31 commits ahead of `main` and had no commits behind it. The `main` baseline at audit start was `3c779a754c55eaacd8238fbc7fe83d4dee89530c`. Documentation updates made during this audit are committed on `ui-cleanup`; the branch distance will increase as this audit record is maintained.
 
 ## Status and scope
 
