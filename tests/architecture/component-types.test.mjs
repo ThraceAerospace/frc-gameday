@@ -13,6 +13,17 @@ const componentRoot = path.join(repositoryRoot, "src/components");
 // a file that already has legacy declarations.
 const existingLocalTypes = {
   "event/HomeEventCard.tsx": ["HomeEventCardProps"],
+  "insights/EventAnalyticsDashboard.tsx": [
+    "MatchFlagSummary",
+    "MatchReviewFlag",
+    "SortKey",
+    "SortRule",
+    "Tab",
+    "TeamAnalysisTab",
+    "TeamMatchAnalysis",
+    "TeamMatchRow",
+    "TeamSeasonHistory",
+  ],
   "event/HomeMatchCard.tsx": ["HomeMatchCardProps"],
   "event/RankingsStrip.tsx": ["RankingsStripProps"],
   "event/EventFooter.tsx": ["EventFooterProps"],
@@ -27,14 +38,7 @@ const existingLocalTypes = {
   "match/NextMatchCountdown.tsx": ["NextMatchCountdownProps"],
   "match/ScoreBreakdown.tsx": ["FieldRow", "FieldSection", "ScoreBreakdownProps"],
   "remote/RemoteEventCard.tsx": ["Props"],
-  "remote/RemoteSession.tsx": [
-    "Props",
-    "RemotePeerStatus",
-    "RemoteRole",
-    "RemoteSessionMessage",
-    "RemoteSignalingStatus",
-    "RemoteSurfaceState",
-  ],
+  "remote/RemoteSession.tsx": ["Props"],
   "remote/RemoteTileSurface.tsx": ["Props"],
   "surface/EventInsightsSurface.tsx": ["EventInsightsSurfaceProps"],
   "surface/TileView.tsx": ["SurfaceUpcomingMatchAlert", "TileViewProps"],
