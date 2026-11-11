@@ -78,20 +78,22 @@ When an event has no remaining subscribers, EventState stops its timers and WebS
 
 ## Current EventAnalytics lifecycle
 
-The existing analytics acquisition path is server-side:
+The analytics acquisition path is server-side, but it is currently a separate HTTP lifecycle from the SharedWorker-owned EventState lifecycle.
 
-1. `GET /api/insights/event/<eventKey>` requests the current analytics snapshot.
-2. `getEventAnalyticsSnapshot` reads the event's persisted Redis job at `insights:progressive:<eventKey>`, or initializes it from TBA event, team, match, OPR, ranking, and playoff-alliance data.
-3. `advanceEventAnalytics` uses an event-scoped Redis lock to prevent concurrent collection.
-4. Statbotics qualification and elimination match collections are acquired for the event and associated with the TBA schedule. This is an event-level collection, not a browser request per match.
-5. FRC Colors event data is acquired as an optional enrichment.
-6. Existing FieldView calculation functions build alliance results, team rows, findings, qualification analysis/anomalies, playoff analysis, and team insights.
-7. The resumable job and source records are persisted in Redis. The job has a one-year TTL; provider refresh behavior remains governed by the existing explicit-refresh and provider-cache rules.
-8. The route attaches the season-cohort snapshot and season-aware team insights before returning the response.
+1. `GET /api/insights/event/<eventKey>` validates the event key and requests the current analytics snapshot.
+2. `getEventAnalyticsSnapshot` reads the event's Redis job at `insights:progressive:<eventKey>`. If no job exists, it acquires the event, team roster, canonical full match schedule, OPRs, rankings, and playoff alliances from TBA. Rankings and playoff alliances are optional in this initialization path and failures are converted to `null`.
+3. The route initializes/reads the season-cohort job, then awaits `advanceEventAnalytics` and `advanceSeasonCohort` together.
+4. `advanceEventAnalytics` uses an event-scoped Redis lock, obtains event-filtered Statbotics qualification and elimination match collections, pairs them with the canonical TBA schedule, acquires FRC Colors event data, and runs the FieldView calculation functions.
+5. The event job is persisted in Redis with a one-year TTL. Normal opens reuse the persisted snapshot; an explicit `?refresh=1` request refreshes the TBA schedule/OPR/rankings/alliances and Statbotics/FRC Colors collection.
+6. The season cohort is a separate Redis job with a 24-hour TTL, a 20-second work budget, bounded batches, and bounded concurrency. The route attaches its snapshot and the season-aware team insights before returning.
 
-A user-requested refresh reacquires the relevant TBA schedule/OPR/ranking/alliance inputs and the Statbotics/FRC Colors collections. A normal historical dashboard open should reuse the persisted snapshot rather than fan out new provider requests.
+**Execution behavior:** the current route declares `maxDuration = 60` and awaits both advancement functions before responding. It does not currently use Vercel `waitUntil` for this work. The dashboard fetches the event analytics endpoint on mount and on explicit user refresh; it does not currently poll for collection progress.
 
-The current analytics API route is the server-side source of the dashboard's analytics payload. **It is not yet a SharedWorker-owned EventAnalytics subscription.** This first contract implementation adds explicit identity, schema version, provenance, and per-source freshness to that payload without changing the calculations or moving the existing refresh policy.
+**Delivery behavior:** `EventAnalyticsSurface` calls `useEventState` to expose the event WebSocket connection status to the dashboard. The analytics payload itself is fetched independently by `EventAnalyticsDashboard` over HTTP. EventAnalytics is not yet a SharedWorker-owned subscription and is not yet delivered through the same snapshot channel as EventState.
+
+**Contract boundary:** the v1 envelope adds schema version, event identity, generation time, provenance, and source metadata while retaining the existing `EventAnalyticsResponse` payload. That compatibility payload still contains provider-shaped TBA and Statbotics records; it is not yet a provider-independent FieldView DTO.
+
+**Known metadata limitation:** the current grouped TBA source status can report `ready` when optional rankings or playoff-alliance acquisition failed and those values are `null`. Source status should eventually be tracked per resource or expose a partial state with missing-resource details.
 
 ## EventAnalytics v1 contract
 
