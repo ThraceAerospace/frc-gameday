@@ -964,3 +964,12 @@ When SharedWorker is unavailable, `sharedWorkerClient` switches to fallback mode
 This violates the documented idle-teardown invariant. The normal SharedWorker-owned path has its own lease/watchdog cleanup; the leak is specific to the per-tab fallback path and can multiply across tabs when SharedWorker is unavailable.
 
 **Action:** give `EventWebSocketManager` explicit consumer/lease accounting and an idle shutdown path. When no event subscriptions or runtime leases remain, cancel reconnect timers, close the socket, clear its started state, and avoid reconnecting. Add tests for last-event unsubscribe, last-runtime-lease release, disconnect while idle, and subsequent fresh subscription/reconnect.
+
+
+### FV-AUD-087 — Repeated asynchronous SharedWorker startup errors cause immediate recreation loops
+
+**Severity: Low / live-runtime startup reliability**
+
+`sharedWorkerClient.connect` catches synchronous `new SharedWorker(...)` construction failures and switches to the per-tab fallback, but errors emitted asynchronously by the worker are handled differently: the `error` listener calls `recover()`, and `recover()` immediately calls `connect()` again whenever listeners or live-runtime leases remain. There is no retry delay, attempt counter, or fallback threshold for repeated worker-script startup/runtime errors. If the worker bundle consistently fails after construction (for example, a deployment asset mismatch or module-load error), the tab can repeatedly create and tear down workers in a tight loop rather than reaching the existing fallback path.
+
+**Action:** apply bounded exponential backoff to asynchronous worker recovery and switch to per-tab fallback after a small number of consecutive startup failures. Reset the failure counter only after a worker has demonstrated health (for example, a successful ready/pong handshake). Add tests for transient recovery and persistent worker-script failure without rapid recreation.
