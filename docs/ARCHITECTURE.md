@@ -17,7 +17,8 @@ This document describes both the architecture currently present in the repositor
 ### Not implemented yet
 
 - SharedWorker-owned EventAnalytics subscriptions and unified EventState/EventAnalytics snapshot delivery.
-- A fully provider-independent, validated FieldView DTO layer for all client-facing data.
+- A fully provider-independent, validated FieldView DTO layer for all client-facing data, including per-resource loading/freshness/failure state.
+- The reusable `EventDataPanel` and `dataPanel` tile type/URL behavior described in the target view architecture; current `TileView` supports only EventView tiles.
 - A dedicated Cloudflare acquisition/persistence implementation. Cloudflare remains a possible future infrastructure adapter, not the current runtime.
 - A public developer API product, public API versioning policy, or OpenAPI/Swagger surface.
 
