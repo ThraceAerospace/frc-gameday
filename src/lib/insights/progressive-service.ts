@@ -62,9 +62,13 @@ async function acquireOptional<T>(request: Promise<T>): Promise<OptionalAcquisit
 function optionalSource(
   loadedAt: number | undefined,
   error: string | null | undefined,
+  hasData: boolean,
 ): { status: "ready" | "partial" | "unavailable" | "unknown"; updatedAt: number | null; error: string | null } {
+  const hasSuccessfulAcquisition = loadedAt !== undefined || hasData;
   return {
-    status: error ? (loadedAt ? "partial" : "unavailable") : loadedAt ? "ready" : "unknown",
+    status: error
+      ? hasSuccessfulAcquisition ? "partial" : "unavailable"
+      : hasSuccessfulAcquisition ? "ready" : "unknown",
     updatedAt: loadedAt ?? null,
     error: error ?? null,
   };
@@ -131,8 +135,8 @@ function buildPayload(job: Job): EventAnalytics {
     teams: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
     matches: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
     oprs: { status: job.tbaLoadedAt ? "ready" as const : "unavailable" as const, updatedAt: job.tbaLoadedAt ?? null },
-    rankings: optionalSource(job.rankingsLoadedAt, job.rankingsFetchError),
-    playoffAlliances: optionalSource(job.playoffAlliancesLoadedAt, job.playoffAlliancesFetchError),
+    rankings: optionalSource(job.rankingsLoadedAt, job.rankingsFetchError, job.rankings !== null),
+    playoffAlliances: optionalSource(job.playoffAlliancesLoadedAt, job.playoffAlliancesFetchError, job.playoffAlliances != null),
   };
   const tbaStatus = !job.tbaLoadedAt
     ? "unavailable"
