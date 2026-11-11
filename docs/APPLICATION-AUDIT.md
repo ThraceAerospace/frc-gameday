@@ -469,3 +469,13 @@ The initial `getEventAnalyticsSnapshot` acquisition uses one `Promise.all` for e
 The explicit-refresh path has the same dependency: `latestOprs` is fetched in the schedule-refresh `Promise.all` without an independent failure outcome. An OPR failure prevents the refreshed schedule and rankings from being applied in that block.
 
 **Action:** model OPR acquisition as an independently tracked optional resource. Preserve existing OPR values on refresh failure, record its status/error/freshness separately, and continue building analytics from available event, match, Statbotics, ranking, and alliance data. Do not label missing OPR data as zero or as a successful empty response.
+
+### FV-AUD-038 — Event team EPA has no per-team observation freshness
+
+**Severity: Medium / metric interpretation**
+
+`buildTeamRows` walks the event's analytics match records and increments `matchesSeen` for every team appearance, regardless of whether that match has a usable Statbotics record. The team's displayed EPA is separately carried forward from the latest record with an available post-match EPA, falling back to pre-match EPA and then to the previous value.
+
+Consequently, a team row can show a large `matchesSeen` count alongside an EPA value last observed several matches earlier. The EventAnalytics source status is event-wide, so it does not identify which team's EPA was last updated from which match. Consumers cannot distinguish a current team estimate from a retained older estimate.
+
+**Action:** attach per-team EPA observation metadata (source match, observed phase, and timestamp/order) and expose the number of usable EPA observations separately from total match appearances. Mark carried-forward values as stale/last-known rather than presenting them as equally current.
