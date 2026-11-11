@@ -8,7 +8,7 @@
 
 The audit has expanded beyond the initial architecture pass into targeted source-level reviews of the main data paths: TBA and Statbotics provider clients, FRC Colors acquisition, Redis cache envelopes and lock lifecycles, webhook mutation and realtime fan-out, SharedWorker/EventState lifecycle and resource reloads, remote WebRTC snapshot delivery, event/team/district API routes, event and team analytics orchestration, season-cohort comparisons, metric calculations, and date/time formatting. The API route inventory and the principal architecture/type/analytics documentation have also been checked against the implementation.
 
-The audit currently contains 95 individually numbered findings (FV-AUD-001 through FV-AUD-095). The findings are implementation observations and recommended follow-ups, not a claim that every issue has been fixed. The review is still in progress: not every presentation component, route edge case, deployment configuration, or browser/runtime behavior has received a line-by-line or live validation pass. No local lint, build, automated test, or live-provider validation has been run during this source-only review. The repository currently has no automated test command or test-runner dependency (FV-AUD-071).
+The audit currently contains 100 individually numbered findings (FV-AUD-001 through FV-AUD-100): 6 High, 68 Medium, and 26 Low. Severity reflects the current impact/risk of the finding, not an implementation priority order. The findings are implementation observations and recommended follow-ups, not a claim that every issue has been fixed. The review is still in progress: not every presentation component, route edge case, deployment configuration, or browser/runtime behavior has received a line-by-line or live validation pass. No local lint, build, automated test, or live-provider validation has been run during this source-only review. The repository currently has no automated test command or test-runner dependency (FV-AUD-071).
 
 ## Executive summary
 
@@ -136,7 +136,7 @@ This conflicts with the project requirement to use the official Statbotics API o
 
 ### FV-AUD-002 — Current-season team history can remain stale for a year
 
-**Severity: High / data-freshness defect**
+**Severity: Medium / latent API data-freshness defect**
 
 `src/app/api/insights/team/[team]/route.ts` stores the assembled team-history response under `cache:insights:team-history:<team>:<year>` with a 365-day TTL. The route has no `refresh=1` handling. This applies to the current season as well as completed seasons, even though the underlying Statbotics team-event cache has a much shorter freshness policy. The cache key has no response-schema version, and a cache hit is returned after `JSON.parse` without validating the payload shape. A team-history contract change can therefore leave an older response shape in circulation for up to a year, with no explicit refresh path to migrate it; this differs from the team-match analysis route, which uses a versioned `v2` cache key. The only in-repository caller found is the dashboard's unfinished two-team history effect, which is currently unreachable because `setTeamB` is never called (FV-AUD-093). These cache risks are therefore latent for direct API consumers or a future implementation of that comparison surface, rather than an active request path in the current UI.
 
@@ -144,7 +144,7 @@ This conflicts with the project requirement to use the official Statbotics API o
 
 ### FV-AUD-003 — Event Analytics runtime is documented incorrectly
 
-**Severity: High / architecture and operational mismatch**
+**Severity: Medium / architecture and operational documentation mismatch**
 
 The documentation says Vercel `waitUntil` advances bounded event-analytics batches and the browser polls collection progress. The inspected route instead awaits both analytics advancement functions before returning, and the dashboard loads on mount or explicit user refresh. There is no `waitUntil` call in the route and no dashboard polling loop.
 
