@@ -110,7 +110,6 @@ test("Statbotics 404 responses are cached as a real null result", async () => {
 
 test("Statbotics refresh failures return stale data and apply a bounded retry cooldown", async () => {
   const { client, redis } = await createClient();
-  const endpoint = "/match/2026ctabc_qm1";
   const cacheKey = "cache:statbotics:v3::match:2026ctabc_qm1";
   const staleData = { key: "2026ctabc_qm1", pred: { red_score: 88 } };
   const now = Date.now();
@@ -134,7 +133,6 @@ test("Statbotics refresh failures return stale data and apply a bounded retry co
   assert.ok(updated.lastRefreshAt >= now);
   assert.ok(updated.expiresAt > Date.now());
   assert.equal(await redis.get("lock:statbotics:v3::match:2026ctabc_qm1"), null);
-  assert.equal(endpoint, "/match/2026ctabc_qm1");
 });
 
 test("Statbotics collection pagination uses stable filters and offsets", async () => {
