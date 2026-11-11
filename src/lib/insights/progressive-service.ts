@@ -50,6 +50,10 @@ async function readJob(eventKey: string): Promise<Job | null> {
       await redis.del(jobKey(eventKey));
       return null;
     }
+    // Backfill source freshness for jobs persisted before EventAnalytics v1.
+    // The schedule timestamp is the closest existing record of the TBA load;
+    // updatedAt is a final fallback for older snapshots without it.
+    value.tbaLoadedAt ??= value.scheduleRefreshedAt ?? value.updatedAt;
     return value;
   } catch {
     await redis.del(jobKey(eventKey));
