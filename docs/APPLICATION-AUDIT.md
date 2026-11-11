@@ -681,3 +681,14 @@ The Statbotics client acquires a per-resource Redis lock with a fixed 20-second 
 Both callers write their results without a generation/fencing check at commit time. If the second request completes first and the original request completes later, the older request can overwrite the newer cache entry. The token-checked `releaseLock` prevents the first caller from deleting a newer owner's lock, but it does not prevent the first caller from writing after its lease has expired.
 
 **Action:** make the lock lifetime and request lifetime consistent. Apply a bounded provider timeout shorter than the lease, renew the lease while work is active, or use a fencing/generation token checked atomically when committing cache results. Ensure a request whose lease is no longer current cannot overwrite a later generation. Add a deterministic test where the first fetch exceeds the lease and completes after the second fetch.
+
+
+### FV-AUD-058 — Cold-cache Statbotics failures become cached “not found” responses
+
+**Severity: Medium / provider failure semantics**
+
+When a Statbotics request fails and there is no prior cached representation, the catch path writes a negative cache entry with `data: null` and a retry cooldown, then rethrows the original error. The first caller therefore observes a service failure. On subsequent calls, however, `getCached` sees the negative entry as fresh and returns its `null` data without attempting the provider request. The per-match API interprets that null as a genuine missing Statbotics record and responds with HTTP 404 and `{ available: false }`.
+
+A transient upstream outage on a cold cache is therefore converted into a successful “record not found” response for the negative-cache interval (normally at least ten minutes). Consumers cannot distinguish an actual provider 404 from a temporary provider failure after the first request.
+
+**Action:** preserve the distinction between negative-cache results caused by an authoritative upstream 404 and cooldown entries caused by acquisition failure. Store an explicit outcome/status in the cache entry; return null only for confirmed not-found results, and return an unavailable/error state (or retry after a short bounded cooldown) for failed acquisition. Add tests for genuine 404, cold-cache network failure followed by a second request, upstream 5xx, and recovery after the cooldown.
