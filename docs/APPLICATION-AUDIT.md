@@ -17,7 +17,7 @@ FieldView already has a meaningful data architecture: TBA acquisition is central
 The largest risks found in this pass are not visual. They concern source correctness, freshness, completeness, and the reliability of the data-delivery path:
 
 1. The Statbotics runtime defaults to a community-operated mirror rather than the project's required official/FieldView-operated source.
-2. Current-season team history can remain cached for a year; multiple analytics consumers also hide stale-on-error provider fallbacks behind fresh-looking timestamps/status.
+2. The currently dormant team-history API can retain current-season data or a transient provider failure for a year if called; active analytics consumers also hide stale-on-error provider fallbacks behind fresh-looking timestamps/status.
 3. Webhook handling does not consistently update or invalidate every cached representation and dependent resource; some failed cache mutations are still acknowledged as successful updates.
 4. Redis lock leases can expire during provider/job work, concurrent workers can overwrite progress, and explicit refreshes can silently return the old snapshot when a lock is held.
 5. TBA, Statbotics, and FRC Colors payloads are trusted with insufficient runtime validation; malformed data can be cached or converted into false-empty state.
