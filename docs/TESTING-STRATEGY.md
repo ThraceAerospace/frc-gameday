@@ -62,7 +62,7 @@ Primary files: `src/lib/statbotics/client.ts`, `src/lib/statbotics/service.ts`, 
 
 Test:
 
-- Configured base URL and endpoint construction; URL encoding for match/event keys.
+- Official API default (`https://api.statbotics.io`) when no override is configured; explicit `STATBOTICS_API_BASE_URL` override and endpoint construction; URL encoding for match/event keys.
 - Cache key and lock key isolation by endpoint/query.
 - Cache parsing rejects malformed structures rather than trusting a generic TypeScript cast.
 - Upstream max-age and endpoint fallback TTL behavior, including the ten-minute request floor.
@@ -72,7 +72,7 @@ Test:
 - Null single-record responses remain distinct from failed collection requests.
 - Provider-specific types remain inside the Statbotics adapter boundary; consumers use the service contract.
 
-**Known contract drift to resolve explicitly:** `src/lib/statbotics/client.ts` currently defaults to `https://api-statbotics.iterativerefinement.com`, while the current `AGENTS.md` states the official API should be the default. `README.md` and the application audit describe the mirror default as a known violation. Do not write a test that blesses the mirror as the intended authority. First agree and implement the provider decision in a separately reviewed, minimal correction or make the runtime base URL an explicit test/deployment configuration; keep this finding visible until resolved.
+**Provider authority decision (2026-11-11):** The official Statbotics API at `https://api.statbotics.io` is the intended and default provider. `STATBOTICS_API_BASE_URL` is an explicit temporary override; it may point to Chondl's maintained fork at `https://api-statbotics.popcornpenguins.com` while the official API is unavailable. The fork is not the canonical authority today. If the official API does not return and Chondl's fork remains maintained and available, the fork may be adopted as the long-term alternative after an explicit decision. Tests must prove the official default and the temporary override independently; they must not silently bless the fork as permanent authority.
 
 ### C. Normalization and schema contract tests
 
