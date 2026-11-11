@@ -166,7 +166,7 @@ The repository currently has no top-level `src/types/` directory and has establi
 
 - [x] Add `npm test` using Node's built-in test runner; this avoids introducing a second test framework before the first contracts are mapped.
 - [x] Add AST-based architecture checks that prevent application/component modules from importing low-level TBA/Statbotics clients and prevent raw generated provider schemas from bypassing their application type adapters.
-- [x] Add deterministic unit coverage for the pure TBA match helpers: played/scored state, time selection, stable sorting without input mutation, next/last match selection, and team filtering.
+- [x] Add deterministic unit coverage for the pure TBA match helpers: played/scored state, time selection, stable sorting without input mutation, next/last match selection, and team filtering.\n- [x] Inventory existing component-local type declarations and add an AST guard that prevents new declarations or additions to the legacy baseline; migrate existing declarations into central types in deliberate, test-backed steps.
 - [ ] Run the suite in a local checkout and wire it into CI. The current execution environment cannot clone the repository or install dependencies, so these tests have been committed but have not yet been executed here.
 - [ ] Add unit tests for TBA cache/ETag/reconciliation behavior.
 - [ ] Add unit tests for Statbotics cache/locking/pagination behavior.
