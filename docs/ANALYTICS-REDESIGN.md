@@ -34,3 +34,14 @@ For team season progression, calculate qualification-to-elimination residual shi
 ## Shared presentation contract
 
 Every view follows takeaway → evidence → investigation. Show plain-language conclusions first, then relevant metrics and visualizations, then match/event evidence. Keep sample size, source coverage, model provenance, and caveats close to conclusions. Never attribute alliance residuals or shared EPA updates to an individual robot.
+
+## Current implementation audit notes
+
+This document defines intended analytical behavior; it is not proof that every calculation is already implemented in the server service layer. The first application audit identified these implementation gaps:
+
+- Suggested Review still calculates model-upset, phase-specific median/MAD, large-residual, and high-alliance-EPA flags in the browser. These classifications should move into the server-side analytics service and become part of the EventAnalytics response.
+- The current median/MAD implementations use the upper middle value for even-sized samples rather than the conventional average of the two middle values. Choose and test a single convention before changing thresholds or historical results.
+- The qualification prediction-calibration summary currently counts an incorrect prediction at exactly 50% as an underdog win. A 50/50 prediction has no underdog; this edge case should be corrected and tested.
+- The selected-team match-analysis API route still contains substantial calculation logic instead of delegating to a reusable server-side service.
+
+See [APPLICATION-AUDIT.md](APPLICATION-AUDIT.md) for the corresponding findings and priorities. Keep this specification as the intended methodology while those implementation gaps are resolved.
