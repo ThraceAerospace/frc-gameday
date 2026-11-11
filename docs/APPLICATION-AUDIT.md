@@ -944,3 +944,12 @@ The selected-team history route emits `source: "Statbotics mirror + The Blue All
 `registerRemoteWebSocket` refreshes the role's Redis presence key every 30 seconds with a token-checked `EXPIRE`, but the interval only logs Redis errors and ignores the script's return value. If Redis is unavailable long enough for the 120-second presence TTL to expire, or the key is otherwise lost/replaced, a later refresh returns `0` because the token no longer owns the key. The existing WebSocket is not closed and its subscriber remains active. A new client can then acquire the now-free role key and connect under the same six-digit code while the old peer is still connected. Both peers can continue receiving/publishing signaling messages for that code, violating the one-controller/one-display presence invariant and potentially routing offers/candidates to multiple peers.
 
 **Action:** treat a failed or token-mismatched lease refresh as loss of session ownership. Close the socket and run idempotent cleanup when the refresh script does not confirm the token-owned key was extended; use a bounded retry only when there is still sufficient TTL to safely recover. Add tests for Redis outage beyond the lease, a refresh returning zero, and a new peer attempting to acquire the same role after lease loss.
+
+
+### FV-AUD-085 — Remote WebRTC has no TURN relay fallback
+
+**Severity: Medium / remote display connectivity**
+
+`RemotePeer.createPeerConnection` configures only Google's public STUN server (`stun:stun.l.google.com:19302`) and does not provide any TURN server. STUN helps peers discover public-facing address candidates, but it does not relay media/data when the peers' NATs or network policies prevent a direct ICE path. Displays and controllers behind restrictive/symmetric NAT, UDP-blocking firewalls, or some enterprise networks can therefore fail to establish the data channel even though their signaling WebSockets connect successfully. The current code restarts the peer after an explicit failed/closed connection state, but it has no relay candidate to fall back to.
+
+**Action:** decide whether remote connectivity is expected to work across arbitrary public networks. If so, configure a credentialed TURN service (with UDP and TCP/TLS relay options) and include it in the ICE server list; keep credentials short-lived and server-issued. Add connectivity tests across same-LAN, typical home NAT, and restrictive-network/TURN-only scenarios, and expose a clear connection failure reason rather than leaving the user at an indefinite “Connecting” state.
