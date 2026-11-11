@@ -11,7 +11,8 @@ export type EventAnalyticsSourceStatus =
   | "pending"
   | "ready"
   | "partial"
-  | "unavailable";
+  | "unavailable"
+  | "unknown";
 
 export type EventAnalyticsSource = {
   status: EventAnalyticsSourceStatus;
@@ -19,6 +20,19 @@ export type EventAnalyticsSource = {
   updatedAt: number | null;
   /** Provider error, when available. Never required for a usable snapshot. */
   error?: string | null;
+};
+
+export type EventAnalyticsTbaResources = {
+  event: EventAnalyticsSource;
+  teams: EventAnalyticsSource;
+  matches: EventAnalyticsSource;
+  oprs: EventAnalyticsSource;
+  rankings: EventAnalyticsSource;
+  playoffAlliances: EventAnalyticsSource;
+};
+
+export type EventAnalyticsTbaSource = EventAnalyticsSource & {
+  resources: EventAnalyticsTbaResources;
 };
 
 /**
@@ -45,7 +59,7 @@ export type EventAnalytics = EventAnalyticsResponse & {
     derived: "fieldview";
   };
   sources: {
-    tba: EventAnalyticsSource;
+    tba: EventAnalyticsTbaSource;
     statbotics: EventAnalyticsSource;
     frcColors: EventAnalyticsSource;
   };
