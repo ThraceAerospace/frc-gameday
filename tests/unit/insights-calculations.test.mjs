@@ -33,6 +33,7 @@ function makeRecord({
     "5": { epa: 15 },
     "6": { epa: 25 },
   },
+  epas = null,
 } = {}) {
   return {
     match: {
@@ -47,6 +48,7 @@ function makeRecord({
     statbotics: {
       pred: { red_score: redPrediction, blue_score: bluePrediction },
       pre_epas: preEpas,
+      epas,
     },
     statboticsStatus: "ready",
   };
@@ -120,4 +122,112 @@ test("team contribution sampling rejects duplicate alliance team keys", () => {
 
   assert.equal(rows.find((team) => team.teamNumber === 1).epaContributionSamples, 0);
   assert.equal(rows.find((team) => team.teamNumber === 2).epaContributionSamples, 0);
+});
+
+test("team rows combine official OPR metrics with the latest available Statbotics EPA values", () => {
+  const first = makeRecord({
+    key: "2026ctabc_qm1",
+    epas: {
+      "1": { epa: 10, auto_epa: 1, teleop_epa: 6, endgame_epa: 3 },
+      "2": { epa: 20, auto_epa: 2, teleop_epa: 12, endgame_epa: 6 },
+      "3": { epa: 20, auto_epa: 2, teleop_epa: 12, endgame_epa: 6 },
+    },
+  });
+  const second = makeRecord({
+    key: "2026ctabc_qm2",
+    preEpas: {
+      "1": { epa: 30 },
+      "2": { epa: 20 },
+      "3": { epa: 20 },
+      "4": { epa: 5 },
+      "5": { epa: 15 },
+      "6": { epa: 25 },
+    },
+  });
+  const teams = [
+    { key: "frc1", team_number: 1, nickname: "Alpha" },
+    { key: "frc2", team_number: 2, name: "Beta" },
+    { key: "frc3", team_number: 3 },
+    { key: "frc99", team_number: 99, nickname: "" },
+  ];
+
+  const rows = buildTeamRows(teams, {
+    oprs: { frc1: 42 },
+    dprs: { frc1: 18 },
+    ccwms: { frc1: 24 },
+  }, [first, second]);
+
+  assert.deepEqual(rows.map(({ teamNumber, name, epa, matchesSeen }) => ({
+    teamNumber, name, epa, matchesSeen,
+  })), [
+    { teamNumber: 1, name: "Alpha", epa: 30, matchesSeen: 2 },
+    { teamNumber: 2, name: "Beta", epa: 20, matchesSeen: 2 },
+    { teamNumber: 3, name: "Team 3", epa: 20, matchesSeen: 2 },
+    { teamNumber: 99, name: "Team 99", epa: null, matchesSeen: 0 },
+  ]);
+
+  assert.equal(rows[0].opr, 42);
+  assert.equal(rows[0].dpr, 18);
+  assert.equal(rows[0].ccwm, 24);
+  assert.equal(rows[0].autoEpa, null);
+  assert.equal(rows[0].teleopEpa, null);
+  assert.equal(rows[0].endgameEpa, null);
+  assert.equal(rows[0].epaPercentile, 1);
+  assert.equal(rows[1].epaPercentile, 0.25);
+  assert.equal(rows[2].epaPercentile, 0.25);
+  assert.equal(rows[3].epaPercentile, null);
+});
+
+test("team EPA contribution percentages use pre-match EPA and average valid alliance samples", () => {
+  const first = makeRecord();
+  const second = makeRecord({
+    key: "2026ctabc_qm2",
+    preEpas: {
+      "1": { epa: 20 },
+      "2": { epa: 20 },
+      "3": { epa: 20 },
+      "4": { epa: 5 },
+      "5": { epa: 15 },
+      "6": { epa: 25 },
+    },
+  });
+  const teams = [
+    { key: "frc1", team_number: 1 },
+    { key: "frc2", team_number: 2 },
+    { key: "frc3", team_number: 3 },
+  ];
+
+  const rows = buildTeamRows(teams, null, [first, second]);
+
+  assert.equal(rows[0].epaContributionSamples, 2);
+  assert.equal(rows[0].epaContributionPercent, (10 / 60 * 100 + 20 / 60 * 100) / 2);
+  assert.equal(rows[1].epaContributionPercent, (20 / 60 * 100 + 20 / 60 * 100) / 2);
+  assert.equal(rows[2].epaContributionPercent, (30 / 60 * 100 + 20 / 60 * 100) / 2);
+});
+
+test("team EPA contribution sampling excludes negative, missing, and zero-total alliance estimates", () => {
+  const negative = makeRecord({
+    key: "2026ctabc_qm1",
+    preEpas: { "1": { epa: -1 }, "2": { epa: 2 }, "3": { epa: 3 } },
+  });
+  const missing = makeRecord({
+    key: "2026ctabc_qm2",
+    preEpas: { "1": { epa: 1 }, "2": { epa: 2 } },
+  });
+  const zero = makeRecord({
+    key: "2026ctabc_qm3",
+    preEpas: { "1": { epa: 0 }, "2": { epa: 0 }, "3": { epa: 0 } },
+  });
+  const teams = [
+    { key: "frc1", team_number: 1 },
+    { key: "frc2", team_number: 2 },
+    { key: "frc3", team_number: 3 },
+  ];
+
+  const rows = buildTeamRows(teams, null, [negative, missing, zero]);
+
+  for (const row of rows) {
+    assert.equal(row.epaContributionSamples, 0);
+    assert.equal(row.epaContributionPercent, null);
+  }
 });
