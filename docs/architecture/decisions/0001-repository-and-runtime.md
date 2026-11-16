@@ -24,7 +24,7 @@ The migration must preserve the existing application while responsibilities move
 ## Consequences
 
 - The repository will gain `apps/web`, `workers/backend`, and focused packages under `packages/`.
-- The current root Next.js application is not moved until its build, environment configuration, and import graph are mapped.
+- The existing Next.js application has been relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. Local clean-install and production-build validation passed.
 - The first runtime candidate is one EventRuntime per event, but exact state ownership remains subject to a separate decision.
 - No Cloudflare resource or production cutover is implied by this ADR.
 - The Vercel migration-branch Ignored Build Step remains a project-level deployment safeguard and is not changed by repository commits.
