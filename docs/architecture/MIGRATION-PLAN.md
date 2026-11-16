@@ -1,8 +1,8 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory completed; M2 repository foundation in progress  
-**Target branch:** `fieldview-architecture-migration`  
-**Strategy:** Incremental migration  
+**Status:** M1 source inventory completed; M2 repository foundation in progress (Next.js app relocated to `apps/web`; post-relocation validation and npm workspace conversion remain)
+**Target branch:** `fieldview-architecture-migration`
+**Strategy:** Incremental migration
 **Last updated:** 2026-11-16
 
 This document is the working migration plan for evolving the existing FieldView application into the target architecture. It is deliberately separate from the historical application audit: audit findings describe observed problems in the old implementation, while this document describes the destination and the order in which responsibilities will move.
@@ -43,7 +43,6 @@ workers/
 packages/
   contracts/                   # Versioned, serializable client DTOs
   domain/                      # Canonical FieldView domain models and rules
-  packages/
   providers/
     tba/
       src/
@@ -93,7 +92,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 - Each provider package owns its complete integration, including generated schemas, schema-generation tooling, clients, services, validation, and normalization.
 - Provider-specific implementation must not be split across the web application, domain package, or generic schema packages.
 - Each provider package translates external data into canonical FieldView domain values. Raw provider types remain internal to that package.
-  
+
 ## 4. Runtime responsibility model
 
 | Responsibility | Default owner |
@@ -141,15 +140,15 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Unresolved design questions are explicitly recorded.
 - No implementation work is based solely on an unverified historical audit finding.
 
-**Status:** Initial source-level mapping is complete in `docs/architecture/MIGRATION-INVENTORY.md`. The 22 audited API handlers, current package/build configuration, environment-variable names found in source, and major provider/state/analytics responsibilities are mapped. Live Vercel environment-variable scopes/values and a complete import graph have not yet been inspected; those are required before relocating the Next.js app.
+**Status:** Complete. The source inventory, 22 API handlers, environment-variable names and Vercel scopes (values withheld), and source import graph have been inspected. The Next.js application has since been relocated to `apps/web`; its post-relocation build validation remains part of M2.
 
 ### M2 — Architecture and repository foundation
 
 **Work**
 - Replace contradictory legacy instructions with migration-aware repository guidance while retaining useful product invariants.
 - Establish architecture decision records and package dependency rules.
-- Introduce npm workspaces and shared TypeScript/lint/test configuration.
-- Move the existing Next.js application into `apps/web` with behavior preserved.
+- Move the existing Next.js application into `apps/web` with behavior preserved. (Committed; post-relocation validation remains.)
+- Introduce npm workspaces and shared TypeScript/lint/test configuration around the relocated app.
 - Add CI for installation, lint, typecheck, tests, and build as each becomes available.
 
 **Exit criteria**
@@ -158,7 +157,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - CI validates the workspace.
 - No provider or backend runtime dependency leaks into the web package through convenience imports.
 
-**Status:** Started. `AGENTS.md` now defines the target architecture and labels the existing Redis/SharedWorker/Vercel path as legacy. README and the source-level inventory are aligned. No workspace/package relocation has been made yet.
+**Status:** In progress. Architecture guidance, ADRs, README, and source inventory are in place. The Next.js app has been relocated to `apps/web`. The root package manifest and lockfile remain; npm workspaces, CI, and the initial test harness are not yet established.
 
 ### M3 — Domain and contract foundation
 
@@ -301,4 +300,4 @@ Every finding should be revalidated before implementation. Some will disappear b
 4. Add CI and the initial test harness only after determining which build-time routes require provider/Redis configuration; never put production secrets into CI.
 5. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
-**Current implementation status:** `AGENTS.md`, README, and the source-level migration inventory have been updated. The repository still has one root Next.js app and the legacy Redis/SharedWorker/Vercel data path. No Cloudflare Worker, Durable Object, workspace package, or production infrastructure has been created.
+**Current implementation status:** The Next.js application has been relocated from the repository root to `apps/web`. The root package manifest and lockfile remain in place; npm workspaces have not yet been enabled. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
