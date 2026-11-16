@@ -1,17 +1,16 @@
 # @fieldview/domain
 
-Canonical, provider-independent FieldView domain models and rules.
+FieldView's derived-data domain models and rules. The domain may use upstream provider types directly when representing provider-shaped data.
 
 ## Ownership boundaries
 
 This package must remain independent of:
 
-- provider packages and generated provider schemas;
 - Next.js, React, and other presentation code;
 - Cloudflare Workers and Durable Objects;
 - storage, transport, and other infrastructure implementations.
 
-Provider adapters may depend on this package to produce normalized FieldView values. The domain package must never import provider implementations.
+The domain package may depend on provider packages and their generated schemas. Provider-specific types remain backend-only and must not leak into client contracts. Keep client DTOs explicit and serializable.
 
 ## Canonical identity
 
