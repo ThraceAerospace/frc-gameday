@@ -13,7 +13,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Migration: incremental, with temporary compatibility adapters where necessary.
 - Backend: hybrid Cloudflare Workers and Durable Objects.
 - Initial authoritative runtime candidate: one EventRuntime per event. Do not create one Durable Object per domain interface.
-- Domain contracts and analytics packages must be reusable independently of Next.js, Cloudflare, and provider SDKs.
+- Domain and analytics packages must be reusable independently of Next.js and Cloudflare. The domain may use provider packages as type-only dependencies for unchanged provider-sourced fields; it must not depend on provider clients or transport at runtime.
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
@@ -22,7 +22,7 @@ See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVEN
 ## Non-negotiable product and data principles
 
 1. **FieldView owns its domain model.** External APIs are inputs, not the application's public data model.
-2. Normalize provider data before it enters published domain state. Provider schemas, identifiers, status enums, and raw response objects stay inside provider adapters.
+2. Pass provider payloads unchanged into FieldView domain normalization. Preserve provider field names, values, types, nullability, and structures. Provider schemas remain in provider packages; the backend domain may use their types for pass-through fields.
 3. Keep acquisition, normalization, domain state/reconciliation, derivation, and presentation as distinct responsibilities.
 4. Preserve provenance and freshness internally. Distinguish unavailable/missing data, explicit null/clear, zero, stale values, and failed acquisition.
 5. A failed or partial provider request must not erase unrelated valid state. A successful explicit clear may clear the corresponding prior value.
@@ -37,7 +37,7 @@ The planned npm workspace layout is:
 
 - `apps/web` — Next.js application, pages, UI, and web-specific route adapters.
 - `workers/backend` — Cloudflare Worker entrypoints, backend application services, and Durable Object runtime implementations.
-- `packages/domain` — canonical FieldView domain objects, normalization-independent types, and domain rules.
+- `packages/domain` — canonical FieldView domain objects, FieldView normalization/correlation, and domain rules.
 - `packages/contracts` — versioned serializable client-facing DTOs and validation schemas.
 - `packages/providers/*` — isolated provider clients, raw provider types, validation, normalization, retries, rate limits, and source metadata.
 - `packages/analytics` — declarative metric definitions and a small provider/UI-independent calculation engine.
@@ -60,7 +60,7 @@ Everything specific to that provider belongs in that package:
 
 Do not split generated schemas, clients, services, or normalization into separate generic packages. Do not put provider-owned implementation or generated types in `apps/web` or `packages/domain`.
 
-A provider package may depend on `packages/domain`, but `packages/domain` must never depend on a provider package. Raw generated provider types must not cross the provider boundary into published FieldView contracts.
+The domain may depend on provider packages for types only. It must not import provider clients, service implementations, or transport code. Client contracts must not import or expose provider types.
 
 Provider adapters own:
 - API transport, credentials, provider-specific request/response types, and schema validation;
@@ -68,9 +68,9 @@ Provider adapters own:
 - mapping external identities and values into FieldView-owned domain values;
 - internal source provenance and acquisition metadata.
 
-Provider adapters must not expose raw provider response objects to the frontend or published client DTOs. Do not leak names such as `TBAEvent`, `TBAMatch`, `StatboticsMatch`, provider status enums, or provider response envelopes into client-facing contracts.
+Provider packages must not expose raw provider response objects directly to the frontend or published client DTOs. The backend domain may use provider types to preserve source values. Do not leak names such as `TBAEvent`, `TBAMatch`, `StatboticsMatch`, provider status enums, or provider response envelopes into client-facing contracts.
 
-Normalization is not aggregation. Do not combine unrelated sources or calculate analytics inside provider adapters. Preserve field-level source precedence and partial-failure semantics.
+Provider packages do not normalize, correlate, aggregate, or calculate FieldView values. The domain may associate related source data into first-class FieldView objects; analytics calculations remain in the analytics layer. Preserve field-level source precedence and partial-failure semantics.
 
 Statbotics runtime data may come only from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. Do not use a community-operated mirror. Keep the provider endpoint configurable only for approved compatible endpoints.
 
