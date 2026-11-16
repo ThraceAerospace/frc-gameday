@@ -46,6 +46,21 @@ The planned npm workspace layout is:
 This is a target boundary map, not permission to move every existing folder mechanically. Keep changes small, trace imports, and validate the build after each structural step. Do not create placeholder packages without a concrete first consumer.
 
 ## Provider adapter boundary
+### Provider package ownership
+
+Each external provider has one self-contained package under `packages/providers/<provider>/`.
+
+Everything specific to that provider belongs in that package:
+- generated OpenAPI types and raw provider schemas;
+- schema-generation scripts, configuration, and supporting files;
+- provider API clients and service layers;
+- provider-specific validation and response types;
+- normalization into canonical FieldView domain models;
+- provider-specific request, retry, rate-limit, and freshness behavior.
+
+Do not split generated schemas, clients, services, or normalization into separate generic packages. Do not put provider-owned implementation or generated types in `apps/web` or `packages/domain`.
+
+A provider package may depend on `packages/domain`, but `packages/domain` must never depend on a provider package. Raw generated provider types must not cross the provider boundary into published FieldView contracts.
 
 Provider adapters own:
 - API transport, credentials, provider-specific request/response types, and schema validation;

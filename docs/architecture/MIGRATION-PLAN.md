@@ -43,10 +43,30 @@ workers/
 packages/
   contracts/                   # Versioned, serializable client DTOs
   domain/                      # Canonical FieldView domain models and rules
+  packages/
   providers/
-    tba/                       # TBA client, provider types, normalization
-    statbotics/                # Statbotics client, provider types, normalization
-    frc-colors/                # FRC Colors integration and normalization
+    tba/
+      src/
+        generated/
+        client/
+        services/
+        normalization/
+        types/
+      scripts/                 # TBA schema generation
+    statbotics/
+      src/
+        generated/
+        client/
+        services/
+        normalization/
+        types/
+      scripts/                 # Statbotics schema generation
+    frc-colors/
+      src/
+        client/
+        services/
+        normalization/
+        types/
   analytics/
     definitions/               # Declarative metric definitions
     engine/                    # Generic operation execution
@@ -70,7 +90,10 @@ This is a destination, not a mandate to move every existing file immediately. Re
 - The Worker may compose providers, domain services, analytics, storage, and Durable Objects.
 - The web application consumes contracts and presentation-safe utilities; it does not import provider packages or backend runtime modules.
 - Analytics accepts normalized input data and has no hidden provider fetching or UI dependency.
-
+- Each provider package owns its complete integration, including generated schemas, schema-generation tooling, clients, services, validation, and normalization.
+- Provider-specific implementation must not be split across the web application, domain package, or generic schema packages.
+- Each provider package translates external data into canonical FieldView domain values. Raw provider types remain internal to that package.
+  
 ## 4. Runtime responsibility model
 
 | Responsibility | Default owner |
@@ -158,6 +181,9 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Normalize provider responses into FieldView-owned domain data.
 - Define per-field source precedence and internal provenance/freshness.
 - Preserve valid prior data on failed or partial acquisition; distinguish omitted fields from authoritative clears.
+- Move TBA and Statbotics OpenAPI generation into their respective provider packages.
+- Keep generated output, generator scripts, and provider integration code together.
+- Remove frontend dependencies on provider-generated types as consumers migrate to FieldView contracts.
 
 **Exit criteria**
 - Provider fixtures cover normal, partial, stale, malformed, and failed responses.
