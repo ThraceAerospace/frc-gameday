@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** Active planning and foundation phase  
+**Status:** M1 source inventory completed; M2 repository foundation in progress  
 **Target branch:** `fieldview-architecture-migration`  
 **Strategy:** Incremental migration  
 **Last updated:** 2026-11-16
@@ -118,6 +118,8 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Unresolved design questions are explicitly recorded.
 - No implementation work is based solely on an unverified historical audit finding.
 
+**Status:** Initial source-level mapping is complete in `docs/architecture/MIGRATION-INVENTORY.md`. The 22 audited API handlers, current package/build configuration, environment-variable names found in source, and major provider/state/analytics responsibilities are mapped. Live Vercel environment-variable scopes/values and a complete import graph have not yet been inspected; those are required before relocating the Next.js app.
+
 ### M2 — Architecture and repository foundation
 
 **Work**
@@ -132,6 +134,8 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - The Next.js application runs and builds from its workspace.
 - CI validates the workspace.
 - No provider or backend runtime dependency leaks into the web package through convenience imports.
+
+**Status:** Started. `AGENTS.md` now defines the target architecture and labels the existing Redis/SharedWorker/Vercel path as legacy. README and the source-level inventory are aligned. No workspace/package relocation has been made yet.
 
 ### M3 — Domain and contract foundation
 
@@ -265,9 +269,10 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 ## 10. Immediate next actions
 
-1. Complete the M1 capability and dependency map from the existing application audit and source tree.
-2. Identify and record architecture decisions that remain open, especially EventRuntime ownership, event-team status refresh, publication protocol, and storage migration.
-3. Rewrite `AGENTS.md` so new work follows the target architecture while retaining product-specific invariants that remain valid.
-4. Only then begin the npm workspace foundation and Next.js relocation.
+1. Finish M1 verification: inspect Vercel environment-variable names/scopes without exposing values, confirm the branch/deployment settings, and map the import graph before moving the Next.js app.
+2. Add focused architecture decision records for the confirmed repository/runtime decisions and for unresolved EventRuntime, publication, storage, and event-team refresh questions.
+3. Establish npm workspace root configuration while preserving the current app's behavior; do not relocate source until a reproducible build baseline and import graph are available.
+4. Add CI and the initial test harness, then validate a clean install, lint, typecheck, tests, and production build.
+5. Define the first provider-independent domain and contract slice before moving provider acquisition or runtime ownership.
 
-**Current implementation status:** this plan records the agreed destination and sequence. It does not claim that workspaces, Cloudflare resources, Durable Objects, new contracts, or production infrastructure have already been created.
+**Current implementation status:** `AGENTS.md`, README, and the source-level migration inventory have been updated. The repository still has one root Next.js app and the legacy Redis/SharedWorker/Vercel data path. No Cloudflare Worker, Durable Object, workspace package, or production infrastructure has been created.
