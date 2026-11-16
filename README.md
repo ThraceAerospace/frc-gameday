@@ -12,7 +12,16 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 - **Insights** — inspect match predictions, event analytics, team comparisons, and evidence for human scouting review.
 - **Remote display** — control a shared viewing session from a controller and present its state on connected displays.
 
-## Current architecture
+## Architecture migration
+
+The `fieldview-architecture-migration` branch is incrementally moving FieldView toward an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend.
+
+The current implementation described below is the legacy system being migrated. It remains in place until replacement slices have passed validation; no production cutover is implied.
+
+- [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks.
+- [Migration inventory](docs/architecture/MIGRATION-INVENTORY.md) — current routes, dependencies, environment variables, and target ownership mapping.
+
+## Current architecture (legacy implementation)
 
 ### Data acquisition
 
@@ -55,12 +64,11 @@ npm run generate:statbotics-types
 
 Do not commit secrets. The application uses environment configuration for Redis, TBA authentication/webhook verification, and optional provider/runtime overrides.
 
-There is currently no dedicated test script in `package.json`; lint/build validation and focused automated data-contract tests remain part of stabilization work.
+There is currently no dedicated test script in the legacy root `package.json`; test infrastructure is part of the repository foundation work.
 
 ## Documentation
 
-- [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks for the incremental migration.
-- [Application audit](docs/APPLICATION-AUDIT.md) — verified implementation map, findings, and follow-up priorities.
+- [Application audit](docs/APPLICATION-AUDIT.md) — verified legacy implementation map, findings, and follow-up priorities.
 - [Architecture](docs/ARCHITECTURE.md) — current boundaries and target architecture.
 - [EventState and EventAnalytics lifecycle](docs/EVENT-STATE-AND-ANALYTICS.md) — live state, analytics acquisition, contract, and integration plan.
 - [Analytics redesign](docs/ANALYTICS-REDESIGN.md) — metric definitions, baselines, and limitations.
