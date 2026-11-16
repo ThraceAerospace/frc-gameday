@@ -195,7 +195,26 @@ The Archimedes SF13 example demonstrates identical or overlapping fields across 
 
 A matching value does not prove that one provider field can be deleted from source records. If the client contract publishes only one canonical value for a duplicated fact, the contract documentation must say which source owns that value and how the other source observation remains available for diagnostics/provenance.
 
-## 7. Client contract boundary
+## 7. Source-record retention and deliberate omissions
+
+Passing a provider payload unchanged into normalization does not mean every provider field must be copied into the client-facing FieldView object. It does mean the original payload must not be silently altered or discarded during ingestion.
+
+The backend must retain the original provider source records (or an equivalently lossless representation) separately from the assembled FieldView product object. This preserves fields that are not currently needed by the product model and permits later model expansion without another provider fetch. Source records are internal and are not automatically serialized to clients.
+
+For the Archimedes Statbotics match, the source record contains:
+
+- identity/context: `key`, `year`, `event`, `week`, `elim`, `comp_level`, `set_number`, `match_number`, `match_name`;
+- timing/status/media: `time`, `predicted_time`, `status`, `video`;
+- `alliances`, `pred`, and the complete `result` object;
+- the complete `pre_epas` and `epas` maps, including component fields such as `comp_0_epa` through `comp_9_epa`.
+
+The FieldView product object exposes the distinct information it needs as named fields and team associations. Statbotics values that duplicate TBA identity, timestamps, or video information need not be repeated as duplicate client fields, but their original observations remain in the internal Statbotics source record and source metadata. The complete Statbotics result and prediction information remain represented as separately sourced values.
+
+The TBA match object retains all of its original fields directly. TBA event predictions and TBA event OPRs are separate source records; their associated values are represented in the match/team product objects without pretending they originated in the TBA match response.
+
+Any field omitted from a client DTO must be listed in the client-contract documentation with the reason for omission. Omission from a DTO is not permission to delete or mutate the internal provider source record.
+
+## 8. Client contract boundary
 
 The domain model is backend-oriented and may use provider types for pass-through fields. The versioned client contract is a separate package and must:
 
@@ -208,7 +227,7 @@ The domain model is backend-oriented and may use provider types for pass-through
 
 The client contract is the next implementation step after this domain baseline is reviewed. This document does not authorize publishing provider schemas directly.
 
-## 8. Implementation sequence
+## 9. Implementation sequence
 
 1. Establish the domain type definitions and source metadata types.
 2. Add provider-owned typing for the TBA event-predictions response from its actual response shape.
