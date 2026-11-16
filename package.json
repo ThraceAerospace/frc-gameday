@@ -4,17 +4,18 @@
   "private": true,
   "workspaces": [
     "apps/web",
-    "packages/domain"
+    "packages/domain",
+    "packages/providers/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@fieldview/web",
     "build": "npm run build --workspace=@fieldview/web",
     "start": "npm run start --workspace=@fieldview/web",
     "lint": "eslint",
-    "generate:tba-types": "openapi-typescript https://www.thebluealliance.com/swagger/api_v3.json -o apps/web/src/lib/tba/generated.ts",
+    "generate:tba-types": "node packages/providers/tba/scripts/generate-types.mjs",
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
-    "generate:statbotics-types": "node scripts/generate-statbotics-types.mjs"
+    "generate:statbotics-types": "node packages/providers/statbotics/scripts/generate-types.mjs"
   },
   "devDependencies": {
     "eslint": "^9",
