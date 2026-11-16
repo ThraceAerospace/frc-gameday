@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "next dev apps/web",
+    "build": "next build apps/web",
+    "start": "next start apps/web",
     "lint": "eslint",
-    "generate:tba-types": "openapi-typescript https://www.thebluealliance.com/swagger/api_v3.json -o src/lib/tba/generated.ts",
+    "generate:tba-types": "openapi-typescript https://www.thebluealliance.com/swagger/api_v3.json -o apps/web/src/lib/tba/generated.ts",
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
     "generate:statbotics-types": "node scripts/generate-statbotics-types.mjs"
