@@ -10,10 +10,10 @@ This inventory maps the existing application to target responsibilities. It is o
 
 | Area | Current state | Migration treatment |
 |---|---|---|
-| Repository | Single Next.js application rooted at repository root | Introduce npm workspaces without changing runtime behavior first |
-| Web framework | Next.js 16.3.8, React 19 | Keep Next.js; relocate to `apps/web` only after workspace root and build parity are established |
-| Runtime version | Vercel project configured for Node 24.x; local audit previously observed Node 20.14.0 | Standardize local/CI/runtime on Node 24 before relying on local parity |
-| Package manager | npm 10.7.0; root `package-lock.json` | Keep npm and one root lockfile; use npm workspaces |
+| Repository | Next.js application relocated to `apps/web`; root manifest and lockfile remain | Complete npm workspace conversion while preserving one root lockfile |
+| Web framework | Next.js 16.3.8, React 19, now under `apps/web` | Keep Next.js; validate app-specific configuration and root-level commands after relocation |
+| Runtime version | Vercel project configured for Node 24.x; migration environment uses Node 24.22.3 | Standardize local/CI/runtime on Node 24 and preserve the pinned runtime |
+| Package manager | npm 11.19.1; root `package-lock.json`; workspaces not yet enabled | Keep npm and one root lockfile; enable npm workspaces without changing package manager |
 | Build scripts | `dev`, `build`, `start`, `lint`; type generation runs in `predev` and `prebuild` | Preserve current commands through workspace scripts; later make generation explicit and reproducible |
 | TypeScript | Root `tsconfig.json`, strict mode, bundler resolution, `@/* -> ./src/*` alias | Move/adjust alias and Next plugin when app relocates; keep strictness |
 | Next config | `next.config.ts`; only observed custom setting is `allowedDevOrigins: ['192.168.18.6']` | Relocate with web app; verify LAN development still works |
