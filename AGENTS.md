@@ -62,11 +62,12 @@ Do not split generated schemas, clients, services, or normalization into separat
 
 The domain may depend on provider packages for types only. It must not import provider clients, service implementations, or transport code. Client contracts must not import or expose provider types.
 
-Provider adapters own:
-- API transport, credentials, provider-specific request/response types, and schema validation;
-- retry, backoff, rate limiting, and provider freshness/cache semantics;
-- mapping external identities and values into FieldView-owned domain values;
-- internal source provenance and acquisition metadata.
+Provider packages own:
+- API transport, credentials, provider-specific request/response types, and generated schemas;
+- retry, backoff, rate limiting, and provider-specific request behavior;
+- unchanged provider payload delivery to the FieldView domain normalization layer.
+
+FieldView domain normalization owns cross-provider correlation, associations, and explicitly approved transformations. Analytics calculations remain in the analytics layer. Provenance and freshness are maintained by backend acquisition/orchestration and associated with domain state.
 
 Provider packages must not expose raw provider response objects directly to the frontend or published client DTOs. The backend domain may use provider types to preserve source values. Do not leak names such as `TBAEvent`, `TBAMatch`, `StatboticsMatch`, provider status enums, or provider response envelopes into client-facing contracts.
 
