@@ -1,32 +1,19 @@
 import type { TBATeam } from "@fieldview/provider-tba/types";
-import type { TeamKey } from "./ids.js";
-
-/** Canonical identity and descriptive information for an FRC team. */
-export interface FieldViewTeam {
-  /** Canonical TBA key, validated and branded at the provider boundary. */
-  key: TeamKey;
-  /** Numeric FRC team number. */
-  teamNumber: TBATeam["team_number"];
-  /** Official team name, when supplied. */
-  name?: TBATeam["name"] | null;
-  /** Common team nickname. */
-  nickname?: TBATeam["nickname"] | null;
-  city?: TBATeam["city"];
-  stateProv?: TBATeam["state_prov"];
-  country?: TBATeam["country"];
-  rookieYear?: TBATeam["rookie_year"];
-  website?: TBATeam["website"];
-  schoolName?: TBATeam["school_name"];
-  motto?: TBATeam["motto"];
-}
 
 /**
- * A team's season-scoped identity.
+ * The TBA team payload as received.
  *
- * Season metrics and event participation do not belong here; those are
- * separate aggregates with their own lifecycle and provider enrichment.
+ * This is a direct type alias: field names, values, nullability, and structure
+ * are unchanged. Any future FieldView-derived values must be separate,
+ * explicitly named fields with documented and approved transformations.
+ */
+export type FieldViewTeam = TBATeam;
+
+/**
+ * A FieldView season-scoped team reference. teamKey is the unchanged TBA key;
+ * year identifies the FieldView season and does not transform provider data.
  */
 export interface FieldViewTeamSeason {
-  teamKey: TeamKey;
+  teamKey: TBATeam["key"];
   year: number;
 }
