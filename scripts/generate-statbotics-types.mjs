@@ -169,7 +169,7 @@ async function main() {
   try {
     response = await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(20000)});
   } catch (error) {
-    const hasExistingTypes = existsSync("src/lib/statbotics/generated.ts") && existsSync("src/lib/statbotics/types.ts");
+    const hasExistingTypes = existsSync("apps/web/src/lib/statbotics/generated.ts") && existsSync("apps/web/src/lib/statbotics/types.ts");
     if (!hasExistingTypes) {
       throw new Error(`Statbotics OpenAPI fetch failed and no existing generated types are available to use as a fallback: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -177,7 +177,7 @@ async function main() {
     return;
   }
   if (!response.ok) {
-    const hasExistingTypes = existsSync("src/lib/statbotics/generated.ts") && existsSync("src/lib/statbotics/types.ts");
+    const hasExistingTypes = existsSync("apps/web/src/lib/statbotics/generated.ts") && existsSync("apps/web/src/lib/statbotics/types.ts");
     if (!hasExistingTypes) {
       throw new Error(`Statbotics OpenAPI fetch failed: HTTP ${response.status} (${url}), and no existing generated types are available to use as a fallback`);
     }
@@ -220,8 +220,8 @@ async function main() {
   const dir=mkdtempSync(join(tmpdir(),"fieldview-statbotics-"));
   try {
     const file=join(dir,"openapi.json"); writeFileSync(file,JSON.stringify(spec));
-    execFileSync(process.platform==="win32"?"npx.cmd":"npx",["openapi-typescript",file,"-o","src/lib/statbotics/generated.ts"],{stdio:"inherit"});
-    writeFileSync("src/lib/statbotics/types.ts",typeFile);
+    execFileSync(process.platform==="win32"?"npx.cmd":"npx",["openapi-typescript",file,"-o","apps/web/src/lib/statbotics/generated.ts"],{stdio:"inherit"});
+    writeFileSync("apps/web/src/lib/statbotics/types.ts",typeFile);
   } finally { rmSync(dir,{recursive:true,force:true}); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
