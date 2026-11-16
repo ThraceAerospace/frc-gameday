@@ -88,7 +88,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 - `packages/contracts` describes serialized boundaries using domain-safe types; it does not import provider models.
 - The domain may import provider types for pass-through fields. Provider packages own their schemas and provider-specific implementation; client DTOs remain explicit and provider-independent.
 - The Worker may compose providers, domain services, analytics, storage, and Durable Objects.
-- The web application consumes contracts and presentation-safe utilities; it does not import provider packages or backend runtime modules.
+- The web application should consume contracts and presentation-safe utilities, not backend runtime modules. Temporary type-only compatibility re-exports may reference provider packages during migration; client contracts must remain provider-independent.
 - Analytics accepts normalized input data and has no hidden provider fetching or UI dependency.
 - Each provider package owns its complete integration, including generated schemas, schema-generation tooling, clients, services, validation, and normalization.
 - Provider-specific implementation must not be split across the web application, domain package, or generic schema packages.
@@ -162,7 +162,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M3 — Domain and contract foundation
 
-**Status:** Started. The independent `@fieldview/domain` workspace now exports opaque TBA-based team, event, and match identifiers and foundational `FieldViewTeam`, `FieldViewTeamSeason`, `FieldViewEvent`, and `FieldViewMatch` models. ADR 0004 records the accepted TBA-first aggregate strategy. Event timezone is required. Event-team state, provider enrichment, provenance, reconciliation semantics, and serializable contracts remain to be designed.
+**Status:** Started. The `@fieldview/domain` workspace exports opaque TBA-based team, event, and match identifiers and foundational `FieldViewTeam`, `FieldViewTeamSeason`, `FieldViewEvent`, and `FieldViewMatch` models. TBA and Statbotics provider workspaces now own their generated schemas, provider type aliases, and generation scripts; the domain is permitted to import their types for pass-through fields. ADR 0004 records the accepted TBA-first aggregate strategy. Event timezone is required. Event-team state, provider enrichment, provenance, reconciliation semantics, and serializable contracts remain to be designed.
 
 **Work**
 - Define canonical models including FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, and analytics result types.
@@ -171,7 +171,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Add schema validation and fixture-driven contract tests.
 
 **Exit criteria**
-- Domain and contracts build independently of Next.js, Cloudflare, and provider packages.
+- Domain builds independently of Next.js and Cloudflare, with provider workspace packages available for its type dependencies. Client contracts build independently of provider packages.
 - Provider-shaped objects cannot be published directly as client contracts.
 - Contract compatibility and validation tests pass.
 
@@ -302,4 +302,4 @@ Every finding should be revalidated before implementation. Some will disappear b
 3. Continue M3 by defining EventTeam and provider-enrichment/reconciliation semantics, then establish serializable client contracts before migrating additional provider-shaped aggregates or application imports.
 4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
-**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative; root tooling and provider type generators remain at the root temporarily. Clean workspace installation and production build have passed locally. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
+**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The lockfile must be refreshed with `npm install` after pulling these workspace changes. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
