@@ -30,13 +30,10 @@ TBA team, event, and match keys remain unchanged source identifiers. The TeamKey
 
 Team-season identity is represented separately by FieldViewTeamSeason, which pairs an unchanged TBA team key with a FieldView season year.
 
-## Current models
+## Model baseline
 
-- FieldViewTeam is a direct alias of TBATeam.
-- FieldViewEvent is a direct alias of TBAEvent; its nullable timezone remains nullable.
-- FieldViewMatch is a direct alias of TBAMatch; TBA competition levels, timestamps, and alliance structure remain unchanged.
-- FieldViewTeamSeason is a FieldView-defined season-scoped reference.
+The initial canonical object set is FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, FieldViewEventAnalytics, and FieldViewTeamAnalytics. FieldViewMatch is the first detailed model and combines TBA match information with independent predictions, team statistics, playoff alliance associations, explicit analysis, flags, and provenance.
 
-Future combined, calculated, or transformed data belongs in separately named and documented fields or models. No transformation is implied merely because a value is represented in the domain package.
+The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Type implementation and the separate versioned client contract follow that specification.
 
 Client contracts must be explicit, serializable, and provider-independent. Provider types must not leak into those contracts.
