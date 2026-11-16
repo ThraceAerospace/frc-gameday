@@ -1,7 +1,10 @@
 /**
  * Public FieldView domain API.
  *
- * Canonical models and domain rules will be introduced here in focused,
- * provider-independent slices. Do not export provider or infrastructure types.
+ * Canonical models and domain rules only. Do not export provider schemas,
+ * transport DTOs, persistence records, or infrastructure implementations.
  */
-export {};
+export * from "./ids.js";
+export * from "./team.js";
+export * from "./event.js";
+export * from "./match.js";
