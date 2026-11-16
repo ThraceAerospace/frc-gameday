@@ -1,19 +1,16 @@
 import type { TBATeam } from "@fieldview/provider-tba/types";
+import type { StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
+import type { TeamKey } from "./ids.js";
 
 /**
- * The TBA team payload as received.
- *
- * This is a direct type alias: field names, values, nullability, and structure
- * are unchanged. Any future FieldView-derived values must be separate,
- * explicitly named fields with documented and approved transformations.
+ * Canonical FieldView team object. TBA-sourced fields retain their exact
+ * provider names, types, nullability, and values.
  */
-export type FieldViewTeam = TBATeam;
+export interface FieldViewTeam extends TBATeam {}
 
-/**
- * A FieldView season-scoped team reference. teamKey is the unchanged TBA key;
- * year identifies the FieldView season and does not transform provider data.
- */
+/** A team's season-scoped information; source data remains provider-typed. */
 export interface FieldViewTeamSeason {
-  teamKey: TBATeam["key"];
+  team_key: TeamKey;
   year: number;
+  statbotics?: StatboticsTeamYear;
 }
