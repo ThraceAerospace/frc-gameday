@@ -204,7 +204,7 @@ async function main() {
     StatboticsTeamEvent: ensureNamedSchema(spec,"/team_event/{team}/{event}","FieldViewStatboticsTeamEvent"),
   };
   const typeFile = [
-    'import type { components } from "./generated";',
+    'import type { components } from "./generated.js";',
     '',
     'type Schemas = components["schemas"];',
     ...Object.entries(aliases).map(([alias,name]) => `export type ${alias} = Schemas["${name}"];`),
