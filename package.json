@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/web"
+    "apps/web",
+    "packages/domain"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@fieldview/web",
