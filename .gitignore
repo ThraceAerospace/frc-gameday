@@ -13,9 +13,11 @@
 # testing
 /coverage
 
-# next.js
+# next.js (root and workspace apps)
 /.next/
+**/.next/
 /out/
+**/out/
 
 # production
 /build
