@@ -31,6 +31,6 @@ FieldView must preserve the meaning of provider data so that provider documentat
 - Derived, combined, or calculated values require separate named fields and documented source semantics.
 - Merge, provenance, freshness, and explicit-clear semantics remain separate concerns and must be specified before provider reconciliation is implemented.
 
-## Initial domain types
+## Domain model baseline
 
-The initial provider-shaped domain types are direct aliases of the corresponding TBA payload types. FieldView-specific models such as FieldViewTeamSeason remain separate and must not imply a transformation of provider data.
+FieldView models are first-class product objects, not direct aliases of provider payloads. A model may retain original provider fields using exact provider types and add separately named FieldView associations and calculations. The initial model responsibilities and FieldViewMatch v1 structure are documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`.
