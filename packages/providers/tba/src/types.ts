@@ -21,18 +21,27 @@ export type TBATeamEventStatus = components["schemas"]["Team_Event_Status"];
 export type TBAAward = components["schemas"]["Award"];
 export type TBATeamAvatar = components["schemas"]["Media_Avatar"];
 export type TBAMedia = components["schemas"]["Media"];
-// TBA's live 2026 match response includes hubScore.uncounted, which is
-// missing from the generated schema. Extend the affected nested field here,
-// leaving the generated API types untouched.
+// TBA's live 2026 match response includes hubScore.uncounted and
+// alliance-level penalties, which are missing from the generated schema.
+// Extend the affected nested provider types here; leave generated types alone.
 type TBA2026HubScore = components["schemas"]["HubScore_2026"] & {
   uncounted?: number;
 };
 
-export type TBAMatch = components["schemas"]["Match"] & {
-  score_breakdown?: {
-    red?: { hubScore?: TBA2026HubScore };
-    blue?: { hubScore?: TBA2026HubScore };
+type TBA2026MatchAlliance =
+  components["schemas"]["Match_Score_Breakdown_2026_Alliance"] & {
+    hubScore: TBA2026HubScore;
+    penalties?: string;
   };
+
+type TBA2026MatchScoreBreakdown =
+  components["schemas"]["Match_Score_Breakdown_2026"] & {
+    red: TBA2026MatchAlliance;
+    blue: TBA2026MatchAlliance;
+  };
+
+export type TBAMatch = components["schemas"]["Match"] & {
+  score_breakdown?: TBA2026MatchScoreBreakdown | null;
 };
 export type TBAMatchSimple = components["schemas"]["Match_Simple"];
 export type TBAEliminationAlliance = components["schemas"]["Elimination_Alliance"];
