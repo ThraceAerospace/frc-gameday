@@ -1,11 +1,23 @@
-import type { TBAEvent } from "@fieldview/provider-tba/types";
+import type {
+  TBAEvent,
+  TBAEventOPRs,
+  TBATeamEventStatus,
+} from "@fieldview/provider-tba/types";
+import type { EventKey, TeamKey } from "./ids.js";
+
+/** Canonical event object retaining all original TBA event fields and types. */
+export interface FieldViewEvent extends TBAEvent {}
 
 /**
- * The TBA event payload as received.
- *
- * This is a direct type alias: field names, values, nullability, and structure
- * are unchanged. In particular, timezone retains the nullable type from TBA.
- * Any future FieldView-derived values must be separate, explicitly named
- * fields with documented and approved transformations.
+ * A team's participation in one event. The TBA status object is passed
+ * through with its original provider type. OPR/DPR/CCWM are associated from
+ * the separate event OPR resource; they are not fields from the TBA match.
  */
-export type FieldViewEvent = TBAEvent;
+export interface FieldViewEventTeam {
+  event_key: EventKey;
+  team_key: TeamKey;
+  tba_status?: TBATeamEventStatus | null;
+  opr?: NonNullable<TBAEventOPRs["oprs"]>[string];
+  dpr?: NonNullable<TBAEventOPRs["dprs"]>[string];
+  ccwm?: NonNullable<TBAEventOPRs["ccwms"]>[string];
+}
