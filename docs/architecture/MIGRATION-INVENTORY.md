@@ -52,6 +52,21 @@ The following names were found by source scan. This is a variable-name inventory
 | `NEXT_PUBLIC_DOMAIN` | Twitch embed parent-domain value | Web-only public configuration; assess replacement with request/deployment origin |
 | `NEXT_PUBLIC_REMOTE_WEBSOCKET_URL` | Browser WebSocket host override | Legacy delivery configuration; replace with explicit web-to-backend endpoint configuration |
 
+Vercel project environment-variable inventory was also checked with values withheld. The project has the following configured names/scopes:
+
+| Variable | Configured targets | Notes |
+|---|---|---|
+| `TBA_API_KEY` | Production and Preview | Separate entries; no Development entry was returned |
+| `TBA_WEBHOOK_TOKEN` | Production, Preview, and Development | Separate entries for each target |
+| `REDIS_URL` | Production, Preview, and Development | Managed integration secret; values were not inspected |
+| `NEXT_PUBLIC_CAST_APP_ID` | Production and Preview | Present in deployment configuration; source usage needs tracing |
+| `NEXT_PUBLIC_DOMAIN` | Production | Browser-visible build/runtime configuration |
+| `NEXT_PUBLIC_SITE_URL` | Production | Browser-visible build/runtime configuration |
+
+No branch-specific environment-variable entries were returned for `fieldview-architecture-migration`. The source references `STATBOTICS_API_BASE_URL`, `STATBOTICS_OPENAPI_URL`, and `NEXT_PUBLIC_REMOTE_WEBSOCKET_URL`, but no corresponding Vercel project entries were present in the project-level environment list. In particular, the missing `STATBOTICS_API_BASE_URL` means the legacy runtime default remains active unless supplied through another deployment mechanism; this matches the provider-compliance finding FV-AUD-001. Do not infer that a missing project-level entry is absent from every possible runtime or external integration.
+
+All values were requested with decryption disabled and were not inspected or copied into this inventory.
+
 External systems/dependencies observed:
 - The Blue Alliance REST API and TBA webhook sender.
 - Official Statbotics API (the legacy default currently points to an unapproved community mirror; see FV-AUD-001).
