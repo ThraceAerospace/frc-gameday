@@ -1,467 +1,182 @@
-# Agent Instructions
+# FieldView Agent Instructions
 
-## Project
+## Project and migration status
 
-FieldView / FRC Gameday is a Next.js application for live FIRST Robotics Competition event presentation.
+FieldView is a data application for FIRST Robotics Competition. Its web application presents live event information, team/event history, remote display sessions, and server-calculated analytics.
 
-The codebase is in a stabilization and cleanup phase after the Multiview/EventView refactor.
+The repository is undergoing an **incremental architecture migration** on branch `fieldview-architecture-migration`. The current Next.js/Vercel/Redis/SharedWorker implementation is the legacy system being migrated, not the target architecture. Preserve a working application throughout the migration; do not perform a clean rebuild or a production cutover before the replacement path is validated.
 
-## Product and data principles
+## Confirmed target decisions
 
-FieldView is a **data application with a first-class web application to serve and explain its data**. Prioritize trustworthy acquisition, normalization, derivation, provenance, freshness, and reliable access. The web application is a primary product surface, but it consumes FieldView-owned data contracts; presentation components must not become the owners of data acquisition or analytical calculations. Build data capabilities once and make them reusable across pages, remote displays, and future consumers. Do not expand public API infrastructure or move hosting providers unless explicitly requested.
+- Monorepo: npm workspaces.
+- Frontend: retain Next.js.
+- Migration: incremental, with temporary compatibility adapters where necessary.
+- Backend: hybrid Cloudflare Workers and Durable Objects.
+- Initial authoritative runtime candidate: one EventRuntime per event. Do not create one Durable Object per domain interface.
+- Domain contracts and analytics packages must be reusable independently of Next.js, Cloudflare, and provider SDKs.
+- Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
+- The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-## Branch
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings.
 
-Use `main` unless the user explicitly requests another branch.
+## Non-negotiable product and data principles
 
-## Core architecture
+1. **FieldView owns its domain model.** External APIs are inputs, not the application's public data model.
+2. Normalize provider data before it enters published domain state. Provider schemas, identifiers, status enums, and raw response objects stay inside provider adapters.
+3. Keep acquisition, normalization, domain state/reconciliation, derivation, and presentation as distinct responsibilities.
+4. Preserve provenance and freshness internally. Distinguish unavailable/missing data, explicit null/clear, zero, stale values, and failed acquisition.
+5. A failed or partial provider request must not erase unrelated valid state. A successful explicit clear may clear the corresponding prior value.
+6. Define source precedence per field. Do not let request timing or incidental merge order decide which source wins.
+7. Build data capabilities once and make them reusable across web pages, live surfaces, remote displays, and future consumers.
+8. Server-side calculations are authoritative. Presentation components must not independently reproduce analytics or fetch providers.
+9. Do not claim a public developer API, production Cloudflare runtime, Durable Object, or completed migration until it exists and has been validated.
 
-The intended realtime flow is:
+## Target repository boundaries
 
-```
-TBA REST / webhooks
-       ↓
-     Redis
-       ↓
- Redis Pub/Sub
-       ↓
- WebSocket
-       ↓
- EventState
-       ↓
- Views
-```
+The planned npm workspace layout is:
 
-Rules:
+- `apps/web` — Next.js application, pages, UI, and web-specific route adapters.
+- `workers/backend` — Cloudflare Worker entrypoints, backend application services, and Durable Object runtime implementations.
+- `packages/domain` — canonical FieldView domain objects, normalization-independent types, and domain rules.
+- `packages/contracts` — versioned serializable client-facing DTOs and validation schemas.
+- `packages/providers/*` — isolated provider clients, raw provider types, validation, normalization, retries, rate limits, and source metadata.
+- `packages/analytics` — declarative metric definitions and a small provider/UI-independent calculation engine.
+- `packages/config` or root configuration — shared TypeScript/lint/tooling only when reuse justifies it.
 
-1. Redis is the server-side cache.
-2. TBA webhooks are the preferred realtime invalidation path.
-3. TBA webhooks mutate existing Redis cache entries first, then broadcast an event-scoped WSS invalidation.
-4. EventState immediately re-reads the API after a webhook mutation, which normally returns the updated Redis entry while that entry is still fresh. It also schedules a one-shot re-read after 65 seconds. This timer does not change the Redis entry's `expiresAt` or force an upstream TBA request; whether the later read reaches TBA depends on the existing TBA cache freshness.
-5. WSS messages are invalidation signals, not data payloads.
-6. Polling reconciles missed webhooks and every explicit reload restarts the polling generation.
-7. Do not introduce another cache layer to support webhooks.
-8. Do not hardcode TBA Cache-Control max-age values.
-9. The full event `/event/<event>/matches` cache is the canonical match cache for Gameday.
-10. Do not reintroduce the old simple/team match caches into the primary realtime path.
+This is a target boundary map, not permission to move every existing folder mechanically. Keep changes small, trace imports, and validate the build after each structural step. Do not create placeholder packages without a concrete first consumer.
 
-## TBA webhook authentication
+## Provider adapter boundary
 
-Endpoint: `/api/tba/webhook`.
+Provider adapters own:
+- API transport, credentials, provider-specific request/response types, and schema validation;
+- retry, backoff, rate limiting, and provider freshness/cache semantics;
+- mapping external identities and values into FieldView-owned domain values;
+- internal source provenance and acquisition metadata.
 
-Authenticate `X-TBA-HMAC` before parsing JSON.
+Provider adapters must not expose raw provider response objects to the frontend or published client DTOs. Do not leak names such as `TBAEvent`, `TBAMatch`, `StatboticsMatch`, provider status enums, or provider response envelopes into client-facing contracts.
 
-- Missing HMAC → HTTP 418 intentionally.
-- Invalid HMAC → HTTP 401.
-- Authenticated malformed JSON → HTTP 400.
-- Internal/configuration failure → HTTP 500.
+Normalization is not aggregation. Do not combine unrelated sources or calculate analytics inside provider adapters. Preserve field-level source precedence and partial-failure semantics.
 
-Mutate the relevant existing Redis cache after authentication/parsing, then broadcast. A broadcast failure must not undo a successful cache mutation.
+Statbotics runtime data may come only from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. Do not use a community-operated mirror. Keep the provider endpoint configurable only for approved compatible endpoints.
 
-## Client realtime behavior
+## Domain model and runtime ownership
 
-Live route layouts under `src/app/gameday`, `src/app/event`, and `src/app/insights` register a shared live-runtime lease. One origin-wide SharedWorker owns the physical WebSocket at `/api/ws`, its event-key subscriptions, the EventState map, and all event acquisition. Tabs receive EventState snapshots over MessagePorts; a tab must not create its own EventState or per-tab WebSocket when SharedWorker is available.
+Canonical domain concepts include:
+- `FieldViewTeam` and `FieldViewTeamSeason`;
+- `FieldViewEvent` and `FieldViewEventTeam`;
+- `FieldViewMatch` and `FieldViewPlayoffAlliance`;
+- `FieldViewDistrict`;
+- `FieldViewEventAnalytics` and `FieldViewTeamAnalytics`.
 
-The worker sends `subscribe`/`unsubscribe` messages for event keys, reconnects with exponential backoff, and resubscribes active keys after reconnect. EventState still owns the per-event refresh and reconciliation policy, but its instances live in the worker. When SharedWorker is unavailable, the client deliberately falls back to per-tab EventState/WebSocket ownership; preserve that fallback unless support requirements change. WSS messages are invalidation signals, not authoritative match payloads. Keep them minimal: the current webhook path still forwards the original `messageData` and this is tracked in `docs/APPLICATION-AUDIT.md`. Preserve the 65-second one-shot authoritative refetch delay, request-race protection, tag invalidation, ETag/304 behavior, and the manual `r` refresh behavior. Remote displays consuming EventStateSnapshotsProvider remain read-only and must not subscribe to worker event acquisition. When all live clients leave, close the socket and stop event timers; do not keep an idle worker connection open.
+A domain object is data; a runtime is machinery that acquires, reconciles, persists, and publishes data. Do not create a Durable Object for every interface or DTO.
 
-## Polling
+Start with an event-scoped EventRuntime only when its state ownership and lifecycle are explicitly defined. Keep its implementation modular internally. Add TeamRuntime, AnalyticsRuntime, or other runtimes only when independent lifecycle, coordination, or consistency requirements justify them. Classes inside one Durable Object are not independently concurrent runtimes.
 
-`usePolling` is shared fallback infrastructure.
+Maintain one authoritative writer for each state resource. Avoid permanent dual writes and two runtimes polling the same authoritative endpoint. Publish versioned snapshots or changes with explicit ordering/reconnect semantics; do not make clients reconstruct authoritative state from incidental provider events.
 
-Current intervals:
+For event-team status, preserve the distinction between match freshness and team-status freshness. The TBA full-event status dataset is a coherent source for event team status; targeted refresh versus periodic full reconciliation remains a documented design decision until endpoint availability/cost and invalidation behavior are verified. Successful explicit null clears; failed fetches do not clear prior valid state. Derive user-facing summaries from structured normalized fields rather than provider HTML strings.
 
-- realtime: 1 second
-- fast: 5 seconds
-- intermediate: 5 minutes
-- long: 15 minutes
+## Analytics architecture
 
-Its generation counter is intentional. A reload must invalidate older work, cancel the old timer, run the current callback, and allow only the newest generation to schedule the next fallback.
+Analytics must be easy to inspect, explain, test, and modify.
 
-Do not replace this with a naive `setInterval` implementation.
+- Metric definitions declare inputs, operation, output semantics/unit, scope, version, and relevant interpretation/limitations.
+- A small generic engine resolves supplied inputs, validates them, and executes a registered vocabulary of safe operations.
+- Do not use `eval()`, arbitrary expression strings, or provider/UI-specific code in the engine.
+- Complex metrics compose known operations rather than introducing hidden bespoke execution paths.
+- Support both per-object and collection/event-wide calculations. Collection results must expose eligible population and sample size.
+- Keep calculation, comparison/classification, human-readable interpretation, and UI rendering separate.
+- Do not fetch providers from the engine. Inputs are passed in by orchestration.
+- Keep missing, null, and zero distinct; version definitions so historical results can be compared deliberately.
 
-## Match semantics
+Analytics conclusions are descriptive evidence, not causal determinations. Alliance residuals, shared model updates, win-probability mismatches, and partner patterns must not be attributed to an individual robot. Review flags invite a human scout to investigate.
 
-The client-side canonical match helpers are in `src/lib/tba/matchUtils.ts`.
+For event-wide team change comparisons, compare each team against its own most recent prior official event. Include all target-event teams in event views, but rank only teams with usable prior/current data. Do not require a shared prior event and do not silently fall back to an older event when the most recent prior event lacks usable data. Show eligible comparison coverage. See `docs/ANALYTICS-REDESIGN.md`.
 
-The presentation chain is:
+## Event time
 
-```
-useMatches → EventView → EventFooter → MatchStrip → MatchCard
-```
+**All event-related dates, times, and datetimes displayed by the application must use that event's IANA timezone.**
 
-Preserve the established next-match semantics and the stale-response protection in `useMatches`.
+- Do not display event dates/times in the viewer's browser timezone or silently fall back to browser-local formatting.
+- In multi-event views, format each event using its own timezone.
+- Countdown values are relative durations and do not require a timezone conversion in the display.
+- Use the event timezone consistently for schedules, match times, timestamps, date labels, and event comparisons.
 
-Team presentation rules:
+The goal is consistency with the venue and announcers.
 
-- Show teams in their red or blue alliance color only when displaying a match; outside match context, use neutral black styling.
-- When a match's alliance data includes a team in `dq_team_keys`, render that team's number with a strikethrough.
+## Frontend, live views, and remote sessions
 
-## Tile View / Multiview
+The frontend consumes versioned FieldView DTOs and presentation state; it does not own provider acquisition or canonical reconciliation.
 
-The current surface implementation is `TileView` and `TileSurfaceController` under `src/components/surface/`. Together they own:
+Preserve these product semantics during migration:
+- Match presentation uses red/blue alliance identity only in match context. A team in `dq_team_keys` is displayed with a strikethrough in that match.
+- Preserve established next/last match semantics and stale-response protection until an explicitly validated replacement exists.
+- Keep remote-session controller authority and display clients separate. Remote actions must use the same controller path as local actions.
+- Keep content/data, stable tile identity, priority, layout, and highlight as separate concepts. Never reorder stable streams merely to change priority.
+- TileSurface is a deliberately dark-only broadcast surface; retain restrained FieldView purple accents and semantic alliance colors.
+- Do not reintroduce Nexus unless explicitly requested.
 
-- stable streams;
-- priority;
-- layout;
-- highlight;
-- event picker;
-- labels;
-- automatic match-imminence focus;
-- keyboard controls.
+The existing SharedWorker, browser EventState, Redis Pub/Sub, WebSocket bridge, and current API routes are legacy delivery/acquisition mechanisms. Preserve their behavior only while required for the incremental transition. Do not treat them as the target source of truth or add new dependencies on them. Avoid adding new provider-shaped fields to their snapshots; introduce compatibility mapping at the boundary.
 
-Keep these concepts separate:
+## Existing legacy system — migration reference only
 
-1. content/data;
-2. stable stream identity;
-3. priority;
-4. layout;
-5. highlight.
+The current implementation includes:
+- one Next.js application rooted at the repository root;
+- 22 API route handlers at the time of the initial audit;
+- Redis-backed TBA/Statbotics/FRC Colors caches and analytics job records;
+- TBA webhook ingress, Redis Pub/Sub, and `/api/ws`;
+- browser SharedWorker/EventState acquisition and reconciliation;
+- server-side insights calculations and progressive collection;
+- Vercel deployment/runtime integration.
 
-The streams array is the stable set of EventView instances. Never reorder streams merely to change priority. Priority determines which existing streams occupy layout slots.
+Known legacy paths include `src/lib/tba`, `src/lib/statbotics`, `src/lib/frc-colors`, `src/lib/cache`, `src/lib/realtime`, `src/lib/events`, and `src/lib/insights`. These are migration sources, not mandatory target locations.
 
-Layouts are pure data in `src/lib/multiview/layouts.ts`.
+Never copy legacy implementation rules into new packages merely for parity. Preserve user-visible behavior and correctness, not obsolete infrastructure choices.
 
-Do not restore old positional TeamPill modes.
+## Workspace and tooling rules
 
-## Planned reusable event data panels
+- Use npm workspaces; do not introduce another package manager.
+- Keep Next.js as the web framework.
+- Keep root scripts explicit and delegate app-specific scripts to the relevant workspace.
+- Use the repository's pinned Node/npm compatibility and lockfile consistently. Do not silently regenerate or replace the lockfile with another package manager.
+- Keep generated provider types generated; do not hand-edit generated output.
+- Do not add Cloudflare resources or deploy backend infrastructure until local contracts, bindings, and runtime responsibilities are defined and validated.
+- Do not relocate the Next.js app until current build configuration, environment dependencies, and import aliases have been mapped.
+- Do not make production changes or cut over traffic as part of a structural migration step.
 
-The reusable `EventDataPanel` described in the target architecture is **not yet implemented** on this branch; the documented component and `/event/<event>/data` route are absent. This section records the requirements for that future capability, not a description of current files. See FV-AUD-076 in `docs/APPLICATION-AUDIT.md`.
+## Environment and secrets
 
-When implemented, the panel must be an event-scoped presentation component, not a tile-only implementation. It should consume the shared `useEventState` snapshot and be renderable from any client component/page. Keep its TBA-backed OPR/DPR/CCWM data in `EventState`; do not introduce a separate client fetch/cache or require Statbotics.
+Never commit secrets or real environment values. Document variable names, purpose, scope, and migration destination; use placeholders in examples. Separate browser-exposed `NEXT_PUBLIC_*` configuration from server-only credentials. Do not copy Vercel-specific secrets into Cloudflare without defining their use, access policy, and rotation.
 
-The target tile model keeps tile identity distinct from event identity. `TileSurfaceState.streams` and `priority` should contain stable tile IDs; `tileEvents` should map each tile to its event key, and `tileTypes` should distinguish `eventView` from `dataPanel`. Preserve existing `event=<key>` URLs and use `panel=<key>` for data panels. The same event should be representable by both tile types. All displays connected to one session should share this single Tile Surface configuration; event, team, and stream configuration is performed once, not per display. Match Insights follows the highlighted valid tile or the first priority tile.
+Current legacy environment variables identified during the initial source scan include:
+- `TBA_API_KEY`
+- `TBA_WEBHOOK_TOKEN`
+- `REDIS_URL`
+- `STATBOTICS_API_BASE_URL`
+- `STATBOTICS_OPENAPI_URL`
+- `NEXT_PUBLIC_DOMAIN`
+- `NEXT_PUBLIC_REMOTE_WEBSOCKET_URL`
 
-## Match Insights surfaces
+This list is provisional; re-scan the source and deployment settings before changing runtime configuration. Never print or expose secret values.
 
-- `EventInsightsSurface` is the Surface/container for one event's Insights experience.
-- `EventInsightView` is presentation only. It consumes the supplied `EventStateSnapshot`; it must not fetch Statbotics data or create event-data subscriptions.
-- `EventState` owns Statbotics match acquisition alongside TBA event data. It keeps the current next/last match data available to all Views, refreshes completed matches after the existing delay, and exposes results in `statboticsMatches`.
-- Use `resolveActiveEventKey` for the integrated Insights display: valid highlighted tile first, otherwise the first tile in priority order; resolve tile ID through `tileEvents`.
-- The local Tile View can switch to Insights using the same active-event rule. The standalone `/event/<event>/insights` route supplies its event key directly and uses the same `EventState` lifecycle.
-- Read Statbotics values directly from the typed response object; do not coerce/cast individual values to another numeric type. Format displayed metrics to at most one decimal place for readability, without modifying the underlying response. Show alliance totals by summing all three teams’ estimates; show `—` until every team value for that metric is available.
+## Design system and accessibility
 
-## Event footer
+- Follow `docs/COLOR-SYSTEM.md`. Purple is FieldView branding; red/blue are reserved for alliance identity in match context; gold/greens are metric percentile tiers; orange is a human-review indicator; team colors are provider metadata.
+- Do not use generic blue utility colors for product branding, navigation, links, selection, or focus.
+- Centralize non-Tailwind design values in semantic CSS custom properties. Use Tailwind for standard layout/styling where appropriate.
+- Site link hover/focus uses FieldView purple. Preserve accessible focus states and semantic controls.
 
-EventView footer configuration is independent from Multiview layout presentation.
+## Code quality and change discipline
 
-Valid footer modes are:
+- Search for and reuse existing helpers before adding new logic. Use `src/lib/time` for legacy date/time behavior until migrated.
+- Keep route handlers thin; business logic belongs in reusable services/packages.
+- Keep provider acquisition out of presentation components.
+- Avoid broad unrelated refactors, dead-file cleanup, or visual changes during architecture work.
+- Before deleting a file, search repository-wide for imports and callers and confirm no live use remains.
+- Prefer small, focused commits with a clear purpose. Keep the branch buildable after each migration slice.
+- Update README and architecture docs when behavior or ownership changes materially.
+- Never modify `main` as part of this migration. Work on `fieldview-architecture-migration` unless the user explicitly changes scope.
 
-- `matchStrip`
-- `rankings`
-- `split`
-- `statbotics` — shows the regular match strip beside Statbotics prediction metrics.
-- `hidden`
+## Agent documentation
 
-Multiview may temporarily hide the footer bar through `footerHidden`, but it must not select or override the EventView's configured footer content mode.
-
-## Gameday hooks
-
-Keep responsibilities specialized:
-
-- `useEvent` — event.
-- `useMatches` — canonical full matches and event next/last.
-- `useTeams` — teams.
-- `useTeamsStatuses` — statuses.
-- `usePlayoffAlliances` — playoff alliances.
-- `useTrackedMatches` — tracked-team derivation.
-- `useStreamController` — stream normalization/selection.
-- `useWebSocket` — WSS lifecycle.
-- `usePolling` — fallback scheduling.
-
-Do not reintroduce Nexus unless explicitly requested.
-
-Avoid rebuilding a monolithic `useGameday` hook.
-
-## Event timezone — core presentation principle
-
-**All dates, times, and datetimes displayed by the application must use the event's timezone.** This is a core product principle, not merely a default formatting preference.
-
-- Use the event's IANA timezone for displayed schedules, match times, date labels, timestamps, and other event-related date/time values.
-- Countdown clocks and time-based UI must use the same event-time basis, so the application's clocks agree with the time announced at the venue.
-- Do not display event dates or times in the viewer's browser/system timezone, and do not silently fall back to browser-local formatting.
-- The viewer's local time is already available from their system clock. The application does not need to duplicate it.
-- A next-match countdown communicates the relative time until the match; once a countdown is shown, the viewer does not need a timezone conversion to understand it.
-- Treat event time as the canonical presentation context throughout the application, including pages that aggregate or compare multiple events. When showing multiple events, each event's displayed date/time must be formatted in that event's own timezone.
-
-The goal is consistency with the venue: the time shown by FieldView should match what event announcers and field staff are using.
-
-`/api/events/active` interprets event dates using the event's own timezone. Do not replace this with browser-local comparisons.
-
-## TBA client
-
-The low-level TBA client is under `src/lib/tba/`.
-
-Preserve:
-
-- Redis-backed caching;
-- TBA ETag handling;
-- TBA Cache-Control max-age handling;
-- 304 expiry refresh;
-- match-result reconciliation when TBA returns an older/incomplete match representation.
-
-The application-facing service is `src/lib/tba/service.ts`.
-
-## Generated types
-
-Never hand-edit `src/lib/tba/generated.ts` or `src/lib/statbotics/generated.ts`.
-
-Regenerate with:
-
-```bash
-npm run generate:tba-types
-npm run generate:statbotics-types
-```
-
-Both generators fetch the current upstream OpenAPI documents. Statbotics fallback response schemas fill only missing fields and generic response definitions; existing upstream fields and types always take precedence. When Statbotics adds or corrects response models in OpenAPI, generation adopts those definitions automatically, after which the corresponding fallback fields can be removed. Keep application-facing aliases in `src/lib/tba/types.ts` and `src/lib/statbotics/types.ts`.
-
-## Data contracts and API boundaries
-
-FieldView-owned data contracts are foundational even when the current delivery mechanism is an internal HTTP route, SharedWorker snapshot, or remote-session message. Keep provider acquisition behind server-side clients/services, normalize at the boundary, and keep calculations outside presentation components. Treat `/api` routes as interfaces to application services rather than places to duplicate business logic. EventAnalytics v1 is currently a compatibility envelope over provider-shaped response data; `EventStateSnapshot` is also still provider-shaped and mixes data with client delivery/runtime status. EventState currently lives in disposable SharedWorker memory rather than a durable server-side model. Neither is yet a final provider-independent DTO, and they are not yet companion models delivered through one shared data service. See FV-AUD-017. Do not claim a public developer API, OpenAPI surface, or Cloudflare runtime exists until implemented.
-
-## Documentation and design system
-
-- Keep `AGENTS.md`, `README.md`, and the `CLAUDE.md` pointer at the repository root.
-- Keep architecture references, analytics specifications, API typing guides, and design-system documentation under `docs/`.
-- Follow `docs/COLOR-SYSTEM.md` for semantic color roles. Purple is FieldView branding; red/blue are reserved for alliance identity in match context; gold/greens are metric percentile tiers; orange is a human-review indicator; team colors remain provider metadata.
-- Do not use generic blue utility colors for product branding, navigation, links, selection, or focus states. Preserve blue where it specifically represents the blue alliance or an explicitly defined probability band.
-- Centralize all non-Tailwind design values in semantic CSS custom properties. This includes colors, theme surfaces, shadows, gradients, borders, typography values, and other reusable visual constants in custom CSS or inline styles; do not scatter literal values through components. Use Tailwind utilities for standard layout and styling when available, and CSS variables for custom values.
-- All site link hover and focus states use FieldView purple, never generic blue. Keep red/blue alliance identity only where semantically required.
-- TileSurface is a deliberately dark-only broadcast surface. Never add a light theme variant or apply the normal site surfaces to it. Keep branding restrained and unobtrusive; use only subtle purple accents for selected, focused, and hovered controls.
-
-## File organization
-
-Current major boundaries:
-
-- `src/app` — pages and API route handlers.
-- `src/components/event` — event-level footer/rankings/time UI.
-- `src/components/eventview` — EventView, settings, and event hooks.
-- `src/components/match` — MatchStrip and MatchCard.
-- `src/components/multiview` — Multiview presentation and controller.
-- `src/components/team` — team UI.
-- `src/lib/gameday` — match and stream utilities.
-- `src/lib/multiview` — pure Multiview layouts.
-- `src/lib/tba` — generated/raw TBA types, client, service, and API helpers.
-- `src/lib/realtime` — Redis Pub/Sub and WebSocket bridge.
-- `docs` — architecture, analytics, API typing, and design-system documentation.
-
-## Legacy areas
-
-Simple/team match helpers in the TBA service remain compatibility helpers. Do not make them part of the primary Gameday realtime path.
-
-## Dead-file cleanup
-
-Before deleting a file:
-
-1. Search the entire repository for references.
-2. Check imports, not only matching symbol names.
-3. Verify that a similarly named replacement is actually used.
-4. Delete only after confirming there are no live callers.
-
-Prefer small, focused cleanup commits.
-
-## Coding approach
-
-- Always use Tailwind CSS utilities where they provide the needed styling; do not add custom CSS for styles Tailwind already supports.
-- Do not duplicate logic that already exists; search for and reuse existing helpers. For date/time parsing, formatting, and timezone behavior, use `src/lib/time`. If a needed helper is missing, add it there for reuse.
-- Keep data fetching in hooks/services rather than presentation components where practical.
-- Keep Multiview state transitions explicit.
-- Keep WSS payloads small.
-- Avoid excessive forensic logging in normal request paths.
-- Do not re-add removed post-write verification requests.
-- Do not hardcode external cache lifetimes.
-- Do not mix a broad directory restructure into routine cleanup.
-- Update README.md and this file when architectural behavior changes materially.
-
-## Other agent documentation
-
-`CLAUDE.md` currently points to `AGENTS.md`. Keep those instructions aligned.
-
-
-## Event Analytics prototype
-
-- The standalone event analytics route is `/insights/event/<event>`. Its UI and analytics pipeline remain independent of Gameday tile/remote-session configuration, but its live event context must use `useEventState` and the shared `/insights` live-runtime layout. Do not create a second WebSocket or duplicate EventState.
-- `src/lib/insights` contains server-side calculations and orchestration. It consumes TBA/Statbotics services; Views must not call upstream APIs directly.
-- FRC team colors use the provider in `src/lib/frc-colors/`. The progressive event analytics collection job acquires the event's colors through the FRC Colors batch event endpoint, caches them in Redis for 24 hours, and persists the result in the event job. Do not add a browser/page-level color request or a request per match. Use primary colors only for robot EPA-bar segments; missing or colliding colors must use distinct fallbacks. A manual analytics refresh may refresh the provider cache.
-- `% EPA Contribution to Matches` is the team's pre-match total EPA divided by the sum of all three alliance robots' pre-match total EPAs, averaged across every usable qualification and elimination appearance. Keep the reusable metric and sample count phase-inclusive; qualification match rows may show the per-match share prominently. This is a model-estimate composition measure, not a share of actual match points or an attribution of scoring to a robot.
-- Statbotics runtime data must come from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. **Do not use a community-operated mirror.** The current `src/lib/statbotics/client.ts` default still points to `https://api-statbotics.iterativerefinement.com`; this violates the provider requirement and is tracked as FV-AUD-001 in `docs/APPLICATION-AUDIT.md`. Keep `STATBOTICS_API_BASE_URL` as an explicit override for a compatible approved endpoint. All upstream requests must go through `src/lib/statbotics/client.ts` and the application-facing `src/lib/statbotics/service.ts`; consumers must not fetch Statbotics directly. Honor upstream `Cache-Control: max-age` when present, with a conservative 10-minute minimum between requests for the same resource. If max-age is absent, use a 10-minute fallback for match/team-year records and 24 hours for team-event records. Preserve stale data on failures and back off failed requests. Event-level analytics workers are limited to two concurrent Statbotics match requests.
-- Event analytics state is stored in a Redis job, but the current event route awaits `advanceEventAnalytics` and `advanceSeasonCohort` before returning (`maxDuration = 60`). It does not currently use Vercel `waitUntil`, and the dashboard does not poll for progress; it loads on mount and explicit refresh. Do not document this as background execution or automatic progress polling until that behavior is implemented. Event schedule/OPR/ranking/alliance inputs are refreshed by explicit analytics refresh; EventState updates currently provide live connection status to the analytics surface, not an automatic analytics rebuild. The event job has a one-year TTL; the season cohort has a 24-hour TTL and a bounded 20-second work budget.
-- Derived event pages should use freshness appropriate to whether the season is active or complete; do not retain current-season data for a year. Known exception/defect: `src/app/api/insights/team/[team]/route.ts` currently caches assembled team history for 365 days, including the current season, and has no refresh parameter. Track this as FV-AUD-002 and correct it before relying on that endpoint for live-season comparisons. The event analytics job itself currently has a one-year TTL; the season cohort has a 24-hour TTL.
-- Residuals are alliance-level, rating changes are model updates, and partner-combination signals are contextual. Never attribute these to an individual robot.
-- Every event team should receive the same concise, bullet-first team brief, followed by supporting analytics, graphs, match pointers, and review flags. Review flags identify correlations/anomalies for a human scout to investigate; they are not causal determinations. Never attribute alliance score residuals, win-probability mismatches, partner patterns, or shared EPA updates to an individual robot.
-- Model percentiles are event-relative. Keep model provenance, sample size, and uncertainty visible.
-- Scout review/dismiss actions in this prototype are browser-local only; do not imply that they are shared or persistent.
-- Known calculation-boundary gaps: `buildMatchFlagSummary` / `phaseAnomalyBand` still derive Suggested Review flags in `EventAnalyticsDashboard.tsx`, and `src/app/api/insights/team/[team]/matches/route.ts` still contains substantial calculation logic. Do not add more analytical rules to the dashboard or route; move them behind server-side services when those areas are next changed. See FV-AUD-010 and FV-AUD-014.
-- The current robust-median implementations select the upper middle value for even samples; see FV-AUD-015. Preserve/document that behavior until a deliberate correction is covered by tests. `predictionCalibration.underdogWins` also counts a miss at exactly 50% as an underdog win; see FV-AUD-016.
-
-- Team season history is loaded only for teams selected in the comparison UI. Filter TBA event type 99 (offseason) and 100 (preseason); use the cached Statbotics `team_year` and `team_event` endpoints through `Statbotics`, never direct browser requests.
-
-- Prefer Statbotics bulk collection endpoints whenever a filtered collection can satisfy the request: `/v3/matches?event=...`, `/v3/matches?team=...&year=...`, and `/v3/team_events?team=...&year=...`. Use paginated collection methods (up to 1000 records per page) through the shared Statbotics client/service; preserve per-query caching, upstream Cache-Control, and the shared request floor. Use single-record endpoints for targeted live-match refreshes or when a collection endpoint cannot express the lookup.
-- Start independent TBA and Statbotics collection requests concurrently. Do not serialize unrelated event metadata, schedule, rankings, OPR, match collection, or team-event collection fetches. Merge bulk Statbotics records into the canonical TBA schedule by match/event key; TBA remains authoritative for schedule and actual results.
-- Persist usable bulk results and retain previously collected records if a later refresh fails or omits a record. Distinguish a failed collection request from a successful collection response that contains no record for a scheduled match. The browser must keep displaying the latest complete-so-far analytics snapshot while polling, reject stale overlapping responses, and show a sticky progress/status area at the top of the analytics page with explicit missing-data explanations.
-
-
-## Homepage event snapshot
-
-- The homepage (`src/app/page.tsx`) is a Server Component with one-hour ISR (`revalidate = 3600`). It renders the current Sunday–Saturday event list and event summaries into the initial HTML.
-- The complete homepage data snapshot is wrapped in `unstable_cache` with a one-hour revalidation period. It retrieves each event's canonical full match schedule through `TBA.getEventMatches` and derives last/next matches with the shared `sortMatches`, `getLastMatch`, and `getNextMatch` helpers in `src/lib/tba/matchUtils.ts`.
-- Reuse the existing TBA Redis cache and its upstream-controlled freshness. Do not introduce a separate homepage match cache, browser polling, or a homepage WebSocket subscription.
-- Event cards are server-rendered and reuse the existing `MatchCard` presentation for last/next matches. A match-summary fetch failure for one event must not prevent the other event cards or homepage from rendering.
-
-
-## Analytics architecture — core principles
-
-The analytics experience has distinct scopes: Event Overview, Team Investigation, Qualification Analysis, Playoff Analysis, Matchup Analysis, and supporting Scouting Tools. Event Overview is the default entry point; scouting review queues are not the product's primary landing view. Team Investigation loads one selected team at a time.
-
-Analytics calculations and conclusions are server-authoritative. The browser presents results, manages view selection, and requests a new analysis when its inputs change; it must not fetch TBA/Statbotics directly or independently reproduce statistical models used by the server.
-
-Keep analytics business logic independent of HTTP handlers and the hosting runtime. Vercel route handlers and `waitUntil` are execution adapters, not dependencies of calculation or orchestration services. A future persistent worker must be able to invoke the same service functions without changing the client API.
-
-Long-running collection and computation must be bounded, persistent, resumable, and recoverable. Redis job state—not a serverless process's memory or lifetime—is authoritative. Persist progress and retry state before yielding; use locks with finite TTLs and ensure abandoned work can be resumed by a later invocation.
-
-Prefer incremental processing. A changed match should refresh that match and the derived results it affects rather than requiring a complete event recollection. Periodic source reconciliation remains necessary for schedule, roster, rankings, and OPR changes.
-
-Track source-data freshness separately from calculation freshness. Preserve the source update time, calculation time, and calculation/schema version wherever derived snapshots are cached so changed source data and changed algorithms can be distinguished and invalidated deliberately.
-
-Treat alliance-level results, team-level model estimates, official qualification rankings, and robot-specific scouting observations as different evidence types. Do not attribute alliance score residuals or shared model updates to an individual robot.
-
-Matchup probability labels use five red-win-probability bands: Strong Red (80–100%), Lean Red (60–80%), Toss-up (40–60%), Lean Blue (20–40%), and Strong Blue (0–20%). Boundaries are left-inclusive except the final 100% endpoint. A model upset is a completed match in which the pre-match favorite had at least a 60% win probability and lost; keep this separate from score-residual anomalies.
-
-Team event EPA share is the mean of each team's pre-match EPA divided by the sum of all three alliance teams' pre-match EPA, calculated only for matches with all three nonnegative team EPA values and a positive alliance total. Show the number of qualifying matches. This is an expected model share, not observed point attribution. Team season-match charts support All, Qualification, and Playoff phase filters plus any combination of Auto, Teleop, and Endgame components.
-
-
-## Elimination performance shift analysis
-
-The season-long team match analysis calculates a qualification-to-elimination score-residual shift separately for each official event. Only events with at least three scored qualification matches and two scored elimination matches with usable pre-match Statbotics predictions are eligible. Each event contributes one shift to the season summary so events with larger playoff schedules do not dominate. The summary reports mean/median event shift, negative-shift event count, and a one-sided exact sign test across event-level shifts. A recurring-negative label requires at least three eligible events, at least three negative shifts, and sign-test p ≤ 0.05. This is an exploratory association in alliance-level residuals, not proof of robot-level underperformance or choking. The first-pass calculation is not yet adjusted for partner/opponent strength; the UI states this limitation explicitly. Match keys for the qualification and elimination evidence are retained for direct match review.
-
-
-## Season-wide cohort analytics
-
-Event Insights builds a Redis-backed, resumable season cohort for every team on the target event roster. For each team, it discovers all official-season events (excluding TBA event types 99 offseason and 100 preseason), then retrieves Statbotics team-event snapshots through the configured Statbotics API endpoint (the runtime default currently violates the official-provider requirement; see FV-AUD-001. The generated response types are based on the official Statbotics v3 schema, which does not make the mirror an approved runtime source). Work is bounded by a 20-second execution budget, two concurrent upstream requests, small batches, up to three discovery attempts per team, a finite lock, and a 24-hour job TTL. Team-event snapshots use the shared Statbotics cache policy (24-hour fallback); the current target event is collected during discovery and is refreshed only by an explicit cohort refresh. This avoids fan-out requests from the browser and avoids collecting every season match for every event team.
-
-The team brief compares the target event EPA total-points value with that team's most recent preceding official event, then ranks the change against all event-roster teams with usable prior/current snapshots. Every event-roster team is eligible regardless of which prior event it attended; do not require a shared prior event. Select the most recent preceding official event by date before checking Statbotics availability. If that event has no usable Statbotics team-event record, do not silently fall back to an older event: leave that team's change/rank unavailable while retaining the team in all current-event views. Overall EPA and each EPA component are ranked independently; each component rank's denominator includes only teams with both current and prior values for that component. Always display the eligible comparison count and make clear that teams may have different prior-event baselines. Coverage and failed records remain visible. These cross-event differences can include timing, event strength, model updates, and game-context effects; the comparison is descriptive and not a causal or direct robot contribution measure.
-
-The selected-team match-history endpoint adds an event-normalized residual pattern. It compares the selected team's mean alliance score residual with opposing alliances from the same matches whose pre-match combined EPA is within ±20% of the selected alliance strength. It requires at least three team matches and six strength-matched opponent residuals per event, then tests whether below- or above-baseline directions recur across events. This is an approximate peer sample from matches featuring the team, not an independent event-wide calibration sample. It cannot separate the selected team from its partners or opponents.
-
-
-## Analytics presentation hierarchy
-
-- Every analytics scope must lead with a concise plain-language answer to the question that scope is meant to answer. Present the interpretation before the supporting numbers.
-- Follow the takeaway with a small number of directly relevant evidence elements: comparisons, charts, and match links. Move raw tables, secondary metrics, statistical tests, model diagnostics, and methodology into clearly labeled disclosures.
-- Event Overview should explain the current competitive picture before exposing standings and model diagnostics. Team Investigation should lead with a single-team strength profile, expectations and peer context, event/season progression, and season-wide anomaly matches worth reviewing. Matchup Analysis should state the recorded result before alliance/model detail. Scouting Tools should prioritize reviewable evidence over aggregate diagnostic charts.
-- Do not hide important caveats or sample coverage. Keep them concise and close to the conclusion they qualify.
-- A summary statement must be traceable to the data shown nearby. Distinguish observed change, comparison with a defined cohort, and a prompt for human investigation. Never turn a statistical association into a causal explanation.
-
-
-## Team, qualification, and playoff investigations
-
-- Team Investigation is a one-team-at-a-time workflow. Its questions are absolute strength, performance relative to expectations, development within/across events, strength-matched peer-relative performance, and season-wide unusual matches involving that team.
-- Team peer comparisons use pre-match combined alliance EPA to find other event alliances within ±20% of the selected team's alliance strength. Compare alliance residuals, not individual robot output; require at least three selected-team matches and five peer alliance results before interpreting the comparison.
-- Team match anomaly flags use the selected team's season residual median and median absolute deviation (MAD), with a minimum of eight scored observations. High-confidence losses are separately flagged when the model assigned the team's alliance at least 80% win probability and it lost. Opponent anomalies are contextual. All flags identify matches to inspect and do not establish robot-level causation.
-- Qualification Analysis is event-wide and includes qualification matches only. Flag alliance score residuals outside a robust event-calibrated band (median ± max(20 points, 3 × 1.4826 × MAD)) and high-confidence win-probability misses (at least 80% predicted win probability but the alliance lost). The score band is estimated from observed event residuals; Statbotics does not provide a score prediction interval in this integration. Do not call it a model-provided confidence interval.
-- Playoff Analysis is separate from qualification analysis. It groups completed elimination alliance results by three-team composition and summarizes residuals by elimination round. Team elimination progression remains season-wide and event-balanced, requiring at least three scored qualification matches and two scored elimination matches per event. A recurring-negative pattern requires at least three eligible events and an exact one-sided sign-test p-value ≤ 0.05 after positive qualification baselines; it is an alliance-level association, not proof of robot-level choking.
-- Every anomaly and conclusion must link to supporting match evidence, expose sample coverage, and distinguish observed alliance outcomes from robot-specific scouting observations.
-
-## Reusable insight components — core architectural principle
-
-**Reusability, Reusability, Reusability.**
-
-FieldView must be built around independently reusable insight components. This is a core architectural requirement for all future analytics development and the continued refactoring of existing dashboards.
-
-### Insights are independent of dashboards
-
-The dashboard is a composition of insights, not the exclusive home of those insights. Every metric, statistic, value, comparison, visualization, indicator, review flag, summary, and other discrete analytical element should be implemented as a self-contained React component that can be placed anywhere in the application.
-
-A component must work when supplied with the appropriate data through its props. It must not depend on being rendered inside a particular dashboard, tab, page, or parent component.
-
-### Build from the smallest useful units
-
-Break analytics down into reusable components at every appropriate level, including:
-
-- Individual metric values and formatted statistics.
-- Performance indicators, trends, and comparisons.
-- Win-probability classifications and prediction summaries.
-- Team and alliance contribution indicators.
-- Statistical distributions, confidence intervals, and error measurements.
-- Charts and their filtering controls.
-- Match review flags and anomaly indicators.
-- Summaries and higher-level analytical insights.
-
-Components should be composable: larger insight components should be assembled from smaller reusable components rather than reimplementing their functionality.
-
-### Separate data, calculations, and presentation
-
-Reusable insight components must have clear, explicit data contracts.
-
-- Data acquisition belongs in appropriate data services and application-level data flows, not in individual presentation components.
-- Calculations and analytical methodology belong in reusable, independently testable functions or services.
-- Presentation belongs in reusable React components that receive the data they need through props.
-
-Do not duplicate calculations or analytical methodology across different pages. The same metric must mean the same thing wherever it appears.
-
-### Avoid dashboard-specific dependencies
-
-Insight components must not assume dashboard-specific state, routing, layout, navigation, or data-fetching behavior.
-
-Where an insight requires configuration, filtering, or interaction, expose the necessary behavior through explicit props and well-defined interfaces. Components should support different presentation contexts, including compact and expanded layouts, without duplicating the underlying analytical implementation.
-
-### Compose dashboards from reusable insights
-
-Dashboards should primarily be composition layers. Their responsibility is to organize, arrange, and contextualize existing insight components. They should not become monolithic implementations containing analytics that cannot be reused elsewhere.
-
-When a new insight is developed for a dashboard, it must be designed for reuse from the beginning.
-
-### Make insights available throughout FieldView
-
-The long-term goal is to distribute useful analytical information throughout the entire application. The same insight should be usable on:
-
-- Team pages.
-- Event pages.
-- District pages.
-- Match cards and match detail views.
-- Event and team dashboards.
-- Remote displays and single-field presentations.
-- Other future application surfaces.
-
-A user should not need to open a dedicated analytics dashboard to benefit from FieldView's analytical capabilities.
-
-### Maintain and verify reusability
-
-Before implementing a new metric or insight, check whether an existing component or analytical function can be reused or extended. Avoid duplicate components that represent the same underlying metric. Prefer shared components with explicit props and sensible configuration over separate implementations for individual pages.
-
-Add appropriate tests for shared calculations and reusable components. Changes to an insight's methodology or presentation must remain consistent across every place that uses it.
-
-**Guiding principle: Build an insight once. Make it available everywhere.**
-
-## Shared layout and page data boundaries
-
-- `SiteShell` is a presentation/layout component for shared site chrome (navigation, theme controls, and the page content frame). It must not fetch TBA data, require event/team collections as props, or make individual pages load data solely to satisfy the shell.
-- Pages and route-level data services fetch only the data their own content requires. Do not call `TBA.getEvents(year)` globally or on every page to populate shared navigation.
-- If navigation genuinely needs contextual information, derive it from the current route or pass the smallest already-available value. Do not introduce a full event-list fetch for navigation state.
-- Keep page-specific collections local to the page that uses them. Do not pass unused data through shared layout components.
-
-## Explicit authorization required for new page data fetches
-
-**No agent may add a data fetch to any page without explicit authorization from the user. This is a hard requirement.**
-
-- Do not add a new TBA, Statbotics, database, Redis, internal API, external API, or other data request to a page or page-specific data-loading path unless the user has explicitly authorized that fetch.
-- This applies whether the request is made directly by a Server Component, through a helper/service, in a client effect or hook, or indirectly through a shared layout or component.
-- Before proposing or implementing a new fetch, inspect the page's existing data flow and determine whether the required data is already available through an existing snapshot, service result, cache, or shared state.
-- Never add a broad collection fetch (for example, `TBA.getEvents(year)`) merely to supply navigation, shared layout, or unrelated page context. Fetch only the narrow resource the page actually needs, and only when that fetch has been explicitly authorized.
-- Reusing, relocating, or refactoring an existing authorized fetch is not permission to introduce additional upstream requests or expand its scope.
-- If a feature appears to require new data acquisition, stop before changing code and ask the user for explicit authorization. Explain the proposed source, scope, trigger/frequency, and why existing data flows cannot satisfy the requirement.
-- Do not interpret a general feature request, bug report, or instruction to improve a page as authorization to add new data fetching. Authorization must specifically cover the proposed fetch.
-- When authorized, keep acquisition in the appropriate shared service/data layer, preserve existing caching and freshness rules, and avoid duplicating requests across pages or components.
-
-This rule applies to all agents and all future work. Existing page fetches may be maintained or corrected; this requirement governs adding new fetches.
-
-## Match flags and Suggested Review presentation
-
-- Keep alliance-level and match-level indicators separate. Inside each alliance panel, place the three team numbers and four match metrics in the top section, then use the entire bottom width of the alliance panel for a wrapping row of applicable flags. The metric order is **Win Chance → Predicted Score → Score Delta → Actual Score**. The flag row begins with **Win** or **Loss** (dark alliance color, based on the actual result), then **Predicted Win** or **Predicted Loss** (light alliance color, according to the model's favored side), followed by any applicable alliance review flags such as **High Alliance EPA**, **Large Score Delta**, and **High Penalties** (shared amber review color). Flags must not be constrained to the team-number column; allow the row to wrap as needed. Do not render placeholder badges for unavailable or inapplicable states.
-- The match-flags row owns the five-band election-style win-probability classification (Strong Red, Lean Red, Toss-up, Lean Blue, Strong Blue) and match-level review flags. Use the five red-to-blue classification colors for the probability label; use the shared amber highlight color for review flags.
-- **Model Upset** means a completed match where the pre-match favorite had at least 60% win probability and lost.
-- **Anomalous Score** means an alliance actual-minus-predicted residual outside the match-phase event baseline of median ± max(20 points, 3 × 1.4826 × MAD), requiring at least eight usable alliance residuals in that phase. This is an event-relative review signal, not a model-provided confidence interval.
-- **Large Score Delta** is alliance-specific and appears inside the affected alliance panel, not in the match-flags row. Flag an alliance when its absolute actual-minus-predicted score delta is in the event-wide top decile, requiring at least 20 usable alliance residuals. It remains a Suggested Review tab; each card identifies the affected alliance and its signed delta.
-- **High Alliance EPA** marks an alliance whose combined pre-match EPA estimate is in the top quartile of available alliance estimates, with at least eight usable estimates. It is a strength indicator, not an anomaly.
-- **High Penalties** is alliance-specific: compare each alliance's credited foul points against the event-wide alliance penalty-point distribution using the Tukey upper fence (Q3 + 1.5 × IQR; when IQR is zero, values above the median are flagged), with at least 10 usable alliance observations. Display penalty count alongside credited penalty points; do not attribute penalties to an individual robot. TBA score-breakdown count fields are season-dependent: through 2025 use `foulCount` + `techFoulCount`; 2026 uses `minorFoulCount` + `majorFoulCount`. Accept the corresponding snake_case variants defensively. `foulPoints` remains the credited-point field.
-- Suggested Review contains flagged matches, sorted by scheduled match time in the event timezone (then competition-level/match-number fallback). Group the same matches into tabs by flag type; a match with multiple flags may appear in multiple tabs. Each card should retain all of its applicable flags, show both alliances and scores, and expose the match/video links without a reviewed/dismissed workflow.
-- Do not add data acquisition for this presentation. Derive flags from the existing event analytics response and its current match/video fields.
+`CLAUDE.md` must remain the one-line pointer `@AGENTS.md` so all repository agents use this source of truth.
