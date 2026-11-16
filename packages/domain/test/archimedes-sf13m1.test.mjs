@@ -22,6 +22,8 @@ test("TBA match fixture preserves original match identity, alliances, scores, an
   assert.equal(archimedesSf13m1TbaMatch.alliances.red.score, 580);
   assert.equal(archimedesSf13m1TbaMatch.alliances.blue.score, 459);
   assert.equal(archimedesSf13m1TbaMatch.score_breakdown.blue.foulPoints, 15);
+  assert.equal(archimedesSf13m1TbaMatch.score_breakdown.red.hubScore.uncounted, 4);
+  assert.equal(archimedesSf13m1TbaMatch.score_breakdown.blue.hubScore.uncounted, 0);
   assert.equal(archimedesSf13m1TbaMatch.time, 1777735980);
   assert.equal(archimedesSf13m1TbaMatch.actual_time, 1777737540);
   assert.equal(archimedesSf13m1TbaMatch.predicted_time, 1777737684);
