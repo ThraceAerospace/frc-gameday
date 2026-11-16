@@ -1,22 +1,23 @@
+import type { TBATeam } from "@fieldview/provider-tba/types";
 import type { TeamKey } from "./ids.js";
 
 /** Canonical identity and descriptive information for an FRC team. */
 export interface FieldViewTeam {
-  /** Canonical TBA key, for example "frc3461". */
+  /** Canonical TBA key, validated and branded at the provider boundary. */
   key: TeamKey;
   /** Numeric FRC team number. */
-  teamNumber: number;
+  teamNumber: TBATeam["team_number"];
   /** Official team name, when supplied. */
-  name?: string | null;
+  name?: TBATeam["name"] | null;
   /** Common team nickname. */
-  nickname?: string | null;
-  city?: string | null;
-  stateProv?: string | null;
-  country?: string | null;
-  rookieYear?: number | null;
-  website?: string | null;
-  schoolName?: string | null;
-  motto?: string | null;
+  nickname?: TBATeam["nickname"] | null;
+  city?: TBATeam["city"];
+  stateProv?: TBATeam["state_prov"];
+  country?: TBATeam["country"];
+  rookieYear?: TBATeam["rookie_year"];
+  website?: TBATeam["website"];
+  schoolName?: TBATeam["school_name"];
+  motto?: TBATeam["motto"];
 }
 
 /**
