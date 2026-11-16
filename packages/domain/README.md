@@ -34,6 +34,6 @@ Team-season identity is represented separately by FieldViewTeamSeason, which pai
 
 The initial canonical object set is FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, FieldViewEventAnalytics, and FieldViewTeamAnalytics. FieldViewMatch is the first detailed model and combines TBA match information with independent predictions, team statistics, playoff alliance associations, explicit analysis, flags, and provenance.
 
-The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Type implementation and the separate versioned client contract follow that specification.
+The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are now implemented for the canonical object set, with `FieldViewMatch` retaining exact TBA match fields and explicitly typed Statbotics associations. Typecheck, fixture validation, and the separate versioned client contract remain follow-up work.
 
 Client contracts must be explicit, serializable, and provider-independent. Provider types must not leak into those contracts.
