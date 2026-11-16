@@ -1,36 +1,36 @@
-# ADR 0004: Canonical identity and TBA-first aggregates
+# ADR 0004: Provider identifiers and FieldView data preservation
 
-**Status:** Accepted
+**Status:** Accepted  
 **Date:** 2026-11-16
 
 ## Context
 
-FieldView consumes multiple FRC data providers. Their identifiers and coverage are not always consistent. The Blue Alliance (TBA) has the longest-established and most widely reused FRC API identifiers, and its key conventions are commonly reproduced by other systems.
+FieldView consumes multiple FRC data providers. Their identifiers and data coverage are not always consistent. TBA is the initial source for team, event, and match records, while Statbotics supplies additional performance data.
 
-Introducing a second opaque FieldView identity system would add mapping and reconciliation work without a demonstrated benefit.
+FieldView must preserve the meaning of provider data so that provider documentation remains directly applicable to the values received and exposed by FieldView.
 
 ## Decision
 
-1. TBA keys are the canonical FieldView identifiers for teams, events, and matches:
-   - Team: `frc3461`
-   - Event: `2026cthar`
-   - Match: `2026cthar_qm1`
-2. These keys are treated as opaque strings outside provider adapters. FieldView does not derive identity by parsing their format.
-3. Team-season identity is the composite of canonical team key and season year.
-4. Aggregate records are initialized from the corresponding TBA data. Other providers enrich those records with additional fields and metrics.
-5. Provider identifiers may be retained as source references where useful, but they do not replace canonical FieldView identity.
-6. Authority is field-specific. TBA is the identity and initial-record baseline; another provider may be authoritative for a particular enrichment, such as its own performance metrics.
-7. Missing or failed enrichment does not invalidate or erase the TBA-backed aggregate.
-8. A FieldView event requires an IANA timezone. Event dates remain calendar dates; match timestamps represent instants and are displayed in the owning event's timezone.
+1. TBA team, event, and match keys are used as source identifiers without changing their values: team frc3461, event 2026cthar, and match 2026cthar_qm1.
+2. These keys are treated as opaque strings. FieldView does not parse, reformat, brand at runtime, or otherwise transform them.
+3. Team-season identity is represented separately as the unchanged TBA team key paired with a FieldView season year.
+4. TBA payloads pass directly into FieldView normalization unchanged.
+5. Statbotics payloads pass directly into FieldView normalization unchanged.
+6. Data from any other provider passes through unchanged.
+7. No provider value may be silently renamed, converted, reinterpreted, defaulted, omitted, or overwritten.
+8. Any transformation must be explicitly described and approved before implementation. Its result must be represented by a specifically named field in each forward-facing data model, with documentation of its source fields and transformation.
+9. Provider payloads and provider-specific types remain backend-only. Client contracts must be explicit, serializable, and provider-independent.
+10. Event timezone retains the source provider value and nullability. The presentation rule to display event dates and times in the event timezone does not authorize changing the stored provider value or inventing a fallback.
 
 ## Consequences
 
-- No separate opaque FieldView ID registry or general identity-mapping layer is introduced.
-- Provider packages own their generated schemas, API clients, services, normalization, and generation tooling. Domain models may use those provider types directly where data is passed through; FieldView-defined types remain appropriate for normalized, combined, or calculated semantics.
-- Domain models may import provider packages and use generated provider types for pass-through fields. Provider types are backend-only and must not leak into client contracts.
+- Provider packages own their generated schemas, API clients, services, provider-specific types, and generation tooling. They do not silently normalize provider payload values.
+- FieldView normalization is the explicit location for approved TBA and Statbotics transformations.
+- Other provider payloads pass through unchanged unless a separately described and approved decision changes this rule.
+- Domain models may use provider types directly for pass-through data. Provider types must not leak into client contracts.
+- Derived, combined, or calculated values require separate named fields and documented source semantics.
 - Merge, provenance, freshness, and explicit-clear semantics remain separate concerns and must be specified before provider reconciliation is implemented.
-- If a future provider cannot map reliably to a TBA key, that integration must handle the unmatched record explicitly rather than silently inventing a competing canonical identity.
 
 ## Initial domain types
 
-The initial domain foundation defines `TeamKey`, `EventKey`, and `MatchKey` as opaque branded string types, plus `FieldViewTeam`, `FieldViewTeamSeason`, `FieldViewEvent`, and `FieldViewMatch`.
+The initial provider-shaped domain types are direct aliases of the corresponding TBA payload types. FieldView-specific models such as FieldViewTeamSeason remain separate and must not imply a transformation of provider data.
