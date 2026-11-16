@@ -162,7 +162,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M3 — Domain and contract foundation
 
-**Status:** Started. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference fixture. The model defines team, season, event, event-team, match, playoff-alliance, and analytics concepts; provider overlaps; explicit associations; calculation/evidence requirements; and the boundary between backend domain types and client DTOs. Type implementation, the TBA event-prediction provider type, versioned client DTOs, and fixture validation remain outstanding.
+**Status:** In progress. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference fixture. Initial types now exist for team, season, event, event-team, match, playoff-alliance, provenance, and analytics concepts. `FieldViewMatch` retains the exact TBA match type and adds explicitly typed Statbotics associations, independent predictions, analysis, playoff associations, and evidence-bearing flags. Remaining M3 work includes validating the types, adding the Archimedes fixture, defining versioned client DTOs, and validating the contract.
 
 **Work**
 - Define canonical models including FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, and analytics result types.
@@ -301,7 +301,7 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 1. Complete the remaining M2 checks: confirm the post-relocation import graph, add CI, and establish a test harness after identifying which build-time routes require provider/Redis configuration. Never put production secrets into CI.
 2. Keep the migration branch deployment pause and current Vercel root directory unchanged; do not enable deployments or change production settings as part of workspace work.
-3. Continue M3 by defining EventTeam and provider-enrichment/reconciliation semantics, then establish serializable client contracts before migrating additional provider-shaped aggregates or application imports.
+3. Continue M3 by validating the canonical domain types against the Archimedes SF13 fixture, resolving remaining association and omission decisions, then establish serializable client contracts before migrating application consumers.
 4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
 **Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The first FieldView domain-model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`; domain type implementation and the versioned client contract remain outstanding. The workspace lockfile has been refreshed and pushed. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
