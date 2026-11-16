@@ -72,7 +72,7 @@ Predictions are separate first-class concepts:
 
 They may agree, disagree, or be unavailable independently. Neither is selected as a silent replacement for the other.
 
-The generated TBA OpenAPI currently models the event-predictions response too loosely to serve as the typed per-match prediction contract. The provider package must define a provider-owned type from the actual endpoint response shape before the domain field is implemented. Do not use `Record<string, unknown>` or an untyped data bag as a shortcut.
+The generated TBA OpenAPI currently models the event-predictions response too loosely to serve as the typed per-match prediction contract. The TBA provider package now defines `TBAEventMatchPrediction` and `TBAEventPredictions` from the supplied endpoint response shape. These remain provider-owned types and are used by the backend domain only; do not replace them with `Record<string, unknown>` or an untyped data bag.
 
 ### 3.4 Team associations
 
