@@ -44,6 +44,8 @@ workers/
 packages/
   contracts/                   # Versioned, serializable client DTOs
   domain/                      # FieldView normalization and derived-data domain models
+    src/
+      normalization/            # Approved TBA and Statbotics transformations only
   providers/
     tba/
       src/
