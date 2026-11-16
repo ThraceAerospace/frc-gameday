@@ -269,10 +269,10 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 ## 10. Immediate next actions
 
-1. Finish M1 verification: inspect Vercel environment-variable names/scopes without exposing values, confirm the branch/deployment settings, and map the import graph before moving the Next.js app.
-2. Add focused architecture decision records for the confirmed repository/runtime decisions and for unresolved EventRuntime, publication, storage, and event-team refresh questions.
-3. Establish npm workspace root configuration while preserving the current app's behavior; do not relocate source until a reproducible build baseline and import graph are available.
-4. Add CI and the initial test harness, then validate a clean install, lint, typecheck, tests, and production build.
-5. Define the first provider-independent domain and contract slice before moving provider acquisition or runtime ownership.
+1. Complete import-graph and clean-build verification from a local checkout before moving the Next.js app. The GitHub source inventory is not a substitute for executing the actual dependency graph/build.
+2. Inspect the current Vercel build/install/root-directory settings and deployment environment scopes as needed; variable names/scopes were inspected with decryption disabled and recorded in the migration inventory.
+3. Begin the workspace foundation in a behavior-preserving step. Keep the existing root app buildable; do not relocate source until the import graph and build baseline are verified.
+4. Add CI and the initial test harness only after determining which build-time routes require provider/Redis configuration; never put production secrets into CI.
+5. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
 **Current implementation status:** `AGENTS.md`, README, and the source-level migration inventory have been updated. The repository still has one root Next.js app and the legacy Redis/SharedWorker/Vercel data path. No Cloudflare Worker, Durable Object, workspace package, or production infrastructure has been created.
