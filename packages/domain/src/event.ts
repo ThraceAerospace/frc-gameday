@@ -1,23 +1,24 @@
+import type { TBAEvent } from "@fieldview/provider-tba/types";
 import type { EventKey } from "./ids.js";
 
 /** Canonical identity and core scheduling/location information for an event. */
 export interface FieldViewEvent {
-  /** Canonical TBA key, for example "2026cthar". */
+  /** Canonical TBA key, validated and branded at the provider boundary. */
   key: EventKey;
-  year: number;
-  name: string;
+  year: TBAEvent["year"];
+  name: TBAEvent["name"];
   /** Event-local code, such as "cthar". */
-  eventCode?: string | null;
+  eventCode?: TBAEvent["event_code"] | null;
   /** Calendar date in YYYY-MM-DD form, not a UTC timestamp. */
-  startDate?: string | null;
+  startDate?: TBAEvent["start_date"] | null;
   /** Calendar date in YYYY-MM-DD form, not a UTC timestamp. */
-  endDate?: string | null;
-  /** Required IANA timezone identifier, such as "America/New_York". */
-  timezone: string;
-  city?: string | null;
-  stateProv?: string | null;
-  country?: string | null;
-  venue?: string | null;
-  address?: string | null;
-  website?: string | null;
+  endDate?: TBAEvent["end_date"] | null;
+  /** Required IANA timezone identifier; null upstream values must be resolved at ingestion. */
+  timezone: NonNullable<TBAEvent["timezone"]>;
+  city?: TBAEvent["city"];
+  stateProv?: TBAEvent["state_prov"];
+  country?: TBAEvent["country"];
+  venue?: TBAEvent["location_name"];
+  address?: TBAEvent["address"];
+  website?: TBAEvent["website"];
 }
