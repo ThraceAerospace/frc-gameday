@@ -26,7 +26,7 @@ These decisions are settled unless a concrete implementation constraint requires
 3. **One authoritative owner per responsibility.** Temporary mirrors and comparison paths are acceptable, but two systems must not independently write the same authoritative state.
 4. **Normalize at provider boundaries.** Provider schemas, identifiers, status values, and response quirks remain inside provider adapters.
 5. **Frontend consumes FieldView contracts.** Client code must not depend on TBA, Statbotics, Redis, or Cloudflare implementation types.
-6. **Keep domain models independent.** Domain and contract packages must not depend on React, Next.js, Cloudflare, or provider packages.
+6. **Keep the derived domain backend-only.** Domain packages may depend on provider packages and generated provider types. Neither domain nor provider packages may depend on React, Next.js, or Cloudflare. Client contracts must not expose provider types.
 7. **Prefer the smallest sufficient runtime.** Workers are the default execution environment. Durable Objects are introduced where persistent state, coordination, ordering, or realtime subscription ownership requires them.
 8. **Keep analytics declarative and generic.** Definitions describe metrics; a small engine executes registered operations. No arbitrary expression evaluation.
 9. **Preserve event-timezone presentation.** All event dates and times are displayed in the relevant event's IANA timezone.
@@ -43,7 +43,7 @@ workers/
   backend/                     # Cloudflare Worker entrypoints and runtime wiring
 packages/
   contracts/                   # Versioned, serializable client DTOs
-  domain/                      # Canonical FieldView domain models and rules
+  domain/                      # FieldView derived-data domain models and rules
   providers/
     tba/
       src/
@@ -86,13 +86,13 @@ This is a destination, not a mandate to move every existing file immediately. Re
 
 - `packages/domain` has no runtime dependency on providers, contracts, UI, or infrastructure.
 - `packages/contracts` describes serialized boundaries using domain-safe types; it does not import provider models.
-- Provider packages may depend on domain types to produce normalized objects, but domain packages never depend on providers.
+- The domain may import provider types for pass-through fields. Provider packages own their schemas and provider-specific implementation; client DTOs remain explicit and provider-independent.
 - The Worker may compose providers, domain services, analytics, storage, and Durable Objects.
 - The web application consumes contracts and presentation-safe utilities; it does not import provider packages or backend runtime modules.
 - Analytics accepts normalized input data and has no hidden provider fetching or UI dependency.
 - Each provider package owns its complete integration, including generated schemas, schema-generation tooling, clients, services, validation, and normalization.
 - Provider-specific implementation must not be split across the web application, domain package, or generic schema packages.
-- Each provider package translates external data into canonical FieldView domain values. Raw provider types remain internal to that package.
+- Provider packages own generated schemas, API clients, services, provider-specific normalization, and generation tooling. Domain models may use provider types directly; those types must not leak into client contracts.
 
 ## 4. Runtime responsibility model
 
@@ -179,7 +179,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 **Work**
 - Introduce isolated TBA, Statbotics, and FRC Colors adapters.
-- Keep raw provider types and API details inside their respective packages.
+- Keep raw provider schemas, API details, and provider-specific types inside their respective packages. The backend domain may import those types; client contracts may not expose them.
 - Normalize provider responses into FieldView-owned domain data.
 - Define per-field source precedence and internal provenance/freshness.
 - Preserve valid prior data on failed or partial acquisition; distinguish omitted fields from authoritative clears.
@@ -299,7 +299,7 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 1. Complete the remaining M2 checks: confirm the post-relocation import graph, add CI, and establish a test harness after identifying which build-time routes require provider/Redis configuration. Never put production secrets into CI.
 2. Keep the migration branch deployment pause and current Vercel root directory unchanged; do not enable deployments or change production settings as part of workspace work.
-3. Continue M3 by defining EventTeam and provider-enrichment/reconciliation semantics, then establish serializable client contracts before moving legacy provider-shaped types or application imports.
+3. Continue M3 by defining EventTeam and provider-enrichment/reconciliation semantics, then establish serializable client contracts before migrating additional provider-shaped aggregates or application imports.
 4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
 **Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative; root tooling and provider type generators remain at the root temporarily. Clean workspace installation and production build have passed locally. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
