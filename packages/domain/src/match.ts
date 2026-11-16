@@ -1,6 +1,7 @@
 import type {
   TBAMatch,
   TBAEventMatchPrediction,
+  TBAEventOPRs,
 } from "@fieldview/provider-tba/types";
 import type {
   StatboticsMatch,
@@ -16,26 +17,31 @@ import type { StatboticsTeamId, TeamKey } from "./ids.js";
 export interface FieldViewMatchTeam {
   /** Original TBA identifier, e.g. "frc7407". */
   team_key: TeamKey;
-  /** Original numeric Statbotics identifier, e.g. 7407. */
-  statbotics_team_id: StatboticsTeamId;
+  /**
+   * Original numeric Statbotics identifier. Optional because the Statbotics
+   * match resource or team association may not be available.
+   */
+  statbotics_team_id?: StatboticsTeamId;
 
   /** Values associated from the TBA event-level OPR resource. */
-  opr?: number;
-  dpr?: number;
-  ccwm?: number;
+  opr?: NonNullable<TBAEventOPRs["oprs"]>[string];
+  dpr?: NonNullable<TBAEventOPRs["dprs"]>[string];
+  ccwm?: NonNullable<TBAEventOPRs["ccwms"]>[string];
 
   /** Original Statbotics EPA records for the two measurement points. */
   pre_epa?: StatboticsMatchEPA;
   epa?: StatboticsMatchEPA;
 }
 
+/**
+ * FieldView analysis of one alliance's score.
+ * Actual and predicted values retain the source field types; delta is derived.
+ */
 export interface FieldViewAllianceScoreAnalysis {
-  /** TBA alliance score; null when the source score is unavailable/null. */
-  actual: number | null;
-  /** Statbotics predicted alliance score; null when unavailable. */
-  predicted: number | null;
-  /** actual - predicted; null unless both inputs are available. */
-  delta: number | null;
+  actual: TBAMatch["alliances"]["red"]["score"];
+  predicted?: StatboticsPrediction["red_score"];
+  /** actual - predicted; only present when both inputs are numeric. */
+  delta?: number;
 }
 
 export interface FieldViewAllianceEPAAnalysis {
