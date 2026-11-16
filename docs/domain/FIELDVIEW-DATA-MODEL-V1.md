@@ -195,24 +195,29 @@ The Archimedes SF13 example demonstrates identical or overlapping fields across 
 
 A matching value does not prove that one provider field can be deleted from source records. If the client contract publishes only one canonical value for a duplicated fact, the contract documentation must say which source owns that value and how the other source observation remains available for diagnostics/provenance.
 
-## 7. Source-record retention and deliberate omissions
+## 7. Provider payload caching, versioning, and deliberate omissions
 
-Passing a provider payload unchanged into normalization does not mean every provider field must be copied into the client-facing FieldView object. It does mean the original payload must not be silently altered or discarded during ingestion.
+Complete provider payload retention belongs to the ingestion/cache/versioning layer, not to each FieldView domain object.
 
-The backend must retain the original provider source records (or an equivalently lossless representation) separately from the assembled FieldView product object. This preserves fields that are not currently needed by the product model and permits later model expansion without another provider fetch. Source records are internal and are not automatically serialized to clients.
+- Every provider payload accepted by FieldView is cached and versioned in its complete ingested form.
+- Ingestion preserves the provider payload: field names, values, types, nullability, and nested structures are not silently changed, omitted, or overwritten.
+- A newer response creates a new version; it does not silently replace the only retained copy of an earlier version.
+- The cache/version store is responsible for retaining and retrieving complete provider payload versions. Its retention duration, eviction policy, and version-selection rules are separate infrastructure decisions.
+- FieldView domain objects and DTOs are aggregates. They select and associate explicitly typed values from the relevant versioned provider inputs and add separately named FieldView-owned values where approved.
+- Constructing an aggregate does not mutate any cached provider payload.
+- Do not add a generic `raw` or `sourceRecords` property to every domain object or DTO merely to repeat data already owned by the ingestion/cache layer.
+- Provider payloads and their versions are backend inputs. They are not automatically serialized to clients.
 
-For the Archimedes Statbotics match, the source record contains:
+For the Archimedes SF13 Match 1 example, the complete TBA match response, Statbotics match response, TBA event-predictions response, and TBA event OPR response are independently cached/versioned resources. The FieldView match/team aggregates may select values from these resources, while retaining the distinction between their source endpoints.
 
-- identity/context: `key`, `year`, `event`, `week`, `elim`, `comp_level`, `set_number`, `match_number`, `match_name`;
-- timing/status/media: `time`, `predicted_time`, `status`, `video`;
-- `alliances`, `pred`, and the complete `result` object;
-- the complete `pre_epas` and `epas` maps, including component fields such as `comp_0_epa` through `comp_9_epa`.
+In particular:
 
-The FieldView product object exposes the distinct information it needs as named fields and team associations. Statbotics values that duplicate TBA identity, timestamps, or video information need not be repeated as duplicate client fields, but their original observations remain in the internal Statbotics source record and source metadata. The complete Statbotics result and prediction information remain represented as separately sourced values.
+- The complete Statbotics match payload remains available in its versioned source record, including identity/context, timing/status/media, alliances, prediction, result, and complete `pre_epas` and `epas` maps.
+- The complete TBA match payload remains available in its versioned source record, including alliances, score breakdown, videos, and all match timestamps.
+- TBA event predictions remain a separate versioned resource indexed by the unchanged TBA match key.
+- TBA OPR/DPR/CCWM remain sourced from the separate event-level OPR resource and are associated with event teams and match teams without being reclassified as match-endpoint fields.
 
-The TBA match object retains all of its original fields directly. TBA event predictions and TBA event OPRs are separate source records; their associated values are represented in the match/team product objects without pretending they originated in the TBA match response.
-
-Any field omitted from a client DTO must be listed in the client-contract documentation with the reason for omission. Omission from a DTO is not permission to delete or mutate the internal provider source record.
+A FieldView aggregate need not duplicate every provider field. Any omission from a client DTO must be deliberate and documented in the client-contract specification. Omission from an aggregate or DTO never authorizes deletion or mutation of the cached provider payload.
 
 ## 8. Client contract boundary
 
