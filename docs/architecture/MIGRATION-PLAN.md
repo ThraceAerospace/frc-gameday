@@ -294,9 +294,9 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 ## 10. Immediate next actions
 
-1. Complete import-graph and clean-build verification from a local checkout before moving the Next.js app. The GitHub source inventory is not a substitute for executing the actual dependency graph/build.
-2. Inspect the current Vercel build/install/root-directory settings and deployment environment scopes as needed; variable names/scopes were inspected with decryption disabled and recorded in the migration inventory.
-3. Begin the workspace foundation in a behavior-preserving step. Keep the existing root app buildable; do not relocate source until the import graph and build baseline are verified.
+1. Complete post-relocation import-graph, clean-install, typecheck, and production-build verification from a local checkout. The source inventory is not a substitute for executing the actual workspace.
+2. Inspect the current Vercel build/install/root-directory settings and deployment environment scopes as needed; variable names/scopes were inspected with decryption disabled and recorded in the migration inventory. Keep the migration branch deployment pause and current root directory unchanged until local workspace validation is complete.
+3. Introduce npm workspaces in a small, behavior-preserving change. Keep the root lockfile authoritative, retain the current root install layout initially, and verify that `apps/web` can build from the workspace root before changing Vercel settings.
 4. Add CI and the initial test harness only after determining which build-time routes require provider/Redis configuration; never put production secrets into CI.
 5. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
