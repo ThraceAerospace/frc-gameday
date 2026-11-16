@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory completed; M2 repository foundation in progress (Next.js app relocated, npm workspace established, local install/build validated)
+**Status:** M1 source inventory completed; M2 repository foundation in progress; M3 domain foundation started
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Incremental migration
 **Last updated:** 2026-11-16
@@ -15,6 +15,7 @@ This document is the working migration plan for evolving the existing FieldView 
 | Frontend | Retain Next.js |
 | Migration strategy | Incremental, with old and new implementations coexisting temporarily |
 | Backend runtime | Hybrid Cloudflare Workers and Durable Objects |
+| Canonical identity | TBA team, event, and match keys; TBA-first aggregates with field-specific provider enrichment |
 
 These decisions are settled unless a concrete implementation constraint requires revisiting one.
 
@@ -161,6 +162,8 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M3 — Domain and contract foundation
 
+**Status:** Started. The independent `@fieldview/domain` workspace now exports opaque TBA-based team, event, and match identifiers and foundational `FieldViewTeam`, `FieldViewTeamSeason`, `FieldViewEvent`, and `FieldViewMatch` models. ADR 0004 records the accepted TBA-first aggregate strategy. Event timezone is required. Event-team state, provider enrichment, provenance, reconciliation semantics, and serializable contracts remain to be designed.
+
 **Work**
 - Define canonical models including FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, and analytics result types.
 - Define versioned serializable client DTOs.
@@ -296,7 +299,7 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 1. Complete the remaining M2 checks: confirm the post-relocation import graph, add CI, and establish a test harness after identifying which build-time routes require provider/Redis configuration. Never put production secrets into CI.
 2. Keep the migration branch deployment pause and current Vercel root directory unchanged; do not enable deployments or change production settings as part of workspace work.
-3. Establish the canonical domain and serializable contract package foundations before moving legacy provider-shaped types or application imports.
+3. Continue M3 by defining EventTeam and provider-enrichment/reconciliation semantics, then establish serializable client contracts before moving legacy provider-shaped types or application imports.
 4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
 **Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative; root tooling and provider type generators remain at the root temporarily. Clean workspace installation and production build have passed locally. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
