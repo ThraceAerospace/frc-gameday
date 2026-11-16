@@ -40,7 +40,7 @@ The match is the first detailed model because it demonstrates the value of combi
 
 ### 3.1 Original TBA match fields
 
-`FieldViewMatch` retains the complete TBA match field set with the exact generated TBA types. The initial implementation may express this as an interface extending `TBAMatch`, rather than redefining TBA fields using generic types.
+`FieldViewMatch` retains the complete TBA match field set with the exact generated TBA types. The current type implementation expresses this as an interface extending `TBAMatch`, rather than redefining TBA fields using generic types. Statbotics-derived fields similarly reference provider-owned types. This is a backend domain dependency only; the client DTOs will define their own serializable types.
 
 This preserves, among other fields:
 
@@ -81,11 +81,11 @@ The model associates each match alliance's teams with their additional statistic
 Each `FieldViewMatchTeam` association includes:
 
 - the unchanged TBA team key;
-- the unchanged numeric Statbotics team ID;
+- the unchanged numeric Statbotics team ID when a source association is available;
 - TBA event-level OPR, DPR, and CCWM values when available;
 - Statbotics pre-match EPA and post-match EPA records when available.
 
-The association arrays follow the corresponding TBA alliance roster order. Missing metrics remain missing; they are never represented as zero.
+The association arrays follow the corresponding TBA alliance roster order. The Statbotics numeric ID is optional when the Statbotics match record or an explicit cross-source association is unavailable. Do not derive it by parsing or stripping the `frc` prefix from a TBA key. The association rule must preserve both original identifiers. Missing metrics remain missing; they are never represented as zero.
 
 OPR/DPR/CCWM originate from the TBA event-level OPR resource, not from the match endpoint. Fetch/cache that event resource at event scope and associate its values with the teams. Do not fetch it separately for every match.
 
@@ -101,9 +101,9 @@ The first analysis fields are:
 
 Definitions:
 
-- Actual score is the original TBA alliance score.
-- Predicted score is the Statbotics predicted alliance score.
-- Score delta is actual score minus predicted score.
+- Actual score is the original TBA alliance score and retains the exact TBA score field type.
+- Predicted score is the original Statbotics predicted alliance score and retains the exact Statbotics prediction field type.
+- Score delta is actual score minus predicted score, represented only when both inputs are numeric. An unavailable prediction remains absent; an explicit provider null remains null. The derived delta is not calculated from missing or null inputs.
 - Alliance EPA totals are the sum of the three associated team EPA values for the relevant time point.
 
 An aggregate is unavailable unless all required team values are present. Missing values are not treated as zero. These calculations are FieldView-owned and do not modify the provider fields.
@@ -229,8 +229,8 @@ The client contract is the next implementation step after this domain baseline i
 
 ## 9. Implementation sequence
 
-1. Establish the domain type definitions and source metadata types.
-2. Add provider-owned typing for the TBA event-predictions response from its actual response shape.
+1. Complete and typecheck the initial domain type definitions and source metadata types.
+2. Keep provider-owned typing for the TBA event-predictions response in the TBA package, based on the supplied endpoint response shape.
 3. Add the Archimedes SF13 fixture and verify every source field, association, overlap, calculation, flag, and playoff relationship.
 4. Define the versioned client DTOs separately.
 5. Add validation and fixture-driven tests.
