@@ -15,14 +15,14 @@ This inventory maps the existing application to target responsibilities. It is o
 | Runtime version | Vercel project configured for Node 24.x; migration environment uses Node 24.22.3 | Standardize local/CI/runtime on Node 24 and preserve the pinned runtime |
 | Package manager | npm 11.19.1; root `package-lock.json`; workspaces not yet enabled | Keep npm and one root lockfile; enable npm workspaces without changing package manager |
 | Build scripts | `dev`, `build`, `start`, `lint`; type generation runs in `predev` and `prebuild` | Preserve current commands through workspace scripts; later make generation explicit and reproducible |
-| TypeScript | Root `tsconfig.json`, strict mode, bundler resolution, `@/* -> ./src/*` alias | Move/adjust alias and Next plugin when app relocates; keep strictness |
-| Next config | `next.config.ts`; only observed custom setting is `allowedDevOrigins: ['192.168.18.6']` | Relocate with web app; verify LAN development still works |
-| Styling/build config | Root `eslint.config.mjs`, `postcss.config.mjs`; Tailwind CSS v4 | Keep web-specific configuration in web workspace unless shared use emerges |
+| TypeScript | `apps/web/tsconfig.json`, strict mode, bundler resolution, `@/* -> ./src/*` alias relative to the app | Keep strictness; validate typechecking from the app workspace and root scripts |
+| Next config | `apps/web/next.config.ts`; custom setting `allowedDevOrigins: ['192.168.18.6']` | Verify app-root discovery and LAN development after relocation |
+| Styling/build config | Root `eslint.config.mjs`; `apps/web/postcss.config.mjs`; Tailwind CSS v4 | Keep lint tooling at root for now; app styling config stays with `apps/web` |
 | Vercel config | No root `vercel.json` found at baseline | Project settings currently provide deployment configuration; do not infer settings from absent config file |
 | Cloudflare config | No `wrangler.toml`, `wrangler.json`, or Worker entrypoint found at baseline | Create only after Worker/DO contracts and bindings are defined |
 | CI | No GitHub Actions workflow found in initial audit | Add CI as part of repository foundation; do not deploy from migration branch |
 | Tests | No test runner dependency or test script in baseline package manifest | Establish a focused test harness in the workspace foundation and add tests alongside slices |
-| Ignore rules | Root `.gitignore` covers node_modules, Next output, env files, Vercel, and TypeScript build artifacts | Extend for workspace outputs/Cloudflare artifacts as they are introduced |
+| Ignore rules | Root `.gitignore` covers root Next output, node_modules, env files, Vercel, and TypeScript build artifacts | Add app-local Next output ignores and Cloudflare artifacts as those workspaces are introduced |
 
 The Vercel project is `frc-gameday`, linked to `ThraceAerospace/frc-gameday`. Its migration-branch preview build is currently skipped by a project-level Ignored Build Step that checks `VERCEL_GIT_COMMIT_REF`. The project-level setting applies to the migration branch only; do not overwrite it casually. The current production/other-branch deployment behavior was intentionally left unchanged.
 
