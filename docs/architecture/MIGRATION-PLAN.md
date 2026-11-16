@@ -85,7 +85,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 
 - `packages/domain` may have type-only dependencies on provider packages for unchanged provider-sourced fields. It must not import provider clients or transport implementations. It has no runtime dependency on UI or infrastructure.
 - `packages/contracts` describes serialized boundaries using domain-safe types; it does not import provider models.
-- The domain may import provider types for pass-through fields. Provider packages own their schemas and provider-specific implementation; client DTOs remain explicit and provider-independent.
+- The domain may import provider types for unchanged pass-through fields using type-only dependencies. Provider packages own their schemas and provider-specific implementation; client DTOs remain explicit and provider-independent.
 - The Worker may compose providers, domain services, analytics, storage, and Durable Objects.
 - The web application should consume contracts and presentation-safe utilities, not backend runtime modules. Temporary type-only compatibility re-exports may reference provider packages during migration; client contracts must remain provider-independent.
 - Analytics accepts normalized input data and has no hidden provider fetching or UI dependency.
@@ -99,7 +99,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | --- | --- |
 | HTTP routing and stateless request handling | Cloudflare Worker |
 | TBA / Statbotics / FRC Colors API access | Provider adapters invoked by Workers |
-| TBA and Statbotics normalization | FieldView normalization layer, after unchanged provider payload receipt |
+| TBA and Statbotics normalization/correlation | FieldView domain layer, after unchanged provider payload receipt |
 | Other provider payloads | Passed through unchanged |
 | Scheduled refresh triggers | Worker Cron Triggers |
 | Authoritative event state and reconciliation | EventRuntime Durable Object |
