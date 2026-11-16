@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory completed; M2 repository foundation in progress (Next.js app relocated to `apps/web`; post-relocation validation and npm workspace conversion remain)
+**Status:** M1 source inventory completed; M2 repository foundation in progress (Next.js app relocated, npm workspace established, local install/build validated)
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Incremental migration
 **Last updated:** 2026-11-16
@@ -148,7 +148,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Replace contradictory legacy instructions with migration-aware repository guidance while retaining useful product invariants.
 - Establish architecture decision records and package dependency rules.
 - Move the existing Next.js application into `apps/web` with behavior preserved. (Committed; post-relocation validation remains.)
-- Introduce npm workspaces and shared TypeScript/lint/test configuration around the relocated app.
+- Establish npm workspaces and shared TypeScript/lint/test configuration around the relocated app. (The initial `apps/web` workspace is committed and locally validated.)
 - Add CI for installation, lint, typecheck, tests, and build as each becomes available.
 
 **Exit criteria**
@@ -157,7 +157,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - CI validates the workspace.
 - No provider or backend runtime dependency leaks into the web package through convenience imports.
 
-**Status:** In progress. Architecture guidance, ADRs, README, and source inventory are in place. The Next.js app has been relocated to `apps/web`. The root package manifest and lockfile remain; npm workspaces, CI, and the initial test harness are not yet established.
+**Status:** In progress. Architecture guidance, ADRs, README, and source inventory are in place. The Next.js app is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. A clean `npm ci` and workspace production build have been validated locally. Lint still reports the pre-existing legacy baseline (62 errors, 35 warnings); this is recorded technical debt, not a workspace blocker. CI and the initial test harness remain outstanding.
 
 ### M3 — Domain and contract foundation
 
@@ -294,10 +294,9 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 ## 10. Immediate next actions
 
-1. Complete post-relocation import-graph, clean-install, typecheck, and production-build verification from a local checkout. The source inventory is not a substitute for executing the actual workspace.
-2. Inspect the current Vercel build/install/root-directory settings and deployment environment scopes as needed; variable names/scopes were inspected with decryption disabled and recorded in the migration inventory. Keep the migration branch deployment pause and current root directory unchanged until local workspace validation is complete.
-3. Introduce npm workspaces in a small, behavior-preserving change. Keep the root lockfile authoritative, retain the current root install layout initially, and verify that `apps/web` can build from the workspace root before changing Vercel settings.
-4. Add CI and the initial test harness only after determining which build-time routes require provider/Redis configuration; never put production secrets into CI.
-5. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
+1. Complete the remaining M2 checks: confirm the post-relocation import graph, add CI, and establish a test harness after identifying which build-time routes require provider/Redis configuration. Never put production secrets into CI.
+2. Keep the migration branch deployment pause and current Vercel root directory unchanged; do not enable deployments or change production settings as part of workspace work.
+3. Establish the canonical domain and serializable contract package foundations before moving legacy provider-shaped types or application imports.
+4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
-**Current implementation status:** The Next.js application has been relocated from the repository root to `apps/web`. The root package manifest and lockfile remain in place; npm workspaces have not yet been enabled. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
+**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative; root tooling and provider type generators remain at the root temporarily. Clean workspace installation and production build have passed locally. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, provider workspace, or production infrastructure is claimed to exist.
