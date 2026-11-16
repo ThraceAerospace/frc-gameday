@@ -21,33 +21,18 @@ export type TBATeamEventStatus = components["schemas"]["Team_Event_Status"];
 export type TBAAward = components["schemas"]["Award"];
 export type TBATeamAvatar = components["schemas"]["Media_Avatar"];
 export type TBAMedia = components["schemas"]["Media"];
-type GeneratedTBAMatch = components["schemas"]["Match"];
-
-/**
- * The live 2026 match response includes hubScore.uncounted, which is not
- * currently represented in TBA's generated OpenAPI schema. Keep the
- * generated file untouched and extend only the provider-facing response type.
- */
-export type TBA2026HubScore = components["schemas"]["HubScore_2026"] & {
+// TBA's live 2026 match response includes hubScore.uncounted, which is
+// missing from the generated schema. Extend the affected nested field here,
+// leaving the generated API types untouched.
+type TBA2026HubScore = components["schemas"]["HubScore_2026"] & {
   uncounted?: number;
 };
 
-type TBA2026MatchAllianceScore = Omit<
-  components["schemas"]["Match_Score_Breakdown_2026_Alliance"],
-  "hubScore"
-> & {
-  hubScore: TBA2026HubScore;
-};
-
-type TBA2026MatchScoreBreakdown = {
-  red: TBA2026MatchAllianceScore;
-  blue: TBA2026MatchAllianceScore;
-};
-
-export type TBAMatch = Omit<GeneratedTBAMatch, "score_breakdown"> & {
-  score_breakdown:
-    | GeneratedTBAMatch["score_breakdown"]
-    | TBA2026MatchScoreBreakdown;
+export type TBAMatch = components["schemas"]["Match"] & {
+  score_breakdown?: {
+    red?: { hubScore?: TBA2026HubScore };
+    blue?: { hubScore?: TBA2026HubScore };
+  };
 };
 export type TBAMatchSimple = components["schemas"]["Match_Simple"];
 export type TBAEliminationAlliance = components["schemas"]["Elimination_Alliance"];
