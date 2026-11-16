@@ -55,7 +55,6 @@ Everything specific to that provider belongs in that package:
 - schema-generation scripts, configuration, and supporting files;
 - provider API clients and service layers;
 - provider-specific validation and response types;
-- normalization into canonical FieldView domain models;
 - provider-specific request, retry, rate-limit, and freshness behavior.
 
 Do not split generated schemas, clients, services, or normalization into separate generic packages. Do not put provider-owned implementation or generated types in `apps/web` or `packages/domain`.
@@ -71,7 +70,7 @@ FieldView domain normalization owns cross-provider correlation, associations, an
 
 Provider packages must not expose raw provider response objects directly to the frontend or published client DTOs. The backend domain may use provider types to preserve source values. Do not leak names such as `TBAEvent`, `TBAMatch`, `StatboticsMatch`, provider status enums, or provider response envelopes into client-facing contracts.
 
-Provider packages do not normalize, correlate, aggregate, or calculate FieldView values. The domain may associate related source data into first-class FieldView objects; analytics calculations remain in the analytics layer. Preserve field-level source precedence and partial-failure semantics.
+Provider packages do not normalize, correlate, aggregate, or calculate FieldView values. They deliver unchanged provider payloads to the FieldView domain. The domain owns canonical model construction, cross-source associations, and explicitly approved transformations; analytics calculations remain in the analytics layer. Preserve field-level source precedence and partial-failure semantics.
 
 Statbotics runtime data may come only from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. Do not use a community-operated mirror. Keep the provider endpoint configurable only for approved compatible endpoints.
 
