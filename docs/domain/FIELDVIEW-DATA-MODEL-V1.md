@@ -236,9 +236,10 @@ The client contract is the next implementation step after this domain baseline i
 
 1. Complete and typecheck the initial domain type definitions and source metadata types.
 2. Keep provider-owned typing for the TBA event-predictions response in the TBA package, based on the supplied endpoint response shape.
-3. Add the Archimedes SF13 fixture and verify every source field, association, overlap, calculation, flag, and playoff relationship.
-4. Define the versioned client DTOs separately.
-5. Add validation and fixture-driven tests.
-6. Only then migrate acquisition/reconciliation and consumers.
+3. Add the Archimedes SF13 source fixture. The fixture includes the complete supplied TBA match and Statbotics match payloads, the exact TBA event-prediction entry for `2026arc_sf13m1`, and the event-level OPR/DPR/CCWM values.
+4. Validate source typing, original identifiers, separate prediction resources, event-level OPR provenance, and preservation of the supplied source values. The focused fixture tests do not claim to test a normalization pipeline; a normalization function has not yet been implemented.
+5. Define the versioned client DTOs separately.
+6. Add normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then add tests for those behaviors.
+7. Only then migrate acquisition/reconciliation and consumers.
 
-No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types alone.
+The fixture is a set of independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
