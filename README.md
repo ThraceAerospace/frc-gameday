@@ -59,6 +59,7 @@ There is currently no dedicated test script in `package.json`; lint/build valida
 
 ## Documentation
 
+- [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks for the incremental migration.
 - [Application audit](docs/APPLICATION-AUDIT.md) — verified implementation map, findings, and follow-up priorities.
 - [Architecture](docs/ARCHITECTURE.md) — current boundaries and target architecture.
 - [EventState and EventAnalytics lifecycle](docs/EVENT-STATE-AND-ANALYTICS.md) — live state, analytics acquisition, contract, and integration plan.
