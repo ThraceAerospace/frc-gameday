@@ -7,7 +7,7 @@ export type TBATeamSimple = components["schemas"]["Team_Simple"];
 
 // The live Team Event Status response includes these year/bracket-specific
 // playoff fields, although they are not currently described in TBA's OpenAPI
-// schema. Keep the generated file untouched and extend the application-facing
+// schema. Keep the generated file untouched and extend the provider-facing
 // type until the upstream schema catches up.
 type TBATeamEventPlayoffStatus = NonNullable<
   components["schemas"]["Team_Event_Status"]["playoff"]
