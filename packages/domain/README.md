@@ -1,6 +1,6 @@
 # @fieldview/domain
 
-FieldView's derived-data domain models and normalization rules.
+FieldView's canonical product data models, normalization, correlation, and domain rules.
 
 ## Data integrity rule
 
@@ -12,7 +12,7 @@ Provider payloads enter FieldView without implicit changes:
 
 No provider value may be silently renamed, converted, reinterpreted, defaulted, omitted, or overwritten. Any approved transformation must be represented by a specifically named field in the forward-facing FieldView model and documented with its source fields and transformation. A transformation must not be implemented until it has been explicitly described and approved.
 
-The initial provider-shaped models are direct type aliases. They preserve upstream field names, value representations, types, nullability, and structure.
+FieldView models are first-class product objects, not direct aliases of provider responses. Where a field passes through provider data, it uses the exact provider field type and preserves its original name, value, nullability, and structure. FieldView-owned associations and calculations are separately named and documented. See [FieldView Data Model v1](../../docs/domain/FIELDVIEW-DATA-MODEL-V1.md).
 
 ## Ownership boundaries
 
@@ -22,7 +22,7 @@ This package must remain independent of:
 - Cloudflare Workers and Durable Objects;
 - storage, transport, and other infrastructure implementations.
 
-The domain package may depend on provider packages and their generated schemas. Provider-specific types remain backend-only and must not leak into client contracts. Keep client DTOs explicit and serializable.
+The domain package may depend on provider packages for types used by unchanged provider-sourced fields. It must not import provider clients or transport implementations. Provider-specific types remain backend-only and must not leak into client contracts. Keep client DTOs explicit and serializable.
 
 ## Identity
 
