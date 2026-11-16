@@ -491,7 +491,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Gets live match-queuing info for an event from Nexus (https://frc.nexus/), or `null` if no data is currently available for this event. */
+        /** @description Gets live match-queuing info and the pit map for an event from Nexus (https://frc.nexus/), or `null` if neither is currently available for this event. */
         get: operations["getEventNexusInfo"];
         put?: never;
         post?: never;
@@ -3293,14 +3293,57 @@ export interface components {
             /** @description The match name as reported by Nexus, e.g. `Qualification 5`. */
             match_name: string;
         };
-        /** @description Live match-queuing info for an event, sourced from Nexus (https://frc.nexus/) and cached by TBA. */
+        /** @description Live match-queuing info and the pit map for an event, sourced from Nexus (https://frc.nexus/) and cached by TBA. */
         Nexus_Event_Info: {
-            /** @description Unix timestamp (in milliseconds) of when this data was last fetched from Nexus. */
-            data_as_of_ms: number;
+            /** @description Unix timestamp (in milliseconds) of when the queuing info was last fetched from Nexus, or null if no queuing info is available. */
+            data_as_of_ms: number | null;
             now_queueing: components["schemas"]["Nexus_Now_Queueing"] | null;
-            /** @description Map of TBA match key to live queuing info for that match. */
+            /** @description Map of TBA match key to live queuing info for that match. Empty if no queuing info is available. */
             matches: {
                 [key: string]: components["schemas"]["Nexus_Match_Info"];
+            };
+            pit_map: components["schemas"]["Nexus_Pit_Map"] | null;
+        };
+        /** @description A pair of x and y values on a Nexus pit map, used for positions and sizes. */
+        Nexus_Map_Vector: {
+            x?: number;
+            y?: number;
+        };
+        /** @description A rectangle on a Nexus pit map. */
+        Nexus_Map_Element: {
+            position?: components["schemas"]["Nexus_Map_Vector"];
+            size?: components["schemas"]["Nexus_Map_Vector"];
+            /** @description Rotation of the element, in degrees. */
+            angle?: number | null;
+        };
+        Nexus_Map_Pit: components["schemas"]["Nexus_Map_Element"] & {
+            /** @description TBA team key of the team in this pit, or null if the pit is unassigned. */
+            team_key: string | null;
+        };
+        Nexus_Map_Label: components["schemas"]["Nexus_Map_Element"] & {
+            label?: string;
+        };
+        Nexus_Map_Arrow: components["schemas"]["Nexus_Map_Element"] & {
+            /** @enum {string} */
+            type?: "single" | "double";
+        };
+        /** @description The pit map for an event, as reported by Nexus. Each collection maps a Nexus element ID to that element. */
+        Nexus_Pit_Map: {
+            size: components["schemas"]["Nexus_Map_Vector"];
+            pits: {
+                [key: string]: components["schemas"]["Nexus_Map_Pit"];
+            };
+            areas: {
+                [key: string]: components["schemas"]["Nexus_Map_Label"];
+            };
+            labels: {
+                [key: string]: components["schemas"]["Nexus_Map_Label"];
+            };
+            arrows: {
+                [key: string]: components["schemas"]["Nexus_Map_Arrow"];
+            };
+            walls: {
+                [key: string]: components["schemas"]["Nexus_Map_Element"];
             };
         };
         NotablesInsight: {
