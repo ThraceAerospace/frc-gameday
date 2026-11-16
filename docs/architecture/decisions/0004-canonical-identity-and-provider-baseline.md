@@ -26,8 +26,8 @@ Introducing a second opaque FieldView identity system would add mapping and reco
 ## Consequences
 
 - No separate opaque FieldView ID registry or general identity-mapping layer is introduced.
-- Provider adapters validate and translate external identifiers at their boundary.
-- Domain models use FieldView-owned types and do not expose generated TBA or Statbotics schemas.
+- Provider packages own their generated schemas, API clients, services, normalization, and generation tooling. Domain models may use those provider types directly where data is passed through; FieldView-defined types remain appropriate for normalized, combined, or calculated semantics.
+- Domain models may import provider packages and use generated provider types for pass-through fields. Provider types are backend-only and must not leak into client contracts.
 - Merge, provenance, freshness, and explicit-clear semantics remain separate concerns and must be specified before provider reconciliation is implemented.
 - If a future provider cannot map reliably to a TBA key, that integration must handle the unmatched record explicitly rather than silently inventing a competing canonical identity.
 
