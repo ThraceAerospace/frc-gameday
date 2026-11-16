@@ -24,10 +24,10 @@ FieldView must preserve the meaning of provider data so that provider documentat
 
 ## Consequences
 
-- Provider packages own their generated schemas, API clients, services, provider-specific types, and generation tooling. They do not silently normalize provider payload values.
-- FieldView normalization is the explicit location for approved TBA and Statbotics transformations.
-- Other provider payloads pass through unchanged unless a separately described and approved decision changes this rule.
-- Domain models may use provider types directly for pass-through data. Provider types must not leak into client contracts.
+- Provider packages own their generated schemas, API clients, services, provider-specific types, and generation tooling. They pass provider payloads into FieldView normalization unchanged.
+- FieldView domain normalization owns correlation, associations, and explicitly approved transformations.
+- Other provider payloads also pass through unchanged unless a separately described and approved decision changes this rule.
+- Domain models may use provider types for unchanged pass-through fields. Provider types must not leak into client contracts.
 - Derived, combined, or calculated values require separate named fields and documented source semantics.
 - Merge, provenance, freshness, and explicit-clear semantics remain separate concerns and must be specified before provider reconciliation is implemented.
 
