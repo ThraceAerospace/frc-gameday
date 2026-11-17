@@ -237,7 +237,7 @@ The canonical FieldView domain objects are the application data model shared by 
 - HTTP responses, WebSocket snapshots, and other client messages serialize the relevant FieldView domain objects directly.
 - Serialization is a transport operation, not a second normalization or interpretation stage. It must not rename, convert, default, or discard domain values.
 - The serialized representation must preserve explicit `null` values and distinguish them from absent properties. Optional properties that are absent remain absent; they must not be filled with invented defaults.
-- The current domain fields use JSON-compatible primitives, arrays, and objects. Add fixture-driven round-trip tests for representative aggregates, including the match normalization fixture.
+- The current domain fields use JSON-compatible primitives, arrays, and objects. Round-trip tests cover representative Team, Event, TeamSeason, EventTeam, Match, and PlayoffAlliance objects, including provenance and nested nullable fields. Analytics round-trip coverage is deferred until its result semantics have been reviewed; this does not authorize changing the analytics model as part of serialization work.
 - If a future domain field cannot be represented by the chosen transport, document the concrete incompatibility and solve it at that field or transport boundary. Do not introduce a duplicate model preemptively.
 - Provider payload retention and version history remain responsibilities of ingestion/storage. A client receives the relevant FieldView domain aggregate, not an automatic dump of every cached provider record.
 
