@@ -28,15 +28,15 @@ The domain package may depend on provider packages for types used by unchanged p
 
 TBA team, event, and match keys remain unchanged source identifiers. The TeamKey, EventKey, and MatchKey aliases do not brand, validate, parse, or transform those values.
 
-Team-season identity is represented separately by FieldViewTeamSeason, which pairs an unchanged TBA team key with a FieldView season year. Its optional numeric Statbotics team ID is an explicit cross-provider association; it is never parsed from the TBA key. The unchanged Statbotics team-year source record may be retained independently of whether that identity association is available.
+Team-season identity is represented separately by FieldViewTeamSeason, which pairs the unchanged TBA team key and official TBA team_number with a FieldView season year. TBA team_number directly correlates with Statbotics' numeric team value; no additional Statbotics ID field is needed.
 
 ## Model baseline
 
 The initial canonical object set is FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, FieldViewEventAnalytics, and FieldViewTeamAnalytics. FieldViewMatch is the first detailed model and combines TBA match information with independent predictions, team statistics, playoff alliance associations, explicit analysis, flags, and provenance.
 
-The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are implemented for the canonical object set. `normalizeFieldViewMatch` composes independently acquired match resources while preserving the complete TBA match payload, keeping TBA and Statbotics predictions independent, associating event OPR/DPR/CCWM, and requiring explicit cross-provider team identity associations. `normalizeFieldViewEventTeam` composes one event-team relationship from its unchanged TBA team key, optional TBA team-event status, and event-level OPR/DPR/CCWM. Both functions are pure association boundaries: they do not fetch providers, mutate source records, or invent defaults. Fixture tests cover source preservation, associations, and absent-versus-null behavior.
+The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are implemented for the canonical object set. `normalizeFieldViewMatch` composes independently acquired match resources while preserving the complete TBA match payload, keeping TBA and Statbotics predictions independent, associating event OPR/DPR/CCWM, and correlating Statbotics EPA by matching TBA team_number with Statbotics team values. `normalizeFieldViewEventTeam` composes one event-team relationship from its unchanged TBA team key, optional TBA team-event status, and event-level OPR/DPR/CCWM. Both functions are pure association boundaries: they do not fetch providers, mutate source records, or invent defaults. Fixture tests cover source preservation, associations, and absent-versus-null behavior.
 
-`normalizeFieldViewTeamSeason` composes the team-season object without changing the Statbotics record. It retains the source record when supplied and includes `statbotics_team_id` only when the caller provides an explicit association. See `test/team-season-normalization.test.mjs`.
+`normalizeFieldViewTeamSeason` composes the team-season object using TBA team_number to correlate the unchanged Statbotics team-year record. It rejects a supplied record whose team value does not match the TBA team number. See `test/team-season-normalization.test.mjs`.
 
 The canonical FieldView domain objects are sent to clients through ordinary serialization. Serialization must preserve the domain model's values and absent-versus-null semantics; it is not a second mapping or normalization layer.
 
@@ -53,11 +53,7 @@ returns a canonical `FieldViewMatch`. It is a pure composition/association
 boundary: it does not fetch providers, mutate inputs, calculate derived
 analytics, or choose a winning source when providers overlap.
 
-The caller supplies cross-provider team identity associations explicitly.
-Statbotics EPA maps use string object keys, so the numeric Statbotics ID is
-stringified only for map lookup; the numeric ID itself remains numeric in the
-FieldView association. If no explicit association is supplied, the TBA team
-remains present and its Statbotics ID/EPA fields remain absent.
+The caller supplies TBA team records alongside the match. The official TBA team_number is matched directly to Statbotics' numeric team values; it is stringified only to look up Statbotics' string-keyed EPA maps. No synthetic Statbotics ID is stored. If TBA team metadata is unavailable, the TBA team remains present and its team_number/EPA fields remain absent.
 
 See `test/match-normalization.test.mjs` and the Archimedes SF13 source fixture
 for executable examples. This is an initial domain normalization seam, not yet
