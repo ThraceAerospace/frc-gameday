@@ -28,7 +28,7 @@ The SharedWorker is the browser-side connection owner. Pages and UI surfaces usi
 6. The multiplexer forwards a notification only to browser connections subscribed to the matching topic/resource key. Clients that did not subscribe must not receive the notification.
 7. The client fetches the canonical snapshot or analytics result through its read-only public endpoint and applies it only if the received revision is not older than its current version. WebSocket messages carry invalidation/revision metadata, not full domain snapshots or analytics result payloads.
 8. When the last client unsubscribes from a topic, the multiplexer unregisters itself from that topic's authoritative runtime. On socket close, all of that client's subscriptions are removed; upstream registrations are removed when no remaining client needs them.
-9. Reconnect creates a new browser WebSocket to the shared multiplexer. The SharedWorker resends its active subscriptions and performs revision/snapshot recovery; no event payload replay is required.
+9. Reconnect creates a new browser WebSocket to the shared multiplexer. The SharedWorker resends its active subscriptions and performs revision/snapshot recovery; no event payload replay is required. The opt-in event-state SharedWorker transport implements this sequence and keeps a versioned canonical snapshot cache. The analytics topic remains reserved until its authoritative publisher and public result-read endpoint exist.
 
 ### Topic ownership and filtering
 
