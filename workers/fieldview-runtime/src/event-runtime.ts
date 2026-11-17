@@ -32,7 +32,7 @@ interface PollTask {
   retryOnFailure: boolean;
 }
 
-const TASK_PREFIX = "poll:";
+const TASK_PREFIX = "task:"
 const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 
@@ -306,8 +306,8 @@ export class EventRuntime {
 
   async alarm(): Promise<void> {
     const now = Date.now();
-    // Reserve due work durably before making requests. A crash during fetch
-    // leaves a retry deadline instead of losing the scheduled task.
+    // Reserve due work before network I/O. Retriable TBA work keeps a durable
+    // retry deadline; at-most-once Statbotics work is removed before its fetch.
     const dueTasks = await this.storage.transaction(async (transaction) => {
       const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
       const due = [...tasks.values()].filter((task) => task.dueAt <= now);

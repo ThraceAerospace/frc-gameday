@@ -24,7 +24,7 @@ export interface DurableObjectNamespaceLike {
 export interface RuntimeEnvironment {
   TBA_API_KEY: string;
   /** Debounced one-shot Statbotics refresh after accepted TBA representation changes. */
-  STATBOTICS_REFRESH_DELAY_MS?: number;
+  STATBOTICS_REFRESH_DELAY_MS?: string | number;
   TBA_WEBHOOK_SECRET: string;
   RUNTIME_ADMIN_TOKEN: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;

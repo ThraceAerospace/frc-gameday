@@ -238,7 +238,9 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
   assert.deepEqual(state.providerData, records);
   assert.equal(state.etag, '"statbotics-v1"');
   assert.deepEqual(storage.values.get("source:" + endpoint + ":v1").data, records);
-  assert.equal(storage.values.has("poll:" + endpoint), false);
+  assert.equal(storage.values.has("task:" + endpoint), false);
+  await runtime.alarm();
+  assert.equal(calls.length, 2);
 });
 
 test("Statbotics one-shot refresh does not retry a failed provider request", async () => {
@@ -266,9 +268,11 @@ test("Statbotics one-shot refresh does not retry a failed provider request", asy
   await runtime.schedulePolls([TBA_ENDPOINTS.eventMatches(eventKey)], 60_000, Date.now() - 1);
   await runtime.alarm();
   assert.equal(calls.length, 1);
-  assert.ok(storage.values.has("poll:" + endpoint));
+  assert.ok(storage.values.has("task:" + endpoint));
   await runtime.alarm();
   assert.equal(calls.length, 2);
   assert.match(calls[1], /api-statbotics/);
-  assert.equal(storage.values.has("poll:" + endpoint), false);
+  assert.equal(storage.values.has("task:" + endpoint), false);
+  await runtime.alarm();
+  assert.equal(calls.length, 2);
 });
