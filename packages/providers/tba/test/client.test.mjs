@@ -71,3 +71,21 @@ test("rejects absolute and non-provider-relative endpoints", async () => {
   assert.throws(() => client.request("https://attacker.example/path"), /provider-relative path/);
   assert.equal(fetchCalled, false);
 });
+
+test("binds the default global fetch receiver", async () => {
+  const originalFetch = globalThis.fetch;
+  let receiver;
+  globalThis.fetch = async function (input, init) {
+    receiver = this;
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    const client = new TBAApiClient({ apiKey: "test-api-key" });
+    const response = await client.request("/events/2026");
+    assert.equal(response.status, 200);
+    assert.equal(receiver, globalThis);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
