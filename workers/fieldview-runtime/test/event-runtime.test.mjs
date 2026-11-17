@@ -245,7 +245,7 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
   assert.equal(calls.length, 2);
 });
 
-test("Statbotics one-shot refresh does not retry a failed provider request", async () => {
+test("Statbotics one-shot refresh retries provider failures within a finite TBA-triggered budget", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
   const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
@@ -270,13 +270,27 @@ test("Statbotics one-shot refresh does not retry a failed provider request", asy
   await runtime.schedulePolls([TBA_ENDPOINTS.eventMatches(eventKey)], 60_000, Date.now() - 1);
   await runtime.alarm();
   assert.equal(calls.length, 1);
-  assert.ok(storage.values.has("task:" + endpoint));
+  const taskKey = "task:" + endpoint;
+  assert.ok(storage.values.has(taskKey));
+  // Advance only the durable retry deadline; the test does not wait for backoff.
+  for (let attempt = 2; attempt <= 4; attempt += 1) {
+    const task = storage.values.get(taskKey);
+    assert.ok(task);
+    task.dueAt = Date.now() - 1;
+    storage.values.set(taskKey, task);
+    await runtime.alarm();
+    assert.equal(calls.length, attempt);
+    assert.ok(storage.values.has(taskKey));
+  }
+  const exhausted = storage.values.get(taskKey);
+  assert.equal(exhausted.attempts, 4);
+  exhausted.dueAt = Date.now() - 1;
+  storage.values.set(taskKey, exhausted);
   await runtime.alarm();
-  assert.equal(calls.length, 2);
-  assert.match(calls[1], /api-statbotics/);
-  assert.equal(storage.values.has("task:" + endpoint), false);
+  assert.equal(calls.length, 5);
+  assert.equal(storage.values.has(taskKey), false);
   await runtime.alarm();
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 5);
 });
 
 

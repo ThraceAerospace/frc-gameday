@@ -30,6 +30,8 @@ interface PollTask {
   attempts: number;
   /** False means at-most-once execution with no retry after provider failure. */
   retryOnFailure: boolean;
+  /** Optional finite attempt budget for causally-triggered one-shot work. */
+  maxAttempts?: number;
 }
 
 const TASK_PREFIX = "task:"
@@ -351,7 +353,8 @@ export class EventRuntime {
         // An administrator may have replaced this task while its poll ran.
         if (!current || current.generation !== task.generation) return;
         const attempts = succeeded ? 0 : current.attempts;
-        if (succeeded && current.intervalMs === null) {
+        const exhausted = current.maxAttempts !== undefined && attempts >= current.maxAttempts;
+        if (current.intervalMs === null && (succeeded || exhausted)) {
           await transaction.delete(key);
         } else {
           await transaction.put(key, {
@@ -487,7 +490,8 @@ export class EventRuntime {
         intervalMs: null,
         generation: (previous?.generation ?? 0) + 1,
         attempts: 0,
-        retryOnFailure: false,
+        retryOnFailure: true,
+        maxAttempts: 4,
       });
       await this.rearm(transaction);
     });
