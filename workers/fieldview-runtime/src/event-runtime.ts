@@ -456,7 +456,7 @@ export class EventRuntime {
   private async scheduleStatboticsRefresh(now: number): Promise<void> {
     const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
-    const delayMs = configuredDelay === undefined ? 5 * 60_000 : configuredDelay;
+    const delayMs = configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay);
     if (!Number.isSafeInteger(delayMs) || delayMs < 0) {
       throw new Error("STATBOTICS_REFRESH_DELAY_MS must be a non-negative integer");
     }
