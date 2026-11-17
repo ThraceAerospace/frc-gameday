@@ -66,7 +66,12 @@ export default {
       }));
     }
 
-    if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {\n      const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));\n      return stub.fetch(new Request("https://fieldview-multiplexer/stream", request));\n    }\n\n    if (url.pathname === "/health") {
+    if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
+      const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
+      return stub.fetch(new Request("https://fieldview-multiplexer/stream", { method: "GET", headers: request.headers }));
+    }
+
+    if (url.pathname === "/health") {
       return Response.json({ service: "fieldview-runtime", status: "ok" });
     }
 
