@@ -109,8 +109,23 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   save(endpoints[0], { key: eventKey, name: "Test Event", timezone: "America/New_York" });
   save(endpoints[1], [{ key: "frc3461", team_number: 3461, nickname: "PEACCE" }]);
   save(endpoints[2], { frc3461: null });
+  save(endpoints[3], [{
+    key: "2026test_qm1",
+    event_key: eventKey,
+    comp_level: "qm",
+    set_number: 1,
+    match_number: 1,
+    alliances: {
+      red: { team_keys: ["frc3461"], score: -1 },
+      blue: { team_keys: [], score: -1 },
+    },
+  }]);
+  save(endpoints[4], []);
   save(endpoints[5], {
     oprs: { frc3461: 0 }, dprs: { frc3461: 0 }, ccwms: { frc3461: 0 },
+  });
+  save(endpoints[6], {
+    "2026test_qm1": { winning_alliance: "red", red: { score: 100 }, blue: { score: 90 } },
   });
 
   const env = {
@@ -134,6 +149,12 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(snapshot.event_teams[0].tba_status, null);
   assert.equal(snapshot.event_teams[0].opr, 0);
   assert.equal(snapshot.event_teams[0].dpr, 0);
+  assert.equal(snapshot.matches[0].key, "2026test_qm1");
+  assert.equal(snapshot.matches[0].teams.red[0].team_number, 3461);
+  assert.equal(snapshot.matches[0].predictions.tba.winning_alliance, "red");
+  assert.equal(snapshot.matches[0].playoff_alliances, null);
+  assert.deepEqual(snapshot.playoff_alliances, []);
+  assert.equal(snapshot.sources.matches.tba_match.status, "available");
   assert.equal(snapshot.event.sources.tba_event.status, "available");
   assert.equal(snapshot.event_teams[0].sources.tba_event_oprs.validator, '"v1"');
 

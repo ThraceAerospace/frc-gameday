@@ -14,7 +14,7 @@ import type {
 } from "./cloudflare.ts";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
-import type { TBAEvent, TBAEventOPRs, TBAEventTeamStatuses, TBATeam } from "../../../packages/providers/tba/src/types.ts";
+import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventPredictions, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewEventSnapshot } from "../../../packages/domain/src/normalization/event-snapshot.ts";
@@ -207,18 +207,30 @@ export class EventRuntime {
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
     const statusesEndpoint = endpoints[2];
-    const oprsEndpoint = TBA_ENDPOINTS.eventOPRs(this.eventKey);
-    const [eventState, teamsState, statusesState, oprsState] = await Promise.all([
+    const matchesEndpoint = endpoints[3];
+    const alliancesEndpoint = endpoints[4];
+    const oprsEndpoint = endpoints[5];
+    const predictionsEndpoint = endpoints[6];
+    const [
+      eventState, teamsState, statusesState, matchesState,
+      alliancesState, oprsState, predictionsState,
+    ] = await Promise.all([
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(statusesEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(matchesEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(alliancesEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(predictionsEndpoint)),
     ]);
     const now = Date.now();
     const eventSource = toSourceMetadata(eventState, now);
     const teamsSource = toSourceMetadata(teamsState, now);
     const statusSource = toSourceMetadata(statusesState, now);
+    const matchesSource = toSourceMetadata(matchesState, now);
+    const alliancesSource = toSourceMetadata(alliancesState, now);
     const oprsSource = toSourceMetadata(oprsState, now);
+    const predictionsSource = toSourceMetadata(predictionsState, now);
 
     return normalizeFieldViewEventSnapshot({
       event_key: this.eventKey as EventKey,
@@ -227,7 +239,14 @@ export class EventRuntime {
       ...(hasAcquiredValue(statusesState)
         ? { tba_team_statuses: statusesState!.data as TBAEventTeamStatuses | null }
         : {}),
+      ...(hasAcquiredValue(matchesState) ? { tba_matches: matchesState!.data as TBAMatch[] | null } : {}),
+      ...(hasAcquiredValue(alliancesState)
+        ? { tba_playoff_alliances: alliancesState!.data as TBAEliminationAlliance[] | null }
+        : {}),
       ...(hasAcquiredValue(oprsState) ? { tba_event_oprs: oprsState!.data as TBAEventOPRs | null } : {}),
+      ...(hasAcquiredValue(predictionsState)
+        ? { tba_event_predictions: predictionsState!.data as TBAEventPredictions | null }
+        : {}),
       sources: {
         event: eventSource ? { tba_event: eventSource } : {},
         teams: teamsSource ? { tba_teams: teamsSource } : {},
@@ -235,6 +254,16 @@ export class EventRuntime {
           ...(statusSource ? { tba_team_event_status: statusSource } : {}),
           ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
         },
+        matches: {
+          ...(matchesSource ? { tba_match: matchesSource } : {}),
+          ...(predictionsSource ? { tba_event_predictions: predictionsSource } : {}),
+          ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
+          ...(statusSource ? { tba_team_event_status: statusSource } : {}),
+          ...(alliancesSource ? { tba_playoff_alliances: alliancesSource } : {}),
+        },
+        playoff_alliances: alliancesSource
+          ? { tba_playoff_alliances: alliancesSource }
+          : {},
       },
     });
   }

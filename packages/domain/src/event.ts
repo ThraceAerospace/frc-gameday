@@ -6,6 +6,8 @@ import type {
 import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
 import type { FieldViewTeam } from "./team.js";
+import type { FieldViewMatch } from "./match.js";
+import type { FieldViewPlayoffAlliance } from "./playoff-alliance.js";
 
 /** Canonical event object retaining all original TBA event fields and types. */
 export interface FieldViewEvent extends TBAEvent {
@@ -41,8 +43,12 @@ export interface FieldViewEventSnapshot {
     event: FieldViewSourceMetadata;
     teams: FieldViewSourceMetadata;
     event_teams: FieldViewSourceMetadata;
+    matches: FieldViewSourceMetadata;
+    playoff_alliances: FieldViewSourceMetadata;
   };
   event?: FieldViewEvent | null;
   teams?: FieldViewTeam[] | null;
   event_teams?: FieldViewEventTeam[] | null;
+  matches?: FieldViewMatch[] | null;
+  playoff_alliances?: FieldViewPlayoffAlliance[] | null;
 }

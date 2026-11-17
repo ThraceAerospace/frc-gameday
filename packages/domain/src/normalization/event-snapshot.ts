@@ -1,7 +1,11 @@
 import type {
+  TBAEliminationAlliance,
   TBAEvent,
+  TBAEventMatchPrediction,
   TBAEventOPRs,
+  TBAEventPredictions,
   TBAEventTeamStatuses,
+  TBAMatch,
   TBATeam,
 } from "@fieldview/provider-tba/types";
 import type { EventKey } from "../ids.js";
@@ -9,6 +13,8 @@ import type { FieldViewEventSnapshot } from "../event.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import { normalizeFieldViewEvent } from "./event.ts";
 import { normalizeFieldViewEventTeam } from "./event-team.ts";
+import { normalizeFieldViewMatch } from "./match.ts";
+import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
 
 export interface NormalizeFieldViewEventSnapshotInput {
@@ -18,20 +24,31 @@ export interface NormalizeFieldViewEventSnapshotInput {
   tba_teams?: TBATeam[] | null;
   tba_team_statuses?: TBAEventTeamStatuses | null;
   tba_event_oprs?: TBAEventOPRs | null;
+  tba_matches?: TBAMatch[] | null;
+  tba_event_predictions?: TBAEventPredictions | null;
+  tba_playoff_alliances?: TBAEliminationAlliance[] | null;
   sources: {
     event: FieldViewSourceMetadata;
     teams: FieldViewSourceMetadata;
     event_teams: FieldViewSourceMetadata;
+    matches: FieldViewSourceMetadata;
+    playoff_alliances: FieldViewSourceMetadata;
   };
 }
 
-/** Compose the canonical event, team, and event-team domain objects. */
+/** Compose the canonical event, team, event-team, match, and playoff objects. */
 export function normalizeFieldViewEventSnapshot(
   input: NormalizeFieldViewEventSnapshotInput,
 ): FieldViewEventSnapshot {
   if (input.tba_event && input.tba_event.key !== input.event_key) {
     throw new Error("TBA event key does not match the requested FieldView event key");
   }
+  for (const match of input.tba_matches ?? []) {
+    if (match.event_key !== input.event_key) {
+      throw new Error("TBA match event key does not match the requested FieldView event key");
+    }
+  }
+
   const result: FieldViewEventSnapshot = {
     event_key: input.event_key,
     sources: input.sources,
@@ -63,6 +80,65 @@ export function normalizeFieldViewEventSnapshot(
         sources: input.sources.event_teams,
       }),
     );
+  }
+
+  if (input.tba_playoff_alliances === null) {
+    result.playoff_alliances = null;
+  } else if (input.tba_playoff_alliances !== undefined) {
+    result.playoff_alliances = input.tba_playoff_alliances.map((alliance) =>
+      normalizeFieldViewPlayoffAlliance(
+        alliance,
+        input.event_key,
+        input.sources.playoff_alliances,
+      ),
+    );
+  }
+
+  if (input.tba_matches === null) {
+    result.matches = null;
+  } else if (input.tba_matches !== undefined) {
+    const teams = input.tba_teams ?? undefined;
+    const eventTeams = input.tba_teams === null
+      ? null
+      : input.tba_teams === undefined
+        ? undefined
+        : result.event_teams ?? [];
+    const playoffAlliances = input.tba_playoff_alliances === undefined
+      ? undefined
+      : input.tba_playoff_alliances === null
+        ? null
+        : result.playoff_alliances ?? [];
+    result.matches = input.tba_matches.map((match) => {
+      const prediction: TBAEventMatchPrediction | undefined =
+        input.tba_event_predictions?.[match.key];
+      return normalizeFieldViewMatch({
+        tba_match: match,
+        ...(teams === undefined ? {} : { tba_teams: teams }),
+        ...(input.tba_event_oprs === undefined || input.tba_event_oprs === null
+          ? {}
+          : { tba_event_oprs: input.tba_event_oprs }),
+        ...(prediction === undefined ? {} : { tba_event_prediction: prediction }),
+        ...(eventTeams === undefined ? {} : { event_teams: eventTeams }),
+        ...(playoffAlliances === undefined ? {} : { tba_playoff_alliances: playoffAlliances }),
+        sources: {
+          ...(input.sources.matches.tba_match
+            ? { tba_match: input.sources.matches.tba_match }
+            : {}),
+          ...(input.sources.matches.tba_event_predictions
+            ? { tba_event_predictions: input.sources.matches.tba_event_predictions }
+            : {}),
+          ...(input.sources.matches.tba_event_oprs
+            ? { tba_event_oprs: input.sources.matches.tba_event_oprs }
+            : {}),
+          ...(input.sources.matches.tba_team_event_status
+            ? { tba_team_event_status: input.sources.matches.tba_team_event_status }
+            : {}),
+          ...(input.sources.matches.tba_playoff_alliances
+            ? { tba_playoff_alliances: input.sources.matches.tba_playoff_alliances }
+            : {}),
+        },
+      });
+    });
   }
 
   return result;

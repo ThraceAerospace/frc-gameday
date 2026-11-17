@@ -9,6 +9,13 @@ const sources = {
     tba_team_event_status: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" },
     tba_event_oprs: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" },
   },
+  matches: {
+    tba_match: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" },
+    tba_event_predictions: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" },
+  },
+  playoff_alliances: {
+    tba_playoff_alliances: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" },
+  },
 };
 
 test("composes canonical event, team, and event-team objects from independent TBA resources", () => {
@@ -81,5 +88,88 @@ test("event snapshot survives JSON transport round-trip without losing provenanc
 test("rejects an event resource that belongs to a different event key", () => {
   assert.throws(() => normalizeFieldViewEventSnapshot({
     event_key: "2026test", tba_event: { key: "2026other" }, sources,
+  }), /does not match/);
+});
+
+test("composes TBA match predictions, team associations, and playoff alliance provenance", () => {
+  const teams = [
+    { key: "frc1", team_number: 1 },
+    { key: "frc2", team_number: 2 },
+    { key: "frc3", team_number: 3 },
+    { key: "frc4", team_number: 4 },
+    { key: "frc5", team_number: 5 },
+    { key: "frc6", team_number: 6 },
+  ];
+  const statuses = Object.fromEntries([
+    ["frc1", "Red"], ["frc2", "Red"], ["frc3", "Red"],
+    ["frc4", "Blue"], ["frc5", "Blue"], ["frc6", "Blue"],
+  ].map(([key, name]) => [key, { alliance: { name } }]));
+  const tbaMatch = {
+    key: "2026test_sf1m1", event_key: "2026test", comp_level: "sf",
+    set_number: 1, match_number: 1,
+    alliances: {
+      red: { team_keys: ["frc1", "frc2", "frc3"], score: -1 },
+      blue: { team_keys: ["frc4", "frc5", "frc6"], score: -1 },
+    },
+  };
+  const prediction = {
+    winning_alliance: "red", prob: 0.75,
+    red: { score: 100 }, blue: { score: 90 },
+  };
+  const alliances = [
+    { name: "Red", picks: ["frc1", "frc2", "frc3"] },
+    { name: "Blue", picks: ["frc4", "frc5", "frc6"] },
+  ];
+  const snapshot = normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_teams: teams,
+    tba_team_statuses: statuses,
+    tba_event_oprs: {
+      oprs: { frc1: 0 }, dprs: { frc1: 0 }, ccwms: { frc1: 0 },
+    },
+    tba_matches: [tbaMatch],
+    tba_event_predictions: { [tbaMatch.key]: prediction },
+    tba_playoff_alliances: alliances,
+    sources,
+  });
+
+  assert.equal(snapshot.matches.length, 1);
+  assert.equal(snapshot.matches[0].key, tbaMatch.key);
+  assert.deepEqual(snapshot.matches[0].predictions.tba, prediction);
+  assert.equal(snapshot.matches[0].teams.red[0].team_number, 1);
+  assert.equal(snapshot.matches[0].teams.red[0].opr, 0);
+  assert.equal(snapshot.matches[0].playoff_alliances.red.name, "Red");
+  assert.equal(snapshot.matches[0].playoff_alliances.blue.name, "Blue");
+  assert.equal(snapshot.playoff_alliances[0].event_key, "2026test");
+  assert.equal(snapshot.matches[0].sources.tba_event_predictions.status, "available");
+  assert.equal(snapshot.playoff_alliances[0].sources.tba_playoff_alliances.status, "available");
+});
+
+test("preserves absent and explicit-null match and playoff resources", () => {
+  const absent = normalizeFieldViewEventSnapshot({ event_key: "2026test", sources });
+  assert.equal("matches" in absent, false);
+  assert.equal("playoff_alliances" in absent, false);
+
+  const explicitNull = normalizeFieldViewEventSnapshot({
+    event_key: "2026test", tba_matches: null, tba_playoff_alliances: null, sources,
+  });
+  assert.equal(explicitNull.matches, null);
+  assert.equal(explicitNull.playoff_alliances, null);
+
+  const empty = normalizeFieldViewEventSnapshot({
+    event_key: "2026test", tba_matches: [], tba_playoff_alliances: [], sources,
+  });
+  assert.deepEqual(empty.matches, []);
+  assert.deepEqual(empty.playoff_alliances, []);
+});
+
+test("rejects matches that belong to another event", () => {
+  assert.throws(() => normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_matches: [{
+      key: "2026other_qm1", event_key: "2026other", comp_level: "qm",
+      alliances: { red: { team_keys: [] }, blue: { team_keys: [] } },
+    }],
+    sources,
   }), /does not match/);
 });
