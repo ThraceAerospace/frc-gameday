@@ -12,7 +12,9 @@ export class StatboticsApiClient {
 
   constructor(options: StatboticsApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    // Cloudflare's global fetch requires the global object as its receiver.
+    // Preserve that receiver when storing the function for later invocation.
+    this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
   request(endpoint: string, init: RequestInit = {}): Promise<Response> {
