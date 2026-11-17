@@ -1,4 +1,4 @@
-import { EventRuntime, eventResourceEndpoints } from "./event-runtime.js";
+import { EventRuntime } from "./event-runtime.js";
 import type { RuntimeEnvironment } from "./cloudflare.js";
 
 export { EventRuntime };
@@ -15,15 +15,20 @@ export default {
       return Response.json({ service: "fieldview-runtime", status: "ok" });
     }
 
-    const match = url.pathname.match(/^\\/internal\\/events\\/([a-zA-Z0-9_-]+)\\/(schedule|webhook|state)$/);
-    if (!match || !authorized(request, env)) {
-      return Response.json({ error: "Not found" }, { status: match ? 401 : 404 });
+    const parts = url.pathname.split("/");
+    const eventKey = parts[3];
+    const action = parts[4];
+    const validRoute = parts.length === 5 && parts[1] === "internal" &&
+      parts[2] === "events" && /^[a-zA-Z0-9_-]+$/.test(eventKey ?? "") &&
+      ["schedule", "webhook", "state"].includes(action ?? "");
+    if (!validRoute || !authorized(request, env)) {
+      return Response.json({ error: "Not found" }, { status: validRoute ? 401 : 404 });
     }
 
-    const [, eventKey, action] = match;
     const id = env.EVENT_RUNTIME.idFromName(eventKey);
     const stub = env.EVENT_RUNTIME.get(id);
     const headers = new Headers(request.headers);
+    headers.set("X-FieldView-Event-Key", eventKey);
     const forwarded = new Request(`https://event-runtime/${action}`, {
       method: request.method,
       headers,
@@ -31,12 +36,6 @@ export default {
         ? {}
         : { body: await request.clone().arrayBuffer() }),
     });
-    const response = await stub.fetch(forwarded);
-    if (action === "schedule" && response.ok) {
-      // The route accepts explicit event-scoped resources only. This call is
-      // also the canonical inventory used by administrative scheduling tools.
-      void eventResourceEndpoints(eventKey);
-    }
-    return response;
+    return stub.fetch(forwarded);
   },
 };

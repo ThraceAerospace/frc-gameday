@@ -35,8 +35,11 @@ function taskStorageKey(endpoint: string): string {
 
 function cacheMaxAgeSeconds(value: string | null): number | null {
   if (!value) return null;
-  const match = value.match(/(?:^|,)\\s*max-age\\s*=\\s*"?([0-9]+)"?/i);
-  return match ? Number(match[1]) : null;
+  const directive = value.split(",").map((part) => part.trim())
+    .find((part) => part.toLowerCase().startsWith("max-age="));
+  if (!directive) return null;
+  const seconds = Number(directive.slice("max-age=".length).replace(/"/g, ""));
+  return Number.isSafeInteger(seconds) && seconds >= 0 ? seconds : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -68,8 +71,8 @@ export class EventRuntime {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly env: RuntimeEnvironment;
-  private readonly eventKey: string;
-  private readonly allowedEndpoints: Set<string>;
+  private eventKey: string;
+  private allowedEndpoints: Set<string>;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     this.storage = state.storage;
@@ -82,10 +85,30 @@ export class EventRuntime {
     this.allowedEndpoints = new Set(this.eventKey ? eventResourceEndpoints(this.eventKey) : []);
   }
 
+  private async bindEventKey(request: Request): Promise<boolean> {
+    const requested = request.headers.get("X-FieldView-Event-Key");
+    if (!requested || !/^[a-zA-Z0-9_-]+$/.test(requested)) return false;
+    const stored = await this.storage.get<string>("event-key");
+    if (stored && stored !== requested) return false;
+    if (!stored) {
+      await this.storage.transaction(async (transaction) => {
+        const current = await transaction.get<string>("event-key");
+        if (current && current !== requested) throw new Error("Durable Object event identity mismatch");
+        if (!current) await transaction.put("event-key", requested);
+      });
+    }
+    this.eventKey = requested;
+    this.allowedEndpoints = new Set(eventResourceEndpoints(requested));
+    return true;
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.headers.get("Authorization") !== `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`) {
+    if (request.headers.get("Authorization") !== "Bearer " + this.env.RUNTIME_ADMIN_TOKEN) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!(await this.bindEventKey(request))) {
+      return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
 
     if (request.method === "POST" && url.pathname === "/schedule") {
