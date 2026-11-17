@@ -233,7 +233,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 **Progress**
 - The server-rendered event page now consumes `FieldViewEventSnapshot` end-to-end: it prefers the runtime snapshot when required resources exist and normalizes its server-side TBA fallback before rendering, so provider-shaped objects do not cross the page boundary. The events browser consumes normalized `FieldViewEvent` objects from the global scheduler discovery cache, with server-side normalization of its TBA fallback. Event lifecycle boundaries use event-local IANA timezones, and discovery provenance distinguishes current from stale cached data. Explicit nulls remain unavailable rather than being overwritten. These are incremental source migrations, not a production cutover.
-- The SharedWorker exposes opt-in canonical event snapshot subscriptions and reconnect recovery. Existing consumers remain on their legacy state contract until migrated individually.
+- The SharedWorker exposes opt-in canonical event snapshot subscriptions and reconnect recovery. Gameday `EventView` now subscribes to that canonical snapshot and prefers its event, teams, matches, event-team statuses, and playoff alliances when each resource has been acquired. Missing resources retain the temporary legacy fallback; explicit null and empty values remain authoritative. Match ordering and next/last-match selection are derived from canonical match records. The legacy EventState remains temporarily active for webhook-derived upcoming-match alerts, websocket status, manual refresh, and fallback while those responsibilities are migrated; this is an incremental read migration, not a cutover.
 
 **Work**
 - Migrate events, teams, gameday, insights, and remote surfaces incrementally.
