@@ -131,7 +131,7 @@ async function releaseLock(key: string, token: string) {
 
 export class StatboticsClient {
   private readonly api = new StatboticsApiClient({
-    baseUrl: process.env.STATBOTICS_API_BASE_URL,
+    baseUrl: process.env.STATBOTICS_API_BASE_URL?.trim() || undefined,
   });
 
   async getMatch(
@@ -193,7 +193,8 @@ export class StatboticsClient {
     const pageSize = 1000;
     let offset = 0;
     while (true) {
-      const page = await this.getCached<T[]>(endpointForPage(pageSize, offset), {
+      const endpoint = endpointForPage(pageSize, offset);
+      const page = await this.getCached<T[]>(endpoint, {
         refresh: options.refresh,
         fallbackTtlSeconds,
       });
