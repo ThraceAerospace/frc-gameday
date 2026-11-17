@@ -1,6 +1,6 @@
-import { EventRuntime } from "./event-runtime.js";
-import type { RuntimeEnvironment } from "./cloudflare.js";
-import { verifyTbaWebhookHmac } from "./webhook-auth.js";
+import { EventRuntime } from "./event-runtime.ts";
+import type { RuntimeEnvironment } from "./cloudflare.ts";
+import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 
 export { EventRuntime };
 

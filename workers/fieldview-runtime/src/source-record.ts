@@ -2,7 +2,7 @@
  * Immutable provider response history stored beside EventRuntime endpoint
  * state. This is infrastructure provenance, not a second domain/DTO model.
  */
-import type { EndpointState, PollResponse } from "./endpoint-state.js";
+import type { EndpointState, PollResponse } from "./endpoint-state.ts";
 
 export interface ProviderSourceVersion<T> {
   endpoint: string;

@@ -1,19 +1,19 @@
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.js";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.js";
+import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import {
   applyPollResponse,
   applyWebhookUpdate,
   createEndpointState,
   createPollRequestSnapshot,
   type EndpointState,
-} from "./endpoint-state.js";
+} from "./endpoint-state.ts";
 import type {
   DurableObjectStateLike,
   DurableObjectTransactionLike,
   RuntimeEnvironment,
-} from "./cloudflare.js";
-import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.js";
-import { createProviderSourceVersion } from "./source-record.js";
+} from "./cloudflare.ts";
+import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
+import { createProviderSourceVersion } from "./source-record.ts";
 
 interface PollTask {
   endpoint: string;
