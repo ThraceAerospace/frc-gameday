@@ -269,7 +269,7 @@ It exercises:
 - FieldViewEventSnapshot and its canonical child domain objects;
 - serialization of the same domain aggregate from an authenticated EventRuntime snapshot route.
 
-Statbotics match enrichment is implemented as TBA-change-driven one-shot acquisition, with no recurring Statbotics polling. Analytics recalculation is a separate coalesced batch target (10-minute default, configurable to 5 minutes) and remains unimplemented while analytics semantics are frozen. Statbotics team-year/team-event resources, client consumption, WebSocket publication, and global event discovery remain subsequent slices. Analytics work remains outside this migration scope until explicitly resumed.
+Statbotics match enrichment is implemented as TBA-change-driven one-shot acquisition, with no recurring Statbotics polling. Analytics recalculation is a separate coalesced batch target (10-minute initial target, with a 5-minute option to evaluate) and remains unimplemented while analytics semantics are frozen. Statbotics team-year/team-event resources, client consumption, WebSocket publication, and global event discovery remain subsequent slices. Analytics work remains outside this migration scope until explicitly resumed.
 
 ## 8. Historical audit disposition
 

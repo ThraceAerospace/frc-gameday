@@ -50,6 +50,8 @@ Each EventRuntime uses its Durable Object alarm to wake for due event-scoped tas
 
 A Worker Cron Trigger handles global discovery and coordination: season/district/event discovery, initialization of event runtimes, and global maintenance. A separate scheduler Durable Object is deferred until durable queueing, batching, retries, or coordination demonstrably require it.
 
+Statbotics is not a recurring poll source. A changed accepted TBA REST representation for an event, its teams/statuses, or its matches marks the corresponding Statbotics enrichment dirty and schedules one debounced, at-most-once fetch after a configurable settle delay. A failed or not-yet-current Statbotics response does not retry; it preserves the last good value, and only a later changed TBA representation can trigger another attempt. Statbotics endpoints are not eligible for administrative recurring schedules.
+
 ### 6. Provider failure and partial availability are non-destructive
 
 A failed or malformed refresh never erases a valid prior representation. A failure for one endpoint does not invalidate unrelated endpoint state. Missing, explicit null, authoritative clear, unavailable, stale, and failed remain distinct; endpoint adapters do not silently turn one state into another.
@@ -73,4 +75,4 @@ EventRuntime composes and publishes the existing @fieldview/domain objects. Endp
 - Event-scoped consistency has one authoritative owner.
 - ETags remain correctly scoped to provider HTTP resources.
 - The first implementation can be tested without Cloudflare dependencies.
-- An initial Worker entrypoint, SQLite-backed EventRuntime binding, endpoint persistence, immutable source-version records, internal webhook-update route, and alarm-driven polling adapter are implemented in the migration branch. TBA `X-TBA-HMAC` verification and event-scoped notification ingestion are implemented. Event/team/event-team/match/playoff-alliance snapshot composition is implemented through `@fieldview/domain` normalizers. Global discovery, Statbotics enrichment, WebSocket lifecycle, runtime secrets, and deployment remain future work; no Worker or Durable Object is deployed.
+- An initial Worker entrypoint, SQLite-backed EventRuntime binding, endpoint persistence, immutable source-version records, internal webhook-update route, and alarm-driven TBA polling adapter are implemented in the migration branch. TBA `X-TBA-HMAC` verification and event-scoped notification ingestion are implemented. Event/team/event-team/match/playoff-alliance snapshot composition is implemented through `@fieldview/domain` normalizers. Statbotics match enrichment is TBA-change-driven and one-shot; it is not polled. Analytics recalculation is planned as a separate coalesced batch (10-minute initial target, with a 5-minute option) and remains outside this runtime implementation. Global discovery, WebSocket lifecycle, runtime secrets, and deployment remain future work; no Worker or Durable Object is deployed.

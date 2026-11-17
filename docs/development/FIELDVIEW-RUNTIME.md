@@ -2,15 +2,19 @@
 
 The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials.
 
-## Required runtime secrets
+## Runtime secrets and configuration
 
-Configure these as Cloudflare Worker secrets; never commit their values:
+Configure secrets as Cloudflare Worker secrets; never commit their values:
 
 - `TBA_API_KEY` — TBA v3 read API key used by EventRuntime polling.
-- `STATBOTICS_REFRESH_DELAY_MS` — optional non-negative delay (default 300000 ms) before a one-shot Statbotics enrichment request after a changed TBA REST representation. This is configuration, not a credential.
-- Statbotics currently requires no API credential; EventRuntime uses the provider-owned v3 transport only for TBA-change-triggered one-shot enrichment.
 - `TBA_WEBHOOK_SECRET` — the secret configured for the TBA webhook; used to verify `X-TBA-HMAC`.
 - `RUNTIME_ADMIN_TOKEN` — high-entropy internal bearer token for administrative scheduling/state routes and Worker-to-DO calls.
+
+Optional non-secret variables:
+
+- `STATBOTICS_REFRESH_DELAY_MS` — non-negative delay (default 300000 ms) before the one-shot Statbotics enrichment request after a changed TBA REST representation.
+
+Statbotics currently requires no API credential.
 
 For local development, use Wrangler's local secret workflow. For a future remote environment, set each secret explicitly for that environment before deploying. No secret values are stored in this repository.
 
@@ -37,4 +41,4 @@ From the repository root:
 - `npm test` runs domain, TBA provider, endpoint-state, reconciliation, source-version, and webhook-signature tests.
 - `npm run typecheck` also typechecks the Worker entrypoint and EventRuntime adapter.
 
-The canonical snapshot includes TBA matches and playoff alliance associations, plus the unchanged Statbotics event-match collection associated by exact match key. Statbotics match data retains independent prediction and EPA fields with its own source metadata. Statbotics is refreshed only once after a changed TBA REST representation, never on a recurring schedule. Analytics recalculation remains a separate downstream batch concern; the proposed initial cadence is ten minutes, configurable down to five minutes, and does not alter analytics semantics. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.
+The canonical snapshot includes TBA matches and playoff alliance associations, plus the unchanged Statbotics event-match collection associated by exact match key. Statbotics match data retains independent prediction and EPA fields with its own source metadata. Statbotics is refreshed only once after a changed TBA REST representation, never on a recurring schedule. Analytics recalculation remains a separate downstream batch concern; the proposed initial cadence is ten minutes as the initial target, with five minutes as a possible more-responsive setting, and does not alter analytics semantics. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.
