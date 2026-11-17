@@ -38,3 +38,24 @@ test("server snapshot reader rejects mismatched event identity and invalid revis
   );
   assert.equal(invalidVersion, null);
 });
+
+test("canonical event discovery reader validates year and returns domain events", async () => {
+  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  let requestedUrl = "";
+  const { getCanonicalEventDiscovery } = await import("./serverSnapshot.ts");
+  const events = await getCanonicalEventDiscovery(2026, async (url, init) => {
+    requestedUrl = String(url);
+    assert.equal(init?.cache, "no-store");
+    return Response.json({
+      year: 2026,
+      events: [{ key: "2026test", sources: { tba_event: { status: "available" } } }],
+    });
+  });
+  assert.equal(requestedUrl, "https://runtime.example.test/events/discovery?year=2026");
+  assert.equal(events?.[0].key, "2026test");
+
+  const wrongYear = await getCanonicalEventDiscovery(2026, async () =>
+    Response.json({ year: 2025, events: [] }),
+  );
+  assert.equal(wrongYear, null);
+});
