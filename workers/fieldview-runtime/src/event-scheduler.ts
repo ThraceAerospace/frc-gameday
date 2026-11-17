@@ -220,6 +220,12 @@ export class EventScheduler {
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
     const year = new Date().getUTCFullYear();
     const events = new Map<string, TBAEvent>();
+    // Keep only the current calendar year's discovery payload in durable storage.
+    const discoveryEntries = await this.storage.list<DiscoveryCache>({ prefix: DISCOVERY_PREFIX });
+    for (const key of discoveryEntries.keys()) {
+      if (key !== DISCOVERY_PREFIX + year) await this.storage.delete(key);
+    }
+
     // FieldView only needs the current calendar year's discovery cache.
     for (const discoveryYear of [year]) {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
@@ -249,6 +255,29 @@ export class EventScheduler {
     }
 
     const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
+    // A previous multi-year scheduler may have left future-year EventRuntime
+    // polls active. Stop those runtimes now that discovery is current-year-only.
+    for (const eventKey of [...scheduledKeys]) {
+      const eventYear = /^([0-9]{4})/.exec(eventKey)?.[1];
+      if (!eventYear || Number(eventYear) === year) continue;
+      const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+      const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lifecycle: "expired",
+          upcomingIntervalMs: policy.upcomingIntervalMs,
+          activeIntervalMs: policy.activeIntervalMs,
+        }),
+      }));
+      if (!response.ok) throw new Error("Failed to stop out-of-year event " + eventKey + ": HTTP " + response.status);
+      scheduledKeys.delete(eventKey);
+    }
+
     for (const event of events.values()) {
       const decision = classifyEventLifecycle(event, Date.now(), policy);
       if (!decision) continue;
