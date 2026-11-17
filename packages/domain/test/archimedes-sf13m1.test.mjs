@@ -7,7 +7,7 @@ import {
   archimedesSf13m1StatboticsMatch,
   archimedesSf13m1TbaMatch,
   archimedesSf13m1TbaPrediction,
-  archimedesSf13m1TeamAssociations,
+  archimedesSf13m1TbaTeams,
 } from "../dist/fixtures/archimedes-sf13m1.js";
 
 test("TBA match fixture preserves original match identity, alliances, scores, and timestamps", () => {
@@ -64,19 +64,20 @@ test("event OPR/DPR/CCWM values remain sourced from the event resource", () => {
   assert.equal(archimedes2026EventOprs.dprs.frc5940, 4.962476468745116);
   assert.equal(archimedes2026EventOprs.ccwms.frc6459, -36.57366296893303);
   assert.equal(archimedesSf13m1SourceFixture.tba_event_oprs, archimedes2026EventOprs);
+  assert.equal(archimedesSf13m1SourceFixture.tba_teams, archimedesSf13m1TbaTeams);
 });
 
-test("cross-provider team associations preserve both original identifier types", () => {
-  assert.deepEqual(archimedesSf13m1TeamAssociations[0], {
-    tba_team_key: "frc7407",
-    statbotics_team_id: 7407,
+test("TBA team fixture retains its original key and official numeric team number", () => {
+  assert.deepEqual(archimedesSf13m1TbaTeams[0], {
+    key: "frc7407",
+    team_number: 7407,
   });
-  assert.equal(typeof archimedesSf13m1TeamAssociations[0].tba_team_key, "string");
-  assert.equal(typeof archimedesSf13m1TeamAssociations[0].statbotics_team_id, "number");
-  assert.equal(archimedesSf13m1TeamAssociations.length, 6);
+  assert.equal(typeof archimedesSf13m1TbaTeams[0].key, "string");
+  assert.equal(typeof archimedesSf13m1TbaTeams[0].team_number, "number");
+  assert.equal(archimedesSf13m1TbaTeams.length, 6);
 });
 
-test("fixture groups four distinct source resources without merging their payloads", () => {
+test("fixture groups five distinct source resources without merging their payloads", () => {
   assert.equal(archimedesSf13m1SourceFixture.tba_match, archimedesSf13m1TbaMatch);
   assert.equal(archimedesSf13m1SourceFixture.statbotics_match, archimedesSf13m1StatboticsMatch);
   assert.equal(
