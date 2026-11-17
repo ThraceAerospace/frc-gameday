@@ -559,7 +559,7 @@ export class EventRuntime {
     let responseState:
       | { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null }
       | { status: "not-modified"; expiresAt: number | null }
-      | { status: "failed" };
+      | { status: "failed"; reason: string };
 
     try {
       const response = isStatboticsEndpoint
@@ -574,7 +574,10 @@ export class EventRuntime {
           expiresAt: expiresAt ?? initial.expiresAt,
         };
       } else if (!response.ok) {
-        responseState = { status: "failed" };
+        responseState = {
+          status: "failed",
+          reason: `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`,
+        };
       } else {
         responseState = {
           status: "modified",
@@ -583,8 +586,16 @@ export class EventRuntime {
           expiresAt,
         };
       }
-    } catch {
-      responseState = { status: "failed" };
+    } catch (error) {
+      // Keep a short, secret-free diagnostic for admin inspection. Never store
+      // response bodies, request headers, or provider credentials.
+      const detail = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      responseState = {
+        status: "failed",
+        reason: detail.slice(0, 300) || "Unknown fetch or response error",
+      };
     }
 
     const result = await this.storage.transaction(async (transaction) => {
@@ -600,7 +611,11 @@ export class EventRuntime {
           ? fetched
           : reconcilePolledEndpoint(endpoint, current, fetched),
       );
-      await transaction.put(key, next);
+      const nextWithDiagnostic = {
+        ...next,
+        lastError: responseState.status === "failed" ? responseState.reason : null,
+      };
+      await transaction.put(key, nextWithDiagnostic);
       if (next.revision !== latest.revision) {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
