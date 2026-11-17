@@ -182,3 +182,37 @@ test("public event discovery route reads the global scheduler cache without cred
     },
   ]);
 });
+
+
+test("internal lifecycle mutation route requires admin auth and forwards the request body", async () => {
+  const { env, calls } = makeEnvironment();
+  const body = { lifecycle: "active", upcomingIntervalMs: 1800000, activeIntervalMs: 300000 };
+  const denied = await worker.fetch(
+    new Request("https://runtime.example/internal/events/2026probe/lifecycle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    env,
+  );
+  assert.equal(denied.status, 401);
+  assert.equal(calls.some((call) => call.operation === "fetch"), false);
+
+  const allowed = await worker.fetch(
+    new Request("https://runtime.example/internal/events/2026probe/lifecycle", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer server-only-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }),
+    env,
+  );
+  assert.equal(allowed.status, 200);
+  const forwarded = calls.find((call) => call.operation === "fetch");
+  assert.equal(forwarded.id, "2026probe");
+  assert.equal(forwarded.url, "/lifecycle");
+  assert.equal(forwarded.method, "POST");
+  assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
+});
