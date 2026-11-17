@@ -13,7 +13,7 @@
     "start": "npm run start --workspace=@fieldview/web",
     "lint": "eslint",
     "typecheck": "npm run typecheck --workspace=@fieldview/web && npm run typecheck --workspace=@fieldview/domain && npx tsc --noEmit -p workers/fieldview-runtime/tsconfig.json",
-    "test": "npm test --workspace=@fieldview/domain && npm test --workspace=@fieldview/provider-tba && node --experimental-strip-types --test workers/fieldview-runtime/test/*.test.mjs && npm test --workspace=@fieldview/provider-statbotics && node --experimental-strip-types --test apps/web/src/lib/events/workerRealtime.test.mjs",
+    "test": "npm test --workspace=@fieldview/domain && npm test --workspace=@fieldview/provider-tba && node --experimental-strip-types --test workers/fieldview-runtime/test/*.test.mjs && npm test --workspace=@fieldview/provider-statbotics && node --experimental-strip-types --test apps/web/src/lib/events/workerRealtime.test.mjs && node --experimental-strip-types --test apps/web/src/lib/events/serverSnapshot.test.mjs",
     "generate:tba-types": "node packages/providers/tba/scripts/generate-types.mjs",
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import type {
   TBAEliminationAlliance,
+  TBAEvent,
   TBAMatch,
   TBAMatchSimple,
   TBATeam,
@@ -43,20 +45,37 @@ export default async function EventPage({
     );
   }
 
-  let event;
-  let teams;
-  let matches;
-  let alliances;
+  let event: TBAEvent | null;
+  let teams: TBATeam[] | null;
+  let matches: TBAMatch[] | null;
+  let alliances: TBAEliminationAlliance[] | null;
 
   try {
-    [event, teams, matches] = await Promise.all([
-      TBA.getEvent(eventKey),
-      TBA.getTeamsAtEvent(eventKey),
-      TBA.getEventMatches(eventKey),
-    ]);
-    alliances = activeTab === "matches"
-      ? await TBA.getEventPlayoffAlliances(eventKey)
-      : null;
+    const canonical = await getCanonicalEventSnapshot(eventKey);
+    const snapshot = canonical?.snapshot;
+    const canonicalReady = snapshot !== undefined &&
+      snapshot.event !== undefined &&
+      snapshot.teams !== undefined &&
+      snapshot.matches !== undefined &&
+      (activeTab !== "matches" || snapshot.playoff_alliances !== undefined);
+
+    if (canonicalReady && snapshot) {
+      event = snapshot.event ?? null;
+      teams = snapshot.teams ?? null;
+      matches = snapshot.matches ?? null;
+      alliances = activeTab === "matches"
+        ? snapshot.playoff_alliances ?? null
+        : null;
+    } else {
+      [event, teams, matches] = await Promise.all([
+        TBA.getEvent(eventKey),
+        TBA.getTeamsAtEvent(eventKey),
+        TBA.getEventMatches(eventKey),
+      ]);
+      alliances = activeTab === "matches"
+        ? await TBA.getEventPlayoffAlliances(eventKey)
+        : null;
+    }
   } catch {
     return (
       <SiteShell>
@@ -72,21 +91,34 @@ export default async function EventPage({
     );
   }
 
+  if (!event) {
+    return (
+      <SiteShell>
+        <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
+          <h1 className="text-2xl font-semibold">Event unavailable</h1>
+          <p className="mt-2 text-[var(--fv-muted)]">No event record is available for <code>{eventKey}</code>.</p>
+        </div>
+      </SiteShell>
+    );
+  }
+
   const location = [event.city, event.state_prov, event.country]
     .filter(Boolean)
     .join(", ");
-  const sortedTeams = [...teams].sort(
+  const teamsAvailable = teams !== null;
+  const matchesAvailable = matches !== null;
+  const sortedTeams = [...(teams ?? [])].sort(
     (a: TBATeam, b: TBATeam) => a.team_number - b.team_number,
   );
 
-  matches = [...matches].sort((a: TBAMatchSimple, b: TBAMatchSimple) => {
+  const sortedMatches = [...(matches ?? [])].sort((a: TBAMatchSimple, b: TBAMatchSimple) => {
     const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
     return (levelOrder[a.comp_level] ?? 99) - (levelOrder[b.comp_level] ?? 99)
       || (a.set_number ?? 0) - (b.set_number ?? 0)
       || (a.match_number ?? 0) - (b.match_number ?? 0);
   });
-  const qualificationMatches = matches.filter((match: TBAMatch) => match.comp_level === "qm");
-  const playoffMatches = matches.filter((match: TBAMatch) => isEliminationMatch(match.comp_level));
+  const qualificationMatches = sortedMatches.filter((match: TBAMatch) => match.comp_level === "qm");
+  const playoffMatches = sortedMatches.filter((match: TBAMatch) => isEliminationMatch(match.comp_level));
   const playoffMatchesPanel = playoffMatches.length > 0 ? (
     <MatchGroup
       title="Playoff Matches"
@@ -126,7 +158,7 @@ export default async function EventPage({
                 href={`/event/${event.key}?tab=matches`}
                 selected={activeTab === "matches"}
                 label="Matches"
-                count={matches.length}
+                count={sortedMatches.length}
               />
               <TabLink
                 href={`/event/${event.key}?tab=teams`}
@@ -145,9 +177,11 @@ export default async function EventPage({
 
           {activeTab === "teams" ? (
             <section id="teams" className="mt-6">
-              <SectionHeading title="Teams" description={`${sortedTeams.length} teams registered for this event.`} className="mb-3" />
+              <SectionHeading title="Teams" description={teamsAvailable ? `${sortedTeams.length} teams registered for this event.` : "Team data is currently unavailable."} className="mb-3" />
               <SurfaceCard className="overflow-hidden">
-                {sortedTeams.length === 0 ? (
+                {!teamsAvailable ? (
+                  <p className="p-6 text-sm text-[var(--fv-muted)]">The event snapshot does not currently contain a team list.</p>
+                ) : sortedTeams.length === 0 ? (
                   <p className="p-6 text-sm text-[var(--fv-muted)]">No teams are currently listed for this event.</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -186,7 +220,12 @@ export default async function EventPage({
             </section>
           ) : (
             <section id="matches" className="mt-6">
-              <SectionHeading title="Match Schedule" description={`${matches.length} matches scheduled or recorded.`} className="mb-3" />
+              <SectionHeading title="Match Schedule" description={matchesAvailable ? `${sortedMatches.length} matches scheduled or recorded.` : "Match data is currently unavailable."} className="mb-3" />
+              {!matchesAvailable ? (
+                <SurfaceCard className="p-6 text-sm text-[var(--fv-muted)]">
+                  The event snapshot does not currently contain a match list.
+                </SurfaceCard>
+              ) : (
               <div className="mt-3 grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(24rem,0.85fr)]">
                 {qualificationMatches.length > 0 ? (
                   <MatchGroup
@@ -210,6 +249,7 @@ export default async function EventPage({
                   playoffAlliancesPanel
                 )}
               </div>
+              )}
             </section>
           )}
         </PageContainer>
