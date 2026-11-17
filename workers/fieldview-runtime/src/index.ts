@@ -74,7 +74,7 @@ export default {
     const action = parts[4];
     const validRoute = parts.length === 5 && parts[1] === "internal" &&
       parts[2] === "events" && /^[a-zA-Z0-9_-]+$/.test(eventKey ?? "") &&
-      ["schedule", "webhook", "state"].includes(action ?? "");
+      ["schedule", "state"].includes(action ?? "");
     if (!validRoute || !authorized(request, env)) {
       return Response.json({ error: "Not found" }, { status: validRoute ? 401 : 404 });
     }

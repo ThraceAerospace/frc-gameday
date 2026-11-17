@@ -18,7 +18,6 @@ For local development, use Wrangler's local secret workflow. For a future remote
 - `POST /webhooks/tba` — public TBA webhook ingress. Verifies HMAC-SHA256 over the exact raw request body before parsing JSON. Payloads are capped at 1 MB. TBA ping and verification notifications receive a 200 response; event notifications are routed to the EventRuntime named by the unchanged TBA event key.
 - `POST /internal/events/:eventKey/schedule` — authenticated administrative scheduling. Body: `{ "endpoints": ["/event/..."], "intervalMs": 60000 }`. Endpoints must be in the EventRuntime's event-scoped TBA endpoint allowlist.
 - `GET /internal/events/:eventKey/state` — authenticated inspection of current endpoint state.
-- `POST /internal/events/:eventKey/webhook` — authenticated internal webhook-forwarding route. Normal TBA traffic should use the signed public ingress.
 
 ## Ownership and data handling
 

@@ -40,7 +40,7 @@ The intended structure is:
 apps/
   web/                         # Next.js UI and presentation
 workers/
-  backend/                     # Cloudflare Worker entrypoints and runtime wiring
+  fieldview-runtime/           # Cloudflare Worker entrypoint and event Durable Object
 packages/
   domain/                      # FieldView normalization and derived-data domain models
     src/
