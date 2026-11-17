@@ -73,3 +73,32 @@ test("event-team domain object survives JSON transport round-trip", () => {
   assert.equal(received.ccwm, archimedes2026EventOprs.ccwms.frc7407);
   assert.equal(received.sources.tba_event_oprs.status, "available");
 });
+
+test("event-team normalization preserves zero metrics and nested explicit nulls", () => {
+  const result = normalizeFieldViewEventTeam({
+    event_key: "2026arc",
+    team_key: "frc7407",
+    tba_status: {
+      alliance: null,
+      next_match_key: null,
+    },
+    tba_event_oprs: {
+      oprs: { frc7407: 0 },
+      dprs: { frc7407: 0 },
+      ccwms: { frc7407: 0 },
+    },
+    sources: {},
+  });
+
+  assert.equal(result.opr, 0);
+  assert.equal(result.dpr, 0);
+  assert.equal(result.ccwm, 0);
+  assert.equal(result.tba_status.alliance, null);
+  assert.equal(result.tba_status.next_match_key, null);
+  assert.equal("qual" in result.tba_status, false);
+
+  const received = JSON.parse(JSON.stringify(result));
+  assert.deepEqual(received, result);
+  assert.equal(received.opr, 0);
+  assert.equal(received.tba_status.alliance, null);
+});
