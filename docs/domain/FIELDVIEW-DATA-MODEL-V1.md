@@ -72,7 +72,7 @@ Predictions are separate first-class concepts:
 
 They may agree, disagree, or be unavailable independently. Neither is selected as a silent replacement for the other.
 
-The generated TBA OpenAPI currently models the event-predictions response too loosely to serve as the typed per-match prediction contract. The TBA provider package now defines `TBAEventMatchPrediction` and `TBAEventPredictions` from the supplied endpoint response shape. These remain provider-owned types and are used by the backend domain only; do not replace them with `Record<string, unknown>` or an untyped data bag.
+The generated TBA OpenAPI currently models the event-predictions response too loosely to serve as the typed per-match prediction contract. The TBA provider package now defines `TBAEventMatchPrediction` and `TBAEventPredictions` from the supplied endpoint response shape. These remain provider-owned types used by the domain to preserve the endpoint's source shape; do not replace them with `Record<string, unknown>` or an untyped data bag.
 
 ### 3.4 Team associations
 
@@ -193,7 +193,7 @@ The Archimedes SF13 example demonstrates identical or overlapping fields across 
 | EPA | Not supplied by TBA match | `pre_epas` / `epas` | Associate with the relevant teams |
 | OPR/DPR/CCWM | Event OPR endpoint | Not supplied by this Statbotics match response | Associate TBA values with event teams and match teams |
 
-A matching value does not prove that one provider field can be deleted from source records. If the client contract publishes only one canonical value for a duplicated fact, the contract documentation must say which source owns that value and how the other source observation remains available for diagnostics/provenance.
+A matching value does not prove that one provider field can be deleted from source records. If a serialized FieldView object exposes only one canonical value for a duplicated fact, the domain documentation must say which source owns that value and how the other source observation remains available for diagnostics/provenance.
 
 ## 7. Provider payload caching, versioning, and deliberate omissions
 
@@ -203,9 +203,9 @@ Complete provider payload retention belongs to the ingestion/cache/versioning la
 - Ingestion preserves the provider payload: field names, values, types, nullability, and nested structures are not silently changed, omitted, or overwritten.
 - A newer response creates a new version; it does not silently replace the only retained copy of an earlier version.
 - The cache/version store is responsible for retaining and retrieving complete provider payload versions. Its retention duration, eviction policy, and version-selection rules are separate infrastructure decisions.
-- FieldView domain objects and DTOs are aggregates. They select and associate explicitly typed values from the relevant versioned provider inputs and add separately named FieldView-owned values where approved.
+- FieldView domain objects and their serialized representations are aggregates. They select and associate explicitly typed values from the relevant versioned provider inputs and add separately named FieldView-owned values where approved.
 - Constructing an aggregate does not mutate any cached provider payload.
-- Do not add a generic `raw` or `sourceRecords` property to every domain object or DTO merely to repeat data already owned by the ingestion/cache layer.
+- Do not add a generic `raw` or `sourceRecords` property to every domain object merely to repeat data already owned by the ingestion/cache layer.
 - Provider payloads and their versions are backend inputs. They are not automatically serialized to clients.
 
 For the Archimedes SF13 Match 1 example, the complete TBA match response, Statbotics match response, TBA event-predictions response, and TBA event OPR response are independently cached/versioned resources. The FieldView match/team aggregates may select values from these resources, while retaining the distinction between their source endpoints.
