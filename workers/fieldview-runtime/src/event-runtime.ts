@@ -154,7 +154,11 @@ export class EventRuntime {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.headers.get("Authorization") !== "Bearer " + this.env.RUNTIME_ADMIN_TOKEN) {
+    const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
+      request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
+    const publicRead = request.method === "GET" &&
+      (url.pathname === "/snapshot" || url.pathname === "/stream");
+    if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!(await this.bindEventKey(request))) {

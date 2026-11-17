@@ -69,6 +69,56 @@ export default {
       return Response.json({ service: "fieldview-runtime", status: "ok" });
     }
 
+    // Public event reads expose only canonical snapshots and read-only
+    // revision notifications. No user account or browser-held service secret
+    // is required; administrative and mutation routes remain private below.
+    const publicParts = url.pathname.split("/");
+    const publicEventKey = publicParts[2];
+    const publicAction = publicParts[3];
+    const validPublicRoute = publicParts.length === 4 &&
+      publicParts[1] === "events" &&
+      /^[a-zA-Z0-9_-]+$/.test(publicEventKey ?? "") &&
+      (publicAction === "snapshot" || publicAction === "stream");
+
+    if (validPublicRoute && publicAction === "snapshot" && request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+
+    if (validPublicRoute && request.method === "GET") {
+      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(publicEventKey));
+      const headers = new Headers({
+        "X-FieldView-Event-Key": publicEventKey,
+      });
+      if (publicAction === "stream") {
+        const upgrade = request.headers.get("Upgrade");
+        if (upgrade) headers.set("Upgrade", upgrade);
+      }
+      const forwarded = new Request(
+        `https://event-runtime/${publicAction}${url.search}`,
+        { method: "GET", headers },
+      );
+      const response = await stub.fetch(forwarded);
+      if (publicAction === "stream") return response;
+
+      const responseHeaders = new Headers(response.headers);
+      responseHeaders.set("Access-Control-Allow-Origin", "*");
+      responseHeaders.set("Access-Control-Expose-Headers", "X-FieldView-Snapshot-Version");
+      responseHeaders.set("Cache-Control", "no-store");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    }
+
     const parts = url.pathname.split("/");
     const eventKey = parts[3];
     const action = parts[4];

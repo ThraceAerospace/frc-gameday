@@ -1,6 +1,6 @@
 # FieldView Runtime Development
 
-The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials.
+The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials. Public event snapshots and read-only live subscriptions do not require user authentication; only internal administration and service-to-service operations use the runtime admin token.
 
 ## Runtime secrets and configuration
 
@@ -24,7 +24,10 @@ For local development, use Wrangler's local secret workflow. For a future remote
 - `POST /webhooks/tba` — public TBA webhook ingress. Verifies HMAC-SHA256 over the exact raw request body before parsing JSON. Payloads are capped at 1 MB. TBA ping and verification notifications receive a 200 response; event notifications are routed to the EventRuntime named by the unchanged TBA event key.
 - `POST /internal/events/:eventKey/schedule` — authenticated administrative scheduling. Body: `{ "endpoints": ["/event/..."], "intervalMs": 60000 }`. Endpoints must be in the EventRuntime's event-scoped TBA endpoint allowlist; Statbotics cannot be scheduled administratively.
 - `GET /internal/events/:eventKey/state` — authenticated inspection of current endpoint state.
-- `GET /internal/events/:eventKey/snapshot` — authenticated canonical `FieldViewEventSnapshot` composed from acquired event, team, team-status, match, event-prediction, OPR, playoff-alliance, and Statbotics match resources.
+- `GET /events/:eventKey/snapshot` — public, read-only canonical `FieldViewEventSnapshot`. No user login or browser-held service credential is required. The response exposes `X-FieldView-Snapshot-Version` and permits cross-origin browser reads; it is not cacheable at the Worker edge.
+- `GET /events/:eventKey/stream?since=:version` — public, read-only WebSocket revision subscription. Clients fetch the public snapshot after a gap or newer revision; the stream never accepts mutation commands.
+- `OPTIONS /events/:eventKey/snapshot` — CORS preflight for public snapshot reads.
+- `GET /internal/events/:eventKey/snapshot` — authenticated administrative/internal canonical snapshot route (retained for service-side inspection).
 
 ## Ownership and data handling
 

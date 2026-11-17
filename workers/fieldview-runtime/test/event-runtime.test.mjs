@@ -142,10 +142,7 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   };
   const runtime = new EventRuntime({ storage }, env, eventKey);
   const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
-    headers: {
-      Authorization: "Bearer runtime-token",
-      "X-FieldView-Event-Key": eventKey,
-    },
+    headers: { "X-FieldView-Event-Key": eventKey },
   }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-FieldView-Snapshot-Version"), "0");
@@ -181,10 +178,7 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   storage.values.set("endpoint:" + endpoints[2], statusState);
 
   const refreshed = await runtime.fetch(new Request("https://event-runtime/snapshot", {
-    headers: {
-      Authorization: "Bearer runtime-token",
-      "X-FieldView-Event-Key": eventKey,
-    },
+    headers: { "X-FieldView-Event-Key": eventKey },
   }));
   const refreshedSnapshot = await refreshed.json();
   assert.equal(refreshedSnapshot.sources.event.tba_event.status, "stale");
@@ -385,4 +379,52 @@ test("recurring schedules reject Statbotics endpoints even when called below the
     /Only TBA event endpoints can be scheduled for recurring polling/,
   );
   assert.equal(storage.values.has("task:" + statboticsEndpoint), false);
+});
+
+
+test("public snapshot and stream reads need no user credential while state inspection remains private", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const acceptedSockets = [];
+  class FakeSocket { sent = []; send(message) { this.sent.push(message); } close() {} }
+  const clientSocket = new FakeSocket();
+  const serverSocket = new FakeSocket();
+  const runtime = new EventRuntime({
+    storage,
+    acceptWebSocket(socket) { acceptedSockets.push(socket); },
+    getWebSockets() { return acceptedSockets; },
+  }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    webSocketPairFactory: () => [clientSocket, serverSocket],
+    webSocketResponseFactory: () => new Response(null, { status: 200 }),
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+
+  const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(snapshot.status, 200);
+  assert.equal(snapshot.headers.get("X-FieldView-Snapshot-Version"), "0");
+
+  const stream = await runtime.fetch(new Request("https://event-runtime/stream", {
+    headers: { "X-FieldView-Event-Key": eventKey, Upgrade: "websocket" },
+  }));
+  assert.equal(stream.status, 200);
+  assert.equal(acceptedSockets.length, 1);
+  assert.equal(JSON.parse(serverSocket.sent[0]).snapshot_required, true);
+
+  const state = await runtime.fetch(new Request("https://event-runtime/state", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(state.status, 401);
+
+  const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
+    method: "POST",
+    headers: { "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoints: [], intervalMs: 60_000 }),
+  }));
+  assert.equal(schedule.status, 401);
 });
