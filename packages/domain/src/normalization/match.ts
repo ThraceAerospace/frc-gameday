@@ -65,10 +65,10 @@ export function associateMatchPlayoffAlliance(
   eventTeams: readonly FieldViewEventTeam[],
   playoffAlliances: readonly FieldViewPlayoffAlliance[],
 ): FieldViewPlayoffAlliance | null {
-  const statusByTeam = new Map(eventTeams.map((team) => [team.team_key, team.tba_status]));
   const countsByAlliance = new Map<number, number>();
   for (const teamKey of new Set(matchTeamKeys)) {
-    const number = statusByTeam.get(teamKey)?.alliance?.number;
+    const status = eventTeams.find((team) => team.team_key === teamKey)?.tba_status;
+    const number = status?.alliance?.number;
     if (number !== undefined) countsByAlliance.set(number, (countsByAlliance.get(number) ?? 0) + 1);
   }
   const candidates = [...countsByAlliance].filter(([, count]) => count >= 2).map(([number]) => number);
