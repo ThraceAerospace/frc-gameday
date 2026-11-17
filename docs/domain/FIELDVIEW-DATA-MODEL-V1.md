@@ -143,11 +143,13 @@ Retains the TBA team fields and exact types. Additional FieldView-owned team-lev
 
 ### FieldViewTeamSeason
 
-Represents a team and season together. It may associate Statbotics season data and other season-scoped information without changing the original team or provider values.
+`FieldViewTeamSeason` pairs an unchanged TBA `team_key` with the FieldView season `year`. It may retain the unchanged Statbotics team-year record. Because Statbotics identifies teams numerically while TBA uses string keys, `statbotics_team_id` is a separate optional FieldView association and is populated only from an explicit cross-provider identity mapping. The Statbotics source record is retained as supplied; its own `team` and `year` values are not rewritten to match the wrapper. If the explicit identity mapping is absent, the source record may still be retained, but no TBA-to-Statbotics identity is asserted.
 
 ### FieldViewEvent
 
 Retains the TBA event fields and exact types, including the original nullable timezone. Event timezone presentation rules do not authorize changing the stored provider value or inventing a fallback.
+
+`normalizeFieldViewTeamSeason` composes this object from the unchanged TBA team key and season year, an optional unchanged Statbotics team-year record, and an optional explicitly supplied numeric Statbotics team identity. It does not infer identity from the `frc` prefix, rewrite the provider record, or default missing values. Fixture tests cover explicit association, absent association, retained explicit nulls, and JSON round-trip behavior.
 
 ### FieldViewEventTeam
 
