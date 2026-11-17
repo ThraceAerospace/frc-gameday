@@ -29,7 +29,8 @@
       "@fieldview/domain": [
         "../../packages/domain/src/index.ts"
       ]
-    }
+    },
+    "baseUrl": "."
   },
   "include": [
     "next-env.d.ts",
