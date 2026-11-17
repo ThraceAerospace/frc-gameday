@@ -13,6 +13,7 @@ import type {
   RuntimeEnvironment,
 } from "./cloudflare.js";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.js";
+import { createProviderSourceVersion } from "./source-record.js";
 
 interface PollTask {
   endpoint: string;
@@ -24,6 +25,7 @@ interface PollTask {
 
 const TASK_PREFIX = "poll:";
 const ENDPOINT_PREFIX = "endpoint:";
+const SOURCE_PREFIX = "source:";
 
 function endpointStorageKey(endpoint: string): string {
   return `${ENDPOINT_PREFIX}${endpoint}`;
@@ -31,6 +33,10 @@ function endpointStorageKey(endpoint: string): string {
 
 function taskStorageKey(endpoint: string): string {
   return `${TASK_PREFIX}${endpoint}`;
+}
+
+function sourceStorageKey(endpoint: string, revision: number): string {
+  return `${SOURCE_PREFIX}${endpoint}:v${revision}`;
 }
 
 function cacheMaxAgeSeconds(value: string | null): number | null {
@@ -257,14 +263,26 @@ export class EventRuntime {
     await this.storage.transaction(async (transaction) => {
       const key = endpointStorageKey(endpoint);
       const latest = await transaction.get<EndpointState<unknown>>(key) ?? initial;
+      const now = Date.now();
       const next = applyPollResponse(
         latest,
         requestSnapshot,
         responseState,
-        Date.now(),
+        now,
         (current, fetched) => reconcilePolledEndpoint(endpoint, current, fetched),
       );
       await transaction.put(key, next);
+
+      // Preserve each accepted upstream 200 payload as an immutable source
+      // version. The current endpoint state may also contain webhook patches;
+      // source records retain exactly what TBA returned.
+      const sourceVersion = createProviderSourceVersion(latest, next, responseState, now);
+      if (sourceVersion) {
+        await transaction.put(
+          sourceStorageKey(endpoint, sourceVersion.validatorRevision),
+          sourceVersion,
+        );
+      }
     });
 
     return responseState.status !== "failed";

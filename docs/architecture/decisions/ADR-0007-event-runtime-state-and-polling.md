@@ -24,7 +24,7 @@ It does not own durable cache state, ETag persistence, polling schedules, webhoo
 
 ### 3. ETags belong to endpoint representations in EventRuntime storage
 
-Persist each endpoint's provider representation and its validator together. An ETag validates one HTTP resource representation, not an individual match and not the locally reconciled FieldView model.
+Persist each endpoint's current provider representation and its validator together. Each accepted HTTP 200 response is also retained as an immutable, revisioned provider source record in the EventRuntime ingestion layer. Webhook patches update the reconciled current endpoint state but never rewrite the raw provider source version. An ETag validates one HTTP resource representation, not an individual match and not the locally reconciled FieldView model.
 
 | Input | Data | ETag | Freshness |
 | --- | --- | --- | --- |
@@ -63,8 +63,8 @@ EventRuntime composes and publishes the existing @fieldview/domain objects. Endp
 1. Keep TBA HTTP transport in @fieldview/provider-tba; add provider-owned path builders.
 2. Introduce platform-independent endpoint-state transition primitives and tests before binding them to Cloudflare storage.
 3. Map legacy Redis cache behavior to endpoint-level state, validator, freshness, and failure semantics; do not migrate Redis abstractions into the provider package.
-4. Add the Cloudflare Worker and EventRuntime Durable Object adapter around these pure transitions.
-5. Add durable alarms, global Cron discovery, webhook ingress, and versioned publication.
+4. Add the Cloudflare Worker and EventRuntime Durable Object adapter around these pure transitions. The initial adapter persists current endpoint state and immutable source versions.
+5. Add authenticated TBA webhook ingress, global Cron discovery, canonical domain composition, and versioned client publication.
 6. Validate duplicate/out-of-order webhooks, concurrent poll/webhook races, 304s, validator replacement/removal, failures, restarts, and reconnects before cutover.
 
 ## Consequences
@@ -73,4 +73,4 @@ EventRuntime composes and publishes the existing @fieldview/domain objects. Endp
 - Event-scoped consistency has one authoritative owner.
 - ETags remain correctly scoped to provider HTTP resources.
 - The first implementation can be tested without Cloudflare dependencies.
-- Cloudflare storage, alarms, bindings, and WebSocket lifecycle remain a later runtime integration step; this ADR does not claim that a Worker or Durable Object is deployed.
+- An initial Worker entrypoint, SQLite-backed EventRuntime binding, endpoint persistence, immutable source-version records, internal webhook-update route, and alarm-driven polling adapter are implemented in the migration branch. Public TBA signature verification/ingress, global discovery, domain composition, WebSocket lifecycle, credentials, and deployment remain future work; no Worker or Durable Object is deployed.
