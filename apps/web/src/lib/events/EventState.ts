@@ -605,12 +605,13 @@ export class EventState {
   private handleWebSocketMessage = (
     message: EventWebSocketMessage,
   ) => {
-    if (
-      this.stopped ||
-      message.type !== "tba-update" ||
-      message.eventKey !== this.eventKey
-    ) {
-      return;    }
+    if (this.stopped || message.eventKey !== this.eventKey) return;
+    if (message.type === "snapshot.changed") {
+      this.update((current) => ({ ...current, websocketStale: false }));
+      this.reloadAll(true);
+      return;
+    }
+    if (message.type !== "tba-update") return;
 
     this.update((current) =>
       current.websocketStale
