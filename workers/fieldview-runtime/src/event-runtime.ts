@@ -28,6 +28,8 @@ interface PollTask {
   intervalMs: number | null;
   generation: number;
   attempts: number;
+  /** False means at-most-once execution with no retry after provider failure. */
+  retryOnFailure: boolean;
 }
 
 const TASK_PREFIX = "poll:";
@@ -98,13 +100,13 @@ export function eventResourceEndpoints(eventKey: string): string[] {
     TBA_ENDPOINTS.eventMedia(eventKey),
     TBA_ENDPOINTS.eventDistrictPoints(eventKey),
     TBA_ENDPOINTS.eventAdvancementPoints(eventKey),
-    STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0),
   ];
 }
 
 /**
  * One EventRuntime instance owns one event's provider endpoint state and
- * polling schedule. Network I/O always occurs outside storage transactions.
+ * TBA polling schedule. Statbotics enrichment is one-shot and TBA-change-driven.
+ * Network I/O always occurs outside storage transactions.
  */
 export class EventRuntime {
   private readonly storage: DurableObjectStateLike["storage"];
@@ -294,6 +296,7 @@ export class EventRuntime {
           intervalMs,
           generation: (previous?.generation ?? 0) + 1,
           attempts: 0,
+          retryOnFailure: true,
         };
         await transaction.put(key, task);
       }
@@ -309,11 +312,17 @@ export class EventRuntime {
       const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
       const due = [...tasks.values()].filter((task) => task.dueAt <= now);
       for (const task of due) {
-        await transaction.put(taskStorageKey(task.endpoint), {
-          ...task,
-          dueAt: now + this.retryDelay(task),
-          attempts: task.attempts + 1,
-        });
+        if (task.retryOnFailure === false) {
+          // One-shot enrichment is at-most-once: remove it before I/O so a
+          // provider failure or runtime interruption cannot create polling.
+          await transaction.delete(taskStorageKey(task.endpoint));
+        } else {
+          await transaction.put(taskStorageKey(task.endpoint), {
+            ...task,
+            dueAt: now + this.retryDelay(task),
+            attempts: task.attempts + 1,
+          });
+        }
       }
       await this.rearm(transaction);
       return due;
@@ -321,6 +330,7 @@ export class EventRuntime {
 
     for (const task of dueTasks) {
       const succeeded = await this.pollEndpoint(task.endpoint);
+      if (task.retryOnFailure === false) continue;
       await this.storage.transaction(async (transaction) => {
         const key = taskStorageKey(task.endpoint);
         const current = await transaction.get<PollTask>(key);
@@ -394,7 +404,7 @@ export class EventRuntime {
       responseState = { status: "failed" };
     }
 
-    const resultingStatus = await this.storage.transaction(async (transaction) => {
+    const result = await this.storage.transaction(async (transaction) => {
       const key = endpointStorageKey(endpoint);
       const latest = await transaction.get<EndpointState<unknown>>(key) ?? initial;
       const now = Date.now();
@@ -419,11 +429,50 @@ export class EventRuntime {
           sourceVersion,
         );
       }
-      return next.status;
+      const representationChanged = sourceVersion !== null &&
+        JSON.stringify(latest.providerData) !== JSON.stringify(
+          responseState.status === "modified" ? responseState.data : undefined,
+        );
+      return { status: next.status, representationChanged };
     });
 
+    if (result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
+      await this.scheduleStatboticsRefresh(Date.now());
+    }
+
     // A 304 without a retained representation is not a successful refresh.
-    return responseState.status !== "failed" && resultingStatus !== "failed";
+    return responseState.status !== "failed" && result.status !== "failed";
+  }
+
+  private isStatboticsTriggerEndpoint(endpoint: string): boolean {
+    return [
+      TBA_ENDPOINTS.event(this.eventKey),
+      TBA_ENDPOINTS.eventTeams(this.eventKey),
+      TBA_ENDPOINTS.eventTeamStatuses(this.eventKey),
+      TBA_ENDPOINTS.eventMatches(this.eventKey),
+    ].includes(endpoint);
+  }
+
+  private async scheduleStatboticsRefresh(now: number): Promise<void> {
+    const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+    const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
+    const delayMs = configuredDelay === undefined ? 5 * 60_000 : configuredDelay;
+    if (!Number.isSafeInteger(delayMs) || delayMs < 0) {
+      throw new Error("STATBOTICS_REFRESH_DELAY_MS must be a non-negative integer");
+    }
+    await this.storage.transaction(async (transaction) => {
+      const key = taskStorageKey(endpoint);
+      const previous = await transaction.get<PollTask>(key);
+      await transaction.put(key, {
+        endpoint,
+        dueAt: now + delayMs,
+        intervalMs: null,
+        generation: (previous?.generation ?? 0) + 1,
+        attempts: 0,
+        retryOnFailure: false,
+      });
+      await this.rearm(transaction);
+    });
   }
 
   private async scheduleImmediatePoll(
@@ -439,6 +488,7 @@ export class EventRuntime {
       intervalMs: previous?.intervalMs ?? null,
       generation: (previous?.generation ?? 0) + 1,
       attempts: 0,
+      retryOnFailure: true,
     });
   }
 

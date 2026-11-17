@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EventRuntime, eventResourceEndpoints } from "../src/event-runtime.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
+import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 
 class MemoryStorage {
   values = new Map();
@@ -191,7 +192,7 @@ test("GET snapshot composes canonical event-team domain objects with source meta
 });
 
 
-test("EventRuntime polls and retains Statbotics event matches through its provider client", async () => {
+test("Statbotics refresh is a one-shot triggered by changed TBA REST representation", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
   const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
@@ -206,25 +207,68 @@ test("EventRuntime polls and retains Statbotics event matches through its provid
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
+    STATBOTICS_REFRESH_DELAY_MS: 0,
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     fetcher: async (url, init) => {
       calls.push({ url: String(url), headers: new Headers(init.headers) });
-      return Response.json(records, {
-        headers: { "Cache-Control": "max-age=30", ETag: '"statbotics-v1"' },
+      if (String(url).includes("api-statbotics")) {
+        return Response.json(records, { headers: { "Cache-Control": "max-age=30", ETag: '"statbotics-v1"' } });
+      }
+      return Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: { red: { score: 10 }, blue: { score: 9 } } }], {
+        headers: { "Cache-Control": "max-age=30", ETag: '"tba-matches-v1"' },
       });
     },
   }, eventKey);
 
-  assert.ok(eventResourceEndpoints(eventKey).includes(endpoint));
-  await runtime.schedulePolls([endpoint], 60_000, Date.now() - 1);
+  assert.equal(eventResourceEndpoints(eventKey).includes(endpoint), false);
+  const tbaMatchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+  await runtime.schedulePolls([tbaMatchesEndpoint], 60_000, Date.now() - 1);
   await runtime.alarm();
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "https://api-statbotics.iterativerefinement.com/v3" + endpoint);
-  assert.equal(calls[0].headers.get("If-None-Match"), null);
+  assert.match(calls[0].url, /thebluealliance\.com/);
+  assert.ok(storage.alarmAt !== null);
+  await runtime.alarm();
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url, "https://api-statbotics.iterativerefinement.com/v3" + endpoint);
+  assert.equal(calls[1].headers.get("If-None-Match"), null);
   const state = storage.values.get("endpoint:" + endpoint);
   assert.deepEqual(state.data, records);
   assert.deepEqual(state.providerData, records);
   assert.equal(state.etag, '"statbotics-v1"');
   assert.deepEqual(storage.values.get("source:" + endpoint + ":v1").data, records);
+  assert.equal(storage.values.has("poll:" + endpoint), false);
+});
+
+test("Statbotics one-shot refresh does not retry a failed provider request", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const calls = [];
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    STATBOTICS_REFRESH_DELAY_MS: 0,
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async (url) => {
+      calls.push(String(url));
+      if (String(url).includes("api-statbotics")) {
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      return Response.json([{ key: "2026test_qm1", event_key: eventKey }], {
+        headers: { ETag: '"tba-v1"' },
+      });
+    },
+  }, eventKey);
+
+  await runtime.schedulePolls([TBA_ENDPOINTS.eventMatches(eventKey)], 60_000, Date.now() - 1);
+  await runtime.alarm();
+  assert.equal(calls.length, 1);
+  assert.ok(storage.values.has("poll:" + endpoint));
+  await runtime.alarm();
+  assert.equal(calls.length, 2);
+  assert.match(calls[1], /api-statbotics/);
+  assert.equal(storage.values.has("poll:" + endpoint), false);
 });
