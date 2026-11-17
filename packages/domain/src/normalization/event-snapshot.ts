@@ -7,9 +7,9 @@ import type {
 import type { EventKey } from "../ids.js";
 import type { FieldViewEventSnapshot } from "../event.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
-import { normalizeFieldViewEvent } from "./event.js";
-import { normalizeFieldViewEventTeam } from "./event-team.js";
-import { normalizeFieldViewTeam } from "./team.js";
+import { normalizeFieldViewEvent } from "./event.ts";
+import { normalizeFieldViewEventTeam } from "./event-team.ts";
+import { normalizeFieldViewTeam } from "./team.ts";
 
 export interface NormalizeFieldViewEventSnapshotInput {
   event_key: EventKey;
