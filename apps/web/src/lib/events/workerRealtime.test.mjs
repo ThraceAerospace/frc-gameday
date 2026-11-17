@@ -88,16 +88,35 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received.at(-1).version, 2);
-  assert.deepEqual(fetchedVersions, [1, 2]);
+
+  socket.close();
+  await new Promise((resolve) => setTimeout(resolve, 1_100));
+  assert.equal(FakeWebSocket.instances.length, 2, "the shared socket reconnects after a disconnect");
+  const reconnectedSocket = FakeWebSocket.instances[1];
+  assert.equal(reconnectedSocket.url, "wss://runtime.example.test/stream");
+  reconnectedSocket.open();
+  assert.deepEqual(reconnectedSocket.sent.map((message) => JSON.parse(message)), [{
+    type: "subscribe",
+    topic: "event-state",
+    event_key: "2026test",
+  }], "active subscriptions replay after reconnect");
+  reconnectedSocket.receive(JSON.stringify({
+    type: "subscribed",
+    topic: "event-state",
+    event_key: "2026test",
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(received.at(-1).version, 3);
+  assert.deepEqual(fetchedVersions, [1, 2, 3]);
 
   unsubscribeFirst();
-  assert.equal(socket.sent.length, 1, "one remaining listener keeps the shared topic subscribed");
+  assert.equal(reconnectedSocket.sent.length, 1, "one remaining listener keeps the shared topic subscribed");
   unsubscribeSecond();
-  assert.deepEqual(JSON.parse(socket.sent.at(-1)), {
+  assert.deepEqual(JSON.parse(reconnectedSocket.sent.at(-1)), {
     type: "unsubscribe",
     topic: "event-state",
     event_key: "2026test",
   });
   workerEventWebSocket.release();
-  assert.equal(socket.readyState, FakeWebSocket.CLOSED);
+  assert.equal(reconnectedSocket.readyState, FakeWebSocket.CLOSED);
 });
