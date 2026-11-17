@@ -49,3 +49,20 @@ test("event-team normalization leaves an absent status absent", () => {
 
   assert.equal("tba_status" in result, false);
 });
+
+
+test("event-team domain object survives JSON transport round-trip", () => {
+  const eventTeam = normalizeFieldViewEventTeam({
+    event_key: "2026arc",
+    team_key: "frc7407",
+    tba_status: null,
+    tba_event_oprs: archimedes2026EventOprs,
+  });
+
+  const received = JSON.parse(JSON.stringify(eventTeam));
+  assert.deepEqual(received, eventTeam);
+  assert.equal(received.tba_status, null);
+  assert.equal(received.opr, archimedes2026EventOprs.oprs.frc7407);
+  assert.equal(received.dpr, archimedes2026EventOprs.dprs.frc7407);
+  assert.equal(received.ccwm, archimedes2026EventOprs.ccwms.frc7407);
+});
