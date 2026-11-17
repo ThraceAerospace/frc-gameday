@@ -11,9 +11,9 @@ const alliance = (name, overrides = {}) => ({
   status: { playoff_type: 0, level: "sf", record: null, current_level_record: null, status: "playing" },
   sources, ...overrides,
 });
-const eventTeam = (team_key, name) => ({
+const eventTeam = (team_key, name, statusNull = false) => ({
   event_key: "2026arc", team_key,
-  tba_status: name === null ? null : { alliance: { number: 4, pick: 0, name } },
+  tba_status: statusNull ? null : { alliance: { number: 4, pick: 0, name } },
   sources,
 });
 
@@ -33,6 +33,7 @@ test("explicit alliance name handles incoming and outgoing backup teams", () => 
 test("null, missing, or mismatched alliance names do not create an association", () => {
   const expected = alliance("Alliance 4");
   assert.equal(associateMatchPlayoffAlliance(["frc7407", "frc5940", "frc9470"], [eventTeam("frc7407", "Alliance 4"), eventTeam("frc5940", null)], [expected]), null);
+  assert.equal(associateMatchPlayoffAlliance(["frc7407", "frc5940", "frc9470"], [eventTeam("frc7407", "Alliance 4"), eventTeam("frc5940", "Alliance 4", true)], [expected]), null);
   assert.equal(associateMatchPlayoffAlliance(["frc7407", "frc5940", "frc9470"], [eventTeam("frc7407", "Alliance 4")], [expected]), null);
   assert.equal(associateMatchPlayoffAlliance(["frc7407", "frc5940", "frc9470"], ["frc7407", "frc5940", "frc9470"].map((key) => eventTeam(key, "Alliance 5")), [expected]), null);
 });
