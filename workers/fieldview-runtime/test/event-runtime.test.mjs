@@ -233,7 +233,7 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
   await runtime.alarm();
 
   assert.equal(calls.length, 2);
-  assert.equal(calls[1].url, "https://api-statbotics.iterativerefinement.com/v3" + endpoint);
+  assert.equal(calls[1].url, "https://api.statbotics.io/v3" + endpoint);
   assert.equal(calls[1].headers.get("If-None-Match"), null);
   const state = storage.values.get("endpoint:" + endpoint);
   assert.deepEqual(state.data, records);
@@ -258,7 +258,7 @@ test("Statbotics one-shot refresh retries provider failures within a finite TBA-
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     fetcher: async (url) => {
       calls.push(String(url));
-      if (String(url).includes("api-statbotics")) {
+      if (String(url).includes("api.statbotics")) {
         return new Response("temporarily unavailable", { status: 503 });
       }
       return Response.json([{ key: "2026test_qm1", event_key: eventKey }], {
@@ -273,22 +273,17 @@ test("Statbotics one-shot refresh retries provider failures within a finite TBA-
   const taskKey = "task:" + endpoint;
   assert.ok(storage.values.has(taskKey));
   // Advance only the durable retry deadline; the test does not wait for backoff.
-  for (let attempt = 2; attempt <= 3; attempt += 1) {
+  for (let attempt = 2; attempt <= 5; attempt += 1) {
     const task = storage.values.get(taskKey);
     assert.ok(task);
     task.dueAt = Date.now() - 1;
     storage.values.set(taskKey, task);
     await runtime.alarm();
     assert.equal(calls.length, attempt);
-    assert.ok(storage.values.has(taskKey));
+    assert.equal(storage.values.has(taskKey), attempt < 5);
   }
-  const exhausted = storage.values.get(taskKey);
-  assert.equal(exhausted.attempts, 3);
-  exhausted.dueAt = Date.now() - 1;
-  storage.values.set(taskKey, exhausted);
-  await runtime.alarm();
-  assert.equal(calls.length, 5);
   assert.equal(storage.values.has(taskKey), false);
+  assert.equal(calls.length, 5);
   await runtime.alarm();
   assert.equal(calls.length, 5);
 });
