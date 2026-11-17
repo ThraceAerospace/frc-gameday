@@ -143,3 +143,24 @@ test("JSON transport preserves explicit null separately from absent properties",
   assert.equal("absent_by_design" in received, false);
   assert.equal(received.zero, 0);
 });
+
+
+test("practice and qualification matches are explicitly not playoff matches", () => {
+  for (const comp_level of ["pm", "qm"]) {
+    const match = normalizeFieldViewMatch({
+      tba_match: { ...archimedesSf13m1TbaMatch, comp_level },
+      sources,
+    });
+
+    assert.equal(match.playoff_alliances, null);
+  }
+});
+
+test("playoff match associations remain absent until both resources are acquired", () => {
+  const match = normalizeFieldViewMatch({
+    tba_match: archimedesSf13m1TbaMatch,
+    sources,
+  });
+
+  assert.equal("playoff_alliances" in match, false);
+});

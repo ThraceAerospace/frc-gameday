@@ -177,12 +177,14 @@ The `sources` metadata is attached to each aggregate that depends on acquired pr
 
 The `FieldViewSourceStatus` meanings are precise:
 
-- `available`: the retained resource version is current;
-- `stale`: a previously usable version is retained but is not current, including when a refresh failed;
-- `unavailable`: the provider authoritatively indicates that the resource is not available;
+- `available`: the retained resource version is current and `retrieved_at` identifies that version;
+- `stale`: a previously usable version is retained but is not current, including when a refresh failed; `retrieved_at` identifies the older retained version;
+- `unavailable`: the provider authoritatively indicates that the resource is not available and no usable version is retained;
 - `failed`: acquisition failed and no usable retained version exists.
 
-An absent metadata entry means no acquisition state has been recorded; it is not equivalent to `unavailable`, `failed`, or a null resource value. `retrieved_at` identifies the retained payload version and is null when no payload version exists. A failed refresh must not erase previously valid data; when an older usable version remains, its status is `stale`, not `failed`. Metadata keys distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA playoff information, and Statbotics match data.
+The TypeScript metadata type is a discriminated union: `available` and `stale` require a non-null `retrieved_at`; `unavailable` and `failed` require `retrieved_at: null`. This prevents contradictory status/timestamp combinations in typed domain code. An absent metadata entry means no acquisition state has been recorded; it is not equivalent to `unavailable`, `failed`, or a null resource value. A failed refresh must not erase previously valid data; when an older usable version remains, its status is `stale`, not `failed`. Metadata keys distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA playoff information, and Statbotics match data.
+
+The match competition levels `pm` (practice) and `qm` (qualification) are known non-playoff matches and therefore carry `playoff_alliances: null`. Elimination levels `ef`, `qf`, `sf`, and `f` are playoff matches: their alliance association is absent until both required source resources have been acquired, then contains the exact-name associations or explicit nulls when the association cannot be resolved.
 
 ## 6. Provider overlaps and deliberate deduplication
 

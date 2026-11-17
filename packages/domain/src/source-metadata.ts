@@ -16,16 +16,32 @@ export type FieldViewSourceStatus =
   | "unavailable"
   | "failed";
 
-/** Internal provenance/freshness metadata for one provider resource. */
-export interface FieldViewSourceRecordMetadata {
-  status: FieldViewSourceStatus;
-  /** ISO-8601 UTC time of the retained payload version; null when none exists. */
-  retrieved_at: string | null;
-  /** Provider-supplied update time, when that resource exposes one. */
-  source_updated_at?: string | null;
-  /** Provider/cache validator, when available. */
-  validator?: string | null;
-}
+/**
+ * Internal provenance/freshness metadata for one provider resource.
+ *
+ * The discriminated union prevents contradictory states: current or stale
+ * data must identify its retained payload version, while unavailable/failed
+ * resources have no retained usable version.
+ */
+export type FieldViewSourceRecordMetadata =
+  | {
+      status: "available" | "stale";
+      /** ISO-8601 UTC time of the retained payload version. */
+      retrieved_at: string;
+      /** Provider-supplied update time, when that resource exposes one. */
+      source_updated_at?: string | null;
+      /** Provider/cache validator, when available. */
+      validator?: string | null;
+    }
+  | {
+      status: "unavailable" | "failed";
+      /** No usable payload version is retained. */
+      retrieved_at: null;
+      /** Provider-supplied update time, when that resource exposes one. */
+      source_updated_at?: string | null;
+      /** Provider/cache validator, when available. */
+      validator?: string | null;
+    };
 
 /**
  * Resource-specific metadata. Separate keys prevent a successful match fetch

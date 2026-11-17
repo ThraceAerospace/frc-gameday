@@ -87,7 +87,8 @@ export function normalizeFieldViewMatch(
   input: NormalizeFieldViewMatchInput,
 ): FieldViewMatch {
   const { tba_match, statbotics_match, event_teams, tba_playoff_alliances } = input;
-  const playoff_alliances = tba_match.comp_level === "qm"
+  const isPlayoffMatch = ["ef", "qf", "sf", "f"].includes(tba_match.comp_level);
+  const playoff_alliances = !isPlayoffMatch
     ? null
     : event_teams === undefined || tba_playoff_alliances === undefined
       ? undefined
