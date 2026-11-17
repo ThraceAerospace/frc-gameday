@@ -110,5 +110,5 @@ test("delayed 200 cannot roll back a validator installed by a newer poll", () =>
   assert.equal(delayed.etag, '"v3"');
   assert.equal(delayed.lastFetchedAt, 250);
   assert.equal(delayed.expiresAt, 350);
-  assert.deepEqual(delayed.data, ["v2"]);
+  assert.deepEqual(delayed.data, ["v3"]);
 });
