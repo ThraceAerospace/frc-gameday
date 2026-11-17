@@ -98,7 +98,7 @@ Do these steps only when the user has explicitly approved a remote prototype dep
      https://<prototype-worker>.<account-subdomain>.workers.dev/internal/scheduler/state
    ```
 
-   The scheduler discovers the prior/current/next event years and then repeats at the configured one-hour interval. It is intentionally not auto-started by a Cron Trigger.
+   The scheduler discovers only the current calendar year's events and then repeats at the configured one-hour interval. It is intentionally not auto-started by a Cron Trigger.
 
 8. Validate a populated discovery year:
 
