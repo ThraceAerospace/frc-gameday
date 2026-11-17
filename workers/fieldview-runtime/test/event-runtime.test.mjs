@@ -189,3 +189,42 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(refreshedSnapshot.sources.event_teams.tba_team_event_status.retrieved_at, null);
   assert.equal("tba_status" in refreshedSnapshot.event_teams[0], false);
 });
+
+
+test("EventRuntime polls and retains Statbotics event matches through its provider client", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const records = [{
+    key: "2026test_qm1",
+    pred: { red_score: 105, blue_score: 95, red_win_prob: 0.6 },
+    pre_epas: { "3461": { epa: 100 } },
+    epas: { "3461": { epa: 110 } },
+  }];
+  const calls = [];
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), headers: new Headers(init.headers) });
+      return Response.json(records, {
+        headers: { "Cache-Control": "max-age=30", ETag: '"statbotics-v1"' },
+      });
+    },
+  }, eventKey);
+
+  assert.ok(eventResourceEndpoints(eventKey).includes(endpoint));
+  await runtime.schedulePolls([endpoint], 60_000, Date.now() - 1);
+  await runtime.alarm();
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api-statbotics.iterativerefinement.com/v3" + endpoint);
+  assert.equal(calls[0].headers.get("If-None-Match"), null);
+  const state = storage.values.get("endpoint:" + endpoint);
+  assert.deepEqual(state.data, records);
+  assert.deepEqual(state.providerData, records);
+  assert.equal(state.etag, '"statbotics-v1"');
+  assert.deepEqual(storage.values.get("source:" + endpoint + ":v1").data, records);
+});
