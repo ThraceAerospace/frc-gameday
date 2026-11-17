@@ -370,7 +370,8 @@ export class EventRuntime {
   }
 
   private retryDelay(task: PollTask): number {
-    return Math.min(5 * 60_000, 2_000 * (2 ** Math.min(task.attempts, 7)));
+    const baseDelay = task.maxAttempts !== undefined ? 30_000 : 2_000;
+    return Math.min(5 * 60_000, baseDelay * (2 ** Math.min(Math.max(0, task.attempts - 1), 7)));
   }
 
   private async rearm(transaction: DurableObjectTransactionLike): Promise<void> {
@@ -384,6 +385,7 @@ export class EventRuntime {
   }
 
   private async pollEndpoint(endpoint: string): Promise<boolean> {
+    const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
     const requestSnapshot = createPollRequestSnapshot(initial);
@@ -396,7 +398,6 @@ export class EventRuntime {
       | { status: "failed" };
 
     try {
-      const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const response = isStatboticsEndpoint
         ? await this.statboticsApi.request(endpoint, { headers })
         : await this.api.request(endpoint, { headers });
@@ -463,7 +464,10 @@ export class EventRuntime {
     }
 
     // A 304 without a retained representation is not a successful refresh.
-    return responseState.status !== "failed" && result.status !== "failed";
+    // A Statbotics 304 means its representation has not caught up to the TBA
+    // change that triggered this bounded refresh. Retry without discarding data.
+    return responseState.status !== "failed" && result.status !== "failed" &&
+      !(isStatboticsEndpoint && responseState.status === "not-modified");
   }
 
   private isStatboticsTriggerEndpoint(endpoint: string): boolean {
