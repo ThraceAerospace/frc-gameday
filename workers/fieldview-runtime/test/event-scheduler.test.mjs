@@ -126,6 +126,7 @@ test("public event discovery returns cached canonical events with provenance", a
   await storage.put("discovery:2026", {
     etag: '"events-2026"',
     updatedAt,
+    checkedAt: Date.now(),
     events: [{
       key: "2026test",
       name: "Test Event",
@@ -153,4 +154,53 @@ test("public event discovery rejects invalid years and reports a cold cache", as
   const scheduler = new EventScheduler({ storage: new MemoryStorage() }, {});
   assert.equal((await scheduler.fetch(new Request("https://scheduler/events?year=abc"))).status, 400);
   assert.equal((await scheduler.fetch(new Request("https://scheduler/events?year=2026"))).status, 503);
+});
+
+test("stale discovery cache provenance remains stale after missed validation cycles", async () => {
+  const storage = new MemoryStorage();
+  const old = Date.now() - 3 * 60 * 60_000;
+  await storage.put("discovery:2026", {
+    etag: '"events-old"',
+    updatedAt: old,
+    checkedAt: old,
+    events: [{
+      key: "2026stale",
+      name: "Stale Event",
+      start_date: "2026-03-08",
+      end_date: "2026-03-08",
+      timezone: "America/New_York",
+    }],
+  });
+  const scheduler = new EventScheduler({ storage }, {});
+  const response = await scheduler.fetch(new Request("https://scheduler/events?year=2026"));
+  const payload = await response.json();
+  assert.equal(payload.events[0].sources.tba_event.status, "stale");
+});
+
+test("a successful TBA 304 refreshes discovery validation time without replacing the payload version", async () => {
+  const storage = new MemoryStorage();
+  const year = new Date().getUTCFullYear();
+  const old = Date.now() - 60 * 60_000;
+  for (const discoveryYear of [year - 1, year, year + 1]) {
+    await storage.put("discovery:" + discoveryYear, {
+      etag: '"cached"',
+      events: [],
+      updatedAt: old,
+      checkedAt: old,
+    });
+  }
+  const scheduler = new EventScheduler({ storage }, {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({}) }) },
+    fetcher: async () => new Response(null, { status: 304 }),
+  });
+  await scheduler.fetch(new Request("https://scheduler/start", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token" },
+  }));
+  await scheduler.alarm();
+  const refreshed = await storage.get("discovery:" + year);
+  assert.equal(refreshed.updatedAt, old);
+  assert.ok(refreshed.checkedAt > old);
 });
