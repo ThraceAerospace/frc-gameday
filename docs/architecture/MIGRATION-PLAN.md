@@ -232,7 +232,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 ### M7 — Frontend and product-surface migration
 
 **Progress**
-- The server-rendered event page now reads `FieldViewEventSnapshot` through the optional server-only `FIELDVIEW_RUNTIME_URL` when all selected-tab resources are present. It preserves explicit nulls as unavailable and retains the legacy TBA read path as a temporary fallback. This is an incremental source migration, not a production cutover.
+- The server-rendered event page now reads `FieldViewEventSnapshot` through the optional server-only `FIELDVIEW_RUNTIME_URL` when all selected-tab resources are present. The events browser now consumes normalized `FieldViewEvent` objects from the global scheduler discovery cache, with server-side normalization of the TBA fallback. Event lifecycle boundaries use event-local IANA timezones, and discovery provenance distinguishes current from stale cached data. Explicit nulls remain unavailable rather than being overwritten. These are incremental source migrations, not a production cutover.
 - The SharedWorker exposes opt-in canonical event snapshot subscriptions and reconnect recovery. Existing consumers remain on their legacy state contract until migrated individually.
 
 **Work**
