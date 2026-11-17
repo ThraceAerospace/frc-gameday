@@ -1,0 +1,40 @@
+name = "fieldview-runtime-prototype"
+main = "src/index.ts"
+compatibility_date = "2026-11-17"
+workers_dev = true
+
+# This config is deliberately separate from wrangler.toml. It creates an
+# isolated Worker and isolated Durable Object namespaces for the prototype.
+# Do not add production routes or reuse production Durable Object namespaces.
+
+[vars]
+TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
+STATBOTICS_REFRESH_DELAY_MS = "300000"
+EVENT_DISCOVERY_INTERVAL_MS = "3600000"
+EVENT_UPCOMING_INTERVAL_MS = "1800000"
+EVENT_ACTIVE_INTERVAL_MS = "300000"
+EVENT_COMPLETED_RETENTION_MS = "86400000"
+
+[[durable_objects.bindings]]
+name = "EVENT_RUNTIME"
+class_name = "EventRuntime"
+
+[[durable_objects.bindings]]
+name = "MULTIPLEXER"
+class_name = "Multiplexer"
+
+[[durable_objects.bindings]]
+name = "EVENT_SCHEDULER"
+class_name = "EventScheduler"
+
+[[migrations]]
+tag = "prototype-v1"
+new_sqlite_classes = ["EventRuntime"]
+
+[[migrations]]
+tag = "prototype-v2"
+new_sqlite_classes = ["Multiplexer"]
+
+[[migrations]]
+tag = "prototype-v3"
+new_sqlite_classes = ["EventScheduler"]
