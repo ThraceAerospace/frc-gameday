@@ -111,6 +111,7 @@ export function eventResourceEndpoints(eventKey: string): string[] {
  * Network I/O always occurs outside storage transactions.
  */
 export class EventRuntime {
+  private readonly state: DurableObjectStateLike;
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly statboticsApi: StatboticsApiClient;
@@ -119,6 +120,7 @@ export class EventRuntime {
   private allowedEndpoints: Set<string>;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
+    this.state = state;
     this.storage = state.storage;
     this.env = env;
     this.api = new TBAApiClient({
@@ -200,6 +202,17 @@ export class EventRuntime {
       return Response.json({ accepted: true, duplicate: !accepted });
     }
 
+    if (request.method === "GET" && url.pathname === "/stream") {
+      if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return Response.json({ error: "WebSocket upgrade required" }, { status: 426 });
+      if (!this.state.acceptWebSocket || !this.state.getWebSockets) return Response.json({ error: "WebSocket subscriptions are unavailable" }, { status: 501 });
+      const pair = this.env.webSocketPairFactory ? this.env.webSocketPairFactory() : new (globalThis as typeof globalThis & { WebSocketPair: new () => { 0: WebSocket; 1: WebSocket } }).WebSocketPair();
+      this.state.acceptWebSocket(pair[1]);
+      const version = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const sinceParam = url.searchParams.get("since");
+      const since = sinceParam !== null && /^\d+$/.test(sinceParam) ? Number(sinceParam) : null;
+      pair[1].send(JSON.stringify({ type: "connected", event_key: this.eventKey, version, snapshot_required: since === null || !Number.isSafeInteger(since) || since !== version }));
+      return this.env.webSocketResponseFactory ? this.env.webSocketResponseFactory(pair[0]) : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
+    }
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const result = await this.buildEventSnapshot();
       return Response.json(result.snapshot, {
@@ -456,8 +469,11 @@ export class EventRuntime {
         JSON.stringify(latest.providerData) !== JSON.stringify(
           responseState.status === "modified" ? responseState.data : undefined,
         );
-      return { status: next.status, representationChanged };
+      const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
+      return { status: next.status, representationChanged, snapshotChanged: next.revision !== latest.revision, snapshotVersion };
     });
+
+    if (result.snapshotChanged) this.publishSnapshotRevision(result.snapshotVersion);
 
     if (result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
       await this.scheduleStatboticsRefresh(Date.now());
@@ -530,9 +546,9 @@ export class EventRuntime {
     const eventEndpoint = TBA_ENDPOINTS.event(eventKey);
     const now = Date.now();
 
-    return this.storage.transaction(async (transaction) => {
+    const result = await this.storage.transaction(async (transaction) => {
       const webhookKey = "webhook:" + webhookId;
-      if (await transaction.get(webhookKey) !== undefined) return false;
+      if (await transaction.get(webhookKey) !== undefined) return { accepted: false, snapshotVersion: null as number | null };
       await transaction.put(webhookKey, { receivedAt: now, messageType, rawPayload });
 
       if (messageType === "match_score" || messageType === "match_video") {
@@ -571,8 +587,24 @@ export class EventRuntime {
       }
 
       await this.rearm(transaction);
-      return true;
+      const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
+      return { accepted: true, snapshotVersion: messageType === "match_score" || messageType === "match_video" ? snapshotVersion : null };
     });
+    if (result.snapshotVersion !== null) this.publishSnapshotRevision(result.snapshotVersion);
+    return result.accepted;
+  }
+
+  private publishSnapshotRevision(version: number): void {
+    const message = JSON.stringify({ type: "snapshot.changed", event_key: this.eventKey, version });
+    for (const socket of this.state.getWebSockets?.() ?? []) {
+      try { socket.send(message); }
+      catch { try { socket.close(1011, "Subscription delivery failed"); } catch { /* already closed */ } }
+    }
+  }
+
+  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
+    if (message === "ping") { try { socket.send("pong"); } catch { /* already closed */ } return; }
+    try { socket.close(1008, "Unsupported subscription message"); } catch { /* already closed */ }
   }
 
 }

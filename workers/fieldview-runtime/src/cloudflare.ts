@@ -14,6 +14,9 @@ export interface DurableObjectStorageLike extends DurableObjectTransactionLike {
 
 export interface DurableObjectStateLike {
   storage: DurableObjectStorageLike;
+  /** Cloudflare Durable Object WebSocket hibernation APIs. */
+  acceptWebSocket?(socket: WebSocket): void;
+  getWebSockets?(): WebSocket[];
 }
 
 export interface DurableObjectNamespaceLike {
@@ -32,4 +35,7 @@ export interface RuntimeEnvironment {
   EVENT_RUNTIME: DurableObjectNamespaceLike;
   /** Test seam; production uses the Workers global fetch implementation. */
   fetcher?: typeof fetch;
+  /** Test seams for the Cloudflare WebSocket upgrade API. */
+  webSocketPairFactory?: () => [WebSocket, WebSocket];
+  webSocketResponseFactory?: (client: WebSocket) => Response;
 }

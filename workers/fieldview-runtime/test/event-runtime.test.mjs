@@ -342,6 +342,33 @@ test("Statbotics 304 responses retry without replacing the last good representat
   assert.deepEqual(storage.values.get("endpoint:" + endpoint).data, lastGood);
 });
 
+test("versioned WebSocket subscriptions announce gaps and publish snapshot revisions", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+  const acceptedSockets = [];
+  class FakeSocket { sent = []; closed = false; send(message) { this.sent.push(message); } close() { this.closed = true; } }
+  const clientSocket = new FakeSocket();
+  const serverSocket = new FakeSocket();
+  const state = { storage, acceptWebSocket(socket) { acceptedSockets.push(socket); }, getWebSockets() { return acceptedSockets; } };
+  const runtime = new EventRuntime(state, {
+    TBA_API_KEY: "test-api-key", TBA_WEBHOOK_SECRET: "test-webhook-secret", RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    webSocketPairFactory: () => [clientSocket, serverSocket],
+    webSocketResponseFactory: () => new Response(null, { status: 200 }),
+    fetcher: async () => Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: { red: { score: 10 }, blue: { score: 9 } } }], { headers: { ETag: '"matches-v1"' } }),
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/stream?since=0", { headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, Upgrade: "websocket" } }));
+  assert.equal(response.status, 200);
+  assert.equal(acceptedSockets.length, 1);
+  assert.deepEqual(JSON.parse(serverSocket.sent[0]), { type: "connected", event_key: eventKey, version: 0, snapshot_required: false });
+  await runtime.schedulePolls([endpoint], 60_000, Date.now() - 1);
+  await runtime.alarm();
+  assert.deepEqual(JSON.parse(serverSocket.sent[1]), { type: "snapshot.changed", event_key: eventKey, version: 1 });
+  runtime.webSocketMessage(serverSocket, "ping");
+  assert.equal(serverSocket.sent[2], "pong");
+});
+
 test("recurring schedules reject Statbotics endpoints even when called below the HTTP route", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
