@@ -6,13 +6,14 @@
 export interface EndpointState<T> {
   endpoint: string;
   data: T | null;
-  /** Validator for the upstream HTTP resource representation. */
   etag: string | null;
   lastFetchedAt: number | null;
   expiresAt: number | null;
-  /** Monotonic local revision used to detect overlapping inputs. */
   revision: number;
+  /** Advances only when a 200 response installs a new upstream validator state. */
+  validatorRevision: number;
   lastAttemptAt: number | null;
+  lastWebhookAt: number | null;
 }
 
 export type PollResponse<T> =
@@ -22,6 +23,7 @@ export type PollResponse<T> =
 
 export interface PollRequestSnapshot {
   revision: number;
+  validatorRevision: number;
   ifNoneMatch: string | null;
 }
 
@@ -30,19 +32,23 @@ export function createEndpointState<T>(endpoint: string): EndpointState<T> {
     throw new Error("Endpoint state requires a provider-relative path");
   }
   return {
-    endpoint, data: null, etag: null, lastFetchedAt: null,
-    expiresAt: null, revision: 0, lastAttemptAt: null,
+    endpoint, data: null, etag: null, lastFetchedAt: null, expiresAt: null,
+    revision: 0, validatorRevision: 0, lastAttemptAt: null, lastWebhookAt: null,
   };
 }
 
-/** Capture revision and validator before network I/O; do not hold a transaction over fetch. */
+/** Capture revision and validator before network I/O; never hold a transaction over fetch. */
 export function createPollRequestSnapshot<T>(state: EndpointState<T>): PollRequestSnapshot {
-  return { revision: state.revision, ifNoneMatch: state.etag };
+  return {
+    revision: state.revision,
+    validatorRevision: state.validatorRevision,
+    ifNoneMatch: state.etag,
+  };
 }
 
 /**
  * Apply the response to the latest state reread after network I/O.
- * Reconcile must merge useful intervening webhook changes with the fetched data.
+ * Reconcile must merge useful intervening webhook changes with fetched data.
  * A changed revision alone is not grounds for discarding a useful poll response.
  */
 export function applyPollResponse<T>(
@@ -53,17 +59,27 @@ export function applyPollResponse<T>(
   reconcile: (latest: T | null, fetched: T, requestRevision: number) => T,
 ): EndpointState<T> {
   if (response.status === "failed") return { ...current, lastAttemptAt: now };
+
   if (response.status === "not-modified") {
+    // A delayed 304 only validates the ETag sent with that request. If another
+    // poll installed a different validator, it must not refresh that validator's TTL.
+    if (request.validatorRevision !== current.validatorRevision) {
+      return { ...current, lastAttemptAt: now };
+    }
     return { ...current, lastFetchedAt: now, expiresAt: response.expiresAt, lastAttemptAt: now };
   }
+
+  const validatorIsCurrent = request.validatorRevision === current.validatorRevision;
   return {
     ...current,
     data: reconcile(current.data, response.data, request.revision),
-    // A 200 without an ETag explicitly clears the old validator.
-    etag: response.etag,
-    lastFetchedAt: now,
-    expiresAt: response.expiresAt,
+    // A delayed response cannot roll back a validator accepted by a newer poll.
+    // A 200 without ETag clears the old validator only for its current generation.
+    etag: validatorIsCurrent ? response.etag : current.etag,
+    lastFetchedAt: validatorIsCurrent ? now : current.lastFetchedAt,
+    expiresAt: validatorIsCurrent ? response.expiresAt : current.expiresAt,
     revision: current.revision + 1,
+    validatorRevision: validatorIsCurrent ? current.validatorRevision + 1 : current.validatorRevision,
     lastAttemptAt: now,
   };
 }
@@ -79,6 +95,6 @@ export function applyWebhookUpdate<T>(
     ...current,
     data: reconcile(current.data, incoming),
     revision: current.revision + 1,
-    lastAttemptAt: now,
+    lastWebhookAt: now,
   };
 }
