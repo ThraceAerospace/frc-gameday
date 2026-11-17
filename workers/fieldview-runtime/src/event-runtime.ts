@@ -347,7 +347,7 @@ export class EventRuntime {
       responseState = { status: "failed" };
     }
 
-    await this.storage.transaction(async (transaction) => {
+    const resultingStatus = await this.storage.transaction(async (transaction) => {
       const key = endpointStorageKey(endpoint);
       const latest = await transaction.get<EndpointState<unknown>>(key) ?? initial;
       const now = Date.now();
@@ -370,9 +370,11 @@ export class EventRuntime {
           sourceVersion,
         );
       }
+      return next.status;
     });
 
-    return responseState.status !== "failed";
+    // A 304 without a retained representation is not a successful refresh.
+    return responseState.status !== "failed" && resultingStatus !== "failed";
   }
 
   private async scheduleImmediatePoll(

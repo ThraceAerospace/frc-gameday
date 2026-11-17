@@ -141,3 +141,12 @@ test("an unavailable response does not erase a previously usable representation"
   assert.deepEqual(next.providerData, []);
   assert.equal(next.lastFetchedAt, 100);
 });
+
+test("304 without a retained HTTP representation is a failed refresh", () => {
+  const initial = createEndpointState("/event/2026test/matches");
+  const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
+    { status: "not-modified", expiresAt: 100 }, 50, replace);
+  assert.equal(next.status, "failed");
+  assert.equal(next.lastFetchedAt, null);
+  assert.equal(next.providerData, null);
+});
