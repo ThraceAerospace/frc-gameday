@@ -36,6 +36,12 @@ export interface FieldViewEventTeam {
  */
 export interface FieldViewEventSnapshot {
   event_key: EventKey;
+  /** Aggregate-level provenance remains visible even when a resource has no value. */
+  sources: {
+    event: FieldViewSourceMetadata;
+    teams: FieldViewSourceMetadata;
+    event_teams: FieldViewSourceMetadata;
+  };
   event?: FieldViewEvent | null;
   teams?: FieldViewTeam[] | null;
   event_teams?: FieldViewEventTeam[] | null;

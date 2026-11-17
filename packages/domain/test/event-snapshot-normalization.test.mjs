@@ -46,6 +46,7 @@ test("preserves not-acquired resources separately from explicit null and empty r
   assert.equal("event" in missing, false);
   assert.equal("teams" in missing, false);
   assert.equal("event_teams" in missing, false);
+  assert.deepEqual(missing.sources, sources);
 
   const explicitNull = normalizeFieldViewEventSnapshot({
     event_key: "2026test", tba_event: null, tba_teams: null, sources,
@@ -53,6 +54,7 @@ test("preserves not-acquired resources separately from explicit null and empty r
   assert.equal(explicitNull.event, null);
   assert.equal(explicitNull.teams, null);
   assert.equal(explicitNull.event_teams, null);
+  assert.deepEqual(explicitNull.sources, sources);
 
   const empty = normalizeFieldViewEventSnapshot({
     event_key: "2026test", tba_teams: [], sources,
@@ -73,6 +75,7 @@ test("event snapshot survives JSON transport round-trip without losing provenanc
   assert.deepEqual(received, snapshot);
   assert.equal(received.event_teams[0].tba_status, null);
   assert.equal(received.event.sources.tba_event.status, "available");
+  assert.deepEqual(received.sources, sources);
 });
 
 test("rejects an event resource that belongs to a different event key", () => {

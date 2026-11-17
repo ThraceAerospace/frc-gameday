@@ -136,4 +136,28 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(snapshot.event_teams[0].dpr, 0);
   assert.equal(snapshot.event.sources.tba_event.status, "available");
   assert.equal(snapshot.event_teams[0].sources.tba_event_oprs.validator, '"v1"');
+
+  const eventState = storage.values.get("endpoint:" + endpoints[0]);
+  eventState.expiresAt = now - 1;
+  storage.values.set("endpoint:" + endpoints[0], eventState);
+  const statusState = storage.values.get("endpoint:" + endpoints[2]);
+  statusState.status = "unavailable";
+  statusState.data = null;
+  statusState.providerData = null;
+  statusState.etag = null;
+  statusState.lastFetchedAt = null;
+  statusState.lastAttemptAt = now;
+  storage.values.set("endpoint:" + endpoints[2], statusState);
+
+  const refreshed = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+    },
+  }));
+  const refreshedSnapshot = await refreshed.json();
+  assert.equal(refreshedSnapshot.sources.event.tba_event.status, "stale");
+  assert.equal(refreshedSnapshot.sources.event_teams.tba_team_event_status.status, "unavailable");
+  assert.equal(refreshedSnapshot.sources.event_teams.tba_team_event_status.retrieved_at, null);
+  assert.equal("tba_status" in refreshedSnapshot.event_teams[0], false);
 });

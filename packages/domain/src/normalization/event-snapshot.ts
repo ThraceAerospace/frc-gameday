@@ -32,7 +32,10 @@ export function normalizeFieldViewEventSnapshot(
   if (input.tba_event && input.tba_event.key !== input.event_key) {
     throw new Error("TBA event key does not match the requested FieldView event key");
   }
-  const result: FieldViewEventSnapshot = { event_key: input.event_key };
+  const result: FieldViewEventSnapshot = {
+    event_key: input.event_key,
+    sources: input.sources,
+  };
 
   if (input.tba_event !== undefined) {
     result.event = input.tba_event === null
