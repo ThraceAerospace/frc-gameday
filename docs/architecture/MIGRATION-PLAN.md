@@ -177,10 +177,10 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M4 — Provider adapter migration
 
-**Status:** In progress. TBA and Statbotics HTTP transports and provider-owned endpoint path builders are in place. Platform-independent EventRuntime endpoint-state transitions are implemented and tested, including endpoint-scoped validators, 304/200/failure behavior, webhook validator preservation, and poll/webhook race reconciliation. The architecture is recorded in ADR-0007. These primitives are bound to the initial EventRuntime Durable Object adapter in the migration branch; no Worker or Durable Object is deployed. The first provider-owned runtime boundaries are in place for TBA and Statbotics HTTP transport: `@fieldview/provider-tba/client` owns the TBA base URL and authentication header and returns the native response so cache validators and provider payloads remain unchanged. The existing Redis cache/reconciliation layer remains in the web workspace temporarily and now delegates network requests to this provider client. This is an incremental extraction, not a completed provider migration.
+**Status:** In progress. TBA and Statbotics HTTP transports and provider-owned endpoint path builders are in place. Platform-independent EventRuntime endpoint-state transitions are implemented and tested, including endpoint-scoped validators, 304/200/failure behavior, webhook validator preservation, and poll/webhook race reconciliation. The architecture is recorded in ADR-0007. These primitives are bound to the initial EventRuntime Durable Object adapter in the migration branch; no Worker or Durable Object is deployed. The first provider-owned runtime boundaries are in place for TBA and Statbotics HTTP transport: `@fieldview/provider-tba/client` owns the TBA base URL and authentication header, while `@fieldview/provider-statbotics/client` owns the Statbotics base URL and `/v3` prefix. Both return native responses so cache validators and provider payloads remain unchanged. The existing Redis cache/reconciliation layer remains in the web workspace temporarily and now delegates network requests to this provider client. This is an incremental extraction, not a completed provider migration.
 
 **Work**
-- Introduce isolated TBA, Statbotics, and FRC Colors adapters. TBA and Statbotics HTTP transports and path builders are provider-owned. Durable endpoint state and reconciliation transitions live in the runtime layer, not in the provider package; the legacy Redis adapter remains temporarily operational.
+- Introduce isolated TBA, Statbotics, and FRC Colors adapters. TBA and Statbotics HTTP transports and path builders are provider-owned. Durable endpoint state and reconciliation transitions live in the runtime layer, not in the provider package; the legacy Redis adapter remains temporarily operational. The FRC Colors integration remains in its existing web/analytics path and is deferred while analytics work is frozen.
 - Keep raw provider schemas, API details, and provider-specific clients inside their respective packages. The domain may use provider types for unchanged source fields; clients consume the FieldView domain shape and never provider acquisition implementations.
 - Pass TBA and Statbotics payloads unchanged into FieldView normalization. Pass every other provider payload through unchanged.
 - Implement only transformations that have been explicitly described and approved; represent each result in a specifically named, documented FieldView field.
@@ -194,7 +194,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Provider fixtures cover normal, partial, stale, malformed, and failed responses.
 - Provider adapters expose provider payloads without changing their values.
 - Any approved FieldView normalization outputs are explicit, documented, and separately named; unapproved transformations do not exist.
-- Consumers do not import provider-generated types.
+- Frontend consumers do not import provider-generated types or provider acquisition implementations; the domain may reference provider types for unchanged source fields.
 
 ### M5 — Cloudflare backend and event runtime
 
@@ -202,7 +202,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Establish Worker entrypoints, environment bindings, deployment configuration, and local development. The Worker entrypoint, Wrangler Durable Object binding/migration, and runtime typecheck are now present; credentials and deployment remain unconfigured.
 - Implement the first EventRuntime Durable Object using the accepted ownership and conditional-polling rules in ADR-0007. The initial DO persists endpoint representations and validators, retains each accepted upstream 200 payload as an immutable revisioned source record, applies webhook updates transactionally without rewriting source records, and schedules endpoint polls through one durable alarm. This first adapter is implemented and typechecked; Cloudflare deployment is intentionally deferred.
 - Establish authoritative event-state ownership, persistence, and reconciliation. The event-scoped owner and endpoint transitions are implemented.
-- Implement webhook invalidation and scheduled safety refreshes. Signed TBA webhook ingress, deduplication, raw-payload retention, match updates, and immediate endpoint refreshes are implemented.
+- Implement webhook invalidation and event-local scheduled safety refreshes. Signed TBA webhook ingress, deduplication, raw-payload retention, match updates, immediate endpoint refreshes, and durable per-event polling alarms are implemented. Global event discovery and schedule coordination remain pending.
 - Compose canonical event snapshots. TBA event, team, event-team, match, prediction, OPR, and playoff-alliance composition is implemented through `@fieldview/domain`; Statbotics enrichment remains pending.
 - Implement versioned publication and client subscriptions (pending).
 - Define WebSocket/subscription authentication, lifecycle, and reconnect behavior.
