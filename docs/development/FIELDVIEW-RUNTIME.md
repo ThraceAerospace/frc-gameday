@@ -38,7 +38,11 @@ For local development, use Wrangler's local secret workflow. For a future remote
 
 The multiplexer calls EventRuntime's internal `POST /subscriptions` operation to register or unregister its shared subscriber identity. Each request carries a monotonically increasing generation for that event; EventRuntime persists the newest generation and ignores stale out-of-order requests. The multiplexer reconciles desired upstream state after each client subscription-set change. EventRuntime sends `snapshot.changed` revision metadata to the multiplexer only while that registration is active. The multiplexer accepts internal `POST /internal/notify` deliveries only with the service bearer token; these internal DO-to-DO paths are not exposed as public Worker routes.
 
-## Frontend SharedWorker integration
+## Frontend integration
+
+Server-rendered event pages can use the optional server-only `FIELDVIEW_RUNTIME_URL` base origin. When configured, the event page reads its canonical snapshot and uses it only when the resources required by the selected tab have been acquired. Missing fields fall back to the existing TBA read path; explicit `null` values remain explicit unavailable data rather than being silently replaced. No production value is configured.
+
+### SharedWorker integration
 
 The existing SharedWorker has an opt-in canonical runtime transport. Set the web application's build-time `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL` to the Cloudflare Worker base origin to enable it. The SharedWorker then uses its single browser WebSocket connection for the public `/stream` multiplexer, replays event-state subscriptions after reconnect, and fetches versioned canonical snapshots from `/events/:eventKey/snapshot` after subscription acknowledgement, reconnect, or a newer revision notification.
 
