@@ -76,7 +76,7 @@ The generated TBA OpenAPI currently models the event-predictions response too lo
 
 ### 3.4 Team associations
 
-The model associates each match alliance's teams with their additional statistics while retaining the original TBA `alliances` field unchanged. Each aggregate carries resource-specific `sources` metadata; a missing metadata key means no acquisition state has been recorded, not that the resource is unavailable.
+The model associates each match alliance's teams with their additional statistics while retaining the original TBA `alliances` field unchanged. Each provider-backed aggregate carries resource-specific `sources` metadata; a missing metadata key means no acquisition state has been recorded, not that the resource is unavailable.
 
 Each `FieldViewMatchTeam` association includes:
 
