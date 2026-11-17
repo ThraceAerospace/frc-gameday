@@ -522,3 +522,55 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
   }
   assert.equal(await storage.get("lifecycle:completed-until"), undefined);
 });
+
+test("webhook refresh retains the 65-second one-shot authoritative TBA refetch", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const calls = [];
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async (url) => {
+      calls.push(String(url));
+      return Response.json([], { headers: { ETag: '"matches-v1"' } });
+    },
+  }, eventKey);
+  const endpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+  const receivedAt = Date.now();
+  const payload = {
+    message_type: "upcoming_match",
+    message_data: { event_key: eventKey, match_key: "2026test_qm1" },
+  };
+  const response = await runtime.fetch(new Request("https://event-runtime/webhook", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "X-FieldView-Webhook-Id": "b".repeat(64),
+    },
+    body: JSON.stringify(payload),
+  }));
+  assert.equal(response.status, 200);
+  const taskKey = "task:" + endpoint;
+  const scheduled = storage.values.get(taskKey);
+  assert.ok(scheduled);
+  assert.ok(scheduled.authoritativeRefetchAt >= receivedAt + 65_000);
+  assert.equal(scheduled.intervalMs, null);
+
+  await runtime.alarm();
+  assert.equal(calls.length, 1);
+  const afterImmediate = storage.values.get(taskKey);
+  assert.equal(afterImmediate.dueAt, scheduled.authoritativeRefetchAt);
+  assert.equal(afterImmediate.authoritativeRefetchAt, scheduled.authoritativeRefetchAt);
+
+  storage.values.set(taskKey, {
+    ...afterImmediate,
+    dueAt: Date.now() - 1,
+    authoritativeRefetchAt: Date.now() - 1,
+  });
+  await runtime.alarm();
+  assert.equal(calls.length, 2);
+  assert.equal(storage.values.has(taskKey), false);
+});

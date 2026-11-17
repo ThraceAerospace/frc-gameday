@@ -12,6 +12,7 @@ Configure secrets as Cloudflare Worker secrets; never commit their values:
 
 Optional non-secret variables:
 
+- `TBA_AUTHORITATIVE_REFETCH_DELAY_MS` — non-negative delay (default 65000 ms) for the one-shot authoritative TBA REST refetch after the immediate webhook-triggered refresh.
 - `STATBOTICS_REFRESH_DELAY_MS` — non-negative delay (default 300000 ms) before the one-shot Statbotics enrichment request after a changed TBA REST representation.
 - `EVENT_DISCOVERY_INTERVAL_MS` — global TBA event discovery cadence (default 3600000 ms / 1 hour).
 - `EVENT_UPCOMING_INTERVAL_MS` — polling cadence for upcoming-event resources (default 1800000 ms / 30 minutes).

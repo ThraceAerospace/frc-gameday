@@ -32,6 +32,8 @@ interface PollTask {
   retryOnFailure: boolean;
   /** Optional finite attempt budget for causally-triggered one-shot work. */
   maxAttempts?: number;
+  /** One-shot REST reconciliation after a webhook's immediate refresh. */
+  authoritativeRefetchAt?: number;
 }
 
 const TASK_PREFIX = "task:"
@@ -383,6 +385,9 @@ export class EventRuntime {
           generation: unchanged ? previous.generation : (previous?.generation ?? 0) + 1,
           attempts: unchanged ? previous.attempts : 0,
           retryOnFailure: true,
+          ...(previous?.authoritativeRefetchAt === undefined
+            ? {}
+            : { authoritativeRefetchAt: previous.authoritativeRefetchAt }),
         };
         await transaction.put(key, task);
       }
@@ -427,15 +432,35 @@ export class EventRuntime {
         const current = await transaction.get<PollTask>(key);
         // An administrator may have replaced this task while its poll ran.
         if (!current || current.generation !== task.generation) return;
+        const completedAt = Date.now();
         const attempts = succeeded ? 0 : current.attempts;
         const exhausted = current.maxAttempts !== undefined && attempts >= current.maxAttempts;
-        if (current.intervalMs === null && (succeeded || exhausted)) {
+        if (succeeded && current.authoritativeRefetchAt !== undefined &&
+            completedAt >= current.authoritativeRefetchAt) {
+          const { authoritativeRefetchAt: _completedRefetch, ...recurringTask } = current;
+          if (current.intervalMs === null) {
+            await transaction.delete(key);
+          } else {
+            await transaction.put(key, {
+              ...recurringTask,
+              attempts: 0,
+              dueAt: completedAt + current.intervalMs,
+            });
+          }
+        } else if (succeeded && current.authoritativeRefetchAt !== undefined) {
+          await transaction.put(key, {
+            ...current,
+            attempts: 0,
+            dueAt: current.authoritativeRefetchAt,
+          });
+        } else if (current.intervalMs === null && (succeeded || exhausted) &&
+            current.authoritativeRefetchAt === undefined) {
           await transaction.delete(key);
         } else {
           await transaction.put(key, {
             ...current,
             attempts,
-            dueAt: Date.now() + (succeeded ? current.intervalMs! : this.retryDelay(current)),
+            dueAt: completedAt + (succeeded ? current.intervalMs! : this.retryDelay(current)),
           });
         }
         await this.rearm(transaction);
@@ -589,6 +614,15 @@ export class EventRuntime {
     });
   }
 
+  private authoritativeRefetchDelayMs(): number {
+    const configured = this.env.TBA_AUTHORITATIVE_REFETCH_DELAY_MS;
+    const delay = configured === undefined ? 65_000 : Number(configured);
+    if (!Number.isSafeInteger(delay) || delay < 0) {
+      throw new Error("TBA_AUTHORITATIVE_REFETCH_DELAY_MS must be a non-negative integer");
+    }
+    return delay;
+  }
+
   private async scheduleImmediatePoll(
     transaction: DurableObjectTransactionLike,
     endpoint: string,
@@ -603,6 +637,7 @@ export class EventRuntime {
       generation: (previous?.generation ?? 0) + 1,
       attempts: 0,
       retryOnFailure: true,
+      authoritativeRefetchAt: now + this.authoritativeRefetchDelayMs(),
     });
   }
 
