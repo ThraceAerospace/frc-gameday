@@ -289,6 +289,59 @@ test("Statbotics one-shot refresh retries provider failures within a finite TBA-
 });
 
 
+
+test("Statbotics 304 responses retry without replacing the last good representation", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const lastGood = [{ key: "2026test_qm1", marker: "last-good" }];
+  storage.values.set("endpoint:" + endpoint, {
+    endpoint,
+    status: "available",
+    data: lastGood,
+    providerData: lastGood,
+    etag: '"statbotics-v1"',
+    lastFetchedAt: Date.now(),
+    expiresAt: null,
+    revision: 1,
+    validatorRevision: 1,
+    lastAttemptAt: Date.now(),
+    lastWebhookAt: null,
+  });
+  const calls = [];
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    STATBOTICS_REFRESH_DELAY_MS: 0,
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), headers: new Headers(init.headers) });
+      if (String(url).includes("api.statbotics.io")) {
+        return new Response(null, { status: 304, headers: { ETag: '"statbotics-v1"' } });
+      }
+      return Response.json([{ key: "2026test_qm1", event_key: eventKey, changed: true }], {
+        headers: { ETag: '"tba-v2"' },
+      });
+    },
+  }, eventKey);
+
+  await runtime.schedulePolls([TBA_ENDPOINTS.eventMatches(eventKey)], 60_000, Date.now() - 1);
+  await runtime.alarm();
+  const taskKey = "task:" + endpoint;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const task = storage.values.get(taskKey);
+    assert.ok(task);
+    task.dueAt = Date.now() - 1;
+    storage.values.set(taskKey, task);
+    await runtime.alarm();
+    assert.equal(calls.length, attempt + 1);
+    assert.equal(calls[attempt].headers.get("If-None-Match"), '"statbotics-v1"');
+    assert.equal(storage.values.has(taskKey), attempt < 4);
+  }
+  assert.deepEqual(storage.values.get("endpoint:" + endpoint).data, lastGood);
+});
+
 test("recurring schedules reject Statbotics endpoints even when called below the HTTP route", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
