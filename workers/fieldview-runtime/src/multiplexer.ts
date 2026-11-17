@@ -151,13 +151,10 @@ export class Multiplexer {
       const clientKey = CLIENT_PREFIX + clientId;
       const current = await tx.get<Subscription[]>(clientKey) ?? [];
       if (current.some((item) => sameSubscription(item, subscription))) {
-        return { added: false, first: false };
+        return { added: false, generation: 0 };
       }
       const topicKey = subscriptionKey(subscription);
       const clients = await tx.get<string[]>(topicKey) ?? [];
-      if (current.some((item) => sameSubscription(item, subscription))) {
-        return { added: false, generation: 0 };
-      }
       await tx.put(clientKey, [...current, subscription]);
       await tx.put(topicKey, [...clients, clientId]);
       const generationKey = REGISTRATION_PREFIX + subscriptionKey(subscription);
@@ -179,7 +176,7 @@ export class Multiplexer {
       const clientKey = CLIENT_PREFIX + clientId;
       const current = await tx.get<Subscription[]>(clientKey) ?? [];
       const next = current.filter((item) => !sameSubscription(item, subscription));
-      if (next.length === current.length) return { removed: false, last: false };
+      if (next.length === current.length) return { removed: false, desired: false, generation: 0 };
       if (next.length) await tx.put(clientKey, next);
       else await tx.delete(clientKey);
       const topicKey = subscriptionKey(subscription);
