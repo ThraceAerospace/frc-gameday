@@ -18,7 +18,7 @@ test("captures endpoint ETag and revision for a conditional poll", () => {
 
 test("304 retains data and ETag while refreshing freshness", () => {
   const initial = { ...createEndpointState("/event/2026test/matches"),
-    data: ["qm1"], etag: '"v1"', lastFetchedAt: 100, revision: 4, validatorRevision: 1 };
+    data: ["qm1"], providerData: ["qm1"], etag: '"v1"', lastFetchedAt: 100, revision: 4, validatorRevision: 1 };
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "not-modified", expiresAt: 500 }, 300, replace);
   assert.deepEqual(next.data, ["qm1"]);
@@ -33,12 +33,13 @@ test("200 without ETag clears the old validator", () => {
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "modified", data: ["new"], etag: null, expiresAt: null }, 300, replace);
   assert.deepEqual(next.data, ["new"]);
+  assert.deepEqual(next.providerData, ["new"]);
   assert.equal(next.etag, null);
 });
 
 test("failed poll preserves good data, validator, freshness, and revision", () => {
   const initial = { ...createEndpointState("/event/2026test/matches"),
-    data: ["good"], etag: '"v1"', lastFetchedAt: 100, expiresAt: 200,
+    data: ["good"], providerData: ["good"], etag: '"v1"', lastFetchedAt: 100, expiresAt: 200,
     revision: 3, validatorRevision: 1 };
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "failed" }, 300, replace);
@@ -71,7 +72,7 @@ test("poll reconciles against latest state after an intervening webhook", () => 
 
 test("webhook update preserves upstream validator and fetch timestamps", () => {
   const initial = { ...createEndpointState("/event/2026test/matches"),
-    data: ["qm1"], etag: '"v1"', lastFetchedAt: 100, lastAttemptAt: 110 };
+    data: ["qm1"], providerData: ["qm1"], etag: '"v1"', lastFetchedAt: 100, lastAttemptAt: 110 };
   const next = applyWebhookUpdate(initial, ["qm1", "qm2"], 250, replace);
   assert.deepEqual(next.data, ["qm1", "qm2"]);
   assert.deepEqual(next.providerData, ["qm1"]);
