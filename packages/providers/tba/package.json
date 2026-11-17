@@ -8,5 +8,8 @@
     "./generated": "./src/generated.ts",
     "./types": "./src/types.ts",
     "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
   }
 }

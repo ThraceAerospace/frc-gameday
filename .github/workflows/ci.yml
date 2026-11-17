@@ -39,7 +39,7 @@ jobs:
       - name: Typecheck workspaces
         run: npm run typecheck
 
-      - name: Run domain tests
+      - name: Run workspace tests
         run: npm test
 
       # The existing application has a documented legacy lint baseline.
