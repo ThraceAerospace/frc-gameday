@@ -9,6 +9,8 @@ import type { FieldViewSourceMetadata } from "./source-metadata.js";
  */
 export interface FieldViewPlayoffAlliance extends TBAEliminationAlliance {
   event_key: EventKey;
+  /** One-based alliance number referenced by TBA Team Event Status alliance.number. */
+  alliance_number: number;
   /** Provenance for the event playoff-alliance and advancement resources. */
   sources: FieldViewSourceMetadata;
 }

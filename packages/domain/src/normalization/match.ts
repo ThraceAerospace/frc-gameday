@@ -7,6 +7,7 @@ import type {
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { FieldViewMatch, FieldViewMatchTeam } from "../match.js";
 import type { FieldViewPlayoffAlliance } from "../playoff-alliance.js";
+import type { FieldViewEventTeam } from "../event.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import type { TeamKey } from "../ids.js";
 
@@ -19,7 +20,9 @@ export interface NormalizeFieldViewMatchInput {
   statbotics_match?: StatboticsMatch;
   tba_event_prediction?: TBAEventMatchPrediction;
   tba_event_oprs?: TBAEventOPRs;
-  /** Event's unchanged TBA elimination alliances; omitted until acquired. */
+  /** Canonical event-team records containing unchanged TBA status objects. */
+  event_teams?: readonly FieldViewEventTeam[] | null;
+  /** Event's TBA elimination alliances, numbered by their one-based response order. */
   tba_playoff_alliances?: readonly FieldViewPlayoffAlliance[] | null;
   sources: FieldViewSourceMetadata;
 }
@@ -51,29 +54,26 @@ function normalizeAllianceTeams(
 }
 
 /**
- * TBA playoff alliances contain the four roster members: three picks and,
- * when used, both the incoming and outgoing backup teams. A match has three
- * teams on the field; at most one roster member can differ from the picks.
- * Two distinct match team keys therefore identify an alliance. Return an
- * association only when exactly one alliance meets that threshold.
+ * TBA Team Event Status exposes alliance.number for each team. Correlate the
+ * match team keys through those unchanged status records, then resolve that
+ * number to the event's normalized elimination-alliance object. Two distinct
+ * match teams reporting the same alliance number are sufficient, including
+ * when either is an incoming or outgoing backup team.
  */
 export function associateMatchPlayoffAlliance(
   matchTeamKeys: readonly TeamKey[],
+  eventTeams: readonly FieldViewEventTeam[],
   playoffAlliances: readonly FieldViewPlayoffAlliance[],
 ): FieldViewPlayoffAlliance | null {
-  const matchTeams = new Set(matchTeamKeys);
-  const matches = playoffAlliances.filter((alliance) => {
-    const roster = new Set(alliance.picks);
-    if (alliance.backup) {
-      roster.add(alliance.backup.in);
-      roster.add(alliance.backup.out);
-    }
-    let overlap = 0;
-    for (const teamKey of matchTeams) {
-      if (roster.has(teamKey)) overlap += 1;
-    }
-    return overlap >= 2;
-  });
+  const statusByTeam = new Map(eventTeams.map((team) => [team.team_key, team.tba_status]));
+  const countsByAlliance = new Map<number, number>();
+  for (const teamKey of new Set(matchTeamKeys)) {
+    const number = statusByTeam.get(teamKey)?.alliance?.number;
+    if (number !== undefined) countsByAlliance.set(number, (countsByAlliance.get(number) ?? 0) + 1);
+  }
+  const candidates = [...countsByAlliance].filter(([, count]) => count >= 2).map(([number]) => number);
+  if (candidates.length !== 1) return null;
+  const matches = playoffAlliances.filter((alliance) => alliance.alliance_number === candidates[0]);
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -85,19 +85,17 @@ export function associateMatchPlayoffAlliance(
 export function normalizeFieldViewMatch(
   input: NormalizeFieldViewMatchInput,
 ): FieldViewMatch {
-  const { tba_match, statbotics_match, tba_playoff_alliances } = input;
+  const { tba_match, statbotics_match, event_teams, tba_playoff_alliances } = input;
   const playoff_alliances = tba_match.comp_level === "qm"
     ? null
-    : tba_playoff_alliances === undefined
+    : event_teams === undefined || tba_playoff_alliances === undefined
       ? undefined
-      : {
-          red: tba_playoff_alliances === null
-            ? null
-            : associateMatchPlayoffAlliance(tba_match.alliances.red.team_keys, tba_playoff_alliances),
-          blue: tba_playoff_alliances === null
-            ? null
-            : associateMatchPlayoffAlliance(tba_match.alliances.blue.team_keys, tba_playoff_alliances),
-        };
+      : event_teams === null || tba_playoff_alliances === null
+        ? { red: null, blue: null }
+        : {
+            red: associateMatchPlayoffAlliance(tba_match.alliances.red.team_keys, event_teams, tba_playoff_alliances),
+            blue: associateMatchPlayoffAlliance(tba_match.alliances.blue.team_keys, event_teams, tba_playoff_alliances),
+          };
 
   return {
     ...tba_match,
