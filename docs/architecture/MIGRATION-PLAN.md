@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory completed; M2 repository foundation in progress; M3 domain foundation started
+**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain and contract foundation in progress
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Incremental migration
 **Last updated:** 2026-11-16
@@ -158,11 +158,11 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - CI validates the workspace.
 - No provider or backend runtime dependency leaks into the web package through convenience imports.
 
-**Status:** In progress. Architecture guidance, ADRs, README, and source inventory are in place. The Next.js app is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. A clean `npm ci` and workspace production build have been validated locally. Lint still reports the pre-existing legacy baseline (62 errors, 35 warnings); this is recorded technical debt, not a workspace blocker. CI and the initial test harness remain outstanding.
+**Status:** Complete. Architecture guidance, ADRs, README, and source inventory are in place. The Next.js app is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. A clean `npm ci` and workspace production build have been validated locally. The initial domain test harness is in place. GitHub Actions validates Next.js type generation, workspace typechecking, domain tests, and reports lint as non-blocking because of the pre-existing legacy baseline (62 errors, 35 warnings). By explicit project decision, CI does not run a production build or prerender pages; production builds remain the hosting platform's responsibility. This CI workflow is validation, not a deployable build artifact.
 
 ### M3 — Domain and contract foundation
 
-**Status:** In progress. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference fixture. Initial types now exist for team, season, event, event-team, match, playoff-alliance, provenance, and analytics concepts. `FieldViewMatch` retains the exact TBA match type and adds explicitly typed Statbotics associations, independent predictions, analysis, playoff associations, and evidence-bearing flags. Remaining M3 work includes validating the types, adding the Archimedes fixture, defining versioned client DTOs, and validating the contract.
+**Status:** In progress. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference case. Initial types now exist for team, season, event, event-team, match, playoff-alliance, provenance, and analytics concepts. `FieldViewMatch` retains the exact TBA match type and adds explicitly typed Statbotics associations, independent predictions, analysis, playoff associations, and evidence-bearing flags. Remaining M3 work: validate the model against a real Archimedes SF13 provider fixture; define versioned, serializable, provider-independent client DTOs; specify the mapping from domain objects to those DTOs without silently changing source values; and add contract validation/tests.
 
 **Work**
 - Define canonical models including FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, and analytics result types.
