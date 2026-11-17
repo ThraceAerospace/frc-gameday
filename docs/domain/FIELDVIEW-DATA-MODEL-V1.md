@@ -76,7 +76,7 @@ The generated TBA OpenAPI currently models the event-predictions response too lo
 
 ### 3.4 Team associations
 
-The model associates each match alliance's teams with their additional statistics while retaining the original TBA `alliances` field unchanged.
+The model associates each match alliance's teams with their additional statistics while retaining the original TBA `alliances` field unchanged. Each aggregate carries resource-specific `sources` metadata; a missing metadata key means no acquisition state has been recorded, not that the resource is unavailable.
 
 Each `FieldViewMatchTeam` association includes:
 
@@ -172,6 +172,8 @@ Source metadata is internal and records, at minimum:
 - retrieval time of the retained payload version;
 - source freshness or staleness where known;
 - source version/ETag or equivalent validator when available.
+
+The `sources` metadata is attached to each aggregate that depends on acquired provider resources: `FieldViewTeam` tracks `tba_team`; `FieldViewEvent` tracks `tba_event`; `FieldViewTeamSeason` tracks `tba_team` and `statbotics_team_year`; `FieldViewEventTeam` tracks `tba_team_event_status` and `tba_event_oprs`; `FieldViewMatch` tracks match, prediction, OPR, team-correlation, and Statbotics resources; and `FieldViewPlayoffAlliance` tracks playoff-alliance and advancement resources. `FieldViewSourceMetadata` includes `tba_team`, `tba_teams`, and `tba_event` in addition to the resource keys listed above.
 
 The `FieldViewSourceStatus` meanings are precise:
 

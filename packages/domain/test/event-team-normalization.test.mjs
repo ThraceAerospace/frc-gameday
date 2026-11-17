@@ -9,6 +9,7 @@ test("event-team normalization associates event OPR values by unchanged TBA team
     event_key: "2026arc",
     team_key: "frc7407",
     tba_event_oprs: archimedes2026EventOprs,
+    sources: { tba_team_event_status: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" }, tba_event_oprs: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" } },
   };
 
   const result = normalizeFieldViewEventTeam(input);
@@ -19,6 +20,7 @@ test("event-team normalization associates event OPR values by unchanged TBA team
     opr: archimedes2026EventOprs.oprs.frc7407,
     dpr: archimedes2026EventOprs.dprs.frc7407,
     ccwm: archimedes2026EventOprs.ccwms.frc7407,
+    sources: { tba_team_event_status: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" }, tba_event_oprs: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" } },
   });
   assert.strictEqual(result.opr, archimedes2026EventOprs.oprs.frc7407);
   assert.strictEqual(input.tba_event_oprs, archimedes2026EventOprs);
@@ -29,7 +31,8 @@ test("event-team normalization preserves explicit null status and omits absent v
     event_key: "2026arc",
     team_key: "frc7407",
     tba_status: null,
-  });
+    sources: {},
+
 
   assert.deepEqual(result, {
     event_key: "2026arc",
@@ -45,6 +48,7 @@ test("event-team normalization leaves an absent status absent", () => {
   const result = normalizeFieldViewEventTeam({
     event_key: "2026arc",
     team_key: "frc7407",
+    sources: {},
   });
 
   assert.equal("tba_status" in result, false);
@@ -65,4 +69,5 @@ test("event-team domain object survives JSON transport round-trip", () => {
   assert.equal(received.opr, archimedes2026EventOprs.oprs.frc7407);
   assert.equal(received.dpr, archimedes2026EventOprs.dprs.frc7407);
   assert.equal(received.ccwm, archimedes2026EventOprs.ccwms.frc7407);
+  assert.equal(received.sources.tba_event_oprs.status, "available");
 });

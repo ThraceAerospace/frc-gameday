@@ -28,6 +28,10 @@ const sources = {
     status: "available",
     retrieved_at: "2026-05-02T00:00:00.000Z",
   },
+  tba_teams: {
+    status: "available",
+    retrieved_at: "2026-05-02T00:00:00.000Z",
+  },
 };
 
 test("normalization retains the complete TBA match payload unchanged", () => {

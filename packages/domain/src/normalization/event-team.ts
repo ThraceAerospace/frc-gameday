@@ -1,6 +1,7 @@
 import type { TBAEventOPRs, TBATeamEventStatus } from "@fieldview/provider-tba/types";
 import type { FieldViewEventTeam } from "../event.js";
 import type { EventKey, TeamKey } from "../ids.js";
+import type { FieldViewSourceMetadata } from "../source-metadata.js";
 
 /** Independent source resources used to construct one event-team association. */
 export interface NormalizeFieldViewEventTeamInput {
@@ -10,6 +11,8 @@ export interface NormalizeFieldViewEventTeamInput {
   tba_status?: TBATeamEventStatus | null;
   /** Event-scoped resource; values are associated by the unchanged TBA team key. */
   tba_event_oprs?: TBAEventOPRs;
+  /** Resource-level provenance; absent entries mean no state has been recorded. */
+  sources: FieldViewSourceMetadata;
 }
 
 /**
@@ -22,7 +25,7 @@ export interface NormalizeFieldViewEventTeamInput {
 export function normalizeFieldViewEventTeam(
   input: NormalizeFieldViewEventTeamInput,
 ): FieldViewEventTeam {
-  const { event_key, team_key, tba_status, tba_event_oprs } = input;
+  const { event_key, team_key, tba_status, tba_event_oprs, sources } = input;
   const opr = tba_event_oprs?.oprs?.[team_key];
   const dpr = tba_event_oprs?.dprs?.[team_key];
   const ccwm = tba_event_oprs?.ccwms?.[team_key];
@@ -30,6 +33,7 @@ export function normalizeFieldViewEventTeam(
   return {
     event_key,
     team_key,
+    sources,
     ...(tba_status === undefined ? {} : { tba_status }),
     ...(opr === undefined ? {} : { opr }),
     ...(dpr === undefined ? {} : { dpr }),
