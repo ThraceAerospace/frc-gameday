@@ -38,14 +38,21 @@ function handleWorkerMessage(event: MessageEvent) {
     lastPongAt = Date.now();
     return;
   }
-  if (message.type !== "snapshot" || !message.eventKey || !message.snapshot) {
+  if (message.type === "canonical-snapshot" && message.eventKey && message.snapshot &&
+      typeof message.version === "number") {
+    const previous = canonicalSnapshots.get(message.eventKey);
+    if (!previous || message.version >= previous.version) {
+      canonicalSnapshots.set(message.eventKey, {
+        version: message.version,
+        snapshot: message.snapshot as FieldViewEventSnapshot,
+      });
+      for (const listener of canonicalListeners.get(message.eventKey) ?? []) listener();
+    }
     return;
   }
-
-  snapshots.set(message.eventKey, message.snapshot);
-  for (const listener of listeners.get(message.eventKey) ?? []) {
-    listener();
-  }
+  if (message.type !== "snapshot" || !message.eventKey || !message.snapshot) return;
+  snapshots.set(message.eventKey, message.snapshot as EventStateSnapshot);
+  for (const listener of listeners.get(message.eventKey) ?? []) listener();
 }
 
 function connect() {

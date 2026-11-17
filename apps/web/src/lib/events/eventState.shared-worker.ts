@@ -84,10 +84,12 @@ function subscribe(port: MessagePort, eventKey: string) {
   const listener = (snapshot: EventStateSnapshot) => postSnapshot(port, eventKey, snapshot);
   const unsubscribe = record.state.subscribe(listener);
   record.clients.set(port, unsubscribe);
-  const unsubscribeCanonical = workerEventWebSocket.subscribeCanonicalSnapshot(
-    eventKey, (value) => postCanonicalSnapshot(port, eventKey, value),
-  );
-  record.canonicalClients.set(port, unsubscribeCanonical);
+  if (!record.canonicalClients.has(port)) {
+    const unsubscribeCanonical = workerEventWebSocket.subscribeCanonicalSnapshot(
+      eventKey, (value) => postCanonicalSnapshot(port, eventKey, value),
+    );
+    record.canonicalClients.set(port, unsubscribeCanonical);
+  }
   subscribed.add(eventKey);
   postSnapshot(port, eventKey, record.state.getSnapshot());
   const canonical = workerEventWebSocket.getCanonicalSnapshot(eventKey);
@@ -105,15 +107,11 @@ function unsubscribe(port: MessagePort, eventKey: string) {
     unsubscribeClient();
   }
   const unsubscribeCanonical = record?.canonicalClients.get(port);
-  if (record && unsubscribeCanonical) {
+  if (record && unsubscribeCanonical && !portCanonicalSubscriptions.get(port)?.has(eventKey)) {
     record.canonicalClients.delete(port);
     unsubscribeCanonical();
   }
-  if (record && record.clients.size === 0 && record.canonicalClients.size === 0) {
-    events.delete(eventKey);
-  }
-  }
-
+  if (record && record.clients.size === 0 && record.canonicalClients.size === 0) events.delete(eventKey);
   if (subscribed.size === 0) portSubscriptions.delete(port);
 }
 
@@ -130,10 +128,12 @@ function subscribeCanonical(port: MessagePort, eventKey: string) {
     record = { clients: new Map(), canonicalClients: new Map() };
     events.set(eventKey, record);
   }
-  const unsubscribe = workerEventWebSocket.subscribeCanonicalSnapshot(
-    eventKey, (value) => postCanonicalSnapshot(port, eventKey, value),
-  );
-  record.canonicalClients.set(port, unsubscribe);
+  if (!record.canonicalClients.has(port)) {
+    const unsubscribe = workerEventWebSocket.subscribeCanonicalSnapshot(
+      eventKey, (value) => postCanonicalSnapshot(port, eventKey, value),
+    );
+    record.canonicalClients.set(port, unsubscribe);
+  }
   subscribed.add(eventKey);
   const canonical = workerEventWebSocket.getCanonicalSnapshot(eventKey);
   if (canonical) postCanonicalSnapshot(port, eventKey, canonical);
@@ -144,11 +144,11 @@ function unsubscribeCanonical(port: MessagePort, eventKey: string) {
   if (!subscribed?.delete(eventKey)) return;
   const record = events.get(eventKey);
   const unsubscribe = record?.canonicalClients.get(port);
-  if (record && unsubscribe) {
+  if (record && unsubscribe && !portSubscriptions.get(port)?.has(eventKey)) {
     record.canonicalClients.delete(port);
     unsubscribe();
-    if (record.clients.size === 0 && record.canonicalClients.size === 0) events.delete(eventKey);
   }
+  if (record && record.clients.size === 0 && record.canonicalClients.size === 0) events.delete(eventKey);
   if (subscribed.size === 0) portCanonicalSubscriptions.delete(port);
 }
 
