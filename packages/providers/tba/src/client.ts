@@ -23,7 +23,7 @@ export class TBAApiClient {
 
   constructor(options: TBAApiClientOptions) {
     this.apiKey = options.apiKey;
-    this.baseUrl = (options.baseUrl ?? "https://www.thebluealliance.com/api/v3").replace(/\\/+$/, "");
+    this.baseUrl = (options.baseUrl ?? "https://www.thebluealliance.com/api/v3").replace(/\/+$/, "");
     // Cloudflare's global fetch requires the global object as its receiver.
     // Preserve that receiver when storing the function for later invocation.
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
