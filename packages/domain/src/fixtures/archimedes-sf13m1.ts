@@ -2,6 +2,7 @@ import type {
   TBAEventMatchPrediction,
   TBAEventOPRs,
   TBAMatch,
+  TBATeam,
 } from "@fieldview/provider-tba/types";
 import type {
   StatboticsMatch,
@@ -302,15 +303,15 @@ export const archimedesSf13m1StatboticsMatch = {
   },
 } satisfies StatboticsMatch;
 
-/** The original identifiers are deliberately not coerced into one format. */
-export const archimedesSf13m1TeamAssociations = [
-  { tba_team_key: "frc7407", statbotics_team_id: 7407 },
-  { tba_team_key: "frc5940", statbotics_team_id: 5940 },
-  { tba_team_key: "frc9470", statbotics_team_id: 9470 },
-  { tba_team_key: "frc6459", statbotics_team_id: 6459 },
-  { tba_team_key: "frc3045", statbotics_team_id: 3045 },
-  { tba_team_key: "frc10021", statbotics_team_id: 10021 },
-] as const;
+/** TBA's own team_number is the cross-provider correlation value. */
+export const archimedesSf13m1TbaTeams = [
+  { key: "frc7407", team_number: 7407 },
+  { key: "frc5940", team_number: 5940 },
+  { key: "frc9470", team_number: 9470 },
+  { key: "frc6459", team_number: 6459 },
+  { key: "frc3045", team_number: 3045 },
+  { key: "frc10021", team_number: 10021 },
+] satisfies Pick<TBATeam, "key" | "team_number">[];
 
 /** Small index object keeps all source resources visibly independent. */
 export const archimedesSf13m1SourceFixture = {
@@ -321,5 +322,5 @@ export const archimedesSf13m1SourceFixture = {
     prediction: archimedesSf13m1TbaPrediction,
   },
   tba_event_oprs: archimedes2026EventOprs,
-  team_associations: archimedesSf13m1TeamAssociations,
+  tba_teams: archimedesSf13m1TbaTeams,
 } as const;
