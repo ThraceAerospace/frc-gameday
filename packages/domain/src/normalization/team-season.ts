@@ -1,33 +1,33 @@
+import type { TBATeam } from "@fieldview/provider-tba/types";
 import type { StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
 import type { FieldViewTeamSeason } from "../team.js";
-import type { StatboticsTeamId, TeamKey } from "../ids.js";
+import type { TeamKey } from "../ids.js";
 
-/** Inputs are independently acquired; identity correlation is caller-supplied. */
 export interface NormalizeFieldViewTeamSeasonInput {
   team_key: TeamKey;
+  team_number: TBATeam["team_number"];
   year: number;
-  /** Explicit cross-provider association; never inferred from team_key. */
-  statbotics_team_id?: StatboticsTeamId;
-  /** Unchanged Statbotics team-year source record. */
+  /** Unchanged Statbotics record selected by matching its team value. */
   statbotics_team_year?: StatboticsTeamYear;
 }
 
-/**
- * Compose one team's season-scoped domain object.
- *
- * The Statbotics record is retained unchanged. Its association with the TBA
- * team key is represented only when the caller supplies the explicit numeric
- * Statbotics identity; no identifier parsing or source-field rewriting occurs.
- */
+/** Correlate the unchanged Statbotics record using TBA's official team_number. */
 export function normalizeFieldViewTeamSeason(
   input: NormalizeFieldViewTeamSeasonInput,
 ): FieldViewTeamSeason {
+  if (
+    input.statbotics_team_year !== undefined &&
+    input.statbotics_team_year.team !== input.team_number
+  ) {
+    throw new Error(
+      `Statbotics team ${String(input.statbotics_team_year.team)} does not match TBA team number ${input.team_number}`,
+    );
+  }
+
   return {
     team_key: input.team_key,
+    team_number: input.team_number,
     year: input.year,
-    ...(input.statbotics_team_id === undefined
-      ? {}
-      : { statbotics_team_id: input.statbotics_team_id }),
     ...(input.statbotics_team_year === undefined
       ? {}
       : { statbotics: input.statbotics_team_year }),
