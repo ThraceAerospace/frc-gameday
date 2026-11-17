@@ -8,12 +8,12 @@ import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import type { TBAEvent } from "@/lib/tba/types";
 import { getEventCompetitionStatus, parseLocalDate } from "@/lib/time";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
   const weekStart = new Date(now);
   weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
@@ -23,38 +23,34 @@ function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 }
 
-const getHomepageSnapshot = unstable_cache(
-  async () => {
-    const allEvents = await TBA.getEvents(new Date().getFullYear());
-    const weekEvents = getCalendarWeekEvents(allEvents);
-
-    // Read the canonical full event match cache. TBAClient handles Redis freshness,
-    // ETags, webhook mutations, and upstream reconciliation for each schedule.
-    const eventSummaries = await Promise.all(
-      weekEvents.map(async (event) => {
-        try {
-          const matches = sortMatches(await TBA.getEventMatches(event.key));
-          return {
-            event,
-            lastMatch: getLastMatch(matches),
-            nextMatch: getNextMatch(matches),
-          };
-        } catch (error) {
-          console.error(`Failed to load homepage match summary for ${event.key}:`, error);
-          return { event, lastMatch: null, nextMatch: null };
-        }
-      }),
-    );
-
-    return { eventSummaries };
-  },
-  ["homepage-event-snapshot"],
+const getCachedEvents = unstable_cache(
+  async (year: number) => TBA.getEvents(year),
+  ["homepage-events"],
   { revalidate: 3600, tags: ["homepage-events"] },
 );
 
 export default async function HomePage() {
-  const { eventSummaries } = await getHomepageSnapshot();
   const now = new Date();
+  const allEvents = await getCachedEvents(now.getFullYear());
+  const weekEvents = getCalendarWeekEvents(allEvents, now);
+
+  // Recompute match summaries for every homepage request. TBAClient still owns
+  // Redis freshness, ETags, webhook mutations, and upstream reconciliation.
+  const eventSummaries = await Promise.all(
+    weekEvents.map(async (event) => {
+      try {
+        const matches = sortMatches(await TBA.getEventMatches(event.key));
+        return {
+          event,
+          lastMatch: getLastMatch(matches),
+          nextMatch: getNextMatch(matches),
+        };
+      } catch (error) {
+        console.error(`Failed to load homepage match summary for ${event.key}:`, error);
+        return { event, lastMatch: null, nextMatch: null };
+      }
+    }),
+  );
   const statusOrder = { inProgress: 0, upcoming: 1, completed: 2 } as const;
   const sortedEventSummaries = [...eventSummaries].sort((a, b) =>
     statusOrder[getEventCompetitionStatus(
