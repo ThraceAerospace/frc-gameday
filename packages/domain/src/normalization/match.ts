@@ -54,26 +54,27 @@ function normalizeAllianceTeams(
 }
 
 /**
- * TBA Team Event Status exposes alliance.number for each team. Correlate the
- * match team keys through those unchanged status records, then resolve that
- * number to the event's normalized elimination-alliance object. Two distinct
- * match teams reporting the same alliance number are sufficient, including
- * when either is an incoming or outgoing backup team.
+ * TBA Team Event Status exposes alliance.name for each team, and the
+ * elimination-alliance resource exposes the corresponding name. Correlate
+ * match team keys through their unchanged status records and resolve only an
+ * exact name match. Two distinct match teams reporting the same non-null name
+ * are sufficient, including either side of a backup substitution. Names that
+ * are absent, null, or non-unique remain unresolved; response order is never
+ * treated as an identity.
  */
 export function associateMatchPlayoffAlliance(
   matchTeamKeys: readonly TeamKey[],
   eventTeams: readonly FieldViewEventTeam[],
   playoffAlliances: readonly FieldViewPlayoffAlliance[],
 ): FieldViewPlayoffAlliance | null {
-  const countsByAlliance = new Map<number, number>();
+  const countsByName = new Map<string, number>();
   for (const teamKey of new Set(matchTeamKeys)) {
-    const status = eventTeams.find((team) => team.team_key === teamKey)?.tba_status;
-    const number = status?.alliance?.number;
-    if (number !== undefined) countsByAlliance.set(number, (countsByAlliance.get(number) ?? 0) + 1);
+    const name = eventTeams.find((team) => team.team_key === teamKey)?.tba_status?.alliance?.name;
+    if (name !== undefined && name !== null) countsByName.set(name, (countsByName.get(name) ?? 0) + 1);
   }
-  const candidates = [...countsByAlliance].filter(([, count]) => count >= 2).map(([number]) => number);
+  const candidates = [...countsByName].filter(([, count]) => count >= 2).map(([name]) => name);
   if (candidates.length !== 1) return null;
-  const matches = playoffAlliances.filter((alliance) => alliance.alliance_number === candidates[0]);
+  const matches = playoffAlliances.filter((alliance) => alliance.name === candidates[0]);
   return matches.length === 1 ? matches[0] : null;
 }
 
