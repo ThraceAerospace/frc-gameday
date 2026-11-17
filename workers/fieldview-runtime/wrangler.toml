@@ -1,0 +1,12 @@
+name = "fieldview-runtime"
+main = "src/index.ts"
+compatibility_date = "2026-11-17"
+workers_dev = false
+
+[[durable_objects.bindings]]
+name = "EVENT_RUNTIME"
+class_name = "EventRuntime"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EventRuntime"]
