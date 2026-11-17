@@ -529,6 +529,18 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
   assert.equal(completed.status, 200);
   assert.equal(await storage.get("lifecycle:completed-until"), completedUntil);
 
+  // Make recurring polls later than the retention deadline. The Durable Object
+  // alarm must still target the earlier lifecycle deadline.
+  for (const endpoint of eventResourceEndpoints(eventKey)) {
+    const key = "task:" + endpoint;
+    const task = storage.values.get(key);
+    task.dueAt = completedUntil + 60_000;
+    storage.values.set(key, task);
+  }
+  await runtime.schedulePolls([], 30 * 60_000);
+  assert.equal(storage.alarmAt, completedUntil);
+
+  // Simulate the alarm firing at the deadline without sleeping in the test.
   await storage.put("lifecycle:completed-until", Date.now() - 1);
   await runtime.alarm();
   for (const endpoint of eventResourceEndpoints(eventKey)) {
