@@ -98,3 +98,49 @@ test("internal administrative routes still require the service bearer token", as
   );
   assert.equal(allowed.status, 200);
 });
+
+
+test("shared public stream route forwards to the single multiplexer without credentials", async () => {
+  const calls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "server-only-token",
+    EVENT_RUNTIME: {
+      idFromName(name) { return name; },
+      get() { throw new Error("event runtime must not receive the shared stream"); },
+    },
+    MULTIPLEXER: {
+      idFromName(name) { calls.push({ operation: "id", name }); return name; },
+      get(id) {
+        return {
+          async fetch(request) {
+            calls.push({
+              operation: "fetch",
+              id,
+              path: new URL(request.url).pathname,
+              method: request.method,
+              upgrade: request.headers.get("Upgrade"),
+              authorization: request.headers.get("Authorization"),
+            });
+            return new Response(null, { status: 200 });
+          },
+        };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://runtime.example/stream", { headers: { Upgrade: "websocket" } }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [
+    { operation: "id", name: "shared" },
+    {
+      operation: "fetch",
+      id: "shared",
+      path: "/stream",
+      method: "GET",
+      upgrade: "websocket",
+      authorization: null,
+    },
+  ]);
+});
