@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EventRuntime, eventResourceEndpoints } from "../src/event-runtime.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 
 class MemoryStorage {
   values = new Map();
@@ -127,6 +128,8 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   save(endpoints[6], {
     "2026test_qm1": { winning_alliance: "red", red: { score: 100 }, blue: { score: 90 } },
   });
+  const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  save(statboticsEndpoint, [{ key: "2026test_qm1", pred: { red_score: 105, blue_score: 95, red_win_prob: 0.6 }, pre_epas: { "3461": { epa: 100 } }, epas: { "3461": { epa: 110 } } }]);
 
   const env = {
     TBA_API_KEY: "test-api-key",
@@ -152,6 +155,10 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(snapshot.matches[0].key, "2026test_qm1");
   assert.equal(snapshot.matches[0].teams.red[0].team_number, 3461);
   assert.equal(snapshot.matches[0].predictions.tba.winning_alliance, "red");
+  assert.equal(snapshot.matches[0].predictions.statbotics.red_score, 105);
+  assert.equal(snapshot.matches[0].teams.red[0].pre_epa.epa, 100);
+  assert.equal(snapshot.matches[0].teams.red[0].epa.epa, 110);
+  assert.equal(snapshot.matches[0].sources.statbotics_match.status, "available");
   assert.equal(snapshot.matches[0].playoff_alliances, null);
   assert.deepEqual(snapshot.playoff_alliances, []);
   assert.equal(snapshot.sources.matches.tba_match.status, "available");

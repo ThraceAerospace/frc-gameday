@@ -1,5 +1,7 @@
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { StatboticsApiClient } from "../../../packages/providers/statbotics/src/client.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import {
   applyPollResponse,
   applyWebhookUpdate,
@@ -15,6 +17,7 @@ import type {
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventPredictions, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../packages/providers/tba/src/types.ts";
+import type { StatboticsMatch } from "../../../packages/providers/statbotics/src/types.ts";
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewEventSnapshot } from "../../../packages/domain/src/normalization/event-snapshot.ts";
@@ -95,6 +98,7 @@ export function eventResourceEndpoints(eventKey: string): string[] {
     TBA_ENDPOINTS.eventMedia(eventKey),
     TBA_ENDPOINTS.eventDistrictPoints(eventKey),
     TBA_ENDPOINTS.eventAdvancementPoints(eventKey),
+    STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0),
   ];
 }
 
@@ -105,6 +109,7 @@ export function eventResourceEndpoints(eventKey: string): string[] {
 export class EventRuntime {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
+  private readonly statboticsApi: StatboticsApiClient;
   private readonly env: RuntimeEnvironment;
   private eventKey: string;
   private allowedEndpoints: Set<string>;
@@ -114,6 +119,9 @@ export class EventRuntime {
     this.env = env;
     this.api = new TBAApiClient({
       apiKey: env.TBA_API_KEY,
+      ...(env.fetcher ? { fetch: env.fetcher } : {}),
+    });
+    this.statboticsApi = new StatboticsApiClient({
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
     this.eventKey = eventKey ?? "";
@@ -211,9 +219,10 @@ export class EventRuntime {
     const alliancesEndpoint = endpoints[4];
     const oprsEndpoint = endpoints[5];
     const predictionsEndpoint = endpoints[6];
+    const statboticsMatchesEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const [
       eventState, teamsState, statusesState, matchesState,
-      alliancesState, oprsState, predictionsState,
+      alliancesState, oprsState, predictionsState, statboticsMatchesState,
     ] = await Promise.all([
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
@@ -222,6 +231,7 @@ export class EventRuntime {
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(alliancesEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(predictionsEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(statboticsMatchesEndpoint)),
     ]);
     const now = Date.now();
     const eventSource = toSourceMetadata(eventState, now);
@@ -231,6 +241,7 @@ export class EventRuntime {
     const alliancesSource = toSourceMetadata(alliancesState, now);
     const oprsSource = toSourceMetadata(oprsState, now);
     const predictionsSource = toSourceMetadata(predictionsState, now);
+    const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
 
     return normalizeFieldViewEventSnapshot({
       event_key: this.eventKey as EventKey,
@@ -247,6 +258,9 @@ export class EventRuntime {
       ...(hasAcquiredValue(predictionsState)
         ? { tba_event_predictions: predictionsState!.data as TBAEventPredictions | null }
         : {}),
+      ...(hasAcquiredValue(statboticsMatchesState)
+        ? { statbotics_matches: statboticsMatchesState!.data as StatboticsMatch[] | null }
+        : {}),
       sources: {
         event: eventSource ? { tba_event: eventSource } : {},
         teams: teamsSource ? { tba_teams: teamsSource } : {},
@@ -260,6 +274,7 @@ export class EventRuntime {
           ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
           ...(statusSource ? { tba_team_event_status: statusSource } : {}),
           ...(alliancesSource ? { tba_playoff_alliances: alliancesSource } : {}),
+          ...(statboticsMatchesSource ? { statbotics_match: statboticsMatchesSource } : {}),
         },
         playoff_alliances: alliancesSource
           ? { tba_playoff_alliances: alliancesSource }
@@ -353,7 +368,10 @@ export class EventRuntime {
       | { status: "failed" };
 
     try {
-      const response = await this.api.request(endpoint, { headers });
+      const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const response = isStatboticsEndpoint
+        ? await this.statboticsApi.request(endpoint, { headers })
+        : await this.api.request(endpoint, { headers });
       const maxAge = cacheMaxAgeSeconds(response.headers.get("Cache-Control"));
       const expiresAt = maxAge === null ? null : Date.now() + maxAge * 1000;
 
@@ -385,7 +403,9 @@ export class EventRuntime {
         requestSnapshot,
         responseState,
         now,
-        (current, fetched) => reconcilePolledEndpoint(endpoint, current, fetched),
+        (current, fetched) => endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)
+          ? fetched
+          : reconcilePolledEndpoint(endpoint, current, fetched),
       );
       await transaction.put(key, next);
 

@@ -7,6 +7,7 @@ The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It
 Configure these as Cloudflare Worker secrets; never commit their values:
 
 - `TBA_API_KEY` — TBA v3 read API key used by EventRuntime polling.
+- Statbotics currently requires no API credential; EventRuntime uses the provider-owned v3 transport.
 - `TBA_WEBHOOK_SECRET` — the secret configured for the TBA webhook; used to verify `X-TBA-HMAC`.
 - `RUNTIME_ADMIN_TOKEN` — high-entropy internal bearer token for administrative scheduling/state routes and Worker-to-DO calls.
 
@@ -16,9 +17,9 @@ For local development, use Wrangler's local secret workflow. For a future remote
 
 - `GET /health` — liveness response.
 - `POST /webhooks/tba` — public TBA webhook ingress. Verifies HMAC-SHA256 over the exact raw request body before parsing JSON. Payloads are capped at 1 MB. TBA ping and verification notifications receive a 200 response; event notifications are routed to the EventRuntime named by the unchanged TBA event key.
-- `POST /internal/events/:eventKey/schedule` — authenticated administrative scheduling. Body: `{ "endpoints": ["/event/..."], "intervalMs": 60000 }`. Endpoints must be in the EventRuntime's event-scoped TBA endpoint allowlist.
+- `POST /internal/events/:eventKey/schedule` — authenticated administrative scheduling. Body: `{ "endpoints": ["/event/..."], "intervalMs": 60000 }`. Endpoints must be in the EventRuntime's event-scoped TBA or Statbotics endpoint allowlist.
 - `GET /internal/events/:eventKey/state` — authenticated inspection of current endpoint state.
-- `GET /internal/events/:eventKey/snapshot` — authenticated canonical `FieldViewEventSnapshot` composed from acquired event, team, team-status, match, event-prediction, OPR, and playoff-alliance resources.
+- `GET /internal/events/:eventKey/snapshot` — authenticated canonical `FieldViewEventSnapshot` composed from acquired event, team, team-status, match, event-prediction, OPR, playoff-alliance, and Statbotics match resources.
 
 ## Ownership and data handling
 
@@ -35,4 +36,4 @@ From the repository root:
 - `npm test` runs domain, TBA provider, endpoint-state, reconciliation, source-version, and webhook-signature tests.
 - `npm run typecheck` also typechecks the Worker entrypoint and EventRuntime adapter.
 
-The canonical snapshot includes TBA matches and playoff alliance associations. Statbotics enrichment and analytics are not included. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.
+The canonical snapshot includes TBA matches and playoff alliance associations, plus the unchanged Statbotics event-match collection associated by exact match key. Statbotics match data retains independent prediction and EPA fields with its own source metadata. No analytics calculations or interpretations are performed by this ingestion path. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.

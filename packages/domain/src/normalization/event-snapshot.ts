@@ -8,6 +8,7 @@ import type {
   TBAMatch,
   TBATeam,
 } from "@fieldview/provider-tba/types";
+import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { EventKey } from "../ids.js";
 import type { FieldViewEventSnapshot } from "../event.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
@@ -27,6 +28,7 @@ export interface NormalizeFieldViewEventSnapshotInput {
   tba_matches?: TBAMatch[] | null;
   tba_event_predictions?: TBAEventPredictions | null;
   tba_playoff_alliances?: TBAEliminationAlliance[] | null;
+  statbotics_matches?: StatboticsMatch[] | null;
   sources: {
     event: FieldViewSourceMetadata;
     teams: FieldViewSourceMetadata;
@@ -48,6 +50,11 @@ export function normalizeFieldViewEventSnapshot(
       throw new Error("TBA match event key does not match the requested FieldView event key");
     }
   }
+
+  const statboticsMatchesByKey = new Map(
+    (input.statbotics_matches ?? []).flatMap((match) =>
+      match.key === undefined ? [] : [[match.key, match] as const]),
+  );
 
   const result: FieldViewEventSnapshot = {
     event_key: input.event_key,
@@ -118,6 +125,9 @@ export function normalizeFieldViewEventSnapshot(
           ? {}
           : { tba_event_oprs: input.tba_event_oprs }),
         ...(prediction === undefined ? {} : { tba_event_prediction: prediction }),
+        ...(statboticsMatchesByKey.get(match.key) === undefined
+          ? {}
+          : { statbotics_match: statboticsMatchesByKey.get(match.key)! }),
         ...(eventTeams === undefined ? {} : { event_teams: eventTeams }),
         ...(playoffAlliances === undefined ? {} : { tba_playoff_alliances: playoffAlliances }),
         sources: {
@@ -135,6 +145,9 @@ export function normalizeFieldViewEventSnapshot(
             : {}),
           ...(input.sources.matches.tba_playoff_alliances
             ? { tba_playoff_alliances: input.sources.matches.tba_playoff_alliances }
+            : {}),
+          ...(input.sources.matches.statbotics_match
+            ? { statbotics_match: input.sources.matches.statbotics_match }
             : {}),
         },
       });
