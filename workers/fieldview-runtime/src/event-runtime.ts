@@ -286,6 +286,9 @@ export class EventRuntime {
   }
 
   async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now()): Promise<void> {
+    if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
+      throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
+    }
     await this.storage.transaction(async (transaction) => {
       for (const endpoint of endpoints) {
         const key = taskStorageKey(endpoint);

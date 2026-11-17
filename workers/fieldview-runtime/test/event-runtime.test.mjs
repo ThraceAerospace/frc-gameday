@@ -276,3 +276,22 @@ test("Statbotics one-shot refresh does not retry a failed provider request", asy
   await runtime.alarm();
   assert.equal(calls.length, 2);
 });
+
+
+test("recurring schedules reject Statbotics endpoints even when called below the HTTP route", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+  const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  await assert.rejects(
+    runtime.schedulePolls([statboticsEndpoint], 60_000),
+    /Only TBA event endpoints can be scheduled for recurring polling/,
+  );
+  assert.equal(storage.values.has("task:" + statboticsEndpoint), false);
+});
