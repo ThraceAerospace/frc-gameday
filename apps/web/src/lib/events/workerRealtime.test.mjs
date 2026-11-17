@@ -50,7 +50,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     );
   };
 
-  const { workerEventWebSocket } = await import("../src/lib/events/workerRealtime.ts");
+  const { workerEventWebSocket } = await import("./workerRealtime.ts");
   const received = [];
   workerEventWebSocket.retain();
   const unsubscribeFirst = workerEventWebSocket.subscribeCanonicalSnapshot(

@@ -19,6 +19,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly snapshots = new Map<string, CanonicalSnapshot>();
   private readonly sentSubscriptions = new Set<string>();
+  private readonly acknowledgedSubscriptions = new Set<string>();
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
   private status: EventWebSocketStatus = "disconnected";
   private disposed = false;
@@ -75,7 +76,9 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     this.disposed = false;
     this.ensureConnected();
     if (first) this.sendSubscription("event-state", eventKey, true);
-    else void this.fetchCanonicalSnapshot(eventKey);
+    else if (!cached && this.acknowledgedSubscriptions.has("event-state:" + eventKey)) {
+      void this.fetchCanonicalSnapshot(eventKey);
+    }
 
     return () => {
       const current = this.snapshotHandlers.get(eventKey);
@@ -136,6 +139,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (this.socket !== socket) return;
       this.reconnectDelay = 1_000;
       this.sentSubscriptions.clear();
+      this.acknowledgedSubscriptions.clear();
       this.setStatus("connected");
       for (const eventKey of this.activeEventKeys()) this.sendSubscription("event-state", eventKey, true);
       if (this.runtimeBaseUrl) {
@@ -172,6 +176,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (this.socket !== socket) return;
       this.socket = null;
       this.sentSubscriptions.clear();
+      this.acknowledgedSubscriptions.clear();
       if (this.heartbeatTimer !== null) clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
       this.setStatus("disconnected");
@@ -191,6 +196,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     if (message.type === "pong" || message.type === "connected") return;
     if (message.type === "subscribed" && message.topic === "event-state" &&
         typeof message.event_key === "string") {
+      this.acknowledgedSubscriptions.add("event-state:" + message.event_key);
       if ((this.snapshotHandlers.get(message.event_key)?.size ?? 0) > 0) {
         void this.fetchCanonicalSnapshot(message.event_key);
       }
@@ -198,6 +204,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     }
     if (message.type === "snapshot.changed" && typeof message.event_key === "string") {
       const eventKey = message.event_key;
+      this.acknowledgedSubscriptions.add("event-state:" + eventKey);
       const version = typeof message.version === "number" ? message.version : undefined;
       const eventMessage: EventWebSocketMessage = {
         type: "snapshot.changed",
@@ -243,6 +250,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     } else {
       if (!this.sentSubscriptions.has(key)) return;
       this.sentSubscriptions.delete(key);
+      this.acknowledgedSubscriptions.delete(key);
     }
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     if (this.runtimeBaseUrl) {
@@ -276,6 +284,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     const socket = this.socket;
     this.socket = null;
     this.sentSubscriptions.clear();
+    this.acknowledgedSubscriptions.clear();
     if (socket) socket.close();
     this.setStatus("disconnected");
   }
