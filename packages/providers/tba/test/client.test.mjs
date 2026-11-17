@@ -66,8 +66,8 @@ test("rejects absolute and non-provider-relative endpoints", async () => {
     },
   });
 
-  await assert.rejects(client.request("event/2026test"), /provider-relative path/);
-  await assert.rejects(client.request("//attacker.example/path"), /provider-relative path/);
-  await assert.rejects(client.request("https://attacker.example/path"), /provider-relative path/);
+  assert.throws(() => client.request("event/2026test"), /provider-relative path/);
+  assert.throws(() => client.request("//attacker.example/path"), /provider-relative path/);
+  assert.throws(() => client.request("https://attacker.example/path"), /provider-relative path/);
   assert.equal(fetchCalled, false);
 });
