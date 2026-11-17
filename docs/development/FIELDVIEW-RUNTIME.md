@@ -36,7 +36,7 @@ For local development, use Wrangler's local secret workflow. For a future remote
 - `OPTIONS /events/:eventKey/snapshot` — CORS preflight for public snapshot reads.
 - `GET /internal/events/:eventKey/snapshot` — authenticated administrative/internal canonical snapshot route (retained for service-side inspection).
 
-The multiplexer calls EventRuntime's internal `POST /subscriptions` operation to register or unregister its shared subscriber identity. EventRuntime sends `snapshot.changed` revision metadata to the multiplexer only while that registration is active. The multiplexer accepts internal `POST /internal/notify` deliveries only with the service bearer token; these internal DO-to-DO paths are not exposed as public Worker routes.
+The multiplexer calls EventRuntime's internal `POST /subscriptions` operation to register or unregister its shared subscriber identity. Each request carries a monotonically increasing generation for that event; EventRuntime persists the newest generation and ignores stale out-of-order requests. The multiplexer reconciles desired upstream state after each client subscription-set change. EventRuntime sends `snapshot.changed` revision metadata to the multiplexer only while that registration is active. The multiplexer accepts internal `POST /internal/notify` deliveries only with the service bearer token; these internal DO-to-DO paths are not exposed as public Worker routes.
 
 ## Ownership and data handling
 
