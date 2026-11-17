@@ -65,7 +65,7 @@ export default async function EventPage({
         TBA.getEvent(eventKey),
         TBA.getTeamsAtEvent(eventKey),
         TBA.getEventMatches(eventKey),
-        activeTab === "matches" ? TBA.getEventPlayoffAlliances(eventKey) : Promise.resolve(null),
+        activeTab === "matches" ? TBA.getEventPlayoffAlliances(eventKey) : Promise.resolve(undefined),
       ]);
       const retrievedAt = new Date().toISOString();
       const source = { status: "available" as const, retrieved_at: retrievedAt };
@@ -80,7 +80,9 @@ export default async function EventPage({
           teams: { tba_teams: source },
           event_teams: { tba_teams: source },
           matches: { tba_match: source },
-          playoff_alliances: { tba_playoff_alliances: source },
+          playoff_alliances: activeTab === "matches"
+            ? { tba_playoff_alliances: source }
+            : {},
         },
       });
     }
