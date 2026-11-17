@@ -1,8 +1,6 @@
 import { redis } from "@/lib/cache/redis";
 import type { TBAMatch } from "@/lib/tba/types";
-
-const BASE_URL =
-  "https://www.thebluealliance.com/api/v3";
+import { TBAApiClient } from "@fieldview/provider-tba/client";
 
 export type CacheEntry<T> = {
   data: T;
@@ -163,7 +161,11 @@ function reconcileMatchData<T>(
 }
 
 export class TBAClient {
-  constructor(private readonly authKey: string) {}
+  private readonly api: TBAApiClient;
+
+  constructor(authKey: string) {
+    this.api = new TBAApiClient({ apiKey: authKey });
+  }
 
   /**
    * Mutate an existing Redis cache entry in place.
@@ -385,21 +387,13 @@ export class TBAClient {
       return cached.data;
     }
 
-    const headers: Record<string, string> = {
-      "X-TBA-Auth-Key": this.authKey,
-    };
+    const headers: Record<string, string> = {};
 
     if (cached?.etag && !options?.forceRefresh) {
       headers["If-None-Match"] = cached.etag;
     }
 
-    const res = await fetch(
-      `${BASE_URL}${endpoint}`,
-      {
-        headers,
-        cache: "no-store",
-      },
-    );
+    const res = await this.api.request(endpoint, { headers });
 
     if (res.status === 304) {
       if (!cached) {

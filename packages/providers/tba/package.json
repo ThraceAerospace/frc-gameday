@@ -6,6 +6,7 @@
   "sideEffects": false,
   "exports": {
     "./generated": "./src/generated.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./client": "./src/client.ts"
   }
 }

@@ -177,8 +177,10 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M4 — Provider adapter migration
 
+**Status:** In progress. The first provider-owned runtime boundary is in place for TBA HTTP transport: `@fieldview/provider-tba/client` owns the TBA base URL and authentication header and returns the native response so cache validators and provider payloads remain unchanged. The existing Redis cache/reconciliation layer remains in the web workspace temporarily and now delegates network requests to this provider client. This is an incremental extraction, not a completed provider migration.
+
 **Work**
-- Introduce isolated TBA, Statbotics, and FRC Colors adapters.
+- Introduce isolated TBA, Statbotics, and FRC Colors adapters. The TBA HTTP transport extraction is the first implemented slice; cache storage and reconciliation remain temporarily in the legacy web adapter.
 - Keep raw provider schemas, API details, and provider-specific clients inside their respective packages. The domain may use provider types for unchanged source fields; clients consume the FieldView domain shape and never provider acquisition implementations.
 - Pass TBA and Statbotics payloads unchanged into FieldView normalization. Pass every other provider payload through unchanged.
 - Implement only transformations that have been explicitly described and approved; represent each result in a specifically named, documented FieldView field.
