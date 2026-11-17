@@ -298,8 +298,23 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
       return Response.json({
         event_key: this.eventKey,
+        lifecycle: {
+          completed_until: await this.storage.get<number>("lifecycle:completed-until") ?? null,
+        },
+        polling: [...tasks.values()].map((task) => ({
+          endpoint: task.endpoint,
+          due_at: task.dueAt,
+          interval_ms: task.intervalMs,
+          generation: task.generation,
+          attempts: task.attempts,
+          retry_on_failure: task.retryOnFailure,
+          ...(task.authoritativeRefetchAt === undefined
+            ? {}
+            : { authoritative_refetch_at: task.authoritativeRefetchAt }),
+        })).sort((left, right) => left.endpoint.localeCompare(right.endpoint)),
         endpoints: Object.fromEntries(entries),
       });
     }
