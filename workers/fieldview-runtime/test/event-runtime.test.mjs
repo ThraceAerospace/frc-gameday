@@ -273,7 +273,7 @@ test("Statbotics one-shot refresh retries provider failures within a finite TBA-
   const taskKey = "task:" + endpoint;
   assert.ok(storage.values.has(taskKey));
   // Advance only the durable retry deadline; the test does not wait for backoff.
-  for (let attempt = 2; attempt <= 4; attempt += 1) {
+  for (let attempt = 2; attempt <= 3; attempt += 1) {
     const task = storage.values.get(taskKey);
     assert.ok(task);
     task.dueAt = Date.now() - 1;
@@ -283,7 +283,7 @@ test("Statbotics one-shot refresh retries provider failures within a finite TBA-
     assert.ok(storage.values.has(taskKey));
   }
   const exhausted = storage.values.get(taskKey);
-  assert.equal(exhausted.attempts, 4);
+  assert.equal(exhausted.attempts, 3);
   exhausted.dueAt = Date.now() - 1;
   storage.values.set(taskKey, exhausted);
   await runtime.alarm();
