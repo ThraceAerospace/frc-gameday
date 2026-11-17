@@ -11,17 +11,14 @@ import type {
 } from "@fieldview/provider-statbotics/types";
 import type { FieldViewPlayoffAlliance } from "./playoff-alliance.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
-import type { StatboticsTeamId, TeamKey } from "./ids.js";
+import type { TeamKey } from "./ids.js";
 
 /** Per-team values associated with one alliance in one match. */
 export interface FieldViewMatchTeam {
   /** Original TBA identifier, e.g. "frc7407". */
   team_key: TeamKey;
-  /**
-   * Original numeric Statbotics identifier. Optional because the Statbotics
-   * match resource or team association may not be available.
-   */
-  statbotics_team_id?: StatboticsTeamId;
+  /** Official TBA team number used to associate Statbotics EPA records. */
+  team_number?: number;
 
   /** Values associated from the TBA event-level OPR resource. */
   opr?: NonNullable<TBAEventOPRs["oprs"]>[string];
