@@ -1,4 +1,4 @@
-# ADR-0008: One browser WebSocket with multiplexed event subscriptions
+# ADR-0008: One browser WebSocket with shared multiplexed subscriptions
 
 - **Status:** Accepted
 - **Date:** 2026-11-17
@@ -6,43 +6,57 @@
 
 ## Context
 
-FieldView's existing browser architecture uses a SharedWorker to maintain one WebSocket connection per browser origin and distribute updates to multiple tabs and UI surfaces. The public event stream introduced by ADR-0007 is event-scoped. Connecting directly to one EventRuntime stream for every subscribed event would violate the existing one-connection invariant and multiply browser WebSocket connections as the user opens more events.
+FieldView's existing browser architecture uses a SharedWorker to maintain one WebSocket connection per browser origin and distribute updates to multiple tabs and UI surfaces. The Gameday page supports up to nine tiles, with each tile subscribing to a distinct event key. Other pages may also consume live event or analytics updates. Opening more tiles or pages must not create a corresponding number of browser WebSocket connections.
 
-Multiple WebSockets would likely have a modest cost at ordinary usage levels, but they are unnecessary for the desired client contract and would weaken an intentional piece of the existing architecture.
+Connecting directly to one EventRuntime stream for every subscribed event would violate the one-connection invariant and multiply browser connections as users open more events. A single globally shared multiplexer Durable Object would instead serialize all users' socket and subscription traffic through one global hot spot. Creating one multiplexer Durable Object per browser connection would avoid that global hot spot, but would unnecessarily prevent multiplexers from serving multiple clients and increase the number of Durable Objects.
 
-A single globally shared SubscriptionHub Durable Object is also undesirable: every user's socket and subscription traffic would serialize through one Durable Object, creating an avoidable global hot spot.
+The desired architecture therefore shares each multiplexer across multiple browser connections, while distributing connections across multiple multiplexer instances.
 
 ## Decision
 
-The browser maintains **one WebSocket per SharedWorker connection**, and multiplexes all event subscriptions over that one channel.
+Each SharedWorker maintains **one browser WebSocket connection** to one instance in a **sharded pool of shared multiplexer Durable Objects**. A multiplexer serves multiple independent client WebSockets and tracks each client's logical subscriptions.
 
-Use a **per-client-connection SubscriptionHub Durable Object**, not one global hub:
+The SharedWorker is the browser-side connection owner. Pages and UI surfaces using that SharedWorker acquire and release logical subscriptions through it; they do not open their own event WebSockets. The Gameday page may hold up to nine distinct event-key subscriptions, and other live-data pages use the same channel. Multiple pages requesting the same topic within one SharedWorker share one logical upstream subscription.
 
-1. The Worker creates a uniquely named SubscriptionHub for each incoming browser WebSocket connection.
-2. The SharedWorker sends logical `subscribe` and `unsubscribe` messages containing event keys over that one socket.
-3. The SubscriptionHub registers its opaque connection identifier with each corresponding EventRuntime using an authenticated internal operation.
-4. Each EventRuntime durably records the subscribed hub identifiers for its own event.
-5. When an event snapshot revision changes, EventRuntime sends a small `{ type: "snapshot.changed", event_key, version }` notification to each registered SubscriptionHub.
-6. The SubscriptionHub forwards notifications to its connected browser socket. The client fetches the canonical snapshot from the existing public snapshot endpoint and applies it only when its version is not older than its current state.
-7. On unsubscribe or socket close, the SubscriptionHub unregisters itself from the affected EventRuntime instances. Failed delivery to a definitively missing hub allows EventRuntime to prune stale registrations.
-8. Reconnect creates a new hub connection. The SharedWorker resends its active logical subscriptions and performs snapshot/version recovery; no event payload replay is required.
+### Connection and subscription flow
 
-The hub owns connection lifecycle and logical subscription routing only. EventRuntime remains the sole owner of event state, snapshot revisions, and event-specific publication. Snapshot data is never copied into the hub.
+1. The public Worker routes a new browser WebSocket to one multiplexer shard. The shard assignment strategy and pool sizing are implementation/configuration concerns; the design must support multiple shards and must not depend on a single global Durable Object.
+2. The SharedWorker sends validated logical subscribe/unsubscribe messages. A subscription identifies its topic and resource key, such as event state for an event key or analytics for an event key. Keepalive is also supported.
+3. The multiplexer maintains a per-client subscription set and a reverse index from topic/resource key to the connected clients that need it.
+4. A multiplexer registers its own opaque identifier with the authoritative runtime for a topic only while at least one connected client on that shard subscribes to it. Multiple clients on the same shard subscribing to the same topic cause only one runtime-to-shard registration.
+5. EventRuntime (or the authoritative analytics publisher) records the subscribed multiplexer shard identifiers for each topic it owns. When that topic's revision changes, it sends one small revision/invalidation notification to each registered shard.
+6. The multiplexer forwards a notification only to the browser connections on that shard that are subscribed to the matching topic/resource key. Clients that did not subscribe must not receive the notification.
+7. The client fetches the canonical snapshot or analytics result through its read-only public endpoint and applies it only if the received revision is not older than its current version. WebSocket messages carry invalidation/revision metadata, not full domain snapshots or analytics result payloads.
+8. When the last client on a shard unsubscribes from a topic, the shard unregisters itself from that topic's authoritative runtime. On socket close, all of that client's subscriptions are removed; registrations are removed when no remaining client on the shard needs them. Failed delivery to a definitively missing shard permits stale-registration pruning.
+9. Reconnect creates a new browser WebSocket to a multiplexer shard. The SharedWorker resends its active subscriptions and performs revision/snapshot recovery; no event payload replay is required.
+
+### Topic ownership and filtering
+
+- Event state notifications originate from the EventRuntime that owns that event's authoritative state and revision.
+- Analytics notifications originate from the authoritative analytics result owner/publisher. Analytics and event-state subscriptions and revisions are independent; an analytics update does not imply an event-state update.
+- Runtime-to-multiplexer delivery is filtered by registered topic/resource key: only shards with at least one interested client are notified.
+- Multiplexer-to-client delivery is filtered again by the shard's per-client subscription index: only interested clients receive the notification.
+- Client-side filtering may remain defensive, but it is not the primary filtering mechanism. Unsubscribed clients must not receive unrelated live messages.
+- A topic notification contains only enough information to identify the topic/resource and its new revision (plus protocol metadata). It does not contain a copied snapshot or analytics result.
+
+The multiplexer owns browser connection lifecycle and logical subscription routing only. EventRuntime and the analytics result owner remain authoritative for their respective data and revisions. Snapshot and analytics data are never copied into the multiplexer as canonical state.
 
 ## Public and internal access
 
 - The browser-facing multiplexed WebSocket is public and read-only; it requires no user login or browser-held service credential.
-- Browser messages are restricted to validated subscribe, unsubscribe, and keepalive operations. They cannot mutate event state.
-- EventRuntime registration and hub notification endpoints are internal service-to-service operations protected by `RUNTIME_ADMIN_TOKEN`.
-- Public canonical snapshots remain available through `GET /events/:eventKey/snapshot`.
-- Event keys are validated before creating or addressing a Durable Object.
+- Browser messages are restricted to validated subscribe, unsubscribe, and keepalive operations. They cannot mutate event or analytics state.
+- Runtime registration and shard notification delivery are internal service-to-service operations protected by service credentials or an equivalently restricted internal binding.
+- Public canonical snapshots and analytics results remain available through their respective read-only endpoints.
+- Event keys and topic names are validated before creating or addressing a Durable Object or runtime resource.
 
 ## Consequences
 
-- The SharedWorker retains one browser WebSocket regardless of the number of subscribed events.
-- Separate browser sessions receive separate SubscriptionHub instances; there is no single global WebSocket hub bottleneck.
-- EventRuntime fan-out work grows with the number of active clients subscribed to that event, which is the necessary delivery cost for notifying those clients.
-- SubscriptionHub instances are short-lived connection coordinators and do not become canonical data stores.
-- Abrupt disconnect cleanup and stale registration pruning must be tested; reconnect must always recover through subscription resubmission plus canonical snapshot reads.
-- The public event-scoped stream is superseded as the browser integration path by the multiplexed stream. EventRuntime's publication API remains revision-only.
+- One SharedWorker browser WebSocket serves all live subscriptions for that worker, including up to nine Gameday event tiles and live subscriptions from other pages.
+- Each multiplexer shard serves multiple browser clients. A shard receives at most one notification per changed topic/revision, regardless of how many of its connected clients subscribe to that topic.
+- Runtime fan-out scales with the number of shards that have at least one interested client, rather than the number of interested browser connections.
+- Multiplexer fan-out is restricted to clients subscribed to the changed topic. Uninterested clients receive no message.
+- Multiple shards avoid a single global Durable Object hot spot. Pool sizing, assignment, rebalancing, per-shard limits, and overload behavior must be designed and measured during implementation; no fixed shard count is implied by this ADR.
+- EventRuntime and analytics owners remain the source of truth. Revision-only notification plus canonical reads limits WebSocket bandwidth and makes reconnect recovery straightforward.
+- Abrupt disconnect cleanup, stale registration pruning, multi-client shard fan-out, subscription deduplication, and reconnect recovery must be tested.
+- The event-scoped public stream is superseded as the browser integration path by the shared multiplexed stream. EventRuntime's publication API remains revision-only.
 - Frontend consumption and production deployment remain separate migration steps. No production cutover or deployment is authorized by this ADR.
