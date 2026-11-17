@@ -22,7 +22,7 @@ export interface NormalizeFieldViewMatchInput {
   tba_event_oprs?: TBAEventOPRs;
   /** Canonical event-team records containing unchanged TBA status objects. */
   event_teams?: readonly FieldViewEventTeam[] | null;
-  /** Event's TBA elimination alliances, numbered by their one-based response order. */
+  /** Event's TBA elimination alliances, associated by their explicit alliance names. */
   tba_playoff_alliances?: readonly FieldViewPlayoffAlliance[] | null;
   sources: FieldViewSourceMetadata;
 }
