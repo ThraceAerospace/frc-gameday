@@ -91,7 +91,9 @@ export default function EventView({
   const loading = canonicalSnapshot && "event" in canonicalSnapshot
     ? false
     : legacyState.loading;
-  const error = legacyState.error;
+  const error = canonicalSnapshot && "event" in canonicalSnapshot
+    ? null
+    : legacyState.error;
   const websocketStatus = legacyState.websocketStatus;
   const webSocketStale = legacyState.websocketStale;
   const eventState = legacyState.state;
