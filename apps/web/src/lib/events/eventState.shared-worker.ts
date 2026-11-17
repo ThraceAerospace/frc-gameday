@@ -131,7 +131,7 @@ function unsubscribeCanonical(port: MessagePort, eventKey: string) {
   if (!subscribed?.delete(eventKey)) return;
   const record = events.get(eventKey);
   const unsubscribe = record?.canonicalClients.get(port);
-  if (record && unsubscribe && !portSubscriptions.get(port)?.has(eventKey)) {
+  if (record && unsubscribe) {
     record.canonicalClients.delete(port);
     unsubscribe();
   }
