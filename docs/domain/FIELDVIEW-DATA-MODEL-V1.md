@@ -58,7 +58,7 @@ The FieldView model represents Statbotics information that adds meaning beyond t
 - Statbotics match name, status, and elimination/week context;
 - Statbotics prediction, kept distinct from TBA's prediction;
 - Statbotics result, preserving the complete result structure;
-- Statbotics alliance data and numeric team identifiers where needed to retain source meaning;
+- Statbotics alliance data, retained under its explicitly named source field;
 - per-team pre-match and post-match EPA records.
 
 Statbotics team IDs remain numeric. TBA team keys remain strings such as `frc7407`. A FieldView association may relate the two, but must not replace either source representation.
@@ -81,11 +81,11 @@ The model associates each match alliance's teams with their additional statistic
 Each `FieldViewMatchTeam` association includes:
 
 - the unchanged TBA team key;
-- the unchanged numeric Statbotics team ID when a source association is available;
+- the official TBA `team_number` when the corresponding TBA team record is available;
 - TBA event-level OPR, DPR, and CCWM values when available;
 - Statbotics pre-match EPA and post-match EPA records when available.
 
-The association arrays follow the corresponding TBA alliance roster order. TBA match alliance rosters provide string team keys, while TBA team records provide the official numeric `team_number`. That TBA `team_number` is the correlation value for Statbotics' numeric `team` values and its string-keyed EPA maps. Do not parse or strip the `frc` prefix from a team key, and do not introduce a redundant `statbotics_team_id` field. Preserve the TBA `team_number` and Statbotics source values unchanged. Missing team metadata or metrics remain missing; they are never represented as zero.
+The association arrays follow the corresponding TBA alliance roster order. TBA match alliance rosters provide string team keys, while TBA team records provide the official numeric `team_number`. That TBA `team_number` is compared directly with Statbotics' numeric `team` value and is stringified only to index Statbotics' string-keyed EPA maps. Do not parse or strip the `frc` prefix from a team key, and do not introduce a redundant `statbotics_team_id` field. Preserve the TBA `team_number` and Statbotics source values unchanged. Missing team metadata or metrics remain missing; they are never represented as zero.
 
 OPR/DPR/CCWM originate from the TBA event-level OPR resource, not from the match endpoint. Fetch/cache that event resource at event scope and associate its values with the teams. Do not fetch it separately for every match.
 
@@ -197,7 +197,7 @@ The Archimedes SF13 example demonstrates identical or overlapping fields across 
 | Actual score | Alliance scores / score breakdown | `result` | Preserve TBA match fields and Statbotics result independently |
 | Winner | `winning_alliance` | `result.winner` | Preserve both source observations; do not overwrite one with the other |
 | Video | `videos` | `video` | Preserve TBA video structure; record Statbotics observation/provenance |
-| Alliance membership | String team keys | Numeric team IDs | Preserve both representations; associate explicitly |
+| Alliance membership | String team keys | Numeric team values | Preserve both source representations; correlate through TBA team records' official `team_number` |
 | Predictions | Event-predictions endpoint | `pred` | Keep as independent predictions |
 | EPA | Not supplied by TBA match | `pre_epas` / `epas` | Associate with the relevant teams |
 | OPR/DPR/CCWM | Event OPR endpoint | Not supplied by this Statbotics match response | Associate TBA values with event teams and match teams |
@@ -217,7 +217,7 @@ Complete provider payload retention belongs to the ingestion/cache/versioning la
 - Do not add a generic `raw` or `sourceRecords` property to every domain object merely to repeat data already owned by the ingestion/cache layer.
 - Provider payloads and their versions are backend inputs. They are not automatically serialized to clients.
 
-For the Archimedes SF13 Match 1 example, the complete TBA match response, Statbotics match response, TBA event-predictions response, and TBA event OPR response are independently cached/versioned resources. The FieldView match/team aggregates may select values from these resources, while retaining the distinction between their source endpoints.
+For the Archimedes SF13 Match 1 example, the complete TBA match response, Statbotics match response, TBA event-predictions response, TBA event OPR response, and TBA team records used for numeric team correlation are independently retained/versioned resources. The FieldView match/team aggregates may select values from these resources, while retaining the distinction between their source endpoints.
 
 In particular:
 
@@ -251,4 +251,4 @@ Versioning applies to the FieldView domain model and its serialized representati
 6. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
 7. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then migrate acquisition/reconciliation and consumers.
 
-The fixture is a set of independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
+The fixture is a set of five independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
