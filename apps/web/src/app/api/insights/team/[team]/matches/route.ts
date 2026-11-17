@@ -3,7 +3,7 @@ import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { matchShortName } from "@/lib/tba/formatters";
-import type { StatboticsEPA, StatboticsMatch } from "@/lib/statbotics/types";
+import type { StatboticsEPA, StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { TBAMatch, TBAEvent } from "@/lib/tba/types";
 
 type TeamMatchRow = {
