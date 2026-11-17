@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { normalizeFieldViewEventSnapshot } from "@fieldview/domain";
 import { getCanonicalEventSnapshot } from "./serverSnapshot.ts";
 
 test("server snapshot reader uses the configured runtime and preserves its revision", async () => {
@@ -58,4 +59,21 @@ test("canonical event discovery reader validates year and returns domain events"
     Response.json({ year: 2025, events: [] }),
   );
   assert.equal(wrongYear, null);
+});
+
+test("web workspace prebuild exposes the canonical domain normalizer at runtime", () => {
+  const source = { status: "available", retrieved_at: "2026-01-02T03:04:05.000Z" };
+  const snapshot = normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_event: { key: "2026test", name: "Test Event" },
+    sources: {
+      event: { tba_event: source },
+      teams: {},
+      event_teams: {},
+      matches: {},
+      playoff_alliances: {},
+    },
+  });
+  assert.equal(snapshot.event?.key, "2026test");
+  assert.equal(snapshot.event?.sources.tba_event.status, "available");
 });

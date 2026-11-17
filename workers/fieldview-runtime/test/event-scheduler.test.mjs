@@ -24,7 +24,6 @@ class MemoryStorage {
 test("global scheduler discovers yearly events and applies the lifecycle plan", async () => {
   const storage = new MemoryStorage();
   const currentYear = new Date().getUTCFullYear();
-  const today = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   const dayAfter = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
   const tbaRequests = [];
