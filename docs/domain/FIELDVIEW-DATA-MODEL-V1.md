@@ -85,7 +85,7 @@ Each `FieldViewMatchTeam` association includes:
 - TBA event-level OPR, DPR, and CCWM values when available;
 - Statbotics pre-match EPA and post-match EPA records when available.
 
-The association arrays follow the corresponding TBA alliance roster order. The Statbotics numeric ID is optional when the Statbotics match record or an explicit cross-source association is unavailable. Do not derive it by parsing or stripping the `frc` prefix from a TBA key. The association rule must preserve both original identifiers. Missing metrics remain missing; they are never represented as zero.
+The association arrays follow the corresponding TBA alliance roster order. TBA match alliance rosters provide string team keys, while TBA team records provide the official numeric `team_number`. That TBA `team_number` is the correlation value for Statbotics' numeric `team` values and its string-keyed EPA maps. Do not parse or strip the `frc` prefix from a team key, and do not introduce a redundant `statbotics_team_id` field. Preserve the TBA `team_number` and Statbotics source values unchanged. Missing team metadata or metrics remain missing; they are never represented as zero.
 
 OPR/DPR/CCWM originate from the TBA event-level OPR resource, not from the match endpoint. Fetch/cache that event resource at event scope and associate its values with the teams. Do not fetch it separately for every match.
 
@@ -143,13 +143,13 @@ Retains the TBA team fields and exact types. Additional FieldView-owned team-lev
 
 ### FieldViewTeamSeason
 
-`FieldViewTeamSeason` pairs an unchanged TBA `team_key` with the FieldView season `year`. It may retain the unchanged Statbotics team-year record. Because Statbotics identifies teams numerically while TBA uses string keys, `statbotics_team_id` is a separate optional FieldView association and is populated only from an explicit cross-provider identity mapping. The Statbotics source record is retained as supplied; its own `team` and `year` values are not rewritten to match the wrapper. If the explicit identity mapping is absent, the source record may still be retained, but no TBA-to-Statbotics identity is asserted.
+`FieldViewTeamSeason` pairs an unchanged TBA `team_key` and official TBA `team_number` with the FieldView season `year`. The TBA `team_number` is sufficient to correlate Statbotics' numeric `team` value; no additional Statbotics identity field is needed. The Statbotics team-year record is retained unchanged, and a supplied record must have a `team` value equal to the TBA `team_number` or normalization rejects the mismatch.
 
 ### FieldViewEvent
 
 Retains the TBA event fields and exact types, including the original nullable timezone. Event timezone presentation rules do not authorize changing the stored provider value or inventing a fallback.
 
-`normalizeFieldViewTeamSeason` composes this object from the unchanged TBA team key and season year, an optional unchanged Statbotics team-year record, and an optional explicitly supplied numeric Statbotics team identity. It does not infer identity from the `frc` prefix, rewrite the provider record, or default missing values. Fixture tests cover explicit association, absent association, retained explicit nulls, and JSON round-trip behavior.
+`normalizeFieldViewTeamSeason` composes this object from the unchanged TBA team key, TBA team number, season year, and optional unchanged Statbotics team-year record. It correlates by equality between TBA `team_number` and Statbotics `team`, rejects mismatched records, and does not parse the TBA key or rewrite provider values. Fixture tests cover successful correlation, mismatch rejection, retained explicit nulls, and JSON round-trip behavior.
 
 ### FieldViewEventTeam
 
@@ -246,7 +246,7 @@ Versioning applies to the FieldView domain model and its serialized representati
 1. Complete and typecheck the initial domain type definitions and source metadata types.
 2. Keep provider-owned typing for the TBA event-predictions response in the TBA package, based on the supplied endpoint response shape.
 3. Add the Archimedes SF13 source fixture. The fixture includes the complete supplied TBA match and Statbotics match payloads, the exact TBA event-prediction entry for `2026arc_sf13m1`, and the event-level OPR/DPR/CCWM values.
-4. Implement and test `normalizeFieldViewMatch` as a pure association boundary, retaining provider payloads and requiring explicit cross-provider team identity associations.
+4. Implement and test `normalizeFieldViewMatch` as a pure association boundary, retaining provider payloads and correlating Statbotics team values through TBA team_number.
 5. Implement and test `normalizeFieldViewEventTeam` for event-team status and event-level OPR/DPR/CCWM association by unchanged TBA team key.
 6. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
 7. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then migrate acquisition/reconciliation and consumers.
