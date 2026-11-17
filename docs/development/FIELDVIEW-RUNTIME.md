@@ -1,6 +1,6 @@
 # FieldView Runtime Development
 
-The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials. Public event snapshots and read-only live subscriptions do not require user authentication; only internal administration and service-to-service operations use the runtime admin token.
+The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials. Public event snapshots and read-only live subscriptions do not require user authentication; only internal administration and service-to-service operations use the runtime admin token. The isolated remote prototype has its own `workers/fieldview-runtime/wrangler.prototype.toml` configuration and setup procedure in [CLOUDFLARE-PROTOTYPE-SETUP.md](./CLOUDFLARE-PROTOTYPE-SETUP.md). It uses a distinct Worker name, `workers.dev` ingress, separate Durable Object namespaces, and independent migration tags; it does not create production routes or reuse production state. No remote deployment or secret configuration has been performed.
 
 ## Runtime secrets and configuration
 
