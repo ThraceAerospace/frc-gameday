@@ -6,6 +6,7 @@ import type {
 } from "@fieldview/provider-tba/types";
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { FieldViewMatch, FieldViewMatchTeam } from "../match.js";
+import type { FieldViewPlayoffAlliance } from "../playoff-alliance.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import type { TeamKey } from "../ids.js";
 
@@ -18,6 +19,8 @@ export interface NormalizeFieldViewMatchInput {
   statbotics_match?: StatboticsMatch;
   tba_event_prediction?: TBAEventMatchPrediction;
   tba_event_oprs?: TBAEventOPRs;
+  /** Event's unchanged TBA elimination alliances; omitted until acquired. */
+  tba_playoff_alliances?: readonly FieldViewPlayoffAlliance[] | null;
   sources: FieldViewSourceMetadata;
 }
 
@@ -48,14 +51,54 @@ function normalizeAllianceTeams(
 }
 
 /**
- * Compose unchanged source observations. Statbotics team numbers are correlated
- * with TBA's official team_number; TBA keys are never parsed or rewritten.
- * The number is stringified only to index Statbotics' string-keyed EPA maps.
+ * TBA playoff alliances contain the four roster members: three picks and,
+ * when used, both the incoming and outgoing backup teams. A match has three
+ * teams on the field; at most one roster member can differ from the picks.
+ * Two distinct match team keys therefore identify an alliance. Return an
+ * association only when exactly one alliance meets that threshold.
+ */
+export function associateMatchPlayoffAlliance(
+  matchTeamKeys: readonly TeamKey[],
+  playoffAlliances: readonly FieldViewPlayoffAlliance[],
+): FieldViewPlayoffAlliance | null {
+  const matchTeams = new Set(matchTeamKeys);
+  const matches = playoffAlliances.filter((alliance) => {
+    const roster = new Set(alliance.picks);
+    if (alliance.backup) {
+      roster.add(alliance.backup.in);
+      roster.add(alliance.backup.out);
+    }
+    let overlap = 0;
+    for (const teamKey of matchTeams) {
+      if (roster.has(teamKey)) overlap += 1;
+    }
+    return overlap >= 2;
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * Compose unchanged source observations and approved associations. Statbotics
+ * team numbers are correlated with TBA's official team_number; TBA keys are
+ * never parsed or rewritten.
  */
 export function normalizeFieldViewMatch(
   input: NormalizeFieldViewMatchInput,
 ): FieldViewMatch {
-  const { tba_match, statbotics_match } = input;
+  const { tba_match, statbotics_match, tba_playoff_alliances } = input;
+  const playoff_alliances = tba_match.comp_level === "qm"
+    ? null
+    : tba_playoff_alliances === undefined
+      ? undefined
+      : {
+          red: tba_playoff_alliances === null
+            ? null
+            : associateMatchPlayoffAlliance(tba_match.alliances.red.team_keys, tba_playoff_alliances),
+          blue: tba_playoff_alliances === null
+            ? null
+            : associateMatchPlayoffAlliance(tba_match.alliances.blue.team_keys, tba_playoff_alliances),
+        };
+
   return {
     ...tba_match,
     ...(statbotics_match === undefined ? {} : {
@@ -74,6 +117,7 @@ export function normalizeFieldViewMatch(
       red: normalizeAllianceTeams(tba_match.alliances.red.team_keys, input),
       blue: normalizeAllianceTeams(tba_match.alliances.blue.team_keys, input),
     },
+    ...(playoff_alliances === undefined ? {} : { playoff_alliances }),
     sources: input.sources,
   };
 }

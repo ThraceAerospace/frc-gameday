@@ -123,9 +123,9 @@ The currently deployed definitions are documented in the analytics source and mu
 
 ### 3.7 Playoff alliance association
 
-For playoff matches, FieldView associates the red and blue match alliances with their corresponding official `FieldViewPlayoffAlliance` objects.
+For playoff matches, FieldView associates the red and blue match alliances with their corresponding official `FieldViewPlayoffAlliance` objects. The association uses TBA team keys and the official alliance roster: all three `picks`, plus both `backup.in` and `backup.out` when a backup substitution is recorded. Since exactly three teams play on the field and at most one of the four alliance members can differ from the picks, two distinct matching team keys are sufficient. FieldView associates only when exactly one official alliance reaches that two-team threshold; zero or multiple candidates remain unresolved. The incoming and outgoing backup teams both remain members of the alliance.
 
-The association is resolved server-side and reused across matches. Investigate TBA's playoff alliances and playoff advancement endpoints to determine the most reliable source for alliance identity and progression across playoff formats.
+The association is resolved server-side and reused across matches. The client does not query the playoff alliances endpoint for each match.
 
 The match association distinguishes:
 - not yet acquired/unknown association;
