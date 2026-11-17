@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { StatboticsApiClient } from "@fieldview/provider-statbotics/client";
+import { STATBOTICS_ENDPOINTS } from "@fieldview/provider-statbotics/endpoints";
 import { redis } from "@/lib/cache/redis";
 import type {
   StatboticsMatch,
@@ -6,8 +8,6 @@ import type {
   StatboticsTeamYear,
 } from "./types";
 
-// Default to the API-compatible Statbotics mirror; the official-schema-compatible endpoint can be overridden by environment.
-const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
 const MIN_REQUEST_INTERVAL_SECONDS = 10 * 60;
 const MATCH_FALLBACK_TTL_SECONDS = 10 * 60;
 const TEAM_YEAR_FALLBACK_TTL_SECONDS = 10 * 60;
@@ -130,19 +130,23 @@ async function releaseLock(key: string, token: string) {
 }
 
 export class StatboticsClient {
+  private readonly api = new StatboticsApiClient({
+    baseUrl: process.env.STATBOTICS_API_BASE_URL,
+  });
+
   async getMatch(
     matchKey: string,
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsMatch | null> {
     return this.getCached<StatboticsMatch>(
-      `/match/${encodeURIComponent(matchKey)}`,
+      STATBOTICS_ENDPOINTS.match(matchKey),
       { refresh: options.refresh, fallbackTtlSeconds: MATCH_FALLBACK_TTL_SECONDS },
     );
   }
 
   async getTeamYear(team: number, year: number): Promise<StatboticsTeamYear | null> {
     return this.getCached<StatboticsTeamYear>(
-      `/team_year/${team}/${year}`,
+      STATBOTICS_ENDPOINTS.teamYear(team, year),
       { fallbackTtlSeconds: TEAM_YEAR_FALLBACK_TTL_SECONDS },
     );
   }
@@ -153,7 +157,7 @@ export class StatboticsClient {
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsTeamEvent | null> {
     return this.getCached<StatboticsTeamEvent>(
-      `/team_event/${team}/${encodeURIComponent(eventKey)}`,
+      STATBOTICS_ENDPOINTS.teamEvent(team, eventKey),
       { refresh: options.refresh, fallbackTtlSeconds: TEAM_EVENT_FALLBACK_TTL_SECONDS },
     );
   }
@@ -162,19 +166,26 @@ export class StatboticsClient {
     filters: { team?: number; year?: number; event?: string; elim?: boolean } = {},
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsMatch[]> {
-    return this.getCollection<StatboticsMatch>("/matches", filters, MATCH_FALLBACK_TTL_SECONDS, options);
+    return this.getCollection<StatboticsMatch>(
+      (limit, offset) => STATBOTICS_ENDPOINTS.matches(filters, limit, offset),
+      MATCH_FALLBACK_TTL_SECONDS,
+      options,
+    );
   }
 
   async getTeamEvents(
     filters: { team?: number; year?: number; event?: string } = {},
     options: { refresh?: boolean } = {},
   ): Promise<StatboticsTeamEvent[]> {
-    return this.getCollection<StatboticsTeamEvent>("/team_events", filters, TEAM_EVENT_FALLBACK_TTL_SECONDS, options);
+    return this.getCollection<StatboticsTeamEvent>(
+      (limit, offset) => STATBOTICS_ENDPOINTS.teamEvents(filters, limit, offset),
+      TEAM_EVENT_FALLBACK_TTL_SECONDS,
+      options,
+    );
   }
 
   private async getCollection<T>(
-    endpoint: string,
-    filters: Record<string, string | number | boolean | undefined>,
+    endpointForPage: (limit: number, offset: number) => string,
     fallbackTtlSeconds: number,
     options: { refresh?: boolean },
   ): Promise<T[]> {
@@ -182,13 +193,7 @@ export class StatboticsClient {
     const pageSize = 1000;
     let offset = 0;
     while (true) {
-      const query = new URLSearchParams();
-      for (const [key, value] of Object.entries(filters)) {
-        if (value !== undefined) query.set(key, String(value));
-      }
-      query.set("limit", String(pageSize));
-      query.set("offset", String(offset));
-      const page = await this.getCached<T[]>(`${endpoint}?${query.toString()}`, {
+      const page = await this.getCached<T[]>(endpointForPage(pageSize, offset), {
         refresh: options.refresh,
         fallbackTtlSeconds,
       });
@@ -240,15 +245,10 @@ export class StatboticsClient {
         return latest.data;
       }
 
-      const configuredBase = process.env.STATBOTICS_API_BASE_URL?.trim();
-      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, "");
       const headers: Record<string, string> = {};
       if (latest?.etag) headers["If-None-Match"] = latest.etag;
 
-      const response = await fetch(baseUrl + "/v3" + endpoint, {
-        headers,
-        cache: "no-store",
-      });
+      const response = await this.api.request(endpoint, { headers });
       const ttlSeconds = getEffectiveTtlSeconds(
         response.headers.get("Cache-Control"),
         options.fallbackTtlSeconds,

@@ -18,7 +18,7 @@ Do not create a Durable Object per endpoint, match, team, or domain interface. A
 
 ### 2. TBA provider client remains a stateless adapter
 
-The TBA provider package owns authentication, base URL, provider-relative endpoint path builders, HTTP semantics, unchanged provider payloads, provider-specific types, and generated schemas.
+The TBA provider package owns authentication, base URL, provider-relative endpoint path builders, HTTP semantics, unchanged provider payloads, provider-specific types, and generated schemas. The Statbotics provider package owns its base URL, `/v3` transport prefix, provider-relative endpoint path builders, HTTP semantics, unchanged payloads, provider-specific types, and generated schemas.
 
 It does not own durable cache state, ETag persistence, polling schedules, webhook reconciliation, or FieldView canonical state. It runs inside the Worker/DO execution environment as an ordinary adapter; it is not itself a Worker or Durable Object.
 
