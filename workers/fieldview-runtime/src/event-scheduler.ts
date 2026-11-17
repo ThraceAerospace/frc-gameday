@@ -112,7 +112,7 @@ export function classifyEventLifecycle(
   policy: EventPollingPolicy,
 ): EventLifecycleDecision | null {
   const endExclusiveDate = nextDateOnly(event.end_date);
-  if (!endExclusiveDate) return null;
+  if (!endExclusiveDate || typeof event.timezone !== "string" || event.timezone.length === 0) return null;
   const start = zonedMidnight(event.start_date, event.timezone);
   const endExclusive = zonedMidnight(endExclusiveDate, event.timezone);
   if (start === null || endExclusive === null || endExclusive <= start) return null;
