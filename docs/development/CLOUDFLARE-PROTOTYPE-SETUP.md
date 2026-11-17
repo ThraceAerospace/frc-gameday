@@ -5,7 +5,8 @@ This runbook creates an isolated Cloudflare Worker prototype for the architectur
 ## Isolation guarantees
 
 - Worker name: `fieldview-runtime-prototype`.
-- Deployment target: the account's `workers.dev` subdomain only.
+- Account `workers.dev` subdomain: `frc-fieldview.workers.dev`.
+- Deployment target: `https://fieldview-runtime-prototype.frc-fieldview.workers.dev` only.
 - No custom domain, production route, Vercel routing change, or production secret is configured.
 - The prototype has its own Durable Object namespaces and migration history. Do not add `script_name` values pointing at another Worker.
 - The existing `workers/fieldview-runtime/wrangler.toml` remains the separate non-prototype configuration.
@@ -69,7 +70,7 @@ Do these steps only when the user has explicitly approved a remote prototype dep
 5. Record the returned `workers.dev` URL. Verify:
 
    ```sh
-   curl -fsS https://<prototype-worker>.<account-subdomain>.workers.dev/health
+   curl -fsS https://fieldview-runtime-prototype.frc-fieldview.workers.dev/health
    ```
 
    Expected response: `{"service":"fieldview-runtime","status":"ok"}`.
@@ -135,7 +136,7 @@ Do these steps only when the user has explicitly approved a remote prototype dep
 
 ## Operator values to collect
 
-- Cloudflare account identity and `workers.dev` subdomain.
+- Cloudflare account identity and `frc-fieldview.workers.dev` account subdomain.
 - Confirmation that the account is authorized for the prototype.
 - Prototype TBA API key and webhook secret (entered directly into Wrangler, never chat).
 - Generated prototype runtime admin token (stored outside the repository).
