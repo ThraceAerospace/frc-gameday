@@ -83,6 +83,7 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   assert.deepEqual(updated.providerData, providerMatches);
   assert.equal(updated.etag, '"matches-v1"');
   assert.equal(updated.lastWebhookAt !== null, true);
+  assert.equal(storage.values.get("snapshot-revision"), 2);
   assert.equal(storage.values.get("webhook:" + webhookId).rawPayload, rawPayload);
 
   const duplicate = await runtime.fetch(makeRequest());
@@ -147,6 +148,7 @@ test("GET snapshot composes canonical event-team domain objects with source meta
     },
   }));
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-FieldView-Snapshot-Version"), "0");
   const snapshot = await response.json();
   assert.equal(snapshot.event.key, eventKey);
   assert.equal(snapshot.teams[0].team_number, 3461);

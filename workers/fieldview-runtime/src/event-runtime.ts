@@ -198,7 +198,10 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      return Response.json(await this.buildEventSnapshot());
+      const result = await this.buildEventSnapshot();
+      return Response.json(result.snapshot, {
+        headers: { "X-FieldView-Snapshot-Version": String(result.version) },
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/state") {
@@ -212,7 +215,7 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  private async buildEventSnapshot() {
+  private async buildEventSnapshot(): Promise<{ version: number; snapshot: ReturnType<typeof normalizeFieldViewEventSnapshot> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -222,19 +225,24 @@ export class EventRuntime {
     const oprsEndpoint = endpoints[5];
     const predictionsEndpoint = endpoints[6];
     const statboticsMatchesEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const [
-      eventState, teamsState, statusesState, matchesState,
-      alliancesState, oprsState, predictionsState, statboticsMatchesState,
-    ] = await Promise.all([
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(statusesEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(matchesEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(alliancesEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(predictionsEndpoint)),
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(statboticsMatchesEndpoint)),
-    ]);
+    // Read the aggregate's endpoint state and version from one transaction so
+    // a snapshot can never combine data from opposite sides of a mutation.
+    const state = await this.storage.transaction(async (transaction) => ({
+      version: await transaction.get<number>("snapshot-revision") ?? 0,
+      event: await transaction.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
+      teams: await transaction.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
+      statuses: await transaction.get<EndpointState<unknown>>(endpointStorageKey(statusesEndpoint)),
+      matches: await transaction.get<EndpointState<unknown>>(endpointStorageKey(matchesEndpoint)),
+      alliances: await transaction.get<EndpointState<unknown>>(endpointStorageKey(alliancesEndpoint)),
+      oprs: await transaction.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
+      predictions: await transaction.get<EndpointState<unknown>>(endpointStorageKey(predictionsEndpoint)),
+      statboticsMatches: await transaction.get<EndpointState<unknown>>(endpointStorageKey(statboticsMatchesEndpoint)),
+    }));
+    const {
+      event: eventState, teams: teamsState, statuses: statusesState,
+      matches: matchesState, alliances: alliancesState, oprs: oprsState,
+      predictions: predictionsState, statboticsMatches: statboticsMatchesState,
+    } = state;
     const now = Date.now();
     const eventSource = toSourceMetadata(eventState, now);
     const teamsSource = toSourceMetadata(teamsState, now);
@@ -245,44 +253,47 @@ export class EventRuntime {
     const predictionsSource = toSourceMetadata(predictionsState, now);
     const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
 
-    return normalizeFieldViewEventSnapshot({
-      event_key: this.eventKey as EventKey,
-      ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
-      ...(hasAcquiredValue(teamsState) ? { tba_teams: teamsState!.data as TBATeam[] | null } : {}),
-      ...(hasAcquiredValue(statusesState)
-        ? { tba_team_statuses: statusesState!.data as TBAEventTeamStatuses | null }
-        : {}),
-      ...(hasAcquiredValue(matchesState) ? { tba_matches: matchesState!.data as TBAMatch[] | null } : {}),
-      ...(hasAcquiredValue(alliancesState)
-        ? { tba_playoff_alliances: alliancesState!.data as TBAEliminationAlliance[] | null }
-        : {}),
-      ...(hasAcquiredValue(oprsState) ? { tba_event_oprs: oprsState!.data as TBAEventOPRs | null } : {}),
-      ...(hasAcquiredValue(predictionsState)
-        ? { tba_event_predictions: predictionsState!.data as TBAEventPredictions | null }
-        : {}),
-      ...(hasAcquiredValue(statboticsMatchesState)
-        ? { statbotics_matches: statboticsMatchesState!.data as StatboticsMatch[] | null }
-        : {}),
-      sources: {
-        event: eventSource ? { tba_event: eventSource } : {},
-        teams: teamsSource ? { tba_teams: teamsSource } : {},
-        event_teams: {
-          ...(statusSource ? { tba_team_event_status: statusSource } : {}),
-          ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
-        },
-        matches: {
-          ...(matchesSource ? { tba_match: matchesSource } : {}),
-          ...(predictionsSource ? { tba_event_predictions: predictionsSource } : {}),
-          ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
-          ...(statusSource ? { tba_team_event_status: statusSource } : {}),
-          ...(alliancesSource ? { tba_playoff_alliances: alliancesSource } : {}),
-          ...(statboticsMatchesSource ? { statbotics_match: statboticsMatchesSource } : {}),
-        },
-        playoff_alliances: alliancesSource
-          ? { tba_playoff_alliances: alliancesSource }
-          : {},
-      },
-    });
+    return {
+      version: state.version,
+      snapshot: normalizeFieldViewEventSnapshot({
+        event_key: this.eventKey as EventKey,
+        ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
+        ...(hasAcquiredValue(teamsState) ? { tba_teams: teamsState!.data as TBATeam[] | null } : {}),
+        ...(hasAcquiredValue(statusesState)
+          ? { tba_team_statuses: statusesState!.data as TBAEventTeamStatuses | null }
+          : {}),
+        ...(hasAcquiredValue(matchesState) ? { tba_matches: matchesState!.data as TBAMatch[] | null } : {}),
+        ...(hasAcquiredValue(alliancesState)
+          ? { tba_playoff_alliances: alliancesState!.data as TBAEliminationAlliance[] | null }
+          : {}),
+        ...(hasAcquiredValue(oprsState) ? { tba_event_oprs: oprsState!.data as TBAEventOPRs | null } : {}),
+        ...(hasAcquiredValue(predictionsState)
+          ? { tba_event_predictions: predictionsState!.data as TBAEventPredictions | null }
+          : {}),
+        ...(hasAcquiredValue(statboticsMatchesState)
+          ? { statbotics_matches: statboticsMatchesState!.data as StatboticsMatch[] | null }
+          : {}),
+        sources: {
+          event: eventSource ? { tba_event: eventSource } : {},
+          teams: teamsSource ? { tba_teams: teamsSource } : {},
+          event_teams: {
+            ...(statusSource ? { tba_team_event_status: statusSource } : {}),
+            ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
+          },
+          matches: {
+            ...(matchesSource ? { tba_match: matchesSource } : {}),
+            ...(predictionsSource ? { tba_event_predictions: predictionsSource } : {}),
+            ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
+            ...(statusSource ? { tba_team_event_status: statusSource } : {}),
+            ...(alliancesSource ? { tba_playoff_alliances: alliancesSource } : {}),
+            ...(statboticsMatchesSource ? { statbotics_match: statboticsMatchesSource } : {}),
+          },
+          playoff_alliances: alliancesSource
+            ? { tba_playoff_alliances: alliancesSource }
+            : {},
+        }),
+      }),
+    };
   }
 
   async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now()): Promise<void> {
@@ -421,6 +432,10 @@ export class EventRuntime {
           : reconcilePolledEndpoint(endpoint, current, fetched),
       );
       await transaction.put(key, next);
+      if (next.revision !== latest.revision) {
+        const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
+        await transaction.put("snapshot-revision", snapshotRevision + 1);
+      }
 
       // Preserve each accepted upstream 200 payload as an immutable source
       // version. The current endpoint state may also contain webhook patches;
@@ -522,6 +537,8 @@ export class EventRuntime {
             (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update),
           );
           await transaction.put(key, next);
+          const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
+          await transaction.put("snapshot-revision", snapshotRevision + 1);
         }
         await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
       } else if (
