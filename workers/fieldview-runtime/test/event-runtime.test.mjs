@@ -428,3 +428,48 @@ test("public snapshot and stream reads need no user credential while state inspe
   }));
   assert.equal(schedule.status, 401);
 });
+
+
+test("EventRuntime publishes revisions to the shared multiplexer only while registered", async () => {
+  const storage = new MemoryStorage();
+  const deliveries = [];
+  const eventKey = "2026test";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    MULTIPLEXER: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (request) => {
+          deliveries.push({ id, authorization: request.headers.get("Authorization"), body: await request.json() });
+          return Response.json({ delivered: 1 });
+        },
+      }),
+    },
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+
+  const subscriptionRequest = (action) => new Request("https://event-runtime/subscriptions", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action }),
+  });
+  const subscribed = await runtime.fetch(subscriptionRequest("subscribe"));
+  assert.deepEqual(await subscribed.json(), { registered: true, event_key: eventKey });
+  await runtime.publishSnapshotRevision(4);
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].id, "shared");
+  assert.equal(deliveries[0].authorization, "Bearer runtime-token");
+  assert.deepEqual(deliveries[0].body, { topic: "event-state", event_key: eventKey, version: 4 });
+
+  const unsubscribed = await runtime.fetch(subscriptionRequest("unsubscribe"));
+  assert.deepEqual(await unsubscribed.json(), { registered: false, event_key: eventKey });
+  await runtime.publishSnapshotRevision(5);
+  assert.equal(deliveries.length, 1);
+});
