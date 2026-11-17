@@ -473,3 +473,52 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
   await runtime.publishSnapshotRevision(5);
   assert.equal(deliveries.length, 1);
 });
+
+test("EventRuntime applies lifecycle schedules and stops recurring polling after completed retention", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+  const lifecycleRequest = (lifecycle, extra = {}) => new Request("https://event-runtime/lifecycle", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      lifecycle,
+      upcomingIntervalMs: 30 * 60_000,
+      activeIntervalMs: 5 * 60_000,
+      ...extra,
+    }),
+  });
+
+  const upcoming = await runtime.fetch(lifecycleRequest("upcoming"));
+  assert.equal(upcoming.status, 200);
+  for (const endpoint of eventResourceEndpoints(eventKey)) {
+    assert.equal(storage.values.get("task:" + endpoint).intervalMs, 30 * 60_000);
+  }
+
+  const active = await runtime.fetch(lifecycleRequest("active"));
+  assert.equal(active.status, 200);
+  assert.equal(storage.values.get("task:" + TBA_ENDPOINTS.eventMatches(eventKey)).intervalMs, 5 * 60_000);
+  assert.equal(storage.values.get("task:" + TBA_ENDPOINTS.event(eventKey)).intervalMs, 30 * 60_000);
+
+  const completedUntil = Date.now() + 60_000;
+  const completed = await runtime.fetch(lifecycleRequest("completed", { completedUntil }));
+  assert.equal(completed.status, 200);
+  assert.equal(await storage.get("lifecycle:completed-until"), completedUntil);
+
+  await storage.put("lifecycle:completed-until", Date.now() - 1);
+  await runtime.alarm();
+  for (const endpoint of eventResourceEndpoints(eventKey)) {
+    assert.equal(storage.values.has("task:" + endpoint), false);
+  }
+  assert.equal(await storage.get("lifecycle:completed-until"), undefined);
+});

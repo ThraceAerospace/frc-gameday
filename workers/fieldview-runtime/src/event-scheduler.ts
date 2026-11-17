@@ -151,9 +151,15 @@ export class EventScheduler {
       for (const event of discovered) if (event.key) events.set(event.key, event);
     }
 
+    const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
     for (const event of events.values()) {
       const decision = classifyEventLifecycle(event, Date.now(), policy);
       if (!decision) continue;
+      // Historical event lists contain years of completed events. Only send an
+      // expiry instruction for events this scheduler previously activated.
+      if (decision.lifecycle === "expired" && !scheduledKeys.has(event.key)) continue;
+      if (decision.lifecycle === "expired") scheduledKeys.delete(event.key);
+      else scheduledKeys.add(event.key);
       const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(event.key));
       const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
         method: "POST",
@@ -171,5 +177,6 @@ export class EventScheduler {
       }));
       if (!response.ok) throw new Error("Failed to schedule " + event.key + ": HTTP " + response.status);
     }
+    await this.storage.put("scheduler:event-keys", [...scheduledKeys]);
   }
 }
