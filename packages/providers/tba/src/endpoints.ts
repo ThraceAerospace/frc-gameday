@@ -2,6 +2,7 @@
  * Provider-relative TBA v3 path builders. No fetching, caching, or normalization.
  */
 export const TBA_ENDPOINTS = {
+  events: (year: number) => `/events/${year}`,
   event: (key: string) => `/event/${segment(key)}`,
   eventTeams: (key: string) => `/event/${segment(key)}/teams`,
   eventTeamStatuses: (key: string) => `/event/${segment(key)}/teams/statuses`,

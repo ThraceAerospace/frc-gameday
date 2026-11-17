@@ -7,7 +7,22 @@ workers_dev = false
 name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
 
+[[durable_objects.bindings]]
+name = "MULTIPLEXER"
+class_name = "Multiplexer"
+
+[[durable_objects.bindings]]
+name = "EVENT_SCHEDULER"
+class_name = "EventScheduler"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["EventRuntime"]
-\n[[migrations]]\ntag = "v2"\nnew_sqlite_classes = ["Multiplexer"]\n
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Multiplexer"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["EventScheduler"]

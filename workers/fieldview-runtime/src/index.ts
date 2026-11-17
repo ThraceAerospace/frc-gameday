@@ -1,9 +1,10 @@
 import { EventRuntime } from "./event-runtime.ts";
 import { Multiplexer } from "./multiplexer.ts";
+import { EventScheduler } from "./event-scheduler.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 
-export { EventRuntime, Multiplexer };
+export { EventRuntime, EventScheduler, Multiplexer };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -69,6 +70,17 @@ export default {
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
       const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
       return stub.fetch(new Request("https://fieldview-multiplexer/stream", { method: "GET", headers: request.headers }));
+    }
+
+    if (url.pathname === "/internal/scheduler/start" || url.pathname === "/internal/scheduler/stop" || url.pathname === "/internal/scheduler/state") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const action = url.pathname.endsWith("/start") ? "start" : url.pathname.endsWith("/stop") ? "stop" : "state";
+      return scheduler.fetch(new Request("https://event-scheduler/" + action, {
+        method: action === "state" ? "GET" : "POST",
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
     }
 
     if (url.pathname === "/health") {

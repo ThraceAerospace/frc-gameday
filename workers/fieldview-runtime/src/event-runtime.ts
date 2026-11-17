@@ -174,6 +174,48 @@ export class EventRuntime {
       return Response.json({ registered: body.action === "subscribe", event_key: this.eventKey });
     }
 
+    if (request.method === "POST" && url.pathname === "/lifecycle") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || !["upcoming", "active", "completed", "expired"].includes(String(body.lifecycle))) {
+        return Response.json({ error: "Invalid event lifecycle" }, { status: 400 });
+      }
+      const upcomingIntervalMs = body.upcomingIntervalMs;
+      const activeIntervalMs = body.activeIntervalMs;
+      const completedUntil = body.completedUntil;
+      if (![upcomingIntervalMs, activeIntervalMs].every((value) =>
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 1_000) ||
+        (completedUntil !== undefined && (typeof completedUntil !== "number" || !Number.isSafeInteger(completedUntil)))) {
+        return Response.json({ error: "Invalid lifecycle polling configuration" }, { status: 400 });
+      }
+      const liveEndpoints = [
+        TBA_ENDPOINTS.eventTeamStatuses(this.eventKey),
+        TBA_ENDPOINTS.eventMatches(this.eventKey),
+        TBA_ENDPOINTS.eventAlliances(this.eventKey),
+        TBA_ENDPOINTS.eventOPRs(this.eventKey),
+        TBA_ENDPOINTS.eventPredictions(this.eventKey),
+      ];
+      const lifecycle = body.lifecycle;
+      if (lifecycle === "expired") {
+        await this.cancelRecurringPolls();
+        await this.storage.delete("lifecycle:completed-until");
+        return Response.json({ lifecycle, scheduled: 0, event_key: this.eventKey });
+      }
+      if (lifecycle === "upcoming") {
+        await this.storage.delete("lifecycle:completed-until");
+        await this.schedulePolls([...this.allowedEndpoints], upcomingIntervalMs as number);
+      } else {
+        const metadataEndpoints = [...this.allowedEndpoints].filter((endpoint) => !liveEndpoints.includes(endpoint));
+        await this.schedulePolls(metadataEndpoints, upcomingIntervalMs as number);
+        await this.schedulePolls(liveEndpoints, activeIntervalMs as number);
+        if (lifecycle === "completed" && typeof completedUntil === "number") {
+          await this.storage.put("lifecycle:completed-until", completedUntil);
+        } else {
+          await this.storage.delete("lifecycle:completed-until");
+        }
+      }
+      return Response.json({ lifecycle, event_key: this.eventKey });
+    }
+
     if (request.method === "POST" && url.pathname === "/schedule") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || !Array.isArray(body.endpoints) ||
@@ -333,12 +375,13 @@ export class EventRuntime {
       for (const endpoint of endpoints) {
         const key = taskStorageKey(endpoint);
         const previous = await transaction.get<PollTask>(key);
+        const unchanged = previous?.retryOnFailure === true && previous.intervalMs === intervalMs;
         const task: PollTask = {
           endpoint,
-          dueAt: now,
+          dueAt: unchanged ? previous.dueAt : now,
           intervalMs,
-          generation: (previous?.generation ?? 0) + 1,
-          attempts: 0,
+          generation: unchanged ? previous.generation : (previous?.generation ?? 0) + 1,
+          attempts: unchanged ? previous.attempts : 0,
           retryOnFailure: true,
         };
         await transaction.put(key, task);
@@ -349,6 +392,11 @@ export class EventRuntime {
 
   async alarm(): Promise<void> {
     const now = Date.now();
+    const completedUntil = await this.storage.get<number>("lifecycle:completed-until");
+    if (completedUntil !== undefined && now >= completedUntil) {
+      await this.cancelRecurringPolls();
+      await this.storage.delete("lifecycle:completed-until");
+    }
     // Reserve due work before network I/O. Retriable TBA work keeps a durable
     // retry deadline; at-most-once Statbotics work is removed before its fetch.
     const dueTasks = await this.storage.transaction(async (transaction) => {
@@ -393,6 +441,16 @@ export class EventRuntime {
         await this.rearm(transaction);
       });
     }
+  }
+
+  private async cancelRecurringPolls(): Promise<void> {
+    await this.storage.transaction(async (transaction) => {
+      const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
+      for (const [key, task] of tasks) {
+        if (task.retryOnFailure !== false) await transaction.delete(key);
+      }
+      await this.rearm(transaction);
+    });
   }
 
   private retryDelay(task: PollTask): number {
