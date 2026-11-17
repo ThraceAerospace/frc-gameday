@@ -84,7 +84,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 
 - `packages/domain` may have type-only dependencies on provider packages for unchanged provider-sourced fields. It must not import provider clients or transport implementations. It has no runtime dependency on UI or infrastructure.
 - The domain model is the shared application data model. HTTP and WebSocket boundaries serialize these objects directly; transport code must not introduce a second semantic model.
-- The domain may import provider types for unchanged pass-through fields using type-only dependencies. Provider packages own their schemas and provider-specific implementation; client DTOs remain explicit and provider-independent.
+- The domain may import provider types for unchanged pass-through fields using type-only dependencies. Provider packages own their schemas and provider-specific implementation; the client receives serialized FieldView domain objects, not provider clients or acquisition code.
 - The Worker may compose providers, domain services, analytics, storage, and Durable Objects.
 - The web application should consume serialized FieldView domain objects and presentation-safe utilities, not provider clients or backend runtime modules. Provider implementations and infrastructure types remain outside the client.
 - Analytics accepts normalized input data and has no hidden provider fetching or UI dependency.
@@ -120,7 +120,7 @@ The legacy application remains operational while individual responsibilities mov
 - The new implementation is built behind a clear boundary.
 - During validation, outputs may be compared against the old implementation.
 - A single owner is selected for writes and authoritative publication.
-- Consumers are migrated to the new contract.
+- Consumers are migrated to the canonical FieldView domain model and its serialized representation.
 - The old implementation is retired only after all callers and operational dependencies have moved.
 
 Do not build a permanent dual-write system. If temporary mirroring is needed for validation, it must be read-only from the comparison side, observable, and explicitly time-limited.
@@ -161,7 +161,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M3 — Canonical domain foundation
 
-**Status:** In progress. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference case. Initial types now exist for team, season, event, event-team, match, playoff-alliance, provenance, and analytics concepts. `FieldViewMatch` retains the exact TBA match type and adds explicitly typed Statbotics associations, independent predictions, analysis, playoff associations, and evidence-bearing flags. An initial pure `normalizeFieldViewMatch` composition boundary now associates the independent TBA match, TBA event prediction, TBA event OPR, and Statbotics match resources. It preserves the original TBA match fields, keeps predictions independent, uses only explicitly supplied cross-provider team identity associations, and associates EPA/OPR values without mutating source records. Archimedes SF13 fixture tests cover source preservation, independent predictions, roster-order associations, and the absence of inferred Statbotics IDs. CI validation for this implementation is pending. Remaining M3 work: complete and review the canonical domain objects, verify that their public data shapes serialize and round-trip without semantic loss, and add fixture-driven serialization tests. There will be no separate DTO package or duplicated client model; the domain objects themselves are the application data model.
+**Status:** In progress. TBA and Statbotics provider workspaces own their generated schemas, provider type aliases, and generation scripts. The first-class FieldView domain model is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`, using Archimedes SF13 as its reference case. Initial types now exist for team, season, event, event-team, match, playoff-alliance, provenance, and analytics concepts. `FieldViewMatch` retains the exact TBA match type and adds explicitly typed Statbotics associations, independent predictions, analysis, playoff associations, and evidence-bearing flags. An initial pure `normalizeFieldViewMatch` composition boundary now associates the independent TBA match, TBA event prediction, TBA event OPR, and Statbotics match resources. It preserves the original TBA match fields, keeps predictions independent, uses only explicitly supplied cross-provider team identity associations, and associates EPA/OPR values without mutating source records. Archimedes SF13 fixture tests cover source preservation, independent predictions, roster-order associations, and the absence of inferred Statbotics IDs. The normalization implementation passed workspace typechecking and domain tests in CI; the new transport round-trip tests are awaiting CI validation. Remaining M3 work: complete and review the canonical domain objects, verify that their public data shapes serialize and round-trip without semantic loss, and add fixture-driven serialization tests. There will be no separate DTO package or duplicated client model; the domain objects themselves are the application data model.
 
 **Work**
 - Define canonical models including FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, and analytics result types.
@@ -178,7 +178,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 **Work**
 - Introduce isolated TBA, Statbotics, and FRC Colors adapters.
-- Keep raw provider schemas, API details, and provider-specific types inside their respective packages. The backend domain may import those types; client contracts may not expose them.
+- Keep raw provider schemas, API details, and provider-specific clients inside their respective packages. The domain may use provider types for unchanged source fields; clients consume the FieldView domain shape and never provider acquisition implementations.
 - Pass TBA and Statbotics payloads unchanged into FieldView normalization. Pass every other provider payload through unchanged.
 - Implement only transformations that have been explicitly described and approved; represent each result in a specifically named, documented FieldView field.
 - Define per-field source precedence and internal provenance/freshness.
@@ -235,7 +235,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 **Exit criteria**
 - No frontend provider schema imports or direct provider requests remain.
-- Views render contract snapshots and do not own shared acquisition.
+- Views render serialized FieldView domain snapshots and do not own shared acquisition.
 - Realtime, remote-session, and event-timezone invariants pass integration tests.
 
 ### M8 — Validation and production cutover
@@ -303,4 +303,4 @@ Every finding should be revalidated before implementation. Some will disappear b
 3. Continue M3 by completing the canonical domain model, verifying direct JSON transport serialization and round-trip behavior, and adding fixture-driven tests before migrating application consumers.
 4. Resolve the open EventRuntime, event-team refresh, publication, and storage decisions before implementing backend state ownership.
 
-**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The first FieldView domain-model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`; domain type implementation and the canonical domain's transport serialization validation remain outstanding. The workspace lockfile has been refreshed and pushed. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
+**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The first FieldView domain-model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`; initial domain types and match normalization are implemented, and direct transport serialization validation is now covered by fixture tests. The workspace lockfile has been refreshed and pushed. The legacy Redis/SharedWorker/Vercel data path remains. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
