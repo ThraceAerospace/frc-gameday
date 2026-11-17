@@ -30,7 +30,8 @@
         "../../packages/domain/src/index.ts"
       ]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",
