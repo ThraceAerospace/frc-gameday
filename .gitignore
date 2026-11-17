@@ -43,3 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 workers/fieldview-runtime/.dev.vars
+
+# Cloudflare Wrangler local state
+.wrangler/
