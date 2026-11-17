@@ -128,7 +128,10 @@ export function classifyEventLifecycle(
 interface DiscoveryCache {
   etag: string | null;
   events: TBAEvent[];
+  /** Retrieval time of the retained payload version. */
   updatedAt: number;
+  /** Most recent successful 200/304 validation of that payload. */
+  checkedAt?: number;
 }
 
 export class EventScheduler {
@@ -155,15 +158,19 @@ export class EventScheduler {
       const cached = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
       if (!cached) return Response.json({ error: "Event discovery cache is not ready" }, { status: 503 });
       const retrievedAt = new Date(cached.updatedAt).toISOString();
+      const checkedAt = cached.checkedAt ?? cached.updatedAt;
+      const sourceStatus = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs * 2
+        ? "stale" as const
+        : "available" as const;
       const events = cached.events.map((event) => normalizeFieldViewEvent(event, {
         tba_event: {
-          status: "available",
+          status: sourceStatus,
           retrieved_at: retrievedAt,
           ...(cached.etag === null ? {} : { validator: cached.etag }),
         },
       }));
       return Response.json(
-        { year, events, updatedAt: cached.updatedAt },
+        { year, events, updatedAt: cached.updatedAt, checkedAt },
         {
           headers: {
             "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
@@ -223,13 +230,16 @@ export class EventScheduler {
       let discovered: TBAEvent[];
       if (response.status === 304 && cached) {
         discovered = cached.events;
+        await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
       } else if (response.ok) {
         discovered = await response.json() as TBAEvent[];
         if (!Array.isArray(discovered)) throw new Error("TBA event discovery returned a non-array payload");
+        const retrievedAt = Date.now();
         await this.storage.put(cacheKey, {
           etag: response.headers.get("ETag"),
           events: discovered,
-          updatedAt: Date.now(),
+          updatedAt: retrievedAt,
+          checkedAt: retrievedAt,
         } satisfies DiscoveryCache);
       } else {
         throw new Error("TBA event discovery failed for " + discoveryYear + " with HTTP " + response.status);
