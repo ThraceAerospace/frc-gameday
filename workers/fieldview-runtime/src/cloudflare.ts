@@ -33,6 +33,7 @@ export interface RuntimeEnvironment {
   TBA_WEBHOOK_SECRET: string;
   RUNTIME_ADMIN_TOKEN: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;
+  MULTIPLEXER?: DurableObjectNamespaceLike;
   /** Test seam; production uses the Workers global fetch implementation. */
   fetcher?: typeof fetch;
   /** Test seams for the Cloudflare WebSocket upgrade API. */

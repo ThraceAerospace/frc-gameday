@@ -1,8 +1,9 @@
 import { EventRuntime } from "./event-runtime.ts";
+import { Multiplexer } from "./multiplexer.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 
-export { EventRuntime };
+export { EventRuntime, Multiplexer };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -65,7 +66,7 @@ export default {
       }));
     }
 
-    if (url.pathname === "/health") {
+    if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {\n      const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));\n      return stub.fetch(new Request("https://fieldview-multiplexer/stream", request));\n    }\n\n    if (url.pathname === "/health") {
       return Response.json({ service: "fieldview-runtime", status: "ok" });
     }
 

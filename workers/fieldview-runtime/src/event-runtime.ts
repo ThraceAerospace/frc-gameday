@@ -165,6 +165,15 @@ export class EventRuntime {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
 
+    if (request.method === "POST" && url.pathname === "/subscriptions") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe")) {
+        return Response.json({ error: "Expected subscribe or unsubscribe action" }, { status: 400 });
+      }
+      await this.storage.put("multiplexer:shared", body.action === "subscribe");
+      return Response.json({ registered: body.action === "subscribe", event_key: this.eventKey });
+    }
+
     if (request.method === "POST" && url.pathname === "/schedule") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || !Array.isArray(body.endpoints) ||
@@ -477,7 +486,7 @@ export class EventRuntime {
       return { status: next.status, representationChanged, snapshotChanged: next.revision !== latest.revision, snapshotVersion };
     });
 
-    if (result.snapshotChanged) this.publishSnapshotRevision(result.snapshotVersion);
+    if (result.snapshotChanged) await this.publishSnapshotRevision(result.snapshotVersion);
 
     if (result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
       await this.scheduleStatboticsRefresh(Date.now());
@@ -594,16 +603,29 @@ export class EventRuntime {
       const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
       return { accepted: true, snapshotVersion: messageType === "match_score" || messageType === "match_video" ? snapshotVersion : null };
     });
-    if (result.snapshotVersion !== null) this.publishSnapshotRevision(result.snapshotVersion);
+    if (result.snapshotVersion !== null) await this.publishSnapshotRevision(result.snapshotVersion);
     return result.accepted;
   }
 
-  private publishSnapshotRevision(version: number): void {
+  private async publishSnapshotRevision(version: number): Promise<void> {
+    // Keep the legacy direct stream available during migration, while the
+    // shared multiplexer becomes the browser integration path.
     const message = JSON.stringify({ type: "snapshot.changed", event_key: this.eventKey, version });
     for (const socket of this.state.getWebSockets?.() ?? []) {
       try { socket.send(message); }
       catch { try { socket.close(1011, "Subscription delivery failed"); } catch { /* already closed */ } }
     }
+
+    if (await this.storage.get<boolean>("multiplexer:shared") !== true || !this.env.MULTIPLEXER) return;
+    const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
+    await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ topic: "event-state", event_key: this.eventKey, version }),
+    })).catch(() => undefined);
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {

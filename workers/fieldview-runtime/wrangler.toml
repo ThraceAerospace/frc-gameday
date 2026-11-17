@@ -10,3 +10,4 @@ class_name = "EventRuntime"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["EventRuntime"]
+\n[[migrations]]\ntag = "v2"\nnew_sqlite_classes = ["Multiplexer"]\n
