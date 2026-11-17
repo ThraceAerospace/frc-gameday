@@ -8,7 +8,7 @@ import {
   archimedesSf13m1StatboticsMatch,
   archimedesSf13m1TbaMatch,
   archimedesSf13m1TbaPrediction,
-  archimedesSf13m1TeamAssociations,
+  archimedesSf13m1TbaTeams,
 } from "../dist/fixtures/archimedes-sf13m1.js";
 
 const sources = {
@@ -62,7 +62,7 @@ test("normalization associates independent source resources without replacing pr
     statbotics_match: archimedesSf13m1StatboticsMatch,
     tba_event_prediction: archimedesSf13m1TbaPrediction,
     tba_event_oprs: archimedes2026EventOprs,
-    team_associations: archimedesSf13m1TeamAssociations,
+    tba_teams: archimedesSf13m1TbaTeams,
     sources,
   });
 
@@ -75,21 +75,20 @@ test("normalization associates independent source resources without replacing pr
   assert.deepEqual(match.teams.red.map((team) => team.team_key), [
     "frc7407", "frc5940", "frc9470",
   ]);
-  assert.deepEqual(match.teams.red.map((team) => team.statbotics_team_id), [
+  assert.deepEqual(match.teams.red.map((team) => team.team_number), [
     7407, 5940, 9470,
   ]);
-  assert.equal(typeof match.teams.red[0].statbotics_team_id, "number");
   assert.equal(match.teams.red[0].opr, archimedes2026EventOprs.oprs.frc7407);
   assert.equal(match.teams.red[0].dpr, archimedes2026EventOprs.dprs.frc7407);
   assert.equal(match.teams.red[0].ccwm, archimedes2026EventOprs.ccwms.frc7407);
   assert.strictEqual(match.teams.red[0].pre_epa, archimedesSf13m1StatboticsMatch.pre_epas["7407"]);
   assert.strictEqual(match.teams.red[0].epa, archimedesSf13m1StatboticsMatch.epas["7407"]);
   assert.equal(match.teams.blue[2].team_key, "frc10021");
-  assert.equal(match.teams.blue[2].statbotics_team_id, 10021);
+  assert.equal(match.teams.blue[2].team_number, 10021);
   assert.strictEqual(match.sources, sources);
 });
 
-test("normalization does not infer Statbotics IDs from TBA team keys", () => {
+test("normalization correlates Statbotics EPA only when TBA team metadata is supplied", () => {
   const match = normalizeFieldViewMatch({
     tba_match: archimedesSf13m1TbaMatch,
     statbotics_match: archimedesSf13m1StatboticsMatch,
@@ -97,7 +96,7 @@ test("normalization does not infer Statbotics IDs from TBA team keys", () => {
   });
 
   assert.equal(match.teams.red[0].team_key, "frc7407");
-  assert.equal("statbotics_team_id" in match.teams.red[0], false);
+  assert.equal("team_number" in match.teams.red[0], false);
   assert.equal("pre_epa" in match.teams.red[0], false);
   assert.equal("epa" in match.teams.red[0], false);
 });
@@ -109,7 +108,7 @@ test("normalized FieldView match survives JSON transport round-trip", () => {
     statbotics_match: archimedesSf13m1StatboticsMatch,
     tba_event_prediction: archimedesSf13m1TbaPrediction,
     tba_event_oprs: archimedes2026EventOprs,
-    team_associations: archimedesSf13m1TeamAssociations,
+    tba_teams: archimedesSf13m1TbaTeams,
     sources,
   });
 
@@ -121,7 +120,7 @@ test("normalized FieldView match survives JSON transport round-trip", () => {
   assert.deepEqual(received.alliances, archimedesSf13m1TbaMatch.alliances);
   assert.deepEqual(received.predictions.tba, archimedesSf13m1TbaPrediction);
   assert.deepEqual(received.predictions.statbotics, archimedesSf13m1StatboticsMatch.pred);
-  assert.equal(received.teams.red[0].statbotics_team_id, 7407);
+  assert.equal(received.teams.red[0].team_number, 7407);
   assert.equal(received.teams.red[0].opr, archimedes2026EventOprs.oprs.frc7407);
   assert.equal(received.sources.tba_match.status, "available");
 });
