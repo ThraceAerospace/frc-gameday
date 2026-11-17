@@ -1,14 +1,16 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
+import {
+  normalizeFieldViewEventSnapshot,
+  type EventKey,
+  type FieldViewEvent,
+  type FieldViewEventSnapshot,
+  type FieldViewMatch,
+  type FieldViewPlayoffAlliance,
+  type FieldViewTeam,
+} from "@fieldview/domain";
 import { TBA } from "@/lib/tba/service";
 import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
-import type {
-  TBAEliminationAlliance,
-  TBAEvent,
-  TBAMatch,
-  TBAMatchSimple,
-  TBATeam,
-} from "@/lib/tba/types";
 import MatchRow from "@/components/match/MatchRow";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
@@ -45,10 +47,7 @@ export default async function EventPage({
     );
   }
 
-  let event: TBAEvent | null;
-  let teams: TBATeam[] | null;
-  let matches: TBAMatch[] | null;
-  let alliances: TBAEliminationAlliance[] | null;
+  let eventSnapshot: FieldViewEventSnapshot;
 
   try {
     const canonical = await getCanonicalEventSnapshot(eventKey);
@@ -60,21 +59,30 @@ export default async function EventPage({
       (activeTab !== "matches" || snapshot.playoff_alliances !== undefined);
 
     if (canonicalReady && snapshot) {
-      event = snapshot.event ?? null;
-      teams = snapshot.teams ?? null;
-      matches = snapshot.matches ?? null;
-      alliances = activeTab === "matches"
-        ? snapshot.playoff_alliances ?? null
-        : null;
+      eventSnapshot = snapshot;
     } else {
-      [event, teams, matches] = await Promise.all([
+      const [tbaEvent, tbaTeams, tbaMatches, tbaAlliances] = await Promise.all([
         TBA.getEvent(eventKey),
         TBA.getTeamsAtEvent(eventKey),
         TBA.getEventMatches(eventKey),
+        activeTab === "matches" ? TBA.getEventPlayoffAlliances(eventKey) : Promise.resolve(null),
       ]);
-      alliances = activeTab === "matches"
-        ? await TBA.getEventPlayoffAlliances(eventKey)
-        : null;
+      const retrievedAt = new Date().toISOString();
+      const source = { status: "available" as const, retrieved_at: retrievedAt };
+      eventSnapshot = normalizeFieldViewEventSnapshot({
+        event_key: eventKey as EventKey,
+        tba_event: tbaEvent,
+        tba_teams: tbaTeams,
+        tba_matches: tbaMatches,
+        tba_playoff_alliances: tbaAlliances,
+        sources: {
+          event: { tba_event: source },
+          teams: { tba_teams: source },
+          event_teams: { tba_teams: source },
+          matches: { tba_match: source },
+          playoff_alliances: { tba_playoff_alliances: source },
+        },
+      });
     }
   } catch {
     return (
@@ -90,6 +98,11 @@ export default async function EventPage({
       </SiteShell>
     );
   }
+
+  const event: FieldViewEvent | null = eventSnapshot.event ?? null;
+  const teams: FieldViewTeam[] | null = eventSnapshot.teams ?? null;
+  const matches: FieldViewMatch[] | null = eventSnapshot.matches ?? null;
+  const alliances: FieldViewPlayoffAlliance[] | null = eventSnapshot.playoff_alliances ?? null;
 
   if (!event) {
     return (
@@ -108,17 +121,17 @@ export default async function EventPage({
   const teamsAvailable = teams !== null;
   const matchesAvailable = matches !== null;
   const sortedTeams = [...(teams ?? [])].sort(
-    (a: TBATeam, b: TBATeam) => a.team_number - b.team_number,
+    (a: FieldViewTeam, b: FieldViewTeam) => a.team_number - b.team_number,
   );
 
-  const sortedMatches = [...(matches ?? [])].sort((a: TBAMatchSimple, b: TBAMatchSimple) => {
+  const sortedMatches = [...(matches ?? [])].sort((a: FieldViewMatch, b: FieldViewMatch) => {
     const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
     return (levelOrder[a.comp_level] ?? 99) - (levelOrder[b.comp_level] ?? 99)
       || (a.set_number ?? 0) - (b.set_number ?? 0)
       || (a.match_number ?? 0) - (b.match_number ?? 0);
   });
-  const qualificationMatches = sortedMatches.filter((match: TBAMatch) => match.comp_level === "qm");
-  const playoffMatches = sortedMatches.filter((match: TBAMatch) => isEliminationMatch(match.comp_level));
+  const qualificationMatches = sortedMatches.filter((match: FieldViewMatch) => match.comp_level === "qm");
+  const playoffMatches = sortedMatches.filter((match: FieldViewMatch) => isEliminationMatch(match.comp_level));
   const playoffMatchesPanel = playoffMatches.length > 0 ? (
     <MatchGroup
       title="Playoff Matches"
