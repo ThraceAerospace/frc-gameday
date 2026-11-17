@@ -1,0 +1,49 @@
+name: FieldView CI
+
+on:
+  push:
+    branches:
+      - fieldview-architecture-migration
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Workspace validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Pin npm version
+        run: npm install --global npm@11.19.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck workspaces
+        run: npm run typecheck
+
+      - name: Run domain tests
+        run: npm test
+
+      # The existing application has a documented legacy lint baseline.
+      # Keep lint visible in CI without making this migration slice fail on
+      # unrelated pre-existing findings.
+      - name: Lint (non-blocking legacy baseline)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build web application
+        run: npm run build

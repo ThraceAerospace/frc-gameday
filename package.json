@@ -12,6 +12,8 @@
     "build": "npm run build --workspace=@fieldview/web",
     "start": "npm run start --workspace=@fieldview/web",
     "lint": "eslint",
+    "typecheck": "npm run typecheck --workspace=@fieldview/web && npm run typecheck --workspace=@fieldview/domain",
+    "test": "npm test --workspace=@fieldview/domain",
     "generate:tba-types": "node packages/providers/tba/scripts/generate-types.mjs",
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
