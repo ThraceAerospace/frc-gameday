@@ -67,13 +67,15 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       handlers = new Set();
       this.snapshotHandlers.set(eventKey, handlers);
     }
-    const first = !this.hasEventStateSubscription(eventKey);
+    const hadSubscription = this.hasEventStateSubscription(eventKey);
+    const first = !hadSubscription;
     handlers.add(handler);
     const cached = this.snapshots.get(eventKey);
     if (cached) queueMicrotask(() => { if (handlers?.has(handler)) handler(cached); });
     this.disposed = false;
     this.ensureConnected();
     if (first) this.sendSubscription("event-state", eventKey, true);
+    else void this.fetchCanonicalSnapshot(eventKey);
 
     return () => {
       const current = this.snapshotHandlers.get(eventKey);
@@ -189,7 +191,9 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     if (message.type === "pong" || message.type === "connected") return;
     if (message.type === "subscribed" && message.topic === "event-state" &&
         typeof message.event_key === "string") {
-      void this.fetchCanonicalSnapshot(message.event_key);
+      if ((this.snapshotHandlers.get(message.event_key)?.size ?? 0) > 0) {
+        void this.fetchCanonicalSnapshot(message.event_key);
+      }
       return;
     }
     if (message.type === "snapshot.changed" && typeof message.event_key === "string") {
@@ -201,7 +205,9 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         ...(version === undefined ? {} : { version }),
       };
       for (const handler of this.handlers.get(eventKey) ?? []) handler(eventMessage);
-      void this.fetchCanonicalSnapshot(eventKey, version);
+      if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
+        void this.fetchCanonicalSnapshot(eventKey, version);
+      }
     }
   }
 
