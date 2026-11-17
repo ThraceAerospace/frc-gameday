@@ -101,3 +101,42 @@ test("normalization does not infer Statbotics IDs from TBA team keys", () => {
   assert.equal("pre_epa" in match.teams.red[0], false);
   assert.equal("epa" in match.teams.red[0], false);
 });
+
+
+test("normalized FieldView match survives JSON transport round-trip", () => {
+  const match = normalizeFieldViewMatch({
+    tba_match: archimedesSf13m1TbaMatch,
+    statbotics_match: archimedesSf13m1StatboticsMatch,
+    tba_event_prediction: archimedesSf13m1TbaPrediction,
+    tba_event_oprs: archimedes2026EventOprs,
+    team_associations: archimedesSf13m1TeamAssociations,
+    sources,
+  });
+
+  const serialized = JSON.stringify(match);
+  assert.equal(typeof serialized, "string");
+  const received = JSON.parse(serialized);
+
+  assert.deepEqual(received, match);
+  assert.deepEqual(received.alliances, archimedesSf13m1TbaMatch.alliances);
+  assert.deepEqual(received.predictions.tba, archimedesSf13m1TbaPrediction);
+  assert.deepEqual(received.predictions.statbotics, archimedesSf13m1StatboticsMatch.pred);
+  assert.equal(received.teams.red[0].statbotics_team_id, 7407);
+  assert.equal(received.teams.red[0].opr, archimedes2026EventOprs.oprs.frc7407);
+  assert.equal(received.sources.tba_match.status, "available");
+});
+
+test("JSON transport preserves explicit null separately from absent properties", () => {
+  const value = {
+    explicit_null: null,
+    absent_by_design: undefined,
+    zero: 0,
+  };
+
+  const received = JSON.parse(JSON.stringify(value));
+
+  assert.equal("explicit_null" in received, true);
+  assert.equal(received.explicit_null, null);
+  assert.equal("absent_by_design" in received, false);
+  assert.equal(received.zero, 0);
+});
