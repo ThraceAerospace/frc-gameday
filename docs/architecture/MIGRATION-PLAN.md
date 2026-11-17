@@ -100,7 +100,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | TBA / Statbotics / FRC Colors API access | Provider adapters invoked by Workers |
 | TBA and Statbotics normalization/correlation | FieldView domain layer, after unchanged provider payload receipt |
 | Other provider payloads | Passed through unchanged |
-| Scheduled refresh triggers | Worker Cron Triggers |
+| Scheduled refresh triggers | Durable Object alarms owned by EventRuntime and the global EventScheduler |
 | Authoritative event state and reconciliation | EventRuntime Durable Object |
 | Event-scoped persistent coordination | EventRuntime Durable Object |
 | Live event subscriptions and publication | Durable Object / Worker boundary |
