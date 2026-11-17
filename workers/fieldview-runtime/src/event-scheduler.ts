@@ -220,7 +220,8 @@ export class EventScheduler {
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
     const year = new Date().getUTCFullYear();
     const events = new Map<string, TBAEvent>();
-    for (const discoveryYear of [year - 1, year, year + 1]) {
+    // FieldView only needs the current calendar year's discovery cache.
+    for (const discoveryYear of [year]) {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
       const cacheKey = DISCOVERY_PREFIX + discoveryYear;
       const cached = await this.storage.get<DiscoveryCache>(cacheKey);
