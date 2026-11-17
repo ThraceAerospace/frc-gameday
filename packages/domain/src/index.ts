@@ -14,3 +14,4 @@ export * from "./analytics.js";
 export * from "./normalization/match.js";
 
 export * from "./normalization/event-team.js";
+export * from "./normalization/team-season.js";
