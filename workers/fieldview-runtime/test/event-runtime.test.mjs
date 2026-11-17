@@ -87,3 +87,53 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   assert.deepEqual(await duplicate.json(), { accepted: true, duplicate: true });
   assert.equal(storage.values.get(key).revision, updated.revision);
 });
+
+test("GET snapshot composes canonical event-team domain objects with source metadata", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoints = eventResourceEndpoints(eventKey);
+  const now = Date.now();
+  const save = (endpoint, data) => storage.values.set("endpoint:" + endpoint, {
+    endpoint,
+    status: "available",
+    data,
+    providerData: data,
+    etag: '"v1"',
+    lastFetchedAt: now,
+    expiresAt: now + 60_000,
+    revision: 1,
+    validatorRevision: 1,
+    lastAttemptAt: now,
+    lastWebhookAt: null,
+  });
+  save(endpoints[0], { key: eventKey, name: "Test Event", timezone: "America/New_York" });
+  save(endpoints[1], [{ key: "frc3461", team_number: 3461, nickname: "PEACCE" }]);
+  save(endpoints[2], { frc3461: null });
+  save(endpoints[5], {
+    oprs: { frc3461: 0 }, dprs: { frc3461: 0 }, ccwms: { frc3461: 0 },
+  });
+
+  const env = {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => new Response("unused"),
+  };
+  const runtime = new EventRuntime({ storage }, env, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+    },
+  }));
+  assert.equal(response.status, 200);
+  const snapshot = await response.json();
+  assert.equal(snapshot.event.key, eventKey);
+  assert.equal(snapshot.teams[0].team_number, 3461);
+  assert.equal(snapshot.event_teams[0].tba_status, null);
+  assert.equal(snapshot.event_teams[0].opr, 0);
+  assert.equal(snapshot.event_teams[0].dpr, 0);
+  assert.equal(snapshot.event.sources.tba_event.status, "available");
+  assert.equal(snapshot.event_teams[0].sources.tba_event_oprs.validator, '"v1"');
+});

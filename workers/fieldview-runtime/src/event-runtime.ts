@@ -14,6 +14,10 @@ import type {
 } from "./cloudflare.ts";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
+import type { TBAEvent, TBAEventOPRs, TBAEventTeamStatuses, TBATeam } from "../../../packages/providers/tba/src/types.ts";
+import type { EventKey } from "../../../packages/domain/src/ids.ts";
+import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
+import { normalizeFieldViewEventSnapshot } from "../../../packages/domain/src/normalization/event-snapshot.ts";
 
 interface PollTask {
   endpoint: string;
@@ -50,6 +54,31 @@ function cacheMaxAgeSeconds(value: string | null): number | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toSourceMetadata(
+  state: EndpointState<unknown> | undefined,
+  now: number,
+): FieldViewSourceRecordMetadata | undefined {
+  if (!state || state.status === "unknown") return undefined;
+  if (state.status === "failed" || state.status === "unavailable") {
+    return { status: state.status, retrieved_at: null };
+  }
+  const retrievedAt = state.lastFetchedAt ?? state.lastWebhookAt;
+  if (retrievedAt === null) return { status: "failed", retrieved_at: null };
+  const expired = state.expiresAt !== null && state.expiresAt < now;
+  const status = state.status === "stale" || expired ? "stale" : "available";
+  return {
+    status,
+    retrieved_at: new Date(retrievedAt).toISOString(),
+    ...(state.lastFetchedAt !== null && state.etag !== null
+      ? { validator: state.etag }
+      : {}),
+  };
+}
+
+function hasAcquiredValue(state: EndpointState<unknown> | undefined): boolean {
+  return Boolean(state && (state.lastFetchedAt !== null || state.lastWebhookAt !== null));
 }
 
 export function eventResourceEndpoints(eventKey: string): string[] {
@@ -158,6 +187,10 @@ export class EventRuntime {
       return Response.json({ accepted: true, duplicate: !accepted });
     }
 
+    if (request.method === "GET" && url.pathname === "/snapshot") {
+      return Response.json(await this.buildEventSnapshot());
+    }
+
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({
@@ -167,6 +200,43 @@ export class EventRuntime {
     }
 
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private async buildEventSnapshot() {
+    const endpoints = eventResourceEndpoints(this.eventKey);
+    const eventEndpoint = endpoints[0];
+    const teamsEndpoint = endpoints[1];
+    const statusesEndpoint = endpoints[2];
+    const oprsEndpoint = TBA_ENDPOINTS.eventOPRs(this.eventKey);
+    const [eventState, teamsState, statusesState, oprsState] = await Promise.all([
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(statusesEndpoint)),
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
+    ]);
+    const now = Date.now();
+    const eventSource = toSourceMetadata(eventState, now);
+    const teamsSource = toSourceMetadata(teamsState, now);
+    const statusSource = toSourceMetadata(statusesState, now);
+    const oprsSource = toSourceMetadata(oprsState, now);
+
+    return normalizeFieldViewEventSnapshot({
+      event_key: this.eventKey as EventKey,
+      ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
+      ...(hasAcquiredValue(teamsState) ? { tba_teams: teamsState!.data as TBATeam[] | null } : {}),
+      ...(hasAcquiredValue(statusesState)
+        ? { tba_team_statuses: statusesState!.data as TBAEventTeamStatuses | null }
+        : {}),
+      ...(hasAcquiredValue(oprsState) ? { tba_event_oprs: oprsState!.data as TBAEventOPRs | null } : {}),
+      sources: {
+        event: eventSource ? { tba_event: eventSource } : {},
+        teams: teamsSource ? { tba_teams: teamsSource } : {},
+        event_teams: {
+          ...(statusSource ? { tba_team_event_status: statusSource } : {}),
+          ...(oprsSource ? { tba_event_oprs: oprsSource } : {}),
+        },
+      },
+    });
   }
 
   async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now()): Promise<void> {
@@ -357,15 +427,7 @@ export class EventRuntime {
       ) {
         await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
       } else if (messageType === "alliance_selection") {
-        const event = messageData.event;
-        if (isRecord(event) && event.key === eventKey) {
-          const key = endpointStorageKey(eventEndpoint);
-          const current = await transaction.get<EndpointState<unknown>>(key) ??
-            createEndpointState<unknown>(eventEndpoint);
-          await transaction.put(key, applyWebhookUpdate(
-            current, event, now, (_latest, update) => update,
-          ));
-        }
+        await this.scheduleImmediatePoll(transaction, eventEndpoint, now);
         await this.scheduleImmediatePoll(
           transaction, TBA_ENDPOINTS.eventAlliances(eventKey), now,
         );

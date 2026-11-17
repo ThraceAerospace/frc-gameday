@@ -5,6 +5,7 @@ import type {
 } from "@fieldview/provider-tba/types";
 import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
+import type { FieldViewTeam } from "./team.js";
 
 /** Canonical event object retaining all original TBA event fields and types. */
 export interface FieldViewEvent extends TBAEvent {
@@ -26,4 +27,16 @@ export interface FieldViewEventTeam {
   ccwm?: NonNullable<TBAEventOPRs["ccwms"]>[string];
   /** Provenance for team-event status and event-level OPR resources. */
   sources: FieldViewSourceMetadata;
+}
+
+/**
+ * Canonical event aggregate composed from independently acquired TBA
+ * resources. Optional means not acquired; null preserves an explicit null
+ * resource value; arrays preserve an acquired empty collection.
+ */
+export interface FieldViewEventSnapshot {
+  event_key: EventKey;
+  event?: FieldViewEvent | null;
+  teams?: FieldViewTeam[] | null;
+  event_teams?: FieldViewEventTeam[] | null;
 }

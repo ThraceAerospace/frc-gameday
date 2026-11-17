@@ -15,3 +15,7 @@ export * from "./normalization/match.js";
 
 export * from "./normalization/event-team.js";
 export * from "./normalization/team-season.js";
+
+export * from "./normalization/event.js";
+export * from "./normalization/team.js";
+export * from "./normalization/event-snapshot.js";

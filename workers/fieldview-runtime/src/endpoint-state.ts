@@ -3,8 +3,12 @@
  * Cloudflare storage adapters persist these values and run transitions inside
  * short transactions. This module has no provider, domain, or platform imports.
  */
+export type EndpointDataStatus = "unknown" | "available" | "stale" | "unavailable" | "failed";
+
 export interface EndpointState<T> {
   endpoint: string;
+  /** Availability of the retained representation, distinct from its value. */
+  status: EndpointDataStatus;
   /** Latest locally reconciled representation, including accepted webhook updates. */
   data: T | null;
   /** Exact latest HTTP representation validated by etag; webhooks never modify it. */
@@ -22,6 +26,7 @@ export interface EndpointState<T> {
 export type PollResponse<T> =
   | { status: "modified"; data: T; etag: string | null; expiresAt: number | null }
   | { status: "not-modified"; expiresAt: number | null }
+  | { status: "unavailable" }
   | { status: "failed" };
 
 export interface PollRequestSnapshot {
@@ -35,7 +40,7 @@ export function createEndpointState<T>(endpoint: string): EndpointState<T> {
     throw new Error("Endpoint state requires a provider-relative path");
   }
   return {
-    endpoint, data: null, providerData: null, etag: null, lastFetchedAt: null, expiresAt: null,
+    endpoint, status: "unknown", data: null, providerData: null, etag: null, lastFetchedAt: null, expiresAt: null,
     revision: 0, validatorRevision: 0, lastAttemptAt: null, lastWebhookAt: null,
   };
 }
@@ -61,7 +66,14 @@ export function applyPollResponse<T>(
   now: number,
   reconcile: (latest: T | null, fetched: T, requestRevision: number) => T,
 ): EndpointState<T> {
-  if (response.status === "failed") return { ...current, lastAttemptAt: now };
+  if (response.status === "failed" || response.status === "unavailable") {
+    const hasRetainedRepresentation = current.lastFetchedAt !== null || current.lastWebhookAt !== null;
+    return {
+      ...current,
+      status: hasRetainedRepresentation ? "stale" : response.status,
+      lastAttemptAt: now,
+    };
+  }
 
   if (response.status === "not-modified") {
     // A delayed 304 only validates the ETag sent with that request. If another
@@ -69,7 +81,10 @@ export function applyPollResponse<T>(
     if (request.validatorRevision !== current.validatorRevision) {
       return { ...current, lastAttemptAt: now };
     }
-    return { ...current, lastFetchedAt: now, expiresAt: response.expiresAt, lastAttemptAt: now };
+    if (current.lastFetchedAt === null) {
+      return { ...current, status: current.lastWebhookAt !== null ? "stale" : "failed", lastAttemptAt: now };
+    }
+    return { ...current, status: "available", lastFetchedAt: now, expiresAt: response.expiresAt, lastAttemptAt: now };
   }
 
   const validatorIsCurrent = request.validatorRevision === current.validatorRevision;
@@ -80,6 +95,7 @@ export function applyPollResponse<T>(
 
   return {
     ...current,
+    status: "available",
     data: reconcile(current.data, response.data, request.revision),
     providerData: response.data,
     // A 200 without ETag explicitly clears the old validator.
@@ -101,6 +117,7 @@ export function applyWebhookUpdate<T>(
 ): EndpointState<T> {
   return {
     ...current,
+    status: "available",
     data: reconcile(current.data, incoming),
     revision: current.revision + 1,
     lastWebhookAt: now,

@@ -50,6 +50,7 @@ test("failed poll preserves good data, validator, freshness, and revision", () =
   assert.equal(next.expiresAt, 200);
   assert.equal(next.revision, 3);
   assert.equal(next.lastAttemptAt, 300);
+  assert.equal(next.status, "stale");
 });
 
 test("poll reconciles against latest state after an intervening webhook", () => {
@@ -115,4 +116,28 @@ test("delayed 200 cannot roll back a validator installed by a newer poll", () =>
   assert.equal(delayed.lastFetchedAt, 250);
   assert.equal(delayed.expiresAt, 350);
   assert.deepEqual(delayed.data, ["v3"]);
+});
+
+test("distinguishes an unavailable endpoint from a failed acquisition", () => {
+  const initial = createEndpointState("/event/2026test/awards");
+  const unavailable = applyPollResponse(initial, createPollRequestSnapshot(initial),
+    { status: "unavailable" }, 100, replace);
+  assert.equal(unavailable.status, "unavailable");
+  assert.equal(unavailable.data, null);
+
+  const failed = applyPollResponse(initial, createPollRequestSnapshot(initial),
+    { status: "failed" }, 100, replace);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.data, null);
+});
+
+test("an unavailable response does not erase a previously usable representation", () => {
+  const initial = { ...createEndpointState("/event/2026test/awards"),
+    status: "available", data: [], providerData: [], lastFetchedAt: 100 };
+  const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
+    { status: "unavailable" }, 200, replace);
+  assert.equal(next.status, "stale");
+  assert.deepEqual(next.data, []);
+  assert.deepEqual(next.providerData, []);
+  assert.equal(next.lastFetchedAt, 100);
 });
