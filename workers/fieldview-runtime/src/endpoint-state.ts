@@ -70,16 +70,20 @@ export function applyPollResponse<T>(
   }
 
   const validatorIsCurrent = request.validatorRevision === current.validatorRevision;
+  // A newer poll has already accepted a representation for this endpoint.
+  // Unlike a webhook (which leaves validatorRevision unchanged), that response
+  // supersedes this in-flight poll, so discard its data and validator together.
+  if (!validatorIsCurrent) return { ...current, lastAttemptAt: now };
+
   return {
     ...current,
     data: reconcile(current.data, response.data, request.revision),
-    // A delayed response cannot roll back a validator accepted by a newer poll.
-    // A 200 without ETag clears the old validator only for its current generation.
-    etag: validatorIsCurrent ? response.etag : current.etag,
-    lastFetchedAt: validatorIsCurrent ? now : current.lastFetchedAt,
-    expiresAt: validatorIsCurrent ? response.expiresAt : current.expiresAt,
+    // A 200 without ETag explicitly clears the old validator.
+    etag: response.etag,
+    lastFetchedAt: now,
+    expiresAt: response.expiresAt,
     revision: current.revision + 1,
-    validatorRevision: validatorIsCurrent ? current.validatorRevision + 1 : current.validatorRevision,
+    validatorRevision: current.validatorRevision + 1,
     lastAttemptAt: now,
   };
 }
