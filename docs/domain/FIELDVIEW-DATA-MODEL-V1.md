@@ -151,7 +151,7 @@ Retains the TBA event fields and exact types, including the original nullable ti
 
 ### FieldViewEventTeam
 
-Represents a team's participation in an event. It is the reusable home for event-specific team status and event-level metrics such as OPR/DPR/CCWM. Match objects may associate those values with the teams participating in a particular match.
+Represents a team's participation in an event. It is the reusable home for event-specific team status and event-level metrics such as OPR/DPR/CCWM. `normalizeFieldViewEventTeam` composes this object from the unchanged event/team identifiers, optional TBA team-event status, and event-level OPR resource. It associates OPR/DPR/CCWM by the original TBA team key; it does not transform the source values. Explicit null status is retained, while absent status and absent metric entries remain absent. Match objects may associate those values with the teams participating in a particular match.
 
 ### FieldViewPlayoffAlliance
 
@@ -166,12 +166,19 @@ Expose calculated results with explicit metric identity/version, value and unit,
 Source metadata is internal and records, at minimum:
 
 - provider and endpoint/resource identity;
-- acquisition outcome;
-- retrieval time;
+- availability state;
+- retrieval time of the retained payload version;
 - source freshness or staleness where known;
 - source version/ETag or equivalent validator when available.
 
-Metadata must be specific enough to distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA playoff information, and Statbotics match data. A failed refresh must not erase previously valid data.
+The `FieldViewSourceStatus` meanings are precise:
+
+- `available`: the retained resource version is current;
+- `stale`: a previously usable version is retained but is not current, including when a refresh failed;
+- `unavailable`: the provider authoritatively indicates that the resource is not available;
+- `failed`: acquisition failed and no usable retained version exists.
+
+An absent metadata entry means no acquisition state has been recorded; it is not equivalent to `unavailable`, `failed`, or a null resource value. `retrieved_at` identifies the retained payload version and is null when no payload version exists. A failed refresh must not erase previously valid data; when an older usable version remains, its status is `stale`, not `failed`. Metadata keys distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA playoff information, and Statbotics match data.
 
 ## 6. Provider overlaps and deliberate deduplication
 
@@ -237,9 +244,9 @@ Versioning applies to the FieldView domain model and its serialized representati
 1. Complete and typecheck the initial domain type definitions and source metadata types.
 2. Keep provider-owned typing for the TBA event-predictions response in the TBA package, based on the supplied endpoint response shape.
 3. Add the Archimedes SF13 source fixture. The fixture includes the complete supplied TBA match and Statbotics match payloads, the exact TBA event-prediction entry for `2026arc_sf13m1`, and the event-level OPR/DPR/CCWM values.
-4. Validate source typing, original identifiers, separate prediction resources, event-level OPR provenance, and preservation of the supplied source values. The focused fixture tests do not claim to test a normalization pipeline; a normalization function has not yet been implemented.
-5. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
-6. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then add tests for those behaviors.
-7. Only then migrate acquisition/reconciliation and consumers.
+4. Implement and test `normalizeFieldViewMatch` as a pure association boundary, retaining provider payloads and requiring explicit cross-provider team identity associations.
+5. Implement and test `normalizeFieldViewEventTeam` for event-team status and event-level OPR/DPR/CCWM association by unchanged TBA team key.
+6. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
+7. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then migrate acquisition/reconciliation and consumers.
 
 The fixture is a set of independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
