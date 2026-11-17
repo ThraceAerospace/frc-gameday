@@ -4,20 +4,20 @@
 **Date:** 2026-11-16  
 **Reference fixture:** Archimedes Championship, Playoff 13 Match 1 (`2026arc_sf13m1`)
 
-This document establishes the first iteration of FieldView's canonical domain model. It defines product-owned objects that correlate information from multiple providers. It is not a provider API schema and is not yet the versioned client DTO specification.
+This document establishes the first iteration of FieldView's canonical domain model. It defines product-owned objects that correlate information from multiple providers. It is not a provider API schema. These domain objects are the application data model used by backend and client; transport serialization does not introduce a second semantic model.
 
 ## 1. Core principles
 
 1. FieldView owns its data model. Its shape is organized around the information the product provides, not around any one provider's API.
 2. Provider payloads enter FieldView normalization unchanged. TBA, Statbotics, and every future provider retain their original values, field names, types, nullability, and nested structures.
-3. Provider-specific types may be used by the backend domain to type fields that preserve provider data. They must not leak into client DTOs.
+3. Provider-specific types may be used by the domain to type fields that preserve provider data. The client consumes the serialized FieldView domain shape, not provider clients or provider acquisition implementations.
 4. Correlation and association do not authorize mutation. For example, associating a TBA OPR value with a match team does not change the OPR value or make it a field from the TBA match endpoint.
 5. Every FieldView-calculated value has a distinct, descriptive name and a documented formula, inputs, units, missing-data behavior, and version.
 6. Every interpretation/flag exposes the evidence and thresholds that caused it. A label without its supporting values is insufficient.
 7. No provider field may be silently renamed, converted, reinterpreted, defaulted, omitted, or overwritten. Any proposed transformation must be described and approved before implementation.
 8. Missing, explicit null, zero, stale, unavailable, and failed acquisition remain distinguishable.
 9. Source provenance and freshness are internal machine-readable metadata. They do not dictate the public product model's nesting.
-10. The client contract is a separate, explicit, serializable, provider-independent representation derived from the domain model.
+10. The canonical domain objects are the shared application data model. Their transport representation is ordinary serialization of those objects, not a separately maintained DTO model.
 
 ## 2. Canonical objects and responsibilities
 
@@ -40,7 +40,7 @@ The match is the first detailed model because it demonstrates the value of combi
 
 ### 3.1 Original TBA match fields
 
-`FieldViewMatch` retains the complete TBA match field set with the exact generated TBA types. The current type implementation expresses this as an interface extending `TBAMatch`, rather than redefining TBA fields using generic types. Statbotics-derived fields similarly reference provider-owned types. This is a backend domain dependency only; the client DTOs will define their own serializable types.
+`FieldViewMatch` retains the complete TBA match field set with the exact generated TBA types. The current type implementation expresses this as an interface extending `TBAMatch`, rather than redefining TBA fields using generic types. Statbotics-derived fields similarly reference provider-owned types. These are type-level dependencies for unchanged source fields; provider clients, API acquisition, and infrastructure implementations are not part of the client data path.
 
 This preserves, among other fields:
 
@@ -217,20 +217,20 @@ In particular:
 - TBA event predictions remain a separate versioned resource indexed by the unchanged TBA match key.
 - TBA OPR/DPR/CCWM remain sourced from the separate event-level OPR resource and are associated with event teams and match teams without being reclassified as match-endpoint fields.
 
-A FieldView aggregate need not duplicate every provider field. Any omission from a client DTO must be deliberate and documented in the client-contract specification. Omission from an aggregate or DTO never authorizes deletion or mutation of the cached provider payload.
+A FieldView aggregate need not duplicate every provider field. Any omission from an aggregate must be deliberate and documented. Omission from an aggregate never authorizes deletion or mutation of the cached provider payload.
 
-## 8. Client contract boundary
+## 8. Domain objects and transport serialization
 
-The domain model is backend-oriented and may use provider types for pass-through fields. The versioned client contract is a separate package and must:
+The canonical FieldView domain objects are the application data model shared by backend and client. Do not create a parallel DTO package that duplicates their fields or semantics.
 
-- contain explicit serializable FieldView DTO types;
-- not import TBA or Statbotics types;
-- expose FieldView concepts, associations, calculations, and flag evidence;
-- define deliberate omission of provider fields not needed by clients;
-- distinguish missing, null, zero, stale, and unavailable values;
-- be versioned when its meaning or structure changes.
+- HTTP responses, WebSocket snapshots, and other client messages serialize the relevant FieldView domain objects directly.
+- Serialization is a transport operation, not a second normalization or interpretation stage. It must not rename, convert, default, or discard domain values.
+- The serialized representation must preserve explicit `null` values and distinguish them from absent properties. Optional properties that are absent remain absent; they must not be filled with invented defaults.
+- The current domain fields use JSON-compatible primitives, arrays, and objects. Add fixture-driven round-trip tests for representative aggregates, including the match normalization fixture.
+- If a future domain field cannot be represented by the chosen transport, document the concrete incompatibility and solve it at that field or transport boundary. Do not introduce a duplicate model preemptively.
+- Provider payload retention and version history remain responsibilities of ingestion/storage. A client receives the relevant FieldView domain aggregate, not an automatic dump of every cached provider record.
 
-The client contract is the next implementation step after this domain baseline is reviewed. This document does not authorize publishing provider schemas directly.
+Versioning applies to the FieldView domain model and its serialized representation. A change to field meaning or structure must be reviewed and documented as a domain-model version change; a separate DTO version is not maintained.
 
 ## 9. Implementation sequence
 
@@ -238,8 +238,8 @@ The client contract is the next implementation step after this domain baseline i
 2. Keep provider-owned typing for the TBA event-predictions response in the TBA package, based on the supplied endpoint response shape.
 3. Add the Archimedes SF13 source fixture. The fixture includes the complete supplied TBA match and Statbotics match payloads, the exact TBA event-prediction entry for `2026arc_sf13m1`, and the event-level OPR/DPR/CCWM values.
 4. Validate source typing, original identifiers, separate prediction resources, event-level OPR provenance, and preservation of the supplied source values. The focused fixture tests do not claim to test a normalization pipeline; a normalization function has not yet been implemented.
-5. Define the versioned client DTOs separately.
-6. Add normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then add tests for those behaviors.
+5. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
+6. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then add tests for those behaviors.
 7. Only then migrate acquisition/reconciliation and consumers.
 
 The fixture is a set of independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
