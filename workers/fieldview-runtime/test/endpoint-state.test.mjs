@@ -59,7 +59,7 @@ test("poll reconciles against latest state after an intervening webhook", () => 
     status: "modified",
     data: { qm1: "scheduled", qm2: "played", qm3: "scheduled" },
     etag: '"v2"', expiresAt: 500,
-  }, 200, (latest, fetched) => ({ ...fetched, ...latest }));
+  }, 200, (latest, fetched) => ({ ...fetched, qm1: latest.qm1 }));
   assert.equal(next.data.qm1, "played");
   assert.equal(next.data.qm2, "played");
   assert.equal(next.data.qm3, "scheduled");
