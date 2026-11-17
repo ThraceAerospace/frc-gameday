@@ -13,7 +13,9 @@ import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 import { buildStreams } from "@/lib/tba/buildStreams";
-import { useEventState } from "@/lib/events";
+import { useCanonicalEventSnapshot, useEventState } from "@/lib/events";
+import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
+import type { TBAEventTeamStatuses } from "@/lib/tba/types";
 import type { BuiltStream } from "@/lib/tba/buildStreams";
 
 
@@ -56,22 +58,43 @@ export default function EventView({
   slotNumber,
   controlHeld = false,
 }: EventViewProps) {
-  const {
-    state: eventState,
-    event: eventData,
-    teams,
-    matches,
-    eventNextMatch,
-    eventLastMatch,
-    teamsStatuses,
-    alliances,
-    loading,
-    error,
-    websocketStatus,
-    websocketStale: webSocketStale,
-  } = useEventState(event);
+  const legacyState = useEventState(event);
+  const canonical = useCanonicalEventSnapshot(event);
+  const canonicalSnapshot = canonical?.snapshot;
 
-
+  // Prefer canonical domain resources when they have been acquired. An omitted
+  // resource still falls back during the migration; explicit null/empty values
+  // remain authoritative and are never replaced with legacy API data.
+  const eventData = canonicalSnapshot && "event" in canonicalSnapshot
+    ? canonicalSnapshot.event ?? null
+    : legacyState.event;
+  const teams = canonicalSnapshot && "teams" in canonicalSnapshot
+    ? canonicalSnapshot.teams ?? []
+    : legacyState.teams;
+  const matches = canonicalSnapshot && "matches" in canonicalSnapshot
+    ? sortMatches(canonicalSnapshot.matches ?? [])
+    : legacyState.matches;
+  const eventNextMatch = canonicalSnapshot && "matches" in canonicalSnapshot
+    ? getNextMatch(matches)
+    : legacyState.eventNextMatch;
+  const eventLastMatch = canonicalSnapshot && "matches" in canonicalSnapshot
+    ? getLastMatch(matches)
+    : legacyState.eventLastMatch;
+  const teamsStatuses = canonicalSnapshot && "event_teams" in canonicalSnapshot
+    ? Object.fromEntries((canonicalSnapshot.event_teams ?? []).flatMap((team) =>
+        team.tba_status === undefined ? [] : [[team.team_key, team.tba_status]],
+      )) as TBAEventTeamStatuses
+    : legacyState.teamsStatuses;
+  const alliances = canonicalSnapshot && "playoff_alliances" in canonicalSnapshot
+    ? canonicalSnapshot.playoff_alliances ?? []
+    : legacyState.alliances;
+  const loading = canonicalSnapshot && "event" in canonicalSnapshot
+    ? false
+    : legacyState.loading;
+  const error = legacyState.error;
+  const websocketStatus = legacyState.websocketStatus;
+  const webSocketStale = legacyState.websocketStale;
+  const eventState = legacyState.state;
   const eventStateSnapshot = eventState?.getSnapshot() ?? null;
 
   const eventConfig = config;
