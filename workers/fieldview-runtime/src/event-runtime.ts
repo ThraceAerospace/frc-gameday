@@ -18,7 +18,7 @@ import { createProviderSourceVersion } from "./source-record.js";
 interface PollTask {
   endpoint: string;
   dueAt: number;
-  intervalMs: number;
+  intervalMs: number | null;
   generation: number;
   attempts: number;
 }
@@ -136,13 +136,26 @@ export class EventRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.endpoint !== "string" || !("data" in body) ||
-          !this.allowedEndpoints.has(body.endpoint)) {
-        return Response.json({ error: "Invalid event endpoint update" }, { status: 400 });
+      const rawPayload = await request.text();
+      const webhookId = request.headers.get("X-FieldView-Webhook-Id");
+      if (!webhookId || !/^[a-f0-9]{64}$/.test(webhookId)) {
+        return Response.json({ error: "Missing webhook id" }, { status: 400 });
       }
-      await this.applyWebhook(body.endpoint, body.data);
-      return Response.json({ accepted: true });
+      let payload: unknown;
+      try { payload = JSON.parse(rawPayload); }
+      catch { return Response.json({ error: "Invalid webhook JSON" }, { status: 400 }); }
+      if (!isRecord(payload) || typeof payload.message_type !== "string" ||
+          !isRecord(payload.message_data)) {
+        return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
+      }
+      const messageEventKey = payload.message_data.event_key;
+      if (messageEventKey !== undefined && messageEventKey !== this.eventKey) {
+        return Response.json({ error: "Webhook event key mismatch" }, { status: 400 });
+      }
+      const accepted = await this.applyTbaWebhook(
+        webhookId, payload.message_type, payload.message_data, rawPayload,
+      );
+      return Response.json({ accepted: true, duplicate: !accepted });
     }
 
     if (request.method === "GET" && url.pathname === "/state") {
@@ -200,11 +213,15 @@ export class EventRuntime {
         // An administrator may have replaced this task while its poll ran.
         if (!current || current.generation !== task.generation) return;
         const attempts = succeeded ? 0 : current.attempts;
-        await transaction.put(key, {
-          ...current,
-          attempts,
-          dueAt: Date.now() + (succeeded ? current.intervalMs : this.retryDelay(current)),
-        });
+        if (succeeded && current.intervalMs === null) {
+          await transaction.delete(key);
+        } else {
+          await transaction.put(key, {
+            ...current,
+            attempts,
+            dueAt: Date.now() + (succeeded ? current.intervalMs! : this.retryDelay(current)),
+          });
+        }
         await this.rearm(transaction);
       });
     }
@@ -286,6 +303,84 @@ export class EventRuntime {
     });
 
     return responseState.status !== "failed";
+  }
+
+  private async scheduleImmediatePoll(
+    transaction: DurableObjectTransactionLike,
+    endpoint: string,
+    now: number,
+  ): Promise<void> {
+    const key = taskStorageKey(endpoint);
+    const previous = await transaction.get<PollTask>(key);
+    await transaction.put(key, {
+      endpoint,
+      dueAt: now,
+      intervalMs: previous?.intervalMs ?? null,
+      generation: (previous?.generation ?? 0) + 1,
+      attempts: 0,
+    });
+  }
+
+  private async applyTbaWebhook(
+    webhookId: string,
+    messageType: string,
+    messageData: Record<string, unknown>,
+    rawPayload: string,
+  ): Promise<boolean> {
+    const eventKey = this.eventKey;
+    const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+    const eventEndpoint = TBA_ENDPOINTS.event(eventKey);
+    const now = Date.now();
+
+    return this.storage.transaction(async (transaction) => {
+      const webhookKey = "webhook:" + webhookId;
+      if (await transaction.get(webhookKey) !== undefined) return false;
+      await transaction.put(webhookKey, { receivedAt: now, messageType, rawPayload });
+
+      if (messageType === "match_score" || messageType === "match_video") {
+        const match = messageData.match;
+        if (isRecord(match) && typeof match.key === "string" && match.event_key === eventKey) {
+          const key = endpointStorageKey(matchesEndpoint);
+          const current = await transaction.get<EndpointState<unknown>>(key) ??
+            createEndpointState<unknown>(matchesEndpoint);
+          const next = applyWebhookUpdate(
+            current, match, now,
+            (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update),
+          );
+          await transaction.put(key, next);
+        }
+        await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
+      } else if (
+        messageType === "upcoming_match" ||
+        messageType === "schedule_updated" ||
+        messageType === "starting_comp_level"
+      ) {
+        await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
+      } else if (messageType === "alliance_selection") {
+        const event = messageData.event;
+        if (isRecord(event) && event.key === eventKey) {
+          const key = endpointStorageKey(eventEndpoint);
+          const current = await transaction.get<EndpointState<unknown>>(key) ??
+            createEndpointState<unknown>(eventEndpoint);
+          await transaction.put(key, applyWebhookUpdate(
+            current, event, now, (_latest, update) => update,
+          ));
+        }
+        await this.scheduleImmediatePoll(
+          transaction, TBA_ENDPOINTS.eventAlliances(eventKey), now,
+        );
+        await this.scheduleImmediatePoll(
+          transaction, TBA_ENDPOINTS.eventTeamStatuses(eventKey), now,
+        );
+      } else if (messageType === "awards_posted") {
+        await this.scheduleImmediatePoll(
+          transaction, TBA_ENDPOINTS.eventAwards(eventKey), now,
+        );
+      }
+
+      await this.rearm(transaction);
+      return true;
+    });
   }
 
   private async applyWebhook(endpoint: string, incoming: unknown): Promise<void> {

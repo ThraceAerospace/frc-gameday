@@ -1,7 +1,12 @@
 import { EventRuntime } from "./event-runtime.js";
 import type { RuntimeEnvironment } from "./cloudflare.js";
+import { verifyTbaWebhookHmac } from "./webhook-auth.js";
 
 export { EventRuntime };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function authorized(request: Request, env: RuntimeEnvironment): boolean {
   return Boolean(env.RUNTIME_ADMIN_TOKEN) &&
@@ -11,6 +16,55 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 export default {
   async fetch(request: Request, env: RuntimeEnvironment): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/webhooks/tba" && request.method === "POST") {
+      if (!env.TBA_WEBHOOK_SECRET) {
+        return Response.json({ error: "Webhook secret is not configured" }, { status: 503 });
+      }
+      const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+      if (declaredLength > 1_000_000) {
+        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
+      }
+      const rawBody = await request.arrayBuffer();
+      if (rawBody.byteLength > 1_000_000) {
+        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
+      }
+      const signature = request.headers.get("X-TBA-HMAC");
+      if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
+        return Response.json({ error: "Invalid TBA webhook signature" }, { status: 401 });
+      }
+
+      let payload: unknown;
+      try { payload = JSON.parse(new TextDecoder().decode(rawBody)); }
+      catch { return Response.json({ error: "Invalid webhook JSON" }, { status: 400 }); }
+      if (!isRecord(payload) || typeof payload.message_type !== "string" ||
+          !isRecord(payload.message_data)) {
+        return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
+      }
+      if (["ping", "verification", "broadcast"].includes(payload.message_type)) {
+        return Response.json({ accepted: true });
+      }
+      const eventKey = payload.message_data.event_key;
+      if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) {
+        return Response.json({ error: "Webhook has no valid event key" }, { status: 400 });
+      }
+
+      const digest = await crypto.subtle.digest("SHA-256", rawBody);
+      const webhookId = [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
+      const headers = new Headers({
+        Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+        "X-FieldView-Event-Key": eventKey,
+        "X-FieldView-Webhook-Id": webhookId,
+        "Content-Type": "application/json",
+      });
+      return stub.fetch(new Request("https://event-runtime/webhook", {
+        method: "POST",
+        headers,
+        body: rawBody,
+      }));
+    }
+
     if (url.pathname === "/health") {
       return Response.json({ service: "fieldview-runtime", status: "ok" });
     }

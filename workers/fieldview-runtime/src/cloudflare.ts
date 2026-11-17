@@ -23,6 +23,7 @@ export interface DurableObjectNamespaceLike {
 
 export interface RuntimeEnvironment {
   TBA_API_KEY: string;
+  TBA_WEBHOOK_SECRET: string;
   RUNTIME_ADMIN_TOKEN: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;
   /** Test seam; production uses the Workers global fetch implementation. */
