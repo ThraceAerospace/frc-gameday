@@ -98,15 +98,17 @@ export function useCanonicalEventSnapshot(eventKey: string): {
   version: number;
   snapshot: FieldViewEventSnapshot;
 } | undefined {
+  const remoteSnapshots = useContext(EventStateSnapshotsContext);
+  const enabled = remoteSnapshots === null && Boolean(eventKey);
   const subscribe = useCallback(
-    (listener: () => void) => eventKey
+    (listener: () => void) => enabled
       ? subscribeCanonicalEventSnapshot(eventKey, listener)
       : () => {},
-    [eventKey],
+    [enabled, eventKey],
   );
   const getSnapshot = useCallback(
-    () => eventKey ? getCanonicalEventSnapshot(eventKey) : undefined,
-    [eventKey],
+    () => enabled ? getCanonicalEventSnapshot(eventKey) : undefined,
+    [enabled, eventKey],
   );
   return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
 }
