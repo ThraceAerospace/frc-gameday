@@ -2,6 +2,7 @@ import type {
   TBAMatch,
   TBAEventMatchPrediction,
   TBAEventOPRs,
+  TBATeam,
 } from "@fieldview/provider-tba/types";
 import type {
   StatboticsMatch,
@@ -18,7 +19,7 @@ export interface FieldViewMatchTeam {
   /** Original TBA identifier, e.g. "frc7407". */
   team_key: TeamKey;
   /** Official TBA team number used to associate Statbotics EPA records. */
-  team_number?: number;
+  team_number?: TBATeam["team_number"];
 
   /** Values associated from the TBA event-level OPR resource. */
   opr?: NonNullable<TBAEventOPRs["oprs"]>[string];
