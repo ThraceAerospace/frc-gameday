@@ -34,9 +34,15 @@ Team-season identity is represented separately by FieldViewTeamSeason, which pai
 
 The initial canonical object set is FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, FieldViewEventAnalytics, and FieldViewTeamAnalytics. FieldViewMatch is the first detailed model and combines TBA match information with independent predictions, team statistics, playoff alliance associations, explicit analysis, flags, and provenance.
 
-The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are implemented for the canonical object set. `normalizeFieldViewMatch` composes independently acquired TBA match, TBA prediction, TBA event OPR, and Statbotics match resources into a `FieldViewMatch`. It preserves the complete TBA match payload, keeps the two prediction sources independent, associates event OPR/DPR/CCWM from their own resource, and requires explicit TBA-to-Statbotics team identity associations. It does not calculate analytics or infer numeric Statbotics IDs from TBA keys. The Archimedes fixture tests exercise source preservation, resource association, and missing identity behavior.
+The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are implemented for the canonical object set. `normalizeFieldViewMatch` composes independently acquired match resources while preserving the complete TBA match payload, keeping TBA and Statbotics predictions independent, associating event OPR/DPR/CCWM, and requiring explicit cross-provider team identity associations. `normalizeFieldViewEventTeam` composes one event-team relationship from its unchanged TBA team key, optional TBA team-event status, and event-level OPR/DPR/CCWM. Both functions are pure association boundaries: they do not fetch providers, mutate source records, or invent defaults. Fixture tests cover source preservation, associations, and absent-versus-null behavior.
 
 The canonical FieldView domain objects are sent to clients through ordinary serialization. Serialization must preserve the domain model's values and absent-versus-null semantics; it is not a second mapping or normalization layer.
+
+## Normalization boundaries
+
+`normalizeFieldViewEventTeam` accepts an unchanged TBA event key and team key plus optional TBA team-event status and the event-level TBA OPR resource. It associates OPR/DPR/CCWM using the original TBA team key. Explicit null status remains null; absent status and missing metric entries remain absent. It does not fetch resources or mutate provider inputs.
+
+See `test/event-team-normalization.test.mjs` for fixture-backed examples.
 
 ## Match normalization
 
