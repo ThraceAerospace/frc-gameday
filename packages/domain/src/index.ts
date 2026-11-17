@@ -11,3 +11,4 @@ export * from "./match.js";
 export * from "./playoff-alliance.js";
 export * from "./source-metadata.js";
 export * from "./analytics.js";
+export * from "./normalization/match.js";
