@@ -4,13 +4,6 @@ import { formatTeamNumber } from "@/lib/tba/formatters";
 import { TBA } from "@/lib/tba/service";
 
 export const revalidate = 3600;
-export const dynamicParams = false;
-
-export async function generateStaticParams() {
-  const districts = await TBA.getDistricts(new Date().getFullYear());
-  return districts.map((district) => ({ district: district.abbreviation.toLowerCase() }));
-}
-
 export default async function DistrictPage({ params }: { params: Promise<{ district: string }> }) {
   const { district: requestedKey } = await params;
   const year = new Date().getFullYear();
