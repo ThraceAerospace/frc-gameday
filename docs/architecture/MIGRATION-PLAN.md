@@ -3,7 +3,7 @@
 **Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation in progress
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Incremental migration
-**Last updated:** 2026-11-16
+**Last updated:** 2026-11-17
 
 This document is the working migration plan for evolving the existing FieldView application into the target architecture. It is deliberately separate from the historical application audit: audit findings describe observed problems in the old implementation, while this document describes the destination and the order in which responsibilities will move.
 
@@ -177,10 +177,10 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M4 — Provider adapter migration
 
-**Status:** In progress. The first provider-owned runtime boundary is in place for TBA HTTP transport: `@fieldview/provider-tba/client` owns the TBA base URL and authentication header and returns the native response so cache validators and provider payloads remain unchanged. The existing Redis cache/reconciliation layer remains in the web workspace temporarily and now delegates network requests to this provider client. This is an incremental extraction, not a completed provider migration.
+**Status:** In progress. TBA HTTP transport and provider-owned endpoint path builders are in place. Platform-independent EventRuntime endpoint-state transitions are implemented and tested, including endpoint-scoped validators, 304/200/failure behavior, webhook validator preservation, and poll/webhook race reconciliation. The architecture is recorded in ADR-0007. These primitives are not yet bound to Cloudflare storage or a deployed Worker. The first provider-owned runtime boundary is in place for TBA HTTP transport: `@fieldview/provider-tba/client` owns the TBA base URL and authentication header and returns the native response so cache validators and provider payloads remain unchanged. The existing Redis cache/reconciliation layer remains in the web workspace temporarily and now delegates network requests to this provider client. This is an incremental extraction, not a completed provider migration.
 
 **Work**
-- Introduce isolated TBA, Statbotics, and FRC Colors adapters. The TBA HTTP transport extraction is the first implemented slice; cache storage and reconciliation remain temporarily in the legacy web adapter.
+- Introduce isolated TBA, Statbotics, and FRC Colors adapters. TBA HTTP transport and path builders are provider-owned. Durable endpoint state and reconciliation transitions live in the runtime layer, not in the provider package; the legacy Redis adapter remains temporarily operational.
 - Keep raw provider schemas, API details, and provider-specific clients inside their respective packages. The domain may use provider types for unchanged source fields; clients consume the FieldView domain shape and never provider acquisition implementations.
 - Pass TBA and Statbotics payloads unchanged into FieldView normalization. Pass every other provider payload through unchanged.
 - Implement only transformations that have been explicitly described and approved; represent each result in a specifically named, documented FieldView field.
@@ -199,8 +199,8 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 ### M5 — Cloudflare backend and event runtime
 
 **Work**
-- Establish Worker entrypoints, environment bindings, deployment configuration, and local development.
-- Implement the first EventRuntime Durable Object.
+- Establish Worker entrypoints, environment bindings, deployment configuration, and local development. Platform-independent endpoint-state transitions and their race/failure tests are in place; Cloudflare bindings and persistence are not yet implemented.
+- Implement the first EventRuntime Durable Object using the accepted ownership and conditional-polling rules in ADR-0007.
 - Establish authoritative event-state ownership, persistence, reconciliation, and versioned publication.
 - Implement webhook invalidation and scheduled safety refreshes.
 - Define WebSocket/subscription authentication, lifecycle, and reconnect behavior.
@@ -303,7 +303,7 @@ Every finding should be revalidated before implementation. Some will disappear b
 
 1. Complete M3 by settling playoff-alliance association and analytics result semantics, then add representative JSON round-trip tests for the remaining canonical aggregates.
 2. After M3 exit criteria are met, begin M4 provider adapter migration while keeping provider payloads unchanged and documenting every approved association.
-3. Resolve EventRuntime, event-team refresh, publication, and storage decisions before implementing M5 backend state ownership.
+3. Bind the tested endpoint-state transitions to Cloudflare Durable Object storage transactions; then implement EventRuntime alarms, webhook ingress, and versioned publication according to ADR-0007.
 4. Keep the migration branch deployment pause and current Vercel root directory unchanged; do not enable deployments or change production settings as part of workspace work.
 
-**Current implementation status:** The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The first FieldView domain-model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`; initial domain types plus match and event-team normalization boundaries are implemented; match serialization is covered by fixture tests, and event-team normalization/availability semantics are being validated. The workspace lockfile has been refreshed and pushed. The legacy Redis/SharedWorker/Vercel data path remains. The domain workspace currently typechecks and its fixture suite passes CI, including match, event-team, and team-season serialization round trips. Playoff-alliance association is resolved through exact TBA Event Team Status alliance.name matching; fixture tests cover backup members, missing/null names, mismatches, and ambiguity. Remaining M3 work is to clarify analytics result/coverage semantics and add serialization coverage for the remaining aggregates. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
+**Current implementation status:** ADR-0007 establishes EventRuntime as the event's authoritative state owner, with TBA ETags persisted per endpoint and poll responses reconciled against the latest state. TBA endpoint path builders and platform-independent endpoint-state transitions are implemented with tests; no Cloudflare Worker, Durable Object, or production infrastructure is deployed. The Next.js application is relocated to `apps/web` and registered as the `@fieldview/web` npm workspace. The root package manifest and lockfile remain authoritative. TBA and Statbotics schema/type-generation files have moved into `packages/providers`; provider clients and services have not yet been migrated. The first FieldView domain-model baseline is documented in `docs/domain/FIELDVIEW-DATA-MODEL-V1.md`; initial domain types plus match and event-team normalization boundaries are implemented; match serialization is covered by fixture tests, and event-team normalization/availability semantics are being validated. The workspace lockfile has been refreshed and pushed. The legacy Redis/SharedWorker/Vercel data path remains. The domain workspace currently typechecks and its fixture suite passes CI, including match, event-team, and team-season serialization round trips. Playoff-alliance association is resolved through exact TBA Event Team Status alliance.name matching; fixture tests cover backup members, missing/null names, mismatches, and ambiguity. Remaining M3 work is to clarify analytics result/coverage semantics and add serialization coverage for the remaining aggregates. No Cloudflare Worker, Durable Object, or production infrastructure is claimed to exist.
