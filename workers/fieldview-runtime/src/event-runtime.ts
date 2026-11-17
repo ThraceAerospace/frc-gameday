@@ -292,7 +292,7 @@ export class EventRuntime {
             ? { tba_playoff_alliances: alliancesSource }
             : {},
         }),
-      }),
+      },
     };
   }
 
