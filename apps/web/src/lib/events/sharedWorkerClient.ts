@@ -2,12 +2,15 @@
 
 import { EventState, type EventStateSnapshot } from "./EventState";
 import { eventWebSocket } from "@/lib/realtime/client";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
 
 type SnapshotListener = () => void;
 type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
 
 const snapshots = new Map<string, EventStateSnapshot>();
 const listeners = new Map<string, Set<SnapshotListener>>();
+const canonicalSnapshots = new Map<string, { version: number; snapshot: FieldViewEventSnapshot }>();
+const canonicalListeners = new Map<string, Set<SnapshotListener>>();
 let worker: SharedWorker | null = null;
 let port: MessagePort | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -27,7 +30,8 @@ function handleWorkerMessage(event: MessageEvent) {
   const message = event.data as {
     type?: string;
     eventKey?: string;
-    snapshot?: EventStateSnapshot;
+    snapshot?: EventStateSnapshot | FieldViewEventSnapshot;
+    version?: number;
   };
 
   if (message.type === "pong") {
@@ -85,9 +89,10 @@ function connect() {
   }, 30_000);
 
   for (const [eventKey, eventListeners] of listeners) {
-    if (eventListeners.size > 0) {
-      nextPort.postMessage({ type: "subscribe", eventKey });
-    }
+    if (eventListeners.size > 0) nextPort.postMessage({ type: "subscribe", eventKey });
+  }
+  for (const [eventKey, eventListeners] of canonicalListeners) {
+    if (eventListeners.size > 0) nextPort.postMessage({ type: "subscribeCanonical", eventKey });
   }
 }
 
@@ -103,7 +108,7 @@ function recover() {
     // The worker may already have been terminated.
   }
   oldPort?.close();
-  if (listeners.size > 0 || liveRuntimeRefs > 0) connect();
+  if (listeners.size > 0 || canonicalListeners.size > 0 || liveRuntimeRefs > 0) connect();
 }
 
 function getFallbackState(eventKey: string): EventState {
@@ -119,6 +124,43 @@ export function getEventStateSnapshot(eventKey: string): EventStateSnapshot | un
   return fallbackMode
     ? fallbackStates.get(eventKey)?.getSnapshot()
     : snapshots.get(eventKey);
+}
+
+export function getCanonicalEventSnapshot(
+  eventKey: string,
+): { version: number; snapshot: FieldViewEventSnapshot } | undefined {
+  return canonicalSnapshots.get(eventKey);
+}
+
+export function subscribeCanonicalEventSnapshot(
+  eventKey: string,
+  listener: SnapshotListener,
+): () => void {
+  if (!eventKey) return () => {};
+  let eventListeners = canonicalListeners.get(eventKey);
+  const isFirst = !eventListeners || eventListeners.size === 0;
+  if (!eventListeners) {
+    eventListeners = new Set();
+    canonicalListeners.set(eventKey, eventListeners);
+  }
+  eventListeners.add(listener);
+  const existingPort = port;
+  connect();
+  if (!fallbackMode && isFirst && existingPort && port === existingPort) {
+    post({ type: "subscribeCanonical", eventKey });
+  }
+  listener();
+  return () => {
+    const current = canonicalListeners.get(eventKey);
+    if (!current) return;
+    current.delete(listener);
+    if (current.size === 0) {
+      canonicalListeners.delete(eventKey);
+      canonicalSnapshots.delete(eventKey);
+      post({ type: "unsubscribeCanonical", eventKey });
+    }
+    closePortIfIdle();
+  };
 }
 
 export function subscribeSharedEventState(
@@ -189,7 +231,7 @@ export function registerSharedLiveRuntime(): () => void {
 }
 
 function closePortIfIdle() {
-  if (listeners.size === 0 && liveRuntimeRefs === 0 && port) {
+  if (listeners.size === 0 && canonicalListeners.size === 0 && liveRuntimeRefs === 0 && port) {
       port.postMessage({ type: "close" });
       if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
       heartbeatTimer = null;

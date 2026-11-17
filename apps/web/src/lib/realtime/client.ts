@@ -5,6 +5,7 @@ export type EventWebSocketMessage = {
   eventKey?: string;
   messageType?: string;
   messageData?: Record<string, unknown>;
+  version?: number;
 };
 
 export type EventWebSocketStatus =
