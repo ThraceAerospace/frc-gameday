@@ -3,13 +3,10 @@ import type {
   TBAEventOPRs,
   TBAMatch,
 } from "@fieldview/provider-tba/types";
-import type {
-  StatboticsMatch,
-  StatboticsTeamId,
-} from "@fieldview/provider-statbotics/types";
+import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { FieldViewMatch, FieldViewMatchTeam } from "../match.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
-import type { TeamKey } from "../ids.js";
+import type { StatboticsTeamId, TeamKey } from "../ids.js";
 
 /**
  * An explicit cross-provider identity association. The numeric Statbotics ID
@@ -40,29 +37,26 @@ function normalizeAllianceTeams(
     );
     const statboticsKey =
       identity === undefined ? undefined : String(identity.statbotics_team_id);
+    const opr = input.tba_event_oprs?.oprs?.[team_key];
+    const dpr = input.tba_event_oprs?.dprs?.[team_key];
+    const ccwm = input.tba_event_oprs?.ccwms?.[team_key];
+    const preEpa = statboticsKey === undefined
+      ? undefined
+      : input.statbotics_match?.pre_epas?.[statboticsKey];
+    const epa = statboticsKey === undefined
+      ? undefined
+      : input.statbotics_match?.epas?.[statboticsKey];
 
     return {
       team_key,
       ...(identity === undefined
         ? {}
         : { statbotics_team_id: identity.statbotics_team_id }),
-      ...(input.tba_event_oprs?.oprs?.[team_key] === undefined
-        ? {}
-        : { opr: input.tba_event_oprs.oprs[team_key] }),
-      ...(input.tba_event_oprs?.dprs?.[team_key] === undefined
-        ? {}
-        : { dpr: input.tba_event_oprs.dprs[team_key] }),
-      ...(input.tba_event_oprs?.ccwms?.[team_key] === undefined
-        ? {}
-        : { ccwm: input.tba_event_oprs.ccwms[team_key] }),
-      ...(statboticsKey === undefined ||
-      input.statbotics_match?.pre_epas?.[statboticsKey] === undefined
-        ? {}
-        : { pre_epa: input.statbotics_match.pre_epas[statboticsKey] }),
-      ...(statboticsKey === undefined ||
-      input.statbotics_match?.epas?.[statboticsKey] === undefined
-        ? {}
-        : { epa: input.statbotics_match.epas[statboticsKey] }),
+      ...(opr === undefined ? {} : { opr }),
+      ...(dpr === undefined ? {} : { dpr }),
+      ...(ccwm === undefined ? {} : { ccwm }),
+      ...(preEpa === undefined ? {} : { pre_epa: preEpa }),
+      ...(epa === undefined ? {} : { epa }),
     };
   });
 }
