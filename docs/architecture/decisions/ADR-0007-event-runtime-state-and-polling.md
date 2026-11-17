@@ -24,7 +24,7 @@ It does not own durable cache state, ETag persistence, polling schedules, webhoo
 
 ### 3. ETags belong to endpoint representations in EventRuntime storage
 
-Persist each endpoint's current provider representation and its validator together. Each accepted HTTP 200 response is also retained as an immutable, revisioned provider source record in the EventRuntime ingestion layer. Webhook patches update the reconciled current endpoint state but never rewrite the raw provider source version. An ETag validates one HTTP resource representation, not an individual match and not the locally reconciled FieldView model.
+Persist each endpoint's exact latest HTTP provider representation (`providerData`) alongside its ETag, separately from the locally reconciled current representation (`data`). Each accepted HTTP 200 response is also retained as an immutable, revisioned provider source record in the EventRuntime ingestion layer. Webhook patches update `data` but never rewrite `providerData`, its validator, or the raw provider source version. An ETag validates one HTTP resource representation, not an individual match and not the locally reconciled FieldView model.
 
 | Input | Data | ETag | Freshness |
 | --- | --- | --- | --- |

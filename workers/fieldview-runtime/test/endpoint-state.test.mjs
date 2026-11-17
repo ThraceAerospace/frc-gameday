@@ -22,6 +22,7 @@ test("304 retains data and ETag while refreshing freshness", () => {
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "not-modified", expiresAt: 500 }, 300, replace);
   assert.deepEqual(next.data, ["qm1"]);
+  assert.deepEqual(next.providerData, ["qm1"]);
   assert.equal(next.etag, '"v1"');
   assert.equal(next.lastFetchedAt, 300);
   assert.equal(next.revision, 4);
@@ -42,6 +43,7 @@ test("failed poll preserves good data, validator, freshness, and revision", () =
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "failed" }, 300, replace);
   assert.deepEqual(next.data, ["good"]);
+  assert.deepEqual(next.providerData, ["good"]);
   assert.equal(next.etag, '"v1"');
   assert.equal(next.lastFetchedAt, 100);
   assert.equal(next.expiresAt, 200);
@@ -72,6 +74,7 @@ test("webhook update preserves upstream validator and fetch timestamps", () => {
     data: ["qm1"], etag: '"v1"', lastFetchedAt: 100, lastAttemptAt: 110 };
   const next = applyWebhookUpdate(initial, ["qm1", "qm2"], 250, replace);
   assert.deepEqual(next.data, ["qm1", "qm2"]);
+  assert.deepEqual(next.providerData, ["qm1"]);
   assert.equal(next.etag, '"v1"');
   assert.equal(next.revision, 1);
   assert.equal(next.lastWebhookAt, 250);

@@ -5,7 +5,10 @@
  */
 export interface EndpointState<T> {
   endpoint: string;
+  /** Latest locally reconciled representation, including accepted webhook updates. */
   data: T | null;
+  /** Exact latest HTTP representation validated by etag; webhooks never modify it. */
+  providerData: T | null;
   etag: string | null;
   lastFetchedAt: number | null;
   expiresAt: number | null;
@@ -32,7 +35,7 @@ export function createEndpointState<T>(endpoint: string): EndpointState<T> {
     throw new Error("Endpoint state requires a provider-relative path");
   }
   return {
-    endpoint, data: null, etag: null, lastFetchedAt: null, expiresAt: null,
+    endpoint, data: null, providerData: null, etag: null, lastFetchedAt: null, expiresAt: null,
     revision: 0, validatorRevision: 0, lastAttemptAt: null, lastWebhookAt: null,
   };
 }
@@ -78,6 +81,7 @@ export function applyPollResponse<T>(
   return {
     ...current,
     data: reconcile(current.data, response.data, request.revision),
+    providerData: response.data,
     // A 200 without ETag explicitly clears the old validator.
     etag: response.etag,
     lastFetchedAt: now,
