@@ -217,22 +217,27 @@ export class EventRuntime {
       ];
       const lifecycle = body.lifecycle;
       if (lifecycle === "expired") {
-        await this.cancelRecurringPolls();
-        await this.storage.delete("lifecycle:completed-until");
+        await this.cancelRecurringPolls(true);
         return Response.json({ lifecycle, scheduled: 0, event_key: this.eventKey });
       }
       if (lifecycle === "upcoming") {
-        await this.storage.delete("lifecycle:completed-until");
         await this.schedulePolls([...this.allowedEndpoints], upcomingIntervalMs as number);
+        await this.storage.transaction(async (transaction) => {
+          await transaction.delete("lifecycle:completed-until");
+          await this.rearm(transaction);
+        });
       } else {
         const metadataEndpoints = [...this.allowedEndpoints].filter((endpoint) => !liveEndpoints.includes(endpoint));
         await this.schedulePolls(metadataEndpoints, upcomingIntervalMs as number);
         await this.schedulePolls(liveEndpoints, activeIntervalMs as number);
-        if (lifecycle === "completed" && typeof completedUntil === "number") {
-          await this.storage.put("lifecycle:completed-until", completedUntil);
-        } else {
-          await this.storage.delete("lifecycle:completed-until");
-        }
+        await this.storage.transaction(async (transaction) => {
+          if (lifecycle === "completed" && typeof completedUntil === "number") {
+            await transaction.put("lifecycle:completed-until", completedUntil);
+          } else {
+            await transaction.delete("lifecycle:completed-until");
+          }
+          await this.rearm(transaction);
+        });
       }
       return Response.json({ lifecycle, event_key: this.eventKey });
     }
@@ -433,8 +438,7 @@ export class EventRuntime {
     const now = Date.now();
     const completedUntil = await this.storage.get<number>("lifecycle:completed-until");
     if (completedUntil !== undefined && now >= completedUntil) {
-      await this.cancelRecurringPolls();
-      await this.storage.delete("lifecycle:completed-until");
+      await this.cancelRecurringPolls(true);
     }
     // Reserve due work before network I/O. Retriable TBA work keeps a durable
     // retry deadline; at-most-once Statbotics work is removed before its fetch.
@@ -502,12 +506,13 @@ export class EventRuntime {
     }
   }
 
-  private async cancelRecurringPolls(): Promise<void> {
+  private async cancelRecurringPolls(clearCompletedUntil = false): Promise<void> {
     await this.storage.transaction(async (transaction) => {
       const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
       for (const [key, task] of tasks) {
         if (task.retryOnFailure !== false) await transaction.delete(key);
       }
+      if (clearCompletedUntil) await transaction.delete("lifecycle:completed-until");
       await this.rearm(transaction);
     });
   }
@@ -519,9 +524,10 @@ export class EventRuntime {
 
   private async rearm(transaction: DurableObjectTransactionLike): Promise<void> {
     const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
+    const completedUntil = await transaction.get<number>("lifecycle:completed-until");
     const nextDue = [...tasks.values()].reduce<number | null>(
       (next, task) => next === null || task.dueAt < next ? task.dueAt : next,
-      null,
+      completedUntil ?? null,
     );
     if (nextDue === null) await transaction.deleteAlarm();
     else await transaction.setAlarm(nextDue);
