@@ -11,7 +11,7 @@ const alliance = (overrides = {}) => ({
   picks: ["frc7407", "frc5940", "frc9470"],
   declines: [],
   status: {
-    playoff_type: "bracket",
+    playoff_type: 0,
     level: "sf",
     record: null,
     current_level_record: null,
