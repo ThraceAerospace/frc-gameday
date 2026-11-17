@@ -32,12 +32,13 @@ test("event-team normalization preserves explicit null status and omits absent v
     team_key: "frc7407",
     tba_status: null,
     sources: {},
-
+  });
 
   assert.deepEqual(result, {
     event_key: "2026arc",
     team_key: "frc7407",
     tba_status: null,
+    sources: {},
   });
   assert.equal("opr" in result, false);
   assert.equal("dpr" in result, false);
@@ -61,6 +62,7 @@ test("event-team domain object survives JSON transport round-trip", () => {
     team_key: "frc7407",
     tba_status: null,
     tba_event_oprs: archimedes2026EventOprs,
+    sources: { tba_team_event_status: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" }, tba_event_oprs: { status: "available", retrieved_at: "2026-05-02T00:00:00.000Z" } },
   });
 
   const received = JSON.parse(JSON.stringify(eventTeam));
