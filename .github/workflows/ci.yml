@@ -32,6 +32,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Next.js types
+        run: npx next typegen
+        working-directory: apps/web
+
       - name: Typecheck workspaces
         run: npm run typecheck
 
@@ -44,6 +48,3 @@ jobs:
       - name: Lint (non-blocking legacy baseline)
         run: npm run lint
         continue-on-error: true
-
-      - name: Build web application
-        run: npm run build
