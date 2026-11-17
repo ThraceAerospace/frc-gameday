@@ -169,11 +169,30 @@ export class EventRuntime {
 
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe")) {
-        return Response.json({ error: "Expected subscribe or unsubscribe action" }, { status: 400 });
+      if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
+          (body.generation !== undefined &&
+            (!Number.isSafeInteger(body.generation) || (body.generation as number) < 1))) {
+        return Response.json({ error: "Expected subscribe or unsubscribe action and an optional positive generation" }, { status: 400 });
       }
-      await this.storage.put("multiplexer:shared", body.action === "subscribe");
-      return Response.json({ registered: body.action === "subscribe", event_key: this.eventKey });
+      if (typeof body.generation === "number") {
+        const currentGeneration = await this.storage.get<number>("multiplexer:registration-generation") ?? 0;
+        if (body.generation <= currentGeneration) {
+          return Response.json({
+            registered: await this.storage.get<boolean>("multiplexer:shared") === true,
+            event_key: this.eventKey,
+            generation: currentGeneration,
+            stale: true,
+          });
+        }
+        await this.storage.put("multiplexer:registration-generation", body.generation);
+      }
+      const registered = body.action === "subscribe";
+      await this.storage.put("multiplexer:shared", registered);
+      return Response.json({
+        registered,
+        event_key: this.eventKey,
+        ...(typeof body.generation === "number" ? { generation: body.generation } : {}),
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/lifecycle") {

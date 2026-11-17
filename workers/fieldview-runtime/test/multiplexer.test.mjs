@@ -39,7 +39,8 @@ test("one multiplexer deduplicates upstream event registration and filters per c
       idFromName: (name) => name,
       get: (id) => ({
         fetch: async (request) => {
-          upstream.push({ id, action: (await request.json()).action });
+          const body = await request.json();
+          upstream.push({ id, action: body.action, generation: body.generation });
           return Response.json({ registered: true });
         },
       }),
@@ -70,8 +71,9 @@ test("one multiplexer deduplicates upstream event registration and filters per c
   await subscribe(second, "2026test");
   await subscribe(otherEvent, "2026other");
   assert.deepEqual(upstream, [
-    { id: "2026test", action: "subscribe" },
-    { id: "2026other", action: "subscribe" },
+    { id: "2026test", action: "subscribe", generation: 1 },
+    { id: "2026test", action: "subscribe", generation: 2 },
+    { id: "2026other", action: "subscribe", generation: 1 },
   ]);
 
   const notify = await mux.fetch(new Request("https://mux/internal/notify", {
@@ -92,9 +94,13 @@ test("one multiplexer deduplicates upstream event registration and filters per c
   await mux.webSocketMessage(first, JSON.stringify({
     type: "unsubscribe", topic: "event-state", event_key: "2026test",
   }));
-  assert.equal(upstream.length, 2, "registration remains while another client is subscribed");
+  assert.deepEqual(upstream.at(-1), {
+    id: "2026test", action: "subscribe", generation: 3,
+  }, "registration remains active while another client is subscribed");
   await mux.webSocketClose(second);
-  assert.deepEqual(upstream.at(-1), { id: "2026test", action: "unsubscribe" });
+  assert.deepEqual(upstream.at(-1), {
+    id: "2026test", action: "unsubscribe", generation: 4,
+  });
   assert.deepEqual(await storage.get("topic:event-state:2026test"), undefined);
 });
 

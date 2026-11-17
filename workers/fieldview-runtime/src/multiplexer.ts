@@ -7,6 +7,7 @@ type SocketAttachment = { clientId: string };
 const EVENT_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const CLIENT_PREFIX = "client:";
 const TOPIC_PREFIX = "topic:";
+const REGISTRATION_PREFIX = "registration-generation:";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -154,27 +155,19 @@ export class Multiplexer {
       }
       const topicKey = subscriptionKey(subscription);
       const clients = await tx.get<string[]>(topicKey) ?? [];
+      if (current.some((item) => sameSubscription(item, subscription))) {
+        return { added: false, generation: 0 };
+      }
       await tx.put(clientKey, [...current, subscription]);
       await tx.put(topicKey, [...clients, clientId]);
-      return { added: true, first: clients.length === 0 };
+      const generationKey = REGISTRATION_PREFIX + subscriptionKey(subscription);
+      const generation = (await tx.get<number>(generationKey) ?? 0) + 1;
+      await tx.put(generationKey, generation);
+      return { added: true, generation };
     });
-    if (!changed.added || !changed.first || subscription.topic !== "event-state") {
-      return { ok: true };
-    }
-    const runtime = this.env.EVENT_RUNTIME;
-    if (!runtime) return { ok: false };
-    const response = await runtime.get(runtime.idFromName(subscription.event_key)).fetch(
-      new Request("https://event-runtime/subscriptions", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": subscription.event_key,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "subscribe" }),
-      }),
-    ).catch(() => null);
-    if (!response?.ok) {
+    if (!changed.added || subscription.topic !== "event-state") return { ok: true };
+    const response = await this.syncEventStateSubscription(subscription.event_key, true, changed.generation);
+    if (!response) {
       await this.removeSubscription(clientId, subscription);
       return { ok: false };
     }
@@ -193,24 +186,40 @@ export class Multiplexer {
       const clients = (await tx.get<string[]>(topicKey) ?? []).filter((id) => id !== clientId);
       if (clients.length) await tx.put(topicKey, clients);
       else await tx.delete(topicKey);
-      return { removed: true, last: clients.length === 0 };
+      const generationKey = REGISTRATION_PREFIX + subscriptionKey(subscription);
+      const generation = (await tx.get<number>(generationKey) ?? 0) + 1;
+      await tx.put(generationKey, generation);
+      return { removed: true, desired: clients.length > 0, generation };
     });
-    if (changed.removed && changed.last && subscription.topic === "event-state") {
-      const runtime = this.env.EVENT_RUNTIME;
-      if (runtime) {
-        await runtime.get(runtime.idFromName(subscription.event_key)).fetch(
-          new Request("https://event-runtime/subscriptions", {
-            method: "POST",
-            headers: {
-              Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-              "X-FieldView-Event-Key": subscription.event_key,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ action: "unsubscribe" }),
-          }),
-        ).catch(() => null);
-      }
+    if (changed.removed && subscription.topic === "event-state") {
+      await this.syncEventStateSubscription(
+        subscription.event_key, changed.desired, changed.generation,
+      );
     }
+  }
+
+  private async syncEventStateSubscription(
+    eventKey: string,
+    registered: boolean,
+    generation: number,
+  ): Promise<boolean> {
+    const runtime = this.env.EVENT_RUNTIME;
+    if (!runtime || !this.env.RUNTIME_ADMIN_TOKEN) return false;
+    const response = await runtime.get(runtime.idFromName(eventKey)).fetch(
+      new Request("https://event-runtime/subscriptions", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: registered ? "subscribe" : "unsubscribe",
+          generation,
+        }),
+      }),
+    ).catch(() => null);
+    return Boolean(response?.ok);
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> {

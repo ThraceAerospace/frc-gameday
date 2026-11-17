@@ -574,3 +574,44 @@ test("webhook refresh retains the 65-second one-shot authoritative TBA refetch",
   assert.equal(calls.length, 2);
   assert.equal(storage.values.has(taskKey), false);
 });
+
+test("EventRuntime ignores out-of-order multiplexer registration generations", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+  const request = (action, generation) => new Request("https://event-runtime/subscriptions", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action, generation }),
+  });
+
+  const latestUnsubscribe = await runtime.fetch(request("unsubscribe", 4));
+  assert.deepEqual(await latestUnsubscribe.json(), {
+    registered: false, event_key: eventKey, generation: 4,
+  });
+  const staleSubscribe = await runtime.fetch(request("subscribe", 3));
+  assert.deepEqual(await staleSubscribe.json(), {
+    registered: false, event_key: eventKey, generation: 4, stale: true,
+  });
+  assert.equal(await storage.get("multiplexer:shared"), false);
+
+  const latestSubscribe = await runtime.fetch(request("subscribe", 5));
+  assert.deepEqual(await latestSubscribe.json(), {
+    registered: true, event_key: eventKey, generation: 5,
+  });
+  const staleUnsubscribe = await runtime.fetch(request("unsubscribe", 4));
+  assert.deepEqual(await staleUnsubscribe.json(), {
+    registered: true, event_key: eventKey, generation: 5, stale: true,
+  });
+  assert.equal(await storage.get("multiplexer:shared"), true);
+});
