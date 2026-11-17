@@ -1,6 +1,6 @@
 # FieldView Data Model v1
 
-**Status:** Initial domain-model baseline  
+**Status:** Initial domain-model baseline; canonical event snapshot composition implemented  
 **Date:** 2026-11-16  
 **Reference fixture:** Archimedes Championship, Playoff 13 Match 1 (`2026arc_sf13m1`)
 
@@ -26,6 +26,7 @@ This document establishes the first iteration of FieldView's canonical domain mo
 | `FieldViewTeam` | Team identity and stable team information |
 | `FieldViewTeamSeason` | Season-scoped team information and season statistics |
 | `FieldViewEvent` | Event identity, schedule, location, and event information |
+| `FieldViewEventSnapshot` | Canonical event-scoped aggregate of event, teams, event-team associations, matches, and playoff alliances |
 | `FieldViewEventTeam` | A team's participation and event-specific status/statistics |
 | `FieldViewMatch` | Match information, predictions, team associations, playoff associations, analysis, and flags |
 | `FieldViewPlayoffAlliance` | Official playoff alliance identity, members, backup, and progression information |
@@ -239,7 +240,7 @@ The canonical FieldView domain objects are the application data model shared by 
 - HTTP responses, WebSocket snapshots, and other client messages serialize the relevant FieldView domain objects directly.
 - Serialization is a transport operation, not a second normalization or interpretation stage. It must not rename, convert, default, or discard domain values.
 - The serialized representation must preserve explicit `null` values and distinguish them from absent properties. Optional properties that are absent remain absent; they must not be filled with invented defaults.
-- The current domain fields use JSON-compatible primitives, arrays, and objects. Round-trip tests cover representative Team, Event, TeamSeason, EventTeam, Match, and PlayoffAlliance objects, including provenance and nested nullable fields. Analytics round-trip coverage is deferred until its result semantics have been reviewed; this does not authorize changing the analytics model as part of serialization work.
+- The current domain fields use JSON-compatible primitives, arrays, and objects. Round-trip tests cover representative Team, Event, TeamSeason, EventTeam, Match, PlayoffAlliance, and EventSnapshot objects, including provenance and nested nullable fields. Analytics round-trip coverage is deferred until its result semantics have been reviewed; this does not authorize changing the analytics model as part of serialization work.
 - If a future domain field cannot be represented by the chosen transport, document the concrete incompatibility and solve it at that field or transport boundary. Do not introduce a duplicate model preemptively.
 - Provider payload retention and version history remain responsibilities of ingestion/storage. A client receives the relevant FieldView domain aggregate, not an automatic dump of every cached provider record.
 
@@ -253,6 +254,6 @@ Versioning applies to the FieldView domain model and its serialized representati
 4. Implement and test `normalizeFieldViewMatch` as a pure association boundary, retaining provider payloads and correlating Statbotics team values through TBA team_number.
 5. Implement and test `normalizeFieldViewEventTeam` for event-team status and event-level OPR/DPR/CCWM association by unchanged TBA team key.
 6. Verify that canonical domain objects serialize and round-trip without changing source values, explicit nulls, or absent fields; add fixture-driven tests.
-7. Add further normalization and reconciliation behavior only after its input/output semantics and transformations are explicitly reviewed and approved; then migrate acquisition/reconciliation and consumers.
+7. Compose FieldViewEventSnapshot from TBA event, team, status, OPR, match, prediction, and playoff-alliance resources. The pure domain normalizer and the first EventRuntime snapshot adapter are implemented; Statbotics enrichment, publication, and client consumers remain pending.
 
-The fixture is a set of five independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. No provider calculations, endpoint acquisition, or runtime implementation is authorized by defining these types or fixtures alone.
+The fixture is a set of five independent provider-resource inputs, not a pre-merged `FieldViewMatch`. Complete provider responses and their versions remain the responsibility of the ingestion/cache layer. Defining a domain type or fixture alone does not authorize provider calculations, analytics changes, or client publication.

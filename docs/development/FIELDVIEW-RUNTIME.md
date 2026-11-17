@@ -18,7 +18,7 @@ For local development, use Wrangler's local secret workflow. For a future remote
 - `POST /webhooks/tba` — public TBA webhook ingress. Verifies HMAC-SHA256 over the exact raw request body before parsing JSON. Payloads are capped at 1 MB. TBA ping and verification notifications receive a 200 response; event notifications are routed to the EventRuntime named by the unchanged TBA event key.
 - `POST /internal/events/:eventKey/schedule` — authenticated administrative scheduling. Body: `{ "endpoints": ["/event/..."], "intervalMs": 60000 }`. Endpoints must be in the EventRuntime's event-scoped TBA endpoint allowlist.
 - `GET /internal/events/:eventKey/state` — authenticated inspection of current endpoint state.
-- `GET /internal/events/:eventKey/snapshot` — authenticated canonical `FieldViewEventSnapshot` composed from acquired event, team, team-status, and OPR resources.
+- `GET /internal/events/:eventKey/snapshot` — authenticated canonical `FieldViewEventSnapshot` composed from acquired event, team, team-status, match, event-prediction, OPR, and playoff-alliance resources.
 
 ## Ownership and data handling
 
@@ -35,4 +35,4 @@ From the repository root:
 - `npm test` runs domain, TBA provider, endpoint-state, reconciliation, source-version, and webhook-signature tests.
 - `npm run typecheck` also typechecks the Worker entrypoint and EventRuntime adapter.
 
-The first canonical event snapshot is now composed through `@fieldview/domain` normalizers; it does not include matches or analytics yet. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.
+The canonical snapshot includes TBA matches and playoff alliance associations. Statbotics enrichment and analytics are not included. The Wrangler config uses a SQLite-backed Durable Object migration and intentionally has no routes, Cron Triggers, or production deployment settings yet.
