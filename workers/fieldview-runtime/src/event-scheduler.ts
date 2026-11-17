@@ -1,6 +1,7 @@
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
-import type { TBAEventSimple } from "../../../packages/providers/tba/src/types.ts";
+import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
+import type { TBAEvent } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 const DISCOVERY_PREFIX = "discovery:";
@@ -43,20 +44,79 @@ export interface EventLifecycleDecision {
   completedUntil: number | null;
 }
 
+function parseDateOnly(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  if (new Date(timestamp).toISOString().slice(0, 10) !== value) return null;
+  return { year, month, day };
+}
+
+function nextDateOnly(value: string): string | null {
+  const parts = parseDateOnly(value);
+  if (!parts) return null;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + 86_400_000)
+    .toISOString().slice(0, 10);
+}
+
+/** Convert local midnight in an IANA timezone to its UTC instant. */
+function zonedMidnight(value: string, timeZone: string): number | null {
+  const date = parseDateOnly(value);
+  if (!date || !timeZone) return null;
+  const target = Date.UTC(date.year, date.month - 1, date.day);
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      calendar: "gregory",
+      numberingSystem: "latn",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    let candidate = target;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const values = new Map(formatter.formatToParts(new Date(candidate))
+        .map((part) => [part.type, part.value]));
+      const represented = Date.UTC(
+        Number(values.get("year")),
+        Number(values.get("month")) - 1,
+        Number(values.get("day")),
+        Number(values.get("hour")),
+        Number(values.get("minute")),
+        Number(values.get("second")),
+      );
+      const adjustment = target - represented;
+      if (adjustment === 0) return candidate;
+      candidate += adjustment;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /**
- * TBA discovery records expose date-only boundaries. Treat start_date as the
- * beginning of that UTC calendar day and end_date as its inclusive end.
- * This is scheduling metadata only; displayed event times always use the
- * event's IANA timezone in the product layer.
+ * TBA event dates are local calendar dates. Classify their boundaries in the
+ * event's IANA timezone, including DST transitions; the end date is inclusive.
  */
 export function classifyEventLifecycle(
-  event: Pick<TBAEventSimple, "start_date" | "end_date">,
+  event: Pick<TBAEvent, "start_date" | "end_date" | "timezone">,
   now: number,
   policy: EventPollingPolicy,
 ): EventLifecycleDecision | null {
-  const start = Date.parse(event.start_date + "T00:00:00.000Z");
-  const end = Date.parse(event.end_date + "T23:59:59.999Z");
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  const endExclusiveDate = nextDateOnly(event.end_date);
+  if (!endExclusiveDate) return null;
+  const start = zonedMidnight(event.start_date, event.timezone);
+  const endExclusive = zonedMidnight(endExclusiveDate, event.timezone);
+  if (start === null || endExclusive === null || endExclusive <= start) return null;
+  const end = endExclusive - 1;
   if (now < start) return { lifecycle: "upcoming", completedUntil: null };
   if (now <= end) return { lifecycle: "active", completedUntil: null };
   const completedUntil = end + policy.completedRetentionMs;
@@ -67,7 +127,7 @@ export function classifyEventLifecycle(
 
 interface DiscoveryCache {
   etag: string | null;
-  events: TBAEventSimple[];
+  events: TBAEvent[];
   updatedAt: number;
 }
 
@@ -87,6 +147,32 @@ export class EventScheduler {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/events") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      }
+      const cached = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+      if (!cached) return Response.json({ error: "Event discovery cache is not ready" }, { status: 503 });
+      const retrievedAt = new Date(cached.updatedAt).toISOString();
+      const events = cached.events.map((event) => normalizeFieldViewEvent(event, {
+        tba_event: {
+          status: "available",
+          retrieved_at: retrievedAt,
+          ...(cached.etag === null ? {} : { validator: cached.etag }),
+        },
+      }));
+      return Response.json(
+        { year, events, updatedAt: cached.updatedAt },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
+            ...(cached.etag === null ? {} : { ETag: cached.etag }),
+          },
+        },
+      );
+    }
+
     const authorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -126,7 +212,7 @@ export class EventScheduler {
 
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
     const year = new Date().getUTCFullYear();
-    const events = new Map<string, TBAEventSimple>();
+    const events = new Map<string, TBAEvent>();
     for (const discoveryYear of [year - 1, year, year + 1]) {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
       const cacheKey = DISCOVERY_PREFIX + discoveryYear;
@@ -134,11 +220,11 @@ export class EventScheduler {
       const headers = new Headers();
       if (cached?.etag) headers.set("If-None-Match", cached.etag);
       const response = await this.api.request(endpoint, { headers });
-      let discovered: TBAEventSimple[];
+      let discovered: TBAEvent[];
       if (response.status === 304 && cached) {
         discovered = cached.events;
       } else if (response.ok) {
-        discovered = await response.json() as TBAEventSimple[];
+        discovered = await response.json() as TBAEvent[];
         if (!Array.isArray(discovered)) throw new Error("TBA event discovery returned a non-array payload");
         await this.storage.put(cacheKey, {
           etag: response.headers.get("ETag"),

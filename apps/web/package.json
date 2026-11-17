@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "predev": "npm run build --workspace=@fieldview/domain",
+    "prebuild": "npm run build --workspace=@fieldview/domain"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

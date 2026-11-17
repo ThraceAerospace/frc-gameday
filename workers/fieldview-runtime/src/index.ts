@@ -67,6 +67,15 @@ export default {
       }));
     }
 
+    if (url.pathname === "/events/discovery" && request.method === "GET") {
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const query = new URLSearchParams();
+      const year = url.searchParams.get("year");
+      if (year !== null) query.set("year", year);
+      return scheduler.fetch(new Request("https://event-scheduler/events?" + query.toString()));
+    }
+
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
       const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
       return stub.fetch(new Request("https://fieldview-multiplexer/stream", { method: "GET", headers: request.headers }));

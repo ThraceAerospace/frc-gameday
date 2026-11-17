@@ -5,10 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { VideoCameraIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
 import EventDateRange from "@/components/event/EventDateRange";
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 import { getEventWebcastStatus } from "@/lib/tba/formatters";
 
-function getEventGroup(event: TBAEvent): string {
+function getEventGroup(event: FieldViewEvent): string {
   const type = event.event_type_string?.trim() ?? "";
   // TBA event type IDs: 2/5 are District Championship events, while
   // 3/4 are the FIRST Championship divisions/finals.
@@ -31,8 +31,8 @@ function getOffseasonMonthId(monthKey: string): string {
 }
 
 function compareGroups(
-  a: [string, TBAEvent[]],
-  b: [string, TBAEvent[]]
+  a: [string, FieldViewEvent[]],
+  b: [string, FieldViewEvent[]]
 ): number {
   const [nameA, eventsA] = a;
   const [nameB, eventsB] = b;
@@ -52,7 +52,7 @@ function compareGroups(
   return firstDateA.localeCompare(firstDateB) || nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: "base" });
 }
 
-export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
+export default function EventsBrowser({ events }: { events: FieldViewEvent[] }) {
   const [district, setDistrict] = useState("all");
   const [eventType, setEventType] = useState("all");
   const [activeGroup, setActiveGroup] = useState("");
@@ -91,7 +91,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
   }), [events, district, eventType]);
 
   const groups = useMemo(() => {
-    const groupMap = new Map<string, TBAEvent[]>();
+    const groupMap = new Map<string, FieldViewEvent[]>();
     for (const event of filtered) {
       const group = getEventGroup(event);
       const groupEvents = groupMap.get(group) ?? [];
@@ -107,7 +107,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
           a.name.localeCompare(b.name, undefined, { numeric: true }) ||
           a.key.localeCompare(b.key, undefined, { numeric: true })
         ),
-      ] as [string, TBAEvent[]])
+      ] as [string, FieldViewEvent[]])
       .sort(compareGroups);
   }, [filtered]);
 
@@ -115,7 +115,7 @@ export default function EventsBrowser({ events }: { events: TBAEvent[] }) {
     const offseason = groups.find(([name]) => name === "Off-Season");
     if (!offseason) return [];
 
-    const monthMap = new Map<string, TBAEvent[]>();
+    const monthMap = new Map<string, FieldViewEvent[]>();
     for (const event of offseason[1]) {
       const match = /^(\d{4})-(\d{2})-/.exec(event.start_date);
       if (!match) continue;
