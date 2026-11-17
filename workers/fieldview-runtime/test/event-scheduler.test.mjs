@@ -58,7 +58,8 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
   assert.deepEqual(await started.json(), { started: true });
   await scheduler.alarm();
 
-  assert.equal(tbaRequests.length, 3);
+  assert.equal(tbaRequests.length, 1);
+  assert.match(tbaRequests[0], new RegExp("/events/" + currentYear + "$"));
   assert.equal(lifecycleRequests.length, 1);
   assert.equal(lifecycleRequests[0].id, "2026future");
   assert.equal(lifecycleRequests[0].body.lifecycle, "upcoming");
@@ -180,7 +181,7 @@ test("a successful TBA 304 refreshes discovery validation time without replacing
   const storage = new MemoryStorage();
   const year = new Date().getUTCFullYear();
   const old = Date.now() - 60 * 60_000;
-  for (const discoveryYear of [year - 1, year, year + 1]) {
+  for (const discoveryYear of [year]) {
     await storage.put("discovery:" + discoveryYear, {
       etag: '"cached"',
       events: [],
