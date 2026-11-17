@@ -242,6 +242,21 @@ export class EventRuntime {
       return Response.json({ lifecycle, event_key: this.eventKey });
     }
 
+    if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
+      const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const scheduledAt = Date.now();
+      await this.scheduleStatboticsRefresh(scheduledAt);
+      const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
+      const delayMs = configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay);
+      return Response.json({
+        scheduled: true,
+        event_key: this.eventKey,
+        endpoint,
+        due_at: scheduledAt + delayMs,
+        delay_ms: delayMs,
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/schedule") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || !Array.isArray(body.endpoints) ||
