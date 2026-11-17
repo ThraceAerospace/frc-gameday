@@ -48,3 +48,11 @@ test("a new match webhook record is appended without rewriting its payload", () 
   const result = reconcileWebhookEndpoint("/event/2026test/matches", [], incoming);
   assert.equal(result[0], incoming);
 });
+
+test("first match webhook initializes event match state as an array", () => {
+  const incoming = { key: "qm1", event_key: "2026test" };
+  assert.deepEqual(
+    reconcileWebhookEndpoint("/event/2026test/matches", null, incoming),
+    [incoming],
+  );
+});

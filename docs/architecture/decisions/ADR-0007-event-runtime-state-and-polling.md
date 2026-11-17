@@ -64,7 +64,7 @@ EventRuntime composes and publishes the existing @fieldview/domain objects. Endp
 2. Introduce platform-independent endpoint-state transition primitives and tests before binding them to Cloudflare storage.
 3. Map legacy Redis cache behavior to endpoint-level state, validator, freshness, and failure semantics; do not migrate Redis abstractions into the provider package.
 4. Add the Cloudflare Worker and EventRuntime Durable Object adapter around these pure transitions. The initial adapter persists current endpoint state and immutable source versions.
-5. Add authenticated TBA webhook ingress, global Cron discovery, canonical domain composition, and versioned client publication.
+5. Verify TBA `X-TBA-HMAC` signatures over the exact raw request body at Worker ingress; persist/deduplicate raw notifications in EventRuntime and use notification types only for explicit local match updates or immediate endpoint refreshes. Then add global Cron discovery, canonical domain composition, and versioned client publication.
 6. Validate duplicate/out-of-order webhooks, concurrent poll/webhook races, 304s, validator replacement/removal, failures, restarts, and reconnects before cutover.
 
 ## Consequences
@@ -73,4 +73,4 @@ EventRuntime composes and publishes the existing @fieldview/domain objects. Endp
 - Event-scoped consistency has one authoritative owner.
 - ETags remain correctly scoped to provider HTTP resources.
 - The first implementation can be tested without Cloudflare dependencies.
-- An initial Worker entrypoint, SQLite-backed EventRuntime binding, endpoint persistence, immutable source-version records, internal webhook-update route, and alarm-driven polling adapter are implemented in the migration branch. Public TBA signature verification/ingress, global discovery, domain composition, WebSocket lifecycle, credentials, and deployment remain future work; no Worker or Durable Object is deployed.
+- An initial Worker entrypoint, SQLite-backed EventRuntime binding, endpoint persistence, immutable source-version records, internal webhook-update route, and alarm-driven polling adapter are implemented in the migration branch. TBA `X-TBA-HMAC` verification and event-scoped notification ingestion are implemented. Global discovery, domain composition, WebSocket lifecycle, runtime secrets, and deployment remain future work; no Worker or Durable Object is deployed.

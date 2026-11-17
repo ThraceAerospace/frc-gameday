@@ -149,7 +149,7 @@ export class EventRuntime {
         return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
       }
       const messageEventKey = payload.message_data.event_key;
-      if (messageEventKey !== undefined && messageEventKey !== this.eventKey) {
+      if (messageEventKey !== this.eventKey) {
         return Response.json({ error: "Webhook event key mismatch" }, { status: 400 });
       }
       const accepted = await this.applyTbaWebhook(
@@ -383,18 +383,4 @@ export class EventRuntime {
     });
   }
 
-  private async applyWebhook(endpoint: string, incoming: unknown): Promise<void> {
-    await this.storage.transaction(async (transaction) => {
-      const key = endpointStorageKey(endpoint);
-      const current = await transaction.get<EndpointState<unknown>>(key) ??
-        createEndpointState<unknown>(endpoint);
-      const next = applyWebhookUpdate(
-        current,
-        incoming,
-        Date.now(),
-        (latest, update) => reconcileWebhookEndpoint(endpoint, latest, update),
-      );
-      await transaction.put(key, next);
-    });
-  }
 }

@@ -65,11 +65,12 @@ export function reconcileWebhookEndpoint(
   latest: unknown,
   incoming: unknown,
 ): unknown {
-  if (!endpoint.endsWith("/matches") || !Array.isArray(latest) || !isRecord(incoming)) {
+  if (!endpoint.endsWith("/matches") || !isRecord(incoming)) {
     return incoming;
   }
   const key = matchKey(incoming);
   if (!key) return incoming;
+  if (!Array.isArray(latest)) return [incoming];
 
   let found = false;
   const merged = latest.map((match) => {
