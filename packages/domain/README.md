@@ -34,6 +34,23 @@ Team-season identity is represented separately by FieldViewTeamSeason, which pai
 
 The initial canonical object set is FieldViewTeam, FieldViewTeamSeason, FieldViewEvent, FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance, FieldViewEventAnalytics, and FieldViewTeamAnalytics. FieldViewMatch is the first detailed model and combines TBA match information with independent predictions, team statistics, playoff alliance associations, explicit analysis, flags, and provenance.
 
-The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are now implemented for the canonical object set, with `FieldViewMatch` retaining exact TBA match fields and explicitly typed Statbotics associations. Typecheck, fixture validation, and the separate versioned client contract remain follow-up work.
+The v1 domain-model specification documents responsibilities, source overlaps, deliberate omissions, and the Archimedes SF13 reference fixture. Initial domain types are implemented for the canonical object set. `normalizeFieldViewMatch` composes independently acquired TBA match, TBA prediction, TBA event OPR, and Statbotics match resources into a `FieldViewMatch`. It preserves the complete TBA match payload, keeps the two prediction sources independent, associates event OPR/DPR/CCWM from their own resource, and requires explicit TBA-to-Statbotics team identity associations. It does not calculate analytics or infer numeric Statbotics IDs from TBA keys. The Archimedes fixture tests exercise source preservation, resource association, and missing identity behavior.
 
 Client contracts must be explicit, serializable, and provider-independent. Provider types must not leak into those contracts.
+
+## Match normalization
+
+`normalizeFieldViewMatch` accepts independently acquired source resources and
+returns a canonical `FieldViewMatch`. It is a pure composition/association
+boundary: it does not fetch providers, mutate inputs, calculate derived
+analytics, or choose a winning source when providers overlap.
+
+The caller supplies cross-provider team identity associations explicitly.
+Statbotics EPA maps use string object keys, so the numeric Statbotics ID is
+stringified only for map lookup; the numeric ID itself remains numeric in the
+FieldView association. If no explicit association is supplied, the TBA team
+remains present and its Statbotics ID/EPA fields remain absent.
+
+See `test/match-normalization.test.mjs` and the Archimedes SF13 source fixture
+for executable examples. This is an initial domain normalization seam, not
+yet a provider ingestion/cache implementation or a client DTO mapper.
