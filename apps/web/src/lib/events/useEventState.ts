@@ -6,11 +6,14 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { EventStateSnapshot } from "./EventState";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
 import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
 import {
   getEventStateController,
   getEventStateSnapshot,
   subscribeSharedEventState,
+  getCanonicalEventSnapshot,
+  subscribeCanonicalEventSnapshot,
 } from "./sharedWorkerClient";
 
 const EMPTY_SNAPSHOT: EventStateSnapshot = {
@@ -84,4 +87,26 @@ export function useEventState(eventKey: string) {
     state,
     ...snapshot,
   };
+}
+
+/**
+ * Read the canonical domain snapshot distributed by the Cloudflare runtime.
+ * The SharedWorker owns the upstream WebSocket and snapshot recovery; this
+ * hook only subscribes to its per-tab canonical snapshot notifications.
+ */
+export function useCanonicalEventSnapshot(eventKey: string): {
+  version: number;
+  snapshot: FieldViewEventSnapshot;
+} | undefined {
+  const subscribe = useCallback(
+    (listener: () => void) => eventKey
+      ? subscribeCanonicalEventSnapshot(eventKey, listener)
+      : () => {},
+    [eventKey],
+  );
+  const getSnapshot = useCallback(
+    () => eventKey ? getCanonicalEventSnapshot(eventKey) : undefined,
+    [eventKey],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
 }
