@@ -23,6 +23,8 @@ export interface DurableObjectNamespaceLike {
 
 export interface RuntimeEnvironment {
   TBA_API_KEY: string;
+  /** Approved official or FieldView-operated compatible Statbotics API base URL. */
+  STATBOTICS_API_BASE_URL?: string;
   /** Debounced one-shot Statbotics refresh after accepted TBA representation changes. */
   STATBOTICS_REFRESH_DELAY_MS?: string | number;
   TBA_WEBHOOK_SECRET: string;

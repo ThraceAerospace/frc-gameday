@@ -213,7 +213,7 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     fetcher: async (url, init) => {
       calls.push({ url: String(url), headers: new Headers(init.headers) });
-      if (String(url).includes("api-statbotics")) {
+      if (String(url).includes("api.statbotics")) {
         return Response.json(records, { headers: { "Cache-Control": "max-age=30", ETag: '"statbotics-v1"' } });
       }
       return Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: { red: { score: 10 }, blue: { score: 9 } } }], {

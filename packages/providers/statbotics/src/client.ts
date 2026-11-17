@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = "https://api-statbotics.iterativerefinement.com";
+const DEFAULT_BASE_URL = "https://api.statbotics.io";
 
 export interface StatboticsApiClientOptions {
   baseUrl?: string;

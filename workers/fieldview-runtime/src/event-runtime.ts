@@ -126,6 +126,7 @@ export class EventRuntime {
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
     this.statboticsApi = new StatboticsApiClient({
+      ...(env.STATBOTICS_API_BASE_URL ? { baseUrl: env.STATBOTICS_API_BASE_URL } : {}),
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
     this.eventKey = eventKey ?? "";
