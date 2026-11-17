@@ -70,6 +70,54 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
   assert.ok(storage.alarmAt > Date.now());
 });
  
+test("current-year discovery prunes old caches and stops previously scheduled future-year events", async () => {
+  const storage = new MemoryStorage();
+  const year = new Date().getUTCFullYear();
+  for (const oldYear of [year - 1, year + 1]) {
+    await storage.put("discovery:" + oldYear, {
+      etag: '"old"',
+      events: [],
+      updatedAt: Date.now(),
+      checkedAt: Date.now(),
+    });
+  }
+  await storage.put("discovery:" + year, {
+    etag: '"current"',
+    events: [],
+    updatedAt: Date.now(),
+    checkedAt: Date.now(),
+  });
+  await storage.put("scheduler:event-keys", [String(year + 1) + "future"]);
+
+  const lifecycleRequests = [];
+  const env = {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (request) => {
+          lifecycleRequests.push({ id, body: await request.json() });
+          return Response.json({ lifecycle: "expired" });
+        },
+      }),
+    },
+    fetcher: async () => Response.json([], { headers: { ETag: '"current-new"' } }),
+  };
+  const scheduler = new EventScheduler({ storage }, env);
+  await scheduler.fetch(new Request("https://scheduler/start", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token" },
+  }));
+  await scheduler.alarm();
+
+  assert.deepEqual([...((await storage.list({ prefix: "discovery:" })).keys())], ["discovery:" + year]);
+  assert.deepEqual(await storage.get("scheduler:event-keys"), []);
+  assert.equal(lifecycleRequests.length, 1);
+  assert.equal(lifecycleRequests[0].id, String(year + 1) + "future");
+  assert.equal(lifecycleRequests[0].body.lifecycle, "expired");
+});
+
 test("event polling policy defaults and overrides remain explicit", () => {
   assert.deepEqual(DEFAULT_EVENT_POLLING_POLICY, {
     discoveryIntervalMs: 60 * 60_000,
