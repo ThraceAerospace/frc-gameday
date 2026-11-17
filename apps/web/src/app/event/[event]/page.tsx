@@ -206,7 +206,7 @@ export default async function EventPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedTeams.map((team: TBATeam) => (
+                        {sortedTeams.map((team: FieldViewTeam) => (
                           <tr
                             key={team.key}
                             className="event-divider border-b border-[var(--fv-border)] last:border-b-0 hover:bg-[var(--fv-surface)]"
@@ -308,12 +308,12 @@ function MatchGroup({
   title: string;
   eventKey: string;
   playoffType: number | null;
-  matches: TBAMatch[];
-  playoffAlliances: TBAEliminationAlliance[] | null;
+  matches: FieldViewMatch[];
+  playoffAlliances: FieldViewPlayoffAlliance[] | null;
   groupPlayoffsByRound?: boolean;
 }) {
   const groupedMatches = groupPlayoffsByRound
-    ? matches.reduce<{ title: string; matches: TBAMatch[] }[]>((groups, match) => {
+    ? matches.reduce<{ title: string; matches: FieldViewMatch[] }[]>((groups, match) => {
         const groupTitle = formatPlayoffMatchGroup(match, playoffType);
         const group = groups.find((entry) => entry.title === groupTitle);
         if (group) {
@@ -364,7 +364,7 @@ function PlayoffAlliances({
   alliances,
   playoffType,
 }: {
-  alliances: TBAEliminationAlliance[] | null;
+  alliances: FieldViewPlayoffAlliance[] | null;
   playoffType: number | null;
 }) {
   return (
