@@ -420,6 +420,13 @@ test("public snapshot and stream reads need no user credential while state inspe
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
   assert.equal(state.status, 401);
+  const authorizedState = await runtime.fetch(new Request("https://event-runtime/state", {
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(authorizedState.status, 200);
+  const diagnostics = await authorizedState.json();
+  assert.deepEqual(diagnostics.polling, []);
+  assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
   const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
     method: "POST",
@@ -504,6 +511,13 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
   for (const endpoint of eventResourceEndpoints(eventKey)) {
     assert.equal(storage.values.get("task:" + endpoint).intervalMs, 30 * 60_000);
   }
+  const upcomingState = await runtime.fetch(new Request("https://event-runtime/state", {
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  const upcomingDiagnostics = await upcomingState.json();
+  assert.equal(upcomingDiagnostics.polling.length, eventResourceEndpoints(eventKey).length);
+  assert.ok(upcomingDiagnostics.polling.every((task) => task.interval_ms === 30 * 60_000));
+  assert.equal(upcomingDiagnostics.lifecycle.completed_until, null);
 
   const active = await runtime.fetch(lifecycleRequest("active"));
   assert.equal(active.status, 200);
