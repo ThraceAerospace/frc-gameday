@@ -56,3 +56,33 @@ test("TeamRuntime rejects identity mismatch and protects admin state", async () 
   const state = await runtime.fetch(new Request("https://team/state", { headers: { "X-FieldView-Team-Key": "frc3461" } }));
   assert.equal(state.status, 401);
 });
+
+test("TeamRuntime restores team identity before a reconstructed object's alarm", async () => {
+  const storage = new MemoryStorage(), calls = [];
+  const fetcher = async (url) => { calls.push(String(url)); return Response.json([]); };
+  const first = new TeamRuntime({ storage }, env(fetcher), "frc3461");
+  await first.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  const reconstructed = new TeamRuntime({ storage }, env(fetcher));
+  await reconstructed.alarm();
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((url) => url.includes("frc3461")));
+});
+
+test("TeamRuntime preserves an explicit null team representation", async () => {
+  const storage = new MemoryStorage();
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    if (String(url).endsWith("/team/frc3461")) return Response.json(null, { headers: { ETag: '"team-null"' } });
+    return Response.json([]);
+  }), "frc3461");
+  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  await runtime.alarm();
+  const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }))).json();
+  assert.equal(snapshot.team, null);
+  assert.equal(snapshot.sources.tba_team.status, "available");
+});

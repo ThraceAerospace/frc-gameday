@@ -139,8 +139,9 @@ export class TeamRuntime {
     const now = Date.now();
     const due = await this.storage.transaction(async (tx) => {
       const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const ready = [...tasks.values()].filter((task) => task.dueAt <= now);
-      for (const task of ready) await tx.put(taskKey(task.endpoint), { ...task, dueAt: now + task.intervalMs, attempts: task.attempts + 1 });
+      const ready = [...tasks.values()].filter((task) => task.dueAt <= now)
+        .map((task) => ({ ...task, attempts: task.attempts + 1 }));
+      for (const task of ready) await tx.put(taskKey(task.endpoint), { ...task, dueAt: now + task.intervalMs });
       await this.rearm(tx); return ready;
     });
     for (const task of due) {
@@ -169,7 +170,7 @@ export class TeamRuntime {
       });
       const key = taskKey(task.endpoint), current = await this.storage.get<TeamPollTask>(key);
       if (current) {
-        const delay = changed ? Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts, 6))) : task.intervalMs;
+        const delay = changed ? Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))) : task.intervalMs;
         await this.storage.put(key, { ...current, dueAt: Date.now() + delay, attempts: changed ? task.attempts : 0 });
       }
     }

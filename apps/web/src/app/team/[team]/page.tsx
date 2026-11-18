@@ -23,7 +23,6 @@ import type {
   TBATeamEventStatus,
   TBAEventRanking,
   TBADistrict,
-  TBAMedia,
   TBATeam,
   TBATeamAvatar,
 } from "@/lib/tba/types";
@@ -100,18 +99,18 @@ export default async function TeamPage({
 
   const [districts, teamEventsResponse, avatar] = await Promise.all([
     canonicalTeam?.snapshot.sources.tba_team_districts !== undefined
-      ? Promise.resolve(canonicalTeam.snapshot.districts ?? [])
+      ? Promise.resolve(canonicalTeam.snapshot.districts ?? null)
       : TBA.getTeamDistricts(teamKey),
     canonicalTeam?.snapshot.sources.tba_team_events !== undefined
-      ? Promise.resolve(canonicalTeam.snapshot.events ?? [])
+      ? Promise.resolve(canonicalTeam.snapshot.events ?? null)
       : TBA.getTeamEvents(teamKey, year),
     canonicalTeam?.snapshot.sources.tba_team_media !== undefined
       ? Promise.resolve((canonicalTeam.snapshot.media ?? []).find(
           (item): item is TBATeamAvatar => item.type === "avatar",
         ) ?? null)
       : TBA.getTeamAvatar(teamKey, year),
-  ]) as [TBADistrict[], TBAEvent[], TBATeamAvatar | null];
-  const teamEvents = [...teamEventsResponse].sort(sortEvents);
+  ]) as [TBADistrict[] | null, TBAEvent[] | null, TBATeamAvatar | null];
+  const teamEvents = teamEventsResponse === null ? [] : [...teamEventsResponse].sort(sortEvents);
 
   const eventSections: TeamEventSection[] = (await Promise.all(
     teamEvents.map(async (teamEvent): Promise<TeamEventSection | null> => {
@@ -201,7 +200,7 @@ export default async function TeamPage({
   const wins = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Win").length;
   const losses = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Loss").length;
   const ties = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Tie").length;
-  const district = districts.find((entry) => entry.year === year) ?? null;
+  const district = districts?.find((entry) => entry.year === year) ?? null;
 
   return (
     <SiteShell>
@@ -217,7 +216,7 @@ export default async function TeamPage({
         <SurfaceCard className="mt-5" padding>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <div><span className="font-black text-[var(--fv-text)]">{year}</span><span className="ml-1.5 text-[var(--fv-muted)]">season</span></div>
-            <Stat label="District" value={district?.display_name || "None"} />
+            <Stat label="District" value={districts === null ? "Unavailable" : district?.display_name || "None"} />
             <Stat label="Events" value={eventSections.length} />
             <Stat label="Matches" value={matchDataComplete ? completedMatches.length : "—"} />
             <Stat label="Record" value={matchDataComplete ? `${wins}-${losses}-${ties}` : "Unavailable"} />
@@ -227,7 +226,7 @@ export default async function TeamPage({
           <SectionHeading title={`${year} Results`} description="Event information and match results for this season." action={district ? <Link href={`/district/${district.key}`} className="text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">View district</Link> : null} className="mb-5" />
 
           {eventSections.length === 0 ? (
-            <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">No events found for {year}.</SurfaceCard>
+            <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">{teamEventsResponse === null ? `Season event data is unavailable for ${year}.` : `No events found for ${year}.`}</SurfaceCard>
           ) : (
             <div className="grid items-start gap-5 lg:grid-cols-[210px_minmax(0,1fr)]">
               <TeamEventsSidebar events={eventSections.map(({ event }) => ({ id: `event-section-${event.key}`, key: event.key, name: event.short_name ?? event.name }))} />
