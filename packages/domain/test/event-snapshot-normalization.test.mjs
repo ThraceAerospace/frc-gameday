@@ -163,6 +163,83 @@ test("preserves absent and explicit-null match and playoff resources", () => {
   assert.deepEqual(empty.playoff_alliances, []);
 });
 
+
+test("preserves event rankings, awards, and advancement points as independent TBA resources", () => {
+  const rankings = {
+    rankings: [{ team_key: "frc3461", rank: 1, extra_stats: [9.5] }],
+    extra_stats_info: [{ name: "Total Ranking Points", precision: 2 }],
+    sort_order_info: null,
+  };
+  const awards = [{
+    name: "Quality Award",
+    award_type: 1,
+    event_key: "2026test",
+    recipient_list: [{ team_key: "frc3461", awardee: null }],
+    year: 2026,
+  }];
+  const advancementPoints = {
+    points: {
+      frc3461: {
+        qual_points: 4,
+        alliance_points: 8,
+        elim_points: 12,
+        award_points: 5,
+        total: 29,
+      },
+    },
+  };
+  const resourceSources = {
+    ...sources,
+    rankings: { tba_event_rankings: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
+    awards: { tba_event_awards: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
+    advancement_points: { tba_event_advancement_points: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
+  };
+  const snapshot = normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_event_rankings: rankings,
+    tba_event_awards: awards,
+    tba_event_advancement_points: advancementPoints,
+    sources: resourceSources,
+  });
+
+  assert.deepEqual(snapshot.rankings, rankings);
+  assert.deepEqual(snapshot.awards, awards);
+  assert.deepEqual(snapshot.advancement_points, advancementPoints);
+  assert.deepEqual(snapshot.sources.rankings, resourceSources.rankings);
+  assert.deepEqual(snapshot.sources.awards, resourceSources.awards);
+  assert.deepEqual(snapshot.sources.advancement_points, resourceSources.advancement_points);
+
+  const received = JSON.parse(JSON.stringify(snapshot));
+  assert.deepEqual(received.rankings, rankings);
+  assert.deepEqual(received.awards, awards);
+  assert.deepEqual(received.advancement_points, advancementPoints);
+});
+
+test("keeps event ranking, award, and advancement resources distinct when absent, null, or empty", () => {
+  const absent = normalizeFieldViewEventSnapshot({ event_key: "2026test", sources });
+  assert.equal("rankings" in absent, false);
+  assert.equal("awards" in absent, false);
+  assert.equal("advancement_points" in absent, false);
+
+  const explicitNull = normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_event_rankings: null,
+    tba_event_awards: null,
+    tba_event_advancement_points: null,
+    sources,
+  });
+  assert.equal(explicitNull.rankings, null);
+  assert.equal(explicitNull.awards, null);
+  assert.equal(explicitNull.advancement_points, null);
+
+  const empty = normalizeFieldViewEventSnapshot({
+    event_key: "2026test",
+    tba_event_awards: [],
+    sources,
+  });
+  assert.deepEqual(empty.awards, []);
+});
+
 test("rejects matches that belong to another event", () => {
   assert.throws(() => normalizeFieldViewEventSnapshot({
     event_key: "2026test",
