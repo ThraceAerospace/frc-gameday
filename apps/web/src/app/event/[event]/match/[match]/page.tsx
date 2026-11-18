@@ -3,6 +3,7 @@ import SiteShell from "@/components/navigation/SiteShell";
 import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import MatchInsightsPanel from "@/components/match/MatchInsightsPanel";
 import type { FieldViewMatch } from "@fieldview/domain";
+import type { TBAMatch } from "@/lib/tba/types";
 import { formatMatchEventTime, formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
 export default async function MatchPage({
