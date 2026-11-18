@@ -168,7 +168,8 @@ export default async function TeamPage({
     }),
   )).filter((section): section is TeamEventSection => section !== null);
 
-  const matchDataComplete = eventSections.every(({ matches }) => matches !== null);
+  const matchDataComplete = eventSections.length === teamEvents.length &&
+    eventSections.every(({ matches }) => matches !== null);
   const completedMatches = eventSections.flatMap(({ event, matches }) =>
     (matches ?? [])
       .filter((match) => (match.alliances?.red?.score ?? -1) >= 0 && (match.alliances?.blue?.score ?? -1) >= 0)
