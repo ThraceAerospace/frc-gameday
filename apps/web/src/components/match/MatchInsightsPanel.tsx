@@ -1,12 +1,7 @@
 import Link from "next/link";
-import type { StatboticsMatch } from "@/lib/statbotics/types";
-import type { TBAEventOPRs, TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch } from "@fieldview/domain";
 
-type Props = {
-  match: TBAMatch;
-  statbotics: StatboticsMatch | null;
-  oprs: TBAEventOPRs | null;
-};
+type Props = { match: FieldViewMatch };
 
 const number = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -55,14 +50,16 @@ function ScoreComparison({
   );
 }
 
-export default function MatchInsightsPanel({ match, statbotics, oprs }: Props) {
-  const prediction = statbotics?.pred ?? undefined;
+export default function MatchInsightsPanel({ match }: Props) {
+  const prediction = match.predictions.statbotics;
+  const teamRecords = new Map([...match.teams.red, ...match.teams.blue].map((team) => [team.team_key, team]));
+  const hasEpas = [...teamRecords.values()].some((team) => team.pre_epa || team.epa);
+  const hasStatbotics = Boolean(prediction || hasEpas);
   const redActual = score(match.alliances.red.score);
   const blueActual = score(match.alliances.blue.score);
   const redPredicted = prediction?.red_score;
   const bluePredicted = prediction?.blue_score;
   const hasPrediction = number(redPredicted) || number(bluePredicted);
-  const hasEpas = Boolean(statbotics?.pre_epas || statbotics?.epas);
   const teams = [
     ...match.alliances.red.team_keys.map((key) => ({ key, color: "red" as const })),
     ...match.alliances.blue.team_keys.map((key) => ({ key, color: "blue" as const })),
@@ -76,7 +73,7 @@ export default function MatchInsightsPanel({ match, statbotics, oprs }: Props) {
           <h2 className="mt-1 text-xl font-semibold">Match analytics</h2>
           <p className="mt-1 text-sm text-neutral-400">Pre-match model estimates compared with the official result and the model's rating update.</p>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statbotics ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-200"}`}>{statbotics ? "Statbotics data available" : "Statbotics data unavailable"}</span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${hasStatbotics ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-200"}`}>{hasStatbotics ? "Statbotics data available" : "Statbotics data unavailable"}</span>
       </div>
 
       {hasPrediction ? (
@@ -107,17 +104,18 @@ export default function MatchInsightsPanel({ match, statbotics, oprs }: Props) {
               <tbody className="divide-y divide-white/[0.06]">
                 {teams.map(({key,color}) => {
                   const id=teamId(key);
-                  const before=statbotics?.pre_epas?.[id]?.epa;
-                  const after=statbotics?.epas?.[id]?.epa;
+                  const teamData = teamRecords.get(key);
+                  const before=teamData?.pre_epa?.epa;
+                  const after=teamData?.epa?.epa;
                   const delta=number(before)&&number(after)?after-before:null;
                   return <tr key={key}>
                     <th className={`px-3 py-3 text-left font-mono ${color==="red"?"text-red-200":"text-blue-200"}`}><Link href={`/team/${id}`} className="hover:underline">{id}</Link></th>
                     <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(before)}</td>
                     <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(after)}</td>
                     <td className={`px-3 py-3 text-right font-mono tabular-nums ${delta===null?"text-neutral-500":delta>=0?"text-emerald-300":"text-rose-300"}`}>{signed(delta)}</td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(oprs?.oprs?.[key])}</td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(oprs?.dprs?.[key])}</td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(oprs?.ccwms?.[key])}</td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(teamData?.opr)}</td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(teamData?.dpr)}</td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">{metric(teamData?.ccwm)}</td>
                   </tr>;
                 })}
               </tbody>
