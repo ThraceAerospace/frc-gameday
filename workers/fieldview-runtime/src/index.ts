@@ -17,6 +17,16 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
     request.headers.get("Authorization") === `Bearer ${env.RUNTIME_ADMIN_TOKEN}`;
 }
 
+async function registerRuntimeObject(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
+  if (!env.EVENT_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return;
+  const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+  await scheduler.fetch(new Request("https://event-scheduler/register", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, key }),
+  }));
+}
+
 export default {
   async fetch(request: Request, env: RuntimeEnvironment): Promise<Response> {
     const url = new URL(request.url);
@@ -87,6 +97,15 @@ export default {
       return scheduler.fetch(new Request("https://event-scheduler/teams?" + query.toString()));
     }
 
+    if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      return scheduler.fetch(new Request("https://event-scheduler/admin/overview", {
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     // Team profiles are served by one lazy TeamRuntime per TBA team key.
     const teamParts = url.pathname.split("/");
     const teamKey = teamParts[2];
@@ -103,6 +122,7 @@ export default {
     }
     if (validTeamRoute && request.method === "GET") {
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+      await registerRuntimeObject(env, "team", teamKey);
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
       const response = await stub.fetch(new Request("https://team-runtime/snapshot" + url.search, {
         method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
@@ -129,6 +149,7 @@ export default {
     if (validInternalTeamRoute) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+      await registerRuntimeObject(env, "team", internalTeamKey);
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(internalTeamKey));
       const headers = new Headers(request.headers);
       headers.set("X-FieldView-Team-Key", internalTeamKey);
@@ -244,6 +265,7 @@ export default {
     }
 
     if (validPublicRoute && request.method === "GET") {
+      await registerRuntimeObject(env, "event", publicEventKey);
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(publicEventKey));
       const headers = new Headers({
         "X-FieldView-Event-Key": publicEventKey,
@@ -280,6 +302,7 @@ export default {
       return Response.json({ error: "Not found" }, { status: validRoute ? 401 : 404 });
     }
 
+    await registerRuntimeObject(env, "event", eventKey);
     const id = env.EVENT_RUNTIME.idFromName(eventKey);
     const stub = env.EVENT_RUNTIME.get(id);
     const headers = new Headers(request.headers);
