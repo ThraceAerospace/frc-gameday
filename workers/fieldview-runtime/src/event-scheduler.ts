@@ -278,7 +278,7 @@ export class EventScheduler {
         generated_at: new Date().toISOString(),
         scheduler: {
           enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
-          last_run_at: await this.storage.get<number>("scheduler:last-run-at") ?? null,
+          last_run_at: await this.storage.get<number>("scheduler:last-run-at") ?? null,\n          next_alarm_at: await this.storage.getAlarm?.() ?? null,
           last_error: await this.storage.get<string>("scheduler:last-error") ?? null,
           team_discovery_error: await this.storage.get<string>("scheduler:team-discovery-error") ?? null,
         },
