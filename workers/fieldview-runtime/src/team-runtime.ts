@@ -117,6 +117,11 @@ export class TeamRuntime {
         team_key: this.teamKey,
         year,
         snapshot,
+        diagnostics: (await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values().map((state) => ({
+          endpoint: state.endpoint,
+          http_status: state.lastHttpStatus ?? null,
+          last_error: state.lastError ?? null,
+        })),
       });
     }
     if (request.method === "GET" && url.pathname === "/state") {
@@ -124,7 +129,8 @@ export class TeamRuntime {
       const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({ team_key: this.teamKey,
         polling: [...tasks.values()].map((task) => ({ endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
-        endpoints: [...states.values()].map((state) => ({ endpoint: state.endpoint, status: state.status, revision: state.revision, last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt })) });
+        endpoints: [...states.values()].map((state) => ({ endpoint: state.endpoint, status: state.status, revision: state.revision, last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt })),
+        diagnostics: [...states.values()].map((state) => ({ endpoint: state.endpoint, http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null })) });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -169,19 +175,26 @@ export class TeamRuntime {
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
       if (requestState.ifNoneMatch) headers.set("If-None-Match", requestState.ifNoneMatch);
       let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
-        { status: "not-modified"; expiresAt: number | null } | { status: "unavailable" } | { status: "failed" };
+        { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
+        { status: "failed"; httpStatus?: number; error?: string };
       try {
         const response = await this.api.request(task.endpoint, { headers }), ttl = maxAge(response.headers.get("Cache-Control"));
         const expiresAt = ttl === null ? null : Date.now() + ttl * 1000;
         if (response.status === 304) result = { status: "not-modified", expiresAt: expiresAt ?? initial.expiresAt };
-        else if (response.status === 404) result = { status: "unavailable" };
-        else if (!response.ok) result = { status: "failed" };
+        else if (response.status === 404) result = { status: "unavailable", httpStatus: response.status };
+        else if (!response.ok) result = { status: "failed", httpStatus: response.status };
         else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
-      } catch { result = { status: "failed" }; }
+      } catch (error) {
+        result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+      }
       const changed = await this.storage.transaction(async (tx) => {
         const key = endpointKey(task.endpoint), latest = await tx.get<EndpointState<unknown>>(key) ?? initial;
         const next = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
-        await tx.put(key, next);
+        await tx.put(key, {
+          ...next,
+          lastHttpStatus: "httpStatus" in result ? result.httpStatus : result.status === "modified" ? 200 : latest.lastHttpStatus ?? null,
+          lastError: "error" in result ? result.error : null,
+        });
         if (next.revision !== latest.revision) {
           await tx.put("snapshot-revision", (await tx.get<number>("snapshot-revision") ?? 0) + 1);
         }
