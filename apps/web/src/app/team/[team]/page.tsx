@@ -57,7 +57,7 @@ type TeamEventSection = {
   matches: TBAMatch[] | null;
   playoffAlliances: Awaited<ReturnType<typeof TBA.getEventPlayoffAlliances>>;
   status: TBATeamEventStatus | null;
-  awards: TBAAward[];
+  awards: TBAAward[] | null;
   advancementPoints: TBAEventAdvancementPoints | null;
   rankings: TBAEventRanking | null;
 };
