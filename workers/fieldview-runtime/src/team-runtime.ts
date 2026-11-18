@@ -101,8 +101,20 @@ export class TeamRuntime {
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
     if (publicRead) { await this.schedule(year, false); return this.snapshot(year); }
-    if (request.method === "POST" && url.pathname === "/refresh") {
-      await this.schedule(year, true); return Response.json({ scheduled: true, team_key: this.teamKey, year });
+    if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
+      // Explicit admin ingestion is synchronous: the 24-hour interval is only
+      // the steady-state refresh cadence after this immediate acquisition.
+      await this.schedule(year, true);
+      await this.alarm();
+      const snapshotResponse = await this.snapshot(year);
+      const snapshot = await snapshotResponse.json() as Record<string, unknown>;
+      return Response.json({
+        scheduled: true,
+        ingested: true,
+        team_key: this.teamKey,
+        year,
+        snapshot,
+      });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
