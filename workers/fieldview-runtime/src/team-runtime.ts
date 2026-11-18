@@ -110,7 +110,7 @@ export class TeamRuntime {
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
       return Response.json({
         scheduled: true,
-        ingested: true,
+        attempted: true,
         team_key: this.teamKey,
         year,
         snapshot,
