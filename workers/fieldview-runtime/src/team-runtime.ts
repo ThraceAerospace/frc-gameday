@@ -85,7 +85,7 @@ export class TeamRuntime {
       for (const endpoint of this.endpoints(year)) {
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         await tx.put(key, { endpoint, dueAt: immediate ? Date.now() : previous?.dueAt ?? Date.now(),
-          intervalMs: previous?.intervalMs ?? this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
+          intervalMs: this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
       await this.rearm(tx);
     });
@@ -141,7 +141,10 @@ export class TeamRuntime {
       const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const ready = [...tasks.values()].filter((task) => task.dueAt <= now)
         .map((task) => ({ ...task, attempts: task.attempts + 1 }));
-      for (const task of ready) await tx.put(taskKey(task.endpoint), { ...task, dueAt: now + task.intervalMs });
+      for (const task of ready) {
+        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6)));
+        await tx.put(taskKey(task.endpoint), { ...task, dueAt: retryAt });
+      }
       await this.rearm(tx); return ready;
     });
     for (const task of due) {
@@ -170,8 +173,9 @@ export class TeamRuntime {
       });
       const key = taskKey(task.endpoint), current = await this.storage.get<TeamPollTask>(key);
       if (current) {
-        const delay = changed ? Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))) : task.intervalMs;
-        await this.storage.put(key, { ...current, dueAt: Date.now() + delay, attempts: changed ? task.attempts : 0 });
+        await this.storage.put(key, changed
+          ? { ...current, dueAt: Date.now() + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))), attempts: task.attempts }
+          : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
       }
     }
     await this.storage.transaction((tx) => this.rearm(tx));
