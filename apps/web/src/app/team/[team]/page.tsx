@@ -10,6 +10,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
 import type {
@@ -53,7 +54,7 @@ function getTeamResult(match: TBAMatch, teamKey: string) {
 
 type TeamEventSection = {
   event: TBAEvent;
-  matches: TBAMatch[];
+  matches: TBAMatch[] | null;
   playoffAlliances: Awaited<ReturnType<typeof TBA.getEventPlayoffAlliances>>;
   status: TBATeamEventStatus | null;
   awards: TBAAward[];
@@ -90,9 +91,53 @@ export default async function TeamPage({
   ]);
   const teamEvents = [...teamEventsResponse].sort(sortEvents);
 
-  const eventSections: TeamEventSection[] = await Promise.all(
-    teamEvents.map(async (teamEvent) => {
-      // Reuse the canonical full event response, which is shared with event pages.
+  const eventSections: TeamEventSection[] = (await Promise.all(
+    teamEvents.map(async (teamEvent): Promise<TeamEventSection | null> => {
+      const canonical = await getCanonicalEventSnapshot(teamEvent.key);
+      const snapshot = canonical?.snapshot;
+
+      // An explicit null event resource is authoritative; do not replace it
+      // with a second TBA request. The season event list remains independently
+      // available, but this event's detailed section cannot be rendered.
+      if (snapshot?.event === null) return null;
+
+      const canonicalReady = snapshot !== undefined &&
+        snapshot.event !== undefined &&
+        snapshot.matches !== undefined &&
+        snapshot.event_teams !== undefined &&
+        snapshot.playoff_alliances !== undefined &&
+        snapshot.rankings !== undefined &&
+        snapshot.awards !== undefined &&
+        snapshot.advancement_points !== undefined;
+
+      if (canonicalReady && snapshot?.event) {
+        const status = snapshot.event_teams === null
+          ? null
+          : snapshot.event_teams?.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
+        const matches = snapshot.matches === null
+          ? null
+          : snapshot.matches.filter((match) =>
+              match.alliances?.red?.team_keys?.includes(teamKey) ||
+              match.alliances?.blue?.team_keys?.includes(teamKey),
+            );
+        const awards = snapshot.awards === null
+          ? null
+          : snapshot.awards.filter((award) =>
+              award.recipient_list.some((recipient) => recipient.team_key === teamKey),
+            );
+        return {
+          event: snapshot.event,
+          matches: matches === null ? null : [...matches].sort(sortMatches),
+          playoffAlliances: snapshot.playoff_alliances,
+          status,
+          awards,
+          advancementPoints: snapshot.advancement_points,
+          rankings: snapshot.rankings,
+        };
+      }
+
+      // Compatibility path remains until the runtime has acquired every
+      // resource required by the team-event presentation.
       const [event, teamMatches, status, awards, advancementPoints, rankings] = await Promise.all([
         TBA.getEvent(teamEvent.key),
         TBA.getTeamMatches(teamKey, teamEvent.key),
@@ -110,10 +155,10 @@ export default async function TeamPage({
         : null;
       return { event, matches, playoffAlliances, status, awards, advancementPoints, rankings };
     }),
-  );
+  )).filter((section): section is TeamEventSection => section !== null);
 
   const completedMatches = eventSections.flatMap(({ event, matches }) =>
-    matches
+    (matches ?? [])
       .filter((match) => (match.alliances?.red?.score ?? -1) >= 0 && (match.alliances?.blue?.score ?? -1) >= 0)
       .map((match) => ({ event, match })),
   );
@@ -279,7 +324,7 @@ export default async function TeamPage({
                               </table>
                             </div>
                           )}
-                          {awards.length > 0 && (
+                          {awards !== null && awards.length > 0 && (
                             <div className="mt-3 border-t border-[var(--fv-border)] pt-3 text-sm">
                               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--fv-muted)]">Awards</span>
                               <p className="mt-1 text-[var(--fv-text)]">{awards.map((award) => award.name).join(", ")}</p>
