@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
+import { FRCColorsApiClient } from "@fieldview/provider-frc-colors/client";
+import { FRC_COLORS_ENDPOINTS } from "@fieldview/provider-frc-colors/endpoints";
 
-const BASE_URL = "https://api.frc-colors.com/v1";
+const provider = new FRCColorsApiClient();
+
 const CACHE_TTL_SECONDS = 24 * 60 * 60;
 const LOCK_TTL_SECONDS = 20;
 const CACHE_PREFIX = "cache:frc-colors:v1:";
@@ -68,10 +71,7 @@ export class FRCColorsClient {
     }
 
     try {
-      const response = await fetch(
-        BASE_URL + "/event/" + encodeURIComponent(eventCode),
-        { cache: "no-store" },
-      );
+      const response = await provider.request(FRC_COLORS_ENDPOINTS.event(eventCode));
       if (!response.ok) throw new Error(`FRC Colors event request failed (${response.status})`);
       const payload = await response.json() as EventResponse;
       const colors = Object.entries(payload.teams ?? {}).flatMap(([key, team]) => {
