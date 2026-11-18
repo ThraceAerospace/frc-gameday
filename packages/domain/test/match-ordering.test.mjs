@@ -96,6 +96,31 @@ test("2022 legacy playoff matches follow scheduled physical play order", () => {
   );
 });
 
+test("2022 legacy semifinal and final matches follow physical play order", () => {
+  const semifinals = [
+    match("sf2m2", "sf", 2, 2, { time: 400 }),
+    match("sf1m3", "sf", 1, 3, { time: 500 }),
+    match("sf2m1", "sf", 2, 1, { time: 200 }),
+    match("sf1m1", "sf", 1, 1, { time: 100 }),
+    match("sf1m2", "sf", 1, 2, { time: 300 }),
+    match("sf2m3", "sf", 2, 3, { time: 600 }),
+  ];
+  assert.deepEqual(
+    sortMatchesByTime(semifinals).map((item) => item.key),
+    ["sf1m1", "sf2m1", "sf1m2", "sf2m2", "sf1m3", "sf2m3"],
+  );
+
+  const finals = [
+    match("f1m3", "f", 1, 3, { time: 300 }),
+    match("f1m1", "f", 1, 1, { time: 100 }),
+    match("f1m2", "f", 1, 2, { time: 200 }),
+  ];
+  assert.deepEqual(
+    sortMatchesByTime(finals).map((item) => item.key),
+    ["f1m1", "f1m2", "f1m3"],
+  );
+});
+
 test("canonical event snapshot sorts matches instead of preserving TBA array order", () => {
   const inputMatches = [
     match("2022test_f1m1", "f", 1, 1, { time: 900 }),
