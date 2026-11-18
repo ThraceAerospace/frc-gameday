@@ -26,7 +26,7 @@ This document establishes the first iteration of FieldView's canonical domain mo
 | `FieldViewTeam` | Team identity and stable team information |
 | `FieldViewTeamSeason` | Season-scoped team information and season statistics |
 | `FieldViewEvent` | Event identity, schedule, location, and event information |
-| `FieldViewEventSnapshot` | Canonical event-scoped aggregate of event, teams, event-team associations, matches, and playoff alliances |
+| `FieldViewEventSnapshot` | Canonical event-scoped aggregate of event, teams, event-team associations, matches, playoff alliances, rankings, awards, and advancement points |
 | `FieldViewEventTeam` | A team's participation and event-specific status/statistics |
 | `FieldViewMatch` | Match information, predictions, team associations, playoff associations, analysis, and flags |
 | `FieldViewPlayoffAlliance` | Official playoff alliance identity, members, backup, and progression information |
@@ -148,7 +148,9 @@ Retains the TBA team fields and exact types. Additional FieldView-owned team-lev
 
 ### FieldViewEvent
 
-Retains the TBA event fields and exact types, including the original nullable timezone. Event timezone presentation rules do not authorize changing the stored provider value or inventing a fallback.
+Retains the TBA event fields and exact types, including the original nullable timezone. Event timezone presentation rules do not authorize changing the stored provider value or inventing a fallback. The event snapshot also exposes the unchanged TBA event rankings, awards, and advancement-points resources as separately named fields; each resource has independent provenance and preserves its own null/empty/absent state.
+
+The team profile associates awards with a team by exact `recipient_list[].team_key` equality and selects ranking/advancement data by the unchanged TBA team key. This is a read-time association over the retained event resources; it does not mutate or reshape the provider payloads.
 
 `normalizeFieldViewTeamSeason` composes this object from the unchanged TBA team key, TBA team number, season year, and optional unchanged Statbotics team-year record. It correlates by equality between TBA `team_number` and Statbotics `team`, rejects mismatched records, and does not parse the TBA key or rewrite provider values. Fixture tests cover successful correlation, mismatch rejection, retained explicit nulls, and JSON round-trip behavior.
 
@@ -174,7 +176,7 @@ Source metadata is internal and records, at minimum:
 - source freshness or staleness where known;
 - source version/ETag or equivalent validator when available.
 
-The `sources` metadata is attached to each aggregate that depends on acquired provider resources: `FieldViewTeam` tracks `tba_team`; `FieldViewEvent` tracks `tba_event`; `FieldViewTeamSeason` tracks `tba_team` and `statbotics_team_year`; `FieldViewEventTeam` tracks `tba_team_event_status` and `tba_event_oprs`; `FieldViewMatch` tracks match, prediction, OPR, team-correlation, and Statbotics resources; and `FieldViewPlayoffAlliance` tracks playoff-alliance and advancement resources. `FieldViewSourceMetadata` includes `tba_team`, `tba_teams`, and `tba_event` in addition to the resource keys listed above.
+The `sources` metadata is attached to each aggregate that depends on acquired provider resources: `FieldViewTeam` tracks `tba_team`; `FieldViewEvent` tracks `tba_event`; `FieldViewTeamSeason` tracks `tba_team` and `statbotics_team_year`; `FieldViewEventTeam` tracks `tba_team_event_status` and `tba_event_oprs`; `FieldViewMatch` tracks match, prediction, OPR, team-correlation, and Statbotics resources; and `FieldViewPlayoffAlliance` tracks playoff-alliance and advancement resources. `FieldViewSourceMetadata` includes `tba_team`, `tba_teams`, `tba_event`, `tba_event_rankings`, `tba_event_awards`, and `tba_event_advancement_points` in addition to the resource keys listed above.
 
 The `FieldViewSourceStatus` meanings are precise:
 
@@ -183,7 +185,7 @@ The `FieldViewSourceStatus` meanings are precise:
 - `unavailable`: the provider authoritatively indicates that the resource is not available and no usable version is retained;
 - `failed`: acquisition failed and no usable retained version exists.
 
-The TypeScript metadata type is a discriminated union: `available` and `stale` require a non-null `retrieved_at`; `unavailable` and `failed` require `retrieved_at: null`. This prevents contradictory status/timestamp combinations in typed domain code. An absent metadata entry means no acquisition state has been recorded; it is not equivalent to `unavailable`, `failed`, or a null resource value. A failed refresh must not erase previously valid data; when an older usable version remains, its status is `stale`, not `failed`. Metadata keys distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA playoff information, and Statbotics match data.
+The TypeScript metadata type is a discriminated union: `available` and `stale` require a non-null `retrieved_at`; `unavailable` and `failed` require `retrieved_at: null`. This prevents contradictory status/timestamp combinations in typed domain code. An absent metadata entry means no acquisition state has been recorded; it is not equivalent to `unavailable`, `failed`, or a null resource value. A failed refresh must not erase previously valid data; when an older usable version remains, its status is `stale`, not `failed`. Metadata keys distinguish TBA match data from TBA event predictions, TBA event OPRs, TBA rankings, awards, advancement points, TBA playoff information, and Statbotics match data.
 
 The match competition levels `pm` (practice) and `qm` (qualification) are known non-playoff matches and therefore carry `playoff_alliances: null`. Elimination levels `ef`, `qf`, `sf`, and `f` are playoff matches: their alliance association is absent until both required source resources have been acquired, then contains the exact-name associations or explicit nulls when the association cannot be resolved.
 
