@@ -130,6 +130,26 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   save(endpoints[6], {
     "2026test_qm1": { winning_alliance: "red", red: { score: 100 }, blue: { score: 90 } },
   });
+  save(endpoints[7], {
+    rankings: [{ team_key: "frc3461", rank: 1, extra_stats: [9.5] }],
+    extra_stats_info: [{ name: "Total Ranking Points", precision: 2 }],
+    sort_order_info: null,
+  });
+  save(endpoints[8], [{
+    name: "Quality Award",
+    award_type: 1,
+    event_key: eventKey,
+    recipient_list: [{ team_key: "frc3461", awardee: null }],
+    year: 2026,
+  }]);
+  save(endpoints[11], {
+    points: {
+      frc3461: {
+        qual_points: 4, alliance_points: 8, elim_points: 12,
+        award_points: 5, total: 29,
+      },
+    },
+  });
   const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
   save(statboticsEndpoint, [{ key: "2026test_qm1", pred: { red_score: 105, blue_score: 95, red_win_prob: 0.6 }, pre_epas: { "3461": { epa: 100 } }, epas: { "3461": { epa: 110 } } }]);
 
@@ -159,6 +179,12 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(snapshot.matches[0].teams.red[0].pre_epa.epa, 100);
   assert.equal(snapshot.matches[0].teams.red[0].epa.epa, 110);
   assert.equal(snapshot.matches[0].sources.statbotics_match.status, "available");
+  assert.equal(snapshot.rankings.rankings[0].team_key, "frc3461");
+  assert.equal(snapshot.awards[0].recipient_list[0].team_key, "frc3461");
+  assert.equal(snapshot.advancement_points.points.frc3461.total, 29);
+  assert.equal(snapshot.sources.rankings.tba_event_rankings.status, "available");
+  assert.equal(snapshot.sources.awards.tba_event_awards.status, "available");
+  assert.equal(snapshot.sources.advancement_points.tba_event_advancement_points.status, "available");
   assert.equal(snapshot.matches[0].playoff_alliances, null);
   assert.deepEqual(snapshot.playoff_alliances, []);
   assert.equal(snapshot.sources.matches.tba_match.status, "available");
