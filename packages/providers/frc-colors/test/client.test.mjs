@@ -38,3 +38,38 @@ test("rejects absolute and protocol-relative endpoint paths", () => {
   assert.throws(() => client.request("https://example.test/event/2026test"), /provider-relative/);
   assert.throws(() => client.request("//example.test/event/2026test"), /provider-relative/);
 });
+
+test("returns non-success provider responses unchanged", async () => {
+  const response = new Response("temporarily unavailable", {
+    status: 502,
+    headers: { "Retry-After": "15" },
+  });
+  const client = new FRCColorsApiClient({ fetch: async () => response });
+
+  const result = await client.request(FRC_COLORS_ENDPOINTS.event("2026test"));
+
+  assert.equal(result, response);
+  assert.equal(result.status, 502);
+  assert.equal(result.headers.get("Retry-After"), "15");
+  assert.equal(await result.text(), "temporarily unavailable");
+});
+
+test("preserves malformed provider payloads for the application boundary to handle", async () => {
+  const response = new Response("{not-json", { status: 200 });
+  const client = new FRCColorsApiClient({ fetch: async () => response });
+
+  const result = await client.request(FRC_COLORS_ENDPOINTS.event("2026test"));
+
+  assert.equal(result, response);
+  assert.equal(await result.text(), "{not-json");
+});
+
+test("propagates network failures without fabricating an empty color result", async () => {
+  const failure = new TypeError("upstream connection failed");
+  const client = new FRCColorsApiClient({ fetch: async () => { throw failure; } });
+
+  await assert.rejects(
+    client.request(FRC_COLORS_ENDPOINTS.event("2026test")),
+    (error) => error === failure,
+  );
+});
