@@ -150,7 +150,7 @@ Retains the TBA team fields and exact types. Additional FieldView-owned team-lev
 
 Retains the TBA event fields and exact types, including the original nullable timezone. Event timezone presentation rules do not authorize changing the stored provider value or inventing a fallback. The event snapshot also exposes the unchanged TBA event rankings, awards, and advancement-points resources as separately named fields; each resource has independent provenance and preserves its own null/empty/absent state.
 
-The team profile associates awards with a team by exact `recipient_list[].team_key` equality and selects ranking/advancement data by the unchanged TBA team key. This is a read-time association over the retained event resources; it does not mutate or reshape the provider payloads.
+The team profile derives its event match subset by exact membership of the unchanged team key in a TBA red/blue alliance `team_keys` array, associates awards by exact `recipient_list[].team_key` equality, and selects ranking/advancement data by the unchanged TBA team key. These are read-time associations over the retained event resources; they do not mutate or reshape provider payloads. Filtering canonical matches preserves the event snapshot's chronological ordering.
 
 `normalizeFieldViewTeamSeason` composes this object from the unchanged TBA team key, TBA team number, season year, and optional unchanged Statbotics team-year record. It correlates by equality between TBA `team_number` and Statbotics `team`, rejects mismatched records, and does not parse the TBA key or rewrite provider values. Fixture tests cover successful correlation, mismatch rejection, retained explicit nulls, and JSON round-trip behavior.
 
