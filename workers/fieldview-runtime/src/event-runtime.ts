@@ -451,12 +451,13 @@ export class EventRuntime {
 
   private async restoreEventIdentity(): Promise<boolean> {
     const storedEventKey = await this.storage.get<string>("event-key");
-    if (!storedEventKey || !/^[a-zA-Z0-9_-]+$/.test(storedEventKey)) return false;
-    if (this.eventKey && this.eventKey !== storedEventKey) {
+    const eventKey = storedEventKey ?? this.eventKey;
+    if (!eventKey || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) return false;
+    if (this.eventKey && this.eventKey !== eventKey) {
       throw new Error("Durable Object event identity mismatch");
     }
-    this.eventKey = storedEventKey;
-    this.allowedEndpoints = new Set(eventResourceEndpoints(storedEventKey));
+    this.eventKey = eventKey;
+    this.allowedEndpoints = new Set(eventResourceEndpoints(eventKey));
     return true;
   }
 
