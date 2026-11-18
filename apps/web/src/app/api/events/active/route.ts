@@ -96,7 +96,8 @@ function getEventWeight(event: ActiveEvent): number {
 
 export async function GET() {
   try {
-    const events = await getCanonicalEventDiscovery(new Date().getUTCFullYear());\n    if (!events) return Response.json({ error: "Event discovery snapshot unavailable" }, { status: 503 });
+    const events = await getCanonicalEventDiscovery(new Date().getUTCFullYear());
+    if (!events) return Response.json({ error: "Event discovery snapshot unavailable" }, { status: 503 });
     const now = new Date();
 
     const enriched = events
