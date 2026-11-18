@@ -216,3 +216,72 @@ test("internal lifecycle mutation route requires admin auth and forwards the req
   assert.equal(forwarded.method, "POST");
   assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
 });
+
+
+test("public team snapshot route selects the team Durable Object and forwards the season", async () => {
+  const calls = [];
+  const env = {
+    TEAM_RUNTIME: {
+      idFromName(name) { calls.push({ operation: "id", name }); return name; },
+      get(id) {
+        return { async fetch(request) {
+          calls.push({
+            operation: "fetch", id,
+            url: new URL(request.url).pathname + new URL(request.url).search,
+            teamKey: request.headers.get("X-FieldView-Team-Key"),
+            authorization: request.headers.get("Authorization"),
+          });
+          return Response.json(
+            { team_key: "frc3461", year: 2026, sources: {} },
+            { headers: { "X-FieldView-Snapshot-Version": "4" } },
+          );
+        } };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://runtime.example/teams/frc3461/snapshot?year=2026"),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+  assert.equal(response.headers.get("X-FieldView-Snapshot-Version"), "4");
+  assert.deepEqual(await response.json(), { team_key: "frc3461", year: 2026, sources: {} });
+  assert.deepEqual(calls, [
+    { operation: "id", name: "frc3461" },
+    { operation: "fetch", id: "frc3461", url: "/snapshot?year=2026", teamKey: "frc3461", authorization: null },
+  ]);
+});
+
+test("internal team refresh route requires service authentication", async () => {
+  const calls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "server-only-token",
+    TEAM_RUNTIME: {
+      idFromName(name) { calls.push({ operation: "id", name }); return name; },
+      get(id) {
+        return { async fetch(request) {
+          calls.push({ operation: "fetch", id, path: new URL(request.url).pathname, method: request.method });
+          return Response.json({ scheduled: true });
+        } };
+      },
+    },
+  };
+  const denied = await worker.fetch(
+    new Request("https://runtime.example/internal/teams/frc3461/refresh?year=2026", { method: "POST" }),
+    env,
+  );
+  assert.equal(denied.status, 401);
+  assert.equal(calls.length, 0);
+  const allowed = await worker.fetch(
+    new Request("https://runtime.example/internal/teams/frc3461/refresh?year=2026", {
+      method: "POST", headers: { Authorization: "Bearer server-only-token" },
+    }),
+    env,
+  );
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(calls, [
+    { operation: "id", name: "frc3461" },
+    { operation: "fetch", id: "frc3461", path: "/refresh", method: "POST" },
+  ]);
+});
