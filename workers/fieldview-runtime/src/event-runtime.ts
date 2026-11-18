@@ -242,7 +242,7 @@ export class EventRuntime {
       // Lifecycle activation is also the initial-ingestion trigger. Do not
       // leave a newly scheduled event waiting for its next polling interval.
       await this.alarm();
-      return Response.json({ lifecycle, ingested: true, event_key: this.eventKey });
+      return Response.json({ lifecycle, attempted: true, event_key: this.eventKey });
     }
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
@@ -276,7 +276,7 @@ export class EventRuntime {
       }
       await this.schedulePolls(endpoints, intervalMs);
       await this.alarm();
-      return Response.json({ scheduled: endpoints.length, ingested: true, event_key: this.eventKey });
+      return Response.json({ scheduled: endpoints.length, attempted: true, event_key: this.eventKey });
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
