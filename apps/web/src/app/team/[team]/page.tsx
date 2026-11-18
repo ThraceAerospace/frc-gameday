@@ -10,41 +10,34 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { notFound } from "next/navigation";
-import { TBA } from "@/lib/tba/service";
 import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
+import type {
+  FieldViewEventSnapshot,
+  FieldViewTeamSnapshot,
+} from "@fieldview/domain";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
-import type {
-  TBAAward,
-  TBAEventAdvancementPoints,
-  TBAEvent,
-  TBAEventSimple,
-  TBAMatch,
-  TBATeamEventStatus,
-  TBAEventRanking,
-  TBADistrict,
-  TBATeam,
-  TBATeamAvatar,
-} from "@/lib/tba/types";
+
 
 function normalizeTeamKey(value: string): string {
   return value.startsWith("frc") ? value : `frc${value}`;
 }
 
-function sortEvents(a: TBAEventSimple, b: TBAEventSimple) {
+type TeamData = NonNullable<FieldViewTeamSnapshot["team"]>;
+type TeamEventReference = NonNullable<FieldViewTeamSnapshot["events"]>[number];
+type TeamDistrict = NonNullable<FieldViewTeamSnapshot["districts"]>[number];
+type TeamAvatarData = Extract<NonNullable<FieldViewTeamSnapshot["media"]>[number], { type: "avatar" }>;
+type CanonicalEvent = NonNullable<FieldViewEventSnapshot["event"]>;
+type CanonicalMatch = NonNullable<NonNullable<FieldViewEventSnapshot["matches"]>[number]>;
+type CanonicalStatus = NonNullable<NonNullable<FieldViewEventSnapshot["event_teams"]>[number]["tba_status"]>;
+
+function sortEvents(a: TeamEventReference, b: TeamEventReference) {
   return a.start_date.localeCompare(b.start_date) ||
     a.name.localeCompare(b.name) ||
     a.key.localeCompare(b.key, undefined, { numeric: true });
 }
 
-function sortMatches(a: TBAMatch, b: TBAMatch) {
-  return (a.time ?? a.actual_time ?? Infinity) - (b.time ?? b.actual_time ?? Infinity) ||
-    (a.comp_level === "qm" ? 0 : 1) - (b.comp_level === "qm" ? 0 : 1) ||
-    (a.set_number ?? 0) - (b.set_number ?? 0) ||
-    (a.match_number ?? 0) - (b.match_number ?? 0);
-}
-
-function getTeamResult(match: TBAMatch, teamKey: string) {
+function getTeamResult(match: CanonicalMatch, teamKey: string) {
   const red = match.alliances?.red;
   const blue = match.alliances?.blue;
   const isRed = red?.team_keys?.includes(teamKey) ?? false;
@@ -57,13 +50,13 @@ function getTeamResult(match: TBAMatch, teamKey: string) {
 }
 
 type TeamEventSection = {
-  event: TBAEvent;
-  matches: TBAMatch[] | null;
-  playoffAlliances: Awaited<ReturnType<typeof TBA.getEventPlayoffAlliances>>;
-  status: TBATeamEventStatus | null;
-  awards: TBAAward[] | null;
-  advancementPoints: TBAEventAdvancementPoints | null;
-  rankings: TBAEventRanking | null;
+  event: CanonicalEvent;
+  matches: NonNullable<FieldViewEventSnapshot["matches"]> | null;
+  playoffAlliances: NonNullable<FieldViewEventSnapshot["playoff_alliances"]> | null;
+  status: CanonicalStatus | null;
+  awards: NonNullable<FieldViewEventSnapshot["awards"]> | null;
+  advancementPoints: NonNullable<FieldViewEventSnapshot["advancement_points"]> | null;
+  rankings: NonNullable<FieldViewEventSnapshot["rankings"]> | null;
 };
 
 export default async function TeamPage({
@@ -79,16 +72,12 @@ export default async function TeamPage({
   const currentYear = new Date().getFullYear();
 
   const initialCanonical = await getCanonicalTeamSnapshot(teamKey, currentYear);
-  let team: TBATeam;
-  if (initialCanonical?.snapshot.sources.tba_team !== undefined) {
-    if (!initialCanonical.snapshot.team) notFound();
-    team = initialCanonical.snapshot.team;
-  } else {
-    team = await TBA.getTeam(teamKey);
-  }
+  const teamSource = initialCanonical?.snapshot.sources.tba_team;
+  if (teamSource && initialCanonical?.snapshot.team === null) notFound();
+  const team: TeamData | null = initialCanonical?.snapshot.team ?? null;
 
   const years = Array.from(
-    { length: currentYear - (team.rookie_year ?? currentYear) + 1 },
+    { length: currentYear - (team?.rookie_year ?? currentYear) + 1 },
     (_, index) => currentYear - index,
   );
   const requestedYear = Number(Array.isArray(search.year) ? search.year[0] : search.year);
@@ -97,96 +86,45 @@ export default async function TeamPage({
     ? initialCanonical
     : await getCanonicalTeamSnapshot(teamKey, year);
 
-  const [districts, teamEventsResponse, avatar] = await Promise.all([
-    canonicalTeam?.snapshot.sources.tba_team_districts !== undefined
-      ? Promise.resolve(canonicalTeam.snapshot.districts ?? null)
-      : TBA.getTeamDistricts(teamKey),
-    canonicalTeam?.snapshot.sources.tba_team_events !== undefined
-      ? Promise.resolve(canonicalTeam.snapshot.events ?? null)
-      : TBA.getTeamEvents(teamKey, year),
-    canonicalTeam?.snapshot.sources.tba_team_media !== undefined
-      ? Promise.resolve((canonicalTeam.snapshot.media ?? []).find(
-          (item): item is TBATeamAvatar => item.type === "avatar",
-        ) ?? null)
-      : TBA.getTeamAvatar(teamKey, year),
-  ]) as [TBADistrict[] | null, TBAEvent[] | null, TBATeamAvatar | null];
+  const districts: TeamDistrict[] | null = canonicalTeam?.snapshot.districts ?? null;
+  const teamEventsResponse: TeamEventReference[] | null = canonicalTeam?.snapshot.events ?? null;
+  const avatar = (canonicalTeam?.snapshot.media ?? []).find(
+    (item): item is TeamAvatarData => item.type === "avatar",
+  ) ?? null;
   const teamEvents = teamEventsResponse === null ? [] : [...teamEventsResponse].sort(sortEvents);
 
+  // Team/event pages consume only canonical snapshots. An unacquired or
+  // unavailable event section remains unavailable instead of issuing a
+  // second provider-shaped request from the page.
   const eventSections: TeamEventSection[] = (await Promise.all(
     teamEvents.map(async (teamEvent): Promise<TeamEventSection | null> => {
       const canonical = await getCanonicalEventSnapshot(teamEvent.key);
       const snapshot = canonical?.snapshot;
+      const event = snapshot?.event;
+      if (!snapshot || !event) return null;
 
-      // An explicit null event resource is authoritative; do not replace it
-      // with a second TBA request. The season event list remains independently
-      // available, but this event's detailed section cannot be rendered.
-      if (snapshot?.event === null) return null;
-      if (snapshot && snapshot.event === undefined &&
-          snapshot.sources.event.tba_event !== undefined) return null;
-
-      // A provenance entry means the runtime has attempted that resource,
-      // including authoritative unavailable/failed responses with no value.
-      // This avoids falling back to a second provider path after an attempt.
-      const canonicalReady = snapshot !== undefined &&
-        snapshot.event !== undefined &&
-        snapshot.sources.event.tba_event !== undefined &&
-        snapshot.sources.teams.tba_teams !== undefined &&
-        snapshot.sources.event_teams.tba_team_event_status !== undefined &&
-        snapshot.sources.matches.tba_match !== undefined &&
-        snapshot.sources.playoff_alliances.tba_playoff_alliances !== undefined &&
-        snapshot.sources.rankings?.tba_event_rankings !== undefined &&
-        snapshot.sources.awards?.tba_event_awards !== undefined &&
-        snapshot.sources.advancement_points?.tba_event_advancement_points !== undefined;
-
-      if (canonicalReady && snapshot?.event) {
-        const eventTeams = snapshot.event_teams ?? null;
-        const eventMatches = snapshot.matches ?? null;
-        const eventAwards = snapshot.awards ?? null;
-        const playoffAlliances = snapshot.playoff_alliances ?? null;
-        const status = eventTeams === null
-          ? null
-          : eventTeams.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
-        const matches = eventMatches === null
-          ? null
-          : eventMatches.filter((match) =>
-              match.alliances?.red?.team_keys?.includes(teamKey) ||
-              match.alliances?.blue?.team_keys?.includes(teamKey),
-            );
-        const awards = eventAwards === null
-          ? null
-          : eventAwards.filter((award) =>
-              award.recipient_list.some((recipient) => recipient.team_key === teamKey),
-            );
-        return {
-          event: snapshot.event,
-          // Filtering preserves the canonical snapshot's BestTime chronology.
-          matches,
-          playoffAlliances,
-          status,
-          awards,
-          advancementPoints: snapshot.advancement_points ?? null,
-          rankings: snapshot.rankings ?? null,
-        };
-      }
-
-      // Compatibility path remains until the runtime has acquired every
-      // resource required by the team-event presentation.
-      const [event, teamMatches, status, awards, advancementPoints, rankings] = await Promise.all([
-        TBA.getEvent(teamEvent.key),
-        TBA.getTeamMatches(teamKey, teamEvent.key),
-        TBA.getTeamEventStatus(teamKey, teamEvent.key),
-        TBA.getTeamEventAwards(teamKey, teamEvent.key),
-        TBA.getEventAdvancementPoints(teamEvent.key),
-        TBA.getEventRankings(teamEvent.key),
-      ]);
-      const matches = [...teamMatches].sort(sortMatches);
-      const hasEliminationMatches = matches.some((match) =>
-        ["ef", "qf", "sf", "f"].includes(match.comp_level.toLowerCase()),
-      );
-      const playoffAlliances = hasEliminationMatches || status?.alliance
-        ? await TBA.getEventPlayoffAlliances(teamEvent.key)
-        : null;
-      return { event, matches, playoffAlliances, status, awards, advancementPoints, rankings };
+      const eventTeams = snapshot.event_teams;
+      const status = eventTeams?.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
+      const matches = snapshot.matches === undefined || snapshot.matches === null
+        ? null
+        : snapshot.matches.filter((match) =>
+            match.alliances?.red?.team_keys?.includes(teamKey) ||
+            match.alliances?.blue?.team_keys?.includes(teamKey),
+          );
+      const awards = snapshot.awards === undefined || snapshot.awards === null
+        ? null
+        : snapshot.awards.filter((award) =>
+            award.recipient_list.some((recipient) => recipient.team_key === teamKey),
+          );
+      return {
+        event,
+        matches,
+        playoffAlliances: snapshot.playoff_alliances ?? null,
+        status,
+        awards,
+        advancementPoints: snapshot.advancement_points ?? null,
+        rankings: snapshot.rankings ?? null,
+      };
     }),
   )).filter((section): section is TeamEventSection => section !== null);
 
@@ -207,17 +145,17 @@ export default async function TeamPage({
       <PageContainer className="max-w-7xl">
         <PageHeader
           eyebrow="Team profile"
-          leading={<TeamAvatar team={team} avatar={avatar} size="lg" />}
-          title={<><span className="font-mono">{team.team_number}</span><span className="text-lg font-semibold text-[var(--fv-muted)] sm:text-xl">{team.nickname || team.name || "Team"}</span></>}
-          description={[team.city, team.state_prov, team.country].filter(Boolean).join(", ")}
+          leading={team ? <TeamAvatar team={team} avatar={avatar} size="lg" /> : undefined}
+          title={<><span className="font-mono">{team?.team_number ?? teamKey.replace(/^frc/i, "")}</span><span className="text-lg font-semibold text-[var(--fv-muted)] sm:text-xl">{team?.nickname || team?.name || "Team"}</span></>}
+          description={team ? [team.city, team.state_prov, team.country].filter(Boolean).join(", ") : "Team details are loading from the canonical runtime."}
           actions={<TeamSeasonSelector years={years} selectedYear={year} />}
-          footer={<>{team.rookie_year != null ? <span>Rookie {team.rookie_year}</span> : null}{team.website ? <a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">Team website</a> : null}</>}
+          footer={<>{team?.rookie_year != null ? <span>Rookie {team.rookie_year}</span> : null}{team?.website ? <a href={team.website} target="_blank" rel="noreferrer" className="font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">Team website</a> : null}</>}
         />
         <SurfaceCard className="mt-5" padding>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <div><span className="font-black text-[var(--fv-text)]">{year}</span><span className="ml-1.5 text-[var(--fv-muted)]">season</span></div>
             <Stat label="District" value={districts === null ? "Unavailable" : district?.display_name || "None"} />
-            <Stat label="Events" value={eventSections.length} />
+            <Stat label="Events" value={teamEventsResponse === null ? "Unavailable" : teamEvents.length} />
             <Stat label="Matches" value={matchDataComplete ? completedMatches.length : "—"} />
             <Stat label="Record" value={matchDataComplete ? `${wins}-${losses}-${ties}` : "Unavailable"} />
           </div>
@@ -226,7 +164,7 @@ export default async function TeamPage({
           <SectionHeading title={`${year} Results`} description="Event information and match results for this season." action={district ? <Link href={`/district/${district.key}`} className="text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">View district</Link> : null} className="mb-5" />
 
           {eventSections.length === 0 ? (
-            <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">{teamEventsResponse === null ? `Season event data is unavailable for ${year}.` : `No events found for ${year}.`}</SurfaceCard>
+            <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">{teamEventsResponse === null ? `Season event data is unavailable for ${year}.` : teamEvents.length > 0 ? `Event details are still being acquired for ${year}.` : `No events found for ${year}.`}</SurfaceCard>
           ) : (
             <div className="grid items-start gap-5 lg:grid-cols-[210px_minmax(0,1fr)]">
               <TeamEventsSidebar events={eventSections.map(({ event }) => ({ id: `event-section-${event.key}`, key: event.key, name: event.short_name ?? event.name }))} />
