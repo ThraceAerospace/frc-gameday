@@ -52,7 +52,7 @@ function compareGroups(
   return firstDateA.localeCompare(firstDateB) || nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: "base" });
 }
 
-export default function EventsBrowser({ events }: { events: FieldViewEvent[] }) {
+export default function EventsBrowser({ events, unavailable = false }: { events: FieldViewEvent[]; unavailable?: boolean }) {
   const [district, setDistrict] = useState("all");
   const [eventType, setEventType] = useState("all");
   const [activeGroup, setActiveGroup] = useState("");
@@ -198,9 +198,11 @@ export default function EventsBrowser({ events }: { events: FieldViewEvent[] }) 
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">Events</p>
             <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">FIRST events</h1>
-            <p className="mt-2 text-sm text-slate-500">{filtered.length} of {events.length} events</p>
+            <p className="mt-2 text-sm text-slate-500">{unavailable ? "Event discovery is currently unavailable." : `${filtered.length} of ${events.length} events`}</p>
           </div>
         </div>
+
+        {unavailable ? <div role="status" className="mt-6 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">The canonical event discovery cache has not been populated yet. Event data will appear after the runtime completes discovery.</div> : null}
 
         <div className="mt-6 items-start gap-8 lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="mb-6 lg:sticky lg:top-6 lg:mb-0">

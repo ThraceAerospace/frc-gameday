@@ -1,15 +1,12 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import {
-  normalizeFieldViewEventSnapshot,
-  type EventKey,
   type FieldViewEvent,
   type FieldViewEventSnapshot,
   type FieldViewMatch,
   type FieldViewPlayoffAlliance,
   type FieldViewTeam,
 } from "@fieldview/domain";
-import { TBA } from "@/lib/tba/service";
 import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import MatchRow from "@/components/match/MatchRow";
 import PageContainer from "@/components/ui/PageContainer";
@@ -47,53 +44,22 @@ export default async function EventPage({
     );
   }
 
-  let eventSnapshot: FieldViewEventSnapshot;
+  let eventSnapshot: FieldViewEventSnapshot | null = null;
 
   try {
-    const canonical = await getCanonicalEventSnapshot(eventKey);
-    const snapshot = canonical?.snapshot;
-    const canonicalReady = snapshot !== undefined &&
-      snapshot.event !== undefined &&
-      snapshot.teams !== undefined &&
-      snapshot.matches !== undefined &&
-      (activeTab !== "matches" || snapshot.playoff_alliances !== undefined);
-
-    if (canonicalReady && snapshot) {
-      eventSnapshot = snapshot;
-    } else {
-      const [tbaEvent, tbaTeams, tbaMatches, tbaAlliances] = await Promise.all([
-        TBA.getEvent(eventKey),
-        TBA.getTeamsAtEvent(eventKey),
-        TBA.getEventMatches(eventKey),
-        activeTab === "matches" ? TBA.getEventPlayoffAlliances(eventKey) : Promise.resolve(undefined),
-      ]);
-      const retrievedAt = new Date().toISOString();
-      const source = { status: "available" as const, retrieved_at: retrievedAt };
-      eventSnapshot = normalizeFieldViewEventSnapshot({
-        event_key: eventKey as EventKey,
-        tba_event: tbaEvent,
-        tba_teams: tbaTeams,
-        tba_matches: tbaMatches,
-        tba_playoff_alliances: tbaAlliances,
-        sources: {
-          event: { tba_event: source },
-          teams: { tba_teams: source },
-          event_teams: { tba_teams: source },
-          matches: { tba_match: source },
-          playoff_alliances: activeTab === "matches"
-            ? { tba_playoff_alliances: source }
-            : {},
-        },
-      });
-    }
+    eventSnapshot = (await getCanonicalEventSnapshot(eventKey))?.snapshot ?? null;
   } catch {
+    eventSnapshot = null;
+  }
+
+  if (!eventSnapshot) {
     return (
       <SiteShell>
         <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <div className="w-full">
-            <h1 className="text-2xl font-semibold">Event unavailable</h1>
+            <h1 className="text-2xl font-semibold">Event data unavailable</h1>
             <p className="mt-2 text-[var(--fv-muted)]">
-              Could not load event <code>{eventKey}</code>.
+              The canonical runtime has not supplied a snapshot for <code>{eventKey}</code> yet.
             </p>
           </div>
         </div>
