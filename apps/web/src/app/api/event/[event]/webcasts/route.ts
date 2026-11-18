@@ -7,5 +7,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   const canonical = await getCanonicalEventSnapshot(event);
   if (!canonical) return Response.json({ error: "Event snapshot unavailable" }, { status: 503 });
   if (canonical.snapshot.event === undefined) return Response.json({ error: "Event resource has not been acquired" }, { status: 503 });
-  return Response.json(buildStreams(canonical.snapshot.event?.webcasts ?? []));
+  return Response.json(await buildStreams(canonical.snapshot.event?.webcasts ?? []));
 }
