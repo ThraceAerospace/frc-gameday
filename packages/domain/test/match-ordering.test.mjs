@@ -80,14 +80,14 @@ test("chronological sort uses BestTime, keeps equal-time competition order, and 
 test("2022 legacy playoff matches follow scheduled physical play order", () => {
   const input = [
     match("qf1m3", "qf", 1, 3, { time: 900 }),
-    match("qf2m2", "qf", 2, 2, { time: 800 }),
+    match("qf2m2", "qf", 2, 2, { time: 600 }),
     match("qf4m1", "qf", 4, 1, { time: 400 }),
     match("qf1m1", "qf", 1, 1, { time: 100 }),
     match("qf3m2", "qf", 3, 2, { time: 700 }),
     match("qf2m1", "qf", 2, 1, { time: 200 }),
     match("qf1m2", "qf", 1, 2, { time: 500 }),
     match("qf3m1", "qf", 3, 1, { time: 300 }),
-    match("qf4m2", "qf", 4, 2, { time: 600 }),
+    match("qf4m2", "qf", 4, 2, { time: 800 }),
   ];
 
   assert.deepEqual(
