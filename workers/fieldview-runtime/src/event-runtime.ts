@@ -449,7 +449,21 @@ export class EventRuntime {
     });
   }
 
+  private async restoreEventIdentity(): Promise<boolean> {
+    const storedEventKey = await this.storage.get<string>("event-key");
+    if (!storedEventKey || !/^[a-zA-Z0-9_-]+$/.test(storedEventKey)) return false;
+    if (this.eventKey && this.eventKey !== storedEventKey) {
+      throw new Error("Durable Object event identity mismatch");
+    }
+    this.eventKey = storedEventKey;
+    this.allowedEndpoints = new Set(eventResourceEndpoints(storedEventKey));
+    return true;
+  }
+
   async alarm(): Promise<void> {
+    // Durable Objects can be reconstructed between requests and alarms. Never
+    // route provider work using constructor-only in-memory identity.
+    const hasEventIdentity = await this.restoreEventIdentity();
     const now = Date.now();
     const completedUntil = await this.storage.get<number>("lifecycle:completed-until");
     if (completedUntil !== undefined && now >= completedUntil) {
@@ -460,6 +474,9 @@ export class EventRuntime {
     const dueTasks = await this.storage.transaction(async (transaction) => {
       const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
       const due = [...tasks.values()].filter((task) => task.dueAt <= now);
+      if (due.length > 0 && !hasEventIdentity) {
+        throw new Error("Cannot execute event alarm without persisted event identity");
+      }
       for (const task of due) {
         if (task.retryOnFailure === false) {
           // One-shot enrichment is at-most-once: remove it before I/O so a
