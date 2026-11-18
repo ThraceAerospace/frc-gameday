@@ -48,7 +48,7 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
   fail = true;
   const refresh = await runtime.fetch(req("POST"));
   assert.equal(refresh.status, 200);
-  assert.equal((await refresh.json()).ingested, true);
+  assert.equal((await refresh.json()).attempted, true);
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": "frc3461" } }))).json();
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "stale");
@@ -68,7 +68,7 @@ test("TeamRuntime admin seed ingests all team resources before responding", asyn
   }));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.ingested, true);
+  assert.equal(result.attempted, true);
   assert.equal(result.snapshot.team.team_number, 3461);
   assert.equal(calls.length, 4);
   assert.ok(calls.every((url) => url.includes("frc3461")));
