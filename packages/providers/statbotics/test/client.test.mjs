@@ -45,3 +45,25 @@ test("rejects absolute and protocol-relative endpoint paths", () => {
   assert.throws(() => client.request("https://example.test/match/1"), /provider-relative/);
   assert.throws(() => client.request("//example.test/match/1"), /provider-relative/);
 });
+
+test("returns non-success provider responses unchanged", async () => {
+  const response = new Response("upstream unavailable", {
+    status: 503,
+    headers: { "Retry-After": "10" },
+  });
+  const client = new StatboticsApiClient({ fetch: async () => response });
+
+  const result = await client.request("/match/2026test_qm1");
+
+  assert.equal(result, response);
+  assert.equal(result.status, 503);
+  assert.equal(result.headers.get("Retry-After"), "10");
+  assert.equal(await result.text(), "upstream unavailable");
+});
+
+test("propagates network failures without converting them into empty data", async () => {
+  const failure = new TypeError("connection reset");
+  const client = new StatboticsApiClient({ fetch: async () => { throw failure; } });
+
+  await assert.rejects(client.request("/match/2026test_qm1"), (error) => error === failure);
+});
