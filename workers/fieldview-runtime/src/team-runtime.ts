@@ -117,7 +117,7 @@ export class TeamRuntime {
         team_key: this.teamKey,
         year,
         snapshot,
-        diagnostics: (await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values().map((state) => ({
+        diagnostics: (await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values().map((state) => ({
           endpoint: state.endpoint,
           http_status: state.lastHttpStatus ?? null,
           last_error: state.lastError ?? null,
@@ -126,7 +126,7 @@ export class TeamRuntime {
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({ team_key: this.teamKey,
         polling: [...tasks.values()].map((task) => ({ endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
         endpoints: [...states.values()].map((state) => ({ endpoint: state.endpoint, status: state.status, revision: state.revision, last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt })),
@@ -135,7 +135,7 @@ export class TeamRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   private async snapshot(year: number): Promise<Response> {
-    const states = await Promise.all(this.endpoints(year).map((endpoint) => this.storage.get<EndpointState<unknown>>(endpointKey(endpoint))));
+    const states = await Promise.all(this.endpoints(year).map((endpoint) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
     const [team, districts, events, media] = states, now = Date.now();
     const teamSource = metadata(team, now), districtSource = metadata(districts, now);
     const eventSource = metadata(events, now), mediaSource = metadata(media, now);
