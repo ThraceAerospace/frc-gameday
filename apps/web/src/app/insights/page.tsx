@@ -1,10 +1,10 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventDiscovery, getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
 
 export default async function InsightsPage() {
   const year = new Date().getFullYear();
-  const [events, teams] = await Promise.all([TBA.getEvents(year), TBA.getTeams(year)]);
+  const [eventSnapshot, teamSnapshot] = await Promise.all([getCanonicalEventDiscovery(year), getCanonicalTeamDiscovery(year)]);\n  const events = eventSnapshot ?? [];\n  const teams = teamSnapshot ?? [];
   const eventCounts = new Map<string, number>();
   const districtCounts = new Map<string, number>();
   for (const event of events) {
@@ -26,8 +26,8 @@ export default async function InsightsPage() {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Season" value={year} detail="Current season" />
-          <Metric label="Events" value={events.length} detail="TBA event records" />
-          <Metric label="Teams" value={teams.length} detail="Teams with season records" />
+          <Metric label="Events" value={events.length} detail={eventSnapshot ? "Canonical event snapshots" : "Snapshot unavailable"} />
+          <Metric label="Teams" value={teams.length} detail={teamSnapshot ? "Canonical team snapshots" : "Snapshot unavailable"} />
           <Metric label="Districts" value={districtCounts.size} detail="Represented in event data" />
         </div>
 
