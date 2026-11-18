@@ -20,6 +20,10 @@ name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
 
 [[durable_objects.bindings]]
+name = "TEAM_RUNTIME"
+class_name = "TeamRuntime"
+
+[[durable_objects.bindings]]
 name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
@@ -38,3 +42,7 @@ new_sqlite_classes = ["Multiplexer"]
 [[migrations]]
 tag = "prototype-v3"
 new_sqlite_classes = ["EventScheduler"]
+
+[[migrations]]
+tag = "prototype-v4"
+new_sqlite_classes = ["TeamRuntime"]

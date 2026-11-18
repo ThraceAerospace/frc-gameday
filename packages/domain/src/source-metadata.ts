@@ -49,6 +49,9 @@ export type FieldViewSourceRecordMetadata =
  */
 export interface FieldViewSourceMetadata {
   tba_team?: FieldViewSourceRecordMetadata;
+  tba_team_districts?: FieldViewSourceRecordMetadata;
+  tba_team_events?: FieldViewSourceRecordMetadata;
+  tba_team_media?: FieldViewSourceRecordMetadata;
   tba_teams?: FieldViewSourceRecordMetadata;
   tba_event?: FieldViewSourceRecordMetadata;
   tba_match?: FieldViewSourceRecordMetadata;

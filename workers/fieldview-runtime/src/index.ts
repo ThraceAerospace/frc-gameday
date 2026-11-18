@@ -1,10 +1,11 @@
 import { EventRuntime } from "./event-runtime.ts";
 import { Multiplexer } from "./multiplexer.ts";
 import { EventScheduler } from "./event-scheduler.ts";
+import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 
-export { EventRuntime, EventScheduler, Multiplexer };
+export { EventRuntime, EventScheduler, Multiplexer, TeamRuntime };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -74,6 +75,51 @@ export default {
       const year = url.searchParams.get("year");
       if (year !== null) query.set("year", year);
       return scheduler.fetch(new Request("https://event-scheduler/events?" + query.toString()));
+    }
+
+    // Team profiles are served by one lazy TeamRuntime per TBA team key.
+    const teamParts = url.pathname.split("/");
+    const teamKey = teamParts[2];
+    const teamAction = teamParts[3];
+    const validTeamRoute = teamParts.length === 4 && teamParts[1] === "teams" &&
+      /^[a-zA-Z0-9_-]+$/.test(teamKey ?? "") && teamAction === "snapshot";
+    if (validTeamRoute && request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "86400",
+      } });
+    }
+    if (validTeamRoute && request.method === "GET") {
+      if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+      const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+      const response = await stub.fetch(new Request("https://team-runtime/snapshot" + url.search, {
+        method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
+      }));
+      const headers = new Headers(response.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Access-Control-Expose-Headers", "X-FieldView-Snapshot-Version");
+      headers.set("Cache-Control", "no-store");
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+
+    const internalTeamParts = url.pathname.split("/");
+    const internalTeamKey = internalTeamParts[3];
+    const internalTeamAction = internalTeamParts[4];
+    const validInternalTeamRoute = internalTeamParts.length === 5 &&
+      internalTeamParts[1] === "internal" && internalTeamParts[2] === "teams" &&
+      /^[a-zA-Z0-9_-]+$/.test(internalTeamKey ?? "") &&
+      ["state", "refresh"].includes(internalTeamAction ?? "");
+    if (validInternalTeamRoute) {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+      const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(internalTeamKey));
+      const headers = new Headers(request.headers);
+      headers.set("X-FieldView-Team-Key", internalTeamKey);
+      return stub.fetch(new Request("https://team-runtime/" + internalTeamAction + url.search, {
+        method: request.method, headers,
+      }));
     }
 
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
