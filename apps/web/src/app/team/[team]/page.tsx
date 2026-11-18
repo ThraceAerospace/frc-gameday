@@ -111,28 +111,32 @@ export default async function TeamPage({
         snapshot.advancement_points !== undefined;
 
       if (canonicalReady && snapshot?.event) {
-        const status = snapshot.event_teams === null
+        const eventTeams = snapshot.event_teams!;
+        const eventMatches = snapshot.matches!;
+        const eventAwards = snapshot.awards!;
+        const playoffAlliances = snapshot.playoff_alliances!;
+        const status = eventTeams === null
           ? null
-          : snapshot.event_teams?.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
-        const matches = snapshot.matches === null
+          : eventTeams.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
+        const matches = eventMatches === null
           ? null
-          : snapshot.matches.filter((match) =>
+          : eventMatches.filter((match) =>
               match.alliances?.red?.team_keys?.includes(teamKey) ||
               match.alliances?.blue?.team_keys?.includes(teamKey),
             );
-        const awards = snapshot.awards === null
+        const awards = eventAwards === null
           ? null
-          : snapshot.awards.filter((award) =>
+          : eventAwards.filter((award) =>
               award.recipient_list.some((recipient) => recipient.team_key === teamKey),
             );
         return {
           event: snapshot.event,
           matches: matches === null ? null : [...matches].sort(sortMatches),
-          playoffAlliances: snapshot.playoff_alliances,
+          playoffAlliances,
           status,
           awards,
-          advancementPoints: snapshot.advancement_points,
-          rankings: snapshot.rankings,
+          advancementPoints: snapshot.advancement_points!,
+          rankings: snapshot.rankings!,
         };
       }
 
