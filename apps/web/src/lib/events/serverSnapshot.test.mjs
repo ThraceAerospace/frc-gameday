@@ -4,7 +4,7 @@ import { normalizeFieldViewEventSnapshot } from "@fieldview/domain";
 import { getCanonicalEventSnapshot } from "./serverSnapshot.ts";
 
 test("server snapshot reader uses the configured runtime and preserves its revision", async () => {
-  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   let requestedUrl = "";
   let requestedCache = "";
   const result = await getCanonicalEventSnapshot("2026test", async (url, init) => {
@@ -22,7 +22,7 @@ test("server snapshot reader uses the configured runtime and preserves its revis
 });
 
 test("server snapshot reader rejects mismatched event identity and invalid revisions", async () => {
-  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   const mismatched = await getCanonicalEventSnapshot("2026test", async () =>
     Response.json(
       { event_key: "2026other" },
@@ -41,7 +41,7 @@ test("server snapshot reader rejects mismatched event identity and invalid revis
 });
 
 test("canonical event discovery reader validates year and returns domain events", async () => {
-  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   let requestedUrl = "";
   const { getCanonicalEventDiscovery } = await import("./serverSnapshot.ts");
   const events = await getCanonicalEventDiscovery(2026, async (url, init) => {
@@ -79,7 +79,7 @@ test("web workspace prebuild exposes the canonical domain normalizer at runtime"
 });
 
 test("canonical team snapshot reader validates identity, year, and revision", async () => {
-  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   const { getCanonicalTeamSnapshot } = await import("./serverSnapshot.ts");
   let requestedUrl = "";
   const result = await getCanonicalTeamSnapshot("frc3461", 2026, async (url, init) => {
