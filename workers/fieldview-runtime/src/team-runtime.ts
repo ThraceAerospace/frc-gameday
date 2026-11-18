@@ -90,9 +90,16 @@ export class TeamRuntime {
   }
   private async schedule(year: number, immediate: boolean): Promise<void> {
     await this.storage.transaction(async (tx) => {
+      const now = Date.now();
       for (const endpoint of this.endpoints(year)) {
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
-        await tx.put(key, { endpoint, dueAt: immediate ? Date.now() : previous?.dueAt ?? Date.now(),
+        const state = await tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
+        const needsIngestion = !state || state.status === "unknown" || state.status === "stale" ||
+          (state.expiresAt !== null && state.expiresAt < now);
+        const dueAt = immediate || (needsIngestion && previous)
+          ? now
+          : previous?.dueAt ?? now;
+        await tx.put(key, { endpoint, dueAt,
           intervalMs: this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
       await this.rearm(tx);
