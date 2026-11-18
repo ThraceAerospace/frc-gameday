@@ -91,6 +91,36 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   assert.equal(storage.values.get(key).revision, updated.revision);
 });
 
+test("public snapshot demand schedules missing event resources asynchronously and coalesces requests", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026demand";
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => { providerCalls += 1; return Response.json([]); },
+  }, eventKey);
+  const request = () => new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  });
+
+  const first = await runtime.fetch(request());
+  assert.equal(first.status, 200);
+  assert.equal(providerCalls, 0, "public read must not wait for provider ingestion");
+  assert.equal(storage.alarmAt <= Date.now(), true);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length,
+    eventResourceEndpoints(eventKey).length);
+
+  await runtime.fetch(request());
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length,
+    eventResourceEndpoints(eventKey).length, "repeat demand must reuse scheduled tasks");
+
+  await runtime.alarm();
+  assert.equal(providerCalls, eventResourceEndpoints(eventKey).length);
+});
+
 test("GET snapshot composes canonical event-team domain objects with source metadata", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
