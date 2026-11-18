@@ -1,10 +1,13 @@
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
-import type { TBAEvent } from "../../../packages/providers/tba/src/types.ts";
+import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
+import type { FieldViewTeam } from "../../../packages/domain/src/team.ts";
+import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 const DISCOVERY_PREFIX = "discovery:";
+const TEAM_DISCOVERY_PREFIX = "team-discovery:";
 
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
@@ -134,6 +137,13 @@ interface DiscoveryCache {
   checkedAt?: number;
 }
 
+interface TeamDiscoveryCache {
+  etag: string | null;
+  teams: TBATeam[];
+  updatedAt: number;
+  checkedAt?: number;
+}
+
 export class EventScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
@@ -180,6 +190,36 @@ export class EventScheduler {
       );
     }
 
+    if (request.method === "GET" && url.pathname === "/teams") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
+      }
+      const cached = await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+      if (!cached) return Response.json({ error: "Team discovery cache is not ready" }, { status: 503 });
+      const retrievedAt = new Date(cached.updatedAt).toISOString();
+      const checkedAt = cached.checkedAt ?? cached.updatedAt;
+      const sourceStatus = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs * 2
+        ? "stale" as const
+        : "available" as const;
+      const teams: FieldViewTeam[] = cached.teams.map((team) => normalizeFieldViewTeam(team, {
+        tba_teams: {
+          status: sourceStatus,
+          retrieved_at: retrievedAt,
+          ...(cached.etag === null ? {} : { validator: cached.etag }),
+        },
+      }));
+      return Response.json(
+        { year, teams, updatedAt: cached.updatedAt, checkedAt },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
+            ...(cached.etag === null ? {} : { ETag: cached.etag }),
+          },
+        },
+      );
+    }
+
     const authorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -213,8 +253,38 @@ export class EventScheduler {
     } catch (error) {
       await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
     }
+    try {
+      await this.discoverTeams(new Date().getUTCFullYear());
+      await this.storage.delete("scheduler:team-discovery-error");
+    } catch (error) {
+      await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
+    }
     await this.storage.put("scheduler:last-run-at", Date.now());
     await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+  }
+
+  private async discoverTeams(year: number): Promise<void> {
+    const key = TEAM_DISCOVERY_PREFIX + year;
+    const cached = await this.storage.get<TeamDiscoveryCache>(key);
+    const headers = new Headers();
+    if (cached?.etag) headers.set("If-None-Match", cached.etag);
+    const response = await this.api.request(TBA_ENDPOINTS.teams(year), { headers });
+    if (response.status === 304 && cached) {
+      await this.storage.put(key, { ...cached, checkedAt: Date.now() } satisfies TeamDiscoveryCache);
+      return;
+    }
+    if (!response.ok) {
+      throw new Error("TBA team discovery failed for " + year + " with HTTP " + response.status);
+    }
+    const teams = await response.json() as TBATeam[];
+    if (!Array.isArray(teams)) throw new Error("TBA team discovery returned a non-array payload");
+    const retrievedAt = Date.now();
+    await this.storage.put(key, {
+      etag: response.headers.get("ETag"),
+      teams,
+      updatedAt: retrievedAt,
+      checkedAt: retrievedAt,
+    } satisfies TeamDiscoveryCache);
   }
 
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
