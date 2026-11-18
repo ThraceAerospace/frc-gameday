@@ -1,15 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import type { TBATeam, TBATeamAvatar } from "@/lib/tba/types";
+import type { FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
+type TeamAvatarData = Extract<NonNullable<FieldViewTeamSnapshot["media"]>[number], { type: "avatar" }>;
 
 export default function TeamAvatar({
   team,
   avatar,
   size = "lg",
 }: {
-  team: TBATeam;
-  avatar?: TBATeamAvatar | null;
+  team: FieldViewTeam;
+  avatar?: TeamAvatarData | null;
   size?: "sm" | "lg";
 }) {
   const sizeClass = size === "sm" ? "h-8 w-8" : "h-20 w-20";

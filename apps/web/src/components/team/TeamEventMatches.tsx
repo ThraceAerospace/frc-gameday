@@ -1,4 +1,4 @@
-import type { TBAEliminationAlliance, TBAEvent, TBAMatch } from "@/lib/tba/types";
+import type { FieldViewEvent, FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import MatchRow from "@/components/match/MatchRow";
 
 export default function TeamEventMatches({
@@ -7,10 +7,10 @@ export default function TeamEventMatches({
   highlightedTeamKeys,
   playoffAlliances,
 }: {
-  event: TBAEvent;
-  matches: TBAMatch[] | null;
+  event: FieldViewEvent;
+  matches: FieldViewMatch[] | null;
   highlightedTeamKeys: string[];
-  playoffAlliances?: TBAEliminationAlliance[] | null;
+  playoffAlliances?: FieldViewPlayoffAlliance[] | null;
 }) {
   return (
     <div className="min-w-0">
