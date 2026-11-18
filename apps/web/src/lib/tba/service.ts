@@ -1,5 +1,6 @@
 import { tba } from "./index";
 import { buildStreams } from "@/lib/tba/buildStreams";
+import { TBA_ENDPOINTS } from "@fieldview/provider-tba/endpoints";
 import type {
   TBAEliminationAlliance,
   TBAEvent,
@@ -53,71 +54,71 @@ function isMatchPlayed(match: TBAMatch | TBAMatchSimple) {
 
 export const TBA = {
   getTeam: (teamKey: string): Promise<TBATeam> =>
-    tba.get<TBATeam>(`/team/${teamKey}`),
+    tba.get<TBATeam>(TBA_ENDPOINTS.team(teamKey)),
 
   getTeamAvatar: async (
     teamKey: string,
     year: number,
   ): Promise<TBATeamAvatar | null> => {
-    const media = await tba.get<TBAMedia[]>(`/team/${teamKey}/media/${year}`);
+    const media = await tba.get<TBAMedia[]>(TBA_ENDPOINTS.teamMedia(teamKey, year));
     return media.find((item): item is TBATeamAvatar => item.type === "avatar") ?? null;
   },
 
   getTeams: (year: number): Promise<TBATeam[]> =>
-    tba.get<TBATeam[]>(`/teams/${year}`),
+    tba.get<TBATeam[]>(TBA_ENDPOINTS.teams(year)),
 
   getTeamDistricts: (teamKey: string): Promise<TBADistrict[]> =>
-    tba.get<TBADistrict[]>(`/team/${teamKey}/districts`),
+    tba.get<TBADistrict[]>(TBA_ENDPOINTS.teamDistricts(teamKey)),
 
   getTeamEvents: (teamKey: string, year: number): Promise<TBAEvent[]> =>
-    tba.get<TBAEvent[]>(`/team/${teamKey}/events/${year}`),
+    tba.get<TBAEvent[]>(TBA_ENDPOINTS.teamEvents(teamKey, year)),
 
   getTeamEventStatus: (
     teamKey: string,
     eventKey: string
   ): Promise<TBATeamEventStatus | null> =>
     tba.get<TBATeamEventStatus | null>(
-      `/team/${teamKey}/event/${eventKey}/status`
+      TBA_ENDPOINTS.teamEventStatus(teamKey, eventKey)
     ),
 
   getTeamEventAwards: (
     teamKey: string,
     eventKey: string
   ): Promise<TBAAward[]> =>
-    tba.get<TBAAward[]>(`/team/${teamKey}/event/${eventKey}/awards`),
+    tba.get<TBAAward[]>(TBA_ENDPOINTS.teamEventAwards(teamKey, eventKey)),
 
   getTeamMatches: (
     teamKey: string,
     eventKey: string
   ): Promise<TBAMatch[]> =>
-    tba.get<TBAMatch[]>(`/team/${teamKey}/event/${eventKey}/matches`),
+    tba.get<TBAMatch[]>(TBA_ENDPOINTS.teamEventMatches(teamKey, eventKey)),
 
   getTeamMatchesSimple: (
     teamKey: string,
     eventKey: string
   ): Promise<TBAMatchSimple[]> =>
     tba.get<TBAMatchSimple[]>(
-      `/team/${teamKey}/event/${eventKey}/matches/simple`
+      TBA_ENDPOINTS.teamEventMatchesSimple(teamKey, eventKey)
     ),
 
   getEvent: (eventKey: string): Promise<TBAEvent> =>
-    tba.get<TBAEvent>(`/event/${eventKey}`),
+    tba.get<TBAEvent>(TBA_ENDPOINTS.event(eventKey)),
 
   getEventSimple: (eventKey: string): Promise<TBAEventSimple> =>
-    tba.get<TBAEventSimple>(`/event/${eventKey}/simple`),
+    tba.get<TBAEventSimple>(TBA_ENDPOINTS.eventSimple(eventKey)),
 
   getEventAdvancementPoints: (
     eventKey: string
   ): Promise<TBAEventAdvancementPoints | null> =>
     tba.get<TBAEventAdvancementPoints | null>(
-      `/event/${eventKey}/advancement_points`
+      TBA_ENDPOINTS.eventAdvancementPoints(eventKey)
     ),
 
   getEvents: (year: number): Promise<TBAEvent[]> =>
-    tba.get<TBAEvent[]>(`/events/${year}`),
+    tba.get<TBAEvent[]>(TBA_ENDPOINTS.events(year)),
 
   getEventsSimple: (year: number): Promise<TBAEventSimple[]> =>
-    tba.get<TBAEventSimple[]>(`/events/${year}/simple`),
+    tba.get<TBAEventSimple[]>(TBA_ENDPOINTS.eventsSimple(year)),
 
   getActiveEvents: async (year: number): Promise<TBAEvent[]> => {
     const events = await TBA.getEvents(year);
@@ -190,32 +191,32 @@ export const TBA = {
   },
 
   getTeamsAtEvent: (eventKey: string): Promise<TBATeam[]> =>
-    tba.get<TBATeam[]>(`/event/${eventKey}/teams`),
+    tba.get<TBATeam[]>(TBA_ENDPOINTS.eventTeams(eventKey)),
 
   getTeamsAtEventSimple: (eventKey: string): Promise<TBATeamSimple[]> =>
-    tba.get<TBATeamSimple[]>(`/event/${eventKey}/teams/simple`),
+    tba.get<TBATeamSimple[]>(TBA_ENDPOINTS.eventTeamsSimple(eventKey)),
 
   getTeamKeysAtEvent: (eventKey: string): Promise<string[]> =>
-    tba.get<string[]>(`/event/${eventKey}/teams/keys`),
+    tba.get<string[]>(TBA_ENDPOINTS.eventTeamKeys(eventKey)),
 
   getEventPlayoffAlliances: (
     eventKey: string
   ): Promise<TBAEliminationAlliance[] | null> =>
-    tba.get<TBAEliminationAlliance[] | null>(`/event/${eventKey}/alliances`),
+    tba.get<TBAEliminationAlliance[] | null>(TBA_ENDPOINTS.eventAlliances(eventKey)),
 
   getEventTeamsStatuses: (
     eventKey: string
   ): Promise<TBAEventTeamStatuses> =>
-    tba.get<TBAEventTeamStatuses>(`/event/${eventKey}/teams/statuses`),
+    tba.get<TBAEventTeamStatuses>(TBA_ENDPOINTS.eventTeamStatuses(eventKey)),
 
   getMatch: (matchKey: string): Promise<TBAMatch> =>
-    tba.get<TBAMatch>(`/match/${matchKey}`),
+    tba.get<TBAMatch>(TBA_ENDPOINTS.match(matchKey)),
 
   getEventMatches: (eventKey: string): Promise<TBAMatch[]> =>
-    tba.get<TBAMatch[]>(`/event/${eventKey}/matches`),
+    tba.get<TBAMatch[]>(TBA_ENDPOINTS.eventMatches(eventKey)),
 
   getEventMatchesSimple: (eventKey: string): Promise<TBAMatchSimple[]> =>
-    tba.get<TBAMatchSimple[]>(`/event/${eventKey}/matches/simple`),
+    tba.get<TBAMatchSimple[]>(TBA_ENDPOINTS.eventMatchesSimple(eventKey)),
 
   getNextMatch: async (eventKey: string): Promise<TBAMatch | null> => {
     const matches = await TBA.getEventMatches(eventKey);
@@ -266,33 +267,33 @@ export const TBA = {
   getEventRankings: (
     eventKey: string
   ): Promise<TBAEventRanking | null> =>
-    tba.get<TBAEventRanking | null>(`/event/${eventKey}/rankings`),
+    tba.get<TBAEventRanking | null>(TBA_ENDPOINTS.eventRankings(eventKey)),
 
   getEventOPRs: (eventKey: string): Promise<TBAEventOPRs | null> =>
-    tba.get<TBAEventOPRs | null>(`/event/${eventKey}/oprs`),
+    tba.get<TBAEventOPRs | null>(TBA_ENDPOINTS.eventOPRs(eventKey)),
 
   getDistricts: (year: number): Promise<TBADistrict[]> =>
-    tba.get<TBADistrict[]>(`/districts/${year}`),
+    tba.get<TBADistrict[]>(TBA_ENDPOINTS.districts(year)),
 
   getDistrictTeams: (districtKey: string): Promise<TBATeam[]> =>
-    tba.get<TBATeam[]>(`/district/${districtKey}/teams`),
+    tba.get<TBATeam[]>(TBA_ENDPOINTS.districtTeams(districtKey)),
 
   getDistrictTeamKeys: (districtKey: string): Promise<string[]> =>
-    tba.get<string[]>(`/district/${districtKey}/teams/keys`),
+    tba.get<string[]>(TBA_ENDPOINTS.districtTeamKeys(districtKey)),
 
   getDistrictEvents: (districtKey: string): Promise<TBAEventSimple[]> =>
-    tba.get<TBAEventSimple[]>(`/district/${districtKey}/events`),
+    tba.get<TBAEventSimple[]>(TBA_ENDPOINTS.districtEvents(districtKey)),
 
   getDistrictRankings: (
     districtKey: string
   ): Promise<TBADistrictRanking[]> =>
-    tba.get<TBADistrictRanking[]>(`/district/${districtKey}/rankings`),
+    tba.get<TBADistrictRanking[]>(TBA_ENDPOINTS.districtRankings(districtKey)),
 
   getDistrictAdvancement: (
     districtKey: string
   ): Promise<TBADistrictAdvancementResponse> =>
     tba.get<TBADistrictAdvancementResponse>(
-      `/district/${districtKey}/advancement`
+      TBA_ENDPOINTS.districtAdvancement(districtKey)
     ),
 
   getDistrictTeamsAdvancedToCMP: async (
