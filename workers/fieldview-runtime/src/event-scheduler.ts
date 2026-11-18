@@ -224,6 +224,70 @@ export class EventScheduler {
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+    if (request.method === "POST" && url.pathname === "/register") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid registration" }, { status: 400 });
+      const value = body as Record<string, unknown>;
+      const kind = value.kind, key = value.key;
+      if ((kind !== "event" && kind !== "team") || typeof key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(key)) {
+        return Response.json({ error: "Invalid registration" }, { status: 400 });
+      }
+      const storageKey = kind === "event" ? "registry:events" : "registry:teams";
+      const current = await this.storage.get<string[]>(storageKey) ?? [];
+      if (!current.includes(key)) await this.storage.put(storageKey, [...current, key].sort());
+      return Response.json({ registered: true });
+    }
+
+    if (request.method === "GET" && url.pathname === "/admin/overview") {
+      const eventKeys = [...new Set([
+        ...(await this.storage.get<string[]>("registry:events") ?? []),
+        ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
+      ])].sort();
+      const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
+      const cap = 250;
+      const events = await Promise.all(eventKeys.slice(0, cap).map(async (key) => {
+        try {
+          const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(key));
+          const response = await stub.fetch(new Request("https://event-runtime/state", {
+            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": key },
+          }));
+          return { key, status: response.status, state: response.ok ? await response.json() : null };
+        } catch (error) { return { key, status: 0, error: error instanceof Error ? error.message : String(error) }; }
+      }));
+      const teams = await Promise.all(teamKeys.slice(0, cap).map(async (key) => {
+        try {
+          if (!this.env.TEAM_RUNTIME) return { key, status: 503, error: "Team runtime is not bound" };
+          const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(key));
+          const response = await stub.fetch(new Request("https://team-runtime/state", {
+            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": key },
+          }));
+          return { key, status: response.status, state: response.ok ? await response.json() : null };
+        } catch (error) { return { key, status: 0, error: error instanceof Error ? error.message : String(error) }; }
+      }));
+      let multiplexer: unknown = null;
+      if (this.env.MULTIPLEXER) {
+        try {
+          const stub = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
+          const response = await stub.fetch(new Request("https://fieldview-multiplexer/state", {
+            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN },
+          }));
+          multiplexer = response.ok ? await response.json() : { status: response.status };
+        } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
+      }
+      return Response.json({
+        generated_at: new Date().toISOString(),
+        scheduler: {
+          enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
+          last_run_at: await this.storage.get<number>("scheduler:last-run-at") ?? null,
+          last_error: await this.storage.get<string>("scheduler:last-error") ?? null,
+          team_discovery_error: await this.storage.get<string>("scheduler:team-discovery-error") ?? null,
+        },
+        events, teams, multiplexer,
+        truncated: eventKeys.length > cap || teamKeys.length > cap,
+        inventory: { events: eventKeys.length, teams: teamKeys.length },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/start") {
       await this.storage.put("scheduler:enabled", true);
       await this.storage.setAlarm(Date.now());
@@ -347,6 +411,9 @@ export class EventScheduler {
       if (!response.ok) throw new Error("Failed to stop out-of-year event " + eventKey + ": HTTP " + response.status);
       scheduledKeys.delete(eventKey);
     }
+
+    const knownEvents = [...new Set([...(await this.storage.get<string[]>("registry:events") ?? []), ...events.keys()])].sort();
+    await this.storage.put("registry:events", knownEvents);
 
     for (const event of events.values()) {
       const decision = classifyEventLifecycle(event, Date.now(), policy);
