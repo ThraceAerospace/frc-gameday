@@ -535,7 +535,8 @@ test("public snapshot and stream reads need no user credential while state inspe
   }));
   assert.equal(authorizedState.status, 200);
   const diagnostics = await authorizedState.json();
-  assert.deepEqual(diagnostics.polling, []);
+  assert.equal(diagnostics.polling.length, eventResourceEndpoints(eventKey).length);
+  assert.ok(diagnostics.polling.every((task) => task.due_at <= Date.now()));
   assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
   const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
