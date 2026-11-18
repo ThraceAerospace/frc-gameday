@@ -174,7 +174,7 @@ export class TeamRuntime {
       await this.rearm(tx); return ready;
     });
     for (const task of due) {
-      const stored = await this.storage.get<EndpointState<unknown>>(endpointKey(task.endpoint));
+      const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
       const initial = stored ?? createEndpointState<unknown>(task.endpoint);
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
       if (requestState.ifNoneMatch) headers.set("If-None-Match", requestState.ifNoneMatch);
@@ -192,7 +192,7 @@ export class TeamRuntime {
         result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
       }
       const changed = await this.storage.transaction(async (tx) => {
-        const key = endpointKey(task.endpoint), latest = await tx.get<EndpointState<unknown>>(key) ?? initial;
+        const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
         const next = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
         await tx.put(key, {
           ...next,
