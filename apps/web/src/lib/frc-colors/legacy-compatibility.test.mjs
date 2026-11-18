@@ -16,8 +16,8 @@ test("projects provider team colors into the existing analytics shape", () => {
   });
 
   assert.deepEqual(result, [
-    { teamNumber: 3461, primaryHex: "#ABCDEF", secondaryHex: "#123456", verified: true },
     { teamNumber: 254, primaryHex: "#ABCDEF", secondaryHex: null, verified: false },
+    { teamNumber: 3461, primaryHex: "#ABCDEF", secondaryHex: "#123456", verified: true },
   ]);
 });
 
