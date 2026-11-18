@@ -143,7 +143,7 @@ export default function AdminRuntimeDashboard() {
 
   if (!authenticated) {
     return (
-      <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-12">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center overflow-y-auto overscroll-y-contain px-5 py-12">
         <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</div>
         <h1 className="text-3xl font-bold tracking-tight">Runtime admin</h1>
         <p className="mt-2 text-sm leading-6 text-[var(--fv-muted)]">Sign in with the dashboard access token to inspect Durable Objects, ingestion tasks, and the event scheduler.</p>
@@ -159,7 +159,7 @@ export default function AdminRuntimeDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] px-4 py-7 sm:px-6 lg:px-8">
+    <div className="mx-auto h-dvh w-full max-w-[1500px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-7 sm:px-6 lg:px-8 custom-scrollbar">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</div>
