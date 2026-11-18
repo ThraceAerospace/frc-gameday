@@ -1,4 +1,5 @@
-import { EventRuntime } from "./event-runtime.ts";
+import { EventRuntime, eventResourceEndpoints } from "./event-runtime.ts";
+import { classifyEventLifecycle, eventPollingPolicy } from "./event-scheduler.ts";
 import { Multiplexer } from "./multiplexer.ts";
 import { EventScheduler } from "./event-scheduler.ts";
 import { TeamRuntime } from "./team-runtime.ts";
@@ -117,9 +118,72 @@ export default {
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(internalTeamKey));
       const headers = new Headers(request.headers);
       headers.set("X-FieldView-Team-Key", internalTeamKey);
-      return stub.fetch(new Request("https://team-runtime/" + internalTeamAction + url.search, {
+      const teamResponse = await stub.fetch(new Request("https://team-runtime/" + internalTeamAction + url.search, {
         method: request.method, headers,
       }));
+      if (internalTeamAction !== "seed" || request.method !== "POST" || !teamResponse.ok) {
+        return teamResponse;
+      }
+
+      // A team seed is a bounded bootstrap of the complete team profile:
+      // first acquire the team resources, then initialize every associated
+      // event's canonical EventRuntime snapshot through its admin lifecycle API.
+      const teamResult = await teamResponse.clone().json() as {
+        snapshot?: { events?: Array<Record<string, unknown>> | null };
+      };
+      const events = Array.isArray(teamResult.snapshot?.events) ? teamResult.snapshot.events : [];
+      const policy = eventPollingPolicy(env);
+      const seededEvents: Array<{ event_key: string; status: number; body: unknown }> = [];
+      for (const event of events) {
+        const eventKey = event.key;
+        if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
+        const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
+        const lifecycle = classifyEventLifecycle({
+          start_date: String(event.start_date ?? ""),
+          end_date: String(event.end_date ?? ""),
+          timezone: String(event.timezone ?? ""),
+        }, Date.now(), policy);
+        const eventHeaders = {
+          Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        };
+        let eventResponse: Response;
+        if (!lifecycle || lifecycle.lifecycle === "expired") {
+          // Historical events remain useful on team profiles. Seed all their
+          // resources once and retain a slow daily refresh instead of skipping
+          // them merely because their live polling retention has elapsed.
+          eventResponse = await eventStub.fetch(new Request("https://event-runtime/schedule", {
+            method: "POST",
+            headers: eventHeaders,
+            body: JSON.stringify({ endpoints: eventResourceEndpoints(eventKey), intervalMs: 86_400_000 }),
+          }));
+        } else {
+          eventResponse = await eventStub.fetch(new Request("https://event-runtime/lifecycle", {
+            method: "POST",
+            headers: eventHeaders,
+            body: JSON.stringify({
+              lifecycle: lifecycle.lifecycle,
+              upcomingIntervalMs: policy.upcomingIntervalMs,
+              activeIntervalMs: policy.activeIntervalMs,
+              ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+            }),
+          }));
+        }
+        seededEvents.push({
+          event_key: eventKey,
+          status: eventResponse.status,
+          body: await eventResponse.json().catch(() => null),
+        });
+      }
+      return Response.json({
+        ...teamResult,
+        event_seed: {
+          requested: events.length,
+          attempted: seededEvents.length,
+          results: seededEvents,
+        },
+      }, { status: teamResponse.status });
     }
 
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
