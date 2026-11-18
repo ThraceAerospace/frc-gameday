@@ -45,6 +45,14 @@ export class TeamRuntime {
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
     this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
   }
+  private refreshIntervalMs(): number {
+    const configured = this.env.TEAM_REFRESH_INTERVAL_MS;
+    const interval = configured === undefined ? DAY_MS : Number(configured);
+    if (!Number.isSafeInteger(interval) || interval < 60_000) {
+      throw new Error("TEAM_REFRESH_INTERVAL_MS must be an integer of at least 60000");
+    }
+    return interval;
+  }
   private endpoints(year: number): string[] {
     return [TBA_ENDPOINTS.team(this.teamKey), TBA_ENDPOINTS.teamDistricts(this.teamKey),
       TBA_ENDPOINTS.teamEvents(this.teamKey, year), TBA_ENDPOINTS.teamMedia(this.teamKey, year)];
@@ -77,7 +85,7 @@ export class TeamRuntime {
       for (const endpoint of this.endpoints(year)) {
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         await tx.put(key, { endpoint, dueAt: immediate ? Date.now() : previous?.dueAt ?? Date.now(),
-          intervalMs: previous?.intervalMs ?? DAY_MS, attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
+          intervalMs: previous?.intervalMs ?? this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
       await this.rearm(tx);
     });
@@ -161,7 +169,7 @@ export class TeamRuntime {
       });
       const key = taskKey(task.endpoint), current = await this.storage.get<TeamPollTask>(key);
       if (current) {
-        const delay = changed ? Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts, 6))) : DAY_MS;
+        const delay = changed ? Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts, 6))) : task.intervalMs;
         await this.storage.put(key, { ...current, dueAt: Date.now() + delay, attempts: changed ? task.attempts : 0 });
       }
     }

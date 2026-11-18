@@ -35,6 +35,7 @@ export interface RuntimeEnvironment {
   TBA_WEBHOOK_SECRET: string;
   RUNTIME_ADMIN_TOKEN: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;
+  TEAM_REFRESH_INTERVAL_MS?: string | number;
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
   EVENT_SCHEDULER?: DurableObjectNamespaceLike;
