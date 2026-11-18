@@ -168,6 +168,7 @@ export default async function TeamPage({
     }),
   )).filter((section): section is TeamEventSection => section !== null);
 
+  const matchDataComplete = eventSections.every(({ matches }) => matches !== null);
   const completedMatches = eventSections.flatMap(({ event, matches }) =>
     (matches ?? [])
       .filter((match) => (match.alliances?.red?.score ?? -1) >= 0 && (match.alliances?.blue?.score ?? -1) >= 0)
@@ -194,8 +195,8 @@ export default async function TeamPage({
             <div><span className="font-black text-[var(--fv-text)]">{year}</span><span className="ml-1.5 text-[var(--fv-muted)]">season</span></div>
             <Stat label="District" value={district?.display_name || "None"} />
             <Stat label="Events" value={eventSections.length} />
-            <Stat label="Matches" value={completedMatches.length} />
-            <Stat label="Record" value={`${wins}-${losses}-${ties}`} />
+            <Stat label="Matches" value={matchDataComplete ? completedMatches.length : "—"} />
+            <Stat label="Record" value={matchDataComplete ? `${wins}-${losses}-${ties}` : "Unavailable"} />
           </div>
         </SurfaceCard>
         <div className="mt-8">
@@ -335,12 +336,14 @@ export default async function TeamPage({
                               </table>
                             </div>
                           )}
-                          {awards !== null && awards.length > 0 && (
+                          {awards === null ? (
+                            <div className="mt-3 border-t border-[var(--fv-border)] pt-3 text-xs text-[var(--fv-muted)]">Award data is unavailable.</div>
+                          ) : awards.length > 0 ? (
                             <div className="mt-3 border-t border-[var(--fv-border)] pt-3 text-sm">
                               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--fv-muted)]">Awards</span>
                               <p className="mt-1 text-[var(--fv-text)]">{awards.map((award) => award.name).join(", ")}</p>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         <TeamEventMatches event={event} matches={matches} highlightedTeamKeys={[teamKey]} playoffAlliances={playoffAlliances} />
                       </div>
