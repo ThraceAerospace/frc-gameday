@@ -8,7 +8,7 @@ export default function TeamEventMatches({
   playoffAlliances,
 }: {
   event: TBAEvent;
-  matches: TBAMatch[];
+  matches: TBAMatch[] | null;
   highlightedTeamKeys: string[];
   playoffAlliances?: TBAEliminationAlliance[] | null;
 }) {
@@ -16,9 +16,11 @@ export default function TeamEventMatches({
     <div className="min-w-0">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <h4 className="text-sm font-bold text-slate-800">Matches</h4>
-        <span className="text-xs text-slate-500">{matches.length} match{matches.length === 1 ? "" : "es"}</span>
+        <span className="text-xs text-slate-500">{matches === null ? "Unavailable" : `${matches.length} match${matches.length === 1 ? "" : "es"}`}</span>
       </div>
-      {matches.length === 0 ? (
+      {matches === null ? (
+        <div className="px-4 py-4 text-sm text-slate-500">Match data is unavailable.</div>
+      ) : matches.length === 0 ? (
         <div className="px-4 py-4 text-sm text-slate-500">No matches.</div>
       ) : (
         matches.map((match) => (
