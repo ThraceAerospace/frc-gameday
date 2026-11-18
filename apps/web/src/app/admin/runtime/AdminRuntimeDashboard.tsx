@@ -85,7 +85,7 @@ function endpointDescription(raw: string) {
   }
 
   const params = new URLSearchParams(search);
-  const normalizedPath = pathname.replace(/\\/+$/, "") || "/";
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
   const isStatbotics = hostname.includes("statbotics") ||
     (normalizedPath === "/matches" && params.has("event")) ||
     normalizedPath === "/team_events";
