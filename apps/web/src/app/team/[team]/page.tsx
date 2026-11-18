@@ -9,8 +9,9 @@ import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
+import { notFound } from "next/navigation";
 import { TBA } from "@/lib/tba/service";
-import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
+import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
 import type {
@@ -21,6 +22,10 @@ import type {
   TBAMatch,
   TBATeamEventStatus,
   TBAEventRanking,
+  TBADistrict,
+  TBAMedia,
+  TBATeam,
+  TBATeamAvatar,
 } from "@/lib/tba/types";
 
 function normalizeTeamKey(value: string): string {
@@ -74,10 +79,14 @@ export default async function TeamPage({
   const teamKey = normalizeTeamKey(rawTeam);
   const currentYear = new Date().getFullYear();
 
-  const [team, districts] = await Promise.all([
-    TBA.getTeam(teamKey),
-    TBA.getTeamDistricts(teamKey),
-  ]);
+  const initialCanonical = await getCanonicalTeamSnapshot(teamKey, currentYear);
+  let team: TBATeam;
+  if (initialCanonical?.snapshot.sources.tba_team !== undefined) {
+    if (!initialCanonical.snapshot.team) notFound();
+    team = initialCanonical.snapshot.team;
+  } else {
+    team = await TBA.getTeam(teamKey);
+  }
 
   const years = Array.from(
     { length: currentYear - (team.rookie_year ?? currentYear) + 1 },
@@ -85,10 +94,23 @@ export default async function TeamPage({
   );
   const requestedYear = Number(Array.isArray(search.year) ? search.year[0] : search.year);
   const year = years.includes(requestedYear) ? requestedYear : currentYear;
-  const [teamEventsResponse, avatar] = await Promise.all([
-    TBA.getTeamEvents(teamKey, year),
-    TBA.getTeamAvatar(teamKey, year),
-  ]);
+  const canonicalTeam = year === currentYear
+    ? initialCanonical
+    : await getCanonicalTeamSnapshot(teamKey, year);
+
+  const [districts, teamEventsResponse, avatar] = await Promise.all([
+    canonicalTeam?.snapshot.sources.tba_team_districts !== undefined
+      ? Promise.resolve(canonicalTeam.snapshot.districts ?? [])
+      : TBA.getTeamDistricts(teamKey),
+    canonicalTeam?.snapshot.sources.tba_team_events !== undefined
+      ? Promise.resolve(canonicalTeam.snapshot.events ?? [])
+      : TBA.getTeamEvents(teamKey, year),
+    canonicalTeam?.snapshot.sources.tba_team_media !== undefined
+      ? Promise.resolve((canonicalTeam.snapshot.media ?? []).find(
+          (item): item is TBATeamAvatar => item.type === "avatar",
+        ) ?? null)
+      : TBA.getTeamAvatar(teamKey, year),
+  ]) as [TBADistrict[], TBAEvent[], TBATeamAvatar | null];
   const teamEvents = [...teamEventsResponse].sort(sortEvents);
 
   const eventSections: TeamEventSection[] = (await Promise.all(

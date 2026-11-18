@@ -1,4 +1,4 @@
-import type { FieldViewEvent, FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEvent, FieldViewEventSnapshot, FieldViewTeamSnapshot } from "@fieldview/domain";
 
 export type CanonicalEventSnapshotResponse = {
   version: number;
@@ -49,6 +49,33 @@ export async function getCanonicalEventDiscovery(
       typeof event === "object" && event !== null &&
       typeof (event as { key?: unknown }).key === "string")) return null;
     return payload.events as FieldViewEvent[];
+  } catch {
+    return null;
+  }
+}
+
+export type CanonicalTeamSnapshotResponse = {
+  version: number;
+  snapshot: FieldViewTeamSnapshot;
+};
+
+/** Read the canonical team aggregate; null leaves the caller's compatibility path available. */
+export async function getCanonicalTeamSnapshot(
+  teamKey: string,
+  year: number,
+  fetcher: typeof fetch = fetch,
+): Promise<CanonicalTeamSnapshotResponse | null> {
+  const baseUrl = process.env.FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
+  try {
+    const url = new URL(`/teams/${encodeURIComponent(teamKey)}/snapshot?year=${year}`, baseUrl);
+    const response = await fetcher(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
+    if (!Number.isSafeInteger(version) || version < 0) return null;
+    const snapshot = await response.json() as FieldViewTeamSnapshot;
+    if (snapshot.team_key !== teamKey || snapshot.year !== year) return null;
+    return { version, snapshot };
   } catch {
     return null;
   }

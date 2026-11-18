@@ -77,3 +77,27 @@ test("web workspace prebuild exposes the canonical domain normalizer at runtime"
   assert.equal(snapshot.event?.key, "2026test");
   assert.equal(snapshot.event?.sources.tba_event.status, "available");
 });
+
+test("canonical team snapshot reader validates identity, year, and revision", async () => {
+  process.env.FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  const { getCanonicalTeamSnapshot } = await import("./serverSnapshot.ts");
+  let requestedUrl = "";
+  const result = await getCanonicalTeamSnapshot("frc3461", 2026, async (url, init) => {
+    requestedUrl = String(url);
+    assert.equal(init?.cache, "no-store");
+    return Response.json(
+      { team_key: "frc3461", year: 2026, sources: {}, team: { key: "frc3461", team_number: 3461, sources: {} } },
+      { headers: { "X-FieldView-Snapshot-Version": "7" } },
+    );
+  });
+  assert.equal(requestedUrl, "https://runtime.example.test/teams/frc3461/snapshot?year=2026");
+  assert.equal(result?.version, 7);
+  assert.equal(result?.snapshot.team?.team_number, 3461);
+
+  const wrongYear = await getCanonicalTeamSnapshot("frc3461", 2026, async () =>
+    Response.json({ team_key: "frc3461", year: 2025, sources: {} }, {
+      headers: { "X-FieldView-Snapshot-Version": "1" },
+    }),
+  );
+  assert.equal(wrongYear, null);
+});
