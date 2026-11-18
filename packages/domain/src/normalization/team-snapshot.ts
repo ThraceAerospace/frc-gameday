@@ -2,7 +2,7 @@ import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provid
 import type { FieldViewTeamSnapshot } from "../team.js";
 import type { TeamKey } from "../ids.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
-import { normalizeFieldViewTeam } from "./team.js";
+import { normalizeFieldViewTeam } from "./team.ts";
 
 export interface NormalizeFieldViewTeamSnapshotInput {
   team_key: TeamKey;
