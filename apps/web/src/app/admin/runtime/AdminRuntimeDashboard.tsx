@@ -50,7 +50,7 @@ type Overview = {
 
 function dateTime(value?: number | null) {
   if (value == null) return "—";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC", timeZoneName: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(value));
 }
 function age(value?: number | null) {
   if (value == null) return "Never";
