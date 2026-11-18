@@ -164,7 +164,7 @@ Represents the official alliance, including the original TBA elimination-allianc
 
 ### FieldViewEventAnalytics and FieldViewTeamAnalytics
 
-Expose calculated results with explicit metric identity/version, value and unit, eligible population, sample size, comparison coverage, and interpretation limitations. Analytics are descriptive evidence, not causal determinations.
+Expose calculated results under the canonical contract in [DOMAIN-RESULT-CONTRACT.md](../analytics/DOMAIN-RESULT-CONTRACT.md). Metric results distinguish sample size from the eligible observation population and from the peer-comparison population; they carry a versioned definition, explicit availability status, optional prior-event baseline, and interpretation limitations. Findings carry typed evidence, scope, thresholds, sample context, and limitations. Analytics are descriptive evidence, not causal determinations.
 
 ## 5. Provenance and freshness
 
