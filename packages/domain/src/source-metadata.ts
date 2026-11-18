@@ -54,6 +54,9 @@ export interface FieldViewSourceMetadata {
   tba_match?: FieldViewSourceRecordMetadata;
   tba_event_predictions?: FieldViewSourceRecordMetadata;
   tba_event_oprs?: FieldViewSourceRecordMetadata;
+  tba_event_rankings?: FieldViewSourceRecordMetadata;
+  tba_event_awards?: FieldViewSourceRecordMetadata;
+  tba_event_advancement_points?: FieldViewSourceRecordMetadata;
   tba_playoff_alliances?: FieldViewSourceRecordMetadata;
   tba_playoff_advancement?: FieldViewSourceRecordMetadata;
   tba_team_event_status?: FieldViewSourceRecordMetadata;
