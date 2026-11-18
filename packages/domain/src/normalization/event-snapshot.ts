@@ -3,6 +3,9 @@ import type {
   TBAEvent,
   TBAEventMatchPrediction,
   TBAEventOPRs,
+  TBAEventRanking,
+  TBAEventAdvancementPoints,
+  TBAAward,
   TBAEventPredictions,
   TBAEventTeamStatuses,
   TBAMatch,
@@ -29,6 +32,9 @@ export interface NormalizeFieldViewEventSnapshotInput {
   tba_matches?: TBAMatch[] | null;
   tba_event_predictions?: TBAEventPredictions | null;
   tba_playoff_alliances?: TBAEliminationAlliance[] | null;
+  tba_event_rankings?: TBAEventRanking | null;
+  tba_event_awards?: TBAAward[] | null;
+  tba_event_advancement_points?: TBAEventAdvancementPoints | null;
   statbotics_matches?: StatboticsMatch[] | null;
   sources: {
     event: FieldViewSourceMetadata;
@@ -36,6 +42,9 @@ export interface NormalizeFieldViewEventSnapshotInput {
     event_teams: FieldViewSourceMetadata;
     matches: FieldViewSourceMetadata;
     playoff_alliances: FieldViewSourceMetadata;
+    rankings: FieldViewSourceMetadata;
+    awards: FieldViewSourceMetadata;
+    advancement_points: FieldViewSourceMetadata;
   };
 }
 
@@ -88,6 +97,16 @@ export function normalizeFieldViewEventSnapshot(
         sources: input.sources.event_teams,
       }),
     );
+  }
+
+  if (input.tba_event_rankings !== undefined) {
+    result.rankings = input.tba_event_rankings;
+  }
+  if (input.tba_event_awards !== undefined) {
+    result.awards = input.tba_event_awards;
+  }
+  if (input.tba_event_advancement_points !== undefined) {
+    result.advancement_points = input.tba_event_advancement_points;
   }
 
   if (input.tba_playoff_alliances === null) {
