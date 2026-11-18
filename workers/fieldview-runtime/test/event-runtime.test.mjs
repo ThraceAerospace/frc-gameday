@@ -202,6 +202,15 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   statusState.lastFetchedAt = null;
   statusState.lastAttemptAt = now;
   storage.values.set("endpoint:" + endpoints[2], statusState);
+  const advancementState = storage.values.get("endpoint:" + endpoints[11]);
+  advancementState.status = "unavailable";
+  advancementState.data = null;
+  advancementState.providerData = null;
+  advancementState.etag = null;
+  advancementState.lastFetchedAt = null;
+  advancementState.expiresAt = null;
+  advancementState.lastAttemptAt = now;
+  storage.values.set("endpoint:" + endpoints[11], advancementState);
 
   const refreshed = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
@@ -211,6 +220,8 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   assert.equal(refreshedSnapshot.sources.event_teams.tba_team_event_status.status, "unavailable");
   assert.equal(refreshedSnapshot.sources.event_teams.tba_team_event_status.retrieved_at, null);
   assert.equal("tba_status" in refreshedSnapshot.event_teams[0], false);
+  assert.equal("advancement_points" in refreshedSnapshot, false);
+  assert.equal(refreshedSnapshot.sources.advancement_points.tba_event_advancement_points.status, "unavailable");
 });
 
 
