@@ -1,6 +1,9 @@
 import type {
   TBAEvent,
   TBAEventOPRs,
+  TBAEventRanking,
+  TBAEventAdvancementPoints,
+  TBAAward,
   TBATeamEventStatus,
 } from "@fieldview/provider-tba/types";
 import type { EventKey, TeamKey } from "./ids.js";
@@ -45,10 +48,19 @@ export interface FieldViewEventSnapshot {
     event_teams: FieldViewSourceMetadata;
     matches: FieldViewSourceMetadata;
     playoff_alliances: FieldViewSourceMetadata;
+    rankings: FieldViewSourceMetadata;
+    awards: FieldViewSourceMetadata;
+    advancement_points: FieldViewSourceMetadata;
   };
   event?: FieldViewEvent | null;
   teams?: FieldViewTeam[] | null;
   event_teams?: FieldViewEventTeam[] | null;
   matches?: FieldViewMatch[] | null;
   playoff_alliances?: FieldViewPlayoffAlliance[] | null;
+  /** Unchanged TBA event rankings, including extra-stat metadata. */
+  rankings?: TBAEventRanking | null;
+  /** Unchanged TBA event awards; recipients retain their provider shape. */
+  awards?: TBAAward[] | null;
+  /** Unchanged TBA event advancement-points resource. */
+  advancement_points?: TBAEventAdvancementPoints | null;
 }
