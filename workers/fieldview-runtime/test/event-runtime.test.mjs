@@ -239,6 +239,49 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
   assert.equal(calls.length, 2);
 });
 
+test("Statbotics alarm restores event identity after Durable Object reconstruction", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const calls = [];
+  const env = {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    STATBOTICS_API_BASE_URL: "https://api-statbotics.iterativerefinement.com",
+    STATBOTICS_REFRESH_DELAY_MS: 0,
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async (url) => {
+      calls.push(String(url));
+      return Response.json([{ key: "2026test_qm1" }], {
+        headers: { ETag: '"statbotics-v1"' },
+      });
+    },
+  };
+
+  const requestRuntime = new EventRuntime({ storage }, env);
+  const scheduled = await requestRuntime.fetch(new Request("https://event-runtime/statbotics-refresh", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+    },
+  }));
+  assert.equal(scheduled.status, 200);
+  assert.equal(await storage.get("event-key"), eventKey);
+
+  // Cloudflare may reconstruct the Durable Object before its alarm fires.
+  // The new instance has no constructor event key and must restore it from
+  // durable storage before choosing the provider client.
+  const alarmRuntime = new EventRuntime({ storage }, env);
+  await alarmRuntime.alarm();
+
+  assert.deepEqual(calls, [
+    "https://api-statbotics.iterativerefinement.com/v3" + endpoint,
+  ]);
+  assert.equal(storage.values.get("endpoint:" + endpoint).status, "available");
+  assert.equal(storage.values.has("task:" + endpoint), false);
+});
+
 test("Statbotics one-shot refresh retries provider failures within a finite TBA-triggered budget", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
