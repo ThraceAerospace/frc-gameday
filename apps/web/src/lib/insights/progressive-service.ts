@@ -3,7 +3,7 @@ import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import { FRCColors } from "@/lib/frc-colors/service";
-import type { FRCColor } from "@/lib/frc-colors/client";
+import type { FRCColor } from "@/lib/frc-colors/legacy-compatibility";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import type { AnalyticsMatch } from "./types";

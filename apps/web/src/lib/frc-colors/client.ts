@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
 import { FRCColorsApiClient } from "@fieldview/provider-frc-colors/client";
 import { FRC_COLORS_ENDPOINTS } from "@fieldview/provider-frc-colors/endpoints";
+import {
+  toLegacyFRCColors,
+  type FRCColor,
+  type LegacyFRCColorsEventResponse,
+} from "./legacy-compatibility";
 
 const provider = new FRCColorsApiClient();
 
@@ -10,32 +15,8 @@ const LOCK_TTL_SECONDS = 20;
 const CACHE_PREFIX = "cache:frc-colors:v1:";
 const LOCK_PREFIX = "lock:frc-colors:v1:";
 
-export type FRCColor = {
-  teamNumber: number;
-  primaryHex: string | null;
-  secondaryHex: string | null;
-  verified: boolean | null;
-};
-
-type EventResponse = {
-  teams?: Record<string, {
-    teamNumber?: number;
-    colors?: {
-      primaryHex?: string | null;
-      secondaryHex?: string | null;
-      verified?: boolean;
-    } | null;
-  }>;
-};
-
 function cacheKey(eventCode: string) {
   return CACHE_PREFIX + encodeURIComponent(eventCode);
-}
-
-function validHex(value: unknown): string | null {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
-    ? value.toUpperCase()
-    : null;
 }
 
 function parseCached(raw: string): FRCColor[] | null {
@@ -73,17 +54,8 @@ export class FRCColorsClient {
     try {
       const response = await provider.request(FRC_COLORS_ENDPOINTS.event(eventCode));
       if (!response.ok) throw new Error(`FRC Colors event request failed (${response.status})`);
-      const payload = await response.json() as EventResponse;
-      const colors = Object.entries(payload.teams ?? {}).flatMap(([key, team]) => {
-        const teamNumber = Number(team.teamNumber ?? key);
-        if (!Number.isSafeInteger(teamNumber) || teamNumber <= 0) return [];
-        return [{
-          teamNumber,
-          primaryHex: validHex(team.colors?.primaryHex),
-          secondaryHex: validHex(team.colors?.secondaryHex),
-          verified: typeof team.colors?.verified === "boolean" ? team.colors.verified : null,
-        }];
-      });
+      const payload = await response.json() as LegacyFRCColorsEventResponse;
+      const colors = toLegacyFRCColors(payload);
       await redis.set(key, JSON.stringify(colors), "EX", CACHE_TTL_SECONDS);
       return colors;
     } catch (error) {
