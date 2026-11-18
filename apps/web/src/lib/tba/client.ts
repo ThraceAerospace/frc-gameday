@@ -1,6 +1,7 @@
 import { redis } from "@/lib/cache/redis";
 import type { TBAMatch } from "@/lib/tba/types";
 import { TBAApiClient } from "@fieldview/provider-tba/client";
+import { TBA_ENDPOINTS } from "@fieldview/provider-tba/endpoints";
 
 export type CacheEntry<T> = {
   data: T;
@@ -249,7 +250,7 @@ export class TBAClient {
       );
 
     await this.mutateCached<any[]>(
-      `/event/${eventKey}/matches`,
+      TBA_ENDPOINTS.eventMatches(eventKey),
       updateMatches,
     );
   }
