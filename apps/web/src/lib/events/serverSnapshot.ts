@@ -13,7 +13,7 @@ export async function getCanonicalEventSnapshot(
   eventKey: string,
   fetcher: typeof fetch = fetch,
 ): Promise<CanonicalEventSnapshotResponse | null> {
-  const baseUrl = process.env.FIELDVIEW_RUNTIME_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
   if (!baseUrl || !eventKey) return null;
 
   try {
@@ -36,7 +36,7 @@ export async function getCanonicalEventDiscovery(
   year: number,
   fetcher: typeof fetch = fetch,
 ): Promise<FieldViewEvent[] | null> {
-  const baseUrl = process.env.FIELDVIEW_RUNTIME_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
   if (!baseUrl || !Number.isSafeInteger(year)) return null;
 
   try {
@@ -65,7 +65,7 @@ export async function getCanonicalTeamSnapshot(
   year: number,
   fetcher: typeof fetch = fetch,
 ): Promise<CanonicalTeamSnapshotResponse | null> {
-  const baseUrl = process.env.FIELDVIEW_RUNTIME_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
   if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
   try {
     const url = new URL(`/teams/${encodeURIComponent(teamKey)}/snapshot?year=${year}`, baseUrl);
