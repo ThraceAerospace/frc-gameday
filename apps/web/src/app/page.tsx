@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import type { FieldViewEvent } from "@fieldview/domain";
 import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import SiteShell from "@/components/navigation/SiteShell";
 import HomeEventCard from "@/components/event/HomeEventCard";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventDiscovery, getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
-import type { TBAEvent } from "@/lib/tba/types";
+
 import { getEventCompetitionStatus, parseLocalDate } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
-function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
+function getCalendarWeekEvents(events: FieldViewEvent[], now = new Date()) {
   const weekStart = new Date(now);
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
@@ -23,32 +23,22 @@ function getCalendarWeekEvents(events: TBAEvent[], now = new Date()) {
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 }
 
-const getCachedEvents = unstable_cache(
-  async (year: number) => TBA.getEvents(year),
-  ["homepage-events"],
-  { revalidate: 3600, tags: ["homepage-events"] },
-);
-
 export default async function HomePage() {
   const now = new Date();
-  const allEvents = await getCachedEvents(now.getFullYear());
-  const weekEvents = getCalendarWeekEvents(allEvents, now);
+  const allEvents = await getCanonicalEventDiscovery(now.getUTCFullYear());
+  const weekEvents = getCalendarWeekEvents(allEvents ?? [], now);
 
-  // Recompute match summaries for every homepage request. TBAClient still owns
-  // Redis freshness, ETags, webhook mutations, and upstream reconciliation.
+  // Match summaries are derived only from the canonical EventRuntime snapshots.
   const eventSummaries = await Promise.all(
     weekEvents.map(async (event) => {
-      try {
-        const matches = sortMatches(await TBA.getEventMatches(event.key));
-        return {
-          event,
-          lastMatch: getLastMatch(matches),
-          nextMatch: getNextMatch(matches),
-        };
-      } catch (error) {
-        console.error(`Failed to load homepage match summary for ${event.key}:`, error);
-        return { event, lastMatch: null, nextMatch: null };
-      }
+      const canonical = await getCanonicalEventSnapshot(event.key);
+      const matches = canonical?.snapshot.matches ?? [];
+      const sorted = sortMatches(matches);
+      return {
+        event,
+        lastMatch: getLastMatch(sorted),
+        nextMatch: getNextMatch(sorted),
+      };
     }),
   );
   const statusOrder = { inProgress: 0, upcoming: 1, completed: 2 } as const;
