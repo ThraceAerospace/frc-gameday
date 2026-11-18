@@ -17,7 +17,7 @@ import { normalizeFieldViewEventTeam } from "./event-team.ts";
 import { normalizeFieldViewMatch } from "./match.ts";
 import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
-import { sortMatchesByTime } from "../match-order.js";
+import { sortMatchesByTime } from "../match-order.ts";
 
 export interface NormalizeFieldViewEventSnapshotInput {
   event_key: EventKey;
