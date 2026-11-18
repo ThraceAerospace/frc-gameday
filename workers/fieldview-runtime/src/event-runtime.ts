@@ -576,7 +576,7 @@ export class EventRuntime {
       } else if (!response.ok) {
         responseState = {
           status: "failed",
-          reason: `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`,
+          reason: `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""} from ${response.url ? (() => { const url = new URL(response.url); return url.origin + url.pathname; })() : "unknown URL"}`,
         };
       } else {
         responseState = {
