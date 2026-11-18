@@ -7,6 +7,10 @@ import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src
 import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
 
 interface TeamPollTask { endpoint: string; dueAt: number; intervalMs: number; attempts: number; }
+interface TeamEndpointState<T> extends EndpointState<T> {
+  lastHttpStatus?: number | null;
+  lastError?: string | null;
+}
 const TASK_PREFIX = "task:";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
@@ -117,7 +121,7 @@ export class TeamRuntime {
         team_key: this.teamKey,
         year,
         snapshot,
-        diagnostics: (await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values().map((state) => ({
+        diagnostics: [...(await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values()].map((state) => ({
           endpoint: state.endpoint,
           http_status: state.lastHttpStatus ?? null,
           last_error: state.lastError ?? null,
