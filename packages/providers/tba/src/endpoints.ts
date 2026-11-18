@@ -3,6 +3,7 @@
  */
 export const TBA_ENDPOINTS = {
   events: (year: number) => `/events/${year}`,
+  teams: (year: number) => `/teams/${year}`,
   eventsSimple: (year: number) => `/events/${year}/simple`,
   event: (key: string) => `/event/${segment(key)}`,
   eventSimple: (key: string) => `/event/${segment(key)}/simple`,
