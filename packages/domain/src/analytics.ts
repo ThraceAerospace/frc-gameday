@@ -30,8 +30,6 @@ export interface FieldViewAnalyticsComparison {
   population: FieldViewAnalyticsPopulation;
   /** One-based rank; null when the comparison cannot be ranked reliably. */
   rank_position: number | null;
-  /** Number of eligible subjects represented by the rank denominator. */
-  rank_population: number;
   /** 0–100 percentile; null when the cohort is too small to support one. */
   percentile: number | null;
 }
@@ -43,11 +41,9 @@ export interface FieldViewAnalyticsComparison {
  * population describes the observation population. comparison, when present,
  * describes a different population used for rank/peer context.
  */
-export interface FieldViewMetricResult {
+interface FieldViewMetricResultBase {
   metric_key: string;
   definition_version: string;
-  status: "available" | "insufficient-data" | "unavailable";
-  value: number | null;
   unit: string;
   sample_size: number;
   population: FieldViewAnalyticsPopulation;
@@ -57,6 +53,14 @@ export interface FieldViewMetricResult {
   /** Caveats that qualify interpretation; never inferred by the client. */
   limitations: string[];
 }
+
+/** Discriminated status/value pair prevents unavailable metrics becoming zero. */
+export type FieldViewMetricResult =
+  | (FieldViewMetricResultBase & { status: "available"; value: number })
+  | (FieldViewMetricResultBase & {
+      status: "insufficient-data" | "unavailable";
+      value: null;
+    });
 
 /** Machine-readable evidence supporting a FieldView-generated finding. */
 export interface FieldViewAnalyticsEvidence {
