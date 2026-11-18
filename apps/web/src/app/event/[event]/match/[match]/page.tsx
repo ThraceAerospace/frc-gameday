@@ -1,9 +1,8 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
-import { TBA } from "@/lib/tba/service";
-import { Statbotics } from "@/lib/statbotics/service";
+import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import MatchInsightsPanel from "@/components/match/MatchInsightsPanel";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch } from "@fieldview/domain";
 import { formatMatchEventTime, formatMatchType, formatScore, formatScoreBreakdownLabel, formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
 export default async function MatchPage({
@@ -24,24 +23,19 @@ export default async function MatchPage({
     );
   }
 
-  let match;
-  let event;
+  const canonical = await getCanonicalEventSnapshot(eventKey);
+  const event = canonical?.snapshot.event ?? null;
+  const match: FieldViewMatch | null =
+    canonical?.snapshot.matches?.find((candidate) => candidate.key === matchKey) ?? null;
 
-  try {
-    [match, event] = await Promise.all([
-      TBA.getMatch(matchKey),
-      TBA.getEvent(eventKey),
-    ]);
-  } catch {
+  if (!canonical || !event || !match) {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <div className="mx-auto max-w-5xl">
           <h1 className="text-2xl font-semibold">Match unavailable</h1>
-
           <p className="mt-2 text-slate-500">
-            Could not load match <code>{matchKey}</code>.
+            The canonical event snapshot does not currently contain match <code>{matchKey}</code>.
           </p>
-
           <Link
             href={`/event/${eventKey}`}
             className="mt-6 inline-block text-sm text-slate-500 hover:text-slate-900"
@@ -52,13 +46,6 @@ export default async function MatchPage({
       </main>
     );
   }
-
-  const [statboticsResult, oprsResult] = await Promise.allSettled([
-    Statbotics.getMatch(matchKey),
-    TBA.getEventOPRs(eventKey),
-  ]);
-  const statbotics = statboticsResult.status === "fulfilled" ? statboticsResult.value : null;
-  const eventOprs = oprsResult.status === "fulfilled" ? oprsResult.value : null;
 
   return (
     <SiteShell>
@@ -184,7 +171,7 @@ export default async function MatchPage({
           </section>
         )}
 
-        <MatchInsightsPanel match={match} statbotics={statbotics} oprs={eventOprs} />
+        <MatchInsightsPanel match={match} />
 
         {/* Match information */}
         <section className="mt-8">
