@@ -31,6 +31,8 @@ test("TeamRuntime lazily schedules and composes canonical team resources", async
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "available");
   assert.equal(snapshot.sources.tba_team.validator, '"team-v1"');
+  assert.equal(snapshot.team.sources.tba_team.status, "available");
+  assert.equal("tba_team_media" in snapshot.team.sources, false);
   assert.equal(snapshot.media.length, 0);
 });
 

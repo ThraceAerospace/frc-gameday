@@ -21,7 +21,9 @@ export function normalizeFieldViewTeamSnapshot(input: NormalizeFieldViewTeamSnap
     year: input.year,
     sources: input.sources,
     ...(input.team === undefined ? {} : {
-      team: input.team === null ? null : normalizeFieldViewTeam(input.team, input.sources),
+      team: input.team === null ? null : normalizeFieldViewTeam(input.team, {
+        ...(input.sources.tba_team === undefined ? {} : { tba_team: input.sources.tba_team }),
+      }),
     }),
     ...(input.districts === undefined ? {} : { districts: input.districts }),
     ...(input.events === undefined ? {} : { events: input.events }),
