@@ -138,7 +138,8 @@ export default async function TeamPage({
             );
         return {
           event: snapshot.event,
-          matches: matches === null ? null : [...matches].sort(sortMatches),
+          // Filtering preserves the canonical snapshot's BestTime chronology.
+          matches,
           playoffAlliances,
           status,
           awards,
