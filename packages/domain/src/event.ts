@@ -48,9 +48,9 @@ export interface FieldViewEventSnapshot {
     event_teams: FieldViewSourceMetadata;
     matches: FieldViewSourceMetadata;
     playoff_alliances: FieldViewSourceMetadata;
-    rankings: FieldViewSourceMetadata;
-    awards: FieldViewSourceMetadata;
-    advancement_points: FieldViewSourceMetadata;
+    rankings?: FieldViewSourceMetadata;
+    awards?: FieldViewSourceMetadata;
+    advancement_points?: FieldViewSourceMetadata;
   };
   event?: FieldViewEvent | null;
   teams?: FieldViewTeam[] | null;
