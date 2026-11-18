@@ -1,16 +1,10 @@
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 
-export const GET = async (  req: Request,
-  { params }: { params: Promise<{ event: string }> }) => {
-  const { event: event } = await params;
-
-  if (!event) {
-    return new Response("Missing event key", { status: 400 });
-  }
-
-
-  const data = await TBA.getTeamsAtEvent(event)
-  
-
-  return Response.json(data);
-};
+export async function GET(_request: Request, { params }: { params: Promise<{ event: string }> }) {
+  const { event } = await params;
+  if (!event) return new Response("Missing event key", { status: 400 });
+  const canonical = await getCanonicalEventSnapshot(event);
+  if (!canonical) return Response.json({ error: "Event snapshot unavailable" }, { status: 503 });
+  if (canonical.snapshot.teams === undefined) return Response.json({ error: "Event teams have not been acquired" }, { status: 503 });
+  return Response.json(canonical.snapshot.teams);
+}
