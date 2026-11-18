@@ -106,7 +106,12 @@ export default {
     }
 
     const internalTeamParts = url.pathname.split("/");
-    const internalTeamKey = internalTeamParts[3];
+    const requestedInternalTeamKey = internalTeamParts[3];
+    // Keep numeric admin seed/refresh routes on the same Durable Object as
+    // public frc-prefixed team snapshot routes.
+    const internalTeamKey = /^\d+$/.test(requestedInternalTeamKey ?? "")
+      ? "frc" + requestedInternalTeamKey
+      : requestedInternalTeamKey;
     const internalTeamAction = internalTeamParts[4];
     const validInternalTeamRoute = internalTeamParts.length === 5 &&
       internalTeamParts[1] === "internal" && internalTeamParts[2] === "teams" &&
