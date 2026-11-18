@@ -58,6 +58,17 @@ export class Multiplexer {
         : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
     }
 
+    if (url.pathname === "/state" && request.method === "GET") {
+      if (!this.authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const clients = await this.state.storage.list<Subscription[]>({ prefix: CLIENT_PREFIX });
+      const topics = await this.state.storage.list<string[]>({ prefix: TOPIC_PREFIX });
+      return Response.json({
+        connected_sockets: this.state.getWebSockets?.().length ?? null,
+        clients: clients.size,
+        subscriptions: [...topics.entries()].map(([key, ids]) => ({ topic: key.slice(TOPIC_PREFIX.length), clients: ids.length })),
+      });
+    }
+
     if (url.pathname === "/internal/notify" && request.method === "POST") {
       if (!this.authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
