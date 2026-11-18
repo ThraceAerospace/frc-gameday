@@ -89,3 +89,31 @@ test("binds the default global fetch receiver", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("returns provider HTTP errors unchanged for the cache adapter to interpret", async () => {
+  const response = new Response('{"Error":"rate limited"}', {
+    status: 429,
+    headers: { "Retry-After": "30", "Content-Type": "application/json" },
+  });
+  const client = new TBAApiClient({
+    apiKey: "test-api-key",
+    fetch: async () => response,
+  });
+
+  const result = await client.request("/event/2026test");
+
+  assert.equal(result, response);
+  assert.equal(result.status, 429);
+  assert.equal(result.headers.get("Retry-After"), "30");
+  assert.equal(await result.text(), '{"Error":"rate limited"}');
+});
+
+test("propagates network failures without converting them into provider responses", async () => {
+  const failure = new TypeError("upstream connection failed");
+  const client = new TBAApiClient({
+    apiKey: "test-api-key",
+    fetch: async () => { throw failure; },
+  });
+
+  await assert.rejects(client.request("/event/2026test"), (error) => error === failure);
+});
