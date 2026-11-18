@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
 import SiteShell from "@/components/navigation/SiteShell";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
@@ -8,17 +8,22 @@ import { formatTeamNumber } from "@/lib/tba/formatters";
 
 export default async function TeamsPage() {
   const year = new Date().getFullYear();
-  const teams = await TBA.getTeams(year);
+  const teams = await getCanonicalTeamDiscovery(year);
 
   return (
     <SiteShell>
       <PageContainer>
         <PageHeader eyebrow="Teams" title={`${year} teams`} description="Browse teams listed for the current season, then open a team page." />
 
-        {teams.length === 0 ? (
+        {!teams ? (
+          <SurfaceCard className="mt-6 border-dashed p-8 text-center">
+            <p className="font-semibold text-[var(--fv-text)]">Team directory snapshot unavailable</p>
+            <p className="mt-1 text-sm text-[var(--fv-muted)]">The FieldView runtime has not published the {year} team directory yet. Start or refresh runtime discovery, then reload this page.</p>
+          </SurfaceCard>
+        ) : teams.length === 0 ? (
           <SurfaceCard className="mt-6 border-dashed p-8 text-center">
             <p className="font-semibold text-[var(--fv-text)]">No teams were returned for {year}.</p>
-            <p className="mt-1 text-sm text-[var(--fv-muted)]">The Blue Alliance may not have published this season's team directory yet.</p>
+            <p className="mt-1 text-sm text-[var(--fv-muted)]">The canonical team directory is currently empty.</p>
           </SurfaceCard>
         ) : (
         <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -43,7 +48,7 @@ export default async function TeamsPage() {
         </div>
 
         )}
-        {teams.length > 200 && (
+        {teams && teams.length > 200 && (
           <p className="mt-6 text-center text-xs text-[var(--fv-muted)]">
             Showing the first 200 teams. Team search will be expanded in the
             next navigation pass.
