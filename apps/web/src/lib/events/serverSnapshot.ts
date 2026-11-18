@@ -1,4 +1,4 @@
-import type { FieldViewEvent, FieldViewEventSnapshot, FieldViewTeamSnapshot } from "@fieldview/domain";
+import type { FieldViewEvent, FieldViewEventSnapshot, FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
 
 export type CanonicalEventSnapshotResponse = {
   version: number;
@@ -49,6 +49,27 @@ export async function getCanonicalEventDiscovery(
       typeof event === "object" && event !== null &&
       typeof (event as { key?: unknown }).key === "string")) return null;
     return payload.events as FieldViewEvent[];
+  } catch {
+    return null;
+  }
+}
+
+export async function getCanonicalTeamDiscovery(
+  year: number,
+  fetcher: typeof fetch = fetch,
+): Promise<FieldViewTeam[] | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl || !Number.isSafeInteger(year)) return null;
+  try {
+    const url = new URL(`/teams/discovery?year=${year}`, baseUrl);
+    const response = await fetcher(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = await response.json() as { year?: number; teams?: unknown };
+    if (payload.year !== year || !Array.isArray(payload.teams)) return null;
+    if (!payload.teams.every((team) =>
+      typeof team === "object" && team !== null &&
+      typeof (team as { key?: unknown }).key === "string")) return null;
+    return payload.teams as FieldViewTeam[];
   } catch {
     return null;
   }
