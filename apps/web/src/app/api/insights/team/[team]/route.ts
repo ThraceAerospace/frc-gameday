@@ -1,7 +1,6 @@
 import { redis } from "@/lib/cache/redis";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import { Statbotics } from "@/lib/statbotics/service";
-import type { TBAEventSimple } from "@/lib/tba/types";
 
 const TEAM_HISTORY_TTL_SECONDS = 365 * 24 * 60 * 60;
 
@@ -25,14 +24,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   }
 
   try {
-    const [teamInfo, events, season, statboticsEvents] = await Promise.all([
-      TBA.getTeam(`frc${team}`),
-      TBA.getTeamEvents(`frc${team}`, year),
+    const canonical = await getCanonicalTeamSnapshot(`frc${team}`, year);
+    if (!canonical) return Response.json({ error: "Team snapshot unavailable" }, { status: 503 });
+    if (canonical.snapshot.team === undefined || canonical.snapshot.events === undefined) {
+      return Response.json({ error: "Team profile resources have not been acquired" }, { status: 503 });
+    }
+    const teamInfo = canonical.snapshot.team;
+    const events = canonical.snapshot.events ?? [];
+    const [season, statboticsEvents] = await Promise.all([
       Statbotics.getTeamYear(team, year).catch(() => null),
       Statbotics.getTeamEvents({ team, year }).catch(() => []),
     ]);
     const officialEvents = [...events]
-      .filter((event: TBAEventSimple) => event.event_type !== 99 && event.event_type !== 100)
+      .filter((event) => event.event_type !== 99 && event.event_type !== 100)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
     const statboticsByEvent = new Map(statboticsEvents.flatMap((record) =>
       typeof record.event === "string" ? [[record.event, record] as const] : [],
