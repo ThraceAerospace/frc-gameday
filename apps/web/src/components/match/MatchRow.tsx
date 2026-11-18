@@ -1,8 +1,5 @@
 import Link from "next/link";
-import type {
-  TBAEliminationAlliance,
-  TBAMatch,
-} from "@/lib/tba/types";
+import type { FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import {
   formatPlayoffAllianceName,
   formatScoreBreakdownLabel,
@@ -16,8 +13,8 @@ import {
 type MatchRowProps = {
   eventKey: string;
   playoffType?: number | null;
-  match: TBAMatch;
-  playoffAlliances?: TBAEliminationAlliance[] | null;
+  match: FieldViewMatch;
+  playoffAlliances?: FieldViewPlayoffAlliance[] | null;
   highlightedTeamKeys?: string[];
   compact?: boolean;
   firstInGroup?: boolean;
@@ -186,7 +183,7 @@ function AllianceScore({
 }
 
 function getAllianceRankPointAchievements(
-  match: TBAMatch,
+  match: FieldViewMatch,
   alliance: "red" | "blue",
 ) {
   if (isEliminationMatch(match.comp_level)) {
