@@ -95,6 +95,27 @@ test("TeamRuntime restores team identity before a reconstructed object's alarm",
   assert.ok(calls.every((url) => url.includes("frc3461")));
 });
 
+
+test("TeamRuntime converts numeric public team IDs to TBA frc-prefixed keys", async () => {
+  const storage = new MemoryStorage(), calls = [];
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/team/frc3461")) return Response.json({ key: "frc3461", team_number: 3461 });
+    return Response.json([]);
+  }), "3461");
+  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "3461" },
+  }));
+  await runtime.alarm();
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((url) => url.includes("/team/frc3461")));
+  const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "3461" },
+  }))).json();
+  assert.equal(snapshot.team_key, "3461");
+  assert.equal(snapshot.team.team_number, 3461);
+});
+
 test("TeamRuntime preserves an explicit null team representation", async () => {
   const storage = new MemoryStorage();
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
