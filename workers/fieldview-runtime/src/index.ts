@@ -78,6 +78,15 @@ export default {
       return scheduler.fetch(new Request("https://event-scheduler/events?" + query.toString()));
     }
 
+    if (url.pathname === "/teams/discovery" && request.method === "GET") {
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Team discovery is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const query = new URLSearchParams();
+      const year = url.searchParams.get("year");
+      if (year !== null) query.set("year", year);
+      return scheduler.fetch(new Request("https://event-scheduler/teams?" + query.toString()));
+    }
+
     // Team profiles are served by one lazy TeamRuntime per TBA team key.
     const teamParts = url.pathname.split("/");
     const teamKey = teamParts[2];
