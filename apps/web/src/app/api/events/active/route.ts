@@ -1,4 +1,4 @@
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalEventDiscovery } from "@/lib/events/serverSnapshot";
 import type { TBAEvent } from "@/lib/tba/types";
 
 type EventState = "upcoming" | "in_progress" | "complete";
@@ -96,7 +96,7 @@ function getEventWeight(event: ActiveEvent): number {
 
 export async function GET() {
   try {
-    const events = await TBA.getEvents(new Date().getFullYear());
+    const events = await getCanonicalEventDiscovery(new Date().getUTCFullYear());\n    if (!events) return Response.json({ error: "Event discovery snapshot unavailable" }, { status: 503 });
     const now = new Date();
 
     const enriched = events
