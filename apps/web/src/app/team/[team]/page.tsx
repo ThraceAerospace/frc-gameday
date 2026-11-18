@@ -100,21 +100,28 @@ export default async function TeamPage({
       // with a second TBA request. The season event list remains independently
       // available, but this event's detailed section cannot be rendered.
       if (snapshot?.event === null) return null;
+      if (snapshot && snapshot.event === undefined &&
+          snapshot.sources.event.tba_event !== undefined) return null;
 
+      // A provenance entry means the runtime has attempted that resource,
+      // including authoritative unavailable/failed responses with no value.
+      // This avoids falling back to a second provider path after an attempt.
       const canonicalReady = snapshot !== undefined &&
         snapshot.event !== undefined &&
-        snapshot.matches !== undefined &&
-        snapshot.event_teams !== undefined &&
-        snapshot.playoff_alliances !== undefined &&
-        snapshot.rankings !== undefined &&
-        snapshot.awards !== undefined &&
-        snapshot.advancement_points !== undefined;
+        snapshot.sources.event.tba_event !== undefined &&
+        snapshot.sources.teams.tba_teams !== undefined &&
+        snapshot.sources.event_teams.tba_team_event_status !== undefined &&
+        snapshot.sources.matches.tba_match !== undefined &&
+        snapshot.sources.playoff_alliances.tba_playoff_alliances !== undefined &&
+        snapshot.sources.rankings?.tba_event_rankings !== undefined &&
+        snapshot.sources.awards?.tba_event_awards !== undefined &&
+        snapshot.sources.advancement_points?.tba_event_advancement_points !== undefined;
 
       if (canonicalReady && snapshot?.event) {
-        const eventTeams = snapshot.event_teams!;
-        const eventMatches = snapshot.matches!;
-        const eventAwards = snapshot.awards!;
-        const playoffAlliances = snapshot.playoff_alliances!;
+        const eventTeams = snapshot.event_teams ?? null;
+        const eventMatches = snapshot.matches ?? null;
+        const eventAwards = snapshot.awards ?? null;
+        const playoffAlliances = snapshot.playoff_alliances ?? null;
         const status = eventTeams === null
           ? null
           : eventTeams.find((entry) => entry.team_key === teamKey)?.tba_status ?? null;
@@ -135,8 +142,8 @@ export default async function TeamPage({
           playoffAlliances,
           status,
           awards,
-          advancementPoints: snapshot.advancement_points!,
-          rankings: snapshot.rankings!,
+          advancementPoints: snapshot.advancement_points ?? null,
+          rankings: snapshot.rankings ?? null,
         };
       }
 
