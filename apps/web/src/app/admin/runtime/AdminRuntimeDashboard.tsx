@@ -71,6 +71,44 @@ function endpointRows(entry: RuntimeEntry): Endpoint[] {
     endpoint: value.endpoint ?? key.replace(/^endpoint:/, ""),
   }));
 }
+function endpointDescription(raw: string) {
+  let pathname = raw;
+  let search = "";
+  let hostname = "";
+  try {
+    const parsed = new URL(raw, "https://fieldview.invalid");
+    pathname = parsed.pathname;
+    search = parsed.search;
+    hostname = parsed.hostname.toLowerCase();
+  } catch {
+    // Keep the raw endpoint available if it is not a valid URL.
+  }
+
+  const params = new URLSearchParams(search);
+  const normalizedPath = pathname.replace(/\\/+$/, "") || "/";
+  const isStatbotics = hostname.includes("statbotics") ||
+    (normalizedPath === "/matches" && params.has("event")) ||
+    normalizedPath === "/team_events";
+  const isTba = hostname.includes("thebluealliance") ||
+    normalizedPath.startsWith("/event/") ||
+    normalizedPath.startsWith("/team/");
+
+  if (isStatbotics && normalizedPath === "/matches") {
+    return { title: "Statbotics · Event match data", detail: params.get("event") ? "Event " + params.get("event") : "Matches" };
+  }
+  if (isStatbotics && normalizedPath === "/team_events") {
+    return { title: "Statbotics · Team event statistics", detail: params.get("team") ? "Team " + params.get("team") : "Team events" };
+  }
+  if (isStatbotics) return { title: "Statbotics · " + (normalizedPath.split("/").filter(Boolean).pop() || "API resource"), detail: "Statbotics resource" };
+
+  if (isTba && normalizedPath.includes("/matches")) return { title: "The Blue Alliance · Event matches", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/teams")) return { title: "The Blue Alliance · Event teams", detail: normalizedPath };
+  if (isTba && normalizedPath.startsWith("/event/")) return { title: "The Blue Alliance · Event data", detail: normalizedPath };
+  if (isTba && normalizedPath.startsWith("/team/")) return { title: "The Blue Alliance · Team data", detail: normalizedPath };
+
+  return { title: "Resource endpoint", detail: raw };
+}
+
 function statusTone(status?: string) {
   if (status === "available" || status === "fresh" || status === "ok") return "text-emerald-600";
   if (status === "stale" || status === "unknown") return "text-amber-600";
@@ -230,12 +268,12 @@ export default function AdminRuntimeDashboard() {
                     const last = endpoint.lastFetchedAt ?? endpoint.last_fetched_at ?? null;
                     const status = endpoint.status ?? "unknown";
                     return <div key={endpoint.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs">
-                      <div className="flex flex-wrap items-center justify-between gap-2"><span className="break-all font-medium">{endpoint.endpoint}</span><span className={"font-bold " + statusTone(status)}>{status}</span></div>
+                      <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><div className="font-semibold">{endpointDescription(endpoint.endpoint).title}</div><div className="mt-0.5 break-all text-[var(--fv-muted)]">{endpointDescription(endpoint.endpoint).detail}</div><div className="mt-0.5 break-all font-mono text-[10px] text-[var(--fv-muted)]">{endpoint.endpoint}</div></div><span className={"font-bold " + statusTone(status)}>{status}</span></div>
                       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Revision {endpoint.revision ?? "—"}</span><span>Fetched {age(last)}</span><span>HTTP {endpoint.lastHttpStatus ?? endpoint.http_status ?? "—"}</span></div>
                       {(endpoint.lastError || endpoint.last_error) && <p className="mt-1 break-words text-rose-600">{endpoint.lastError ?? endpoint.last_error}</p>}
                     </div>;
                   })}{!endpoints.length && <p className="text-xs text-[var(--fv-muted)]">No resource state recorded yet.</p>}</div></div>
-                  <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Scheduled tasks</h3><div className="space-y-2">{tasks.map((task) => <div key={task.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="break-all font-medium">{task.endpoint}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Due {dateTime(task.due_at)}</span><span>{task.due_at <= Date.now() ? "Due now" : "Scheduled"}</span><span>Attempts {task.attempts}</span><span>Interval {task.interval_ms == null ? "one-shot" : Math.round(task.interval_ms / 60000) + "m"}</span></div>{task.authoritative_refetch_at && <div className="mt-1 text-[var(--fv-muted)]">Authoritative refetch {dateTime(task.authoritative_refetch_at)}</div>}</div>)}{!tasks.length && <p className="text-xs text-[var(--fv-muted)]">No pending scheduled tasks.</p>}</div></div>
+                  <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Scheduled tasks</h3><div className="space-y-2">{tasks.map((task) => <div key={task.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="font-semibold">{endpointDescription(task.endpoint).title}</div><div className="mt-0.5 break-all text-[var(--fv-muted)]">{endpointDescription(task.endpoint).detail}</div><div className="mt-0.5 break-all font-mono text-[10px] text-[var(--fv-muted)]">{task.endpoint}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Due {dateTime(task.due_at)}</span><span>{task.due_at <= Date.now() ? "Due now" : "Scheduled"}</span><span>Attempts {task.attempts}</span><span>Interval {task.interval_ms == null ? "one-shot" : Math.round(task.interval_ms / 60000) + "m"}</span></div>{task.authoritative_refetch_at && <div className="mt-1 text-[var(--fv-muted)]">Authoritative refetch {dateTime(task.authoritative_refetch_at)}</div>}</div>)}{!tasks.length && <p className="text-xs text-[var(--fv-muted)]">No pending scheduled tasks.</p>}</div></div>
                 </div>
               </div>}
             </article>;
