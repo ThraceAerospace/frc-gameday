@@ -239,7 +239,10 @@ export class EventRuntime {
           await this.rearm(transaction);
         });
       }
-      return Response.json({ lifecycle, event_key: this.eventKey });
+      // Lifecycle activation is also the initial-ingestion trigger. Do not
+      // leave a newly scheduled event waiting for its next polling interval.
+      await this.alarm();
+      return Response.json({ lifecycle, ingested: true, event_key: this.eventKey });
     }
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
@@ -272,7 +275,8 @@ export class EventRuntime {
         return Response.json({ error: "Endpoint is not part of this event" }, { status: 400 });
       }
       await this.schedulePolls(endpoints, intervalMs);
-      return Response.json({ scheduled: endpoints.length, event_key: this.eventKey });
+      await this.alarm();
+      return Response.json({ scheduled: endpoints.length, ingested: true, event_key: this.eventKey });
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
