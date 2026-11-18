@@ -17,6 +17,7 @@ import { normalizeFieldViewEventTeam } from "./event-team.ts";
 import { normalizeFieldViewMatch } from "./match.ts";
 import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
+import { sortMatchesByTime } from "../match-order.js";
 
 export interface NormalizeFieldViewEventSnapshotInput {
   event_key: EventKey;
@@ -115,7 +116,7 @@ export function normalizeFieldViewEventSnapshot(
       : input.tba_playoff_alliances === null
         ? null
         : result.playoff_alliances ?? [];
-    result.matches = input.tba_matches.map((match) => {
+    const normalizedMatches = input.tba_matches.map((match) => {
       const prediction: TBAEventMatchPrediction | undefined =
         input.tba_event_predictions?.[match.key];
       return normalizeFieldViewMatch({
@@ -151,6 +152,7 @@ export function normalizeFieldViewEventSnapshot(
             : {}),
         },
       });
+    result.matches = sortMatchesByTime(normalizedMatches);
     });
   }
 
