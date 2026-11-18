@@ -152,8 +152,8 @@ export function normalizeFieldViewEventSnapshot(
             : {}),
         },
       });
-    result.matches = sortMatchesByTime(normalizedMatches);
     });
+    result.matches = sortMatchesByTime(normalizedMatches);
   }
 
   return result;
