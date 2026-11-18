@@ -4,7 +4,9 @@ import { getCanonicalEventDiscovery, getCanonicalTeamDiscovery } from "@/lib/eve
 
 export default async function InsightsPage() {
   const year = new Date().getFullYear();
-  const [eventSnapshot, teamSnapshot] = await Promise.all([getCanonicalEventDiscovery(year), getCanonicalTeamDiscovery(year)]);\n  const events = eventSnapshot ?? [];\n  const teams = teamSnapshot ?? [];
+  const [eventSnapshot, teamSnapshot] = await Promise.all([getCanonicalEventDiscovery(year), getCanonicalTeamDiscovery(year)]);
+  const events = eventSnapshot ?? [];
+  const teams = teamSnapshot ?? [];
   const eventCounts = new Map<string, number>();
   const districtCounts = new Map<string, number>();
   for (const event of events) {
