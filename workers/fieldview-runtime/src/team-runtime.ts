@@ -54,8 +54,11 @@ export class TeamRuntime {
     return interval;
   }
   private endpoints(year: number): string[] {
-    return [TBA_ENDPOINTS.team(this.teamKey), TBA_ENDPOINTS.teamDistricts(this.teamKey),
-      TBA_ENDPOINTS.teamEvents(this.teamKey, year), TBA_ENDPOINTS.teamMedia(this.teamKey, year)];
+    // Public team routes commonly use the numeric team number ("/team/3461"),
+    // while TBA v3 requires the provider key ("frc3461").
+    const providerTeamKey = /^\\d+$/.test(this.teamKey) ? "frc" + this.teamKey : this.teamKey;
+    return [TBA_ENDPOINTS.team(providerTeamKey), TBA_ENDPOINTS.teamDistricts(providerTeamKey),
+      TBA_ENDPOINTS.teamEvents(providerTeamKey, year), TBA_ENDPOINTS.teamMedia(providerTeamKey, year)];
   }
   private async bindTeamKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Team-Key");
