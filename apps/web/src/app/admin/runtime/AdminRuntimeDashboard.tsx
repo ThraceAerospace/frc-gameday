@@ -39,7 +39,7 @@ type RuntimeEntry = {
 };
 type Overview = {
   generated_at: string;
-  scheduler: { enabled: boolean; last_run_at: number | null; last_error: string | null; team_discovery_error: string | null };
+  scheduler: { enabled: boolean; last_run_at: number | null; next_alarm_at: number | null; last_error: string | null; team_discovery_error: string | null };
   events: RuntimeEntry[];
   teams: RuntimeEntry[];
   multiplexer: { connected_sockets: number | null; clients: number; subscriptions: Array<{ topic: string; clients: number }> } | null;
@@ -50,7 +50,7 @@ type Overview = {
 
 function dateTime(value?: number | null) {
   if (value == null) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC", timeZoneName: "short" }).format(new Date(value));
 }
 function age(value?: number | null) {
   if (value == null) return "Never";
@@ -62,7 +62,7 @@ function age(value?: number | null) {
 }
 function endpointRows(entry: RuntimeEntry): Endpoint[] {
   const values = entry.state?.endpoints;
-  if (Array.isArray(values)) return values;
+  if (Array.isArray(values)) {\n    const diagnostics = new Map((entry.state?.diagnostics ?? []).map((item) => [item.endpoint, item]));\n    return values.map((value) => ({ ...value, ...(diagnostics.get(value.endpoint) ?? {}) }));\n  }
   return Object.entries(values ?? {}).map(([key, value]) => ({
     ...value,
     endpoint: value.endpoint ?? key.replace(/^endpoint:/, ""),
@@ -189,7 +189,7 @@ export default function AdminRuntimeDashboard() {
           <span className={overview?.scheduler.enabled ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800" : "rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800"}>{overview?.scheduler.enabled ? "Running" : "Stopped"}</span>
         </div>
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div><div className="text-xs text-[var(--fv-muted)]">Last scheduler run</div><div className="mt-1 font-medium">{dateTime(overview?.scheduler.last_run_at)}</div></div>
+          <div><div className="text-xs text-[var(--fv-muted)]">Last scheduler run (UTC)</div><div className="mt-1 font-medium">{dateTime(overview?.scheduler.last_run_at)}</div></div>\n          <div><div className="text-xs text-[var(--fv-muted)]">Next scheduler alarm (UTC)</div><div className="mt-1 font-medium">{dateTime(overview?.scheduler.next_alarm_at)}</div></div>
           <div><div className="text-xs text-[var(--fv-muted)]">Registered event objects</div><div className="mt-1 font-medium tabular-nums">{overview?.inventory.events ?? 0}</div></div>
           <div><div className="text-xs text-[var(--fv-muted)]">Registered team objects</div><div className="mt-1 font-medium tabular-nums">{overview?.inventory.teams ?? 0}</div></div>
           <div><div className="text-xs text-[var(--fv-muted)]">Multiplexer connections</div><div className="mt-1 font-medium tabular-nums">{overview?.multiplexer?.connected_sockets ?? "Unavailable"} · {overview?.multiplexer?.clients ?? 0} clients</div></div>
