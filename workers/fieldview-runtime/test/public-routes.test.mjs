@@ -139,6 +139,8 @@ test("admin team seed ingests team resources and initializes every event runtime
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.event_seed.requested, 2);
+  assert.ok(calls.some((call) => call.operation === "team-id" && call.name === "frc3461"));
+  assert.ok(calls.some((call) => call.operation === "team-fetch" && call.id === "frc3461"));
   assert.equal(result.event_seed.attempted, 2);
   const past = calls.find((call) => call.operation === "event-fetch" && call.id === "2026past");
   const future = calls.find((call) => call.operation === "event-fetch" && call.id === "2026future");
