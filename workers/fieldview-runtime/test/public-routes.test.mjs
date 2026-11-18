@@ -235,6 +235,44 @@ test("public event discovery route reads the global scheduler cache without cred
 });
 
 
+test("public team discovery route reads the global scheduler cache without credentials", async () => {
+  const calls = [];
+  const env = {
+    EVENT_SCHEDULER: {
+      idFromName(name) { calls.push({ operation: "id", name }); return name; },
+      get(id) {
+        return {
+          async fetch(request) {
+            calls.push({
+              operation: "fetch",
+              id,
+              url: new URL(request.url).pathname + new URL(request.url).search,
+              method: request.method,
+              authorization: request.headers.get("Authorization"),
+            });
+            return Response.json({ year: 2026, teams: [] });
+          },
+        };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://runtime.example/teams/discovery?year=2026"),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [
+    { operation: "id", name: "global" },
+    {
+      operation: "fetch",
+      id: "global",
+      url: "/teams?year=2026",
+      method: "GET",
+      authorization: null,
+    },
+  ]);
+});
+
 test("internal lifecycle mutation route requires admin auth and forwards the request body", async () => {
   const { env, calls } = makeEnvironment();
   const body = { lifecycle: "active", upcomingIntervalMs: 1800000, activeIntervalMs: 300000 };
