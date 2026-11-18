@@ -42,8 +42,14 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
       }),
     },
     fetcher: async (url) => {
-      tbaRequests.push(String(url));
-      const year = Number(String(url).split("/").pop());
+      const requestUrl = String(url);
+      tbaRequests.push(requestUrl);
+      const year = Number(requestUrl.split("/").pop());
+      if (requestUrl.includes("/teams/")) {
+        return Response.json([{ key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" }], {
+          headers: { ETag: '"teams-' + year + '"' },
+        });
+      }
       const events = year === currentYear
         ? [{ key: "2026future", start_date: tomorrow, end_date: dayAfter, timezone: "America/New_York" }]
         : [];
@@ -58,7 +64,9 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
   assert.deepEqual(await started.json(), { started: true });
   await scheduler.alarm();
 
-  assert.equal(tbaRequests.length, 1);
+  assert.equal(tbaRequests.length, 2);
+  assert.ok(tbaRequests.some((url) => url.includes("/events/" + currentYear)));
+  assert.ok(tbaRequests.some((url) => url.includes("/teams/" + currentYear)));
   assert.match(tbaRequests[0], new RegExp("/events/" + currentYear + "$"));
   assert.equal(lifecycleRequests.length, 1);
   assert.equal(lifecycleRequests[0].id, "2026future");
@@ -196,6 +204,26 @@ test("public event discovery returns cached canonical events with provenance", a
     retrieved_at: "2026-01-02T03:04:05.000Z",
     validator: '"events-2026"',
   });
+});
+
+test("public team discovery returns canonical team records with provenance", async () => {
+  const storage = new MemoryStorage();
+  const updatedAt = Date.parse("2026-01-02T03:04:05.000Z");
+  await storage.put("team-discovery:2026", {
+    etag: '"teams-2026"',
+    updatedAt,
+    checkedAt: Date.now(),
+    teams: [{ key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" }],
+  });
+  const scheduler = new EventScheduler({ storage }, {});
+  const response = await scheduler.fetch(new Request("https://scheduler/teams?year=2026"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("ETag"), '"teams-2026"');
+  const payload = await response.json();
+  assert.equal(payload.year, 2026);
+  assert.equal(payload.teams[0].key, "frc3461");
+  assert.equal(payload.teams[0].sources.tba_teams.status, "available");
+  assert.equal(payload.teams[0].sources.tba_teams.retrieved_at, "2026-01-02T03:04:05.000Z");
 });
 
 test("public event discovery rejects invalid years and reports a cold cache", async () => {
