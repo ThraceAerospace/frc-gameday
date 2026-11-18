@@ -16,7 +16,7 @@ import type {
 } from "./cloudflare.ts";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
-import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventPredictions, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../packages/providers/tba/src/types.ts";
+import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoints, TBAEventOPRs, TBAEventPredictions, TBAEventRanking, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { StatboticsMatch } from "../../../packages/providers/statbotics/src/types.ts";
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
@@ -351,6 +351,9 @@ export class EventRuntime {
     const alliancesEndpoint = endpoints[4];
     const oprsEndpoint = endpoints[5];
     const predictionsEndpoint = endpoints[6];
+    const rankingsEndpoint = TBA_ENDPOINTS.eventRankings(this.eventKey);
+    const awardsEndpoint = TBA_ENDPOINTS.eventAwards(this.eventKey);
+    const advancementPointsEndpoint = TBA_ENDPOINTS.eventAdvancementPoints(this.eventKey);
     const statboticsMatchesEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     // Read the aggregate's endpoint state and version from one transaction so
     // a snapshot can never combine data from opposite sides of a mutation.
@@ -363,12 +366,16 @@ export class EventRuntime {
       alliances: await transaction.get<EndpointState<unknown>>(endpointStorageKey(alliancesEndpoint)),
       oprs: await transaction.get<EndpointState<unknown>>(endpointStorageKey(oprsEndpoint)),
       predictions: await transaction.get<EndpointState<unknown>>(endpointStorageKey(predictionsEndpoint)),
+      rankings: await transaction.get<EndpointState<unknown>>(endpointStorageKey(rankingsEndpoint)),
+      awards: await transaction.get<EndpointState<unknown>>(endpointStorageKey(awardsEndpoint)),
+      advancementPoints: await transaction.get<EndpointState<unknown>>(endpointStorageKey(advancementPointsEndpoint)),
       statboticsMatches: await transaction.get<EndpointState<unknown>>(endpointStorageKey(statboticsMatchesEndpoint)),
     }));
     const {
       event: eventState, teams: teamsState, statuses: statusesState,
       matches: matchesState, alliances: alliancesState, oprs: oprsState,
-      predictions: predictionsState, statboticsMatches: statboticsMatchesState,
+      predictions: predictionsState, rankings: rankingsState, awards: awardsState,
+      advancementPoints: advancementPointsState, statboticsMatches: statboticsMatchesState,
     } = state;
     const now = Date.now();
     const eventSource = toSourceMetadata(eventState, now);
@@ -378,6 +385,9 @@ export class EventRuntime {
     const alliancesSource = toSourceMetadata(alliancesState, now);
     const oprsSource = toSourceMetadata(oprsState, now);
     const predictionsSource = toSourceMetadata(predictionsState, now);
+    const rankingsSource = toSourceMetadata(rankingsState, now);
+    const awardsSource = toSourceMetadata(awardsState, now);
+    const advancementPointsSource = toSourceMetadata(advancementPointsState, now);
     const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
 
     return {
@@ -396,6 +406,15 @@ export class EventRuntime {
         ...(hasAcquiredValue(oprsState) ? { tba_event_oprs: oprsState!.data as TBAEventOPRs | null } : {}),
         ...(hasAcquiredValue(predictionsState)
           ? { tba_event_predictions: predictionsState!.data as TBAEventPredictions | null }
+          : {}),
+        ...(hasAcquiredValue(rankingsState)
+          ? { tba_event_rankings: rankingsState!.data as TBAEventRanking | null }
+          : {}),
+        ...(hasAcquiredValue(awardsState)
+          ? { tba_event_awards: awardsState!.data as TBAAward[] | null }
+          : {}),
+        ...(hasAcquiredValue(advancementPointsState)
+          ? { tba_event_advancement_points: advancementPointsState!.data as TBAEventAdvancementPoints | null }
           : {}),
         ...(hasAcquiredValue(statboticsMatchesState)
           ? { statbotics_matches: statboticsMatchesState!.data as StatboticsMatch[] | null }
@@ -417,6 +436,11 @@ export class EventRuntime {
           },
           playoff_alliances: alliancesSource
             ? { tba_playoff_alliances: alliancesSource }
+            : {},
+          rankings: rankingsSource ? { tba_event_rankings: rankingsSource } : {},
+          awards: awardsSource ? { tba_event_awards: awardsSource } : {},
+          advancement_points: advancementPointsSource
+            ? { tba_event_advancement_points: advancementPointsSource }
             : {},
         },
       }),
