@@ -60,6 +60,7 @@ export class TeamRuntime {
   private async bindTeamKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Team-Key");
     if (!requested || !validKey(requested)) return false;
+    if (this.teamKey && this.teamKey !== requested) return false;
     const stored = await this.storage.get<string>("team-key");
     if (stored && stored !== requested) return false;
     if (!stored) await this.storage.transaction(async (tx) => {
