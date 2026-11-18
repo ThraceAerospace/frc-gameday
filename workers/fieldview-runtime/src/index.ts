@@ -110,7 +110,7 @@ export default {
     const validInternalTeamRoute = internalTeamParts.length === 5 &&
       internalTeamParts[1] === "internal" && internalTeamParts[2] === "teams" &&
       /^[a-zA-Z0-9_-]+$/.test(internalTeamKey ?? "") &&
-      ["state", "refresh"].includes(internalTeamAction ?? "");
+      ["state", "refresh", "seed"].includes(internalTeamAction ?? "");
     if (validInternalTeamRoute) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
