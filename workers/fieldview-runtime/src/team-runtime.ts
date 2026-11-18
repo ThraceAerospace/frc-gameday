@@ -175,7 +175,7 @@ export class TeamRuntime {
     });
     for (const task of due) {
       const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
-      const initial = stored ?? createEndpointState<unknown>(task.endpoint);
+      const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(task.endpoint);
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
       if (requestState.ifNoneMatch) headers.set("If-None-Match", requestState.ifNoneMatch);
       let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
