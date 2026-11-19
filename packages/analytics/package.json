@@ -10,7 +10,8 @@
     "./definitions": "./src/definitions.ts",
     "./audit": "./src/audit.ts",
     "./match-flags": "./src/match-flags.ts",
-    "./season-diagnostics": "./src/season-diagnostics.ts"
+    "./season-diagnostics": "./src/season-diagnostics.ts",
+    "./invalidation": "./src/invalidation.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
