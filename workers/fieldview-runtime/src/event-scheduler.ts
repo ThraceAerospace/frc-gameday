@@ -954,6 +954,8 @@ export class EventScheduler {
           const endpoints = state.endpoints ?? [];
           const acquired = endpoints.filter((item) => item.last_fetched_at != null).length;
           const unavailable = endpoints.filter((item) => item.status === "unavailable").length;
+          const snapshot = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year, { headers }));
+          if (!snapshot.ok) throw new Error("TeamRuntime season snapshot generation returned HTTP " + snapshot.status);
           if (acquired === resources.length) job.counts.teams_complete += 1;
           else if (acquired > 0 || unavailable > 0) job.counts.teams_partial += 1;
           else job.counts.teams_failed += 1;
