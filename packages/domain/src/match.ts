@@ -13,6 +13,7 @@ import type {
 import type { FieldViewPlayoffAlliance } from "./playoff-alliance.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
 import type { TeamKey } from "./ids.js";
+import type { FieldViewAnalyticsAudit } from "./analytics.js";
 
 /** Per-team values associated with one alliance in one match. */
 export interface FieldViewMatchTeam {
@@ -62,6 +63,8 @@ export interface FieldViewMatchAnalysis {
     red: FieldViewAllianceEPAAnalysis;
     blue: FieldViewAllianceEPAAnalysis;
   };
+  /** Reproducible input/definition provenance for the calculated analysis. */
+  audit?: FieldViewAnalyticsAudit;
 }
 
 export type FieldViewPredictionLabel =
