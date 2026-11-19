@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 type Kind = "event" | "team";
 type Endpoint = {
@@ -29,7 +30,7 @@ type Overview = {
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[] };
 
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ children }: { children: ReactNode }) {
   return <section className="rounded-2xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 sm:p-5">{children}</section>;
 }
 function time(value?: number | null) {
@@ -123,12 +124,12 @@ export default function AdminOperationsDashboard() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load entity state"); }
   }, [requestHeaders]);
 
-  const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string) => {
+  const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string) => {
     setBusy(true); setMessage(""); setError("");
     try {
       const response = await fetch("/api/admin/runtime", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: entityKind, action, ...(key ? { key } : {}) }),
+        body: JSON.stringify({ kind: entityKind, action, ...(key ? { key } : {}), ...(endpoint ? { endpoint } : {}) }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
