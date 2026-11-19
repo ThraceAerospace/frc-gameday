@@ -222,7 +222,31 @@ export interface FieldViewTeamAnalytics {
   season_history?: FieldViewTeamSeasonHistoryEntry[];
   /** Match-level review prompts and supporting values. */
   review_matches?: FieldViewTeamAnalyticsMatch[];
+  /** Complete canonical match evidence for season-level diagnostics. Includes unflagged matches. */
+  match_evidence?: FieldViewTeamMatchEvidence[];
   audit?: FieldViewAnalyticsAudit;
+}
+
+
+/** Complete team-side and opponent-side evidence for one completed match. */
+export interface FieldViewTeamMatchEvidence {
+  match_key: string;
+  match_label: string;
+  competition_level: string;
+  alliance: "red" | "blue";
+  partner_team_numbers: number[];
+  opponent_team_numbers: number[];
+  predicted_score: number | null;
+  actual_score: number | null;
+  score_residual: number | null;
+  opponent_predicted_score: number | null;
+  opponent_actual_score: number | null;
+  opponent_score_residual: number | null;
+  win_probability: number | null;
+  won: boolean | null;
+  pre_match_epa: number | null;
+  post_match_epa: number | null;
+  epa_change: number | null;
 }
 
 /** One alliance-side observation used by event-wide score analysis. */
