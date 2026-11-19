@@ -3,7 +3,7 @@
 import { EventState, type EventStateSnapshot } from "./EventState";
 import { eventWebSocket, type EventWebSocketStatus } from "@/lib/realtime/client";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
-import { workerEventWebSocket, type CanonicalAnalyticsPublication } from "./workerRealtime";
+import type { CanonicalAnalyticsPublication } from "./workerRealtime";
 
 type SnapshotListener = () => void;
 type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
@@ -164,7 +164,8 @@ export function getCanonicalEventSnapshot(
 }
 
 export function refreshCanonicalEventAnalytics(eventKey: string): void {
-  workerEventWebSocket.refreshCanonicalAnalytics(eventKey);
+  if (!eventKey) return;
+  post({ type: "refreshCanonicalAnalytics", eventKey });
 }
 
 export function getCanonicalEventAnalytics(eventKey: string): CanonicalAnalyticsPublication | undefined {
