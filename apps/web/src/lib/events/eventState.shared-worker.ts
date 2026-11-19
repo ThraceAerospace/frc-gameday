@@ -123,7 +123,7 @@ function subscribeCanonical(port: MessagePort, eventKey: string) {
   if (subscribed.has(eventKey)) return;
   let record = events.get(eventKey);
   if (!record) {
-    record = { clients: new Map(), canonicalClients: new Map() };
+    record = { clients: new Map(), canonicalClients: new Map(), analyticsClients: new Map() };
     events.set(eventKey, record);
   }
   if (!record.canonicalClients.has(port)) {
