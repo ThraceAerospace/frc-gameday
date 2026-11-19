@@ -21,6 +21,7 @@ export * from "./normalization/event.js";
 export * from "./normalization/team.js";
 export * from "./normalization/team-snapshot.js";
 export * from "./normalization/team-state.js";
+export * from "./normalization/event-state.js";
 export * from "./normalization/event-snapshot.js";
 
 export * from "./normalization/playoff-alliance.js";
