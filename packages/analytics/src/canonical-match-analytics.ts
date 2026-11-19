@@ -5,6 +5,8 @@ import type { AnalyticsMatch } from "./types.ts";
 import { buildAllianceResults } from "./calculations.ts";
 import { buildQualificationAnalysis } from "./calculations.ts";
 import { buildMatchFlags } from "./match-flags.ts";
+import { createAnalyticsAudit } from "./audit.ts";
+import type { FieldViewAnalyticsInputRecord } from "../../domain/src/analytics.ts";
 
 function epaValues(
   teams: FieldViewMatch["teams"]["red"],
@@ -60,9 +62,10 @@ function toAnalyticsRecord(match: FieldViewMatch): AnalyticsMatch {
  * event's normalized provider observations. This runs in EventRuntime and
  * contains no provider I/O. Existing dashboard flag thresholds are reused.
  */
-export function calculateCanonicalMatchAnalytics(
+export async function calculateCanonicalMatchAnalytics(
   eventState: FieldViewEventState,
-): FieldViewEventState {
+  inputRecords: FieldViewAnalyticsInputRecord[] = [],
+): Promise<FieldViewEventState> {
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
 
   const records = eventState.matches.map(toAnalyticsRecord);
@@ -74,6 +77,25 @@ export function calculateCanonicalMatchAnalytics(
     eventState.event?.playoff_type,
   );
   const flagContext = { allianceResults, qualificationAnalysis };
+  const audit = await createAnalyticsAudit({
+    calculation_id: crypto.randomUUID(),
+    calculated_at: Date.now(),
+    inputs: inputRecords,
+    definition_keys: [
+      "alliance-score-residual",
+      "alliance-pre-match-epa-total",
+      "match-prediction-label",
+      "match-model-upset",
+      "match-phase-score-anomaly",
+      "match-large-score-delta",
+      "match-high-alliance-epa",
+      "match-high-penalties",
+      "qualification-prediction-calibration",
+      "qualification-penalty-outliers",
+    ],
+    warnings: inputRecords.filter((input) => input.status !== "available")
+      .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
+  });
   const resultByMatchAndColor = new Map(
     allianceResults.map((result) => [`${result.matchKey}:${result.color}`, result]),
   );
@@ -112,6 +134,7 @@ export function calculateCanonicalMatchAnalytics(
       analysis: {
         score: { red: red.score, blue: blue.score },
         alliance_epa: { red: red.alliance_epa, blue: blue.alliance_epa },
+        audit,
       },
       flags: buildMatchFlags(flagContext, record),
     };
