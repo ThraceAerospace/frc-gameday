@@ -124,16 +124,40 @@ function analyticsSourceForEndpoint(endpoint: string, eventKey: string): Analyti
   return null;
 }
 
-function changedMatchKeys(previous: unknown, next: unknown): string[] | null {
+function matchAnalyticsProjection(value: unknown, source: AnalyticsSourceKey): unknown {
+  if (source === "statbotics-event-matches" || !isRecord(value)) return value;
+  const alliances = isRecord(value.alliances) ? value.alliances : {};
+  const alliance = (color: "red" | "blue") => {
+    const side = alliances[color];
+    if (!isRecord(side)) return null;
+    return { team_keys: side.team_keys, score: side.score };
+  };
+  return {
+    key: value.key,
+    event_key: value.event_key,
+    comp_level: value.comp_level,
+    set_number: value.set_number,
+    match_number: value.match_number,
+    alliances: { red: alliance("red"), blue: alliance("blue") },
+    winning_alliance: value.winning_alliance,
+    score_breakdown: value.score_breakdown,
+  };
+}
+
+function changedMatchKeys(
+  previous: unknown,
+  next: unknown,
+  source: AnalyticsSourceKey,
+): string[] | null {
   if (!Array.isArray(previous) || !Array.isArray(next)) return null;
   const keyOf = (value: unknown) => isRecord(value) && typeof value.key === "string" ? value.key : null;
   const before = new Map(previous.flatMap((match) => {
     const key = keyOf(match);
-    return key === null ? [] : [[key, match] as const];
+    return key === null ? [] : [[key, matchAnalyticsProjection(match, source)] as const];
   }));
   const after = new Map(next.flatMap((match) => {
     const key = keyOf(match);
-    return key === null ? [] : [[key, match] as const];
+    return key === null ? [] : [[key, matchAnalyticsProjection(match, source)] as const];
   }));
   const changed = [...new Set([...before.keys(), ...after.keys()])]
     .filter((key) => JSON.stringify(before.get(key)) !== JSON.stringify(after.get(key)))
@@ -1167,7 +1191,7 @@ export class EventRuntime {
             analyticsSource,
             Date.now(),
             analyticsSource === "tba-event-matches" || analyticsSource === "statbotics-event-matches"
-              ? changedMatchKeys(latest.providerData, next.providerData)
+              ? changedMatchKeys(latest.providerData, next.providerData, analyticsSource)
               : null,
           );
         }
