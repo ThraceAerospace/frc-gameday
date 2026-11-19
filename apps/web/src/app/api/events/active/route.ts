@@ -121,8 +121,9 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch active events:", error);
 
-    return Response.json([], {
-      status: 200,
+    return Response.json({ error: "Event discovery is temporarily unavailable" }, {
+      status: 502,
+      headers: { "Cache-Control": "no-store" },
     });
   }
 }
