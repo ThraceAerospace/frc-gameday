@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import { getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 
 function normalizeTeamKey(team: string) {
@@ -20,7 +21,7 @@ function hasTrackedTeam(
 
 type Options = {
   eventKey: string;
-  eventState: EventStateSnapshot | null;
+  snapshot: FieldViewEventSnapshot | undefined;
   trackedTeams: string[];
   autoHighlight: boolean;
   actions: TileSurfaceActions;
@@ -28,7 +29,7 @@ type Options = {
 
 export function useUpcomingMatchAlert({
   eventKey,
-  eventState,
+  snapshot,
   trackedTeams,
   autoHighlight,
   actions,
@@ -36,14 +37,19 @@ export function useUpcomingMatchAlert({
   const previousUpcomingMatchRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const upcomingMatchKey = eventState?.upcomingMatchKey ?? null;
+    const nextMatch = snapshot?.matches ? getNextMatch(sortMatches(snapshot.matches)) : null;
+    const upcomingMatchKey = nextMatch?.key ?? null;
+    const upcomingMatchTeamKeys = [
+      ...(nextMatch?.alliances.red.team_keys ?? []),
+      ...(nextMatch?.alliances.blue.team_keys ?? []),
+    ];
     const previous = previousUpcomingMatchRef.current;
 
     const trackedUpcoming = Boolean(
       upcomingMatchKey &&
-      eventState &&
+      snapshot &&
       hasTrackedTeam(
-        eventState.upcomingMatchTeamKeys,
+        upcomingMatchTeamKeys,
         trackedTeams,
       ),
     );
@@ -51,7 +57,7 @@ export function useUpcomingMatchAlert({
     if (
       upcomingMatchKey === previous &&
       upcomingMatchKey &&
-      eventState &&
+      snapshot &&
       !trackedUpcoming
     ) {
       actions.setUpcomingMatchAlert({
@@ -86,15 +92,15 @@ export function useUpcomingMatchAlert({
   }, [
     actions,
     eventKey,
-    eventState,
+    snapshot,
     trackedTeams,
   ]);
 
   const activeMatchHighlightRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const nextMatchKey = eventState?.eventNextMatch?.key ?? null;
-    const statuses = eventState?.teamsStatuses ?? {};
+    const nextMatchKey = snapshot?.matches ? getNextMatch(sortMatches(snapshot.matches))?.key ?? null : null;
+    const statuses = Object.fromEntries((snapshot?.event_teams ?? []).map((entry) => [entry.team_key, entry.tba_status]));
     const imminentMatchKey =
       autoHighlight && nextMatchKey && trackedTeams.some((team) =>
         statuses[normalizeTeamKey(team)]?.next_match_key === nextMatchKey
@@ -125,8 +131,8 @@ export function useUpcomingMatchAlert({
     actions,
     autoHighlight,
     eventKey,
-    eventState?.eventNextMatch?.key,
-    eventState?.teamsStatuses,
+    snapshot?.matches,
+    snapshot?.event_teams,
     trackedTeams,
   ]);
 
