@@ -1,4 +1,4 @@
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 import type {
   UpcomingMatchAlert,
   TileSurfaceState,
@@ -31,7 +31,7 @@ export type TileSurfaceActions = {
   openEventPicker(): void;
   closeEventPicker(): void;
   setEventSearch(search: string): void;
-  addEvent(event: TBAEvent): void;
+  addEvent(event: FieldViewEvent): void;
   removeEvent(tileId: string): void;
 
   registerLabel(eventKey: string, label: string): void;
