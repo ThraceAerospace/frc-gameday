@@ -641,7 +641,7 @@ export class EventScheduler {
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
         event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[];
-        counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_stale: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_stale: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>("admin:coverage-audit:" + year);
       if (!audit) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, { headers: { "Cache-Control": "no-store" } });
       const snapshotChanged = !discoveryReady ||
@@ -669,7 +669,7 @@ export class EventScheduler {
         year: number; status: string; started_at: number; updated_at: number;
         event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[]; cursor: number;
-        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_stale: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_stale: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
@@ -692,7 +692,7 @@ export class EventScheduler {
           event_discovery_updated_at: eventDiscovery.updatedAt,
           team_discovery_updated_at: teamDiscovery.updatedAt,
           event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
-          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_state_complete: 0, event_state_partial: 0, event_state_missing: 0, event_state_failed: 0, event_analytics_succeeded: 0, event_analytics_partial: 0, event_analytics_waiting: 0, event_analytics_missing: 0, event_analytics_failed: 0, event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0, team_snapshot_complete: 0, team_snapshot_partial: 0, team_snapshot_missing: 0, team_snapshot_failed: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
+          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_state_complete: 0, event_state_partial: 0, event_state_stale: 0, event_state_missing: 0, event_state_failed: 0, event_analytics_succeeded: 0, event_analytics_partial: 0, event_analytics_stale: 0, event_analytics_waiting: 0, event_analytics_missing: 0, event_analytics_failed: 0, event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0, team_snapshot_complete: 0, team_snapshot_partial: 0, team_snapshot_missing: 0, team_snapshot_failed: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
         };
         await this.storage.put(storageKey, audit);
       }
@@ -762,11 +762,13 @@ export class EventScheduler {
             const eventStateStatus = state.event_state?.status ?? "missing";
             if (eventStateStatus === "complete") audit.counts.event_state_complete += 1;
             else if (eventStateStatus === "partial") audit.counts.event_state_partial += 1;
+            else if (eventStateStatus === "stale") audit.counts.event_state_stale += 1;
             else if (eventStateStatus === "failed") audit.counts.event_state_failed += 1;
             else audit.counts.event_state_missing += 1;
             const analyticsStatus = state.analytics?.status ?? "missing";
             if (analyticsStatus === "succeeded") audit.counts.event_analytics_succeeded += 1;
             else if (analyticsStatus === "partial") audit.counts.event_analytics_partial += 1;
+            else if (analyticsStatus === "stale") audit.counts.event_analytics_stale += 1;
             else if (analyticsStatus === "waiting-for-cohort") audit.counts.event_analytics_waiting += 1;
             else if (analyticsStatus === "failed") audit.counts.event_analytics_failed += 1;
             else audit.counts.event_analytics_missing += 1;
