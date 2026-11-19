@@ -299,6 +299,7 @@ export function calculateCanonicalAggregateAnalytics(
       })),
     })),
   };
+  const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
   const team_states = eventState.team_states === undefined || eventState.team_states === null
     ? eventState.team_states
     : eventState.team_states.map((teamState) => {
@@ -328,8 +329,8 @@ export function calculateCanonicalAggregateAnalytics(
             : match.alliances.blue.team_keys.includes(teamState.team_key) ? "blue" as const : null;
           if (!alliance) return [];
           const opponentAlliance = alliance === "red" ? "blue" as const : "red" as const;
-          const own = allianceResults.find((item) => item.matchKey === match.key && item.color === alliance);
-          const opponent = allianceResults.find((item) => item.matchKey === match.key && item.color === opponentAlliance);
+          const own = allianceResultByMatch.get(match.key + ":" + alliance);
+          const opponent = allianceResultByMatch.get(match.key + ":" + opponentAlliance);
           const redProbability = record.statbotics?.pred?.red_win_prob;
           const winProbability = typeof redProbability === "number" && redProbability >= 0 && redProbability <= 1
             ? alliance === "red" ? redProbability : 1 - redProbability : null;
