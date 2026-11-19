@@ -758,7 +758,7 @@ export class EventRuntime {
     };
   }
 
-  private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; sourceRevision: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
+  private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -909,12 +909,14 @@ export class EventRuntime {
             status: "unavailable",
           }]
         : [];
+      const analyticsInputs = [...inputRecords, ...(seasonCollection?.inputs ?? []), ...missingCohortInput];
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
+        analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available"),
         state: await calculateCanonicalMatchAnalytics(
           normalizedState,
-          [...inputRecords, ...(seasonCollection?.inputs ?? []), ...missingCohortInput],
+          analyticsInputs,
           seasonCollection?.cohort,
         ),
       };
@@ -1140,7 +1142,7 @@ export class EventRuntime {
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
     await this.storage.put("analytics:status", "running");
-    let calculated: { version: number; sourceRevision: number; state: ReturnType<typeof normalizeFieldViewEventState> };
+    let calculated: { version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> };
     try {
       const allowPartialCohort = await this.storage.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       calculated = await this.buildEventState(true, allowPartialCohort);
@@ -1190,6 +1192,11 @@ export class EventRuntime {
         ? calculated.state.analytics.season_cohort.state
         : undefined;
       const cohortIncomplete = cohortState !== undefined && cohortState !== "complete";
+      const collectionPartial = isRecord(calculated.state.analytics) &&
+        isRecord(calculated.state.analytics.collection) &&
+        calculated.state.analytics.collection.state === "partial";
+      const analyticsIncomplete = calculated.analyticsInputsComplete === false ||
+        cohortIncomplete || collectionPartial || (allowPartialCohort && cohortState === undefined);
       const allowPartialCohort = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       const cohortRetries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
       const terminalDiscoveryGap = allowPartialCohort && cohortState === "discovering";
@@ -1200,7 +1207,7 @@ export class EventRuntime {
       } else {
         await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
         await transaction.delete(ANALYTICS_DUE_KEY);
-        await transaction.put("analytics:status", cohortIncomplete || (allowPartialCohort && cohortState === undefined) ? "partial" : "succeeded");
+        await transaction.put("analytics:status", analyticsIncomplete ? "partial" : "succeeded");
       }
       await transaction.delete(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY);
       await transaction.delete("analytics:last-error");
