@@ -1040,7 +1040,8 @@ export class EventScheduler {
             }
           }
         } else {
-          const snapshot = await stub.fetch(new Request("https://event-runtime/snapshot", {
+          const snapshot = await stub.fetch(new Request("https://event-runtime/publish-state", {
+            method: "POST",
             headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
           }));
           if (!snapshot.ok) throw new Error("EventState generation returned HTTP " + snapshot.status);
