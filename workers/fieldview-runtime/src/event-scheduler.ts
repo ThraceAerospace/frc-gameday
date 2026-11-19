@@ -746,14 +746,14 @@ export class EventScheduler {
             continue;
           }
           const state = await response.json() as {
-            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
-              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
+            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
+              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
             analytics?: { status?: string; cohort_status?: string | null };
             event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
           };
           const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
           const acquiredResources = endpointStates.filter((resource) =>
-            resource.lastFetchedAt != null || resource.last_fetched_at != null).length;
+            resource.lastFetchedAt != null || resource.last_fetched_at != null || resource.lastWebhookAt != null || resource.last_webhook_at != null).length;
           const incompleteResources = endpointStates.filter((resource) =>
             resource.status === "failed" || resource.status === "unavailable" || resource.status === "stale" ||
             ((resource.expiresAt ?? resource.expires_at) != null && (resource.expiresAt ?? resource.expires_at)! < Date.now())).length;
