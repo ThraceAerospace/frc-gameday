@@ -2,7 +2,7 @@
 
 ## Status
 
-Design contract only. The admin command center does not yet expose or execute a full-season ingest. Do not use the existing per-team `seed` action as a substitute: it synchronously refreshes a team and fans out scheduling work to every event associated with that team.
+Design contract only. The admin command center does not yet expose or execute a full-season ingest. The full-season coverage audit is implemented separately and does not make provider requests. Do not use the existing per-team `seed` action as a substitute: it synchronously refreshes a team and fans out scheduling work to every event associated with that team. Likewise, the current event single-resource refresh path can invoke the EventRuntime alarm, which may process other due resources; it is not a safe primitive for a globally paced ingest job. Before enabling ingestion, add isolated one-resource execution to both runtime types and a shared request gate that normal EventRuntime and TeamRuntime alarms also honor. Otherwise normal polling could overlap the season job and invalidate its advertised global request interval.
 
 ## Scope
 
