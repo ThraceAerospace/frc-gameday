@@ -6,12 +6,20 @@ import type {
   FieldViewAnalyticsPopulation,
   FieldViewMetricResult,
   FieldViewTeamAnalytics,
+  FieldViewAnalyticsAllianceResult,
+  FieldViewAnalyticsTeamSummary,
+  FieldViewQualificationAnalytics,
+  FieldViewQualificationAnomaly,
+  FieldViewPlayoffAnalytics,
 } from "../../domain/src/analytics.ts";
 import type { AnalyticsMatch, AllianceResult } from "./types.ts";
 import {
   buildReviewFindings,
   buildTeamInsights,
   buildTeamRows,
+  buildQualificationAnalysis,
+  buildQualificationAnomalies,
+  buildPlayoffAnalysis,
   mean,
   standardDeviation,
 } from "./calculations.ts";
@@ -162,6 +170,11 @@ export function calculateCanonicalAggregateAnalytics(
   const teamRows = buildTeamRows(teams, oprs, records);
   const insights = buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
   const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
+  const qualificationAnalysis = buildQualificationAnalysis(
+    records, records.map((record) => record.match), allianceResults, eventState.event?.playoff_type,
+  );
+  const qualificationAnomalies = buildQualificationAnomalies(records, allianceResults, eventState.event?.playoff_type);
+  const playoffAnalysis = buildPlayoffAnalysis(allianceResults, eventState.playoff_alliances ?? null);
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const residualPopulation = population("event-alliance-sides", allianceResults.length, residuals.length);
   const winChecks = records.flatMap((record) => {
@@ -179,6 +192,82 @@ export function calculateCanonicalAggregateAnalytics(
     metric("winner-prediction-accuracy", "qualification-prediction-calibration", winChecks.length ? winChecks.reduce((sum, value) => sum + value, 0) / winChecks.length : null, "ratio", winChecks.length, population("event-matches-with-prediction-and-known-winner", records.length, winChecks.length), ["Retains the existing >= 0.5 red-favorite tie convention used by the legacy event prediction summary."]),
   ];
 
+  const allianceResultsDomain: FieldViewAnalyticsAllianceResult[] = allianceResults.map((item) => ({
+    match_key: item.matchKey, match_label: item.matchLabel, competition_level: item.compLevel,
+    alliance: item.color, team_keys: item.teamKeys, predicted_score: item.predicted,
+    actual_score: item.actual, score_residual: item.residual, pre_match_epa_total: item.preEpaTotal,
+    winner: item.winner, outcome: item.outcome,
+  }));
+  const teamSummaries: FieldViewAnalyticsTeamSummary[] = teamRows.map((item) => ({
+    team_key: item.teamKey, team_number: item.teamNumber, name: item.name,
+    opr: item.opr, dpr: item.dpr, ccwm: item.ccwm, epa: item.epa,
+    auto_epa: item.autoEpa, teleop_epa: item.teleopEpa, endgame_epa: item.endgameEpa,
+    matches_seen: item.matchesSeen, epa_percentile: item.epaPercentile,
+    epa_contribution_percent: item.epaContributionPercent, epa_contribution_samples: item.epaContributionSamples,
+  }));
+  const qualificationDomain: FieldViewQualificationAnalytics = {
+    prediction_calibration: {
+      match_count: qualificationAnalysis.predictionCalibration.matchCount,
+      correct_count: qualificationAnalysis.predictionCalibration.correctCount,
+      underdog_wins: qualificationAnalysis.predictionCalibration.underdogWins,
+      accuracy: qualificationAnalysis.predictionCalibration.accuracy,
+      brier_score: qualificationAnalysis.predictionCalibration.brierScore,
+      high_confidence_misses: qualificationAnalysis.predictionCalibration.highConfidenceMisses.map((item) => ({
+        match_key: item.matchKey, match_label: item.matchLabel, predicted_winner: item.predictedWinner, probability: item.probability,
+      })),
+      bins: qualificationAnalysis.predictionCalibration.bins.map((item) => ({
+        label: item.label, count: item.count, mean_predicted: item.meanPredicted,
+        observed_red_win_rate: item.observedRedWinRate, calibration_error: item.calibrationError,
+      })),
+    },
+    score_prediction: {
+      alliance_count: qualificationAnalysis.scorePrediction.allianceCount,
+      mean_absolute_error: qualificationAnalysis.scorePrediction.meanAbsoluteError,
+      root_mean_square_error: qualificationAnalysis.scorePrediction.rootMeanSquareError,
+      mean_residual: qualificationAnalysis.scorePrediction.meanResidual,
+      within_25_count: allianceResults.filter((item) => item.compLevel.toLowerCase() === "qm" && item.residual !== null && Math.abs(item.residual) <= 25).length,
+      win_prediction_count: winChecks.length,
+      win_prediction_accuracy: winChecks.length ? winChecks.reduce((sum, value) => sum + value, 0) / winChecks.length : null,
+    },
+    progression: qualificationAnalysis.progression.map((item) => ({
+      label: item.label, first_match: item.firstMatch, last_match: item.lastMatch,
+      alliance_count: item.allianceCount, mean_absolute_error: item.meanAbsoluteError, mean_residual: item.meanResidual,
+    })),
+    penalties: {
+      sample_size: qualificationAnalysis.penalties.sampleSize,
+      matches_with_penalty_points: qualificationAnalysis.penalties.matchesWithPenaltyPoints,
+      total_penalty_points: qualificationAnalysis.penalties.totalPenaltyPoints,
+      mean_penalty_points: qualificationAnalysis.penalties.meanPenaltyPoints,
+      median_penalty_points: qualificationAnalysis.penalties.medianPenaltyPoints,
+      outlier_threshold: qualificationAnalysis.penalties.outlierThreshold,
+      flagged_matches: qualificationAnalysis.penalties.flaggedMatches.map((item) => ({
+        match_key: item.matchKey, match_label: item.matchLabel, match_number: item.matchNumber,
+        red_penalty_count: item.redPenaltyCount, blue_penalty_count: item.bluePenaltyCount,
+        red_penalty_points: item.redPenaltyPoints, blue_penalty_points: item.bluePenaltyPoints,
+        total_penalty_points: item.totalPenaltyPoints, red_flagged: item.redFlagged, blue_flagged: item.blueFlagged,
+      })),
+    },
+  };
+  const qualificationAnomaliesDomain: FieldViewQualificationAnomaly[] = qualificationAnomalies.map((item) => ({
+    anomaly_key: item.id, match_key: item.matchKey, match_label: item.matchLabel, alliance: item.alliance,
+    team_keys: item.teamKeys, predicted_score: item.predicted, actual_score: item.actual, score_residual: item.residual,
+    margin_of_error: item.marginOfError, standardized_residual: item.standardizedResidual, win_probability: item.winProbability,
+    outside_expected_range: item.outsideExpectedRange, high_confidence_miss: item.highConfidenceMiss,
+    severity: item.severity, reasons: item.reasons,
+  }));
+  const playoffsDomain: FieldViewPlayoffAnalytics = {
+    match_count: playoffAnalysis.matchCount, alliance_count: playoffAnalysis.allianceCount,
+    alliances: playoffAnalysis.alliances.map((item) => ({
+      name: item.name, team_keys: item.teamKeys, match_count: item.matchCount, scored_match_count: item.scoredMatchCount,
+      wins: item.wins, losses: item.losses, ties: item.ties, unknown_outcomes: item.unknownOutcomes,
+      mean_predicted_score: item.meanPredicted, mean_actual_score: item.meanActual,
+      mean_score_residual: item.meanResidual, residual_standard_deviation: item.residualStandardDeviation,
+      matches: item.matches.map((match) => ({
+        match_key: match.matchKey, competition_level: match.compLevel, alliance: match.color, outcome: match.outcome,
+        score_residual: match.residual, actual_score: match.actual, predicted_score: match.predicted,
+      })),
+    })),
+  };
   const team_states = eventState.team_states === undefined || eventState.team_states === null
     ? eventState.team_states
     : eventState.team_states.map((teamState) => {
@@ -210,6 +299,35 @@ export function calculateCanonicalAggregateAnalytics(
           event_key: teamState.event_key,
           metrics,
           findings: teamFindings,
+          ...(insight ? {
+            summary: insight.summary,
+            performance: {
+              rank: insight.metrics.rank, wins: insight.metrics.wins, losses: insight.metrics.losses,
+              ties: insight.metrics.ties, matches_seen: insight.metrics.matchesSeen,
+              completed_matches: insight.metrics.completedMatches, epa: insight.metrics.epa,
+              epa_percentile: insight.metrics.epaPercentile, auto_epa: insight.metrics.autoEpa,
+              teleop_epa: insight.metrics.teleopEpa, endgame_epa: insight.metrics.endgameEpa,
+              epa_start: insight.metrics.epaStart, epa_end: insight.metrics.epaEnd, epa_change: insight.metrics.epaChange,
+            },
+            epa_trend: insight.epaTrend.map((point) => ({ match_key: point.matchKey, match_label: point.matchLabel, epa: point.epa })),
+            peer_performance: {
+              team_match_count: insight.peerPerformance.teamMatches,
+              peer_alliance_count: insight.peerPerformance.peerAllianceCount,
+              team_mean_residual: insight.peerPerformance.teamMeanResidual,
+              peer_mean_residual: insight.peerPerformance.peerMeanResidual,
+              difference: insight.peerPerformance.difference,
+              interpretation: insight.peerPerformance.interpretation,
+            },
+            review_matches: insight.reviewMatches.map((item) => ({
+              match_key: item.matchKey, match_label: item.matchLabel, alliance: item.alliance,
+              partner_team_numbers: item.partners, opponent_team_numbers: item.opponents,
+              predicted_score: item.predicted, actual_score: item.actual, score_residual: item.residual,
+              win_probability: item.winProbability, won: item.won, pre_match_epa: item.preEPA,
+              post_match_epa: item.postEPA, epa_change: item.deltaEPA, reasons: item.reasons,
+            })),
+            season_comparison: null,
+            season_history: [],
+          } : {}),
           audit,
         };
         return { ...teamState, analytics };
@@ -221,6 +339,22 @@ export function calculateCanonicalAggregateAnalytics(
       event_key: eventState.event_key,
       metrics: eventMetrics,
       findings: findings.map(reviewFinding),
+      alliance_results: allianceResultsDomain,
+      team_summaries: teamSummaries,
+      qualification: qualificationDomain,
+      qualification_anomalies: qualificationAnomaliesDomain,
+      playoffs: playoffsDomain,
+      residual_summary: {
+        mean: mean(residuals), standard_deviation: standardDeviation(residuals), sample_size: residuals.length,
+      },
+      prediction_summary: qualificationDomain.score_prediction,
+      collection: {
+        state: records.some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete",
+        processed_match_count: records.length,
+        total_match_count: eventState.matches?.length ?? records.length,
+        unavailable_match_count: records.filter((record) => record.statboticsStatus === "unavailable").length,
+        updated_at: audit.calculated_at,
+      },
       audit,
     },
     ...(team_states === undefined ? {} : { team_states }),
