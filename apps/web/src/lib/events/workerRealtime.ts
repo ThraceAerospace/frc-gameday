@@ -1,15 +1,39 @@
 "use strict";
 
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type {
+  FieldViewEventSnapshot,
+  FieldViewEventAnalytics,
+  FieldViewTeamAnalytics,
+  FieldViewMatchAnalysis,
+  FieldViewMatchFlags,
+} from "@fieldview/domain";
 import type { EventRealtimeTransport } from "./EventState";
 import type { EventWebSocketMessage, EventWebSocketStatus } from "@/lib/realtime/client";
 
 type MessageHandler = (message: EventWebSocketMessage) => void;
 type StatusHandler = (status: EventWebSocketStatus) => void;
 export type CanonicalSnapshot = { version: number; snapshot: FieldViewEventSnapshot };
+export type CanonicalAnalyticsPublicationPayload = {
+  sourceRevision: number;
+  calculatedAt: number;
+  analyticsRevision?: number;
+  matches: Array<{
+    key: string;
+    analysis?: FieldViewMatchAnalysis;
+    flags?: FieldViewMatchFlags;
+  }>;
+  eventAnalytics?: FieldViewEventAnalytics;
+  teamAnalytics: Array<{ team_key: string; analytics?: FieldViewTeamAnalytics }>;
+};
+
 export type CanonicalAnalyticsPublication = {
-  event_key: string; revision: number; status: string; due_at: number | null;
-  calculated_at: number | null; source_revision: number | null; publication: unknown | null;
+  event_key: string;
+  revision: number;
+  status: string;
+  due_at: number | null;
+  calculated_at: number | null;
+  source_revision: number | null;
+  publication: CanonicalAnalyticsPublicationPayload | null;
 };
 type AnalyticsHandler = (value: CanonicalAnalyticsPublication) => void;
 type SnapshotHandler = (value: CanonicalSnapshot) => void;
