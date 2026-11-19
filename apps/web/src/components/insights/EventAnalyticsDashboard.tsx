@@ -1062,7 +1062,7 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey, records, team, d
 
   return <>
     <TeamAnalysisTabs analysis={legacyAnalysis} records={records} eventKey={eventKey} name={name} team={team} data={data} />
-  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
     <div className="border-b border-slate-200 px-4 pt-4 dark:border-slate-700 sm:px-5">
       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
       <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
