@@ -48,8 +48,12 @@ export interface FieldViewAllianceEPAAnalysis {
   pre_match_total: number | null;
   /** Sum of the three associated teams' post-match EPA values. */
   post_match_total: number | null;
-  /** Number of team EPA values included in each total. */
+  /** Number of teams in the match alliance roster. */
   team_count: number;
+  /** Number of valid pre-match EPA values present, even if the total is incomplete. */
+  pre_match_team_count: number;
+  /** Number of valid post-match EPA values present, even if the total is incomplete. */
+  post_match_team_count: number;
   /** Expected alliance roster size for this game. */
   expected_team_count: 3;
 }
