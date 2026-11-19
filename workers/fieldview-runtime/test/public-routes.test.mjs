@@ -41,7 +41,7 @@ test("public event snapshot route forwards without user credentials and exposes 
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
-  assert.equal(response.headers.get("Access-Control-Expose-Headers"), "X-FieldView-Snapshot-Version");
+  assert.equal(response.headers.get("Access-Control-Expose-Headers"), "X-FieldView-Snapshot-Version, X-FieldView-Analytics-Version");
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.equal(response.headers.get("X-FieldView-Snapshot-Version"), "12");
   assert.deepEqual(await response.json(), { ok: true });
