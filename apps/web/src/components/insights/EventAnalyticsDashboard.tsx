@@ -918,6 +918,10 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
     const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
     return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
   };
+  const qualificationResiduals = qualificationMatches.flatMap((match) => match.score_residual === null ? [] : [match.score_residual]);
+  const qualificationMeanResidual = average(qualificationResiduals);
+  const qualificationMae = average(qualificationResiduals.map(Math.abs));
+  const qualificationRmse = qualificationResiduals.length ? Math.sqrt(average(qualificationResiduals.map((value) => value * value)) ?? 0) : null;
   const matchTable = (matches: typeof allReviewMatches) => matches.length ? (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[620px] text-left text-sm">
@@ -971,9 +975,9 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
         </div>
         {peer ? <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparable-alliance context</p><p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{peer.interpretation === "insufficient-sample" ? "Not enough qualification results to compare this team's alliances with the event field." : `Team alliance mean residual: ${signed(peer.team_mean_residual)} pts · peer mean: ${signed(peer.peer_mean_residual)} pts · difference: ${signed(peer.difference)} pts.`}</p><p className="mt-1 text-[11px] text-slate-500">{peer.team_match_count} team matches · {peer.peer_alliance_count} comparison alliances. Alliance results cannot isolate an individual robot.</p></div> : null}
         <div className="grid gap-3 sm:grid-cols-3">
-          <Metric label="Mean residual" value={signed(analysis.phaseSummaries.find((item) => item.phase === "qm")?.meanResidual)} detail={`${analysis.phaseSummaries.find((item) => item.phase === "qm")?.predictionSamples ?? 0} predicted alliance scores`} />
-          <Metric label="Prediction MAE" value={fmt(analysis.phaseSummaries.find((item) => item.phase === "qm")?.meanAbsoluteError)} detail="Mean absolute score error" />
-          <Metric label="Prediction RMSE" value={fmt(analysis.phaseSummaries.find((item) => item.phase === "qm")?.rootMeanSquareError)} detail="Penalizes larger misses" />
+          <Metric label="Mean residual" value={signed(qualificationMeanResidual)} detail={`${qualificationResiduals.length} predicted alliance scores at this event`} />
+          <Metric label="Prediction MAE" value={fmt(qualificationMae)} detail="Mean absolute score error" />
+          <Metric label="Prediction RMSE" value={fmt(qualificationRmse)} detail="Penalizes larger misses" />
         </div>
         <p className="text-xs leading-5 text-slate-500">Residual metrics use only completed alliance scores with a usable prediction. Match counts and prediction sample counts are reported separately.</p>
         <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Qualification match evidence</h5>{matchTable(qualificationMatches.filter((match) => match.actual_score !== null && match.opponent_actual_score !== null))}</div>
@@ -992,6 +996,11 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
       </> : null}
       {activeTab === "season" ? <>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-base font-bold text-slate-900 dark:text-slate-100">{name} · Season analysis</h4><p className="text-xs text-slate-500">{analysis.analyzedEventCount} of {analysis.eventCount} events analyzed · {analysis.matchCount} completed matches with published team analytics</p></div><span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold capitalize text-slate-500">{analysis.collection.state}</span></div>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <h5 className="text-sm font-bold text-slate-900 dark:text-slate-100">Season performance by match phase</h5>
+          <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="text-slate-500"><tr><th className="py-2">Phase</th><th>Matches</th><th>Prediction n</th><th>Record</th><th>Mean residual</th><th>MAE</th><th>RMSE</th><th>Mean EPA Δ</th></tr></thead><tbody>{[{phase:"Overall",...analysis.summary},...analysis.phaseSummaries].map((item) => <tr key={item.phase} className="border-t border-slate-100 dark:border-slate-800"><td className="py-2 font-semibold uppercase">{item.phase}</td><td>{item.matches}</td><td>{item.predictionSamples}</td><td>{item.wins}–{item.losses}–{item.ties}</td><td>{signed(item.meanResidual)}</td><td>{fmt(item.meanAbsoluteError)}</td><td>{fmt(item.rootMeanSquareError)}</td><td>{signed(item.meanMatchEPAChange)}</td></tr>)}</tbody></table></div>
+          <p className="mt-2 text-xs text-slate-500">Residual metrics use only matches with usable predictions. Prediction sample counts are separate from completed match counts.</p>
+        </div>
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <div className="flex flex-wrap items-center justify-between gap-2"><h5 className="text-sm font-bold text-slate-900 dark:text-slate-100">Residual pattern vs. opposing alliances</h5><span className="text-xs font-semibold capitalize text-slate-500">{analysis.residualPattern.interpretation.replaceAll("-", " ")}</span></div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3"><Metric label="Mean team-minus-opponent residual" value={signed(analysis.residualPattern.meanTeamResidual)} detail="Equal-weighted event differences" /><Metric label="Negative event comparisons" value={`${analysis.residualPattern.negativeEventCount}/${analysis.residualPattern.eligibleEventCount}`} detail="Team mean below opponent baseline" /><Metric label="Sign-test p-value" value={fmt(analysis.residualPattern.signTestPValue, 3)} detail="One-sided exact test for recurring negative pattern" /></div>
