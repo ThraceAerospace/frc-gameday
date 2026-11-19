@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 type Tab = "overview" | "events" | "teams" | "providers" | "tasks" | "system";
 type Endpoint = {
@@ -78,7 +79,7 @@ function tone(status?: string) {
   if (status === "failed" || status === "unavailable" || status === "error") return "text-rose-600";
   return "text-[var(--fv-muted)]";
 }
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ children }: { children: ReactNode }) {
   return <section className="rounded-2xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 sm:p-5">{children}</section>;
 }
 
