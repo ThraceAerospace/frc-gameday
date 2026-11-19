@@ -26,7 +26,7 @@ For local development, keep `FIELDVIEW_ADMIN_ACCESS_TOKEN` in the web app's igno
 - Pending Durable Object tasks, due times, intervals, attempts, and webhook-triggered authoritative refetch times.
 - The single shared Multiplexer connection and subscription counts.
 
-The dashboard refreshes every ten seconds. Its tabs cover overview, event objects, team objects, provider health, scheduled tasks, and system controls. Authenticated operations can refresh all event resources, refresh an individual TBA resource, refresh Statbotics event matches, force canonical analytics recalculation, refresh or seed a team profile, and start or stop the global scheduler. Mutations are dispatched through the Worker admin router; the browser never receives the Worker service token.
+The dashboard refreshes every ten seconds. Its tabs cover overview, event objects, team objects, provider health, scheduled tasks, an attention queue, and system controls. Authenticated operations can refresh all event resources, refresh an individual TBA resource, refresh Statbotics event matches, force canonical analytics recalculation, refresh or seed a team profile, and start, stop, or manually run global discovery. Mutations are dispatched through the Worker admin router; the browser never receives the Worker service token.
 
 ## Inventory semantics and limits
 
