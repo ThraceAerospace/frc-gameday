@@ -967,7 +967,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; revision?: number; last_fetched_at?: number | null }> };
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
           }
-          if ((resourceState?.last_fetched_at != null && resourceState.status !== "failed") || resourceState?.status === "unavailable") {
+          if ((resourceState?.last_fetched_at != null && resourceState.status === "available") || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
@@ -1093,7 +1093,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
-          if ((resourceState?.lastFetchedAt != null && resourceState.status !== "failed") || resourceState?.status === "unavailable") {
+          if (((resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) && resourceState.status === "available") || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
