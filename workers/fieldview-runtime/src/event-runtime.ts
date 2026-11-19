@@ -1196,8 +1196,9 @@ export class EventRuntime {
       const collectionPartial = isRecord(calculated.state.analytics) &&
         isRecord(calculated.state.analytics.collection) &&
         calculated.state.analytics.collection.state === "partial";
-      const analyticsIncomplete = calculated.analyticsInputsComplete === false ||
-        cohortIncomplete || collectionPartial || (allowPartialCohort && cohortState === undefined);
+      const analyticsIncomplete = (this.env.TEAM_RUNTIME &&
+        (calculated.analyticsInputsComplete === false || collectionPartial)) ||
+        cohortIncomplete || (allowPartialCohort && cohortState === undefined);
       const cohortRetries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
       const terminalDiscoveryGap = allowPartialCohort && cohortState === "discovering";
       if (cohortIncomplete && !terminalDiscoveryGap && cohortRetries < ANALYTICS_COHORT_MAX_RETRIES) {
