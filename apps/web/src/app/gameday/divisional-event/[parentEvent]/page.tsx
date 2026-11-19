@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 import TileViewSurface from "@/components/surface/TileViewSurface";
 
 export const dynamic = "force-dynamic";
 
 export default function DivisionalEvent({ params }: { params: Promise<{ parentEvent: string }> }) {
-  const [data, setData] = useState<TBAEvent | null>(null);
+  const [data, setData] = useState<FieldViewEvent | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function DivisionalEvent({ params }: { params: Promise<{ parentEv
 
         return res.json();
       })
-      .then((parent: TBAEvent) => {
+      .then((parent: FieldViewEvent) => {
         if (!cancelled) {
           setData(parent);
         }
