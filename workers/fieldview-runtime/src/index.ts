@@ -65,6 +65,7 @@ export default {
       const digest = await crypto.subtle.digest("SHA-256", rawBody);
       const webhookId = [...new Uint8Array(digest)]
         .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      await registerRuntimeObject(env, "event", eventKey);
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
       const headers = new Headers({
         Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
@@ -305,6 +306,7 @@ export default {
       for (const event of events) {
         const eventKey = event.key;
         if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
+        await registerRuntimeObject(env, "event", eventKey);
         const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
         const lifecycle = classifyEventLifecycle({
           start_date: String(event.start_date ?? ""),
