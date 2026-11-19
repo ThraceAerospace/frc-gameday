@@ -588,7 +588,7 @@ export class EventScheduler {
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
     const response = await this.api.request(TBA_ENDPOINTS.events(year), { headers });
     if (response.status === 304 && cached) {
-      await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
+      await this.storage.put(cacheKey, { ...cached, complete: true, checkedAt: Date.now() } satisfies DiscoveryCache);
       return;
     }
     if (!response.ok) throw new Error("TBA event discovery failed for " + year + " with HTTP " + response.status);
@@ -607,6 +607,7 @@ export class EventScheduler {
     const pageEtags: Record<string, string | null> = {};
     let requestCount = 0;
     let complete = false;
+    let payloadChanged = !cached?.complete;
     // TBA season-team endpoints are paginated in fixed groups of 500. Walk
     // sequentially, retain per-page validators, and require a short final page.
     for (let page = 0; page < 100; page += 1) {
@@ -627,6 +628,7 @@ export class EventScheduler {
         pageTeams = await response.json() as TBATeam[];
         if (!Array.isArray(pageTeams) || pageTeams.length > 500) throw new Error("TBA team discovery page " + page + " returned an invalid payload");
         pageEtags[pageKey] = response.headers.get("ETag");
+        payloadChanged = true;
       }
       pages.push(pageTeams);
       if (pageTeams.length < 500) {
@@ -637,10 +639,11 @@ export class EventScheduler {
     if (!complete) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
     const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
-    const retrievedAt = Date.now();
+    const checkedAt = Date.now();
+    const updatedAt = payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
     await this.storage.put(key, {
       etag: pageEtags["0"] ?? null, pageEtags, pages, pageCount: pages.length,
-      complete: true, teams, updatedAt: retrievedAt, checkedAt: retrievedAt,
+      complete: true, teams, updatedAt, checkedAt,
     } satisfies TeamDiscoveryCache);
     return { requestCount, pageCount: pages.length, teamCount: teams.length };
   }
