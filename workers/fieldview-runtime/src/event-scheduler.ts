@@ -183,6 +183,7 @@ interface SeasonIngestJob {
 
 const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
 const seasonIngestHistoryPrefix = (year: number) => "admin:season-ingest-history:" + year + ":";
+const SEASON_INGEST_BOOKKEEPING_DELAY_MS = 100;
 const seasonIngestSummary = (job: SeasonIngestJob) => ({
   year: job.year, run_generation: job.runGeneration, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
   team_discovery_updated_at: job.teamDiscoveryUpdatedAt, status: job.status, phase: job.phase,
@@ -467,7 +468,7 @@ export class EventScheduler {
           team_resources_per_team: teamResourceCount, planned_resource_requests: plannedRequests,
           request_interval_ms: requestIntervalMs,
           estimated_minimum_duration_ms: plannedRequests * requestIntervalMs,
-          estimate_note: "Baseline assuming one request for every configured resource; cached resources reduce the count, while retries and normal live polling may add time or requests.",
+          estimate_note: "Baseline assumes one provider request per configured resource. Fresh cached resources are skipped with a 100 ms bookkeeping step; retries and normal live polling may add time or requests.",
           existing_job: job ? seasonIngestSummary(job) : null,
           history_count: (await this.storage.list<SeasonIngestJob>({ prefix: seasonIngestHistoryPrefix(year) })).size,
           requires_explicit_confirmation: true,
@@ -994,7 +995,7 @@ export class EventScheduler {
         job.resourceAttempts = 0;
         if (kind === "team") job.teamResourceCursor += 1;
         else job.eventResourceCursor += 1;
-        job.nextDueAt = Date.now() + 1_000;
+        job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
       } else {
         recordError(kind, entityKey, detail + " (retry " + job.resourceAttempts + "/3)");
         job.nextDueAt = Date.now() + Math.min(30_000, 1_000 * (2 ** job.resourceAttempts));
@@ -1028,7 +1029,7 @@ export class EventScheduler {
             if (resourceState?.status === "unavailable") job.counts.requests_unavailable += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
-            job.nextDueAt = Date.now() + 1_000;
+            job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
           } else {
             if (!(await this.isSeasonIngestCurrent(job))) return;
             const response = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
@@ -1052,7 +1053,7 @@ export class EventScheduler {
                 recordError("team", teamKey, resource.endpoint + " is unavailable");
                 job.teamResourceCursor += 1;
                 job.resourceAttempts = 0;
-                job.nextDueAt = Date.now() + 1_000;
+                job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
               } else if (result.status === "failed" || result.success === false) {
                 job.counts.requests_failed += 1;
                 retry(result.last_error ?? (resource.endpoint + " failed"), "team", teamKey);
@@ -1083,7 +1084,7 @@ export class EventScheduler {
           job.teamCursor += 1;
           job.teamResourceCursor = 0;
           job.resourceAttempts = 0;
-          job.nextDueAt = Date.now() + 1_000;
+          job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
         }
       } else if (job.phase === "events") {
         if (job.eventCursor >= job.eventKeys.length) {
@@ -1139,7 +1140,7 @@ export class EventScheduler {
               job.eventCursor += 1;
               job.eventResourceCursor = 0;
               job.resourceAttempts = 0;
-              job.nextDueAt = Date.now() + 1_000;
+              job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
             }
           }
         }
@@ -1158,7 +1159,7 @@ export class EventScheduler {
             if (resourceState?.status === "unavailable") job.counts.requests_unavailable += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
-            job.nextDueAt = Date.now() + 1_000;
+            job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
           } else {
             if (!(await this.isSeasonIngestCurrent(job))) return;
             const response = await stub.fetch(new Request("https://event-runtime/ingest-resource", {
@@ -1181,7 +1182,7 @@ export class EventScheduler {
                 recordError("event", eventKey, endpoint + " is unavailable");
                 job.eventResourceCursor += 1;
                 job.resourceAttempts = 0;
-                job.nextDueAt = Date.now() + 1_000;
+                job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
               } else if (result.status === "failed" || result.success === false) {
                 job.counts.requests_failed += 1;
                 retry(result.last_error ?? (endpoint + " failed"), "event", eventKey);
@@ -1255,7 +1256,7 @@ export class EventScheduler {
           job.eventCursor += 1;
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
-          job.nextDueAt = Date.now() + 1_000;
+          job.nextDueAt = Date.now() + SEASON_INGEST_BOOKKEEPING_DELAY_MS;
         }
         }
       }
