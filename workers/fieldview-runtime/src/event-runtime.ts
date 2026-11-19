@@ -484,6 +484,10 @@ export class EventRuntime {
           const hasEpa = (record: unknown): boolean => {
             if (!isRecord(record)) return false;
             if (isRecord(record.predictions) && record.predictions.statbotics !== undefined) return true;
+            for (const mapName of ["pre_epas", "epas"]) {
+              const epaMap = isRecord(record[mapName]) ? Object.values(record[mapName] as Record<string, unknown>) : [];
+              if (epaMap.some((entry) => isRecord(entry) && typeof entry.epa === "number")) return true;
+            }
             for (const alliance of ["red", "blue"]) {
               const teams = isRecord(record.teams) && Array.isArray(record.teams[alliance])
                 ? record.teams[alliance] as unknown[] : [];
@@ -1139,7 +1143,7 @@ export class EventRuntime {
   private async scheduleStatboticsRefresh(now: number, overrideDelayMs?: number): Promise<void> {
     const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
-    const delayMs = configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay);
+    const delayMs = overrideDelayMs ?? (configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay));
     if (!Number.isSafeInteger(delayMs) || delayMs < 0) {
       throw new Error("STATBOTICS_REFRESH_DELAY_MS must be a non-negative integer");
     }
