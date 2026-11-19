@@ -368,7 +368,7 @@ export class EventScheduler {
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
         event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[];
-        counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_analytics_partial: number; event_state_missing: number; event_state_partial: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>("admin:coverage-audit:" + year);
       if (!audit) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, { headers: { "Cache-Control": "no-store" } });
       const snapshotChanged = !discoveryReady ||
@@ -419,7 +419,7 @@ export class EventScheduler {
           event_discovery_updated_at: eventDiscovery.updatedAt,
           team_discovery_updated_at: teamDiscovery.updatedAt,
           event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
-          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
+          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_analytics_partial: 0, event_state_missing: 0, event_state_partial: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
         };
         await this.storage.put(storageKey, audit);
       }
@@ -464,13 +464,19 @@ export class EventScheduler {
             endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null }> |
               Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null }>;
             analytics?: { status?: string };
+            event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
           };
           const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
           const acquiredResources = endpointStates.filter((resource) =>
             resource.lastFetchedAt != null || resource.last_fetched_at != null).length;
           if (isEvent) {
             if (acquiredResources < 13) audit.counts.event_resources_incomplete += 1;
-            if (!["succeeded", "partial"].includes(state.analytics?.status ?? "")) audit.counts.event_analytics_missing += 1;
+            const eventStateStatus = state.event_state?.status ?? "missing";
+            if (eventStateStatus === "partial") audit.counts.event_state_partial = (audit.counts.event_state_partial ?? 0) + 1;
+            else if (eventStateStatus !== "complete") audit.counts.event_state_missing = (audit.counts.event_state_missing ?? 0) + 1;
+            const analyticsStatus = state.analytics?.status ?? "missing";
+            if (analyticsStatus === "partial") audit.counts.event_analytics_partial = (audit.counts.event_analytics_partial ?? 0) + 1;
+            else if (analyticsStatus !== "succeeded") audit.counts.event_analytics_missing += 1;
           } else if (acquiredResources < 7) audit.counts.team_resources_incomplete += 1;
         } catch {
           audit.counts.read_errors += 1;
