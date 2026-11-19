@@ -250,9 +250,9 @@ export default {
     const validPublicRoute = publicParts.length === 4 &&
       publicParts[1] === "events" &&
       /^[a-zA-Z0-9_-]+$/.test(publicEventKey ?? "") &&
-      (publicAction === "snapshot" || publicAction === "stream");
+      (publicAction === "snapshot" || publicAction === "analytics" || publicAction === "stream");
 
-    if (validPublicRoute && publicAction === "snapshot" && request.method === "OPTIONS") {
+    if (validPublicRoute && ["snapshot", "analytics"].includes(publicAction ?? "") && request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
         headers: {
@@ -283,7 +283,7 @@ export default {
 
       const responseHeaders = new Headers(response.headers);
       responseHeaders.set("Access-Control-Allow-Origin", "*");
-      responseHeaders.set("Access-Control-Expose-Headers", "X-FieldView-Snapshot-Version");
+      responseHeaders.set("Access-Control-Expose-Headers", "X-FieldView-Snapshot-Version, X-FieldView-Analytics-Version");
       responseHeaders.set("Cache-Control", "no-store");
       return new Response(response.body, {
         status: response.status,
