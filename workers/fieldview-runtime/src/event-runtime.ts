@@ -550,7 +550,11 @@ export class EventRuntime {
         status: acquiredCount === eventResources.length + 1 ? "complete" : acquiredCount > 0 ? "partial" : "failed",
         state: result.state,
       };
-      await this.storage.put(EVENT_STATE_PUBLICATION_KEY, eventStatePublication);
+      const previousPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!previousPublication || previousPublication.sourceRevision !== eventStatePublication.sourceRevision ||
+          previousPublication.status !== eventStatePublication.status) {
+        await this.storage.put(EVENT_STATE_PUBLICATION_KEY, eventStatePublication);
+      }
       return Response.json(result.state, {
         headers: {
           "X-FieldView-Snapshot-Version": String(result.version),
