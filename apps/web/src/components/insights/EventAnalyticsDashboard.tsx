@@ -177,7 +177,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <CanonicalTeamAnalysisPanel analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <CanonicalTeamAnalysisPanel analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} eventKey={eventKey} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -875,34 +875,110 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
 
-function CanonicalTeamAnalysisPanel({ analysis, name }: { analysis: CanonicalTeamAnalysisResponse; name: string }) {
-  return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h3 className="text-lg font-bold text-slate-900">{name} · Season analysis</h3><p className="text-xs text-slate-500">{analysis.analyzedEventCount} of {analysis.eventCount} events analyzed · {analysis.matchCount} completed matches with published team analytics</p></div>
-        <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold capitalize text-slate-500">{analysis.collection.state}</span>
-      </div>
-      {analysis.events.map(({ event, status, analytics }) => {
-        const performance = analytics?.performance;
-        return <article key={event.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><h4 className="font-bold text-slate-900">{event.name}</h4><p className="text-xs text-slate-500">{event.startDate}</p></div><span className="text-xs font-semibold capitalize text-slate-500">{status === "ready" ? "Analysis ready" : status === "pending" ? "Awaiting analytics" : "Event unavailable"}</span></div>
-          {!analytics ? <p className="px-4 py-4 text-sm text-slate-500">The EventRuntime has not published team analytics for this event yet.</p> : <div className="space-y-4 p-4">
-            {analytics.summary?.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">{analytics.summary.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Metric label="EPA" value={fmt(performance?.epa)} detail="Published event estimate" />
-              <Metric label="EPA change" value={performance?.epa_change == null ? "—" : `${performance.epa_change > 0 ? "+" : ""}${fmt(performance.epa_change)}`} detail="Change during this event" />
-              <Metric label="Record" value={performance ? `${performance.wins ?? "—"}–${performance.losses ?? "—"}–${performance.ties ?? "—"}` : "—"} detail="Completed match results" />
-              <Metric label="Completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} detail="Completed / observed" />
-            </div>
-            {analytics.season_comparison ? <div className="rounded-lg border border-slate-200 p-3 text-sm"><p className="font-semibold text-slate-800">Prior-event comparison</p><p className="mt-1 text-slate-600">{analytics.season_comparison.prior_event.event_name}: {fmt(analytics.season_comparison.prior_epa)} → {fmt(analytics.season_comparison.current_epa)} EPA ({analytics.season_comparison.change > 0 ? "+" : ""}{fmt(analytics.season_comparison.change)})</p><p className="mt-1 text-xs text-slate-500">Change rank {analysis.events.length > 0 ? analytics.season_comparison.cohort_rank : "—"} of {analytics.season_comparison.cohort_size} eligible teams</p></div> : null}
-            {analytics.peer_performance ? <p className="text-sm text-slate-600">Peer comparison: {analytics.peer_performance.interpretation.replaceAll("-", " ")} · {analytics.peer_performance.team_match_count} team matches · {analytics.peer_performance.peer_alliance_count} peer alliances</p> : null}
-            {analytics.findings.length ? <div><h5 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Review findings</h5><ul className="space-y-2">{analytics.findings.map((finding) => <li key={finding.finding_key} className="rounded-lg border border-slate-200 p-3"><p className="text-sm font-semibold text-slate-800">{finding.title}</p><p className="mt-1 text-sm text-slate-600">{finding.summary}</p><p className="mt-1 text-xs text-slate-500">{finding.suggested_action}</p></li>)}</ul></div> : null}
-            {analytics.review_matches?.length ? <div><h5 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Matches to review</h5><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="text-xs text-slate-500"><tr><th className="py-2">Match</th><th>Alliance</th><th>Actual / predicted</th><th>Residual</th><th>EPA change</th></tr></thead><tbody>{analytics.review_matches.map((match) => <tr key={match.match_key} className="border-t border-slate-100"><td className="py-2 font-mono">{match.match_label}</td><td className="capitalize">{match.alliance}</td><td>{match.actual_score ?? "—"} / {match.predicted_score ?? "—"}</td><td>{match.score_residual == null ? "—" : `${match.score_residual > 0 ? "+" : ""}${fmt(match.score_residual)}`}</td><td>{match.epa_change == null ? "—" : `${match.epa_change > 0 ? "+" : ""}${fmt(match.epa_change)}`}</td></tr>)}</tbody></table></div></div> : null}
-          </div>}
-        </article>;
-      })}
-    </section>
+function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: CanonicalTeamAnalysisResponse; name: string; eventKey: string }) {
+  const [activeTab, setActiveTab] = useState<TeamAnalysisTab>("qualification");
+  const tabs: { id: TeamAnalysisTab; label: string }[] = [
+    { id: "qualification", label: "Qualification Analysis" },
+    { id: "playoffs", label: "Playoff Analysis" },
+    { id: "season", label: "Season Analysis" },
+    { id: "review", label: "Team Match Review" },
+  ];
+  const current = analysis.events.find((item) => item.event.key === eventKey) ?? null;
+  const currentAnalytics = current?.analytics ?? null;
+  const allReviewMatches = analysis.events.flatMap(({ event, analytics }) =>
+    (analytics?.review_matches ?? []).map((match) => ({ ...match, event })),
   );
+  const isElimination = (match: { match_key: string; match_label: string }) =>
+    /_(?:ef|qf|sf|f)\d/i.test(match.match_key) || /^(?:ef|qf|sf|f)/i.test(match.match_label);
+  const qualificationMatches = (currentAnalytics?.review_matches ?? []).filter((match) => !isElimination(match));
+  const playoffMatches = (currentAnalytics?.review_matches ?? []).filter(isElimination);
+  const signed = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(value) ? "—" : `${value > 0 ? "+" : ""}${fmt(value)}`;
+  const average = (values: Array<number | null>) => {
+    const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
+    return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
+  };
+  const matchTable = (matches: typeof allReviewMatches) => matches.length ? (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[620px] text-left text-sm">
+        <thead className="text-xs text-slate-500"><tr><th className="py-2">Event / match</th><th>Alliance</th><th>Partners</th><th>Actual / predicted</th><th>Residual</th><th>EPA change</th></tr></thead>
+        <tbody>{matches.map((match) => <tr key={match.event.key + match.match_key} className="border-t border-slate-100 dark:border-slate-800">
+          <td className="py-2"><a href={`https://www.thebluealliance.com/match/${match.match_key}`} target="_blank" rel="noreferrer" className="font-semibold text-[var(--fv-brand)] hover:underline">{match.event.shortName || match.event.name} · {match.match_label}</a></td>
+          <td className="capitalize">{match.alliance}</td>
+          <td className="tabular-nums">{match.partner_team_numbers.join(" · ") || "—"}</td>
+          <td className="tabular-nums">{match.actual_score ?? "—"} / {match.predicted_score ?? "—"}</td>
+          <td className="tabular-nums">{signed(match.score_residual)}</td>
+          <td className="tabular-nums">{signed(match.epa_change)}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  ) : <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">No published match-review evidence is available for this section yet. Matches without review evidence are not treated as zero or as missing performance.</p>;
+  const findingsList = (events: typeof analysis.events) => {
+    const findings = events.flatMap(({ event, analytics }) =>
+      (analytics?.findings ?? []).map((finding) => ({ event, finding })),
+    );
+    return findings.length ? <div className="space-y-2">{findings.map(({ event, finding }) => (
+      <article key={event.key + finding.finding_key} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{finding.title}</p><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-600">{finding.severity}</span></div>
+        <p className="mt-1 text-xs font-medium text-slate-500">{event.name} · {finding.scope} · {finding.category}</p>
+        <p className="mt-2 text-sm leading-5 text-slate-700 dark:text-slate-300">{finding.summary}</p>
+        {finding.evidence.length ? <ul className="mt-2 grid gap-1 text-xs text-slate-600 sm:grid-cols-2">{finding.evidence.map((evidence) => <li key={evidence.evidence_key} className="rounded bg-slate-50 px-2 py-1.5 dark:bg-slate-900">{evidence.label}: <strong className="tabular-nums">{evidence.value == null ? "—" : `${fmt(evidence.value)} ${evidence.unit}`}</strong>{evidence.sample_size == null ? "" : ` · n=${evidence.sample_size}`}</li>)}</ul> : null}
+        <p className="mt-2 text-xs text-slate-500">Suggested review: {finding.suggested_action}</p>
+        {finding.limitations.length ? <p className="mt-1 text-[11px] leading-4 text-slate-400">{finding.limitations.join(" ")}</p> : null}
+      </article>
+    ))}</div> : <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">No review findings have been published for this selection.</p>;
+  };
+  const performance = currentAnalytics?.performance;
+  const peer = currentAnalytics?.peer_performance;
+
+  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
+    <div className="border-b border-slate-200 px-4 pt-4 dark:border-slate-700 sm:px-5">
+      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
+      <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
+      <div role="tablist" aria-label="Team analysis sections" className="no-scrollbar mt-3 -mb-px flex gap-1 overflow-x-auto">
+        {tabs.map((tab) => <button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors " + (activeTab === tab.id ? "border-[var(--fv-brand)] text-[var(--fv-brand-strong)] dark:text-[var(--fv-brand)]" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
+      </div>
+    </div>
+    <div role="tabpanel" id={`team-analysis-panel-${activeTab}`} aria-labelledby={`team-analysis-tab-${activeTab}`} className="space-y-4 p-4 sm:p-5">
+      {!currentAnalytics ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">The current event has not published canonical team analytics yet. Season history remains available below where prior event publications exist.</p> : null}
+      {activeTab === "qualification" ? <>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="text-base font-bold text-slate-900 dark:text-slate-100">{name} · Qualification outlook</h4><p className="text-xs text-slate-500">{qualificationMatches.length} qualification matches with published review evidence</p></div><span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500">{current?.status === "ready" ? "Analysis ready" : "Awaiting analysis"}</span></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Qual rank" value={performance?.rank == null ? "—" : `#${performance.rank}`} detail="Official event ranking" />
+          <Metric label="Qual record" value={performance ? `${performance.wins ?? "—"}–${performance.losses ?? "—"}–${performance.ties ?? "—"}` : "—"} detail="Published match results" />
+          <Metric label="EPA" value={fmt(performance?.epa)} detail="Current event estimate" />
+          <Metric label="Matches completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} detail="Completed / observed" />
+        </div>
+        {peer ? <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparable-alliance context</p><p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{peer.interpretation === "insufficient-sample" ? "Not enough qualification results to compare this team's alliances with the event field." : `Team alliance mean residual: ${signed(peer.team_mean_residual)} pts · peer mean: ${signed(peer.peer_mean_residual)} pts · difference: ${signed(peer.difference)} pts.`}</p><p className="mt-1 text-[11px] text-slate-500">{peer.team_match_count} team matches · {peer.peer_alliance_count} comparison alliances. Alliance results cannot isolate an individual robot.</p></div> : null}
+        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Qualification match evidence</h5>{matchTable(qualificationMatches.map((match) => ({...match,event:current!.event})))}</div>
+      </> : null}
+      {activeTab === "playoffs" ? <>
+        <div className="grid gap-3 sm:grid-cols-3"><Metric label="Elimination matches reviewed" value={String(playoffMatches.length)} detail="Published review evidence only" /><Metric label="Mean score residual" value={signed(average(playoffMatches.map((match) => match.score_residual)))} detail="Actual minus predicted alliance score" /><Metric label="Mean EPA change" value={signed(average(playoffMatches.map((match) => match.epa_change)))} detail="Model estimate change" /></div>
+        <p className="text-xs leading-5 text-slate-500">These values summarize matches with published team-review evidence, not every elimination match. They do not assert an individual robot caused an alliance result.</p>
+        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Elimination match evidence</h5>{matchTable(playoffMatches.map((match) => ({...match,event:current!.event})))}</div>
+        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Playoff review findings</h5>{findingsList(current ? [current] : [])}</div>
+      </> : null}
+      {activeTab === "season" ? <>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-base font-bold text-slate-900 dark:text-slate-100">{name} · Season analysis</h4><p className="text-xs text-slate-500">{analysis.analyzedEventCount} of {analysis.eventCount} events analyzed · {analysis.matchCount} completed matches with published team analytics</p></div><span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold capitalize text-slate-500">{analysis.collection.state}</span></div>
+        <div className="space-y-3">{analysis.events.map(({ event, status, analytics }) => {
+          const item = analytics?.performance;
+          const comparison = analytics?.season_comparison;
+          return <article key={event.key} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"><div><h5 className="font-bold text-slate-900 dark:text-slate-100">{event.name}</h5><p className="text-xs text-slate-500">{event.startDate}</p></div><span className="text-xs font-semibold capitalize text-slate-500">{status === "ready" ? "Analysis ready" : status === "pending" ? "Awaiting analytics" : "Event unavailable"}</span></div>
+            {!analytics ? <p className="px-4 py-4 text-sm text-slate-500">The EventRuntime has not published team analytics for this event yet.</p> : <div className="space-y-3 p-4">
+              {analytics.summary?.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">{analytics.summary.map((summary, index) => <li key={index}>{summary}</li>)}</ul> : null}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Metric label="EPA" value={fmt(item?.epa)} detail="Event estimate" /><Metric label="Record" value={item ? `${item.wins ?? "—"}–${item.losses ?? "—"}–${item.ties ?? "—"}` : "—"} detail="Completed matches" /><Metric label="EPA change" value={signed(item?.epa_change)} detail="During this event" /><Metric label="Completed" value={item ? `${item.completed_matches}/${item.matches_seen}` : "—"} detail="Completed / observed" /></div>
+              {comparison ? <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-900"><p className="font-semibold text-slate-800 dark:text-slate-200">Prior-event comparison</p><p className="mt-1 text-slate-600 dark:text-slate-300">{comparison.prior_event.event_name}: {fmt(comparison.prior_epa)} → {fmt(comparison.current_epa)} EPA ({signed(comparison.change)})</p><p className="mt-1 text-xs text-slate-500">Change rank {comparison.cohort_rank} of {comparison.cohort_size} eligible teams</p></div> : null}
+            </div>}
+          </article>;
+        })}</div>
+      </> : null}
+      {activeTab === "review" ? <>
+        <div><h4 className="mb-2 text-base font-bold text-slate-900 dark:text-slate-100">Season review findings</h4>{findingsList(analysis.events)}</div>
+        <div><h4 className="mb-2 text-base font-bold text-slate-900 dark:text-slate-100">Match-by-match EPA and score evidence</h4>{matchTable(allReviewMatches)}</div>
+      </> : null}
+    </div>
+  </section>;
 }
 
 function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string;team:TeamAnalyticsRow|undefined;data:EventAnalyticsResponse}) {
