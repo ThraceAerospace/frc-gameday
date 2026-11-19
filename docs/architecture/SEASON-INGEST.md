@@ -40,7 +40,7 @@ During ordinary runtime operation, EventRuntime withholds analytics calculation 
 The admin command center exposes a preview and explicit start/pause/resume/cancel controls. The Worker persists each year's job under the EventScheduler Durable Object and advances it from alarms, one provider resource at a time:
 
 1. Prepare every discovered season team by walking its seven configured TeamRuntime resources individually through `/ingest-resource`.
-2. For every discovered event, walk all configured TBA and Statbotics resources individually, then request a canonical snapshot so EventRuntime persists EventState, request analytics calculation, and verify the EventAnalytics publication.
+2. For every discovered event, walk all configured TBA and Statbotics resources individually, then request a canonical snapshot so EventRuntime persists EventState, request analytics calculation, and verify the EventAnalytics publication. Recalculate every event after the season-wide TeamRuntime phase: TeamRuntime revisions are independent of EventRuntime revisions, so matching event-source revisions alone cannot prove that an older analytics cohort still reflects current team-season data.
 3. Persist the discovery snapshot timestamps, phase cursors, per-entity resource cursors, retry count, next due time, and separate complete/partial/failed counters. A Worker restart resumes from the last durable cursor; a retried completed-with-errors job restarts its inventory scan and skips already-acquired resources and already-published complete artifacts.
 4. Record bounded recent errors and continue processing other entities when one resource fails. Partial evidence is counted distinctly from missing or failed artifacts.
 
