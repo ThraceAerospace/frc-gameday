@@ -96,7 +96,7 @@ export async function calculateCanonicalMatchAnalytics(
       "qualification-residual-anomaly",
       "qualification-penalty-outliers",
       "playoff-alliance-performance",
-      "team-season-event-comparison",
+      ...(seasonCohort ? ["team-season-event-comparison"] : []),
       "team-event-epa",
       "team-epa-contribution-share",
       "team-event-match-appearances",
