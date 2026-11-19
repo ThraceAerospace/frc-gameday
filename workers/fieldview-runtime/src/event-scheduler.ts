@@ -1020,6 +1020,7 @@ export class EventScheduler {
           await this.persistSeasonIngest(job);
           return;
         }
+        const eventIndex = job.eventCursor;
         const eventKey = job.eventKeys[job.eventCursor];
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
         const event = eventDiscovery?.events.find((item) => item.key === eventKey);
@@ -1060,7 +1061,8 @@ export class EventScheduler {
             }
           }
         }
-        if (job.eventResourceCursor < resources.length && job.eventCursor < job.eventKeys.length) {
+        if (job.eventCursor === eventIndex) {
+        if (job.eventResourceCursor < resources.length) {
           const endpoint = resources[job.eventResourceCursor];
           const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
           let resourceState: { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null } | undefined;
@@ -1162,6 +1164,7 @@ export class EventScheduler {
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
           job.nextDueAt = Date.now() + 1_000;
+        }
         }
       }
     } catch (error) {
