@@ -29,6 +29,9 @@
       "@fieldview/domain": [
         "../../packages/domain/src/index.ts"
       ],
+      "@fieldview/analytics/*": [
+        "../../packages/analytics/src/*"
+      ],
       "@fieldview/provider-frc-colors/*": [
         "../../packages/providers/frc-colors/src/*"
       ]
