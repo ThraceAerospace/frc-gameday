@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEventSnapshot, FieldViewTeamSnapshot } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
 import { refreshCanonicalEventAnalytics } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
@@ -31,6 +31,34 @@ const ordinal = (value: number) => {
   return `${value}${suffix}`;
 };
 const percentileLabel = (value: number | null) => value === null ? "—" : ordinal(Math.round(value * 100));
+
+function toTeamSeasonHistory(snapshot: FieldViewTeamSnapshot): TeamSeasonHistory {
+  const statboticsByEvent = new Map((snapshot.statbotics_events ?? []).flatMap((record) =>
+    typeof record.event === "string" ? [[record.event, record] as const] : [],
+  ));
+  const events = (snapshot.events ?? [])
+    .filter((event) => event.event_type !== 99 && event.event_type !== 100)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .map((event) => {
+      const statbotics = statboticsByEvent.get(event.key) ?? null;
+      return {
+        event: {
+          key: event.key,
+          name: event.name,
+          short_name: event.event_code,
+          start_date: event.start_date,
+          week: statbotics?.week ?? null,
+        },
+        statbotics,
+        status: statbotics ? "ready" as const : "unavailable" as const,
+      };
+    });
+  return {
+    team: snapshot.team ?? {},
+    season: snapshot.statbotics ?? null,
+    events,
+  };
+}
 
 function allianceTeamNumbers(teamNumber: number, otherTeams: string[]): string[] {
   return [...new Set([String(teamNumber), ...otherTeams])];
@@ -91,14 +119,17 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     let active = true;
     setHistoryLoading(true);
     Promise.all([
-      fetch(`/api/insights/team/${teamA}?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
-      fetch(`/api/insights/team/${teamB}?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
+      fetch(`/api/team/${teamA}/history?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
+      fetch(`/api/team/${teamB}/history?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
     ]).then(async ([responseA, responseB]) => {
       if (!responseA.ok || !responseB.ok) throw new Error("Team season history is temporarily unavailable");
-      const [nextA, nextB] = await Promise.all([responseA.json(), responseB.json()]);
+      const [nextA, nextB] = await Promise.all([
+        responseA.json() as Promise<FieldViewTeamSnapshot>,
+        responseB.json() as Promise<FieldViewTeamSnapshot>,
+      ]);
       if (active) {
-        setHistoryA(nextA as TeamSeasonHistory);
-        setHistoryB(nextB as TeamSeasonHistory);
+        setHistoryA(toTeamSeasonHistory(nextA));
+        setHistoryB(toTeamSeasonHistory(nextB));
       }
     }).catch(() => {
       if (active) {
@@ -122,7 +153,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     const shouldRefresh = matchAnalysisRefreshKey > lastMatchAnalysisRefreshKey.current;
     if (shouldRefresh) lastMatchAnalysisRefreshKey.current = matchAnalysisRefreshKey;
     const query = `year=${data.event.year}${shouldRefresh ? "&refresh=1" : ""}`;
-    fetch(`/api/insights/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
+    fetch(`/api/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
       if (active) setMatchAnalysisA(result as TeamMatchAnalysis);
