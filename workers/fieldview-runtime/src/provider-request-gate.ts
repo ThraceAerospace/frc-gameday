@@ -33,10 +33,11 @@ export async function releaseProviderRequestPermit(
 ): Promise<void> {
   if (!leaseId || !env.EVENT_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return;
   const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-  const response = await scheduler.fetch(new Request("https://event-scheduler/provider-request/release", {
+  // Release is best-effort: if the Worker is interrupted or the scheduler is
+  // temporarily unavailable, the durable lease expires automatically.
+  await scheduler.fetch(new Request("https://event-scheduler/provider-request/release", {
     method: "POST",
     headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify({ lease_id: leaseId }),
-  }));
-  if (!response.ok) throw new Error("Shared provider request gate release returned HTTP " + response.status);
+  })).catch(() => undefined);
 }
