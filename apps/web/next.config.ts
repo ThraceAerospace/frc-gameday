@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     "@fieldview/provider-tba",
     "@fieldview/provider-statbotics",
     "@fieldview/provider-frc-colors",
+    "@fieldview/analytics",
   ],
   allowedDevOrigins: ['192.168.18.6'],
 };
