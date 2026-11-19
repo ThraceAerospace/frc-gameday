@@ -339,6 +339,51 @@ export function calculateCanonicalAggregateAnalytics(
           const preEpa = typeof ownPre === "number" && Number.isFinite(ownPre) ? ownPre : null;
           const postEpa = typeof ownPost === "number" && Number.isFinite(ownPost) ? ownPost : null;
           const winner = match.winning_alliance;
+          const ownPreRecord = record.statbotics?.pre_epas?.[String(row.team_number)];
+          const ownPostRecord = record.statbotics?.epas?.[String(row.team_number)];
+          const numericComponents = (value: object | null | undefined): Record<string, number> => {
+            if (!value) return {};
+            return Object.fromEntries(Object.entries(value).filter(([key, amount]) =>
+              typeof amount === "number" && Number.isFinite(amount) && !/^comp_\\d+_epa$/.test(key),
+            )) as Record<string, number>;
+          };
+          const allianceTeamKeys = match.alliances[alliance].team_keys;
+          const opponentTeamKeys = match.alliances[opponentAlliance].team_keys;
+          const sumPreEPA = (teamKeys: string[]) => {
+            const values = teamKeys.map((key) => {
+              const value = record.statbotics?.pre_epas?.[String(Number(key.replace(/^frc/i, "")))]?.epa;
+              return typeof value === "number" && Number.isFinite(value) ? value : null;
+            });
+            return values.every((value) => value !== null)
+              ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0) : null;
+          };
+          const alliancePreComponents: Record<string, number> = {};
+          for (const key of ["auto_epa", "teleop_epa", "endgame_epa", "rp_1_epa", "rp_2_epa", "rp_3_epa", "tiebreaker_epa"]) {
+            const values = allianceTeamKeys.map((teamKey) => {
+              const value = record.statbotics?.pre_epas?.[String(Number(teamKey.replace(/^frc/i, "")))];
+              const amount = value?.[key as keyof typeof value];
+              return typeof amount === "number" && Number.isFinite(amount) ? amount : null;
+            });
+            if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+          }
+          const scoreBreakdown = match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
+          const actualAllianceBreakdown = scoreBreakdown?.[alliance] ?? {};
+          const actualComponents: Record<string, number> = {};
+          const autoField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?auto(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          const teleopField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?teleop(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          const foulField = Object.keys(actualAllianceBreakdown).find((field) => /^foul(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          if (autoField) actualComponents.auto = actualAllianceBreakdown[autoField] as number;
+          if (teleopField) actualComponents.teleop = actualAllianceBreakdown[teleopField] as number;
+          if (foulField) actualComponents.fouls = actualAllianceBreakdown[foulField] as number;
+          const allianceDeltas = allianceTeamKeys.map((key) => {
+            const id = String(Number(key.replace(/^frc/i, "")));
+            const before = record.statbotics?.pre_epas?.[id]?.epa;
+            const after = record.statbotics?.epas?.[id]?.epa;
+            return typeof before === "number" && Number.isFinite(before) && typeof after === "number" && Number.isFinite(after)
+              ? after - before : null;
+          }).filter((value): value is number => value !== null);
+          const allianceDeltaSpread = allianceDeltas.length === allianceTeamKeys.length && allianceDeltas.length > 1
+            ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas) : null;
           return [{
             match_key: match.key, match_label: own?.matchLabel ?? match.key,
             competition_level: match.comp_level, alliance,
@@ -355,6 +400,14 @@ export function calculateCanonicalAggregateAnalytics(
             won: winner === "red" || winner === "blue" ? winner === alliance : null,
             pre_match_epa: preEpa, post_match_epa: postEpa,
             epa_change: preEpa !== null && postEpa !== null ? postEpa - preEpa : null,
+            alliance_pre_epa_total: sumPreEPA(allianceTeamKeys),
+            opponent_pre_epa_total: sumPreEPA(opponentTeamKeys),
+            alliance_pre_components: alliancePreComponents,
+            actual_components: actualComponents,
+            pre_match_components: numericComponents(ownPreRecord),
+            post_match_components: numericComponents(ownPostRecord),
+            alliance_delta_spread: allianceDeltaSpread,
+            shared_alliance_update: allianceDeltaSpread !== null && allianceDeltaSpread < 0.000001,
           }];
         });
         const teamFindings = (insight?.reviewMatches ?? [])
