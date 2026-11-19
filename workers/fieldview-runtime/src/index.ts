@@ -115,7 +115,7 @@ export default {
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
           const operation = action.slice("season-ingest-".length);
           const payload = { action: operation, year, ...(operation === "start" ? { confirm: body.confirm === true } : {}) };
-          return scheduler.fetch(new Request("https://event-scheduler/admin/season-ingest", {
+          return scheduler.fetch(new Request("https://event-scheduler/admin/season-ingest" + (operation === "preview" ? "?year=" + year : ""), {
             method: operation === "preview" ? "GET" : "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             ...(operation === "preview" ? {} : { body: JSON.stringify(payload) }),
