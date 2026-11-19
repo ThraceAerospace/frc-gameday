@@ -1,0 +1,22 @@
+{
+  "name": "@fieldview/analytics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./calculations": "./src/calculations.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@fieldview/provider-tba": "0.1.0",
+    "@fieldview/provider-statbotics": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
