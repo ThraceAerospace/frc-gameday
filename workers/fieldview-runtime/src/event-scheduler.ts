@@ -401,9 +401,10 @@ export class EventScheduler {
       if (action === "preview") {
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
         const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
-        const eventKeys = events?.events.map((item) => item.key).filter((item): item is string => typeof item === "string") ?? [];
-        const teamKeys = teams?.teamKeys ?? [];
-        const ready = events?.complete === true && teams?.complete === true && teamKeys.length > 0;
+        const eventKeys = events?.events.map((item) => item.key).filter((item): item is string =>
+          typeof item === "string" && /^[a-zA-Z0-9_-]+$/.test(item)) ?? [];
+        const teamKeys = (teams?.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey));
+        const ready = events?.complete === true && teams?.complete === true && eventKeys.length > 0 && teamKeys.length > 0;
         const eventResourceCount = eventKeys[0] ? eventResourceEndpoints(eventKeys[0]).length + 1 : 0;
         const teamResourceCount = teamKeys[0] ? teamResourceEndpoints(teamKeys[0], year).length : 0;
         const plannedRequests = eventKeys.length * eventResourceCount + teamKeys.length * teamResourceCount;
