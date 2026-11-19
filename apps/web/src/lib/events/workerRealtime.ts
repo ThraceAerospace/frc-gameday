@@ -7,6 +7,11 @@ import type { EventWebSocketMessage, EventWebSocketStatus } from "@/lib/realtime
 type MessageHandler = (message: EventWebSocketMessage) => void;
 type StatusHandler = (status: EventWebSocketStatus) => void;
 export type CanonicalSnapshot = { version: number; snapshot: FieldViewEventSnapshot };
+export type CanonicalAnalyticsPublication = {
+  event_key: string; revision: number; status: string; due_at: number | null;
+  calculated_at: number | null; source_revision: number | null; publication: unknown | null;
+};
+type AnalyticsHandler = (value: CanonicalAnalyticsPublication) => void;
 type SnapshotHandler = (value: CanonicalSnapshot) => void;
 
 class WorkerEventWebSocket implements EventRealtimeTransport {
@@ -16,6 +21,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   private reconnectDelay = 1_000;
   private readonly handlers = new Map<string, Set<MessageHandler>>();
   private readonly snapshotHandlers = new Map<string, Set<SnapshotHandler>>();
+  private readonly analyticsHandlers = new Map<string, Set<AnalyticsHandler>>();
+  private readonly analyticsPublications = new Map<string, CanonicalAnalyticsPublication>();
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly snapshots = new Map<string, CanonicalSnapshot>();
   private readonly sentSubscriptions = new Set<string>();
@@ -92,6 +99,33 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     };
   }
 
+  subscribeCanonicalAnalytics(eventKey: string, handler: AnalyticsHandler): () => void {
+    if (!eventKey || !this.runtimeBaseUrl) return () => {};
+    let handlers = this.analyticsHandlers.get(eventKey);
+    if (!handlers) { handlers = new Set(); this.analyticsHandlers.set(eventKey, handlers); }
+    const first = handlers.size === 0;
+    handlers.add(handler);
+    const cached = this.analyticsPublications.get(eventKey);
+    if (cached) queueMicrotask(() => { if (handlers?.has(handler)) handler(cached); });
+    this.disposed = false;
+    this.ensureConnected();
+    if (first) this.sendSubscription("analytics", eventKey, true);
+    return () => {
+      const current = this.analyticsHandlers.get(eventKey);
+      if (!current) return;
+      current.delete(handler);
+      if (current.size === 0) {
+        this.analyticsHandlers.delete(eventKey);
+        this.analyticsPublications.delete(eventKey);
+        this.sendSubscription("analytics", eventKey, false);
+      }
+      this.stopIfIdle();
+    };
+  }
+
+  getCanonicalAnalytics(eventKey: string): CanonicalAnalyticsPublication | undefined {
+    return this.analyticsPublications.get(eventKey);
+  }
   getCanonicalSnapshot(eventKey: string): CanonicalSnapshot | undefined {
     return this.snapshots.get(eventKey);
   }
@@ -148,6 +182,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       this.acknowledgedSubscriptions.clear();
       this.setStatus("connected");
       for (const eventKey of this.activeEventKeys()) this.sendSubscription("event-state", eventKey, true);
+      for (const eventKey of this.analyticsHandlers.keys()) this.sendSubscription("analytics", eventKey, true);
       if (this.runtimeBaseUrl) {
         if (this.heartbeatTimer !== null) clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = setInterval(() => {
@@ -187,7 +222,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       this.heartbeatTimer = null;
       this.setStatus("disconnected");
       if (this.disposed ||
-          (this.leases === 0 && this.handlers.size === 0 && this.snapshotHandlers.size === 0) ||
+          (this.leases === 0 && this.handlers.size === 0 && this.snapshotHandlers.size === 0 && this.analyticsHandlers.size === 0) ||
           this.reconnectTimer !== null) return;
       const delay = this.reconnectDelay;
       this.reconnectTimer = setTimeout(() => {
@@ -200,6 +235,15 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
 
   private handleRuntimeMessage(message: Record<string, unknown>) {
     if (message.type === "pong" || message.type === "connected") return;
+    if (message.type === "subscribed" && message.topic === "analytics" &&
+        typeof message.event_key === "string") {
+      void this.fetchCanonicalAnalytics(message.event_key);
+      return;
+    }
+    if (message.type === "analytics.changed" && typeof message.event_key === "string") {
+      void this.fetchCanonicalAnalytics(message.event_key, typeof message.version === "number" ? message.version : undefined);
+      return;
+    }
     if (message.type === "subscribed" && message.topic === "event-state" &&
         typeof message.event_key === "string") {
       this.acknowledgedSubscriptions.add("event-state:" + message.event_key);
@@ -224,6 +268,25 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     }
   }
 
+  private async fetchCanonicalAnalytics(eventKey: string, expectedRevision?: number) {
+    if (!this.runtimeBaseUrl) return;
+    try {
+      const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", this.runtimeBaseUrl);
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error("Analytics request failed: HTTP " + response.status);
+      const value = await response.json() as CanonicalAnalyticsPublication;
+      if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) {
+        throw new Error("Analytics response omitted a valid event identity or revision");
+      }
+      const current = this.analyticsPublications.get(eventKey);
+      if (current && value.revision < current.revision) return;
+      if (expectedRevision !== undefined && value.revision < expectedRevision) return;
+      this.analyticsPublications.set(eventKey, value);
+      for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(value);
+    } catch (error) {
+      console.warn("[SharedEventWorker] Canonical analytics recovery failed", eventKey, error);
+    }
+  }
   private async fetchCanonicalSnapshot(eventKey: string, expectedVersion?: number) {
     if (!this.runtimeBaseUrl) return;
     try {
@@ -248,7 +311,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     }
   }
 
-  private sendSubscription(topic: "event-state", eventKey: string, subscribe: boolean) {
+  private sendSubscription(topic: "event-state" | "analytics", eventKey: string, subscribe: boolean) {
     const key = topic + ":" + eventKey;
     if (subscribe) {
       if (this.sentSubscriptions.has(key)) return;
@@ -265,7 +328,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         topic,
         event_key: eventKey,
       }));
-    } else {
+    } else if (topic === "event-state") {
       this.socket.send(JSON.stringify({ type: subscribe ? "subscribe" : "unsubscribe", eventKey }));
     }
   }
@@ -277,7 +340,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   }
 
   private stopIfIdle() {
-    if (this.leases > 0 || this.handlers.size > 0 || this.snapshotHandlers.size > 0) return;
+    if (this.leases > 0 || this.handlers.size > 0 || this.snapshotHandlers.size > 0 || this.analyticsHandlers.size > 0) return;
     this.stop();
   }
 
