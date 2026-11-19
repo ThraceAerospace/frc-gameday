@@ -191,7 +191,7 @@ export class TeamRuntime {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const providerByEndpoint = new Map([...tasks.values()].map((task) => [task.endpoint, task.provider]));
-      return Response.json({ team_key: this.teamKey,
+      return Response.json({ team_key: this.teamKey, snapshot_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
         polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
         endpoints: [...states.values()].map((state) => {
           const value = state.providerData ?? state.data;
