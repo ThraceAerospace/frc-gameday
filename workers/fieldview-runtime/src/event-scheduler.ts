@@ -160,7 +160,7 @@ interface SeasonIngestJob {
   eventKeys: string[];
   teamResourceCount: number;
   eventResourceCount: number;
-  teamDataChanged: boolean;
+  forceEventAnalytics: boolean;
   teamCursor: number;
   teamResourceCursor: number;
   eventCursor: number;
@@ -486,7 +486,7 @@ export class EventScheduler {
         const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
         job = {
           year, runGeneration: now, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
-          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount, teamDataChanged: false,
+          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount, forceEventAnalytics: false,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -520,7 +520,7 @@ export class EventScheduler {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
           job.teamResourceCursor = 0;
-          job.teamDataChanged = false;
+          job.forceEventAnalytics = false;
           job.eventCursor = 0;
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
@@ -998,7 +998,7 @@ export class EventScheduler {
           // TeamRuntime's revisions are independent from EventRuntime source
           // revisions. Recalculate every event against the just-verified
           // season snapshots, including data that changed before this run.
-          job.teamDataChanged = true;
+          job.forceEventAnalytics = true;
           job.updatedAt = Date.now();
           await this.persistSeasonIngest(job);
           return;
@@ -1041,7 +1041,7 @@ export class EventScheduler {
             } else {
               job.counts.requests_attempted += 1;
               const result = await response.json() as { status?: string; success?: boolean; revision?: number; last_error?: string | null };
-              if (result.revision != null && result.revision !== (resourceState?.revision ?? 0)) job.teamDataChanged = true;
+              if (result.revision != null && result.revision !== (resourceState?.revision ?? 0)) job.forceEventAnalytics = true;
               if (result.status === "unavailable") {
                 job.counts.requests_unavailable += 1;
                 recordError("team", teamKey, resource.endpoint + " is unavailable");
@@ -1118,7 +1118,7 @@ export class EventScheduler {
               event_state?: { status?: string; source_revision?: number | null };
               analytics?: { status?: string; source_revision?: number | null; cohort_status?: string | null };
             };
-            const artifactsReusable = !job.teamDataChanged && current.event_state?.status === "complete" &&
+            const artifactsReusable = !job.forceEventAnalytics && current.event_state?.status === "complete" &&
               current.event_state.source_revision != null &&
               current.analytics?.source_revision === current.event_state.source_revision &&
               (current.analytics?.status === "succeeded" || current.analytics?.status === "partial") &&
