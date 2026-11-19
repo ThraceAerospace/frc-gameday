@@ -10,11 +10,14 @@ type Endpoint = {
   lastAttemptAt?: number | null;
   last_fetched_at?: number | null;
   last_attempt_at?: number | null;
+  lastWebhookAt?: number | null;
+  last_webhook_at?: number | null;
   lastError?: string | null;
   last_error?: string | null;
   lastHttpStatus?: number | null;
   http_status?: number | null;
   expiresAt?: number | null;
+  expires_at?: number | null;
 };
 type Task = {
   endpoint: string;
@@ -101,10 +104,29 @@ function endpointDescription(raw: string) {
   }
   if (isStatbotics) return { title: "Statbotics · " + (normalizedPath.split("/").filter(Boolean).pop() || "API resource"), detail: "Statbotics resource" };
 
+  if (isTba && normalizedPath.startsWith("/team/") && normalizedPath.includes("/districts")) {
+    return { title: "The Blue Alliance · Team district memberships", detail: normalizedPath };
+  }
+  if (isTba && normalizedPath.startsWith("/team/") && normalizedPath.includes("/events/")) {
+    return { title: "The Blue Alliance · Team season events", detail: normalizedPath };
+  }
+  if (isTba && normalizedPath.startsWith("/team/") && normalizedPath.includes("/media/")) {
+    return { title: "The Blue Alliance · Team media", detail: normalizedPath };
+  }
+  if (isTba && normalizedPath.startsWith("/team/")) {
+    return { title: "The Blue Alliance · Team identity", detail: normalizedPath };
+  }
   if (isTba && normalizedPath.includes("/matches")) return { title: "The Blue Alliance · Event matches", detail: normalizedPath };
   if (isTba && normalizedPath.includes("/teams")) return { title: "The Blue Alliance · Event teams", detail: normalizedPath };
-  if (isTba && normalizedPath.startsWith("/event/")) return { title: "The Blue Alliance · Event data", detail: normalizedPath };
-  if (isTba && normalizedPath.startsWith("/team/")) return { title: "The Blue Alliance · Team data", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/team_statuses")) return { title: "The Blue Alliance · Event team status", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/alliances")) return { title: "The Blue Alliance · Playoff alliances", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/oprs")) return { title: "The Blue Alliance · Event OPRs", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/predictions")) return { title: "The Blue Alliance · Event predictions", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/rankings")) return { title: "The Blue Alliance · Event rankings", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/awards")) return { title: "The Blue Alliance · Event awards", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/district_points")) return { title: "The Blue Alliance · District points", detail: normalizedPath };
+  if (isTba && normalizedPath.includes("/advancement_points")) return { title: "The Blue Alliance · Advancement points", detail: normalizedPath };
+  if (isTba && normalizedPath.startsWith("/event/")) return { title: "The Blue Alliance · Event metadata", detail: normalizedPath };
 
   return { title: "Resource endpoint", detail: raw };
 }
@@ -266,14 +288,17 @@ export default function AdminRuntimeDashboard() {
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Resources</h3><div className="space-y-2">{endpoints.map((endpoint) => {
                     const last = endpoint.lastFetchedAt ?? endpoint.last_fetched_at ?? null;
+                    const attempted = endpoint.lastAttemptAt ?? endpoint.last_attempt_at ?? null;
+                    const webhook = endpoint.lastWebhookAt ?? endpoint.last_webhook_at ?? null;
+                    const expires = endpoint.expiresAt ?? endpoint.expires_at ?? null;
                     const status = endpoint.status ?? "unknown";
                     return <div key={endpoint.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><div className="font-semibold">{endpointDescription(endpoint.endpoint).title}</div><div className="mt-0.5 break-all text-[var(--fv-muted)]">{endpointDescription(endpoint.endpoint).detail}</div><div className="mt-0.5 break-all font-mono text-[10px] text-[var(--fv-muted)]">{endpoint.endpoint}</div></div><span className={"font-bold " + statusTone(status)}>{status}</span></div>
-                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Revision {endpoint.revision ?? "—"}</span><span>Fetched {age(last)}</span><span>HTTP {endpoint.lastHttpStatus ?? endpoint.http_status ?? "—"}</span></div>
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Revision {endpoint.revision ?? "—"}</span><span>Fetched {age(last)}</span><span>Attempted {age(attempted)}</span><span>HTTP {endpoint.lastHttpStatus ?? endpoint.http_status ?? "—"}</span>{webhook != null && <span>Webhook {age(webhook)}</span>}{expires != null && <span>Expires {dateTime(expires)}</span>}</div>
                       {(endpoint.lastError || endpoint.last_error) && <p className="mt-1 break-words text-rose-600">{endpoint.lastError ?? endpoint.last_error}</p>}
                     </div>;
                   })}{!endpoints.length && <p className="text-xs text-[var(--fv-muted)]">No resource state recorded yet.</p>}</div></div>
-                  <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Scheduled tasks</h3><div className="space-y-2">{tasks.map((task) => <div key={task.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="font-semibold">{endpointDescription(task.endpoint).title}</div><div className="mt-0.5 break-all text-[var(--fv-muted)]">{endpointDescription(task.endpoint).detail}</div><div className="mt-0.5 break-all font-mono text-[10px] text-[var(--fv-muted)]">{task.endpoint}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Due {dateTime(task.due_at)}</span><span>{task.due_at <= Date.now() ? "Due now" : "Scheduled"}</span><span>Attempts {task.attempts}</span><span>Interval {task.interval_ms == null ? "one-shot" : Math.round(task.interval_ms / 60000) + "m"}</span></div>{task.authoritative_refetch_at && <div className="mt-1 text-[var(--fv-muted)]">Authoritative refetch {dateTime(task.authoritative_refetch_at)}</div>}</div>)}{!tasks.length && <p className="text-xs text-[var(--fv-muted)]">No pending scheduled tasks.</p>}</div></div>
+                  <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Scheduled tasks</h3><div className="space-y-2">{tasks.map((task) => <div key={task.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="font-semibold">{endpointDescription(task.endpoint).title}</div><div className="mt-0.5 break-all text-[var(--fv-muted)]">{endpointDescription(task.endpoint).detail}</div><div className="mt-0.5 break-all font-mono text-[10px] text-[var(--fv-muted)]">{task.endpoint}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]"><span>Due {dateTime(task.due_at)}</span><span>{task.due_at <= Date.now() ? "Due now" : "Scheduled"}</span><span>Attempts {task.attempts}</span><span>Interval {task.interval_ms == null ? "one-shot" : Math.round(task.interval_ms / 60000) + "m"}</span>{task.retry_on_failure !== undefined && <span>{task.retry_on_failure ? "Retry on failure" : "No automatic retry"}</span>}</div>{task.authoritative_refetch_at && <div className="mt-1 text-[var(--fv-muted)]">Authoritative refetch {dateTime(task.authoritative_refetch_at)}</div>}</div>)}{!tasks.length && <p className="text-xs text-[var(--fv-muted)]">No pending scheduled tasks.</p>}</div></div>
                 </div>
               </div>}
             </article>;
