@@ -34,6 +34,7 @@ function handleWorkerMessage(event: MessageEvent) {
     eventKey?: string;
     snapshot?: EventStateSnapshot | FieldViewEventSnapshot;
     version?: number;
+    status?: EventWebSocketStatus;
   };
 
   if (message.type === "pong") {
