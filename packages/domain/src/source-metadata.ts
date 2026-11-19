@@ -66,4 +66,5 @@ export interface FieldViewSourceMetadata {
   statbotics_match?: FieldViewSourceRecordMetadata;
   statbotics_team_year?: FieldViewSourceRecordMetadata;
   statbotics_team_events?: FieldViewSourceRecordMetadata;
+  frc_colors_event?: FieldViewSourceRecordMetadata;
 }
