@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
 import type { FieldViewEventSnapshot, FieldViewTeamSnapshot } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
-import { refreshCanonicalEventAnalytics } from "@/lib/events/sharedWorkerClient";
+import { refreshCanonicalEventAnalytics, refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
 import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
@@ -107,6 +107,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
   const lastMatchAnalysisRefreshKey = useRef(0);
 
   const load = useCallback(async () => {
+    refreshCanonicalEventSnapshot(eventKey);
     refreshCanonicalEventAnalytics(eventKey);
   }, [eventKey]);
 
