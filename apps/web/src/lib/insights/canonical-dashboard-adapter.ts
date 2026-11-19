@@ -246,7 +246,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
     )),
     matches,
     allianceResults: (analytics.alliance_results ?? []).map((item) => {
-      const match = snapshot.matches.find((candidate) => candidate.key === item.match_key);
+      const match = snapshot.matches?.find((candidate) => candidate.key === item.match_key);
       const publishedMatch = publication.matches.find((candidate) => candidate.key === item.match_key);
       const score = (publishedMatch?.analysis ?? match?.analysis)?.score?.[item.alliance];
       const alliance = match?.alliances[item.alliance];
