@@ -108,7 +108,7 @@ export function formatPlayoffMatchGroup(
   }
 }
 
-export function matchLongName(match: FieldViewMatch, eventPlayoffType: number | null = null): string {
+export function matchLongName(match: Pick<FieldViewMatch, "comp_level" | "match_number" | "set_number">, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
@@ -192,7 +192,7 @@ export function matchShortName(match: FieldViewMatch, eventPlayoffType: number |
 
 /** Compact next-match label used by TeamPill, following TBA's mobile convention. */
 export function matchAbbreviationName(
-  match: FieldViewMatch,
+  match: Pick<FieldViewMatch, "comp_level" | "match_number" | "set_number">,
   eventPlayoffType: number | null = null,
 ): string {
   try {
@@ -378,7 +378,7 @@ export function isEliminationMatch(compLevel: string | null | undefined): boolea
  */
 export function formatPlayoffAllianceName(
   teamKeys: string[],
-  playoffAlliances: FieldViewPlayoffAlliance[] | null | undefined,
+  playoffAlliances: Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup">[] | null | undefined,
 ): string | null {
   if (!playoffAlliances?.length || !teamKeys.length) return null;
 
@@ -405,7 +405,7 @@ export function formatPlayoffAllianceName(
 
 
 /** Summarize the webcast availability reported by The Blue Alliance. */
-export function getEventWebcastStatus(event: FieldViewEvent): "Live" | "Offline" | "No Webcast" {
+export function getEventWebcastStatus(event: Pick<FieldViewEvent, "webcasts">): "Live" | "Offline" | "No Webcast" {
   const webcasts = event.webcasts ?? [];
   if (webcasts.length === 0) return "No Webcast";
   return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
