@@ -43,7 +43,8 @@ export type TeamAnalyticsRow = {
 
 export type ReviewFinding = {
   id: string;
-  category: "score-residual" | "alliance-pattern" | "penalty-frequency";
+  /** Canonical finding category; consumers may opt into categories they understand. */
+  category: string;
   subject: string;
   title: string;
   description: string;
