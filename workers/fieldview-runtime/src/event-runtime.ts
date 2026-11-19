@@ -298,12 +298,50 @@ export class EventRuntime {
       return Response.json({ lifecycle, attempted: true, event_key: this.eventKey });
     }
 
+    if (request.method === "POST" && url.pathname === "/refresh") {
+      const body: unknown = await request.json().catch(() => ({}));
+      const requested = isRecord(body) && Array.isArray(body.endpoints) ? body.endpoints : [...this.allowedEndpoints];
+      if (!requested.every((endpoint) => typeof endpoint === "string" && this.allowedEndpoints.has(endpoint))) {
+        return Response.json({ error: "Refresh endpoints must belong to this event" }, { status: 400 });
+      }
+      const endpoints = requested as string[];
+      await this.schedulePolls(endpoints, 86_400_000);
+      await this.scheduleStatboticsRefresh(Date.now(), 0);
+      await this.alarm();
+      // Explicit refreshes also force a fresh analytics publication, even when
+      // the provider returns an unchanged representation or HTTP 304.
+      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+      await this.storage.put("analytics:status", "pending");
+      await this.storage.transaction((transaction) => this.rearm(transaction));
+      await this.alarm();
+      return Response.json({
+        event_key: this.eventKey,
+        requested: endpoints.length + 1,
+        attempted: true,
+        state: await (async () => {
+          const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+          return [...entries.values()].map((state) => ({
+            endpoint: state.endpoint, status: state.status, revision: state.revision,
+            fetched_at: state.lastFetchedAt, attempted_at: state.lastAttemptAt,
+            http_status: (state as EndpointState<unknown> & { lastHttpStatus?: number }).lastHttpStatus ?? null,
+            last_error: (state as EndpointState<unknown> & { lastError?: string | null }).lastError ?? null,
+          }));
+        })(),
+        analytics: {
+          status: await this.storage.get<string>("analytics:status") ?? "pending",
+          last_calculated_at: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.calculatedAt ?? null,
+          source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
+          last_error: await this.storage.get<string>("analytics:last-error") ?? null,
+        },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const scheduledAt = Date.now();
       await this.scheduleStatboticsRefresh(scheduledAt);
       const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
-      const delayMs = configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay);
+      const delayMs = overrideDelayMs ?? (configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay));
       return Response.json({
         scheduled: true,
         event_key: this.eventKey,
@@ -1053,7 +1091,7 @@ export class EventRuntime {
     ].includes(endpoint);
   }
 
-  private async scheduleStatboticsRefresh(now: number): Promise<void> {
+  private async scheduleStatboticsRefresh(now: number, overrideDelayMs?: number): Promise<void> {
     const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
     const delayMs = configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay);
