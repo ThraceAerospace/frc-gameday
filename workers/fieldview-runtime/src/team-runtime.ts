@@ -5,6 +5,7 @@ import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src
 import { FRCColorsApiClient } from "../../../packages/providers/frc-colors/src/client.ts";
 import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src/endpoints.ts";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
+import type { FRCColorsTeam } from "../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
@@ -12,11 +13,6 @@ import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src
 import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
 
 interface TeamPollTask { endpoint: string; dueAt: number; intervalMs: number; attempts: number; }
-interface FRCColorsTeamPayload {
-  primaryHex?: string | null;
-  secondaryHex?: string | null;
-  verified?: boolean;
-}
 interface TeamEndpointState<T> extends EndpointState<T> {
   lastHttpStatus?: number | null;
   lastError?: string | null;
@@ -188,7 +184,7 @@ export class TeamRuntime {
       ...(acquired(media) ? { media: media!.data as TBAMedia[] | null } : {}),
       ...(acquired(statboticsYear) ? { statbotics: statboticsYear!.data as StatboticsTeamYear | null } : {}),
       ...(acquired(statboticsEvents) ? { statbotics_events: statboticsEvents!.data as StatboticsTeamEvent[] | null } : {}),
-      ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeamPayload | null } : {}),
+      ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeam | null } : {}),
     });
     return Response.json(snapshot, { headers: {
       "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
