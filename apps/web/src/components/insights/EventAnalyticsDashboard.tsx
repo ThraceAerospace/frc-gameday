@@ -4,14 +4,13 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import type { FieldViewEventSnapshot, FieldViewTeamSnapshot } from "@fieldview/domain";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
 import { refreshCanonicalEventAnalytics, refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
 import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
-type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
 type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; anomalySummary:{matchesWithAnomalies:number;matchesEvaluated:number;frequency:number|null;allianceUnderperformance:number;allianceOverperformance:number;opponentAnomalies:number;highConfidenceMisses:number;baseline:string}; anomalies:{matchKey:string;matchLabel:string;event:{key:string;name:string;startDate:string};compLevel:string;partners:string[];opponents:string[];alliance:string;residual:number|null;opponentResidual:number|null;teamWinProbability:number|null;won:boolean|null;kinds:string[];reasons:string[];highConfidenceMiss:boolean}[]; summary:{matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}[];eliminationShift:{eliminationMatchCount:number;eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;directionalEventCount:number;meanShift:number|null;medianShift:number|null;signTestPValue:number|null;minimumQualificationMatchesPerEvent:number;minimumEliminationMatchesPerEvent:number;interpretation:"insufficient-history"|"no-elimination-matches"|"single-event-shift"|"recurring-negative-shift"|"no-established-negative-shift";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};qualificationMatches:number;eliminationMatches:number;qualificationMeanResidual:number|null;eliminationMeanResidual:number|null;shift:number;shiftStandardError:number;qualificationMatchKeys:string[];eliminationMatchKeys:string[]}[]};residualPattern:{eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;meanTeamResidual:number|null;signTestPValue:number|null;positiveSignTestPValue:number|null;interpretation:"insufficient-history"|"single-event-below-baseline"|"single-event-above-baseline"|"recurring-below-baseline"|"recurring-above-baseline"|"no-established-pattern";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};teamMatches:number;baselineAllianceSamples:number;teamMeanResidual:number;baselineMeanResidual:number;baselineStandardDeviation:number;belowOneSigma:number;aboveOneSigma:number;belowBaseline:boolean;matchKeys:string[]}[];diagnostics?:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;scoredMatches:number;teamResidualSamples:number;opponentResidualSamples:number;baselineAllianceSamples:number;eligible:boolean}[]};matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
 type Tab = "overview" | "teams" | "qualification" | "playoffs" | "alliances" | "scouting";
@@ -31,34 +30,6 @@ const ordinal = (value: number) => {
   return `${value}${suffix}`;
 };
 const percentileLabel = (value: number | null) => value === null ? "—" : ordinal(Math.round(value * 100));
-
-function toTeamSeasonHistory(snapshot: FieldViewTeamSnapshot): TeamSeasonHistory {
-  const statboticsByEvent = new Map((snapshot.statbotics_events ?? []).flatMap((record) =>
-    typeof record.event === "string" ? [[record.event, record] as const] : [],
-  ));
-  const events = (snapshot.events ?? [])
-    .filter((event) => event.event_type !== 99 && event.event_type !== 100)
-    .sort((a, b) => a.start_date.localeCompare(b.start_date))
-    .map((event) => {
-      const statbotics = statboticsByEvent.get(event.key) ?? null;
-      return {
-        event: {
-          key: event.key,
-          name: event.name,
-          short_name: event.event_code,
-          start_date: event.start_date,
-          week: statbotics?.week ?? null,
-        },
-        statbotics,
-        status: statbotics ? "ready" as const : "unavailable" as const,
-      };
-    });
-  return {
-    team: snapshot.team ?? {},
-    season: snapshot.statbotics ?? null,
-    events,
-  };
-}
 
 function allianceTeamNumbers(teamNumber: number, otherTeams: string[]): string[] {
   return [...new Set([String(teamNumber), ...otherTeams])];
@@ -89,18 +60,16 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     [eventState, analyticsPublication],
   );
   const [tab, setTab] = useState<Tab>("overview");
-  const loading = !data && (!analyticsPublication || analyticsPublication.status === "pending" || analyticsPublication.status === "running");
+  const loading = !data && (!analyticsPublication || analyticsPublication.status === "pending" || analyticsPublication.status === "running" || (analyticsPublication.status === "succeeded" && !analyticsPublication.publication));
   const error = !data && analyticsPublication?.status === "failed"
     ? "Event analytics are temporarily unavailable. The last successful publication is not available yet."
-    : null;
+    : !data && analyticsPublication?.status === "succeeded" && !analyticsPublication.publication
+      ? "The analytics runtime completed without publishing an analytics snapshot. Refresh to retry."
+      : null;
   const [teamFocus, setTeamFocus] = useState("");
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
-  const [historyA, setHistoryA] = useState<TeamSeasonHistory | null>(null);
-  const [historyB, setHistoryB] = useState<TeamSeasonHistory | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [matchAnalysisA, setMatchAnalysisA] = useState<TeamMatchAnalysis | null>(null);
-  const [matchAnalysisB, setMatchAnalysisB] = useState<TeamMatchAnalysis | null>(null);
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
   const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
@@ -112,41 +81,8 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
   }, [eventKey]);
 
   useEffect(() => {
-    if (!teamA || !teamB) {
-      setHistoryA(null);
-      setHistoryB(null);
-      return;
-    }
-    let active = true;
-    setHistoryLoading(true);
-    Promise.all([
-      fetch(`/api/team/${teamA}/history?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
-      fetch(`/api/team/${teamB}/history?year=${data?.event.year ?? new Date().getFullYear()}`, { cache: "no-store" }),
-    ]).then(async ([responseA, responseB]) => {
-      if (!responseA.ok || !responseB.ok) throw new Error("Team season history is temporarily unavailable");
-      const [nextA, nextB] = await Promise.all([
-        responseA.json() as Promise<FieldViewTeamSnapshot>,
-        responseB.json() as Promise<FieldViewTeamSnapshot>,
-      ]);
-      if (active) {
-        setHistoryA(toTeamSeasonHistory(nextA));
-        setHistoryB(toTeamSeasonHistory(nextB));
-      }
-    }).catch(() => {
-      if (active) {
-        setHistoryA(null);
-        setHistoryB(null);
-      }
-    }).finally(() => {
-      if (active) setHistoryLoading(false);
-    });
-    return () => { active = false; };
-  }, [teamA, teamB, data?.event.year]);
-
-
-  useEffect(() => {
     if (!teamA || !data?.event.year) {
-      setMatchAnalysisA(null); setMatchAnalysisB(null); setMatchAnalysisError(null); return;
+      setMatchAnalysisA(null); setMatchAnalysisError(null); return;
     }
     let active = true;
     setMatchAnalysisA(null);
