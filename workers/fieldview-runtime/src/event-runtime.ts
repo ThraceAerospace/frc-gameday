@@ -1091,6 +1091,8 @@ export class EventRuntime {
       const nextWithDiagnostic = {
         ...next,
         lastError: responseState.status === "failed" ? responseState.reason : null,
+        lastHttpStatus: responseState.status === "modified" ? 200
+          : responseState.status === "not-modified" ? 304 : null,
       };
       await transaction.put(key, nextWithDiagnostic);
       if (next.revision !== latest.revision) {
