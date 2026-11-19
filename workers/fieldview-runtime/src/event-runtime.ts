@@ -148,7 +148,7 @@ function changedMatchKeys(
   previous: unknown,
   next: unknown,
   source: AnalyticsSourceKey,
-): string[] | null {
+): string[] | null | undefined {
   if (!Array.isArray(previous) || !Array.isArray(next)) return null;
   const keyOf = (value: unknown) => isRecord(value) && typeof value.key === "string" ? value.key : null;
   const before = new Map(previous.flatMap((match) => {
@@ -159,10 +159,11 @@ function changedMatchKeys(
     const key = keyOf(match);
     return key === null ? [] : [[key, matchAnalyticsProjection(match, source)] as const];
   }));
+  if (before.size !== previous.length || after.size !== next.length) return null;
   const changed = [...new Set([...before.keys(), ...after.keys()])]
     .filter((key) => JSON.stringify(before.get(key)) !== JSON.stringify(after.get(key)))
     .sort();
-  return changed.length > 0 ? changed : null;
+  return changed.length > 0 ? changed : undefined;
 }
 
 async function recordAnalyticsInvalidation(
@@ -1188,14 +1189,13 @@ export class EventRuntime {
         await transaction.put("snapshot-revision", snapshotRevision + 1);
         const analyticsSource = analyticsSourceForEndpoint(endpoint, this.eventKey);
         if (analyticsSource) {
-          await recordAnalyticsInvalidation(
-            transaction,
-            analyticsSource,
-            Date.now(),
-            analyticsSource === "tba-event-matches" || analyticsSource === "statbotics-event-matches"
-              ? changedMatchKeys(latest.providerData, next.providerData, analyticsSource)
-              : null,
-          );
+          const matchKeys = analyticsSource === "tba-event-matches" || analyticsSource === "statbotics-event-matches"
+            ? changedMatchKeys(latest.providerData, next.providerData, analyticsSource)
+            : null;
+          // undefined means the endpoint changed only in non-analytic metadata.
+          if (matchKeys !== undefined) {
+            await recordAnalyticsInvalidation(transaction, analyticsSource, Date.now(), matchKeys);
+          }
         }
       }
 
