@@ -24,6 +24,7 @@ export type TileSurfaceState = {
   eventSearch: string;
   availableEvents: FieldViewEvent[];
   eventsLoading: boolean;
+  eventsError: string | null;
   labels: Record<string, string>;
   controlsVisible: boolean;
   priorityEditKey: string | null;
@@ -71,6 +72,7 @@ export function createInitialTileSurfaceState(
     eventSearch: "",
     availableEvents: [],
     eventsLoading: false,
+    eventsError: null,
     labels: {},
     controlsVisible: true,
     priorityEditKey: null,
