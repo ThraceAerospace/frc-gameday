@@ -4,11 +4,14 @@ import type { FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain
 import NextMatchCountdown from "./NextMatchCountdown";
 import { formatAlliance, formatAllianceShortName, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
+export type MatchPresentation = Pick<FieldViewMatch, "key" | "comp_level" | "match_number" | "set_number" | "alliances" | "actual_time" | "predicted_time" | "time">;
+export type PlayoffAlliancePresentation = Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup" | "status">;
+
 type MatchCardProps = {
-  match: FieldViewMatch;
+  match: MatchPresentation;
   team?: string[];
   isNext?: boolean;
-  playoffAlliances?: FieldViewPlayoffAlliance[];
+  playoffAlliances?: PlayoffAlliancePresentation[];
   playoffType?: number | null;
   eventTimezone?: string;
   onOpenInsights?: () => void;
