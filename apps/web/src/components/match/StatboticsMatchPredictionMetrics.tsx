@@ -1,6 +1,7 @@
 "use client";
 
-import type { StatboticsPrediction } from "@/lib/statbotics/types";
+import type { FieldViewMatch } from "@fieldview/domain";
+type StatboticsPrediction = NonNullable<FieldViewMatch["predictions"]["statbotics"]>;
 
 const REWARD_FIELDS = [
   ["energized_rp", "Energized RP"],
