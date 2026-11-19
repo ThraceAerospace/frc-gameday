@@ -374,7 +374,7 @@ export default function AdminOperationsDashboard() {
             : null}
           {seasonIngest?.status === "running" && <button disabled={busy} onClick={() => void controlSeasonIngest("pause")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Pause</button>}
           {(seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("resume")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Resume / retry</button>}
-          {(seasonIngest?.status === "running" || seasonIngest?.status === "paused") && <button disabled={busy} onClick={() => void controlSeasonIngest("cancel")} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-40">Cancel</button>}
+          {(seasonIngest?.status === "running" || seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("cancel")} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-40">Cancel</button>}
         </div>
       </Panel>
             <Panel><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview samples at most 250 objects of each type. These are sample counts, not full-inventory totals.</p></div><span className="text-xs text-[var(--fv-muted)]">{sampled.events} events · {sampled.teams} teams inspected</span></div>
