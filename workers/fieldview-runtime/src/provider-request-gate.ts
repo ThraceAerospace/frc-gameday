@@ -1,0 +1,42 @@
+import type { RuntimeEnvironment } from "./cloudflare.ts";
+
+export type ProviderRequestPermit =
+  | { granted: true; leaseId: string | null }
+  | { granted: false; retryAt: number };
+
+/**
+ * Serializes provider I/O across EventRuntime and TeamRuntime instances.
+ * Test environments without the scheduler binding retain their isolated
+ * behavior; deployed runtime bindings always route through the shared gate.
+ */
+export async function acquireProviderRequestPermit(
+  env: RuntimeEnvironment,
+  owner: string,
+  endpoint: string,
+): Promise<ProviderRequestPermit> {
+  if (!env.EVENT_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return { granted: true, leaseId: null };
+  const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+  const response = await scheduler.fetch(new Request("https://event-scheduler/provider-request/acquire", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ owner, endpoint }),
+  }));
+  if (!response.ok) throw new Error("Shared provider request gate returned HTTP " + response.status);
+  const body = await response.json() as { granted?: boolean; lease_id?: string; retry_at?: number };
+  if (body.granted === true) return { granted: true, leaseId: body.lease_id ?? null };
+  return { granted: false, retryAt: Number.isFinite(body.retry_at) ? Number(body.retry_at) : Date.now() + 1_000 };
+}
+
+export async function releaseProviderRequestPermit(
+  env: RuntimeEnvironment,
+  leaseId: string | null,
+): Promise<void> {
+  if (!leaseId || !env.EVENT_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return;
+  const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+  const response = await scheduler.fetch(new Request("https://event-scheduler/provider-request/release", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ lease_id: leaseId }),
+  }));
+  if (!response.ok) throw new Error("Shared provider request gate release returned HTTP " + response.status);
+}
