@@ -20,6 +20,7 @@ export default function EventAnalyticsSurface({
       eventName={eventName}
       eventTimezone={snapshot?.event?.timezone ?? undefined}
       analytics={snapshot?.analytics}
+      snapshot={snapshot}
       teamStates={snapshot?.team_states}
       matches={snapshot?.matches}
       loading={canonical === undefined}
