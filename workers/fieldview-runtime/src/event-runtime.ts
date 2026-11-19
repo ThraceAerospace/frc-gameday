@@ -21,6 +21,7 @@ import type { StatboticsMatch } from "../../../packages/providers/statbotics/src
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
+import { calculateCanonicalMatchAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
 
 interface PollTask {
   endpoint: string;
@@ -398,9 +399,7 @@ export class EventRuntime {
     const advancementPointsSource = toSourceMetadata(advancementPointsState, now);
     const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
 
-    return {
-      version: state.version,
-      state: normalizeFieldViewEventState({
+    const normalizedState = normalizeFieldViewEventState({
         event_key: this.eventKey as EventKey,
         ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
         ...(hasAcquiredValue(teamsState) ? { tba_teams: teamsState!.data as TBATeam[] | null } : {}),
@@ -451,7 +450,10 @@ export class EventRuntime {
             ? { tba_event_advancement_points: advancementPointsSource }
             : {},
         },
-      }),
+      });
+    return {
+      version: state.version,
+      state: calculateCanonicalMatchAnalytics(normalizedState),
     };
   }
 
