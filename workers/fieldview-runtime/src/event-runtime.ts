@@ -547,10 +547,16 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/analytics") {
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const revision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
+      const endpointStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
+        total + (endpointStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+      const storedStatus = await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending");
+      const analyticsStatus = publication && publication.sourceRevision !== currentSourceRevision ? "stale" : storedStatus;
       return Response.json({
         event_key: this.eventKey,
         revision,
-        status: await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending"),
+        status: analyticsStatus,
         due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
         calculated_at: publication?.calculatedAt ?? null,
         source_revision: publication?.sourceRevision ?? null,
@@ -590,17 +596,26 @@ export class EventRuntime {
       const eventAnalytics = analyticsPublication?.eventAnalytics;
       const cohortStatus = isRecord(eventAnalytics) && isRecord(eventAnalytics.season_cohort)
         ? eventAnalytics.season_cohort.state : null;
+      const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
+        total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+      const eventStateStatus = !eventStatePublication ? "missing"
+        : eventStatePublication.sourceRevision === currentSourceRevision ? eventStatePublication.status : "stale";
+      const storedAnalyticsStatus = await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending");
+      const analyticsStatus = analyticsPublication && analyticsPublication.sourceRevision !== currentSourceRevision
+        ? "stale" : storedAnalyticsStatus;
       return Response.json({
         event_key: this.eventKey,
+        source_revision: currentSourceRevision,
         event_state: {
-          status: eventStatePublication?.status ?? "missing",
+          status: eventStateStatus,
           generated_at: eventStatePublication?.generatedAt ?? null,
           source_revision: eventStatePublication?.sourceRevision ?? null,
         },
         analytics: {
           revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
           due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
-          status: await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending"),
+          status: analyticsStatus,
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
           pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
@@ -926,6 +941,7 @@ export class EventRuntime {
         });
     return {
       version: state.version,
+      sourceRevision: state.sourceRevision,
       state: {
         ...normalizedState,
         ...(matches === undefined ? {} : { matches }),
