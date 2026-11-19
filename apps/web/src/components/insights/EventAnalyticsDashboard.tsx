@@ -4,6 +4,10 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
+import { refreshCanonicalEventAnalytics } from "@/lib/events/sharedWorkerClient";
+import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
 import { formatTeamNumber, matchCode, matchShortName } from "@/lib/tba/formatters";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/types";
 
@@ -44,12 +48,23 @@ function teamNumberLink(teamNumber:number):ReactNode {
   return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-[var(--fv-brand-strong)]">{teamNumber}</Link>;
 }
 
-export default function EventAnalyticsDashboard({ eventKey, eventName, websocketStatus, websocketStale }: { eventKey: string; eventName: string; websocketStatus: "connected" | "disconnected" | "connecting"; websocketStale: boolean }) {
-  const [data, setData] = useState<EventAnalyticsResponse | null>(null);
-  const loadGeneration = useRef(0);
+export default function EventAnalyticsDashboard({ eventKey, eventName, eventState, analyticsPublication, websocketStatus, websocketStale }: {
+  eventKey: string;
+  eventName: string;
+  eventState: FieldViewEventSnapshot;
+  analyticsPublication: CanonicalAnalyticsPublication | undefined;
+  websocketStatus: "connected" | "disconnected" | "connecting";
+  websocketStale: boolean;
+}) {
+  const data = useMemo(
+    () => toEventAnalyticsDashboardData(eventState, analyticsPublication),
+    [eventState, analyticsPublication],
+  );
   const [tab, setTab] = useState<Tab>("overview");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const loading = !data && (!analyticsPublication || analyticsPublication.status === "pending" || analyticsPublication.status === "running");
+  const error = !data && analyticsPublication?.status === "failed"
+    ? "Event analytics are temporarily unavailable. The last successful publication is not available yet."
+    : null;
   const [teamFocus, setTeamFocus] = useState("");
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
@@ -63,26 +78,9 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
   const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
   const lastMatchAnalysisRefreshKey = useRef(0);
 
-  const load = useCallback(async (forceRefresh = false) => {
-    const generation = ++loadGeneration.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const refreshQuery = forceRefresh ? "?refresh=1" : "";
-      const response = await fetch(`/api/insights/event/${encodeURIComponent(eventKey)}${refreshQuery}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      const next = await response.json() as EventAnalyticsResponse;
-      if (generation === loadGeneration.current) setData(next);
-    } catch (cause) {
-      if (generation === loadGeneration.current) setError(cause instanceof Error ? cause.message : "Unable to load analytics");
-    } finally {
-      if (generation === loadGeneration.current) setLoading(false);
-    }
+  const load = useCallback(async () => {
+    refreshCanonicalEventAnalytics(eventKey);
   }, [eventKey]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     if (!teamA || !teamB) {
@@ -155,7 +153,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, websocket
           <p className="mt-2 max-w-3xl text-sm text-slate-500">Understand the competitive landscape: how teams compare, where the field is strongest, and which results have diverged from statistical expectations. Model outputs describe teams and alliances, not robot-specific observations.</p>
           <p className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500"><span className={`h-2 w-2 rounded-full ${websocketStatus === "connected" ? "bg-emerald-500" : websocketStatus === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />{websocketStatus === "connected" ? "Live event feed connected" : websocketStatus === "connecting" ? "Connecting to live event feed…" : "Live event feed disconnected"}{websocketStale ? " · live feed delayed" : ""}</p>
         </div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (teamA) setMatchAnalysisRefreshKey((value) => value + 1); void load(true); }} disabled={loading} className="rounded-lg border border-[var(--fv-brand-border)] bg-[var(--fv-brand-soft)] px-3 py-2 text-sm font-semibold text-[var(--fv-brand-strong)] hover:bg-[var(--fv-brand-border)] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (teamA) setMatchAnalysisRefreshKey((value) => value + 1); void load(); }} disabled={loading} className="rounded-lg border border-[var(--fv-brand-border)] bg-[var(--fv-brand-soft)] px-3 py-2 text-sm font-semibold text-[var(--fv-brand-strong)] hover:bg-[var(--fv-brand-border)] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Loading…" : "Refresh data"}</button><Link href={`/event/${eventKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Event details</Link></div>
       </div>
 
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
