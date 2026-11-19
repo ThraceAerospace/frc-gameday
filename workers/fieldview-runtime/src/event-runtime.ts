@@ -563,7 +563,7 @@ export class EventRuntime {
       const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const acquiredCount = await Promise.all([...eventResources, statboticsResource].map(async (endpoint) => {
         const resource = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-        return resource?.lastFetchedAt != null || resource?.lastWebhookAt != null;
+        return resource?.lastFetchedAt != null;
       })).then((values) => values.filter(Boolean).length);
       const eventStatePublication: EventStatePublication = {
         sourceRevision: result.version,
