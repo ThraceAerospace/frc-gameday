@@ -20,7 +20,10 @@ export type AnalyticsSourceKey =
 
 export type AnalyticsInvalidationScope =
   | "match-analysis"
-  | "event-aggregate";
+  | "event-aggregate"
+  | "team-aggregate"
+  | "playoff-aggregate"
+  | "season-comparison";
 
 export interface AnalyticsInvalidation {
   sources: AnalyticsSourceKey[];
@@ -33,16 +36,16 @@ export interface AnalyticsInvalidation {
 }
 
 const SOURCE_SCOPES: Record<AnalyticsSourceKey, AnalyticsInvalidationScope[]> = {
-  "tba-event": ["match-analysis", "event-aggregate"],
-  "tba-event-teams": ["match-analysis", "event-aggregate"],
-  "tba-team-event-statuses": ["match-analysis", "event-aggregate"],
-  "tba-event-matches": ["match-analysis", "event-aggregate"],
-  "tba-event-alliances": ["match-analysis", "event-aggregate"],
-  "tba-event-oprs": ["match-analysis", "event-aggregate"],
-  "tba-event-predictions": ["match-analysis", "event-aggregate"],
-  "statbotics-event-matches": ["match-analysis", "event-aggregate"],
-  "season-cohort": ["event-aggregate"],
-  "manual": ["match-analysis", "event-aggregate"],
+  "tba-event": ["match-analysis", "event-aggregate", "team-aggregate", "playoff-aggregate"],
+  "tba-event-teams": ["team-aggregate"],
+  "tba-team-event-statuses": ["team-aggregate"],
+  "tba-event-matches": ["match-analysis", "event-aggregate", "team-aggregate", "playoff-aggregate"],
+  "tba-event-alliances": ["playoff-aggregate"],
+  "tba-event-oprs": ["team-aggregate"],
+  "tba-event-predictions": ["match-analysis", "event-aggregate", "team-aggregate"],
+  "statbotics-event-matches": ["match-analysis", "event-aggregate", "team-aggregate"],
+  "season-cohort": ["team-aggregate", "season-comparison"],
+  "manual": ["match-analysis", "event-aggregate", "team-aggregate", "playoff-aggregate", "season-comparison"],
 };
 
 export function planAnalyticsInvalidation(
