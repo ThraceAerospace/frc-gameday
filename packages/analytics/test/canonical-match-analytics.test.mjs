@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateCanonicalMatchAnalytics } from "../src/canonical-match-analytics.ts";
 
-test("EventRuntime canonical enrichment publishes match score and EPA analysis plus flags", () => {
+test("EventRuntime canonical enrichment publishes match score and EPA analysis plus flags", async () => {
   const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
     team_key: `frc${start + index}`,
     team_number: start + index,
@@ -31,7 +31,11 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
     }],
   };
 
-  const result = calculateCanonicalMatchAnalytics(state);
+  const result = await calculateCanonicalMatchAnalytics(state, [{
+    input_key: "matches", provider: "tba", resource: "event-matches",
+    source_revision: 4, fetched_at: 1_800_000_000_000, record_count: 1,
+    included_count: 1, excluded_count: 0, status: "available",
+  }]);
   const calculated = result.matches[0];
   assert.equal(calculated.analysis.score.red.actual, 105);
   assert.equal(calculated.analysis.score.red.predicted, 100);
@@ -41,12 +45,15 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
   assert.equal(calculated.analysis.alliance_epa.red.pre_match_team_count, 3);
   assert.equal(calculated.analysis.alliance_epa.red.post_match_team_count, 3);
   assert.equal(calculated.flags.prediction.label, "Lean Red");
+  assert.equal(calculated.analysis.audit.inputs[0].source_revision, 4);
+  assert.equal(calculated.analysis.audit.definition_versions.length, 10);
+  assert.equal(calculated.analysis.audit.input_digest.length, 64);
   assert.equal(result.team_states[0].matches[0], calculated);
 });
 
-test("canonical match analytics preserves absent and explicit-null match resources", () => {
+test("canonical match analytics preserves absent and explicit-null match resources", async () => {
   const absent = { event_key: "2026test", sources: {} };
   const explicitNull = { event_key: "2026test", matches: null, sources: {} };
-  assert.equal(calculateCanonicalMatchAnalytics(absent), absent);
-  assert.equal(calculateCanonicalMatchAnalytics(explicitNull), explicitNull);
+  assert.equal(await calculateCanonicalMatchAnalytics(absent), absent);
+  assert.equal(await calculateCanonicalMatchAnalytics(explicitNull), explicitNull);
 });
