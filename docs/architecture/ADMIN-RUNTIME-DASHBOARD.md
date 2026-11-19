@@ -18,7 +18,9 @@ For local development, keep `FIELDVIEW_ADMIN_ACCESS_TOKEN` in the web app's igno
 
 - Global EventScheduler enabled state, last run, and discovery errors.
 - Registered EventRuntime and TeamRuntime instances.
-- Resource status, revision, last successful fetch, HTTP status, and recorded errors.
+- Resource status, revision, last successful fetch, last attempt, expiry, HTTP status, webhook time when present, and recorded errors.
+- Task due time, interval, attempts, retry-on-failure policy when exposed, and webhook-triggered authoritative refetch times.
+- Provider/resource-specific labels for EventRuntime resources and TeamRuntime identity, district, season-event, and media endpoints.
 - Pending Durable Object tasks, due times, intervals, attempts, and webhook-triggered authoritative refetch times.
 - The single shared Multiplexer connection and subscription counts.
 
