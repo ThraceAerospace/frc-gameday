@@ -18,7 +18,7 @@ type EventInsightsSurfaceProps = {
  *
  * The caller chooses the event key: Tile View's shared active selection for
  * an integrated display, or the URL event for the standalone route. The
- * shared EventState remains the sole owner of live data acquisition.
+ * canonical EventRuntime snapshot is the sole source of event and match data.
  */
 export default function EventInsightsSurface({
   eventKey,
