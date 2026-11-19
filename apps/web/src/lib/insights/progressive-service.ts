@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
-import { FRCColors } from "@/lib/frc-colors/service";
 import type { FRCColor } from "@/lib/frc-colors/legacy-compatibility";
+import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import { buildMatchFlags } from "@fieldview/analytics/match-flags";
@@ -301,13 +301,29 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     // event endpoint, alongside the existing analytics collection job.
     if (!job.teamColorsLoadedAt || Date.now() - job.teamColorsLoadedAt >= TEAM_COLOR_REFRESH_MS) {
       try {
-        job.teamColors = await FRCColors.getEvent(eventKey, { refresh: forceRefresh });
-        job.teamColorsLoadedAt = Date.now();
-        job.teamColorsFetchError = null;
+        // FRC Colors is acquired and cached by EventRuntime. The Next.js
+        // analytics service only projects the canonical snapshot into its
+        // legacy presentation DTO; it never calls the provider.
+        const canonical = await getCanonicalEventSnapshot(eventKey);
+        const colors = canonical?.snapshot.team_colors;
+        if (colors !== undefined) {
+          job.teamColors = Object.entries(colors).map(([teamNumber, color]) => ({
+            teamNumber: Number(teamNumber),
+            primaryHex: color.primary_hex,
+            secondaryHex: color.secondary_hex,
+            verified: color.verified,
+          }));
+          const retrievedAt = canonical?.snapshot.sources.team_colors?.frc_colors_event?.retrieved_at;
+          job.teamColorsLoadedAt = retrievedAt ? Date.parse(retrievedAt) : Date.now();
+          job.teamColorsFetchError = canonical?.snapshot.sources.team_colors?.frc_colors_event?.status === "stale"
+            ? "Using stale canonical FRC Colors data"
+            : null;
+        } else {
+          job.teamColorsFetchError = "Canonical FRC Colors data has not been acquired";
+        }
       } catch (error) {
         job.teamColorsFetchError = error instanceof Error ? error.message : String(error);
-        console.warn("[Insights] FRC Colors event collection failed", eventKey, error);
-        // Leave the timestamp unset so a later snapshot request can retry.
+        console.warn("[Insights] canonical FRC Colors snapshot unavailable", eventKey, error);
       }
       await writeJob(eventKey, job);
     }
