@@ -14,6 +14,7 @@ type ClientMessage =
     }
   | { type: "subscribeCanonical"; eventKey: string }
   | { type: "unsubscribeCanonical"; eventKey: string }
+  | { type: "refreshCanonical"; eventKey: string }
   | { type: "close" }
   | { type: "ping"; nonce: number };
 
@@ -27,6 +28,7 @@ const events = new Map<string, EventRecord>();
 const portSubscriptions = new Map<MessagePort, Set<string>>();
 const portCanonicalSubscriptions = new Map<MessagePort, Set<string>>();
 const portLastSeen = new Map<MessagePort, number>();
+const portStatusUnsubscribers = new Map<MessagePort, () => void>();
 const PORT_IDLE_TIMEOUT = 120_000;
 let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -103,6 +105,12 @@ function unsubscribe(port: MessagePort, eventKey: string) {
 }
 
 function subscribeCanonical(port: MessagePort, eventKey: string) {
+  if (!portStatusUnsubscribers.has(port)) {
+    const unsubscribeStatus = workerEventWebSocket.subscribeStatus((status) => {
+      try { port.postMessage({ type: "runtime-status", status }); } catch { /* closing port */ }
+    });
+    portStatusUnsubscribers.set(port, unsubscribeStatus);
+  }
   if (!eventKey) return;
   let subscribed = portCanonicalSubscriptions.get(port);
   if (!subscribed) {
@@ -142,6 +150,8 @@ function unsubscribeCanonical(port: MessagePort, eventKey: string) {
 function closePort(port: MessagePort) {
   if (!portLastSeen.has(port)) return;
   portLastSeen.delete(port);
+  portStatusUnsubscribers.get(port)?.();
+  portStatusUnsubscribers.delete(port);
   workerEventWebSocket.release();
   for (const eventKey of [...(portSubscriptions.get(port) ?? [])]) unsubscribe(port, eventKey);
   for (const eventKey of [...(portCanonicalSubscriptions.get(port) ?? [])]) unsubscribeCanonical(port, eventKey);
@@ -191,6 +201,9 @@ function handleMessage(port: MessagePort, message: ClientMessage) {
       break;
     case "unsubscribeCanonical":
       unsubscribeCanonical(port, message.eventKey);
+      break;
+    case "refreshCanonical":
+      workerEventWebSocket.refreshCanonicalSnapshot(message.eventKey);
       break;
     case "ping":
       port.postMessage({ type: "pong", nonce: message.nonce });
