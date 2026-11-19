@@ -111,6 +111,17 @@ export type FieldViewAllianceFlag =
       };
     }
   | {
+      type: "anomalous-score";
+      evidence: {
+        actual_score: number;
+        predicted_score: number;
+        residual: number;
+        phase_median: number;
+        phase_margin: number;
+        sample_size: number;
+      };
+    }
+  | {
       type: "high-penalties";
       evidence: {
         penalty_points: number;
