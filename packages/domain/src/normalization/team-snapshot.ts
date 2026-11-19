@@ -1,5 +1,6 @@
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
+import type { FRCColorsTeam } from "@fieldview/provider-frc-colors/types";
 import type { FieldViewTeamSnapshot } from "../team.js";
 import type { TeamKey } from "../ids.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
@@ -15,7 +16,7 @@ export interface NormalizeFieldViewTeamSnapshotInput {
   media?: TBAMedia[] | null;
   statbotics?: StatboticsTeamYear | null;
   statbotics_events?: StatboticsTeamEvent[] | null;
-  frc_colors?: NonNullable<import("../team.js").FieldViewTeam["frc_colors"]> | null;
+  frc_colors?: FRCColorsTeam | null;
 }
 
 /** Compose team-scoped resources without renaming or rewriting provider fields. */
