@@ -1203,10 +1203,9 @@ export class EventRuntime {
     const permit = await acquireProviderRequestPermit(this.env, "event:" + this.eventKey, endpoint);
     if (!permit.granted) return { deferredUntil: permit.retryAt };
     try {
-      try {
-        const response = isStatboticsEndpoint
-          ? await this.statboticsApi.request(endpoint, { headers })
-          : await this.api.request(endpoint, { headers });
+      const response = isStatboticsEndpoint
+        ? await this.statboticsApi.request(endpoint, { headers })
+        : await this.api.request(endpoint, { headers });
       const maxAge = cacheMaxAgeSeconds(response.headers.get("Cache-Control"));
       const expiresAt = maxAge === null ? null : Date.now() + maxAge * 1000;
 
@@ -1228,17 +1227,14 @@ export class EventRuntime {
           expiresAt,
         };
       }
-      } catch (error) {
-        // Keep a short, secret-free diagnostic for admin inspection. Never store
-        // response bodies, request headers, or provider credentials.
-      const detail = error instanceof Error
-        ? `${error.name}: ${error.message}`
-        : String(error);
-        responseState = {
-          status: "failed",
-          reason: detail.slice(0, 300) || "Unknown fetch or response error",
-        };
-      }
+    } catch (error) {
+      // Keep a short, secret-free diagnostic for admin inspection. Never store
+      // response bodies, request headers, or provider credentials.
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      responseState = {
+        status: "failed",
+        reason: detail.slice(0, 300) || "Unknown fetch or response error",
+      };
     } finally {
       await releaseProviderRequestPermit(this.env, permit.leaseId);
     }
