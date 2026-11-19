@@ -1,7 +1,7 @@
-import AdminRuntimeDashboard from "./AdminRuntimeDashboard";
+import AdminOperationsDashboard from "./AdminOperationsDashboard";
 
 export const dynamic = "force-dynamic";
 
 export default function AdminRuntimePage() {
-  return <AdminRuntimeDashboard />;
+  return <AdminOperationsDashboard />;
 }
