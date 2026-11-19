@@ -768,7 +768,7 @@ export class EventScheduler {
     if (runningJob) {
       await this.processSeasonIngest(runningJob);
       const refreshed = await this.storage.get<SeasonIngestJob>(seasonIngestKey(runningJob.year));
-      if (refreshed?.status === "running") await this.storage.setAlarm(Date.now() + 1_000);
+      if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt ?? Date.now() + 1_000));
       else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
         await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
       } else await this.storage.deleteAlarm();
