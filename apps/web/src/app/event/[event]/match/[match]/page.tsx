@@ -383,7 +383,7 @@ function ScoreBreakdownPanel({
   variant,
 }: {
   name: string;
-  breakdown: NonNullable<TBAMatch["score_breakdown"]>["red"];
+  breakdown: NonNullable<FieldViewMatch["score_breakdown"]>["red"];
   score: number | null;
   variant: "red" | "blue";
 }) {
