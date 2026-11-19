@@ -23,6 +23,9 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
   const state = {
     event_key: "2026test",
     event: { key: "2026test", playoff_type: 0, timezone: "America/New_York" },
+    teams: Array.from({ length: 6 }, (_, index) => ({
+      key: "frc" + (index + 1), team_number: index + 1,
+    })),
     matches: [match],
     sources: {},
     team_states: [{
@@ -49,6 +52,12 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
   assert.equal(calculated.analysis.audit.definition_versions.length, 10);
   assert.equal(calculated.analysis.audit.input_digest.length, 64);
   assert.equal(result.team_states[0].matches[0], calculated);
+  assert.equal(result.analytics.event_key, "2026test");
+  assert.equal(result.analytics.metrics.find((item) => item.metric_key === "mean-score-residual").value, 0);
+  assert.equal(result.team_states[0].analytics.team_key, "frc1");
+  assert.equal(result.team_states[0].analytics.metrics.find((item) => item.metric_key === "epa").value, 15);
+  assert.ok(result.team_states[0].analytics.metrics.some((item) => item.metric_key === "epa-contribution-percent"));
+  assert.equal(result.team_states[0].analytics.audit.calculation_id, calculated.analysis.audit.calculation_id);
 });
 
 test("canonical match analytics preserves absent and explicit-null match resources", async () => {
