@@ -9,7 +9,7 @@ import TeamRecord from "./Record";
 type TeamModalProps = {
   open: boolean;
   onClose: () => void;
-  teams?: FieldViewTeam[];
+  teams?: Pick<FieldViewTeam, "key" | "team_number" | "nickname" | "name" | "city" | "state_prov" | "country">[];
   teamsStatuses?: globalThis.Record<string, FieldViewEventTeam["tba_status"] | null>;
   trackedTeams?: string[];
   remapTeams?: Record<string, string> | null;
@@ -17,7 +17,7 @@ type TeamModalProps = {
 };
 
 function getDisplayTeamNumber(
-  team: FieldViewTeam,
+  team: Pick<FieldViewTeam, "key" | "team_number" | "nickname" | "name">,
   remapTeams: Record<string, string> | null | undefined,
 ) {
   const mappedKey = remapTeams?.[team.key];
