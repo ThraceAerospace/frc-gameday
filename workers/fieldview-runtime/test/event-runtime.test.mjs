@@ -752,3 +752,45 @@ test("EventRuntime ignores out-of-order multiplexer registration generations", a
   });
   assert.equal(await storage.get("multiplexer:shared"), true);
 });
+
+
+test("canonical analytics are coalesced into EventRuntime alarm work, persisted, and overlaid on reads", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026analytics";
+  const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => Response.json([], { headers: { ETag: '"analytics-v1"' } }),
+  }, eventKey);
+
+  await runtime.schedulePolls([matchesEndpoint], 60_000, Date.now() - 1);
+  await runtime.alarm();
+  assert.equal(storage.values.get("analytics:status"), "pending");
+  assert.ok(storage.values.get("analytics:due-at") > Date.now() - 5_000);
+
+  const read = () => runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  const beforeCalculation = await read();
+  assert.equal(beforeCalculation.status, 200);
+  const beforeState = await beforeCalculation.json();
+  assert.equal(beforeState.analytics, undefined);
+  assert.equal(storage.values.has("analytics:publication"), false,
+    "snapshot reads must not execute or persist analytics calculations");
+
+  storage.values.set("analytics:due-at", Date.now() - 1);
+  await runtime.alarm();
+  assert.equal(storage.values.get("analytics:status"), "succeeded");
+  assert.equal(storage.values.has("analytics:due-at"), false);
+  const publication = storage.values.get("analytics:publication");
+  assert.ok(publication);
+  assert.equal(publication.sourceRevision, storage.values.get("snapshot-revision") - 1);
+  assert.equal(typeof publication.calculatedAt, "number");
+
+  const afterCalculation = await read();
+  const afterState = await afterCalculation.json();
+  assert.ok(afterState.analytics);
+  assert.equal(afterState.analytics.audit.calculation_id, publication.eventAnalytics.audit.calculation_id);
+});
