@@ -48,6 +48,7 @@ const ANALYTICS_REVISION_KEY = "analytics:revision";
 interface AnalyticsPublication {
   sourceRevision: number;
   calculatedAt: number;
+  analyticsRevision?: number;
   matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
   eventAnalytics?: unknown;
   teamAnalytics: Array<{ team_key: string; analytics?: unknown }>;
