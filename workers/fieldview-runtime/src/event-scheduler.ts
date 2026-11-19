@@ -162,6 +162,8 @@ interface SeasonIngestJob {
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number;
     event_analytics_waiting: number; event_analytics_failed: number;
+    requests_attempted: number; requests_succeeded: number; requests_failed: number;
+    requests_skipped: number; requests_unavailable: number; requests_deferred: number;
   };
   recentErrors: Array<{ kind: "team" | "event"; key: string; detail: string; at: number }>;
   startedAt: number;
@@ -382,10 +384,21 @@ export class EventScheduler {
       if (action === "preview") {
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
         const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
-        const ready = events?.complete === true && teams?.complete === true && (teams.teamKeys?.length ?? 0) > 0;
+        const eventKeys = events?.events.map((item) => item.key).filter((item): item is string => typeof item === "string") ?? [];
+        const teamKeys = teams?.teamKeys ?? [];
+        const ready = events?.complete === true && teams?.complete === true && teamKeys.length > 0;
+        const eventResourceCount = eventKeys[0] ? eventResourceEndpoints(eventKeys[0]).length + 1 : 0;
+        const teamResourceCount = teamKeys[0] ? teamResourceEndpoints(teamKeys[0], year).length : 0;
+        const plannedRequests = eventKeys.length * eventResourceCount + teamKeys.length * teamResourceCount;
+        const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+        const requestIntervalMs = intervalValue === undefined ? 1_000 : Number(intervalValue);
         return Response.json({
-          year, ready, events: events?.events.length ?? 0, teams: teams?.teamKeys?.length ?? 0,
-          team_pages: teams?.pageCount ?? 0,
+          year, ready, events: eventKeys.length, teams: teamKeys.length,
+          team_pages: teams?.pageCount ?? 0, event_resources_per_event: eventResourceCount,
+          team_resources_per_team: teamResourceCount, planned_resource_requests: plannedRequests,
+          request_interval_ms: requestIntervalMs,
+          estimated_minimum_duration_ms: plannedRequests * requestIntervalMs,
+          estimate_note: "Lower-bound estimate; cached resources are skipped, while retries and normal live polling can add time or requests.",
           existing_job: job ? seasonIngestSummary(job) : null,
           requires_explicit_confirmation: true,
         }, { headers: { "Cache-Control": "no-store" } });
@@ -410,6 +423,8 @@ export class EventScheduler {
             event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
             event_analytics_succeeded: 0, event_analytics_partial: 0,
             event_analytics_waiting: 0, event_analytics_failed: 0,
+            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0,
+            requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
           },
           recentErrors: [], startedAt: now, updatedAt: now,
         };
@@ -435,6 +450,8 @@ export class EventScheduler {
             event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
             event_analytics_succeeded: 0, event_analytics_partial: 0,
             event_analytics_waiting: 0, event_analytics_failed: 0,
+            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0,
+            requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
           };
           job.recentErrors = [];
           job.startedAt = Date.now();
@@ -835,6 +852,7 @@ export class EventScheduler {
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
           }
           if (resourceState?.last_fetched_at != null || resourceState?.status === "unavailable") {
+            job.counts.requests_skipped += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
@@ -844,20 +862,27 @@ export class EventScheduler {
               body: JSON.stringify({ endpoint: resource.endpoint }),
             }));
             if (response.status === 202) {
+              job.counts.requests_deferred += 1;
               const deferred = await response.json() as { retry_at?: number };
               job.nextDueAt = deferred.retry_at ?? Date.now() + requestInterval;
             } else if (!response.ok) {
+              job.counts.requests_attempted += 1;
+              job.counts.requests_failed += 1;
               retry("Team resource " + resource.endpoint + " returned HTTP " + response.status, "team", teamKey);
             } else {
+              job.counts.requests_attempted += 1;
               const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
               if (result.status === "unavailable") {
+                job.counts.requests_unavailable += 1;
                 recordError("team", teamKey, resource.endpoint + " is unavailable");
                 job.teamResourceCursor += 1;
                 job.resourceAttempts = 0;
                 job.nextDueAt = Date.now() + 1_000;
               } else if (result.status === "failed" || result.success === false) {
+                job.counts.requests_failed += 1;
                 retry(result.last_error ?? (resource.endpoint + " failed"), "team", teamKey);
               } else {
+                job.counts.requests_succeeded += 1;
                 job.teamResourceCursor += 1;
                 job.resourceAttempts = 0;
                 job.nextDueAt = Date.now() + requestInterval;
@@ -913,6 +938,7 @@ export class EventScheduler {
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
           if (resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) {
+            job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
@@ -922,15 +948,21 @@ export class EventScheduler {
               body: JSON.stringify({ endpoint }),
             }));
             if (response.status === 202) {
+              job.counts.requests_deferred += 1;
               const deferred = await response.json() as { retry_at?: number };
               job.nextDueAt = deferred.retry_at ?? Date.now() + requestInterval;
             } else if (!response.ok) {
+              job.counts.requests_attempted += 1;
+              job.counts.requests_failed += 1;
               retry("Event resource " + endpoint + " returned HTTP " + response.status, "event", eventKey);
             } else {
+              job.counts.requests_attempted += 1;
               const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
               if (result.status === "failed" || result.success === false) {
+                job.counts.requests_failed += 1;
                 retry(result.last_error ?? (endpoint + " failed"), "event", eventKey);
               } else {
+                job.counts.requests_succeeded += 1;
                 job.eventResourceCursor += 1;
                 job.resourceAttempts = 0;
                 job.nextDueAt = Date.now() + requestInterval;
