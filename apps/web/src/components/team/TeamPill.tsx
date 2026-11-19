@@ -1,13 +1,14 @@
 "use client";
 
-import type { FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
+import type { FieldViewEventTeam } from "@fieldview/domain";
+import type { MatchPresentation, PlayoffAlliancePresentation } from "@/components/match/MatchCard";
 
 import { formatAllianceShortName, formatRecord, formatTeamNumber, matchAbbreviationName } from "@/lib/tba/formatters";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(
   team: string,
-  alliances: FieldViewPlayoffAlliance[],
+  alliances: PlayoffAlliancePresentation[],
 ) {
   const teamKey = String(team).toLowerCase();
 
@@ -37,7 +38,7 @@ export default function TeamPill({
 }: {
   team: string;
   status: FieldViewEventTeam["tba_status"] | null | undefined;
-  nextMatch: FieldViewMatch | null | undefined;
+  nextMatch: MatchPresentation | null | undefined;
   playoffAlliances?: FieldViewPlayoffAlliance[];
   eventTimezone?: string | null;
   playoffType?: number | null;
