@@ -452,7 +452,7 @@ export class EventRuntime {
       if (!endpoint || (!this.allowedEndpoints.has(endpoint) && endpoint !== statboticsEndpoint)) {
         return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
       }
-      const result = await this.pollEndpoint(endpoint);
+      const result = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
       if (typeof result !== "boolean") {
         return Response.json({ endpoint, deferred: true, retry_at: result.deferredUntil }, { status: 202 });
       }
@@ -1191,7 +1191,7 @@ export class EventRuntime {
     else await transaction.setAlarm(nextDue);
   }
 
-  private async pollEndpoint(endpoint: string): Promise<boolean | { deferredUntil: number }> {
+  private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean | { deferredUntil: number }> {
     const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
@@ -1304,7 +1304,7 @@ export class EventRuntime {
 
     if (result.snapshotChanged) await this.publishSnapshotRevision(result.snapshotVersion);
 
-    if (result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
+    if (!options.suppressStatboticsRefresh && result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
       await this.scheduleStatboticsRefresh(Date.now());
     }
 
