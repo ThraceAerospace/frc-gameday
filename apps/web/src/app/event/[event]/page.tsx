@@ -9,6 +9,7 @@ import {
 } from "@fieldview/domain";
 import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import MatchRow from "@/components/match/MatchRow";
+import EventAnalyticsSurface from "@/components/insights/EventAnalyticsSurface";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
@@ -32,7 +33,7 @@ export default async function EventPage({
   const { event: eventKey } = await params;
   const search = await searchParams;
   const selectedTab = Array.isArray(search.tab) ? search.tab[0] : search.tab;
-  const activeTab = selectedTab === "teams" ? "teams" : "matches";
+  const activeTab = selectedTab === "teams" ? "teams" : selectedTab === "analytics" ? "analytics" : "matches";
 
   if (!eventKey) {
     return (
@@ -147,12 +148,11 @@ export default async function EventPage({
                 label="Teams"
                 count={sortedTeams.length}
               />
-              <Link
-                href={`/insights/event/${event.key}`}
-                className="border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-[var(--fv-muted)] hover:text-[var(--fv-text)]"
-              >
-                Analytics
-              </Link>
+              <TabLink
+                href={`/event/${event.key}?tab=analytics`}
+                selected={activeTab === "analytics"}
+                label="Analytics"
+              />
             </nav>
           </SurfaceCard>
 
@@ -199,6 +199,8 @@ export default async function EventPage({
                 )}
               </SurfaceCard>
             </section>
+          ) : activeTab === "analytics" ? (
+            <EventAnalyticsSurface eventKey={event.key} eventName={event.name} />
           ) : (
             <section id="matches" className="mt-6">
               <SectionHeading title="Match Schedule" description={matchesAvailable ? `${sortedMatches.length} matches scheduled or recorded.` : "Match data is currently unavailable."} className="mb-3" />
@@ -248,7 +250,7 @@ function TabLink({
   href: string;
   selected: boolean;
   label: string;
-  count: number;
+  count?: number;
 }) {
   return (
     <Link
@@ -260,7 +262,7 @@ function TabLink({
           : "border-transparent text-[var(--fv-muted)] hover:text-[var(--fv-text)]"
       }`}
     >
-      {label} <span className="ml-1 text-[var(--fv-muted)]">{count}</span>
+      {label}{count === undefined ? null : <span className="ml-1 text-[var(--fv-muted)]">{count}</span>}
     </Link>
   );
 }
