@@ -1,10 +1,13 @@
 import type { StatboticsMatch } from "@/lib/statbotics/types";
+import type { FieldViewMatchFlags } from "@fieldview/domain";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventRanking, TBAMatch } from "@/lib/tba/types";
 
 export type AnalyticsMatch = {
   match: TBAMatch;
   statbotics: StatboticsMatch | null;
   statboticsStatus: "ready" | "unavailable";
+  /** Server-calculated match review flags; absent while legacy jobs are loaded. */
+  flags?: FieldViewMatchFlags;
 };
 
 export type AllianceResult = {
