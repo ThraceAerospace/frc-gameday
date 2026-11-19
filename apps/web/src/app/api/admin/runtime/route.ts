@@ -24,8 +24,15 @@ export async function GET(request: Request) {
       error: "Admin runtime configuration is incomplete. Configure NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL and the server-only RUNTIME_ADMIN_TOKEN.",
     }, { status: 503 });
   }
+  const query = new URL(request.url).searchParams;
+  const kind = query.get("kind");
+  const key = query.get("key");
+  const inventoryKind = query.get("inventory");
+  const target = kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key)
+    : inventoryKind ? "/internal/admin/inventory?" + query.toString()
+    : "/internal/admin/overview";
   try {
-    const response = await fetch(new URL("/internal/admin/overview", runtimeUrl), {
+    const response = await fetch(new URL(target, runtimeUrl), {
       headers: { Authorization: "Bearer " + runtimeToken },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
