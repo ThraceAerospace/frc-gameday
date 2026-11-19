@@ -462,7 +462,33 @@ export class EventRuntime {
             ? {}
             : { authoritative_refetch_at: task.authoritativeRefetchAt }),
         })).sort((left, right) => left.endpoint.localeCompare(right.endpoint)),
-        endpoints: Object.fromEntries(entries),
+        endpoints: Object.fromEntries([...entries.entries()].map(([key, state]) => {
+          const value = state.providerData ?? state.data;
+          const records = Array.isArray(value) ? value : value == null ? [] : [value];
+          const hasEpa = (record: unknown): boolean => {
+            if (!isRecord(record)) return false;
+            if (isRecord(record.predictions) && record.predictions.statbotics !== undefined) return true;
+            for (const alliance of ["red", "blue"]) {
+              const teams = isRecord(record.teams) && Array.isArray(record.teams[alliance])
+                ? record.teams[alliance] as unknown[] : [];
+              if (teams.some((team) => isRecord(team) &&
+                (typeof team.epa === "number" || typeof team.pre_epa === "number"))) return true;
+            }
+            return false;
+          };
+          const statbotics = key.includes("/matches?event=");
+          const included = statbotics ? records.filter(hasEpa).length : records.length;
+          const diagnostic = state as EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null };
+          return [key, {
+            ...state,
+            record_count: records.length,
+            included_count: included,
+            excluded_count: Math.max(0, records.length - included),
+            data_kind: Array.isArray(value) ? "array" : value === null ? "empty" : typeof value,
+            lastError: diagnostic.lastError ?? null,
+            lastHttpStatus: diagnostic.lastHttpStatus ?? null,
+          }];
+        })),
       });
     }
 
