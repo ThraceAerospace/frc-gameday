@@ -889,10 +889,10 @@ function CanonicalTeamAnalysisPanel({ analysis, name }: { analysis: CanonicalTea
           {!analytics ? <p className="px-4 py-4 text-sm text-slate-500">The EventRuntime has not published team analytics for this event yet.</p> : <div className="space-y-4 p-4">
             {analytics.summary?.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">{analytics.summary.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Metric label="EPA" value={fmt(performance?.epa)} />
-              <Metric label="EPA change" value={performance?.epa_change == null ? "—" : `${performance.epa_change > 0 ? "+" : ""}${fmt(performance.epa_change)}`} />
-              <Metric label="Record" value={performance ? `${performance.wins ?? "—"}–${performance.losses ?? "—"}–${performance.ties ?? "—"}` : "—"} />
-              <Metric label="Completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} />
+              <Metric label="EPA" value={fmt(performance?.epa)} detail="Published event estimate" />
+              <Metric label="EPA change" value={performance?.epa_change == null ? "—" : `${performance.epa_change > 0 ? "+" : ""}${fmt(performance.epa_change)}`} detail="Change during this event" />
+              <Metric label="Record" value={performance ? `${performance.wins ?? "—"}–${performance.losses ?? "—"}–${performance.ties ?? "—"}` : "—"} detail="Completed match results" />
+              <Metric label="Completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} detail="Completed / observed" />
             </div>
             {analytics.season_comparison ? <div className="rounded-lg border border-slate-200 p-3 text-sm"><p className="font-semibold text-slate-800">Prior-event comparison</p><p className="mt-1 text-slate-600">{analytics.season_comparison.prior_event.event_name}: {fmt(analytics.season_comparison.prior_epa)} → {fmt(analytics.season_comparison.current_epa)} EPA ({analytics.season_comparison.change > 0 ? "+" : ""}{fmt(analytics.season_comparison.change)})</p><p className="mt-1 text-xs text-slate-500">Change rank {analysis.events.length > 0 ? analytics.season_comparison.cohort_rank : "—"} of {analytics.season_comparison.cohort_size} eligible teams</p></div> : null}
             {analytics.peer_performance ? <p className="text-sm text-slate-600">Peer comparison: {analytics.peer_performance.interpretation.replaceAll("-", " ")} · {analytics.peer_performance.team_match_count} team matches · {analytics.peer_performance.peer_alliance_count} peer alliances</p> : null}
