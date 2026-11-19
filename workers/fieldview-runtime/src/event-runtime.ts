@@ -718,7 +718,7 @@ export class EventRuntime {
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
     await this.storage.put("analytics:status", "running");
-    let calculated: Awaited<ReturnType<EventRuntime["buildEventState"]>>;
+    let calculated: { version: number; state: ReturnType<typeof normalizeFieldViewEventState> };
     try {
       calculated = await this.buildEventState(true);
     } catch (error) {
