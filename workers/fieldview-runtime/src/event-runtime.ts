@@ -20,7 +20,7 @@ import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoi
 import type { StatboticsMatch } from "../../../packages/providers/statbotics/src/types.ts";
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
-import { normalizeFieldViewEventSnapshot } from "../../../packages/domain/src/normalization/event-snapshot.ts";
+import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
 
 interface PollTask {
   endpoint: string;
@@ -318,8 +318,8 @@ export class EventRuntime {
       // Scheduling only persists the work and arms the DO alarm; provider I/O
       // runs asynchronously after this request returns.
       await this.scheduleDemandIngestion();
-      const result = await this.buildEventSnapshot();
-      return Response.json(result.snapshot, {
+      const result = await this.buildEventState();
+      return Response.json(result.state, {
         headers: { "X-FieldView-Snapshot-Version": String(result.version) },
       });
     }
@@ -350,7 +350,7 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  private async buildEventSnapshot(): Promise<{ version: number; snapshot: ReturnType<typeof normalizeFieldViewEventSnapshot> }> {
+  private async buildEventState(): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -400,7 +400,7 @@ export class EventRuntime {
 
     return {
       version: state.version,
-      snapshot: normalizeFieldViewEventSnapshot({
+      state: normalizeFieldViewEventState({
         event_key: this.eventKey as EventKey,
         ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
         ...(hasAcquiredValue(teamsState) ? { tba_teams: teamsState!.data as TBATeam[] | null } : {}),
