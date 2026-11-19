@@ -22,7 +22,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ team
   const canonical = await getCanonicalTeamSnapshot(`frc${teamNumber}`, year);
   if (!canonical) return Response.json({ error: "Canonical team snapshot unavailable" }, { status: 503 });
 
-  const events = (canonical.snapshot.events ?? [])
+  if (canonical.snapshot.events === undefined || canonical.snapshot.events === null) {
+    return Response.json({ error: "Team season event list is still being acquired" }, { status: 503 });
+  }
+
+  const events = canonical.snapshot.events
     .filter((event) => event.event_type !== 99 && event.event_type !== 100)
     .sort((a, b) => a.start_date.localeCompare(b.start_date)) as TeamEventReference[];
 
