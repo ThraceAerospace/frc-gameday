@@ -171,7 +171,7 @@ interface SeasonIngestJob {
     event_analytics_succeeded: number; event_analytics_partial: number;
     event_analytics_waiting: number; event_analytics_failed: number;
     event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
-    requests_attempted: number; requests_succeeded: number; requests_failed: number;
+    requests_attempted: number; requests_succeeded: number; requests_failed: number; requests_retried: number;
     requests_skipped: number; requests_unavailable: number; requests_deferred: number;
   };
   recentErrors: Array<{ kind: "team" | "event"; key: string; detail: string; at: number }>;
@@ -438,7 +438,7 @@ export class EventScheduler {
             event_analytics_succeeded: 0, event_analytics_partial: 0,
             event_analytics_waiting: 0, event_analytics_failed: 0,
             event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
-            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0,
+            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0, requests_retried: 0,
             requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
           },
           recentErrors: [], startedAt: now, updatedAt: now,
@@ -893,6 +893,7 @@ export class EventScheduler {
     const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
     const requestInterval = intervalValue === undefined ? 1_000 : Number(intervalValue);
     const retry = (detail: string, kind: "team" | "event", entityKey: string) => {
+      if (job.resourceAttempts > 0) job.counts.requests_retried += 1;
       job.resourceAttempts += 1;
       if (job.resourceAttempts >= 3) {
         recordError(kind, entityKey, detail);
