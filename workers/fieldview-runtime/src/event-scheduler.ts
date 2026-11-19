@@ -292,13 +292,23 @@ export class EventScheduler {
     if (request.method === "POST" && url.pathname === "/run") {
       const policy = eventPollingPolicy(this.env);
       const errors: string[] = [];
-      try { await this.discoverAndSchedule(policy); }
-      catch (error) { errors.push("Event discovery: " + (error instanceof Error ? error.message : String(error))); }
-      try { await this.discoverTeams(new Date().getUTCFullYear()); }
-      catch (error) { errors.push("Team discovery: " + (error instanceof Error ? error.message : String(error))); }
+      try {
+        await this.discoverAndSchedule(policy);
+        await this.storage.delete("scheduler:last-error");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        errors.push("Event discovery: " + detail);
+        await this.storage.put("scheduler:last-error", detail);
+      }
+      try {
+        await this.discoverTeams(new Date().getUTCFullYear());
+        await this.storage.delete("scheduler:team-discovery-error");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        errors.push("Team discovery: " + detail);
+        await this.storage.put("scheduler:team-discovery-error", detail);
+      }
       await this.storage.put("scheduler:last-run-at", Date.now());
-      if (errors.length) await this.storage.put("scheduler:last-error", errors.join("; "));
-      else await this.storage.delete("scheduler:last-error");
       if (await this.storage.get<boolean>("scheduler:enabled") === true) {
         await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
       }
