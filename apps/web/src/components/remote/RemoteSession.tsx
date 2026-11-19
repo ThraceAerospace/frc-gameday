@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import TileViewSurface from "@/components/surface/TileViewSurface";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
-import { subscribeEventState } from "@/lib/events/useEventState";
+import { getCanonicalEventSnapshot, subscribeCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { EventStateSnapshotsProvider } from "@/lib/events/EventStateSnapshotsProvider";
+import { CanonicalEventSnapshotsProvider, type CanonicalEventSnapshotValue } from "@/lib/events/CanonicalEventSnapshotsProvider";
 import type { EventStateSnapshot } from "@/lib/events/EventState";
 import {
   createRemoteSessionActions,
@@ -47,11 +48,11 @@ export default function RemoteSession({
 
   const [peerStatus, setPeerStatus] =
     useState<RemotePeerStatus>("connecting");
-  const [eventStates, setEventStates] = useState<Record<string, EventStateSnapshot>>({});
-  const eventStatesRef = useRef<Record<string, EventStateSnapshot>>({});
+  const [eventSnapshots, setEventSnapshots] = useState<Record<string, CanonicalEventSnapshotValue>>({});
+  const eventSnapshotsRef = useRef<Record<string, CanonicalEventSnapshotValue>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
   const sendControllerState = useMemo(
-    () => (includeEventStates = false) => {
+    () => (includeEventSnapshots = false) => {
       if (role !== "controller") return;
       const state = localControllerRef.current.getState();
       const {
@@ -79,13 +80,9 @@ export default function RemoteSession({
         ),
       };
       peerRef.current?.sendMessage({ type: "stateSnapshot", state: snapshot });
-      if (includeEventStates) {
-        for (const [eventKey, eventState] of Object.entries(eventStatesRef.current)) {
-          peerRef.current?.sendMessage({
-            type: "eventStateSnapshot",
-            eventKey,
-            state: eventState,
-          });
+      if (includeEventSnapshots) {
+        for (const [eventKey, value] of Object.entries(eventSnapshotsRef.current)) {
+          peerRef.current?.sendMessage({ type: "eventSnapshot", eventKey, ...value });
         }
       }
     },
@@ -117,13 +114,13 @@ export default function RemoteSession({
           applyRemoteSessionAction(localControllerRef.current, action);
         },
         onMessage: (message: RemoteSessionMessage) => {
-          if (message.type === "eventStateSnapshot" && role === "display") {
-            setEventStates((current) => {
+          if (message.type === "eventSnapshot" && role === "display") {
+            setEventSnapshots((current) => {
               const next = {
                 ...current,
-                [message.eventKey]: message.state,
+                [message.eventKey]: { version: message.version, snapshot: message.snapshot },
               };
-              eventStatesRef.current = next;
+              eventSnapshotsRef.current = next;
               return next;
             });
             return;
@@ -160,10 +157,10 @@ export default function RemoteSession({
       if (!eventKeys.has(eventKey)) {
         unsubscribe();
         eventSubscriptionsRef.current.delete(eventKey);
-        setEventStates((current) => {
+        setEventSnapshots((current) => {
           const next = { ...current };
           delete next[eventKey];
-          eventStatesRef.current = next;
+          eventSnapshotsRef.current = next;
           return next;
         });
       }
@@ -172,18 +169,16 @@ export default function RemoteSession({
     for (const eventKey of eventKeys) {
       if (eventSubscriptionsRef.current.has(eventKey)) continue;
 
-      const unsubscribe = subscribeEventState(eventKey, (state) => {
+      const unsubscribe = subscribeCanonicalEventSnapshot(eventKey, () => {
+        const value = getCanonicalEventSnapshot(eventKey);
+        if (!value) return;
         const next = {
-          ...eventStatesRef.current,
-          [eventKey]: state,
+          ...eventSnapshotsRef.current,
+          [eventKey]: value,
         };
-        eventStatesRef.current = next;
-        setEventStates(next);
-        peerRef.current?.sendMessage({
-          type: "eventStateSnapshot",
-          eventKey,
-          state,
-        });
+        eventSnapshotsRef.current = next;
+        setEventSnapshots(next);
+        peerRef.current?.sendMessage({ type: "eventSnapshot", eventKey, ...value });
       });
 
       eventSubscriptionsRef.current.set(eventKey, unsubscribe);
@@ -224,17 +219,19 @@ export default function RemoteSession({
         <RemoteTileSurface
           controller={controller}
           peerStatus={peerStatus}
-          eventStates={eventStates}
+          eventSnapshots={eventSnapshots}
         />
       </div>
     );
   }
 
   return (
-    <EventStateSnapshotsProvider snapshots={eventStates}>
-      <div hidden={hidden}>
-        <TileViewSurface controller={controller} />
-      </div>
+    <EventStateSnapshotsProvider snapshots={{}}>
+      <CanonicalEventSnapshotsProvider snapshots={eventSnapshots}>
+        <div hidden={hidden}>
+          <TileViewSurface controller={controller} />
+        </div>
+      </CanonicalEventSnapshotsProvider>
     </EventStateSnapshotsProvider>
   );
 }
