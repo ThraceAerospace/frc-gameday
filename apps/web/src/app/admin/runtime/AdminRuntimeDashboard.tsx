@@ -35,7 +35,7 @@ type RuntimeEntry = {
     event_key?: string;
     team_key?: string;
     lifecycle?: { completed_until?: number | null };
-    analytics?: { due_at?: number | null; status?: string; last_calculated_at?: number | null; source_revision?: number | null };
+    analytics?: { due_at?: number | null; status?: string; last_calculated_at?: number | null; source_revision?: number | null; last_error?: string | null };
     polling?: Task[];
     endpoints?: Record<string, Endpoint> | Endpoint[];
     diagnostics?: Array<{ endpoint: string; http_status: number | null; last_error: string | null }>;
@@ -296,6 +296,7 @@ export default function AdminRuntimeDashboard() {
                     <span>Last calculated {dateTime(entry.state?.analytics?.last_calculated_at)}</span>
                     <span>Source revision {entry.state?.analytics?.source_revision ?? "—"}</span>
                   </div>
+                  {entry.state?.analytics?.last_error && <p className="mt-2 break-words text-rose-600">{entry.state.analytics.last_error}</p>}
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Resources</h3><div className="space-y-2">{endpoints.map((endpoint) => {
