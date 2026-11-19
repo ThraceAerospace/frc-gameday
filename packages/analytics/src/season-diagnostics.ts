@@ -1,6 +1,6 @@
 import type { FieldViewTeamMatchEvidence } from "../../domain/src/analytics.ts";
 
-type SeasonMatchEvidence = FieldViewTeamMatchEvidence & {
+export type SeasonMatchEvidence = FieldViewTeamMatchEvidence & {
   event: { key: string; name: string; shortName: string | null; startDate: string };
 };
 
@@ -49,7 +49,7 @@ function summarizePhase(items: SeasonMatchEvidence[]) {
     epaStart: first?.pre_match_epa ?? null, epaEnd: last?.post_match_epa ?? null,
   };
 }
-function buildSeasonDiagnostics(rows: SeasonMatchEvidence[]) {
+export function buildSeasonDiagnostics(rows: SeasonMatchEvidence[]) {
   const completed = rows.filter((row) => row.actual_score !== null && row.opponent_actual_score !== null);
   const phaseSummaries = ["qm", "ef", "qf", "sf", "f"].flatMap((phase) => {
     const items = completed.filter((row) => row.competition_level.toLowerCase() === phase);
