@@ -27,7 +27,7 @@ function getDisplayTeamNumber(
 }
 
 function getDisplayTeamName(
-  team: FieldViewTeam,
+  team: Pick<FieldViewTeam, "team_number" | "nickname">,
   displayTeamNumber: string,
   isRemapped: boolean,
 ) {
