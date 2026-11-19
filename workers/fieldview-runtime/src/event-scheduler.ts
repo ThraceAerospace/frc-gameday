@@ -355,15 +355,22 @@ export class EventScheduler {
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true;
+      const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
+        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
       const audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
+        event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[];
         counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>("admin:coverage-audit:" + year);
       if (!audit) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, { headers: { "Cache-Control": "no-store" } });
+      const snapshotChanged = !discoveryReady ||
+        audit.event_discovery_updated_at !== eventDiscovery?.updatedAt ||
+        audit.team_discovery_updated_at !== teamDiscovery?.updatedAt;
+      const status = snapshotChanged ? "stale" : audit.status;
       const total = audit.event_keys.length + audit.team_keys.length;
       return Response.json({
-        year: audit.year, status: audit.status, discovery_ready: discoveryReady, started_at: audit.started_at, updated_at: audit.updated_at,
+        year: audit.year, status, discovery_ready: discoveryReady, started_at: audit.started_at, updated_at: audit.updated_at,
         cursor: audit.cursor, processed: audit.cursor, total, remaining: Math.max(0, total - audit.cursor), counts: audit.counts,
       }, { headers: { "Cache-Control": "no-store" } });
     }
@@ -380,6 +387,7 @@ export class EventScheduler {
       const storageKey = "admin:coverage-audit:" + year;
       let audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number;
+        event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[]; cursor: number;
         counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>(storageKey);
@@ -401,6 +409,8 @@ export class EventScheduler {
         }
         audit = {
           year, status: "running", started_at: Date.now(), updated_at: Date.now(),
+          event_discovery_updated_at: eventDiscovery.updatedAt,
+          team_discovery_updated_at: teamDiscovery.updatedAt,
           event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
           counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? teamDiscovery.pages?.length ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
         };
