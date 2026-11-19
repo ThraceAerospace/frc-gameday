@@ -374,3 +374,21 @@ test("internal team refresh route requires service authentication", async () => 
     { operation: "fetch", id: "frc3461", path: "/refresh", method: "POST" },
   ]);
 });
+
+
+test("public event analytics route exposes the persisted analytics publication", async () => {
+  const { env, calls } = makeEnvironment();
+  const response = await worker.fetch(
+    new Request("https://runtime.example/events/2026test/analytics"),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+  assert.equal(response.headers.get("Access-Control-Expose-Headers"), "X-FieldView-Snapshot-Version, X-FieldView-Analytics-Version");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal((await response.json()).ok, true);
+  const forwarded = calls.find((call) => call.operation === "fetch");
+  assert.equal(forwarded.url, "/analytics");
+  assert.equal(forwarded.method, "GET");
+  assert.equal(forwarded.headers.get("X-FieldView-Event-Key"), "2026test");
+});
