@@ -40,7 +40,7 @@ type SeasonIngest = {
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_failed: number;
     event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
-    requests_attempted: number; requests_succeeded: number; requests_failed: number;
+    requests_attempted: number; requests_succeeded: number; requests_failed: number; requests_retried: number;
     requests_skipped: number; requests_unavailable: number; requests_deferred: number;
   };
   recent_errors?: Array<{ kind: string; key: string; detail: string; at: number }>;
@@ -362,7 +362,7 @@ export default function AdminOperationsDashboard() {
               ["EventAnalytics succeeded", seasonIngest.counts.event_analytics_succeeded], ["EventAnalytics partial", seasonIngest.counts.event_analytics_partial],
               ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed], ["Cohort complete", seasonIngest.counts.event_cohort_complete], ["Cohort partial", seasonIngest.counts.event_cohort_partial], ["Cohort discovering", seasonIngest.counts.event_cohort_discovering], ["Cohort missing", seasonIngest.counts.event_cohort_missing],
               ["Requests attempted", seasonIngest.counts.requests_attempted], ["Requests succeeded", seasonIngest.counts.requests_succeeded],
-              ["Requests failed", seasonIngest.counts.requests_failed], ["Requests skipped", seasonIngest.counts.requests_skipped],
+              ["Requests failed", seasonIngest.counts.requests_failed], ["Requests retried", seasonIngest.counts.requests_retried], ["Requests skipped", seasonIngest.counts.requests_skipped],
               ["Resources unavailable", seasonIngest.counts.requests_unavailable], ["Requests deferred by gate", seasonIngest.counts.requests_deferred],
             ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-lg font-bold tabular-nums">{value}</p></div>)}
           </div>}
