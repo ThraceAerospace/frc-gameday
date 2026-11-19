@@ -182,6 +182,7 @@ export function useTileSurfaceController({
       update((current) => ({
         ...current,
         eventsLoading: true,
+        eventsError: null,
       }));
 
       try {
@@ -202,6 +203,7 @@ export function useTileSurfaceController({
             ...current,
             availableEvents: data,
             eventsLoading: false,
+            eventsError: null,
           }));
         }
       } catch (error) {
@@ -212,6 +214,7 @@ export function useTileSurfaceController({
             ...current,
             availableEvents: [],
             eventsLoading: false,
+            eventsError: error instanceof Error ? error.message : "Event discovery failed",
           }));
         }
       }
