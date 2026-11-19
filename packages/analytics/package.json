@@ -8,7 +8,8 @@
     "./calculations": "./src/calculations.ts",
     "./types": "./src/types.ts",
     "./definitions": "./src/definitions.ts",
-    "./audit": "./src/audit.ts"
+    "./audit": "./src/audit.ts",
+    "./match-flags": "./src/match-flags.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
