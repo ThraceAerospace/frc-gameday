@@ -1,13 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { use } from "react";
-import EventInsightsSurface from "@/components/surface/EventInsightsSurface";
-
-export default function MatchInsightsPage({
+export default async function EventInsightsRedirect({
   params,
 }: {
   params: Promise<{ event: string }>;
 }) {
-  const { event } = use(params);
-  return <EventInsightsSurface eventKey={event} />;
+  const { event } = await params;
+  redirect(`/event/${encodeURIComponent(event)}?tab=analytics`);
 }
