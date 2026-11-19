@@ -151,6 +151,7 @@ interface ProviderRequestLease { leaseId: string; owner: string; endpoint: strin
 
 interface SeasonIngestJob {
   year: number;
+  runGeneration: number;
   eventDiscoveryUpdatedAt: number;
   teamDiscoveryUpdatedAt: number;
   status: "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
@@ -182,7 +183,7 @@ interface SeasonIngestJob {
 const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
 const seasonIngestHistoryPrefix = (year: number) => "admin:season-ingest-history:" + year + ":";
 const seasonIngestSummary = (job: SeasonIngestJob) => ({
-  year: job.year, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
+  year: job.year, run_generation: job.runGeneration, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
   team_discovery_updated_at: job.teamDiscoveryUpdatedAt, status: job.status, phase: job.phase,
   team_cursor: job.teamCursor, team_total: job.teamKeys.length,
   team_resource_cursor: job.teamResourceCursor, team_resources_per_team: job.teamResourceCount,
@@ -438,7 +439,7 @@ export class EventScheduler {
         const teamResourceCount = teamResourceEndpoints(teamKeys[0], year).length;
         const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
         job = {
-          year, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
+          year, runGeneration: now, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
           status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
@@ -461,6 +462,7 @@ export class EventScheduler {
         if (job.status === "running") job.status = "paused";
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
+        job.runGeneration = Date.now();
         if (job.status === "completed_with_errors") {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
@@ -876,6 +878,15 @@ export class EventScheduler {
     await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
   }
 
+  private async persistSeasonIngest(job: SeasonIngestJob): Promise<void> {
+    await this.storage.transaction(async (tx) => {
+      const current = await tx.get<SeasonIngestJob>(seasonIngestKey(job.year));
+      if (!current || current.runGeneration !== job.runGeneration) return;
+      if (current.status !== "running") job.status = current.status;
+      await tx.put(seasonIngestKey(job.year), job);
+    });
+  }
+
   private async processSeasonIngest(job: SeasonIngestJob): Promise<void> {
     const key = seasonIngestKey(job.year);
     const recordError = (kind: "team" | "event", entityKey: string, detail: string) => {
@@ -889,7 +900,7 @@ export class EventScheduler {
       job.status = "paused";
       recordError("event", "season-discovery", "The retained discovery snapshot changed; review and restart the job from a fresh preview.");
       job.updatedAt = Date.now();
-      await this.storage.put(key, job);
+      await this.persistSeasonIngest(job);
       return;
     }
     if (teamResourceEndpoints(job.teamKeys[0] ?? "", job.year).length !== job.teamResourceCount ||
@@ -897,7 +908,7 @@ export class EventScheduler {
       job.status = "paused";
       recordError("event", "resource-inventory", "Configured resource builders changed; review and restart from a fresh preview.");
       job.updatedAt = Date.now();
-      await this.storage.put(key, job);
+      await this.persistSeasonIngest(job);
       return;
     }
     const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
@@ -921,7 +932,7 @@ export class EventScheduler {
         if (job.teamCursor >= job.teamKeys.length) {
           job.phase = "events";
           job.updatedAt = Date.now();
-          await this.storage.put(key, job);
+          await this.persistSeasonIngest(job);
           return;
         }
         const teamKey = job.teamKeys[job.teamCursor];
@@ -1006,7 +1017,7 @@ export class EventScheduler {
           job.status = failures > 0 ? "completed_with_errors" : "completed";
           delete job.nextDueAt;
           job.updatedAt = Date.now();
-          await this.storage.put(key, job);
+          await this.persistSeasonIngest(job);
           return;
         }
         const eventKey = job.eventKeys[job.eventCursor];
@@ -1158,7 +1169,7 @@ export class EventScheduler {
       }
     }
     job.updatedAt = Date.now();
-    await this.storage.put(key, job);
+    await this.persistSeasonIngest(job);
   }
 
   private async discoverEvents(year: number): Promise<void> {
