@@ -141,12 +141,22 @@ function mapMatch(match: FieldViewMatch, publicationMatch?: NonNullable<Canonica
       ? [[String(team.team_number), team.pre_epa]]
       : [],
   ));
-  const statbotics = match.predictions.statbotics || Object.keys(pre_epas).length
-    ? ({ pred: match.predictions.statbotics, pre_epas } as unknown as StatboticsMatch)
+  const canonicalPrediction = match.predictions.statbotics;
+  const scoreAnalysis = publicationMatch?.analysis?.score;
+  const prediction = canonicalPrediction || scoreAnalysis
+    ? ({
+        ...(canonicalPrediction ?? {}),
+        red_score: canonicalPrediction?.red_score ?? scoreAnalysis?.red.predicted,
+        blue_score: canonicalPrediction?.blue_score ?? scoreAnalysis?.blue.predicted,
+      })
+    : undefined;
+  const statbotics = prediction || Object.keys(pre_epas).length
+    ? ({ pred: prediction, pre_epas } as unknown as StatboticsMatch)
     : null;
   return {
     match: enriched,
     statbotics,
+    flags: publicationMatch?.flags ?? match.flags,
     statboticsStatus: statbotics ? "ready" as const : "unavailable" as const,
   };
 }
@@ -186,19 +196,30 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
         : [],
     )),
     matches,
-    allianceResults: (analytics.alliance_results ?? []).map((item) => ({
-      matchKey: item.match_key,
-      matchLabel: item.match_label,
-      compLevel: item.competition_level,
-      color: item.alliance,
-      teamKeys: item.team_keys,
-      predicted: item.predicted_score,
-      actual: item.actual_score,
-      residual: item.score_residual,
-      preEpaTotal: item.pre_match_epa_total,
-      winner: item.winner,
-      outcome: item.outcome,
-    })),
+    allianceResults: (analytics.alliance_results ?? []).map((item) => {
+      const match = snapshot.matches.find((candidate) => candidate.key === item.match_key);
+      const publishedMatch = publication.matches.find((candidate) => candidate.key === item.match_key);
+      const score = publishedMatch?.analysis?.score?.[item.alliance];
+      const alliance = match?.alliances[item.alliance];
+      const actual = item.actual_score ?? (typeof alliance?.score === "number" && alliance.score >= 0 ? alliance.score : null);
+      const predicted = item.predicted_score ?? score?.predicted ?? null;
+      const residual = item.score_residual ?? score?.delta ?? (
+        actual !== null && predicted !== null ? actual - predicted : null
+      );
+      return {
+        matchKey: item.match_key,
+        matchLabel: item.match_label,
+        compLevel: item.competition_level,
+        color: item.alliance,
+        teamKeys: item.team_keys,
+        predicted,
+        actual,
+        residual,
+        preEpaTotal: item.pre_match_epa_total,
+        winner: item.winner,
+        outcome: item.outcome,
+      };
+    }),
     findings: analytics.findings.map((item) => ({
       id: item.finding_key,
       category: item.category === "score-residual" || item.category === "penalty-frequency"
