@@ -690,7 +690,7 @@ export class EventScheduler {
           const failedResources = endpointStates.filter((resource) =>
             resource.status === "failed" || resource.status === "unavailable").length;
           if (isEvent) {
-            if (acquiredResources < 13) audit.counts.event_resources_incomplete += 1;
+            if (acquiredResources < 13 || failedResources > 0) audit.counts.event_resources_incomplete += 1;
             const eventStateStatus = state.event_state?.status ?? "missing";
             if (eventStateStatus === "complete") audit.counts.event_state_complete += 1;
             else if (eventStateStatus === "partial") audit.counts.event_state_partial += 1;
