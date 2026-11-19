@@ -430,7 +430,10 @@ export class EventRuntime {
 
   private async collectSeasonCohort(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
-  ): Promise<import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot | undefined> {
+  ): Promise<{
+    cohort: import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot;
+    inputs: FieldViewAnalyticsInputRecord[];
+  } | undefined> {
     const event = eventState.event;
     const teams = eventState.teams;
     const namespace = this.env.TEAM_RUNTIME;
@@ -442,18 +445,54 @@ export class EventRuntime {
         ? [{ teamNumber: team.team_number, teamKey: team.key }]
         : [],
     );
-    const snapshots = await Promise.all(participants.map(async ({ teamKey }) => {
+    const results = await Promise.all(participants.map(async ({ teamKey }) => {
       try {
         const stub = namespace.get(namespace.idFromName(teamKey));
         const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
           method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
         }));
-        if (!response.ok) return null;
-        return await response.json() as FieldViewTeamSnapshot;
-      } catch { return null; }
+        if (!response.ok) return { teamKey, snapshot: null, revision: null };
+        return {
+          teamKey,
+          snapshot: await response.json() as FieldViewTeamSnapshot,
+          revision: Number(response.headers.get("X-FieldView-Snapshot-Version")) || null,
+        };
+      } catch {
+        return { teamKey, snapshot: null, revision: null };
+      }
     }));
-    return buildCanonicalSeasonCohort(event, participants.map((team) => team.teamNumber), snapshots, Date.now());
+    const snapshots = results.map((item) => item.snapshot);
+    const inputs: FieldViewAnalyticsInputRecord[] = results.map(({ teamKey, snapshot, revision }) => {
+      const source = snapshot?.sources.statbotics_team_events;
+      const events = snapshot?.events ?? [];
+      const statboticsEvents = snapshot?.statbotics_events ?? [];
+      const fetchedAt = typeof source?.retrieved_at === "string"
+        ? Date.parse(source.retrieved_at) : null;
+      const status = !source || source.status === "failed" || source.status === "unavailable" ||
+        snapshot?.statbotics_events === undefined || snapshot?.statbotics_events === null
+        ? "unavailable" as const
+        : source.status === "stale" || statboticsEvents.length < events.length
+          ? "partial" as const : "available" as const;
+      return {
+        input_key: "team:" + teamKey + ":statbotics-team-events",
+        provider: "statbotics",
+        resource: "team-events",
+        source_revision: revision,
+        fetched_at: fetchedAt !== null && Number.isFinite(fetchedAt) ? fetchedAt : null,
+        record_count: events.length,
+        included_count: Math.min(events.length, statboticsEvents.length),
+        excluded_count: Math.max(0, events.length - statboticsEvents.length),
+        status,
+      };
+    });
+    return {
+      cohort: buildCanonicalSeasonCohort(
+        event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
+      ),
+      inputs,
+    };
   }
+
   private async buildEventState(calculateAnalytics = false): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
@@ -579,10 +618,14 @@ export class EventRuntime {
       ),
     ];
     if (calculateAnalytics) {
-      const seasonCohort = await this.collectSeasonCohort(normalizedState);
+      const seasonCollection = await this.collectSeasonCohort(normalizedState);
       return {
         version: state.version,
-        state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords, seasonCohort),
+        state: await calculateCanonicalMatchAnalytics(
+          normalizedState,
+          [...inputRecords, ...(seasonCollection?.inputs ?? [])],
+          seasonCollection?.cohort,
+        ),
       };
     }
 
