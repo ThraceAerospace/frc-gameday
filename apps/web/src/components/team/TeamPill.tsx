@@ -39,7 +39,7 @@ export default function TeamPill({
   team: string;
   status: FieldViewEventTeam["tba_status"] | null | undefined;
   nextMatch: MatchPresentation | null | undefined;
-  playoffAlliances?: FieldViewPlayoffAlliance[];
+  playoffAlliances?: PlayoffAlliancePresentation[];
   eventTimezone?: string | null;
   playoffType?: number | null;
   priorityEditing?: boolean;
