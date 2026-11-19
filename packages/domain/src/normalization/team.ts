@@ -6,6 +6,7 @@ import type { FieldViewSourceMetadata } from "../source-metadata.js";
 export function normalizeFieldViewTeam(
   tba_team: TBATeam,
   sources: FieldViewSourceMetadata,
+  frc_colors?: FieldViewTeam["frc_colors"],
 ): FieldViewTeam {
-  return { ...tba_team, sources };
+  return { ...tba_team, sources, ...(frc_colors === undefined ? {} : { frc_colors }) };
 }
