@@ -1,14 +1,19 @@
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
-import type { StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
-import type { TeamKey } from "./ids.js";
+import type { TeamKey, EventKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
+import type { FieldViewEventTeam } from "./event.js";
+import type { FieldViewMatch } from "./match.js";
+import type { FieldViewTeamAnalytics } from "./analytics.js";
 
 /** Canonical FieldView team object; TBA fields retain their exact source shape. */
 export interface FieldViewTeam extends TBATeam {
   sources: FieldViewSourceMetadata;
 }
 
-/** Canonical team profile composed from independently acquired TBA resources. */
+/**
+ * Team-profile aggregate for one season. This is distinct from
+ * FieldViewTeamState, which is scoped to one team's participation at an event.
+ */
 export interface FieldViewTeamSnapshot {
   team_key: TeamKey;
   year: number;
@@ -19,11 +24,30 @@ export interface FieldViewTeamSnapshot {
   media?: TBAMedia[] | null;
 }
 
+/**
+ * The assembled totality of what FieldView knows about one team at one event.
+ * Match objects retain their complete canonical alliance context; the state
+ * selects only matches in which this team appeared.
+ */
+export interface FieldViewTeamState {
+  event_key: EventKey;
+  team_key: TeamKey;
+  sources: {
+    team: FieldViewSourceMetadata;
+    event_team: FieldViewSourceMetadata;
+    matches: FieldViewSourceMetadata;
+  };
+  team?: FieldViewTeam | null;
+  event_team?: FieldViewEventTeam | null;
+  matches?: FieldViewMatch[] | null;
+  analytics?: FieldViewTeamAnalytics | null;
+}
+
 /** A team's season-scoped Statbotics record correlated by official TBA team number. */
 export interface FieldViewTeamSeason {
   team_key: TeamKey;
   year: number;
   team_number: TBATeam["team_number"];
-  statbotics?: StatboticsTeamYear;
+  statbotics?: import("@fieldview/provider-statbotics/types").StatboticsTeamYear;
   sources: FieldViewSourceMetadata;
 }
