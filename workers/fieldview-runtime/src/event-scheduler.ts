@@ -780,6 +780,10 @@ export class EventScheduler {
     }
 
     if (request.method === "POST" && url.pathname === "/run") {
+      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
+        return Response.json({ error: "Pause/resume or cancel the season-ingest job before running discovery manually." }, { status: 409 });
+      }
       const policy = eventPollingPolicy(this.env);
       const errors: string[] = [];
       try {
