@@ -424,12 +424,6 @@ type MatchFlagSummary = {
   reviewFlags: MatchReviewFlag[];
 };
 
-function quantile(values:number[],p:number):number|null {
-  if(!values.length)return null;
-  const sorted=[...values].sort((a,b)=>a-b);
-  return sorted[Math.min(sorted.length-1,Math.ceil(sorted.length*p)-1)];
-}
-
 function predictionTone(label:string):string {
   switch(label){
     case "Strong Red": return "bg-rose-800 text-white dark:bg-rose-700";
@@ -440,60 +434,31 @@ function predictionTone(label:string):string {
   }
 }
 
-function predictionClassification(redWinProbability:number|null):string|null {
-  if(redWinProbability===null||!Number.isFinite(redWinProbability))return null;
-  if(redWinProbability>=0.8)return "Strong Red";
-  if(redWinProbability>=0.6)return "Lean Red";
-  if(redWinProbability<=0.2)return "Strong Blue";
-  if(redWinProbability<=0.4)return "Lean Blue";
-  return "Toss-up";
-}
-
-function phaseAnomalyBand(data:EventAnalyticsResponse,compLevel:string):{median:number;margin:number}|null {
-  const residuals=data.allianceResults.filter((item)=>item.compLevel.toLowerCase()===compLevel.toLowerCase()&&item.residual!==null).map((item)=>item.residual as number).sort((a,b)=>a-b);
-  if(residuals.length<8)return null;
-  const median=residuals[Math.floor(residuals.length/2)];
-  const deviations=residuals.map((value)=>Math.abs(value-median)).sort((a,b)=>a-b);
-  const mad=deviations[Math.floor(deviations.length/2)];
-  return {median,margin:Math.max(20,3*1.4826*mad)};
-}
-
-function buildMatchFlagSummary(data:EventAnalyticsResponse,record:EventAnalyticsResponse["matches"][number]):MatchFlagSummary {
-  const {match,statbotics}=record;
-  const redProbability=typeof statbotics?.pred?.red_win_prob==="number"?statbotics.pred.red_win_prob:null;
-  const prediction=predictionClassification(redProbability);
-  const predictedWinner=redProbability===null||redProbability===0.5?null:redProbability>0.5?"red":"blue";
-  const redScore=match.alliances.red.score,blueScore=match.alliances.blue.score;
-  const completed=redScore>=0&&blueScore>=0;
-  const winner=match.winning_alliance==="red"||match.winning_alliance==="blue"?match.winning_alliance:completed&&redScore!==blueScore?(redScore>blueScore?"red":"blue"):null;
-  const favoriteProbability=redProbability===null?null:Math.max(redProbability,1-redProbability);
-  const modelUpset=completed&&winner!==null&&predictedWinner!==null&&winner!==predictedWinner&&favoriteProbability!==null&&favoriteProbability>=0.6;
-  const matchResults=data.allianceResults.filter((item)=>item.matchKey===match.key);
-  const allianceEpaValues=data.allianceResults.flatMap((item)=>item.preEpaTotal===null?[]:[item.preEpaTotal]);
-  const highEpaThreshold=allianceEpaValues.length>=8?quantile(allianceEpaValues,0.75):null;
-  const highAllianceEpa={
-    red:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.preEpaTotal??-Infinity)>=highEpaThreshold,
-    blue:highEpaThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.preEpaTotal??-Infinity)>=highEpaThreshold,
+function buildMatchFlagSummary(_data:EventAnalyticsResponse,record:EventAnalyticsResponse["matches"][number]):MatchFlagSummary {
+  const flags=record.flags;
+  const reviewFlags=flags?.review_flags??[];
+  const red=flags?.alliances.red??[];
+  const blue=flags?.alliances.blue??[];
+  return {
+    prediction:flags?.prediction?{label:flags.prediction.label,tone:predictionTone(flags.prediction.label)}:null,
+    predictedWinner:flags?.prediction?.predicted_winner??null,
+    winner:flags?.winner??null,
+    modelUpset:reviewFlags.includes("model-upset"),
+    anomalousScore:reviewFlags.includes("anomalous-score"),
+    largeResidual:{
+      red:red.some((flag)=>flag.type==="large-score-delta"),
+      blue:blue.some((flag)=>flag.type==="large-score-delta"),
+    },
+    highPenalties:{
+      red:red.some((flag)=>flag.type==="high-penalties"),
+      blue:blue.some((flag)=>flag.type==="high-penalties"),
+    },
+    highAllianceEpa:{
+      red:red.some((flag)=>flag.type==="high-alliance-epa"),
+      blue:blue.some((flag)=>flag.type==="high-alliance-epa"),
+    },
+    reviewFlags,
   };
-  const anomalyBand=phaseAnomalyBand(data,match.comp_level);
-  const anomalousScore=anomalyBand!==null&&matchResults.some((item)=>item.residual!==null&&Math.abs(item.residual-anomalyBand.median)>anomalyBand.margin);
-  const qualification=match.comp_level.toLowerCase()==="qm";
-  const residualMagnitudes=data.allianceResults.flatMap((item)=>item.residual===null?[]:[Math.abs(item.residual)]);
-  const largeResidualThreshold=residualMagnitudes.length>=20?quantile(residualMagnitudes,0.9):null;
-  const largeResidual={
-    red:largeResidualThreshold!==null&&(matchResults.find((item)=>item.color==="red")?.residual!==null&&matchResults.find((item)=>item.color==="red")?.residual!==undefined)&&Math.abs(matchResults.find((item)=>item.color==="red")!.residual!)>=largeResidualThreshold,
-    blue:largeResidualThreshold!==null&&(matchResults.find((item)=>item.color==="blue")?.residual!==null&&matchResults.find((item)=>item.color==="blue")?.residual!==undefined)&&Math.abs(matchResults.find((item)=>item.color==="blue")!.residual!)>=largeResidualThreshold,
-  };
-  const penaltyRow=qualification?data.qualificationAnalysis?.penalties.flaggedMatches.find((item)=>item.matchKey===match.key):undefined;
-  const highPenalties={red:penaltyRow?.redFlagged??false,blue:penaltyRow?.blueFlagged??false};
-  const reviewFlags:MatchReviewFlag[]=[
-    ...(modelUpset?["model-upset" as const]:[]),
-    ...(anomalousScore?["anomalous-score" as const]:[]),
-    ...(largeResidual.red||largeResidual.blue?["large-residual" as const]:[]),
-    ...(highPenalties.red||highPenalties.blue?["high-penalties" as const]:[]),
-    ...(highAllianceEpa.red||highAllianceEpa.blue?["high-alliance-epa" as const]:[]),
-  ];
-  return {prediction:prediction?{label:prediction,tone:predictionTone(prediction)}:null,predictedWinner,winner,modelUpset,anomalousScore,largeResidual,highPenalties,highAllianceEpa,reviewFlags};
 }
 
 function MatchAnalysisTable({data,records,playoff,reviewReasons}:{data:EventAnalyticsResponse;records:EventAnalyticsResponse["matches"];playoff:boolean;reviewReasons?:Map<string,string[]>}) {
