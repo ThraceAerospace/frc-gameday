@@ -2,8 +2,6 @@ import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import { StatboticsApiClient } from "../../../packages/providers/statbotics/src/client.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
-import { FRCColorsApiClient } from "../../../packages/providers/frc-colors/src/client.ts";
-import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src/endpoints.ts";
 import {
   applyPollResponse,
   applyWebhookUpdate,
@@ -45,10 +43,6 @@ const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
-
-interface FRCColorsEventPayload {
-  teams?: Record<string, { teamNumber?: number; colors?: { primaryHex?: string | null; secondaryHex?: string | null; verified?: boolean } | null }>;
-}
 
 interface AnalyticsPublication {
   sourceRevision: number;
@@ -156,7 +150,6 @@ export function eventResourceEndpoints(eventKey: string): string[] {
     TBA_ENDPOINTS.eventMedia(eventKey),
     TBA_ENDPOINTS.eventDistrictPoints(eventKey),
     TBA_ENDPOINTS.eventAdvancementPoints(eventKey),
-    FRC_COLORS_ENDPOINTS.event(eventKey),
   ];
 }
 
@@ -170,7 +163,6 @@ export class EventRuntime {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly statboticsApi: StatboticsApiClient;
-  private readonly frcColorsApi: FRCColorsApiClient;
   private readonly env: RuntimeEnvironment;
   private eventKey: string;
   private allowedEndpoints: Set<string>;
@@ -187,7 +179,6 @@ export class EventRuntime {
       ...(env.STATBOTICS_API_BASE_URL ? { baseUrl: env.STATBOTICS_API_BASE_URL } : {}),
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
-    this.frcColorsApi = new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {});
     this.eventKey = eventKey ?? "";
     this.allowedEndpoints = new Set(this.eventKey ? eventResourceEndpoints(this.eventKey) : []);
   }
@@ -426,7 +417,6 @@ export class EventRuntime {
     const awardsEndpoint = TBA_ENDPOINTS.eventAwards(this.eventKey);
     const advancementPointsEndpoint = TBA_ENDPOINTS.eventAdvancementPoints(this.eventKey);
     const statboticsMatchesEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const frcColorsEndpoint = FRC_COLORS_ENDPOINTS.event(this.eventKey);
     // Read the aggregate's endpoint state and version from one transaction so
     // a snapshot can never combine data from opposite sides of a mutation.
     const state = await this.storage.transaction(async (transaction) => ({
@@ -442,14 +432,12 @@ export class EventRuntime {
       awards: await transaction.get<EndpointState<unknown>>(endpointStorageKey(awardsEndpoint)),
       advancementPoints: await transaction.get<EndpointState<unknown>>(endpointStorageKey(advancementPointsEndpoint)),
       statboticsMatches: await transaction.get<EndpointState<unknown>>(endpointStorageKey(statboticsMatchesEndpoint)),
-      frcColors: await transaction.get<EndpointState<unknown>>(endpointStorageKey(frcColorsEndpoint)),
     }));
     const {
       event: eventState, teams: teamsState, statuses: statusesState,
       matches: matchesState, alliances: alliancesState, oprs: oprsState,
       predictions: predictionsState, rankings: rankingsState, awards: awardsState,
       advancementPoints: advancementPointsState, statboticsMatches: statboticsMatchesState,
-      frcColors: frcColorsState,
     } = state;
     const now = Date.now();
     const eventSource = toSourceMetadata(eventState, now);
@@ -463,7 +451,6 @@ export class EventRuntime {
     const awardsSource = toSourceMetadata(awardsState, now);
     const advancementPointsSource = toSourceMetadata(advancementPointsState, now);
     const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
-    const frcColorsSource = toSourceMetadata(frcColorsState, now);
 
     const normalizedState = normalizeFieldViewEventState({
         event_key: this.eventKey as EventKey,
@@ -517,20 +504,6 @@ export class EventRuntime {
             : {},
         },
       });
-    const frcPayload = hasAcquiredValue(frcColorsState) ? frcColorsState!.data as FRCColorsEventPayload | null : undefined;
-    if (frcPayload !== undefined) {
-      normalizedState.team_colors = Object.fromEntries(Object.entries(frcPayload?.teams ?? {}).flatMap(([key, team]) => {
-        const teamNumber = Number(team.teamNumber ?? key);
-        if (!Number.isSafeInteger(teamNumber) || teamNumber <= 0) return [];
-        const validHex = (value: unknown) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
-        return [[String(teamNumber), {
-          primary_hex: validHex(team.colors?.primaryHex),
-          secondary_hex: validHex(team.colors?.secondaryHex),
-          verified: typeof team.colors?.verified === "boolean" ? team.colors.verified : null,
-        }] as const];
-      }));
-    }
-    if (frcColorsSource) normalizedState.sources.team_colors = { frc_colors_event: frcColorsSource };
     const canonicalMatches = normalizedState.matches ?? [];
     const tbaMatchRecords = Array.isArray(matchesState?.data) ? matchesState.data : [];
     const tbaTeamRecords = Array.isArray(teamsState?.data) ? teamsState.data : [];
@@ -824,7 +797,6 @@ export class EventRuntime {
 
   private async pollEndpoint(endpoint: string): Promise<boolean> {
     const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const isFRCColorsEndpoint = endpoint === FRC_COLORS_ENDPOINTS.event(this.eventKey);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
     const requestSnapshot = createPollRequestSnapshot(initial);
@@ -839,9 +811,7 @@ export class EventRuntime {
     try {
       const response = isStatboticsEndpoint
         ? await this.statboticsApi.request(endpoint, { headers })
-        : isFRCColorsEndpoint
-          ? await this.frcColorsApi.request(endpoint, { headers })
-          : await this.api.request(endpoint, { headers });
+        : await this.api.request(endpoint, { headers });
       const maxAge = cacheMaxAgeSeconds(response.headers.get("Cache-Control"));
       const expiresAt = maxAge === null ? null : Date.now() + maxAge * 1000;
 
@@ -884,7 +854,7 @@ export class EventRuntime {
         requestSnapshot,
         responseState,
         now,
-        (current, fetched) => isStatboticsEndpoint || isFRCColorsEndpoint
+        (current, fetched) => isStatboticsEndpoint
           ? fetched
           : reconcilePolledEndpoint(endpoint, current, fetched),
       );
