@@ -199,7 +199,7 @@ export class TeamRuntime {
           return {
             provider: providerByEndpoint.get(state.endpoint) ?? null,
             endpoint: state.endpoint, status: state.status, revision: state.revision,
-            last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt,
+            last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt, expires_at: state.expiresAt,
             record_count: recordCount, included_count: recordCount, excluded_count: 0,
             data_kind: Array.isArray(value) ? "array" : value === null ? "empty" : typeof value,
             http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null,
