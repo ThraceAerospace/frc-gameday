@@ -2,6 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import TeamAvatar from "@/components/team/TeamAvatar";
 import TeamEventMatches from "@/components/team/TeamEventMatches";
+import TeamProfileTabs from "@/components/team/TeamProfileTabs";
 import TeamEventsSidebar from "@/components/team/TeamEventsSidebar";
 import TeamSeasonSelector from "@/components/team/TeamSeasonSelector";
 import TeamRecord from "@/components/team/Record";
@@ -160,7 +161,8 @@ export default async function TeamPage({
             <Stat label="Record" value={matchDataComplete ? `${wins}-${losses}-${ties}` : "Unavailable"} />
           </div>
         </SurfaceCard>
-        <div className="mt-8">
+        <TeamProfileTabs teamNumber={team?.team_number ?? Number(teamKey.replace(/^frc/i, ""))} year={year} results={
+          <div>
           <SectionHeading title={`${year} Results`} description="Event information and match results for this season." action={district ? <Link href={`/district/${district.key}`} className="text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">View district</Link> : null} className="mb-5" />
 
           {eventSections.length === 0 ? (
@@ -314,7 +316,8 @@ export default async function TeamPage({
               </div>
             </div>
           )}
-        </div>
+          </div>
+        } />
       </PageContainer>
     </SiteShell>
   );
