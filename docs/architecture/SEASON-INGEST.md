@@ -44,7 +44,7 @@ The admin command center exposes a preview and explicit start/pause/resume/cance
 3. Persist the discovery snapshot timestamps, phase cursors, per-entity resource cursors, retry count, next due time, and separate complete/partial/failed counters. A Worker restart resumes from the last durable cursor; a retried completed-with-errors job restarts its inventory scan and skips already-acquired resources and already-published complete artifacts.
 4. Record bounded recent errors and continue processing other entities when one resource fails. Partial evidence is counted distinctly from missing or failed artifacts.
 
-The job starts only after a preview confirms complete event and paginated team discovery, and the start operation requires an explicit confirmation flag. Each alarm step processes at most one team or event; it does not fan out the full inventory in one request. The job shares the EventScheduler alarm with routine discovery, so routine scheduler work is deferred while a season-ingest job is actively running and resumes afterward if enabled.
+The job starts only after a preview confirms complete event and paginated team discovery, and the start operation requires an explicit confirmation flag. Each alarm step processes at most one provider resource; it does not fan out the full inventory in one request. The job shares the EventScheduler alarm with routine discovery, so routine scheduler work is deferred while a season-ingest job is actively running and resumes afterward if enabled.
 
 ## Completion and coverage accounting
 
@@ -56,15 +56,15 @@ The season job and coverage audit must report distinct counts for:
 - TeamRuntime season snapshots complete, partial, missing, and failed.
 - Events whose participant cohort is complete, partial, or still discovering.
 
-The job is complete only when every discovered event has an EventState publication and an EventAnalytics publication, with partial outcomes explicitly accounted for. A terminal job may contain recorded failures, but it must never report full success while any event artifact is missing or failed.
+The job reports full success only when every discovered event has a complete EventState, successful EventAnalytics, and a complete participant cohort, with all season TeamRuntime snapshots complete. Partial, waiting, missing, or failed outcomes produce a completed-with-errors result and remain separately counted.
 
 ## Safety requirements
 
-1. **Preview before start.** Resolve and retain the selected year's discovery snapshots, then show event count, team count, resource-request estimate, expected duration at the selected rate, and any already-complete work.
+1. **Preview before start.** Resolve and retain the selected year's discovery snapshots, then show event count, team count, resource-request estimate, expected duration at the selected rate, and any existing job state.
 2. **One external resource request at a time.** Do not use unbounded `Promise.all`, bulk team seeding, or event fan-out to execute the season job. Each EventRuntime and TeamRuntime provider call, including normal alarm-driven polling, must acquire the shared single-flight lease.
 3. **Explicit global pacing.** The EventScheduler gate owns a durable lease and next-request timestamp and enforces the configurable interval across TBA, Statbotics, and FRC Colors calls. A lease expires after 60 seconds if the Worker is interrupted.
 4. **Durable progress.** Persist year, event/team discovery snapshot timestamps and inventory keys, current phase, event/team index, resource index, bounded retry count, completed/failed/skipped counts, attempted/succeeded/failed/deferred request counts, next due time, and recent errors. A Worker restart must not lose the cursor.
-5. **Pause, resume, cancel.** Pausing prevents new provider requests but preserves progress. Resume continues from the cursor. Cancellation is terminal and must not erase the audit record.
+5. **Pause, resume, cancel.** Pausing prevents new season-job resource requests but preserves progress; normal live polling may continue and remains subject to the shared gate. Resume continues from the cursor. Cancellation is terminal and must not erase the audit record.
 6. **Bounded retry.** Retry transient failures with capped backoff and a finite attempt count. Permanent failures are recorded and skipped; they must not stall the entire season indefinitely.
 7. **Idempotency and reuse.** Skip resources already acquired for the selected season unless the operator explicitly chooses a future force-refresh mode. Completed EventState and EventAnalytics publications are reused on retry. Never discard previously acquired source data when a request fails.
 8. **Request accounting.** Distinguish planned, attempted, successful, failed, retried, and skipped requests. The estimate assumes one request for every configured resource; cached resources reduce actual work, while retries and unrelated normal polling are reported separately.
