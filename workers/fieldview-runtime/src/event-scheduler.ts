@@ -224,6 +224,50 @@ export class EventScheduler {
     });
   }
 
+  private providerRequestInterval(): number {
+    const value = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+    const interval = value === undefined ? 1_000 : Number(value);
+    if (!Number.isSafeInteger(interval) || interval < 100) {
+      throw new Error("PROVIDER_REQUEST_INTERVAL_MS must be an integer of at least 100");
+    }
+    return interval;
+  }
+
+  /** Scheduler-owned discovery requests use the same lease as EventRuntime and TeamRuntime. */
+  private async requestWithProviderGate(endpoint: string, request: () => Promise<Response>): Promise<Response> {
+    const interval = this.providerRequestInterval();
+    while (true) {
+      const now = Date.now();
+      const permit = await this.storage.transaction(async (tx) => {
+        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
+        const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
+        if (current && current.expiresAt > now) {
+          return { granted: false as const, retryAt: Math.min(current.expiresAt, now + interval) };
+        }
+        if (nextAt > now) return { granted: false as const, retryAt: nextAt };
+        const leaseId = crypto.randomUUID();
+        await tx.put("provider-gate:lease", {
+          leaseId, owner: "scheduler:discovery", endpoint, expiresAt: now + 60_000,
+        } satisfies ProviderRequestLease);
+        return { granted: true as const, leaseId };
+      });
+      if (!permit.granted) {
+        await new Promise<void>((resolve) => setTimeout(resolve, Math.max(10, permit.retryAt - Date.now())));
+        continue;
+      }
+      try {
+        return await request();
+      } finally {
+        await this.storage.transaction(async (tx) => {
+          const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
+          if (!current || current.leaseId !== permit.leaseId) return;
+          await tx.delete("provider-gate:lease");
+          await tx.put("provider-gate:next-at", Date.now() + interval);
+        });
+      }
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/events") {
@@ -1236,7 +1280,7 @@ export class EventScheduler {
     const cached = await this.storage.get<DiscoveryCache>(cacheKey);
     const headers = new Headers();
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
-    const response = await this.api.request(TBA_ENDPOINTS.events(year), { headers });
+    const response = await this.requestWithProviderGate(TBA_ENDPOINTS.events(year), () => this.api.request(TBA_ENDPOINTS.events(year), { headers }));
     if (response.status === 304 && cached) {
       await this.storage.put(cacheKey, { ...cached, complete: true, checkedAt: Date.now() } satisfies DiscoveryCache);
       return;
@@ -1281,7 +1325,8 @@ export class EventScheduler {
       const etag = cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
-      const response = await this.api.request(TBA_ENDPOINTS.teamsByYearPage(year, page), { headers });
+      const endpoint = TBA_ENDPOINTS.teamsByYearPage(year, page);
+      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
       requestCount += 1;
       let pageTeams: TBATeam[];
       if (response.status === 304) {
@@ -1332,7 +1377,7 @@ export class EventScheduler {
       const cached = await this.storage.get<DiscoveryCache>(cacheKey);
       const headers = new Headers();
       if (cached?.etag) headers.set("If-None-Match", cached.etag);
-      const response = await this.api.request(endpoint, { headers });
+      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
       let discovered: TBAEvent[];
       if (response.status === 304 && cached) {
         discovered = cached.events;
