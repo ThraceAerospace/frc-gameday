@@ -981,6 +981,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sponsors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Returns TBA's platinum sponsors in display order (0 to 3 entries), for clients to credit. Separate from /status so a malformed sponsor entry can never break the status call. */
+        get: operations["getSponsors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/team/{team_key}": {
         parameters: {
             query?: never;
@@ -1567,6 +1584,22 @@ export interface components {
             min_app_version: number;
             /** @description Internal use - Latest application version available. */
             latest_app_version: number;
+        };
+        Sponsors_List: {
+            /** @description Platinum sponsors in display order. Contains 0 to 3 entries. */
+            sponsors: components["schemas"]["Sponsor"][];
+        };
+        Sponsor: {
+            /** @description Sponsor name. Use as the logo's alt text, or show it as text when there is no logo. */
+            name: string;
+            /** @description Absolute https URL the sponsor credit links to. */
+            url: string;
+            /** @description How to show the logo. `wordmark`: the logo already spells the sponsor's name, so show it alone. `mark`: a square logo, shown with the name beside it. Other values may be added later; clients must treat any value they do not recognize as `wordmark`. */
+            logo_style: string;
+            /** @description Absolute https URL of a full-color PNG logo for light backgrounds, or null if there is none. */
+            logo_url: string | null;
+            /** @description Absolute https URL of a white PNG logo for dark or brand-colored backgrounds, or null if there is none. */
+            logo_url_dark: string | null;
         };
         /**
          * AllianceColor
@@ -5882,6 +5915,35 @@ export interface operations {
             304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getSponsors: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Value of the `ETag` header in the most recently cached response by the client. */
+                "If-None-Match"?: components["parameters"]["If-None-Match"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    /** @description The `Cache-Control` header, in particular the `max-age` value, contains the number of seconds the result should be considered valid for. During this time subsequent calls should return from the local cache directly. */
+                    "Cache-Control"?: string;
+                    /** @description Specifies the version of the most recent response. Used by clients in the `If-None-Match` request header. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sponsors_List"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getTeam: {
