@@ -782,7 +782,7 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
 
   storage.values.set("analytics:due-at", Date.now() - 1);
   await runtime.alarm();
-  assert.equal(storage.values.get("analytics:status"), "succeeded");
+  assert.equal(storage.values.get("analytics:status"), "succeeded", storage.values.get("analytics:last-error") ?? "no calculation error recorded");
   assert.equal(storage.values.has("analytics:due-at"), false);
   const publication = storage.values.get("analytics:publication");
   assert.ok(publication);
