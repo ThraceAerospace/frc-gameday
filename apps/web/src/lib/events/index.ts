@@ -2,4 +2,4 @@
 
 export { EventState } from "./EventState";
 export type { EventStateSnapshot } from "./EventState";
-export { useEventState, useCanonicalEventSnapshot, useCanonicalRuntimeStatus } from "./useEventState";
+export { useEventState, useCanonicalEventSnapshot, useCanonicalEventAnalytics, useCanonicalRuntimeStatus } from "./useEventState";
