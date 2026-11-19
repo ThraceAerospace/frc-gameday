@@ -150,11 +150,15 @@ export function calculateCanonicalAggregateAnalytics(
     name: team.name,
   }));
   const eventTeams = eventState.event_teams ?? [];
-  const oprs = {
-    oprs: Object.fromEntries(eventTeams.flatMap((team) => team.opr === undefined ? [] : [[team.team_key, team.opr]])),
-    dprs: Object.fromEntries(eventTeams.flatMap((team) => team.dpr === undefined ? [] : [[team.team_key, team.dpr]])),
-    ccwms: Object.fromEntries(eventTeams.flatMap((team) => team.ccwm === undefined ? [] : [[team.team_key, team.ccwm]])),
-  };
+  const oprValues: Record<string, number> = {};
+  const dprValues: Record<string, number> = {};
+  const ccwmValues: Record<string, number> = {};
+  for (const team of eventTeams) {
+    if (team.opr !== undefined) oprValues[team.team_key] = team.opr;
+    if (team.dpr !== undefined) dprValues[team.team_key] = team.dpr;
+    if (team.ccwm !== undefined) ccwmValues[team.team_key] = team.ccwm;
+  }
+  const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
   const teamRows = buildTeamRows(teams, oprs, records);
   const insights = buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
   const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
