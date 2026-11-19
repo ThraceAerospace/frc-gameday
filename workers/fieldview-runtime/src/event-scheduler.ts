@@ -160,7 +160,7 @@ interface SeasonIngestJob {
   eventKeys: string[];
   teamResourceCount: number;
   eventResourceCount: number;
-  forceEventAnalytics: boolean;
+  teamSnapshotRevision: number;
   teamCursor: number;
   teamResourceCursor: number;
   eventCursor: number;
@@ -486,7 +486,7 @@ export class EventScheduler {
         const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
         job = {
           year, runGeneration: now, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
-          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount, forceEventAnalytics: false,
+          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount, teamSnapshotRevision: 0,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -520,7 +520,7 @@ export class EventScheduler {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
           job.teamResourceCursor = 0;
-          job.forceEventAnalytics = false;
+          job.teamSnapshotRevision = 0;
           job.eventCursor = 0;
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
@@ -995,10 +995,6 @@ export class EventScheduler {
       if (job.phase === "teams") {
         if (job.teamCursor >= job.teamKeys.length) {
           job.phase = "events";
-          // TeamRuntime's revisions are independent from EventRuntime source
-          // revisions. Recalculate every event against the just-verified
-          // season snapshots, including data that changed before this run.
-          job.forceEventAnalytics = true;
           job.updatedAt = Date.now();
           await this.persistSeasonIngest(job);
           return;
@@ -1041,7 +1037,7 @@ export class EventScheduler {
             } else {
               job.counts.requests_attempted += 1;
               const result = await response.json() as { status?: string; success?: boolean; revision?: number; last_error?: string | null };
-              if (result.revision != null && result.revision !== (resourceState?.revision ?? 0)) job.forceEventAnalytics = true;
+              
               if (result.status === "unavailable") {
                 job.counts.requests_unavailable += 1;
                 recordError("team", teamKey, resource.endpoint + " is unavailable");
@@ -1062,8 +1058,9 @@ export class EventScheduler {
         } else {
           const verify = await stub.fetch(new Request("https://team-runtime/state", { headers }));
           if (!verify.ok) throw new Error("Unable to verify TeamRuntime state: HTTP " + verify.status);
-          const state = await verify.json() as { endpoints?: Array<{ last_fetched_at?: number | null; expires_at?: number | null; status?: string }> };
+          const state = await verify.json() as { snapshot_revision?: number; endpoints?: Array<{ last_fetched_at?: number | null; expires_at?: number | null; status?: string }> };
           const endpoints = state.endpoints ?? [];
+          job.teamSnapshotRevision += state.snapshot_revision ?? 0;
           const acquired = endpoints.filter((item) => item.last_fetched_at != null).length;
           const unavailable = endpoints.filter((item) => item.status === "unavailable").length;
           const failed = endpoints.filter((item) => item.status === "failed").length;
@@ -1116,11 +1113,12 @@ export class EventScheduler {
           if (preflight.ok) {
             const current = await preflight.json() as {
               event_state?: { status?: string; source_revision?: number | null };
-              analytics?: { status?: string; source_revision?: number | null; cohort_status?: string | null };
+              analytics?: { status?: string; source_revision?: number | null; season_team_revision?: number | null; cohort_status?: string | null };
             };
-            const artifactsReusable = !job.forceEventAnalytics && current.event_state?.status === "complete" &&
+            const artifactsReusable = current.event_state?.status === "complete" &&
               current.event_state.source_revision != null &&
               current.analytics?.source_revision === current.event_state.source_revision &&
+              current.analytics?.season_team_revision === job.teamSnapshotRevision &&
               (current.analytics?.status === "succeeded" || current.analytics?.status === "partial") &&
               current.analytics?.cohort_status === "complete";
             if (artifactsReusable) {
@@ -1205,7 +1203,7 @@ export class EventScheduler {
           const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", {
              method: "POST",
              headers,
-             body: JSON.stringify({ allowPartialCohort: true }),
+             body: JSON.stringify({ allowPartialCohort: true, seasonTeamRevision: job.teamSnapshotRevision }),
            }));
           if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
           const analyticsResponse = await stub.fetch(new Request("https://event-runtime/analytics", {
