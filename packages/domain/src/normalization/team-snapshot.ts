@@ -15,6 +15,7 @@ export interface NormalizeFieldViewTeamSnapshotInput {
   media?: TBAMedia[] | null;
   statbotics?: StatboticsTeamYear | null;
   statbotics_events?: StatboticsTeamEvent[] | null;
+  frc_colors?: NonNullable<import("../team.js").FieldViewTeam["frc_colors"]> | null;
 }
 
 /** Compose team-scoped resources without renaming or rewriting provider fields. */
@@ -26,7 +27,7 @@ export function normalizeFieldViewTeamSnapshot(input: NormalizeFieldViewTeamSnap
     ...(input.team === undefined ? {} : {
       team: input.team === null ? null : normalizeFieldViewTeam(input.team, {
         ...(input.sources.tba_team === undefined ? {} : { tba_team: input.sources.tba_team }),
-      }),
+      }, input.frc_colors),
     }),
     ...(input.districts === undefined ? {} : { districts: input.districts }),
     ...(input.events === undefined ? {} : { events: input.events }),
