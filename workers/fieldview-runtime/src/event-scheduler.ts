@@ -401,7 +401,7 @@ export class EventScheduler {
           team_resources_per_team: teamResourceCount, planned_resource_requests: plannedRequests,
           request_interval_ms: requestIntervalMs,
           estimated_minimum_duration_ms: plannedRequests * requestIntervalMs,
-          estimate_note: "Lower-bound estimate; cached resources are skipped, while retries and normal live polling can add time or requests.",
+          estimate_note: "Baseline assuming one request for every configured resource; cached resources reduce the count, while retries and normal live polling may add time or requests.",
           existing_job: job ? seasonIngestSummary(job) : null,
           requires_explicit_confirmation: true,
         }, { headers: { "Cache-Control": "no-store" } });
