@@ -58,6 +58,21 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
   assert.equal(result.team_states[0].analytics.metrics.find((item) => item.metric_key === "epa").value, 15);
   assert.ok(result.team_states[0].analytics.metrics.some((item) => item.metric_key === "epa-contribution-percent"));
   assert.equal(result.team_states[0].analytics.audit.calculation_id, calculated.analysis.audit.calculation_id);
+  assert.equal(result.analytics.alliance_results.length, 2);
+  assert.equal(result.analytics.team_summaries.length, 6);
+  assert.ok(result.analytics.qualification);
+  assert.ok(result.analytics.qualification.prediction_calibration);
+  assert.ok(result.analytics.qualification.penalties);
+  assert.deepEqual(result.analytics.qualification_anomalies, []);
+  assert.equal(result.analytics.playoffs.match_count, 0);
+  assert.equal(result.analytics.residual_summary.sample_size, 2);
+  assert.ok(result.analytics.prediction_summary);
+  assert.equal(result.analytics.collection.processed_match_count, 1);
+  assert.equal(result.team_states[0].analytics.performance.epa, 15);
+  assert.ok(Array.isArray(result.team_states[0].analytics.summary));
+  assert.ok(Array.isArray(result.team_states[0].analytics.epa_trend));
+  assert.ok(result.team_states[0].analytics.peer_performance);
+  assert.ok(Array.isArray(result.team_states[0].analytics.review_matches));
 });
 
 test("canonical match analytics preserves absent and explicit-null match resources", async () => {
