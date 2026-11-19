@@ -37,8 +37,8 @@ type SeasonIngest = {
   event_cursor?: number; event_total?: number; event_resource_cursor?: number; event_resources_per_event?: number; next_due_at?: number | null;
   counts?: {
     teams_complete: number; teams_partial: number; teams_failed: number;
-    event_state_complete: number; event_state_partial: number; event_state_failed: number;
-    event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_failed: number;
+    event_state_complete: number; event_state_partial: number; event_state_missing: number; event_state_failed: number;
+    event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number;
     event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
     requests_attempted: number; requests_succeeded: number; requests_failed: number; requests_retried: number;
     requests_skipped: number; requests_unavailable: number; requests_deferred: number;
@@ -358,9 +358,9 @@ export default function AdminOperationsDashboard() {
           {seasonIngest.counts && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             {[
               ["Teams complete", seasonIngest.counts.teams_complete], ["Teams partial", seasonIngest.counts.teams_partial], ["Teams failed", seasonIngest.counts.teams_failed],
-              ["EventState complete", seasonIngest.counts.event_state_complete], ["EventState partial", seasonIngest.counts.event_state_partial], ["EventState failed", seasonIngest.counts.event_state_failed],
+              ["EventState complete", seasonIngest.counts.event_state_complete], ["EventState partial", seasonIngest.counts.event_state_partial], ["EventState failed", seasonIngest.counts.event_state_failed], ["EventState missing", seasonIngest.counts.event_state_missing],
               ["EventAnalytics succeeded", seasonIngest.counts.event_analytics_succeeded], ["EventAnalytics partial", seasonIngest.counts.event_analytics_partial],
-              ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed], ["Cohort complete", seasonIngest.counts.event_cohort_complete], ["Cohort partial", seasonIngest.counts.event_cohort_partial], ["Cohort discovering", seasonIngest.counts.event_cohort_discovering], ["Cohort missing", seasonIngest.counts.event_cohort_missing],
+              ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics missing", seasonIngest.counts.event_analytics_missing], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed], ["Cohort complete", seasonIngest.counts.event_cohort_complete], ["Cohort partial", seasonIngest.counts.event_cohort_partial], ["Cohort discovering", seasonIngest.counts.event_cohort_discovering], ["Cohort missing", seasonIngest.counts.event_cohort_missing],
               ["Requests attempted", seasonIngest.counts.requests_attempted], ["Requests succeeded", seasonIngest.counts.requests_succeeded],
               ["Requests failed", seasonIngest.counts.requests_failed], ["Requests retried", seasonIngest.counts.requests_retried], ["Requests skipped", seasonIngest.counts.requests_skipped],
               ["Resources unavailable", seasonIngest.counts.requests_unavailable], ["Requests deferred by gate", seasonIngest.counts.requests_deferred],
