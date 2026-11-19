@@ -500,7 +500,9 @@ export class EventRuntime {
           const statbotics = key.includes("/matches?event=");
           const included = statbotics ? records.filter(hasEpa).length : records.length;
           const diagnostic = state as EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null };
-          const { data: _data, providerData: _providerData, ...safeState } = state;
+          const { data: omittedData, providerData: omittedProviderData, ...safeState } = state;
+          void omittedData;
+          void omittedProviderData;
           return [key, {
             ...safeState,
             record_count: records.length,
