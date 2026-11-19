@@ -1,6 +1,6 @@
 "use client";
 
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import TileSurfaceSettingsView from "./TileSurfaceSettingsView";
 import type { TileSurfaceController } from "./TileSurfaceActions";
@@ -18,7 +18,7 @@ import TileView from "./TileView";
 type TileViewSurfaceProps = {
   events?: string[];
   isDivisional?: boolean;
-  parentEvent?: TBAEvent | null;
+  parentEvent?: FieldViewEvent | null;
   controller?: TileSurfaceController;
 };
 
