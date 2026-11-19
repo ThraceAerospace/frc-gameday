@@ -746,18 +746,19 @@ export class EventScheduler {
             continue;
           }
           const state = await response.json() as {
-            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; status?: string }> |
-              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; status?: string }>;
+            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
+              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
             analytics?: { status?: string; cohort_status?: string | null };
             event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
           };
           const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
           const acquiredResources = endpointStates.filter((resource) =>
             resource.lastFetchedAt != null || resource.last_fetched_at != null).length;
-          const failedResources = endpointStates.filter((resource) =>
-            resource.status === "failed" || resource.status === "unavailable").length;
+          const incompleteResources = endpointStates.filter((resource) =>
+            resource.status === "failed" || resource.status === "unavailable" || resource.status === "stale" ||
+            ((resource.expiresAt ?? resource.expires_at) != null && (resource.expiresAt ?? resource.expires_at)! < Date.now())).length;
           if (isEvent) {
-            if (acquiredResources < 13 || failedResources > 0) audit.counts.event_resources_incomplete += 1;
+            if (acquiredResources < 13 || incompleteResources > 0) audit.counts.event_resources_incomplete += 1;
             const eventStateStatus = state.event_state?.status ?? "missing";
             if (eventStateStatus === "complete") audit.counts.event_state_complete += 1;
             else if (eventStateStatus === "partial") audit.counts.event_state_partial += 1;
@@ -776,10 +777,10 @@ export class EventScheduler {
             else if (cohortStatus === "discovering") audit.counts.event_cohort_discovering += 1;
             else audit.counts.event_cohort_missing += 1;
           } else {
-            if (acquiredResources >= 7 && failedResources === 0) audit.counts.team_snapshot_complete += 1;
+            if (acquiredResources >= 7 && incompleteResources === 0) audit.counts.team_snapshot_complete += 1;
             else if (acquiredResources > 0) audit.counts.team_snapshot_partial += 1;
             else audit.counts.team_snapshot_failed += 1;
-            if (acquiredResources < 7 || failedResources > 0) audit.counts.team_resources_incomplete += 1;
+            if (acquiredResources < 7 || incompleteResources > 0) audit.counts.team_resources_incomplete += 1;
           }
         } catch {
           audit.counts.read_errors += 1;
