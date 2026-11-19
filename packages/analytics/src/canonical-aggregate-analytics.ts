@@ -1,0 +1,224 @@
+import type { FieldViewEventState } from "../../domain/src/event.ts";
+import type {
+  FieldViewAnalyticsAudit,
+  FieldViewAnalyticsEvidence,
+  FieldViewAnalyticsFinding,
+  FieldViewAnalyticsPopulation,
+  FieldViewMetricResult,
+  FieldViewTeamAnalytics,
+} from "../../domain/src/analytics.ts";
+import type { AnalyticsMatch, AllianceResult } from "./types.ts";
+import {
+  buildReviewFindings,
+  buildTeamInsights,
+  buildTeamRows,
+  mean,
+  standardDeviation,
+} from "./calculations.ts";
+import { getAnalyticsDefinition } from "./definitions.ts";
+
+function population(key: string, totalCount: number, eligibleCount: number): FieldViewAnalyticsPopulation {
+  const total = Math.max(0, totalCount);
+  const eligible = Math.max(0, Math.min(total, eligibleCount));
+  return {
+    population_key: key,
+    total_count: total,
+    eligible_count: eligible,
+    excluded_count: total - eligible,
+  };
+}
+
+function metric(
+  metricKey: string,
+  definitionKey: string,
+  value: number | null,
+  unit: string,
+  sampleSize: number,
+  sourcePopulation: FieldViewAnalyticsPopulation,
+  limitations: string[],
+  comparison?: {
+    population: FieldViewAnalyticsPopulation;
+    rank_position: number | null;
+    percentile: number | null;
+  },
+): FieldViewMetricResult {
+  const definition = getAnalyticsDefinition(definitionKey);
+  if (!definition) throw new Error("Missing analytics definition: " + definitionKey);
+  const base = {
+    metric_key: metricKey,
+    definition_version: definition.version,
+    unit,
+    sample_size: Math.max(0, sampleSize),
+    population: sourcePopulation,
+    limitations,
+    ...(comparison ? { comparison } : {}),
+  };
+  return typeof value === "number" && Number.isFinite(value)
+    ? { ...base, status: "available", value }
+    : { ...base, status: "insufficient-data", value: null };
+}
+
+function reviewFinding(
+  finding: ReturnType<typeof buildReviewFindings>[number],
+): FieldViewAnalyticsFinding {
+  const sourcePopulation = population(
+    finding.category === "alliance-pattern"
+      ? "repeated-qualification-alliance-combinations"
+      : "event-alliance-score-residuals",
+    finding.sampleSize,
+    finding.sampleSize,
+  );
+  const evidence: FieldViewAnalyticsEvidence[] = finding.evidence.map((label, index) => ({
+    evidence_key: finding.id + ":evidence:" + String(index + 1),
+    label,
+    value: null,
+    unit: "description",
+    sample_size: finding.sampleSize,
+    population: sourcePopulation,
+  }));
+  return {
+    finding_key: finding.id,
+    category: finding.category,
+    scope: "alliance",
+    subject_key: finding.subject,
+    severity: finding.severity,
+    title: finding.title,
+    summary: finding.description,
+    evidence,
+    suggested_action: finding.suggestedAction,
+    limitations: ["Alliance-level observation; this finding does not attribute performance to an individual robot."],
+  };
+}
+
+function teamFinding(
+  teamKey: string,
+  item: ReturnType<typeof buildTeamInsights>[number]["reviewMatches"][number],
+): FieldViewAnalyticsFinding {
+  const evidence: FieldViewAnalyticsEvidence[] = [];
+  if (item.residual !== null) {
+    evidence.push({
+      evidence_key: teamKey + ":" + item.matchKey + ":residual",
+      label: "Alliance score residual",
+      value: item.residual,
+      unit: "points",
+    });
+  }
+  if (item.winProbability !== null) {
+    evidence.push({
+      evidence_key: teamKey + ":" + item.matchKey + ":win-probability",
+      label: "Team alliance win probability",
+      value: item.winProbability,
+      unit: "probability",
+    });
+  }
+  if (item.deltaEPA !== null) {
+    evidence.push({
+      evidence_key: teamKey + ":" + item.matchKey + ":epa-change",
+      label: "Model EPA update during this match",
+      value: item.deltaEPA,
+      unit: "EPA",
+    });
+  }
+  return {
+    finding_key: "team-match-review:" + teamKey + ":" + item.matchKey,
+    category: "match-review",
+    scope: "team",
+    subject_key: teamKey,
+    severity: "low",
+    title: "Match review prompt",
+    summary: item.reasons.join("; "),
+    evidence,
+    suggested_action: "Review the match and webcast alongside partner and opponent context.",
+    limitations: ["The evidence is alliance-level or model-derived and does not establish individual robot causation."],
+  };
+}
+
+/**
+ * Publishes event-wide and team-at-event analytics in their canonical state
+ * owners. All values come from the same backend calculation run/audit.
+ */
+export function calculateCanonicalAggregateAnalytics(
+  eventState: FieldViewEventState,
+  records: AnalyticsMatch[],
+  allianceResults: AllianceResult[],
+  audit: FieldViewAnalyticsAudit,
+): FieldViewEventState {
+  const teams = (eventState.teams ?? []).map((team) => ({
+    key: team.key,
+    team_number: team.team_number,
+    nickname: team.nickname,
+    name: team.name,
+  }));
+  const eventTeams = eventState.event_teams ?? [];
+  const oprs = {
+    oprs: Object.fromEntries(eventTeams.flatMap((team) => team.opr === undefined ? [] : [[team.team_key, team.opr]])),
+    dprs: Object.fromEntries(eventTeams.flatMap((team) => team.dpr === undefined ? [] : [[team.team_key, team.dpr]])),
+    ccwms: Object.fromEntries(eventTeams.flatMap((team) => team.ccwm === undefined ? [] : [[team.team_key, team.ccwm]])),
+  };
+  const teamRows = buildTeamRows(teams, oprs, records);
+  const insights = buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
+  const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
+  const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
+  const residualPopulation = population("event-alliance-sides", allianceResults.length, residuals.length);
+  const winChecks = records.flatMap((record) => {
+    const probability = record.statbotics?.pred?.red_win_prob;
+    const winner = record.match.winning_alliance;
+    if (typeof probability !== "number" || (winner !== "red" && winner !== "blue")) return [];
+    return [(probability >= 0.5 ? "red" : "blue") === winner ? 1 : 0];
+  });
+
+  const eventMetrics: FieldViewMetricResult[] = [
+    metric("mean-score-residual", "alliance-score-residual", mean(residuals), "points", residuals.length, residualPopulation, ["Positive values mean actual alliance scores exceeded Statbotics predictions."]),
+    metric("score-residual-standard-deviation", "alliance-score-residual", standardDeviation(residuals), "points", residuals.length, residualPopulation, ["Uses the existing population-standard-deviation helper."]),
+    metric("score-mean-absolute-error", "alliance-score-residual", residuals.length ? residuals.reduce((sum, value) => sum + Math.abs(value), 0) / residuals.length : null, "points", residuals.length, residualPopulation, ["Alliance-level prediction error; not individual robot attribution."]),
+    metric("score-root-mean-square-error", "alliance-score-residual", residuals.length ? Math.sqrt(residuals.reduce((sum, value) => sum + value * value, 0) / residuals.length) : null, "points", residuals.length, residualPopulation, ["Weights larger alliance score misses more heavily."]),
+    metric("winner-prediction-accuracy", "qualification-prediction-calibration", winChecks.length ? winChecks.reduce((sum, value) => sum + value, 0) / winChecks.length : null, "ratio", winChecks.length, population("event-matches-with-prediction-and-known-winner", records.length, winChecks.length), ["Retains the existing >= 0.5 red-favorite tie convention used by the legacy event prediction summary."]),
+  ];
+
+  const team_states = eventState.team_states === undefined || eventState.team_states === null
+    ? eventState.team_states
+    : eventState.team_states.map((teamState) => {
+        const row = teamRows.find((item) => item.teamKey === teamState.team_key);
+        if (!row) return teamState;
+        const insight = insights.find((item) => item.teamNumber === row.teamNumber);
+        const epaPopulation = population("team-event-latest-epa", 1, row.epa === null ? 0 : 1);
+        const contributionPopulation = population("team-event-alliance-appearances", row.matchesSeen, row.epaContributionSamples);
+        const comparisonPopulation = population("event-teams-with-available-epa", teamRows.length, teamRows.filter((item) => item.epa !== null).length);
+        const epaRank = row.epa === null ? null : 1 + teamRows.filter((item) => item.epa !== null && item.epa > row.epa!).length;
+        const metrics: FieldViewMetricResult[] = [
+          metric("epa", "team-event-epa", row.epa, "EPA", row.epa === null ? 0 : 1, epaPopulation, ["Latest observed EPA; not an event-average value."]),
+          metric("auto-epa", "team-event-epa", row.autoEpa, "EPA", row.autoEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("teleop-epa", "team-event-epa", row.teleopEpa, "EPA", row.teleopEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("endgame-epa", "team-event-epa", row.endgameEpa, "EPA", row.endgameEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("epa-percentile", "team-event-epa", row.epaPercentile, "percentile", row.epa === null ? 0 : 1, epaPopulation, ["Compared with event teams that have an available EPA value."], {
+            population: comparisonPopulation,
+            rank_position: epaRank,
+            percentile: row.epaPercentile,
+          }),
+          metric("epa-contribution-percent", "team-epa-contribution-share", row.epaContributionPercent, "percent", row.epaContributionSamples, contributionPopulation, ["Mean share of eligible three-team alliance pre-match EPA totals; not measured robot-level scoring contribution."]),
+          metric("matches-seen", "team-event-match-appearances", row.matchesSeen, "matches", row.matchesSeen, population("team-event-match-appearances", row.matchesSeen, row.matchesSeen), ["Counts roster appearances, including matches that are not yet scored."]),
+        ];
+        const teamFindings = (insight?.reviewMatches ?? [])
+          .filter((item) => item.reasons.length > 0)
+          .map((item) => teamFinding(teamState.team_key, item));
+        const analytics: FieldViewTeamAnalytics = {
+          team_key: teamState.team_key,
+          event_key: teamState.event_key,
+          metrics,
+          findings: teamFindings,
+          audit,
+        };
+        return { ...teamState, analytics };
+      });
+
+  return {
+    ...eventState,
+    analytics: {
+      event_key: eventState.event_key,
+      metrics: eventMetrics,
+      findings: findings.map(reviewFinding),
+      audit,
+    },
+    ...(team_states === undefined ? {} : { team_states }),
+  };
+}
