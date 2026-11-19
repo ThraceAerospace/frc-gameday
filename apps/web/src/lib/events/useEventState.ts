@@ -16,6 +16,8 @@ import {
   subscribeSharedEventState,
   getCanonicalEventSnapshot,
   subscribeCanonicalEventSnapshot,
+  getCanonicalEventAnalytics,
+  subscribeCanonicalEventAnalytics,
   getCanonicalRuntimeStatus,
   subscribeCanonicalRuntimeStatus,
 } from "./sharedWorkerClient";
@@ -118,6 +120,21 @@ export function useCanonicalEventSnapshot(eventKey: string): {
   return remoteSnapshots === null ? liveSnapshot : remoteSnapshots[eventKey];
 }
 
+
+/** Subscribe to durable EventRuntime analytics publications via the shared Worker. */
+export function useCanonicalEventAnalytics(eventKey: string) {
+  const subscribe = useCallback(
+    (listener: () => void) => eventKey
+      ? subscribeCanonicalEventAnalytics(eventKey, listener)
+      : () => {},
+    [eventKey],
+  );
+  const getSnapshot = useCallback(
+    () => eventKey ? getCanonicalEventAnalytics(eventKey) : undefined,
+    [eventKey],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+}
 
 /** Connection health for the shared canonical EventRuntime snapshot stream. */
 export function useCanonicalRuntimeStatus(eventKey: string): EventWebSocketStatus {
