@@ -44,6 +44,8 @@ export interface RuntimeEnvironment {
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
   EVENT_COMPLETED_RETENTION_MS?: string | number;
+  /** Minimum delay between provider requests across all runtime Durable Objects. */
+  PROVIDER_REQUEST_INTERVAL_MS?: string | number;
   /** Test seam; production uses the Workers global fetch implementation. */
   fetcher?: typeof fetch;
   /** Test seams for the Cloudflare WebSocket upgrade API. */
