@@ -247,6 +247,10 @@ export class EventScheduler {
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
       const current = await this.storage.get<string[]>(storageKey) ?? [];
       if (!current.includes(key)) await this.storage.put(storageKey, [...current, key].sort());
+      if (kind === "event") {
+        const runtimeKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+        if (!runtimeKeys.includes(key)) await this.storage.put("registry:runtime-events", [...runtimeKeys, key].sort());
+      }
       return Response.json({ registered: true });
     }
 
@@ -422,7 +426,7 @@ export class EventScheduler {
       if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
       const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
       const registeredEvents = new Set([
-        ...(await this.storage.get<string[]>("registry:events") ?? []),
+        ...(await this.storage.get<string[]>("registry:runtime-events") ?? []),
         ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
       ]);
       const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
@@ -721,6 +725,7 @@ export class EventScheduler {
     }
 
     const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
+    const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
     // A previous multi-year scheduler may have left future-year EventRuntime
     // polls active. Stop those runtimes now that discovery is current-year-only.
     for (const eventKey of [...scheduledKeys]) {
@@ -771,7 +776,9 @@ export class EventScheduler {
         }),
       }));
       if (!response.ok) throw new Error("Failed to schedule " + event.key + ": HTTP " + response.status);
+      runtimeEventKeys.add(event.key);
     }
     await this.storage.put("scheduler:event-keys", [...scheduledKeys]);
+    await this.storage.put("registry:runtime-events", [...runtimeEventKeys].sort());
   }
 }
