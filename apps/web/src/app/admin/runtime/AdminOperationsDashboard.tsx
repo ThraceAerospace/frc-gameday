@@ -186,10 +186,10 @@ export default function AdminOperationsDashboard() {
   }, [authenticated, loadCoverageAudit]);
 
   useEffect(() => {
-    if (!authenticated || coverageAudit?.status !== "running" || busy) return;
+    if (!authenticated || coverageAudit?.year !== year || coverageAudit.status !== "running" || busy) return;
     const timer = window.setTimeout(() => void runCoverageAudit(), 300);
     return () => window.clearTimeout(timer);
-  }, [authenticated, coverageAudit, busy, runCoverageAudit]);
+  }, [authenticated, coverageAudit, year, busy, runCoverageAudit]);
 
   useEffect(() => {
     if (!authenticated || (tab !== "events" && tab !== "teams")) return;
