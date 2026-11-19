@@ -807,12 +807,19 @@ export class EventRuntime {
     ];
     if (calculateAnalytics) {
       const seasonCollection = await this.collectSeasonCohort(normalizedState);
+      // Event-level analytics must not be published until every event participant
+      // has a TeamRuntime season snapshot with its TBA event history available.
+      // Missing Statbotics records remain explicit partial cohort rows; missing
+      // team/event discovery is a hard prerequisite and is retried separately.
+      if (!seasonCollection || seasonCollection.cohort.state === "discovering") {
+        throw new Error("SEASON_COHORT_NOT_READY: waiting for participant TeamRuntime season histories");
+      }
       return {
         version: state.version,
         state: await calculateCanonicalMatchAnalytics(
           normalizedState,
-          [...inputRecords, ...(seasonCollection?.inputs ?? [])],
-          seasonCollection?.cohort,
+          [...inputRecords, ...seasonCollection.inputs],
+          seasonCollection.cohort,
         ),
       };
     }
@@ -1005,10 +1012,12 @@ export class EventRuntime {
       calculated = await this.buildEventState(true);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      const waitingForCohort = detail.startsWith("SEASON_COHORT_NOT_READY:");
       await this.storage.transaction(async (transaction) => {
-        await transaction.put("analytics:status", "failed");
-        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 30_000);
-        await transaction.put("analytics:last-error", detail.slice(0, 300));
+        await transaction.put("analytics:status", waitingForCohort ? "waiting-for-cohort" : "failed");
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + (waitingForCohort ? ANALYTICS_COHORT_RETRY_DELAY_MS : 30_000));
+        if (waitingForCohort) await transaction.delete("analytics:last-error");
+        else await transaction.put("analytics:last-error", detail.slice(0, 300));
         await this.rearm(transaction);
       });
       return;
