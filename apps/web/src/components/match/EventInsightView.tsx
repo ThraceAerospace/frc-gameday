@@ -66,7 +66,7 @@ function AllianceCard({
   const alliance = match.alliances[color];
   const allianceTeams = alliance.team_keys ?? [];
   const teamNames = useMemo(
-    () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
+    () => new Map((snapshot.teams ?? []).map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
     [snapshot.teams],
   );
   const allianceData = match.teams[color];
@@ -109,9 +109,9 @@ function AllianceCard({
                     <div className={`font-mono text-xl font-bold tabular-nums ${tracked ? "text-amber-200 underline decoration-amber-400 decoration-2 underline-offset-4" : "text-white"}`}>{formatTeamNumber(teamKey)}</div>
                     <div className="mt-1 max-w-40 truncate text-md text-neutral-400">{teamNames.get(teamKey) ?? teamKey}</div>
                   </th>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.oprs?.[teamKey])}</td>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.dprs?.[teamKey])}</td>
-                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(snapshot.oprs?.ccwms?.[teamKey])}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(teamDataByKey.get(teamKey)?.opr)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(teamDataByKey.get(teamKey)?.dpr)}</td>
+                  <td className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(teamDataByKey.get(teamKey)?.ccwm)}</td>
                   {PRE_EPA_FIELDS.map(([key]) => (
                     <td key={key} className="px-2 py-3 text-right font-mono text-lg font-bold tabular-nums text-neutral-300">{formatMetric(teamEpa?.[key])}</td>
                   ))}
