@@ -33,15 +33,23 @@ type InventoryPage = { total: number; cursor: number; next_cursor: number | null
 type SeasonIngest = {
   year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
   phase?: "teams" | "events" | "complete";
-  team_cursor?: number; team_total?: number; event_cursor?: number; event_total?: number;
+  team_cursor?: number; team_total?: number; team_resource_cursor?: number;
+  event_cursor?: number; event_total?: number; event_resource_cursor?: number; next_due_at?: number | null;
   counts?: {
     teams_complete: number; teams_partial: number; teams_failed: number;
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_failed: number;
+    requests_attempted: number; requests_succeeded: number; requests_failed: number;
+    requests_skipped: number; requests_unavailable: number; requests_deferred: number;
   };
   recent_errors?: Array<{ kind: string; key: string; detail: string; at: number }>;
 };
-type SeasonPreview = { year: number; ready: boolean; events: number; teams: number; team_pages: number; existing_job?: SeasonIngest | null };
+type SeasonPreview = {
+  year: number; ready: boolean; events: number; teams: number; team_pages: number;
+  event_resources_per_event?: number; team_resources_per_team?: number;
+  planned_resource_requests?: number; request_interval_ms?: number; estimated_minimum_duration_ms?: number;
+  estimate_note?: string; existing_job?: SeasonIngest | null;
+};
 type CoverageAudit = {
   year: number; status: "not_started" | "running" | "completed" | "stale"; discovery_ready?: boolean;
   started_at?: number; updated_at?: number; cursor?: number; processed?: number; total?: number; remaining?: number;
@@ -338,10 +346,13 @@ export default function AdminOperationsDashboard() {
         {seasonPreview && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-sm">
           <p className="font-semibold">{seasonPreview.ready ? "Discovery is ready" : "Discovery is incomplete"}</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.events.toLocaleString()} events · {seasonPreview.teams.toLocaleString()} teams · {seasonPreview.team_pages} TBA team pages</p>
-          {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting confirms that FieldView may make provider requests for this full inventory. Each entity is processed in its own durable job step.</p>}
+          <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.event_resources_per_event} event resources/event · {seasonPreview.team_resources_per_team} team resources/team · {(seasonPreview.planned_resource_requests ?? 0).toLocaleString()} planned resource requests</p>
+          <p className="mt-1 text-xs text-[var(--fv-muted)]">Shared provider interval: {seasonPreview.request_interval_ms ?? 1000} ms · Lower-bound duration: {((seasonPreview.estimated_minimum_duration_ms ?? 0) / 3_600_000).toFixed(1)} hours</p>
+          {seasonPreview.estimate_note && <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.estimate_note}</p>}
+          {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting confirms that FieldView may make provider requests for this full inventory. One shared lease serializes EventRuntime and TeamRuntime provider calls; cached resources are skipped.</p>}
         </div>}
         {seasonIngest && seasonIngest.status !== "not_started" && <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"} phase</span><span>Teams {seasonIngest.team_cursor ?? 0}/{seasonIngest.team_total ?? 0} · Events {seasonIngest.event_cursor ?? 0}/{seasonIngest.event_total ?? 0}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"} phase</span><span>Teams {seasonIngest.team_cursor ?? 0}/{seasonIngest.team_total ?? 0} (resource {seasonIngest.team_resource_cursor ?? 0}/7) · Events {seasonIngest.event_cursor ?? 0}/{seasonIngest.event_total ?? 0} (resource {seasonIngest.event_resource_cursor ?? 0}/13)</span></div>
           <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full bg-[var(--fv-brand)]" style={{ width: (((seasonIngest.team_cursor ?? 0) + (seasonIngest.event_cursor ?? 0)) / Math.max(1, (seasonIngest.team_total ?? 0) + (seasonIngest.event_total ?? 0))) * 100 + "%" }} /></div>
           {seasonIngest.counts && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             {[
@@ -349,6 +360,9 @@ export default function AdminOperationsDashboard() {
               ["EventState complete", seasonIngest.counts.event_state_complete], ["EventState partial", seasonIngest.counts.event_state_partial], ["EventState failed", seasonIngest.counts.event_state_failed],
               ["EventAnalytics succeeded", seasonIngest.counts.event_analytics_succeeded], ["EventAnalytics partial", seasonIngest.counts.event_analytics_partial],
               ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed],
+              ["Requests attempted", seasonIngest.counts.requests_attempted], ["Requests succeeded", seasonIngest.counts.requests_succeeded],
+              ["Requests failed", seasonIngest.counts.requests_failed], ["Requests skipped", seasonIngest.counts.requests_skipped],
+              ["Resources unavailable", seasonIngest.counts.requests_unavailable], ["Requests deferred by gate", seasonIngest.counts.requests_deferred],
             ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-lg font-bold tabular-nums">{value}</p></div>)}
           </div>}
           {seasonIngest.recent_errors && seasonIngest.recent_errors.length > 0 && <details className="text-xs"><summary className="cursor-pointer font-semibold">Recent ingestion errors ({seasonIngest.recent_errors.length})</summary><ul className="mt-2 space-y-1">{seasonIngest.recent_errors.slice(-10).map((item, index) => <li key={item.kind + item.key + index} className="text-rose-600">{item.kind} {item.key}: {item.detail}</li>)}</ul></details>}
