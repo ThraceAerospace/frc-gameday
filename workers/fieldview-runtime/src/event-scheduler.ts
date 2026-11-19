@@ -898,6 +898,8 @@ export class EventScheduler {
         if (!this.env.TEAM_RUNTIME) throw new Error("TeamRuntime namespace is not bound");
         const resources = teamResourceEndpoints(teamKey, job.year);
         const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+        const teamRegistry = await this.storage.get<string[]>("registry:teams") ?? [];
+        if (!teamRegistry.includes(teamKey)) await this.storage.put("registry:teams", [...teamRegistry, teamKey].sort());
         const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
         if (job.teamResourceCursor < resources.length) {
           const resource = resources[job.teamResourceCursor];
@@ -978,6 +980,10 @@ export class EventScheduler {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
         const event = eventDiscovery?.events.find((item) => item.key === eventKey);
         const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+        const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+        if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
+        const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
+        if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
         const headers = {
           Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
           "X-FieldView-Event-Key": eventKey,
