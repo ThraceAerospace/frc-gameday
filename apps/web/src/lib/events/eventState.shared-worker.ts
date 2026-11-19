@@ -14,6 +14,8 @@ type ClientMessage =
     }
   | { type: "subscribeCanonical"; eventKey: string }
   | { type: "unsubscribeCanonical"; eventKey: string }
+  | { type: "subscribeCanonicalAnalytics"; eventKey: string }
+  | { type: "unsubscribeCanonicalAnalytics"; eventKey: string }
   | { type: "refreshCanonical"; eventKey: string }
   | { type: "close" }
   | { type: "ping"; nonce: number };
@@ -22,6 +24,7 @@ type EventRecord = {
   state?: EventState;
   clients: Map<MessagePort, () => void>;
   canonicalClients: Map<MessagePort, () => void>;
+  analyticsClients: Map<MessagePort, () => void>;
 };
 
 const events = new Map<string, EventRecord>();
@@ -78,7 +81,7 @@ function subscribe(port: MessagePort, eventKey: string) {
 
   let record = events.get(eventKey);
   if (!record) {
-    record = { clients: new Map(), canonicalClients: new Map() };
+    record = { clients: new Map(), canonicalClients: new Map(), analyticsClients: new Map() };
     events.set(eventKey, record);
   }
   if (!record.state) record.state = new EventState(eventKey, workerEventWebSocket);
@@ -100,7 +103,7 @@ function unsubscribe(port: MessagePort, eventKey: string) {
     record.clients.delete(port);
     unsubscribeClient();
   }
-  if (record && record.clients.size === 0 && record.canonicalClients.size === 0) events.delete(eventKey);
+  if (record && record.clients.size === 0 && record.canonicalClients.size === 0 && record.analyticsClients.size === 0) events.delete(eventKey);
   if (subscribed.size === 0) portSubscriptions.delete(port);
 }
 
@@ -134,6 +137,26 @@ function subscribeCanonical(port: MessagePort, eventKey: string) {
   if (canonical) postCanonicalSnapshot(port, eventKey, canonical);
 }
 
+function subscribeCanonicalAnalytics(port: MessagePort, eventKey: string) {
+  if (!eventKey) return;
+  let record = events.get(eventKey);
+  if (!record) {
+    record = { clients: new Map(), canonicalClients: new Map(), analyticsClients: new Map() };
+    events.set(eventKey, record);
+  }
+  if (record.analyticsClients.has(port)) return;
+  const unsubscribe = workerEventWebSocket.subscribeCanonicalAnalytics(eventKey, (value) => {
+    try { port.postMessage({ type: "canonical-analytics", eventKey, value }); } catch { /* closing port */ }
+  });
+  record.analyticsClients.set(port, unsubscribe);
+}
+
+function unsubscribeCanonicalAnalytics(port: MessagePort, eventKey: string) {
+  const record = events.get(eventKey);
+  const unsubscribe = record?.analyticsClients.get(port);
+  if (record && unsubscribe) { record.analyticsClients.delete(port); unsubscribe(); }
+  if (record && record.clients.size === 0 && record.canonicalClients.size === 0 && record.analyticsClients.size === 0) events.delete(eventKey);
+}
 function unsubscribeCanonical(port: MessagePort, eventKey: string) {
   const subscribed = portCanonicalSubscriptions.get(port);
   if (!subscribed?.delete(eventKey)) return;
@@ -155,6 +178,7 @@ function closePort(port: MessagePort) {
   workerEventWebSocket.release();
   for (const eventKey of [...(portSubscriptions.get(port) ?? [])]) unsubscribe(port, eventKey);
   for (const eventKey of [...(portCanonicalSubscriptions.get(port) ?? [])]) unsubscribeCanonical(port, eventKey);
+  for (const [eventKey, record] of events) if (record.analyticsClients.has(port)) unsubscribeCanonicalAnalytics(port, eventKey);
   portSubscriptions.delete(port);
   portCanonicalSubscriptions.delete(port);
   port.close();
@@ -201,6 +225,12 @@ function handleMessage(port: MessagePort, message: ClientMessage) {
       break;
     case "unsubscribeCanonical":
       unsubscribeCanonical(port, message.eventKey);
+      break;
+    case "subscribeCanonicalAnalytics":
+      subscribeCanonicalAnalytics(port, message.eventKey);
+      break;
+    case "unsubscribeCanonicalAnalytics":
+      unsubscribeCanonicalAnalytics(port, message.eventKey);
       break;
     case "refreshCanonical":
       workerEventWebSocket.refreshCanonicalSnapshot(message.eventKey);
