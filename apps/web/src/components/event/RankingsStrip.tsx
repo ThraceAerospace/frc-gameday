@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import type { FieldViewEventTeam, FieldViewPlayoffAlliance } from "@fieldview/domain";
+import type { FieldViewEventTeam } from "@fieldview/domain";
+import type { PlayoffAlliancePresentation } from "@/components/match/MatchCard";
 import { formatAllianceLongName, formatPlayoffLevel, formatRecord, formatTeamNumber } from "@/lib/tba/formatters";
 
 type RankingsStripProps = {
   teamsStatuses: Record<string, FieldViewEventTeam["tba_status"]>;
-  playoffAlliances?: FieldViewPlayoffAlliance[];
+  playoffAlliances?: PlayoffAlliancePresentation[];
   playoffType?: number | null;
   trackedTeams?: string[];
 };
