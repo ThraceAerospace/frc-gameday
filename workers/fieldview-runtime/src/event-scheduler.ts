@@ -8,6 +8,8 @@ import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts
 
 const DISCOVERY_PREFIX = "discovery:";
 const TEAM_DISCOVERY_PREFIX = "team-discovery:";
+const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
+const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
 
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
@@ -245,7 +247,7 @@ export class EventScheduler {
       }
       try {
         await this.discoverEvents(year);
-        await this.discoverTeams(year);
+        await this.discoverTeams(year, ADMIN_TEAM_DISCOVERY_PREFIX);
         return Response.json({
           discovered: true,
           year,
@@ -275,8 +277,10 @@ export class EventScheduler {
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
       const registered = await this.storage.get<string[]>(storageKey) ?? [];
       const discovery = kind === "event"
-        ? await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)
-        : await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+        ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))
+        : (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
       const discoveredKeys = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
         : (discovery as TeamDiscoveryCache | undefined)?.teams.map((item) => item.key) ?? [];
@@ -304,8 +308,10 @@ export class EventScheduler {
       const registryKey = kind === "event" ? "registry:events" : "registry:teams";
       const registered = await this.storage.get<string[]>(registryKey) ?? [];
       const discovery = kind === "event"
-        ? await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)
-        : await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+        ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))
+        : (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
       const discovered = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
         : (discovery as TeamDiscoveryCache | undefined)?.teams.some((item) => item.key === key) ?? false;
@@ -446,7 +452,7 @@ export class EventScheduler {
   }
 
   private async discoverEvents(year: number): Promise<void> {
-    const cacheKey = DISCOVERY_PREFIX + year;
+    const cacheKey = ADMIN_DISCOVERY_PREFIX + year;
     const cached = await this.storage.get<DiscoveryCache>(cacheKey);
     const headers = new Headers();
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
@@ -464,8 +470,8 @@ export class EventScheduler {
     } satisfies DiscoveryCache);
   }
 
-  private async discoverTeams(year: number): Promise<void> {
-    const key = TEAM_DISCOVERY_PREFIX + year;
+  private async discoverTeams(year: number, prefix = TEAM_DISCOVERY_PREFIX): Promise<void> {
+    const key = prefix + year;
     const cached = await this.storage.get<TeamDiscoveryCache>(key);
     const headers = new Headers();
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
@@ -491,7 +497,12 @@ export class EventScheduler {
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
     const year = new Date().getUTCFullYear();
     const events = new Map<string, TBAEvent>();
-    // Historical discovery caches are retained for season-specific admin operations.
+    // Routine discovery keeps only the active calendar year's cache. Admin-prepared
+    // historical snapshots live under separate prefixes and are not pruned here.
+    const discoveryEntries = await this.storage.list<DiscoveryCache>({ prefix: DISCOVERY_PREFIX });
+    for (const key of discoveryEntries.keys()) {
+      if (key !== DISCOVERY_PREFIX + year) await this.storage.delete(key);
+    }
     // FieldView only needs the current calendar year's discovery cache.
     for (const discoveryYear of [year]) {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
