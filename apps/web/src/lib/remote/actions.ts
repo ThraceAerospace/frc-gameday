@@ -1,8 +1,7 @@
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent, FieldViewEventSnapshot } from "@fieldview/domain";
 import type { UpcomingMatchAlert, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
 
 type TileSurfaceUiState =
   | "eventPickerOpen"
@@ -19,7 +18,7 @@ export type RemoteSurfaceState = Omit<
 
 export type RemoteSessionMessage =
   | { type: "action"; action: RemoteSessionAction }
-  | { type: "eventStateSnapshot"; eventKey: string; state: EventStateSnapshot }
+  | { type: "eventSnapshot"; eventKey: string; version: number; snapshot: FieldViewEventSnapshot }
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteSessionAction =
@@ -34,7 +33,7 @@ export type RemoteSessionAction =
   | { type: "movePriority"; position: number; direction: -1 | 1 }
   | { type: "selectPriorityEdit"; eventKey: string | null }
   | { type: "movePriorityEdit"; direction: -1 | 1 }
-  | { type: "addEvent"; event: TBAEvent }
+  | { type: "addEvent"; event: FieldViewEvent }
   | { type: "removeEvent"; eventKey: string }
   | { type: "registerLabel"; eventKey: string; label: string }
   | { type: "setEventViewConfig"; eventKey: string; config: Partial<EventViewConfig> }
