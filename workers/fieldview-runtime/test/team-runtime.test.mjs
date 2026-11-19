@@ -132,3 +132,30 @@ test("TeamRuntime preserves an explicit null team representation", async () => {
   assert.equal(snapshot.team, null);
   assert.equal(snapshot.sources.tba_team.status, "available");
 });
+
+
+test("TeamRuntime dispatches each team resource through its declared provider", async () => {
+  const storage = new MemoryStorage(), calls = [];
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    calls.push(String(url));
+    return Response.json([]);
+  }), "2485");
+  const headers = { "X-FieldView-Team-Key": "2485", Authorization: "Bearer admin" };
+  await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers }));
+  await runtime.alarm();
+
+  const state = await runtime.fetch(new Request("https://team/state", { headers }));
+  const diagnostics = await state.json();
+  const providers = new Map(diagnostics.polling.map((task) => [task.endpoint, task.provider]));
+  assert.equal(providers.get("/team/frc2485"), "tba");
+  assert.equal(providers.get("/team/frc2485/districts"), "tba");
+  assert.equal(providers.get("/team/frc2485/events/2026"), "tba");
+  assert.equal(providers.get("/team/frc2485/media/2026"), "tba");
+  assert.equal(providers.get("/team_year/2485/2026"), "statbotics");
+  assert.equal(providers.get("/team_events?team=2485&year=2026&limit=1000&offset=0"), "statbotics");
+  assert.equal(providers.get("/team/2485"), "frc-colors");
+
+  assert.ok(calls.some((url) => url.includes("thebluealliance.com") && url.endsWith("/team/frc2485")));
+  assert.ok(calls.some((url) => url.includes("statbotics") && url.includes("/team_year/2485/2026")));
+  assert.ok(calls.some((url) => url.includes("frc-colors") && url.endsWith("/team/2485")));
+});
