@@ -6,7 +6,8 @@
   "sideEffects": false,
   "exports": {
     "./client": "./src/client.ts",
-    "./endpoints": "./src/endpoints.ts"
+    "./endpoints": "./src/endpoints.ts",
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.mjs"
