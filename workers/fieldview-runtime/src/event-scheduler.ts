@@ -1037,7 +1037,30 @@ export class EventScheduler {
           ...eventResourceEndpoints(eventKey),
           STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0),
         ];
-        if (job.eventResourceCursor < resources.length) {
+        if (job.eventResourceCursor === 0) {
+          const preflight = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+          if (preflight.ok) {
+            const current = await preflight.json() as {
+              event_state?: { status?: string };
+              analytics?: { status?: string; cohort_status?: string | null };
+            };
+            const artifactsReusable = current.event_state?.status === "complete" &&
+              (current.analytics?.status === "succeeded" || current.analytics?.status === "partial") &&
+              current.analytics?.cohort_status === "complete";
+            if (artifactsReusable) {
+              job.counts.requests_skipped += resources.length;
+              job.counts.event_state_complete += 1;
+              if (current.analytics?.status === "succeeded") job.counts.event_analytics_succeeded += 1;
+              else job.counts.event_analytics_partial += 1;
+              job.counts.event_cohort_complete += 1;
+              job.eventCursor += 1;
+              job.eventResourceCursor = 0;
+              job.resourceAttempts = 0;
+              job.nextDueAt = Date.now() + 1_000;
+            }
+          }
+        }
+        if (job.eventResourceCursor < resources.length && job.eventCursor < job.eventKeys.length) {
           const endpoint = resources[job.eventResourceCursor];
           const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
           let resourceState: { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null } | undefined;
