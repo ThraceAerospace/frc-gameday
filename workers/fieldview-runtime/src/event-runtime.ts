@@ -809,9 +809,22 @@ export class EventRuntime {
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
-      await transaction.put("analytics:status", "succeeded");
+      const cohortState = isRecord(calculated.state.analytics) &&
+        isRecord(calculated.state.analytics.season_cohort)
+        ? calculated.state.analytics.season_cohort.state
+        : undefined;
+      const cohortIncomplete = cohortState !== undefined && cohortState !== "complete";
+      const cohortRetries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
+      if (cohortIncomplete && cohortRetries < ANALYTICS_COHORT_MAX_RETRIES) {
+        await transaction.put(ANALYTICS_COHORT_RETRY_KEY, cohortRetries + 1);
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + ANALYTICS_COHORT_RETRY_DELAY_MS);
+        await transaction.put("analytics:status", "partial");
+      } else {
+        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+        await transaction.delete(ANALYTICS_DUE_KEY);
+        await transaction.put("analytics:status", cohortIncomplete ? "partial" : "succeeded");
+      }
       await transaction.delete("analytics:last-error");
-      await transaction.delete(ANALYTICS_DUE_KEY);
       const nextRevision = currentRevision + 1;
       await transaction.put("snapshot-revision", nextRevision);
       await this.rearm(transaction);
