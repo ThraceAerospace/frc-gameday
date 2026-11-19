@@ -37,12 +37,18 @@ function phaseAnomalyBand(
   return { median, margin: Math.max(20, 3 * 1.4826 * mad) };
 }
 
+type MatchFlagData = Pick<EventAnalyticsResponse, "allianceResults" | "qualificationAnalysis">;
+type dataAllianceResult = MatchFlagData["allianceResults"][number];
+
 export interface MatchFlagContext {
   allianceEpaValues: number[];
   highEpaThreshold: number | null;
   anomalyBands: Map<string, { median: number; margin: number } | null>;
   residualMagnitudes: number[];
   largeResidualThreshold: number | null;
+  allianceResultsByMatch: Map<string, typeof dataAllianceResult[]>;
+  phaseSampleSizes: Map<string, number>;
+  penaltyByMatch: Map<string, NonNullable<EventAnalyticsResponse["qualificationAnalysis"]>["penalties"]["flaggedMatches"][number]>;
 }
 
 /**
@@ -59,6 +65,18 @@ export function buildMatchFlagContext(
     item.residual === null ? [] : [Math.abs(item.residual)],
   );
   const phases = new Set(data.allianceResults.map((item) => item.compLevel.toLowerCase()));
+  const allianceResultsByMatch = new Map<string, dataAllianceResult[]>();
+  const phaseSampleSizes = new Map<string, number>();
+  for (const item of data.allianceResults) {
+    const matchItems = allianceResultsByMatch.get(item.matchKey) ?? [];
+    matchItems.push(item);
+    allianceResultsByMatch.set(item.matchKey, matchItems);
+    const phase = item.compLevel.toLowerCase();
+    if (item.residual !== null) phaseSampleSizes.set(phase, (phaseSampleSizes.get(phase) ?? 0) + 1);
+  }
+  const penaltyByMatch = new Map(
+    (data.qualificationAnalysis?.penalties.flaggedMatches ?? []).map((item) => [item.matchKey, item]),
+  );
   return {
     allianceEpaValues,
     highEpaThreshold: allianceEpaValues.length >= 8 ? quantile(allianceEpaValues, 0.75) : null,
@@ -67,6 +85,9 @@ export function buildMatchFlagContext(
     largeResidualThreshold: residualMagnitudes.length >= 20
       ? quantile(residualMagnitudes, 0.9)
       : null,
+    allianceResultsByMatch,
+    phaseSampleSizes,
+    penaltyByMatch,
   };
 }
 
@@ -101,7 +122,7 @@ export function buildMatchFlags(
   const modelUpset = completed && winner !== null && predictedWinner !== null &&
     winner !== predictedWinner && favoriteProbability !== null && favoriteProbability >= 0.6;
 
-  const matchResults = data.allianceResults.filter((item) => item.matchKey === match.key);
+  const matchResults = context.allianceResultsByMatch.get(match.key) ?? [];
   const { allianceEpaValues, highEpaThreshold } = context;
   const highAllianceEpa = {
     red: highEpaThreshold !== null &&
@@ -125,9 +146,7 @@ export function buildMatchFlags(
   };
 
   const qualification = match.comp_level.toLowerCase() === "qm";
-  const penaltyRow = qualification
-    ? data.qualificationAnalysis?.penalties.flaggedMatches.find((item) => item.matchKey === match.key)
-    : undefined;
+  const penaltyRow = qualification ? context.penaltyByMatch.get(match.key) : undefined;
   const highPenalties = { red: penaltyRow?.redFlagged ?? false, blue: penaltyRow?.blueFlagged ?? false };
 
   const reviewFlags: FieldViewMatchReviewFlag[] = [];
@@ -161,9 +180,7 @@ export function buildMatchFlags(
           residual: result.residual,
           phase_median: anomalyBand.median,
           phase_margin: anomalyBand.margin,
-          sample_size: data.allianceResults.filter((item) =>
-            item.compLevel.toLowerCase() === match.comp_level.toLowerCase() && item.residual !== null,
-          ).length,
+          sample_size: context.phaseSampleSizes.get(match.comp_level.toLowerCase()) ?? 0,
         },
       });
     }
