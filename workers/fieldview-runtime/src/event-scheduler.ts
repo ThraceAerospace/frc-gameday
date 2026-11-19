@@ -926,7 +926,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; last_fetched_at?: number | null }> };
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
           }
-          if (resourceState?.last_fetched_at != null || resourceState?.status === "unavailable") {
+          if ((resourceState?.last_fetched_at != null && resourceState.status !== "failed") || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
@@ -971,10 +971,11 @@ export class EventScheduler {
           const endpoints = state.endpoints ?? [];
           const acquired = endpoints.filter((item) => item.last_fetched_at != null).length;
           const unavailable = endpoints.filter((item) => item.status === "unavailable").length;
+          const failed = endpoints.filter((item) => item.status === "failed").length;
           const snapshot = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers }));
           if (!snapshot.ok) throw new Error("TeamRuntime season snapshot generation returned HTTP " + snapshot.status);
-          if (acquired === resources.length) job.counts.teams_complete += 1;
-          else if (acquired > 0 || unavailable > 0) job.counts.teams_partial += 1;
+          if (acquired === resources.length && failed === 0 && unavailable === 0) job.counts.teams_complete += 1;
+          else if (acquired > 0 || unavailable > 0 || failed > 0) job.counts.teams_partial += 1;
           else job.counts.teams_failed += 1;
           await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
           job.teamCursor += 1;
@@ -1020,7 +1021,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
-          if (resourceState?.lastFetchedAt != null || resourceState?.status === "unavailable") {
+          if ((resourceState?.lastFetchedAt != null && resourceState.status !== "failed") || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
