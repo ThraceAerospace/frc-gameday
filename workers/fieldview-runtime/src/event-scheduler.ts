@@ -335,6 +335,86 @@ export class EventScheduler {
       }
     }
 
+    if (url.pathname === "/admin/coverage-audit" && request.method === "GET") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid audit year" }, { status: 400 });
+      const audit = await this.storage.get<Record<string, unknown>>("admin:coverage-audit:" + year);
+      return Response.json(audit ?? { year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (url.pathname === "/admin/coverage-audit" && request.method === "POST") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid coverage audit request" }, { status: 400 });
+      const value = body as Record<string, unknown>;
+      const year = Number(value.year);
+      const action = value.action;
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200 || !["start", "continue"].includes(String(action))) {
+        return Response.json({ error: "Expected a valid year and start or continue action" }, { status: 400 });
+      }
+      const storageKey = "admin:coverage-audit:" + year;
+      let audit = await this.storage.get<{
+        year: number; status: string; started_at: number; updated_at: number;
+        event_keys: string[]; team_keys: string[]; cursor: number;
+        counts: { events_total: number; teams_total: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+      }>(storageKey);
+      if (action === "start") {
+        const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+        const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
+          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+        if (!eventDiscovery || !teamDiscovery) return Response.json({ error: "Discover this season before running the full coverage audit." }, { status: 409 });
+        const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string" && key.startsWith(String(year))))].sort();
+        const teamKeys = [...new Set(teamDiscovery.teams.map((team) => team.key).filter((key) => typeof key === "string"))].sort();
+        audit = {
+          year, status: "running", started_at: Date.now(), updated_at: Date.now(),
+          event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
+          counts: { events_total: eventKeys.length, teams_total: teamKeys.length, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
+        };
+        await this.storage.put(storageKey, audit);
+      }
+      if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
+      const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
+      const batch = all.slice(audit.cursor, audit.cursor + 20);
+      for (const item of batch) {
+        try {
+          const isEvent = item.kind === "event";
+          if (!isEvent && !this.env.TEAM_RUNTIME) {
+            audit.counts.team_runtime_missing += 1;
+            continue;
+          }
+          const namespace = isEvent ? this.env.EVENT_RUNTIME : this.env.TEAM_RUNTIME!;
+          const stub = namespace.get(namespace.idFromName(item.key));
+          const response = await stub.fetch(new Request(isEvent ? "https://event-runtime/state" : "https://team-runtime/state", {
+            headers: {
+              Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+              [isEvent ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key"]: item.key,
+            },
+          }));
+          if (!response.ok) {
+            if (isEvent) audit.counts.event_runtime_missing += 1;
+            else audit.counts.team_runtime_missing += 1;
+            continue;
+          }
+          const state = await response.json() as { endpoints?: Record<string, unknown> | Array<unknown>; analytics?: { status?: string } };
+          const resources = Array.isArray(state.endpoints) ? state.endpoints.length : Object.keys(state.endpoints ?? {}).length;
+          if (isEvent) {
+            if (resources < 13) audit.counts.event_resources_incomplete += 1;
+            if (!["succeeded", "partial"].includes(state.analytics?.status ?? "")) audit.counts.event_analytics_missing += 1;
+          } else if (resources < 7) audit.counts.team_resources_incomplete += 1;
+        } catch {
+          audit.counts.read_errors += 1;
+          if (item.kind === "event") audit.counts.event_runtime_missing += 1;
+          else audit.counts.team_runtime_missing += 1;
+        }
+      }
+      audit.cursor += batch.length;
+      audit.updated_at = Date.now();
+      if (audit.cursor >= all.length) audit.status = "completed";
+      await this.storage.put(storageKey, audit);
+      const { event_keys: _eventKeys, team_keys: _teamKeys, ...summary } = audit;
+      return Response.json({ ...summary, processed: audit.cursor, total: all.length, remaining: Math.max(0, all.length - audit.cursor) }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "GET" && url.pathname === "/admin/overview") {
       const eventKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:events") ?? []),
