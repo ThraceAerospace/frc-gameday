@@ -1,19 +1,14 @@
 "use client";
 
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import NextMatchCountdown from "./NextMatchCountdown";
 import { formatAlliance, formatAllianceShortName, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
-type PlayoffAlliance = {
-  name?: string;
-  picks?: string[];
-};
-
 type MatchCardProps = {
-  match: TBAMatch;
+  match: FieldViewMatch;
   team?: string[];
   isNext?: boolean;
-  playoffAlliances?: PlayoffAlliance[];
+  playoffAlliances?: FieldViewPlayoffAlliance[];
   playoffType?: number | null;
   eventTimezone?: string;
   onOpenInsights?: () => void;
