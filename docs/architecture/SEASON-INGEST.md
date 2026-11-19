@@ -33,6 +33,17 @@ An EventRuntime registration, a set of raw endpoint records, or a successful HTT
 
 EventRuntime now withholds analytics calculation while its participant cohort is still in the discovering state. The season ingest must perform the team-preparation phase first so this gate can clear predictably rather than relying on repeated event-runtime retries.
 
+## Durable season-ingest job
+
+The admin command center exposes a preview and explicit start/pause/resume/cancel controls. The Worker persists each year's job under the EventScheduler Durable Object and advances it from alarms, one entity at a time:
+
+1. Prepare every discovered season team through its TeamRuntime `/refresh` route. This intentionally bypasses the index-level `seed` operation, which fans out to event runtimes.
+2. For every discovered event, refresh its provider resources, request a canonical snapshot so EventRuntime persists EventState, then request analytics calculation and verify the EventAnalytics publication.
+3. Persist phase cursors and separate complete/partial/failed counters. A Worker restart resumes from the last durable cursor; a retried completed-with-errors job restarts its inventory scan and skips already-acquired TeamRuntime resources and already-complete EventState artifacts.
+4. Record bounded recent errors and continue processing other entities when one entity fails. Partial evidence is counted distinctly from missing or failed artifacts.
+
+The job starts only after a preview confirms complete event and paginated team discovery, and the start operation requires an explicit confirmation flag. Each alarm step processes at most one team or event; it does not fan out the full inventory in one request. The job shares the EventScheduler alarm with routine discovery, so routine scheduler work is deferred while a season-ingest job is actively running and resumes afterward if enabled.
+
 ## Completion and coverage accounting
 
 The season job and coverage audit must report distinct counts for:
