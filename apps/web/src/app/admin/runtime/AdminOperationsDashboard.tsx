@@ -347,7 +347,7 @@ export default function AdminOperationsDashboard() {
           <p className="font-semibold">{seasonPreview.ready ? "Discovery is ready" : "Discovery is incomplete"}</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.events.toLocaleString()} events · {seasonPreview.teams.toLocaleString()} teams · {seasonPreview.team_pages} TBA team pages</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.event_resources_per_event} event resources/event · {seasonPreview.team_resources_per_team} team resources/team · {(seasonPreview.planned_resource_requests ?? 0).toLocaleString()} planned resource requests</p>
-          <p className="mt-1 text-xs text-[var(--fv-muted)]">Shared provider interval: {seasonPreview.request_interval_ms ?? 1000} ms · Lower-bound duration: {((seasonPreview.estimated_minimum_duration_ms ?? 0) / 3_600_000).toFixed(1)} hours</p>
+          <p className="mt-1 text-xs text-[var(--fv-muted)]">Shared provider interval: {seasonPreview.request_interval_ms ?? 1000} ms · Baseline duration: {((seasonPreview.estimated_minimum_duration_ms ?? 0) / 3_600_000).toFixed(1)} hours</p>
           {seasonPreview.estimate_note && <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.estimate_note}</p>}
           {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting confirms that FieldView may make provider requests for this full inventory. One shared lease serializes EventRuntime and TeamRuntime provider calls; cached resources are skipped.</p>}
         </div>}
