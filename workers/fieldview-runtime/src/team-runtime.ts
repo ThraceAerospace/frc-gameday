@@ -227,11 +227,23 @@ export class TeamRuntime {
     const now = Date.now();
     const due = await this.storage.transaction(async (tx) => {
       const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const ready = [...tasks.values()].filter((task) => task.dueAt <= now)
-        .map((task) => ({ ...task, attempts: task.attempts + 1 }));
-      for (const task of ready) {
-        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6)));
-        await tx.put(taskKey(task.endpoint), { ...task, dueAt: retryAt });
+      const ready: TeamPollTask[] = [];
+      for (const [key, task] of tasks) {
+        // Durable Object storage can outlive code revisions. Never let a task
+        // written with the former resource-object shape reach endpoint state
+        // handling; the next snapshot/refresh will schedule it correctly.
+        if (typeof task.endpoint !== "string" ||
+          (task.provider !== "tba" && task.provider !== "statbotics" && task.provider !== "frc-colors") ||
+          !Number.isFinite(task.dueAt) || !Number.isFinite(task.intervalMs) ||
+          !Number.isFinite(task.attempts)) {
+          await tx.delete(key);
+          continue;
+        }
+        if (task.dueAt > now) continue;
+        const next = { ...task, attempts: task.attempts + 1 };
+        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
+        await tx.put(key, { ...next, dueAt: retryAt });
+        ready.push(next);
       }
       await this.rearm(tx); return ready;
     });
