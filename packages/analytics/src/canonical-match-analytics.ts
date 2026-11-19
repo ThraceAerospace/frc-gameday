@@ -93,6 +93,9 @@ export async function calculateCanonicalMatchAnalytics(
       "match-high-penalties",
       "qualification-prediction-calibration",
       "qualification-penalty-outliers",
+      "team-event-epa",
+      "team-epa-contribution-share",
+      "team-event-match-appearances",
     ],
     warnings: inputRecords.filter((input) => input.status !== "available")
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
