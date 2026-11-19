@@ -396,7 +396,7 @@ export class EventScheduler {
         year: number; status: string; started_at: number; updated_at: number;
         event_discovery_updated_at?: number; team_discovery_updated_at?: number;
         event_keys: string[]; team_keys: string[]; cursor: number;
-        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_analytics_partial: number; event_state_missing: number; event_state_partial: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
