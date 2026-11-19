@@ -969,6 +969,7 @@ export class EventScheduler {
           }
           if ((resourceState?.last_fetched_at != null && resourceState.status === "available" && (resourceState.expires_at == null || resourceState.expires_at > Date.now())) || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
+            if (resourceState?.status === "unavailable") job.counts.requests_unavailable += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
@@ -1095,6 +1096,7 @@ export class EventScheduler {
           }
           if (((resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) && resourceState.status === "available" && (resourceState.expiresAt == null || resourceState.expiresAt > Date.now())) || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
+            if (resourceState?.status === "unavailable") job.counts.requests_unavailable += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
