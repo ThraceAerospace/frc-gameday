@@ -150,9 +150,9 @@ export async function calculateCanonicalMatchAnalytics(
           : { matches: teamState.matches.map((match) => matchByKey.get(match.key) ?? match) }),
       }));
 
-  return {
+  return calculateCanonicalAggregateAnalytics({
     ...eventState,
     matches,
     ...(team_states === undefined ? {} : { team_states }),
-  };
+  }, records, allianceResults, audit);
 }
