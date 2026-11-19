@@ -40,7 +40,7 @@ export default function TeamProfileTabs({
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (tab !== "analysis" || data) return;
+    if (tab !== "analysis" || (data && data.team === teamNumber && data.year === year)) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -83,7 +83,7 @@ export default function TeamProfileTabs({
               <button type="button" className="mt-3 font-semibold text-[var(--fv-brand)]" onClick={() => { setData(null); setError(null); setRetry((value) => value + 1); }}>Try again</button>
             </div>
           )}
-          {data && (
+          {data && data.team === teamNumber && data.year === year && (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-[var(--fv-muted)]">
