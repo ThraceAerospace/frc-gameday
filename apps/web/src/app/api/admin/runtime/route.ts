@@ -29,7 +29,12 @@ export async function GET(request: Request) {
   const key = query.get("key");
   const inventoryKind = query.get("inventory");
   const target = kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key)
-    : inventoryKind ? "/internal/admin/inventory?" + query.toString()
+    : inventoryKind ? "/internal/admin/inventory?" + new URLSearchParams({
+      kind: inventoryKind,
+      q: query.get("q") ?? "",
+      cursor: query.get("cursor") ?? "0",
+      limit: query.get("limit") ?? "50",
+    }).toString()
     : "/internal/admin/overview";
   try {
     const response = await fetch(new URL(target, runtimeUrl), {
