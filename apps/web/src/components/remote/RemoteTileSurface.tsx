@@ -6,19 +6,19 @@ import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
+import type { CanonicalEventSnapshotValue } from "@/lib/events/CanonicalEventSnapshotsProvider";
 import { useTileSurfaceKeyboard } from "@/components/surface/TileSurfaceController";
 
 type Props = {
   controller: TileSurfaceController;
   peerStatus: RemotePeerStatus;
-  eventStates: Record<string, EventStateSnapshot>;
+  eventSnapshots: Record<string, CanonicalEventSnapshotValue>;
 };
 
 export default function RemoteSurface({
   controller,
   peerStatus,
-  eventStates,
+  eventSnapshots,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
