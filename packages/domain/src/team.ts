@@ -8,6 +8,12 @@ import type { FieldViewTeamAnalytics } from "./analytics.js";
 /** Canonical FieldView team object; TBA fields retain their exact source shape. */
 export interface FieldViewTeam extends TBATeam {
   sources: FieldViewSourceMetadata;
+  /** Stable team identity colors from FRC Colors; null means no colors are registered. */
+  frc_colors?: {
+    primary_hex: string | null;
+    secondary_hex: string | null;
+    verified: boolean | null;
+  } | null;
 }
 
 /**
