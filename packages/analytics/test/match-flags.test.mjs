@@ -55,7 +55,7 @@ test("backend match flags preserve existing event-relative thresholds and winner
     "model-upset", "anomalous-score", "large-residual", "high-penalties", "high-alliance-epa",
   ]);
   assert.deepEqual(flags.alliances.red.map((flag) => flag.type), [
-    "predicted-win", "high-alliance-epa", "large-score-delta", "high-penalties",
+    "predicted-win", "anomalous-score", "high-alliance-epa", "large-score-delta", "high-penalties",
   ]);
   assert.deepEqual(flags.alliances.blue.map((flag) => flag.type), ["predicted-loss"]);
 });
