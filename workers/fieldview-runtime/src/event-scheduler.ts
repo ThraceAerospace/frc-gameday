@@ -439,12 +439,18 @@ export class EventScheduler {
             else audit.counts.team_runtime_missing += 1;
             continue;
           }
-          const state = await response.json() as { endpoints?: Record<string, unknown> | Array<unknown>; analytics?: { status?: string } };
-          const resources = Array.isArray(state.endpoints) ? state.endpoints.length : Object.keys(state.endpoints ?? {}).length;
+          const state = await response.json() as {
+            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null }> |
+              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null }>;
+            analytics?: { status?: string };
+          };
+          const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
+          const acquiredResources = endpointStates.filter((resource) =>
+            resource.lastFetchedAt != null || resource.last_fetched_at != null).length;
           if (isEvent) {
-            if (resources < 13) audit.counts.event_resources_incomplete += 1;
+            if (acquiredResources < 13) audit.counts.event_resources_incomplete += 1;
             if (!["succeeded", "partial"].includes(state.analytics?.status ?? "")) audit.counts.event_analytics_missing += 1;
-          } else if (resources < 7) audit.counts.team_resources_incomplete += 1;
+          } else if (acquiredResources < 7) audit.counts.team_resources_incomplete += 1;
         } catch {
           audit.counts.read_errors += 1;
           if (item.kind === "event") audit.counts.event_runtime_missing += 1;
