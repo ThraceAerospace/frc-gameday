@@ -973,14 +973,14 @@ export class EventRuntime {
     const result = await this.buildEventState();
     const eventResources = eventResourceEndpoints(this.eventKey);
     const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const acquiredCount = await Promise.all([...eventResources, statboticsResource].map(async (endpoint) => {
-      const resource = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-      return resource?.lastFetchedAt != null;
-    })).then((values) => values.filter(Boolean).length);
+    const resourceStates = await Promise.all([...eventResources, statboticsResource].map((endpoint) =>
+      this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
+    const acquiredCount = resourceStates.filter((resource) => resource?.lastFetchedAt != null).length;
+    const hasFailedResource = resourceStates.some((resource) => resource?.status === "failed" || resource?.status === "unavailable");
     const publication: EventStatePublication = {
       sourceRevision: result.version,
       generatedAt: Date.now(),
-      status: acquiredCount === eventResources.length + 1 ? "complete" : acquiredCount > 0 ? "partial" : "failed",
+      status: acquiredCount === eventResources.length + 1 && !hasFailedResource ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
     };
     const previous = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
