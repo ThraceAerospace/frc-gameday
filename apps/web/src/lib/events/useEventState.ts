@@ -8,6 +8,7 @@ import {
 import type { EventStateSnapshot } from "./EventState";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
 import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
+import { CanonicalEventSnapshotsContext } from "./CanonicalEventSnapshotsProvider";
 import {
   getEventStateController,
   getEventStateSnapshot,
@@ -98,7 +99,7 @@ export function useCanonicalEventSnapshot(eventKey: string): {
   version: number;
   snapshot: FieldViewEventSnapshot;
 } | undefined {
-  const remoteSnapshots = useContext(EventStateSnapshotsContext);
+  const remoteSnapshots = useContext(CanonicalEventSnapshotsContext);
   const enabled = remoteSnapshots === null && Boolean(eventKey);
   const subscribe = useCallback(
     (listener: () => void) => enabled
@@ -110,5 +111,6 @@ export function useCanonicalEventSnapshot(eventKey: string): {
     () => enabled ? getCanonicalEventSnapshot(eventKey) : undefined,
     [enabled, eventKey],
   );
-  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+  const liveSnapshot = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+  return remoteSnapshots === null ? liveSnapshot : remoteSnapshots[eventKey];
 }
