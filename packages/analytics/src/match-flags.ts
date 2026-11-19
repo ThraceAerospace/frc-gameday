@@ -37,6 +37,39 @@ function phaseAnomalyBand(
   return { median, margin: Math.max(20, 3 * 1.4826 * mad) };
 }
 
+export interface MatchFlagContext {
+  allianceEpaValues: number[];
+  highEpaThreshold: number | null;
+  anomalyBands: Map<string, { median: number; margin: number } | null>;
+  residualMagnitudes: number[];
+  largeResidualThreshold: number | null;
+}
+
+/**
+ * Derive event-wide thresholds once and share them across all match outputs.
+ * These values intentionally depend on the full event population.
+ */
+export function buildMatchFlagContext(
+  data: Pick<EventAnalyticsResponse, "allianceResults" | "qualificationAnalysis">,
+): MatchFlagContext {
+  const allianceEpaValues = data.allianceResults.flatMap((item) =>
+    item.preEpaTotal === null ? [] : [item.preEpaTotal],
+  );
+  const residualMagnitudes = data.allianceResults.flatMap((item) =>
+    item.residual === null ? [] : [Math.abs(item.residual)],
+  );
+  const phases = new Set(data.allianceResults.map((item) => item.compLevel.toLowerCase()));
+  return {
+    allianceEpaValues,
+    highEpaThreshold: allianceEpaValues.length >= 8 ? quantile(allianceEpaValues, 0.75) : null,
+    anomalyBands: new Map([...phases].map((phase) => [phase, phaseAnomalyBand(data, phase)])),
+    residualMagnitudes,
+    largeResidualThreshold: residualMagnitudes.length >= 20
+      ? quantile(residualMagnitudes, 0.9)
+      : null,
+  };
+}
+
 /**
  * Backend equivalent of the existing EventAnalyticsDashboard match flag
  * calculation. Thresholds, quantile convention, and inclusivity are retained
@@ -45,6 +78,7 @@ function phaseAnomalyBand(
 export function buildMatchFlags(
   data: Pick<EventAnalyticsResponse, "allianceResults" | "qualificationAnalysis">,
   record: AnalyticsMatch,
+  context: MatchFlagContext = buildMatchFlagContext(data),
 ): FieldViewMatchFlags {
   const { match, statbotics } = record;
   const redProbability = typeof statbotics?.pred?.red_win_prob === "number"
@@ -68,12 +102,7 @@ export function buildMatchFlags(
     winner !== predictedWinner && favoriteProbability !== null && favoriteProbability >= 0.6;
 
   const matchResults = data.allianceResults.filter((item) => item.matchKey === match.key);
-  const allianceEpaValues = data.allianceResults.flatMap((item) =>
-    item.preEpaTotal === null ? [] : [item.preEpaTotal],
-  );
-  const highEpaThreshold = allianceEpaValues.length >= 8
-    ? quantile(allianceEpaValues, 0.75)
-    : null;
+  const { allianceEpaValues, highEpaThreshold } = context;
   const highAllianceEpa = {
     red: highEpaThreshold !== null &&
       (matchResults.find((item) => item.color === "red")?.preEpaTotal ?? -Infinity) >= highEpaThreshold,
@@ -81,16 +110,11 @@ export function buildMatchFlags(
       (matchResults.find((item) => item.color === "blue")?.preEpaTotal ?? -Infinity) >= highEpaThreshold,
   };
 
-  const anomalyBand = phaseAnomalyBand(data, match.comp_level);
+  const anomalyBand = context.anomalyBands.get(match.comp_level.toLowerCase()) ?? null;
   const anomalousScore = anomalyBand !== null && matchResults.some((item) =>
     item.residual !== null && Math.abs(item.residual - anomalyBand.median) > anomalyBand.margin,
   );
-  const residualMagnitudes = data.allianceResults.flatMap((item) =>
-    item.residual === null ? [] : [Math.abs(item.residual)],
-  );
-  const largeResidualThreshold = residualMagnitudes.length >= 20
-    ? quantile(residualMagnitudes, 0.9)
-    : null;
+  const { residualMagnitudes, largeResidualThreshold } = context;
   const largeResidual = {
     red: largeResidualThreshold !== null &&
       matchResults.find((item) => item.color === "red")?.residual != null &&
