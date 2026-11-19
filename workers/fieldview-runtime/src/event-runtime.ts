@@ -322,7 +322,7 @@ export class EventRuntime {
       }
       const endpoints = requested as string[];
       const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
-      await this.schedulePolls(endpoints, 86_400_000);
+      await this.schedulePolls(endpoints, 86_400_000, Date.now(), true);
       if (includeStatbotics) await this.scheduleStatboticsRefresh(Date.now(), 0);
       await this.alarm();
       // Explicit refreshes also force a fresh analytics publication, even when
@@ -787,7 +787,7 @@ export class EventRuntime {
     });
   }
 
-  async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now()): Promise<void> {
+  async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now(), forceImmediate = false): Promise<void> {
     if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
       throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
     }
@@ -795,7 +795,7 @@ export class EventRuntime {
       for (const endpoint of endpoints) {
         const key = taskStorageKey(endpoint);
         const previous = await transaction.get<PollTask>(key);
-        const unchanged = previous?.retryOnFailure === true && previous.intervalMs === intervalMs;
+        const unchanged = !forceImmediate && previous?.retryOnFailure === true && previous.intervalMs === intervalMs;
         const task: PollTask = {
           endpoint,
           dueAt: unchanged ? previous.dueAt : now,
