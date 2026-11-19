@@ -22,7 +22,7 @@ function predictionClassification(redWinProbability: number | null): FieldViewPr
 }
 
 function phaseAnomalyBand(
-  data: EventAnalyticsResponse,
+  data: Pick<EventAnalyticsResponse, "allianceResults">,
   compLevel: string,
 ): { median: number; margin: number } | null {
   const residuals = data.allianceResults
@@ -43,7 +43,7 @@ function phaseAnomalyBand(
  * exactly; this function intentionally does not reinterpret the math.
  */
 export function buildMatchFlags(
-  data: EventAnalyticsResponse,
+  data: Pick<EventAnalyticsResponse, "allianceResults" | "qualificationAnalysis">,
   record: AnalyticsMatch,
 ): FieldViewMatchFlags {
   const { match, statbotics } = record;
