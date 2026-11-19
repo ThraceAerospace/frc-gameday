@@ -23,6 +23,12 @@ import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src
 import type { FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
 import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
 import { calculateCanonicalMatchAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
+import {
+  mergeAnalyticsInvalidations,
+  planAnalyticsInvalidation,
+  type AnalyticsInvalidation,
+  type AnalyticsSourceKey,
+} from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
 import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
 
@@ -47,6 +53,7 @@ const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 const ANALYTICS_COHORT_RETRY_KEY = "analytics:cohort-retries";
+const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const ANALYTICS_COHORT_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_COHORT_MAX_RETRIES = 12;
 
@@ -103,6 +110,57 @@ function toSourceMetadata(
       ? { validator: state.etag }
       : {}),
   };
+}
+
+function analyticsSourceForEndpoint(endpoint: string, eventKey: string): AnalyticsSourceKey | null {
+  if (endpoint === TBA_ENDPOINTS.event(eventKey)) return "tba-event";
+  if (endpoint === TBA_ENDPOINTS.eventTeams(eventKey)) return "tba-event-teams";
+  if (endpoint === TBA_ENDPOINTS.eventTeamStatuses(eventKey)) return "tba-team-event-statuses";
+  if (endpoint === TBA_ENDPOINTS.eventMatches(eventKey)) return "tba-event-matches";
+  if (endpoint === TBA_ENDPOINTS.eventAlliances(eventKey)) return "tba-event-alliances";
+  if (endpoint === TBA_ENDPOINTS.eventOPRs(eventKey)) return "tba-event-oprs";
+  if (endpoint === TBA_ENDPOINTS.eventPredictions(eventKey)) return "tba-event-predictions";
+  if (endpoint === STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0)) return "statbotics-event-matches";
+  return null;
+}
+
+function changedMatchKeys(previous: unknown, next: unknown): string[] | null {
+  if (!Array.isArray(previous) || !Array.isArray(next)) return null;
+  const keyOf = (value: unknown) => isRecord(value) && typeof value.key === "string" ? value.key : null;
+  const before = new Map(previous.flatMap((match) => {
+    const key = keyOf(match);
+    return key === null ? [] : [[key, match] as const];
+  }));
+  const after = new Map(next.flatMap((match) => {
+    const key = keyOf(match);
+    return key === null ? [] : [[key, match] as const];
+  }));
+  const changed = [...new Set([...before.keys(), ...after.keys()])]
+    .filter((key) => JSON.stringify(before.get(key)) !== JSON.stringify(after.get(key)))
+    .sort();
+  return changed.length > 0 ? changed : null;
+}
+
+async function recordAnalyticsInvalidation(
+  transaction: DurableObjectTransactionLike,
+  source: AnalyticsSourceKey,
+  now: number,
+  matchKeys: readonly string[] | null = null,
+): Promise<void> {
+  const current = await transaction.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY);
+  const next = mergeAnalyticsInvalidations(
+    current,
+    planAnalyticsInvalidation(source, matchKeys, now),
+  );
+  await transaction.put(ANALYTICS_INVALIDATION_KEY, next);
+  const existingDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
+  const requestedDueAt = now + 1_000;
+  await transaction.put(
+    ANALYTICS_DUE_KEY,
+    existingDueAt === undefined ? requestedDueAt : Math.min(existingDueAt, requestedDueAt),
+  );
+  await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+  await transaction.put("analytics:status", "pending");
 }
 
 function hasAcquiredValue(state: EndpointState<unknown> | undefined): boolean {
@@ -956,6 +1014,7 @@ export class EventRuntime {
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
+      await transaction.delete(ANALYTICS_INVALIDATION_KEY);
       const cohortState = isRecord(calculated.state.analytics) &&
         isRecord(calculated.state.analytics.season_cohort)
         ? calculated.state.analytics.season_cohort.state
@@ -1101,9 +1160,17 @@ export class EventRuntime {
       if (next.revision !== latest.revision) {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
-        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
-        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
-        await transaction.put("analytics:status", "pending");
+        const analyticsSource = analyticsSourceForEndpoint(endpoint, this.eventKey);
+        if (analyticsSource) {
+          await recordAnalyticsInvalidation(
+            transaction,
+            analyticsSource,
+            Date.now(),
+            analyticsSource === "tba-event-matches" || analyticsSource === "statbotics-event-matches"
+              ? changedMatchKeys(latest.providerData, next.providerData)
+              : null,
+          );
+        }
       }
 
       // Preserve each accepted upstream 200 payload as an immutable source
@@ -1223,9 +1290,9 @@ export class EventRuntime {
             (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update),
           );
           await transaction.put(key, next);
-          await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
-          await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
-          await transaction.put("analytics:status", "pending");
+          if (messageType === "match_score") {
+            await recordAnalyticsInvalidation(transaction, "tba-event-matches", now, [match.key]);
+          }
           const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
           await transaction.put("snapshot-revision", snapshotRevision + 1);
         }
@@ -1250,11 +1317,12 @@ export class EventRuntime {
         );
       }
 
-      if (messageType !== "match_score" && messageType !== "match_video" &&
-          ["upcoming_match", "schedule_updated", "starting_comp_level", "alliance_selection"].includes(messageType)) {
-        await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
-        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
-        await transaction.put("analytics:status", "pending");
+      if (["upcoming_match", "schedule_updated", "starting_comp_level"].includes(messageType)) {
+        await recordAnalyticsInvalidation(transaction, "tba-event-matches", now);
+      } else if (messageType === "alliance_selection") {
+        await recordAnalyticsInvalidation(transaction, "tba-event", now);
+        await recordAnalyticsInvalidation(transaction, "tba-event-alliances", now);
+        await recordAnalyticsInvalidation(transaction, "tba-team-event-statuses", now);
       }
       await this.rearm(transaction);
       const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
