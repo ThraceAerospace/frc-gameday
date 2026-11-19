@@ -684,8 +684,12 @@ export class EventRuntime {
           }));
         }
         const stub = namespace.get(namespace.idFromName(teamKey));
-        const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
-          method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
+        const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
+          method: "GET",
+          headers: {
+            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+            "X-FieldView-Team-Key": teamKey,
+          },
         }));
         if (!response.ok) return { teamKey, snapshot: null, revision: null };
         return {
