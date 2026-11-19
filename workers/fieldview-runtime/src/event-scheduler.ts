@@ -609,7 +609,7 @@ export class EventScheduler {
       const etag = cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
-      const response = await this.api.request(TBA_ENDPOINTS.teams(year, page), { headers });
+      const response = await this.api.request(TBA_ENDPOINTS.teamsByYearPage(year, page), { headers });
       requestCount += 1;
       let pageTeams: TBATeam[];
       if (response.status === 304) {
