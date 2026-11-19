@@ -149,7 +149,9 @@ export default function AdminRuntimeDashboard() {
     tasks: allTasks.length,
     due: allTasks.filter((task) => task.due_at <= Date.now()).length,
     stale: allResources.filter((resource) => resource.status === "stale").length,
-    failed: allResources.filter((resource) => resource.status === "failed" || resource.status === "unavailable").length,
+    failed: allResources.filter((resource) => resource.status === "failed" || resource.status === "unavailable").length
+      + (overview?.events ?? []).filter((entry) => entry.status !== 200).length
+      + (overview?.teams ?? []).filter((entry) => entry.status !== 200).length,
   }), [overview, allTasks, allResources]);
 
   if (!authenticated) return (
