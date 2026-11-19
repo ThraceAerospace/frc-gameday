@@ -12,7 +12,7 @@ import type { TileSurfaceActions } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import { buildStreams, type BuiltStream } from "@/lib/tba/buildStreams";
-import { useEventState } from "@/lib/events";
+import { useCanonicalEventSnapshot } from "@/lib/events";
 import StreamModal from "@/components/eventview/StreamModal";
 import TeamModal from "@/components/team/TeamModal";
 import { formatEventName, formatTeamNumber } from "@/lib/tba/formatters";
@@ -20,7 +20,13 @@ import { formatEventName, formatTeamNumber } from "@/lib/tba/formatters";
 type TileSurfaceSettingsViewProps = { state: TileSurfaceState; actions: TileSurfaceActions; triggerClassName?: string; triggerTitle?: string; open?: boolean; onOpenChange?: (open: boolean) => void; };
 
 function EventSettingsRow({ eventKey, label, position, state, actions }: { eventKey: string; label: string; position: number; state: TileSurfaceState; actions: TileSurfaceActions; }) {
-  const { event, teams, teamsStatuses } = useEventState(eventKey);
+  const canonical = useCanonicalEventSnapshot(eventKey);
+  const snapshot = canonical?.snapshot;
+  const event = snapshot?.event ?? null;
+  const teams = snapshot?.teams ?? [];
+  const teamsStatuses = Object.fromEntries((snapshot?.event_teams ?? []).flatMap((entry) =>
+    entry.tba_status === undefined ? [] : [[entry.team_key, entry.tba_status]],
+  ));
   const [streams, setStreams] = useState<BuiltStream[]>([]);
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [streamsOpen, setStreamsOpen] = useState(false);
