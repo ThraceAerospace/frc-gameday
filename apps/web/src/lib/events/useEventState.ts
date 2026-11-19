@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { EventStateSnapshot } from "./EventState";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { EventWebSocketStatus } from "@/lib/realtime/client";
 import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
 import { CanonicalEventSnapshotsContext } from "./CanonicalEventSnapshotsProvider";
 import {
@@ -15,6 +16,8 @@ import {
   subscribeSharedEventState,
   getCanonicalEventSnapshot,
   subscribeCanonicalEventSnapshot,
+  getCanonicalRuntimeStatus,
+  subscribeCanonicalRuntimeStatus,
 } from "./sharedWorkerClient";
 
 const EMPTY_SNAPSHOT: EventStateSnapshot = {
@@ -113,4 +116,27 @@ export function useCanonicalEventSnapshot(eventKey: string): {
   );
   const liveSnapshot = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
   return remoteSnapshots === null ? liveSnapshot : remoteSnapshots[eventKey];
+}
+
+
+/** Connection health for the shared canonical EventRuntime snapshot stream. */
+export function useCanonicalRuntimeStatus(eventKey: string): EventWebSocketStatus {
+  const remoteSnapshots = useContext(CanonicalEventSnapshotsContext);
+  const subscribe = useCallback(
+    (listener: () => void) => remoteSnapshots === null
+      ? subscribeCanonicalRuntimeStatus(listener)
+      : () => {},
+    [remoteSnapshots],
+  );
+  const getSnapshot = useCallback(
+    () => remoteSnapshots === null
+      ? getCanonicalRuntimeStatus()
+      : remoteSnapshots[eventKey] ? "connected" : "disconnected",
+    [eventKey, remoteSnapshots],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => remoteSnapshots?.[eventKey] ? "connected" : "disconnected",
+  );
 }
