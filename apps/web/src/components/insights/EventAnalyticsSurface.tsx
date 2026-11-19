@@ -22,11 +22,16 @@ function mergeEventSnapshots(
     ...initial,
     ...live,
     event: live.event === undefined ? initial.event : live.event,
-    teams: live.teams === undefined ? initial.teams : live.teams,
-    event_teams: live.event_teams === undefined ? initial.event_teams : live.event_teams,
+    // The server-rendered page already has the authoritative roster. A transient
+    // empty live roster must not blank an otherwise populated event dashboard.
+    teams: live.teams === undefined || (live.teams?.length === 0 && (initial.teams?.length ?? 0) > 0)
+      ? initial.teams : live.teams,
+    event_teams: live.event_teams === undefined || (live.event_teams?.length === 0 && (initial.event_teams?.length ?? 0) > 0)
+      ? initial.event_teams : live.event_teams,
     matches: live.matches === undefined ? initial.matches : live.matches,
     playoff_alliances: live.playoff_alliances === undefined ? initial.playoff_alliances : live.playoff_alliances,
-    team_states: live.team_states === undefined ? initial.team_states : live.team_states,
+    team_states: live.team_states === undefined || (live.team_states?.length === 0 && (initial.team_states?.length ?? 0) > 0)
+      ? initial.team_states : live.team_states,
     analytics: live.analytics === undefined ? initial.analytics : live.analytics,
     rankings: live.rankings === undefined ? initial.rankings : live.rankings,
     awards: live.awards === undefined ? initial.awards : live.awards,
