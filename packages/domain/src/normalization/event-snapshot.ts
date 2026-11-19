@@ -177,3 +177,8 @@ export function normalizeFieldViewEventSnapshot(
 
   return result;
 }
+
+
+/** Canonical state naming; the snapshot alias remains during frontend migration. */
+export type NormalizeFieldViewEventStateInput = NormalizeFieldViewEventSnapshotInput;
+export const normalizeFieldViewEventState = normalizeFieldViewEventSnapshot;
