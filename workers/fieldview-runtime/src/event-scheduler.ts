@@ -951,7 +951,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
-          if (resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) {
+          if (resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
@@ -972,7 +972,13 @@ export class EventScheduler {
             } else {
               job.counts.requests_attempted += 1;
               const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
-              if (result.status === "failed" || result.success === false) {
+              if (result.status === "unavailable") {
+                job.counts.requests_unavailable += 1;
+                recordError("event", eventKey, endpoint + " is unavailable");
+                job.eventResourceCursor += 1;
+                job.resourceAttempts = 0;
+                job.nextDueAt = Date.now() + 1_000;
+              } else if (result.status === "failed" || result.success === false) {
                 job.counts.requests_failed += 1;
                 retry(result.last_error ?? (endpoint + " failed"), "event", eventKey);
               } else {
