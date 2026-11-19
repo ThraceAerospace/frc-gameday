@@ -1,5 +1,8 @@
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { StatboticsApiClient } from "../../../packages/providers/statbotics/src/client.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
+import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
@@ -43,11 +46,16 @@ function acquired(state: EndpointState<unknown> | undefined): boolean {
 export class TeamRuntime {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
+  private readonly statboticsApi: StatboticsApiClient;
   private readonly env: RuntimeEnvironment;
   private teamKey: string;
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
     this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
+    this.statboticsApi = new StatboticsApiClient({
+      ...(env.STATBOTICS_API_BASE_URL ? { baseUrl: env.STATBOTICS_API_BASE_URL } : {}),
+      ...(env.fetcher ? { fetch: env.fetcher } : {}),
+    });
   }
   private refreshIntervalMs(): number {
     const configured = this.env.TEAM_REFRESH_INTERVAL_MS;
@@ -62,7 +70,9 @@ export class TeamRuntime {
     // while TBA v3 requires the provider key ("frc3461").
     const providerTeamKey = /^\d+$/.test(this.teamKey) ? "frc" + this.teamKey : this.teamKey;
     return [TBA_ENDPOINTS.team(providerTeamKey), TBA_ENDPOINTS.teamDistricts(providerTeamKey),
-      TBA_ENDPOINTS.teamEvents(providerTeamKey, year), TBA_ENDPOINTS.teamMedia(providerTeamKey, year)];
+      TBA_ENDPOINTS.teamEvents(providerTeamKey, year), TBA_ENDPOINTS.teamMedia(providerTeamKey, year),
+      STATBOTICS_ENDPOINTS.teamYear(Number(providerTeamKey.replace(/^frc/i, "")), year),
+      STATBOTICS_ENDPOINTS.teamEvents({ team: Number(providerTeamKey.replace(/^frc/i, "")), year })];
   }
   private async bindTeamKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Team-Key");
@@ -147,20 +157,25 @@ export class TeamRuntime {
   }
   private async snapshot(year: number): Promise<Response> {
     const states = await Promise.all(this.endpoints(year).map((endpoint) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-    const [team, districts, events, media] = states, now = Date.now();
+    const [team, districts, events, media, statboticsYear, statboticsEvents] = states, now = Date.now();
     const teamSource = metadata(team, now), districtSource = metadata(districts, now);
     const eventSource = metadata(events, now), mediaSource = metadata(media, now);
+    const statboticsYearSource = metadata(statboticsYear, now), statboticsEventsSource = metadata(statboticsEvents, now);
     const snapshot = normalizeFieldViewTeamSnapshot({ team_key: this.teamKey, year,
       sources: {
         ...(teamSource ? { tba_team: teamSource } : {}),
         ...(districtSource ? { tba_team_districts: districtSource } : {}),
         ...(eventSource ? { tba_team_events: eventSource } : {}),
         ...(mediaSource ? { tba_team_media: mediaSource } : {}),
+        ...(statboticsYearSource ? { statbotics_team_year: statboticsYearSource } : {}),
+        ...(statboticsEventsSource ? { statbotics_team_events: statboticsEventsSource } : {}),
       },
       ...(acquired(team) ? { team: team!.data as TBATeam | null } : {}),
       ...(acquired(districts) ? { districts: districts!.data as TBADistrict[] | null } : {}),
       ...(acquired(events) ? { events: events!.data as TBAEvent[] | null } : {}),
       ...(acquired(media) ? { media: media!.data as TBAMedia[] | null } : {}),
+      ...(acquired(statboticsYear) ? { statbotics: statboticsYear!.data as StatboticsTeamYear | null } : {}),
+      ...(acquired(statboticsEvents) ? { statbotics_events: statboticsEvents!.data as StatboticsTeamEvent[] | null } : {}),
     });
     return Response.json(snapshot, { headers: {
       "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
@@ -189,7 +204,8 @@ export class TeamRuntime {
         { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
         { status: "failed"; httpStatus?: number; error?: string };
       try {
-        const response = await this.api.request(task.endpoint, { headers }), ttl = maxAge(response.headers.get("Cache-Control"));
+        const isStatbotics = task.endpoint.startsWith("/team_year/") || task.endpoint.startsWith("/team_events?");
+        const response = await (isStatbotics ? this.statboticsApi.request(task.endpoint, { headers }) : this.api.request(task.endpoint, { headers })), ttl = maxAge(response.headers.get("Cache-Control"));
         const expiresAt = ttl === null ? null : Date.now() + ttl * 1000;
         if (response.status === 304) result = { status: "not-modified", expiresAt: expiresAt ?? initial.expiresAt };
         else if (response.status === 404) result = { status: "unavailable", httpStatus: response.status };
