@@ -10,7 +10,7 @@ test("audit digest is stable across input object key ordering", async () => {
     inputs: [{
       input_key: "matches", provider: "tba", resource: "matches",
       source_revision: 2, fetched_at: 90, record_count: 3,
-      included_count: 2, excluded_count: 1, status: "partial" as const,
+      included_count: 2, excluded_count: 1, status: "partial",
     }],
   };
   const first = await createAnalyticsAudit(base);
