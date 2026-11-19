@@ -32,6 +32,34 @@ export async function getCanonicalEventSnapshot(
   }
 }
 
+export type CanonicalEventAnalyticsResponse = {
+  event_key: string;
+  revision: number;
+  status: "pending" | "running" | "succeeded" | "failed" | string;
+  due_at: number | null;
+  calculated_at: number | null;
+  source_revision: number | null;
+  publication: unknown | null;
+};
+
+/** Read the last durable EventRuntime analytics publication without triggering calculations. */
+export async function getCanonicalEventAnalytics(
+  eventKey: string,
+  fetcher: typeof fetch = fetch,
+): Promise<CanonicalEventAnalyticsResponse | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl || !eventKey) return null;
+  try {
+    const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", baseUrl);
+    const response = await fetcher(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const value = await response.json() as CanonicalEventAnalyticsResponse;
+    if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
 export async function getCanonicalEventDiscovery(
   year: number,
   fetcher: typeof fetch = fetch,
