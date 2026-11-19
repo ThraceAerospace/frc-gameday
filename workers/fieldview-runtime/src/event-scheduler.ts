@@ -462,7 +462,6 @@ export class EventScheduler {
         if (job.status === "running") job.status = "paused";
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
-        job.runGeneration = Date.now();
         if (job.status === "completed_with_errors") {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
@@ -484,6 +483,7 @@ export class EventScheduler {
           job.recentErrors = [];
           job.startedAt = Date.now();
         }
+        job.runGeneration = Date.now();
         job.status = "running";
         await this.storage.setAlarm(Date.now() + 1_000);
       } else if (action === "cancel") {
