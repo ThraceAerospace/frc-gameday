@@ -123,10 +123,18 @@ export function useCanonicalEventSnapshot(eventKey: string): {
 export function useCanonicalRuntimeStatus(eventKey: string): EventWebSocketStatus {
   const remoteSnapshots = useContext(CanonicalEventSnapshotsContext);
   const subscribe = useCallback(
-    (listener: () => void) => remoteSnapshots === null
-      ? subscribeCanonicalRuntimeStatus(listener)
-      : () => {},
-    [remoteSnapshots],
+    (listener: () => void) => {
+      if (remoteSnapshots !== null) return () => {};
+      // A status subscription must also establish the event's canonical
+      // runtime stream; otherwise no shared WebSocket exists to report status.
+      const unsubscribeSnapshot = subscribeCanonicalEventSnapshot(eventKey, () => {});
+      const unsubscribeStatus = subscribeCanonicalRuntimeStatus(listener);
+      return () => {
+        unsubscribeSnapshot();
+        unsubscribeStatus();
+      };
+    },
+    [eventKey, remoteSnapshots],
   );
   const getSnapshot = useCallback(
     () => remoteSnapshots === null
