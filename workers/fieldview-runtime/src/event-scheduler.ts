@@ -962,12 +962,12 @@ export class EventScheduler {
         if (job.teamResourceCursor < resources.length) {
           const resource = resources[job.teamResourceCursor];
           const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
-          let resourceState: { status?: string; revision?: number; last_fetched_at?: number | null } | undefined;
+          let resourceState: { status?: string; revision?: number; last_fetched_at?: number | null; expires_at?: number | null } | undefined;
           if (stateResponse.ok) {
-            const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; revision?: number; last_fetched_at?: number | null }> };
+            const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; revision?: number; last_fetched_at?: number | null; expires_at?: number | null }> };
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
           }
-          if ((resourceState?.last_fetched_at != null && resourceState.status === "available") || resourceState?.status === "unavailable") {
+          if ((resourceState?.last_fetched_at != null && resourceState.status === "available" && (resourceState.expires_at == null || resourceState.expires_at > Date.now())) || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.teamResourceCursor += 1;
             job.resourceAttempts = 0;
@@ -1088,12 +1088,12 @@ export class EventScheduler {
         if (job.eventResourceCursor < resources.length) {
           const endpoint = resources[job.eventResourceCursor];
           const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
-          let resourceState: { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null } | undefined;
+          let resourceState: { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null; expiresAt?: number | null } | undefined;
           if (stateResponse.ok) {
-            const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
+            const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null; expiresAt?: number | null }> };
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
-          if (((resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) && resourceState.status === "available") || resourceState?.status === "unavailable") {
+          if (((resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) && resourceState.status === "available" && (resourceState.expiresAt == null || resourceState.expiresAt > Date.now())) || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
