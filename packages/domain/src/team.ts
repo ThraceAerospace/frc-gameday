@@ -22,6 +22,10 @@ export interface FieldViewTeamSnapshot {
   districts?: TBADistrict[] | null;
   events?: TBAEvent[] | null;
   media?: TBAMedia[] | null;
+  /** Statbotics season-level EPA record, acquired and cached by TeamRuntime. */
+  statbotics?: import("@fieldview/provider-statbotics/types").StatboticsTeamYear | null;
+  /** Statbotics event-level season history, correlated by TBA event key. */
+  statbotics_events?: import("@fieldview/provider-statbotics/types").StatboticsTeamEvent[] | null;
 }
 
 /**
