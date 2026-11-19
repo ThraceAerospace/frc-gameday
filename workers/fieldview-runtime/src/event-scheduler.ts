@@ -965,7 +965,9 @@ export class EventScheduler {
         if (job.eventCursor >= job.eventKeys.length) {
           job.phase = "complete";
           const failures = job.counts.teams_partial + job.counts.teams_failed + job.counts.event_state_partial +
-            job.counts.event_state_failed + job.counts.event_analytics_waiting + job.counts.event_analytics_failed;
+            job.counts.event_state_failed + job.counts.event_analytics_partial + job.counts.event_analytics_waiting +
+            job.counts.event_analytics_failed + job.counts.event_cohort_partial + job.counts.event_cohort_discovering +
+            job.counts.event_cohort_missing;
           job.status = failures > 0 ? "completed_with_errors" : "completed";
           delete job.nextDueAt;
           job.updatedAt = Date.now();
