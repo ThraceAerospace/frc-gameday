@@ -148,7 +148,7 @@ export function matchLongName(match: Pick<FieldViewMatch, "comp_level" | "match_
   }
 }
 
-export function matchShortName(match: FieldViewMatch, eventPlayoffType: number | null = null): string {
+export function matchShortName(match: Pick<FieldViewMatch, "comp_level" | "match_number" | "set_number">, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
