@@ -20,6 +20,10 @@ type CanonicalTeamMatchEvidence = {
   predicted_score: number | null; actual_score: number | null; score_residual: number | null;
   opponent_predicted_score: number | null; opponent_actual_score: number | null; opponent_score_residual: number | null;
   win_probability: number | null; won: boolean | null; pre_match_epa: number | null; post_match_epa: number | null; epa_change: number | null;
+  alliance_pre_epa_total: number | null; opponent_pre_epa_total: number | null;
+  alliance_pre_components: Record<string, number>; actual_components: Record<string, number>;
+  pre_match_components: Record<string, number>; post_match_components: Record<string, number>;
+  alliance_delta_spread: number | null; shared_alliance_update: boolean;
   event: { key: string; name: string; shortName: string | null; startDate: string };
 };
 type CanonicalTeamPhaseSummary = {
@@ -914,9 +918,10 @@ function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): Tea
       opponentPredicted: match.opponent_predicted_score,
       opponentActual: match.opponent_actual_score,
       opponentResidual: match.opponent_score_residual,
-      alliancePreEPATotal: null,
-      alliancePreComponents: {},
-      actualComponents: {},
+      alliancePreEPATotal: match.alliance_pre_epa_total,
+      opponentPreEPATotal: match.opponent_pre_epa_total,
+      alliancePreComponents: match.alliance_pre_components,
+      actualComponents: match.actual_components,
       redWinProbability: match.alliance === "red" ? match.win_probability : match.win_probability === null ? null : 1 - match.win_probability,
       teamWinProbability: match.win_probability,
       rpOutcomes: [],
@@ -924,10 +929,10 @@ function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): Tea
       preEPA: match.pre_match_epa,
       postEPA: match.post_match_epa,
       deltaEPA: match.epa_change,
-      preComponents: {},
-      postComponents: {},
-      allianceDeltaSpread: null,
-      sharedAllianceUpdate: false,
+      preComponents: match.pre_match_components,
+      postComponents: match.post_match_components,
+      allianceDeltaSpread: match.alliance_delta_spread,
+      sharedAllianceUpdate: match.shared_alliance_update,
       statboticsAvailable: match.predicted_score !== null,
     })),
   );
