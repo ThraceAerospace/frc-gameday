@@ -343,7 +343,7 @@ export class EventScheduler {
           return Response.json({ error: "Complete event discovery and paginated team discovery before starting ingestion" }, { status: 409 });
         }
         const eventKeys = [...new Set(events.events.map((event) => event.key).filter((eventKey): eventKey is string => typeof eventKey === "string" && /^[a-zA-Z0-9_-]+$/.test(eventKey)))].sort();
-        const teamKeys = [...new Set(teams.teamKeys.filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
+        const teamKeys = [...new Set((teams.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
         if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
         const now = Date.now();
         job = {
@@ -793,35 +793,43 @@ export class EventScheduler {
         const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
         let current: { event_state?: { status?: string }; analytics?: { status?: string } } = {};
         if (stateResponse.ok) current = await stateResponse.json() as typeof current;
-        if (current.event_state?.status !== "complete") {
-          const refresh = await stub.fetch(new Request("https://event-runtime/refresh", {
-            method: "POST", headers, body: JSON.stringify({}),
+        const artifactsAlreadyComplete = current.event_state?.status === "complete" &&
+          (current.analytics?.status === "succeeded" || current.analytics?.status === "partial");
+        if (artifactsAlreadyComplete) {
+          job.counts.event_state_complete += 1;
+          if (current.analytics?.status === "succeeded") job.counts.event_analytics_succeeded += 1;
+          else job.counts.event_analytics_partial += 1;
+        } else {
+          if (current.event_state?.status !== "complete") {
+            const refresh = await stub.fetch(new Request("https://event-runtime/refresh", {
+              method: "POST", headers, body: JSON.stringify({}),
+            }));
+            if (!refresh.ok) throw new Error("EventRuntime resource refresh returned HTTP " + refresh.status);
+          }
+          const snapshot = await stub.fetch(new Request("https://event-runtime/snapshot", {
+            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
           }));
-          if (!refresh.ok) throw new Error("EventRuntime resource refresh returned HTTP " + refresh.status);
-        }
-        const snapshot = await stub.fetch(new Request("https://event-runtime/snapshot", {
-          headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
-        }));
-        if (!snapshot.ok) throw new Error("EventState generation returned HTTP " + snapshot.status);
-        const afterState = await stub.fetch(new Request("https://event-runtime/state", { headers }));
-        if (!afterState.ok) throw new Error("Unable to verify EventState publication");
-        const eventState = await afterState.json() as { event_state?: { status?: string }; analytics?: { status?: string } };
-        const stateStatus = eventState.event_state?.status ?? "missing";
-        if (stateStatus === "complete") job.counts.event_state_complete += 1;
-        else if (stateStatus === "partial") job.counts.event_state_partial += 1;
-        else job.counts.event_state_failed += 1;
+          if (!snapshot.ok) throw new Error("EventState generation returned HTTP " + snapshot.status);
+          const afterState = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+          if (!afterState.ok) throw new Error("Unable to verify EventState publication");
+          const eventState = await afterState.json() as { event_state?: { status?: string }; analytics?: { status?: string } };
+          const stateStatus = eventState.event_state?.status ?? "missing";
+          if (stateStatus === "complete") job.counts.event_state_complete += 1;
+          else if (stateStatus === "partial") job.counts.event_state_partial += 1;
+          else job.counts.event_state_failed += 1;
 
-        const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", { method: "POST", headers }));
-        if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
-        const analyticsResponse = await stub.fetch(new Request("https://event-runtime/analytics", {
-          headers: { "X-FieldView-Event-Key": eventKey },
-        }));
-        if (!analyticsResponse.ok) throw new Error("Unable to verify EventAnalytics publication");
-        const analytics = await analyticsResponse.json() as { status?: string; publication?: unknown };
-        if (analytics.status === "succeeded" && analytics.publication) job.counts.event_analytics_succeeded += 1;
-        else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
-        else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
-        else job.counts.event_analytics_failed += 1;
+          const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", { method: "POST", headers }));
+          if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
+          const analyticsResponse = await stub.fetch(new Request("https://event-runtime/analytics", {
+            headers: { "X-FieldView-Event-Key": eventKey },
+          }));
+          if (!analyticsResponse.ok) throw new Error("Unable to verify EventAnalytics publication");
+          const analytics = await analyticsResponse.json() as { status?: string; publication?: unknown };
+          if (analytics.status === "succeeded" && analytics.publication) job.counts.event_analytics_succeeded += 1;
+          else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
+          else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
+          else job.counts.event_analytics_failed += 1;
+        }
 
         if (event) {
           const decision = classifyEventLifecycle(event, Date.now(), eventPollingPolicy(this.env));
