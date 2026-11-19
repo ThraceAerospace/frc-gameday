@@ -145,10 +145,12 @@ interface TeamDiscoveryCache {
   etag: string | null;
   /** One ETag and payload per TBA page; TBA pages contain at most 500 teams. */
   pageEtags?: Record<string, string | null>;
-  pages?: TBATeam[][];
   pageCount?: number;
+  teamCount?: number;
+  teamKeys?: string[];
+  /** Legacy single-value cache shape, read only during migration. */
+  teams?: TBATeam[];
   complete?: boolean;
-  teams: TBATeam[];
   updatedAt: number;
   checkedAt?: number;
 }
@@ -205,13 +207,14 @@ export class EventScheduler {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
       const cached = await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-      if (!cached) return Response.json({ error: "Team discovery cache is not ready" }, { status: 503 });
+      const discoveredTeams = await this.readDiscoveredTeams(year, TEAM_DISCOVERY_PREFIX);
+      if (!cached?.complete || !discoveredTeams) return Response.json({ error: "Complete team discovery cache is not ready" }, { status: 503 });
       const retrievedAt = new Date(cached.updatedAt).toISOString();
       const checkedAt = cached.checkedAt ?? cached.updatedAt;
       const sourceStatus = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs * 2
         ? "stale" as const
         : "available" as const;
-      const teams: FieldViewTeam[] = cached.teams.map((team) => normalizeFieldViewTeam(team, {
+      const teams: FieldViewTeam[] = discoveredTeams.map((team) => normalizeFieldViewTeam(team, {
         tba_teams: {
           status: sourceStatus,
           retrieved_at: retrievedAt,
@@ -293,7 +296,7 @@ export class EventScheduler {
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
       const discoveredKeys = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
-        : (discovery as TeamDiscoveryCache | undefined)?.teams.map((item) => item.key) ?? [];
+        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
       const keys = [...new Set([...registered, ...discoveredKeys])]
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
@@ -324,7 +327,7 @@ export class EventScheduler {
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
       const discovered = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
-        : (discovery as TeamDiscoveryCache | undefined)?.teams.some((item) => item.key === key) ?? false;
+        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys?.includes(key) ?? false;
       if (!registered.includes(key) && !discovered) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
       try {
         if (kind === "event") {
@@ -354,7 +357,7 @@ export class EventScheduler {
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.complete === true;
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-      const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true;
+      const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) > 0;
       const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
         await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
       const audit = await this.storage.get<{
@@ -396,9 +399,9 @@ export class EventScheduler {
           await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
         const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-        if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
+        if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
-        const teamKeys = [...new Set(teamDiscovery.teams.map((team) => team.key).filter((key) => typeof key === "string"))].sort();
+        const teamKeys = [...new Set(teamDiscovery.teamKeys ?? teamDiscovery.teams?.map((team) => team.key).filter((key) => typeof key === "string") ?? [])].sort();
         const eventCounts = { events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0 };
         for (const event of eventDiscovery.events) {
           const lifecycle = classifyEventLifecycle(event, Date.now(), DEFAULT_EVENT_POLLING_POLICY)?.lifecycle;
@@ -412,7 +415,7 @@ export class EventScheduler {
           event_discovery_updated_at: eventDiscovery.updatedAt,
           team_discovery_updated_at: teamDiscovery.updatedAt,
           event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
-          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? teamDiscovery.pages?.length ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
+          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
         };
         await this.storage.put(storageKey, audit);
       }
@@ -600,6 +603,20 @@ export class EventScheduler {
     } satisfies DiscoveryCache);
   }
 
+  private async readDiscoveredTeams(year: number, prefix = TEAM_DISCOVERY_PREFIX): Promise<TBATeam[] | null> {
+    const key = prefix + year;
+    const cache = await this.storage.get<TeamDiscoveryCache>(key);
+    if (!cache?.complete || !Number.isSafeInteger(cache.pageCount)) return null;
+    if (cache.teams) return cache.teams;
+    const teams: TBATeam[] = [];
+    for (let page = 0; page < (cache.pageCount ?? 0); page += 1) {
+      const values = await this.storage.get<TBATeam[]>(key + ":page:" + page);
+      if (!values) return null;
+      teams.push(...values);
+    }
+    return teams;
+  }
+
   private async discoverTeams(year: number, prefix = TEAM_DISCOVERY_PREFIX): Promise<{ requestCount: number; pageCount: number; teamCount: number }> {
     const key = prefix + year;
     const cached = await this.storage.get<TeamDiscoveryCache>(key);
@@ -612,7 +629,8 @@ export class EventScheduler {
     // sequentially, retain per-page validators, and require a short final page.
     for (let page = 0; page < 100; page += 1) {
       const pageKey = String(page);
-      const cachedPage = cached?.pages?.[page] ?? (page === 0 ? cached?.teams : undefined);
+      const cachedPage = await this.storage.get<TBATeam[]>(key + ":page:" + page) ??
+        (page === 0 ? cached?.teams : undefined);
       const etag = cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
@@ -622,7 +640,7 @@ export class EventScheduler {
       if (response.status === 304) {
         if (!cachedPage) throw new Error("TBA team page " + page + " returned 304 without a retained page payload");
         pageTeams = cachedPage;
-        pageEtags[pageKey] = etag ?? null;
+        pageEtags[pageKey] = etag;
       } else {
         if (!response.ok) throw new Error("TBA team discovery page " + page + " failed for " + year + " with HTTP " + response.status);
         pageTeams = await response.json() as TBATeam[];
@@ -639,11 +657,14 @@ export class EventScheduler {
     if (!complete) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
     const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
+    for (let page = 0; page < pages.length; page += 1) await this.storage.put(key + ":page:" + page, pages[page]);
+    for (let page = pages.length; page < (cached?.pageCount ?? 0); page += 1) await this.storage.delete(key + ":page:" + page);
     const checkedAt = Date.now();
     const updatedAt = payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
     await this.storage.put(key, {
-      etag: pageEtags["0"] ?? null, pageEtags, pages, pageCount: pages.length,
-      complete: true, teams, updatedAt, checkedAt,
+      etag: pageEtags["0"] ?? null, pageEtags, pageCount: pages.length,
+      teamCount: teams.length, teamKeys: teams.map((team) => team.key).sort(),
+      complete: true, updatedAt, checkedAt,
     } satisfies TeamDiscoveryCache);
     return { requestCount, pageCount: pages.length, teamCount: teams.length };
   }
