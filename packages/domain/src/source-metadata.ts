@@ -65,4 +65,5 @@ export interface FieldViewSourceMetadata {
   tba_team_event_status?: FieldViewSourceRecordMetadata;
   statbotics_match?: FieldViewSourceRecordMetadata;
   statbotics_team_year?: FieldViewSourceRecordMetadata;
+  statbotics_team_events?: FieldViewSourceRecordMetadata;
 }
