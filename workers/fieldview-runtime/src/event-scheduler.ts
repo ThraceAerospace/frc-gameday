@@ -1148,7 +1148,11 @@ export class EventScheduler {
           else if (stateStatus === "failed") job.counts.event_state_failed += 1;
           else job.counts.event_state_missing += 1;
 
-          const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", { method: "POST", headers }));
+          const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", {
+             method: "POST",
+             headers,
+             body: JSON.stringify({ allowPartialCohort: true }),
+           }));
           if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
           const analyticsResponse = await stub.fetch(new Request("https://event-runtime/analytics", {
             headers: { "X-FieldView-Event-Key": eventKey },
