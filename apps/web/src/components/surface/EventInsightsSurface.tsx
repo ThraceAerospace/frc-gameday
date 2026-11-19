@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { useEventState } from "@/lib/events";
-import type { TBAMatch } from "@/lib/tba/types";
+import { useCanonicalEventSnapshot } from "@/lib/events";
+import type { FieldViewMatch } from "@fieldview/domain";
 import EventInsightView from "@/components/match/EventInsightView";
 
 type EventInsightsSurfaceProps = {
   eventKey: string;
   trackedTeams?: string[];
-  matchOverride?: TBAMatch | null;
+  matchOverride?: FieldViewMatch | null;
   onClose?: () => void;
   embedded?: boolean;
 };
@@ -27,7 +27,8 @@ export default function EventInsightsSurface({
   onClose,
   embedded = false,
 }: EventInsightsSurfaceProps) {
-  const snapshot = useEventState(eventKey);
+  const canonical = useCanonicalEventSnapshot(eventKey);
+  const snapshot = canonical?.snapshot;
 
   useEffect(() => {
     if (!onClose) return;
