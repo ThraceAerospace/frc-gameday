@@ -97,6 +97,66 @@ export default {
       return scheduler.fetch(new Request("https://event-scheduler/teams?" + query.toString()));
     }
 
+    if (url.pathname === "/internal/admin/operations" && request.method === "POST") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.kind !== "string" || typeof body.action !== "string") {
+        return Response.json({ error: "Expected kind and action" }, { status: 400 });
+      }
+      const { kind, action } = body;
+      if (kind === "system") {
+        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop"].includes(action)) {
+          return Response.json({ error: "Unsupported system operation" }, { status: 400 });
+        }
+        const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+        return scheduler.fetch(new Request("https://event-scheduler/" + (action === "scheduler-start" ? "start" : "stop"), {
+          method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+        }));
+      }
+      if (typeof body.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(body.key)) {
+        return Response.json({ error: "A valid event or team key is required" }, { status: 400 });
+      }
+      const key = body.key;
+      if (kind === "event") {
+        if (!["refresh", "recalculate", "statbotics-refresh", "resource-refresh"].includes(action)) {
+          return Response.json({ error: "Unsupported event operation" }, { status: 400 });
+        }
+        await registerRuntimeObject(env, "event", key);
+        const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
+        const headers = {
+          Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": key,
+          "Content-Type": "application/json",
+        };
+        const endpoint = body.endpoint;
+        if (action === "resource-refresh" && typeof endpoint !== "string") {
+          return Response.json({ error: "A resource endpoint is required" }, { status: 400 });
+        }
+        const path = action === "statbotics-refresh" ? "statbotics-refresh" : "refresh";
+        const payload = action === "resource-refresh" ? { endpoints: [endpoint] }
+          : action === "recalculate" ? { endpoints: [] } : {};
+        return stub.fetch(new Request("https://event-runtime/" + path, {
+          method: "POST", headers, body: JSON.stringify(payload),
+        }));
+      }
+      if (kind === "team") {
+        if (!["refresh", "seed"].includes(action)) return Response.json({ error: "Unsupported team operation" }, { status: 400 });
+        if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+        const year = body.year === undefined ? new Date().getUTCFullYear() : Number(body.year);
+        if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
+          return Response.json({ error: "Invalid season year" }, { status: 400 });
+        }
+        const teamKey = /^\\d+$/.test(key) ? "frc" + key : key;
+        await registerRuntimeObject(env, "team", teamKey);
+        const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+        return stub.fetch(new Request("https://team-runtime/" + action + "?year=" + year, {
+          method: "POST",
+          headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
+        }));
+      }
+      return Response.json({ error: "Unsupported operation kind" }, { status: 400 });
+    }
+
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
