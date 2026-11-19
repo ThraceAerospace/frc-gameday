@@ -425,9 +425,6 @@ export class EventScheduler {
       if (action === "start") {
         if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
         if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
-        if (job && (job.status === "completed" || job.status === "cancelled")) {
-          await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
-        }
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
         const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
         if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
@@ -436,6 +433,9 @@ export class EventScheduler {
         const eventKeys = [...new Set(events.events.map((event) => event.key).filter((eventKey): eventKey is string => typeof eventKey === "string" && /^[a-zA-Z0-9_-]+$/.test(eventKey)))].sort();
         const teamKeys = [...new Set((teams.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
         if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
+        if (job && (job.status === "completed" || job.status === "cancelled")) {
+          await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
+        }
         const now = Date.now();
         const teamResourceCount = teamResourceEndpoints(teamKeys[0], year).length;
         const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
