@@ -6,6 +6,7 @@ import { FRCColors } from "@/lib/frc-colors/service";
 import type { FRCColor } from "@/lib/frc-colors/legacy-compatibility";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
+import { buildMatchFlags } from "@fieldview/analytics/match-flags";
 import type { AnalyticsMatch } from "./types";
 import type { EventAnalytics } from "./event-analytics";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventOPRs, TBAEventRanking, TBAMatch, TBATeam } from "@/lib/tba/types";
@@ -93,7 +94,7 @@ function buildPayload(job: Job): EventAnalytics {
     : job.teamColorsFetchError
       ? "unavailable"
       : "pending";
-  return {
+  const payload: EventAnalytics = {
     schemaVersion: 1,
     eventKey: job.event.key,
     generatedAt: Date.now(),
@@ -161,7 +162,14 @@ function buildPayload(job: Job): EventAnalytics {
       updatedAt: job.updatedAt,
     },
   };
-}
+  return {
+    ...payload,
+    matches: payload.matches.map((record) => ({
+      ...record,
+      flags: buildMatchFlags(payload, record),
+    })),
+  };
+}}
 
 export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalytics> {
   let job = await readJob(eventKey);
