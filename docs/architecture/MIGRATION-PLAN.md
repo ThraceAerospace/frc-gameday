@@ -223,6 +223,18 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - Support both single-entity and collection/event-wide calculations.
 - Keep calculation, interpretation, summary text, and presentation separate.
 
+**Progress**
+- The existing pure calculation implementation has been moved unchanged into `packages/analytics`; the web calculation module is a compatibility re-export. The package is registered in workspace typechecking and tests.
+- A versioned definition catalog now documents current calculation inputs, source paths, inclusion/exclusion rules, formulas, thresholds, units, and limitations. The catalog records current behavior for hand verification; it does not certify the mathematics.
+- Deterministic audit-manifest hashing is implemented, including source revision/fetch metadata and the definition versions used by a run.
+- Match-review flags (model upset, phase-specific anomaly, large residual, high penalties, and high alliance EPA) are now calculated by the shared analytics package in the server-side progressive analytics job. The dashboard renders the supplied flag evidence rather than recalculating thresholds in the browser.
+- This is an intermediate ownership move: the progressive job and provider acquisition still run in the Next.js server. EventRuntime has not yet become the authoritative analytics calculator/publisher, and the new results are not yet embedded in canonical event/team state.
+
+**Next**
+- Move analytics orchestration and source dependency tracking into the existing EventRuntime, without adding a second analytics Durable Object.
+- Publish match analysis/flags on `FieldViewMatch`, team analytics on `FieldViewTeamState`, and event analytics on `FieldViewEventState`; preserve last-good values and expose partial/unavailable inputs.
+- Add historical parity fixtures before removing the Next.js orchestration path. Independently hand-verify the math later and make any corrections as deliberate definition-version changes.
+
 **Exit criteria**
 - Definitions contain no arbitrary executable code or provider fetches.
 - Historical fixtures validate migrated outputs.
@@ -238,7 +250,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - The homepage event cards and match summaries now consume `FieldViewEvent` and `FieldViewMatch` from canonical discovery/snapshot reads. Homepage card and countdown props no longer import TBA event/match schemas; shared match-selection helpers use a small structural match shape so remaining legacy EventState consumers can continue working during their own migration.
 - Gameday's event footer, match strip/cards, tracked-team pills, rankings, team picker, and Statbotics prediction panel now use canonical domain models or narrow presentation projections of those models. Statbotics prediction values and availability come from each canonical match's prediction/provenance fields rather than browser-owned Statbotics records. The active-event picker API, tile state, and remote add-event action now carry `FieldViewEvent` objects.
 - The Match Insights surface now subscribes directly to `FieldViewEventSnapshot` and renders `FieldViewMatch` records. Alliance OPR/DPR/CCWM and pre-match EPA values are read from the match's canonical team associations; Statbotics prediction and availability come from the match's prediction/provenance fields. The divisional-event selector also uses the canonical `FieldViewEvent` model.
-- Tile View's imminent-match notification source now derives the next match from canonical event snapshots; the banner, score breakdown, prediction bar, and prediction metrics use canonical match types. The aggregate Event Analytics surface now reads canonical runtime connection status, while its analytics payload remains on the legacy M6 calculation/API path pending the canonical analytics publisher and engine.
+- Tile View's imminent-match notification source now derives the next match from canonical event snapshots; the banner, score breakdown, prediction bar, and prediction metrics use canonical match types. The aggregate Event Analytics surface now reads canonical runtime connection status, while its aggregate payload remains on the legacy M6 API path. Match-review flags now come from server-side calculation code, but canonical EventRuntime analytics publication is still pending.
 - Remote sessions now subscribe to versioned canonical EventRuntime snapshots, transmit `FieldViewEventSnapshot` values over the existing session channel, and render remote event cards from those snapshots. They no longer transmit or consume `EventStateSnapshot` provider-shaped payloads.
 
 **Work**
