@@ -995,6 +995,10 @@ export class EventScheduler {
       if (job.phase === "teams") {
         if (job.teamCursor >= job.teamKeys.length) {
           job.phase = "events";
+          // TeamRuntime's revisions are independent from EventRuntime source
+          // revisions. Recalculate every event against the just-verified
+          // season snapshots, including data that changed before this run.
+          job.teamDataChanged = true;
           job.updatedAt = Date.now();
           await this.persistSeasonIngest(job);
           return;
