@@ -168,9 +168,9 @@ interface SeasonIngestJob {
   nextDueAt?: number;
   counts: {
     teams_complete: number; teams_partial: number; teams_failed: number;
-    event_state_complete: number; event_state_partial: number; event_state_failed: number;
+    event_state_complete: number; event_state_partial: number; event_state_missing: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number;
-    event_analytics_waiting: number; event_analytics_failed: number;
+    event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number;
     event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
     requests_attempted: number; requests_succeeded: number; requests_failed: number; requests_retried: number;
     requests_skipped: number; requests_unavailable: number; requests_deferred: number;
@@ -444,9 +444,9 @@ export class EventScheduler {
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
-            event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
+            event_state_complete: 0, event_state_partial: 0, event_state_missing: 0, event_state_failed: 0,
             event_analytics_succeeded: 0, event_analytics_partial: 0,
-            event_analytics_waiting: 0, event_analytics_failed: 0,
+            event_analytics_waiting: 0, event_analytics_missing: 0, event_analytics_failed: 0,
             event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
             requests_attempted: 0, requests_succeeded: 0, requests_failed: 0, requests_retried: 0,
             requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
@@ -1018,8 +1018,9 @@ export class EventScheduler {
         if (job.eventCursor >= job.eventKeys.length) {
           job.phase = "complete";
           const failures = job.counts.teams_partial + job.counts.teams_failed + job.counts.event_state_partial +
-            job.counts.event_state_failed + job.counts.event_analytics_partial + job.counts.event_analytics_waiting +
-            job.counts.event_analytics_failed + job.counts.event_cohort_partial + job.counts.event_cohort_discovering +
+            job.counts.event_state_missing + job.counts.event_state_failed + job.counts.event_analytics_partial +
+            job.counts.event_analytics_waiting + job.counts.event_analytics_missing + job.counts.event_analytics_failed +
+            job.counts.event_cohort_partial + job.counts.event_cohort_discovering +
             job.counts.event_cohort_missing;
           job.status = failures > 0 ? "completed_with_errors" : "completed";
           delete job.nextDueAt;
@@ -1130,7 +1131,8 @@ export class EventScheduler {
           const stateStatus = eventState.event_state?.status ?? "missing";
           if (stateStatus === "complete") job.counts.event_state_complete += 1;
           else if (stateStatus === "partial") job.counts.event_state_partial += 1;
-          else job.counts.event_state_failed += 1;
+          else if (stateStatus === "failed") job.counts.event_state_failed += 1;
+          else job.counts.event_state_missing += 1;
 
           const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", { method: "POST", headers }));
           if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
@@ -1142,7 +1144,8 @@ export class EventScheduler {
           if (analytics.status === "succeeded" && analytics.publication) job.counts.event_analytics_succeeded += 1;
           else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
           else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
-          else job.counts.event_analytics_failed += 1;
+          else if (analytics.status === "failed") job.counts.event_analytics_failed += 1;
+          else job.counts.event_analytics_missing += 1;
           const publication = isRecord(analytics.publication) ? analytics.publication : null;
           const eventAnalytics = publication && isRecord(publication.eventAnalytics) ? publication.eventAnalytics : null;
           const cohort = eventAnalytics && isRecord(eventAnalytics.season_cohort) ? eventAnalytics.season_cohort : null;
