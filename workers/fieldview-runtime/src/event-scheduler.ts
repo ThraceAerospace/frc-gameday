@@ -619,7 +619,7 @@ export class EventScheduler {
       }
     }
     if (!complete) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
-    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
+    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
     const retrievedAt = Date.now();
     await this.storage.put(key, {
