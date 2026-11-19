@@ -1166,10 +1166,10 @@ export class EventRuntime {
       return;
     }
     const state = calculated.state;
+    const seasonTeamRevision = await this.storage.get<number>(ANALYTICS_SEASON_TEAM_REVISION_KEY);
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
-      ...(await this.storage.get<number>(ANALYTICS_SEASON_TEAM_REVISION_KEY) === undefined
-        ? {} : { seasonTeamRevision: await this.storage.get<number>(ANALYTICS_SEASON_TEAM_REVISION_KEY) }),
+      ...(seasonTeamRevision === undefined ? {} : { seasonTeamRevision }),
       calculatedAt: Date.now(),
       matches: (state.matches ?? []).map((match) => ({
         key: match.key,
