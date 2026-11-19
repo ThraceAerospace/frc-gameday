@@ -908,12 +908,10 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
   const current = analysis.events.find((item) => item.event.key === eventKey) ?? null;
   const currentAnalytics = current?.analytics ?? null;
   const allReviewMatches = analysis.events.flatMap(({ event, analytics }) =>
-    (analytics?.review_matches ?? []).map((match) => ({ ...match, event })),
+    (analytics?.match_evidence ?? []).map((match) => ({ ...match, event })),
   );
-  const isElimination = (match: { match_key: string; match_label: string }) =>
-    /_(?:ef|qf|sf|f)\d/i.test(match.match_key) || /^(?:ef|qf|sf|f)/i.test(match.match_label);
-  const qualificationMatches = (currentAnalytics?.review_matches ?? []).filter((match) => !isElimination(match));
-  const playoffMatches = (currentAnalytics?.review_matches ?? []).filter(isElimination);
+  const qualificationMatches = allReviewMatches.filter((match) => match.event.key === eventKey && match.competition_level.toLowerCase() === "qm");
+  const playoffMatches = allReviewMatches.filter((match) => match.event.key === eventKey && ["ef", "qf", "sf", "f"].includes(match.competition_level.toLowerCase()));
   const signed = (value: number | null | undefined) =>
     value == null || !Number.isFinite(value) ? "—" : `${value > 0 ? "+" : ""}${fmt(value)}`;
   const average = (values: Array<number | null>) => {
@@ -972,16 +970,34 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
           <Metric label="Matches completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} detail="Completed / observed" />
         </div>
         {peer ? <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comparable-alliance context</p><p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{peer.interpretation === "insufficient-sample" ? "Not enough qualification results to compare this team's alliances with the event field." : `Team alliance mean residual: ${signed(peer.team_mean_residual)} pts · peer mean: ${signed(peer.peer_mean_residual)} pts · difference: ${signed(peer.difference)} pts.`}</p><p className="mt-1 text-[11px] text-slate-500">{peer.team_match_count} team matches · {peer.peer_alliance_count} comparison alliances. Alliance results cannot isolate an individual robot.</p></div> : null}
-        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Qualification match evidence</h5>{matchTable(qualificationMatches.map((match) => ({...match,event:current!.event})))}</div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Metric label="Mean residual" value={signed(analysis.phaseSummaries.find((item) => item.phase === "qm")?.meanResidual)} detail={`${analysis.phaseSummaries.find((item) => item.phase === "qm")?.predictionSamples ?? 0} predicted alliance scores`} />
+          <Metric label="Prediction MAE" value={fmt(analysis.phaseSummaries.find((item) => item.phase === "qm")?.meanAbsoluteError)} detail="Mean absolute score error" />
+          <Metric label="Prediction RMSE" value={fmt(analysis.phaseSummaries.find((item) => item.phase === "qm")?.rootMeanSquareError)} detail="Penalizes larger misses" />
+        </div>
+        <p className="text-xs leading-5 text-slate-500">Residual metrics use only completed alliance scores with a usable prediction. Match counts and prediction sample counts are reported separately.</p>
+        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Qualification match evidence</h5>{matchTable(qualificationMatches.filter((match) => match.actual_score !== null && match.opponent_actual_score !== null))}</div>
       </> : null}
       {activeTab === "playoffs" ? <>
         <div className="grid gap-3 sm:grid-cols-3"><Metric label="Elimination matches reviewed" value={String(playoffMatches.length)} detail="Published review evidence only" /><Metric label="Mean score residual" value={signed(average(playoffMatches.map((match) => match.score_residual)))} detail="Actual minus predicted alliance score" /><Metric label="Mean EPA change" value={signed(average(playoffMatches.map((match) => match.epa_change)))} detail="Model estimate change" /></div>
-        <p className="text-xs leading-5 text-slate-500">These values summarize matches with published team-review evidence, not every elimination match. They do not assert an individual robot caused an alliance result.</p>
-        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Elimination match evidence</h5>{matchTable(playoffMatches.map((match) => ({...match,event:current!.event})))}</div>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h5 className="text-sm font-bold text-slate-900 dark:text-slate-100">Qualification-to-elimination shift</h5><span className="text-xs font-semibold text-slate-500">{analysis.eliminationShift.interpretation.replaceAll("-", " ")}</span></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3"><Metric label="Mean event shift" value={signed(analysis.eliminationShift.meanShift)} detail="Elimination mean residual − qualification mean residual" /><Metric label="Median event shift" value={signed(analysis.eliminationShift.medianShift)} detail={`${analysis.eliminationShift.eligibleEventCount} eligible events`} /><Metric label="One-sided sign test" value={fmt(analysis.eliminationShift.signTestPValue, 3)} detail={`${analysis.eliminationShift.negativeEventCount} negative / ${analysis.eliminationShift.directionalEventCount} directional`} /></div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Each event contributes one shift. Eligibility requires at least {analysis.eliminationShift.minimumQualificationMatchesPerEvent} scored qualification matches and {analysis.eliminationShift.minimumEliminationMatchesPerEvent} scored elimination matches with predictions. This exploratory alliance-level association is not proof of individual robot underperformance or choking.</p>
+          {analysis.eliminationShift.events.length ? <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[560px] text-left text-xs"><thead className="text-slate-500"><tr><th className="py-2">Event</th><th>Qual n</th><th>Elim n</th><th>Qual residual</th><th>Elim residual</th><th>Shift</th></tr></thead><tbody>{analysis.eliminationShift.events.map((item) => <tr key={item.event.key} className="border-t border-slate-100 dark:border-slate-800"><td className="py-2">{item.event.shortName || item.event.name}</td><td>{item.qualificationMatches}</td><td>{item.eliminationMatches}</td><td>{signed(item.qualificationMeanResidual)}</td><td>{signed(item.eliminationMeanResidual)}</td><td className="font-semibold">{signed(item.shift)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-xs text-slate-500">No event meets the minimum sample requirements yet.</p>}
+        </div>
+        <p className="text-xs leading-5 text-slate-500">Phase summaries are pooled from eligible match observations; residual sample sizes are distinct from completed-match counts. Alliance-level results do not isolate individual robot performance.</p>
+        <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Elimination match evidence</h5>{matchTable(playoffMatches.filter((match) => match.actual_score !== null && match.opponent_actual_score !== null))}</div>
         <div><h5 className="mb-2 text-sm font-bold text-slate-900 dark:text-slate-100">Playoff review findings</h5>{findingsList(current ? [current] : [])}</div>
       </> : null}
       {activeTab === "season" ? <>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-base font-bold text-slate-900 dark:text-slate-100">{name} · Season analysis</h4><p className="text-xs text-slate-500">{analysis.analyzedEventCount} of {analysis.eventCount} events analyzed · {analysis.matchCount} completed matches with published team analytics</p></div><span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold capitalize text-slate-500">{analysis.collection.state}</span></div>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h5 className="text-sm font-bold text-slate-900 dark:text-slate-100">Residual pattern vs. opposing alliances</h5><span className="text-xs font-semibold capitalize text-slate-500">{analysis.residualPattern.interpretation.replaceAll("-", " ")}</span></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3"><Metric label="Mean team-minus-opponent residual" value={signed(analysis.residualPattern.meanTeamResidual)} detail="Equal-weighted event differences" /><Metric label="Negative event comparisons" value={`${analysis.residualPattern.negativeEventCount}/${analysis.residualPattern.eligibleEventCount}`} detail="Team mean below opponent baseline" /><Metric label="Sign-test p-value" value={fmt(analysis.residualPattern.signTestPValue, 3)} detail="One-sided exact test for recurring negative pattern" /></div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Each event is compared with the opposing alliances encountered by the team at that event. Events with no usable team or opponent residual samples are excluded, not treated as zero.</p>
+          {analysis.residualPattern.events.length ? <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[560px] text-left text-xs"><thead className="text-slate-500"><tr><th className="py-2">Event</th><th>Team residual</th><th>Opponent baseline</th><th>Baseline SD</th><th>Below / above 1 SD</th></tr></thead><tbody>{analysis.residualPattern.events.map((item) => <tr key={item.event.key} className="border-t border-slate-100 dark:border-slate-800"><td className="py-2">{item.event.shortName || item.event.name}</td><td>{signed(item.teamMeanResidual)}</td><td>{signed(item.baselineMeanResidual)}</td><td>{fmt(item.baselineStandardDeviation)}</td><td>{item.belowOneSigma} / {item.aboveOneSigma}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-xs text-slate-500">No comparable event-level residual samples are available.</p>}
+        </div>
         <div className="space-y-3">{analysis.events.map(({ event, status, analytics }) => {
           const item = analytics?.performance;
           const comparison = analytics?.season_comparison;
@@ -996,6 +1012,12 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
         })}</div>
       </> : null}
       {activeTab === "review" ? <>
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Season anomaly summary</h4>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><Metric label="Flagged matches" value={`${analysis.anomalySummary.matchesWithAnomalies}/${analysis.anomalySummary.matchesEvaluated}`} detail="Matches with at least one review signal" /><Metric label="Alliance underperformance" value={String(analysis.anomalySummary.allianceUnderperformance)} detail="Unusually negative residuals" /><Metric label="Alliance overperformance" value={String(analysis.anomalySummary.allianceOverperformance)} detail="Unusually positive residuals" /><Metric label="High-confidence misses" value={String(analysis.anomalySummary.highConfidenceMisses)} detail="At least 80% predicted win, but lost" /></div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{analysis.anomalySummary.baseline} These are review leads, not causal findings.</p>
+          {analysis.anomalies.length ? <div className="mt-3 space-y-2">{analysis.anomalies.map((item) => <article key={item.match_key} className="rounded-lg border border-slate-100 p-3 dark:border-slate-800"><div className="flex flex-wrap items-center justify-between gap-2"><a href={`https://www.thebluealliance.com/match/${item.match_key}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-[var(--fv-brand)] hover:underline">{item.event.shortName || item.event.name} · {item.match_label}</a><span className="text-[10px] font-semibold uppercase text-slate-500">{item.kinds.join(" · ")}</span></div><ul className="mt-1 list-disc pl-4 text-xs leading-5 text-slate-600 dark:text-slate-300">{item.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></article>)}</div> : <p className="mt-2 text-xs text-slate-500">No matches crossed the current review thresholds.</p>}
+        </div>
         <div><h4 className="mb-2 text-base font-bold text-slate-900 dark:text-slate-100">Season review findings</h4>{findingsList(analysis.events)}</div>
         <div><h4 className="mb-2 text-base font-bold text-slate-900 dark:text-slate-100">Match-by-match EPA and score evidence</h4>{matchTable(allReviewMatches)}</div>
       </> : null}
