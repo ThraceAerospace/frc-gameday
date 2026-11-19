@@ -205,7 +205,7 @@ export default function AdminOperationsDashboard() {
     <p className="mt-5 text-xs text-[var(--fv-muted)]">The dashboard access token is separate from the server-only Worker token.</p>
   </main>;
 
-  return <main className="custom-scrollbar mx-auto min-h-dvh w-full max-w-[1500px] overflow-x-hidden px-4 py-7 sm:px-6 lg:px-8">
+  return <main className="custom-scrollbar mx-auto h-dvh w-full max-w-[1500px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-7 sm:px-6 lg:px-8">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Command center</h1><p className="mt-1 text-sm text-[var(--fv-muted)]">A focused view of runtime health, canonical data coverage, and ingestion work.</p></div>
       <div className="flex items-center gap-2"><span className="text-xs text-[var(--fv-muted)]">Updated {ago(updatedAt)}</span><button onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Refresh</button><button onClick={() => { setAuthenticated(false); setOverview(null); setToken(""); setSelected(null); }} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Sign out</button></div>
