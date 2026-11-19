@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEventSnapshot, FieldViewTeamAnalytics } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
 import { refreshCanonicalEventAnalytics, refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
@@ -14,6 +14,20 @@ import type { StatboticsTeamEvent, StatboticsTeamYear } from "@/lib/statbotics/t
 type TeamSeasonHistory = { team: { nickname?: string | null; name?: string | null }; season: StatboticsTeamYear | null; events: { event: { key: string; name: string; short_name?: string | null; start_date: string; week?: number | null }; statbotics: StatboticsTeamEvent | null; status: "ready" | "unavailable" }[] };
 type TeamMatchRow = { matchKey:string; matchLabel:string; compLevel:string; event:{key:string;name:string;shortName?:string|null;startDate:string}; partners:string[]; opponents:string[]; alliance:"red"|"blue"; predicted:number|null; actual:number|null; residual:number|null; opponentPredicted:number|null; opponentActual:number|null; opponentResidual:number|null; alliancePreEPATotal:number|null; alliancePreComponents:Record<string,number>; actualComponents:Record<string,number>; redWinProbability:number|null; teamWinProbability:number|null; rpOutcomes:{key:string;predicted:number|null;achieved:boolean|null}[]; won:boolean|null; preEPA:number|null; postEPA:number|null; deltaEPA:number|null; preComponents:Record<string,number>; postComponents:Record<string,number>; allianceDeltaSpread:number|null; sharedAllianceUpdate:boolean; statboticsAvailable:boolean } ;
 type TeamMatchAnalysis = { team:number; year:number; eventCount:number; matchCount:number; anomalySummary:{matchesWithAnomalies:number;matchesEvaluated:number;frequency:number|null;allianceUnderperformance:number;allianceOverperformance:number;opponentAnomalies:number;highConfidenceMisses:number;baseline:string}; anomalies:{matchKey:string;matchLabel:string;event:{key:string;name:string;startDate:string};compLevel:string;partners:string[];opponents:string[];alliance:string;residual:number|null;opponentResidual:number|null;teamWinProbability:number|null;won:boolean|null;kinds:string[];reasons:string[];highConfidenceMiss:boolean}[]; summary:{matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}; eventSummaries:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null}[]; phaseSummaries:{phase:string;matches:number;wins:number;losses:number;ties:number;winRate:number|null;meanResidual:number|null;meanAbsoluteError:number|null;rootMeanSquareError:number|null;meanMatchEPAChange:number|null;epaStart:number|null;epaEnd:number|null;rp:{key:string;sampleSize:number;accuracy:number|null;brier:number|null}[]}[];eliminationShift:{eliminationMatchCount:number;eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;directionalEventCount:number;meanShift:number|null;medianShift:number|null;signTestPValue:number|null;minimumQualificationMatchesPerEvent:number;minimumEliminationMatchesPerEvent:number;interpretation:"insufficient-history"|"no-elimination-matches"|"single-event-shift"|"recurring-negative-shift"|"no-established-negative-shift";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};qualificationMatches:number;eliminationMatches:number;qualificationMeanResidual:number|null;eliminationMeanResidual:number|null;shift:number;shiftStandardError:number;qualificationMatchKeys:string[];eliminationMatchKeys:string[]}[]};residualPattern:{eligibleEventCount:number;negativeEventCount:number;positiveEventCount:number;meanTeamResidual:number|null;signTestPValue:number|null;positiveSignTestPValue:number|null;interpretation:"insufficient-history"|"single-event-below-baseline"|"single-event-above-baseline"|"recurring-below-baseline"|"recurring-above-baseline"|"no-established-pattern";events:{event:{key:string;name:string;shortName?:string|null;startDate:string};teamMatches:number;baselineAllianceSamples:number;teamMeanResidual:number;baselineMeanResidual:number;baselineStandardDeviation:number;belowOneSigma:number;aboveOneSigma:number;belowBaseline:boolean;matchKeys:string[]}[];diagnostics?:{event:{key:string;name:string;shortName?:string|null;startDate:string};matches:number;scoredMatches:number;teamResidualSamples:number;opponentResidualSamples:number;baselineAllianceSamples:number;eligible:boolean}[]};matches:TeamMatchRow[];collection:{state:string;statboticsMatches:number;totalMatches:number;updatedAt:number}};
+type CanonicalTeamAnalysisResponse = {
+  team: number;
+  year: number;
+  eventCount: number;
+  analyzedEventCount: number;
+  matchCount: number;
+  matchesSeen: number;
+  events: {
+    event: { key: string; name: string; shortName: string | null; startDate: string };
+    status: "ready" | "pending" | "unavailable";
+    analytics: FieldViewTeamAnalytics | null;
+  }[];
+  collection: { state: string; analyzedEvents: number; totalEvents: number; updatedAt: number };
+};
 type Tab = "overview" | "teams" | "qualification" | "playoffs" | "alliances" | "scouting";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Event Overview" },
@@ -70,7 +84,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
   const [teamFocus, setTeamFocus] = useState("");
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
-  const [matchAnalysisA, setMatchAnalysisA] = useState<TeamMatchAnalysis | null>(null);
+  const [matchAnalysisA, setMatchAnalysisA] = useState<CanonicalTeamAnalysisResponse | null>(null);
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
   const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
@@ -94,7 +108,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     fetch(`/api/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
-      if (active) setMatchAnalysisA(result as TeamMatchAnalysis);
+      if (active) setMatchAnalysisA(result as CanonicalTeamAnalysisResponse);
     }).catch((error) => {
       if (active) { setMatchAnalysisA(null); setMatchAnalysisError(error instanceof Error ? error.message : "Unable to load team investigation"); }
     }).finally(() => { if (active) setMatchAnalysisLoading(false); });
@@ -163,7 +177,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <TeamAnalysisTabs analysis={matchAnalysisA} records={data.matches} eventKey={eventKey} name={selectedA?.name ?? `Team ${teamA}`} team={selectedA} data={data} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <CanonicalTeamAnalysisPanel analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -860,6 +874,36 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 
 type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
+
+function CanonicalTeamAnalysisPanel({ analysis, name }: { analysis: CanonicalTeamAnalysisResponse; name: string }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h3 className="text-lg font-bold text-slate-900">{name} · Season analysis</h3><p className="text-xs text-slate-500">{analysis.analyzedEventCount} of {analysis.eventCount} events analyzed · {analysis.matchCount} completed matches with published team analytics</p></div>
+        <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold capitalize text-slate-500">{analysis.collection.state}</span>
+      </div>
+      {analysis.events.map(({ event, status, analytics }) => {
+        const performance = analytics?.performance;
+        return <article key={event.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><h4 className="font-bold text-slate-900">{event.name}</h4><p className="text-xs text-slate-500">{event.startDate}</p></div><span className="text-xs font-semibold capitalize text-slate-500">{status === "ready" ? "Analysis ready" : status === "pending" ? "Awaiting analytics" : "Event unavailable"}</span></div>
+          {!analytics ? <p className="px-4 py-4 text-sm text-slate-500">The EventRuntime has not published team analytics for this event yet.</p> : <div className="space-y-4 p-4">
+            {analytics.summary?.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">{analytics.summary.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Metric label="EPA" value={fmt(performance?.epa)} />
+              <Metric label="EPA change" value={performance?.epa_change == null ? "—" : `${performance.epa_change > 0 ? "+" : ""}${fmt(performance.epa_change)}`} />
+              <Metric label="Record" value={performance ? `${performance.wins ?? "—"}–${performance.losses ?? "—"}–${performance.ties ?? "—"}` : "—"} />
+              <Metric label="Completed" value={performance ? `${performance.completed_matches}/${performance.matches_seen}` : "—"} />
+            </div>
+            {analytics.season_comparison ? <div className="rounded-lg border border-slate-200 p-3 text-sm"><p className="font-semibold text-slate-800">Prior-event comparison</p><p className="mt-1 text-slate-600">{analytics.season_comparison.prior_event.event_name}: {fmt(analytics.season_comparison.prior_epa)} → {fmt(analytics.season_comparison.current_epa)} EPA ({analytics.season_comparison.change > 0 ? "+" : ""}{fmt(analytics.season_comparison.change)})</p><p className="mt-1 text-xs text-slate-500">Change rank {analysis.events.length > 0 ? analytics.season_comparison.cohort_rank : "—"} of {analytics.season_comparison.cohort_size} eligible teams</p></div> : null}
+            {analytics.peer_performance ? <p className="text-sm text-slate-600">Peer comparison: {analytics.peer_performance.interpretation.replaceAll("-", " ")} · {analytics.peer_performance.team_match_count} team matches · {analytics.peer_performance.peer_alliance_count} peer alliances</p> : null}
+            {analytics.findings.length ? <div><h5 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Review findings</h5><ul className="space-y-2">{analytics.findings.map((finding) => <li key={finding.finding_key} className="rounded-lg border border-slate-200 p-3"><p className="text-sm font-semibold text-slate-800">{finding.title}</p><p className="mt-1 text-sm text-slate-600">{finding.summary}</p><p className="mt-1 text-xs text-slate-500">{finding.suggested_action}</p></li>)}</ul></div> : null}
+            {analytics.review_matches?.length ? <div><h5 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Matches to review</h5><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="text-xs text-slate-500"><tr><th className="py-2">Match</th><th>Alliance</th><th>Actual / predicted</th><th>Residual</th><th>EPA change</th></tr></thead><tbody>{analytics.review_matches.map((match) => <tr key={match.match_key} className="border-t border-slate-100"><td className="py-2 font-mono">{match.match_label}</td><td className="capitalize">{match.alliance}</td><td>{match.actual_score ?? "—"} / {match.predicted_score ?? "—"}</td><td>{match.score_residual == null ? "—" : `${match.score_residual > 0 ? "+" : ""}${fmt(match.score_residual)}`}</td><td>{match.epa_change == null ? "—" : `${match.epa_change > 0 ? "+" : ""}${fmt(match.epa_change)}`}</td></tr>)}</tbody></table></div></div> : null}
+          </div>}
+        </article>;
+      })}
+    </section>
+  );
+}
 
 function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string;team:TeamAnalyticsRow|undefined;data:EventAnalyticsResponse}) {
   const [activeTab,setActiveTab]=useState<TeamAnalysisTab>("qualification");
