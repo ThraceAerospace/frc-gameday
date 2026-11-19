@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-type Tab = "overview" | "events" | "teams" | "providers" | "tasks" | "system";
+type Tab = "overview" | "events" | "teams" | "providers" | "tasks" | "attention" | "system";
 type Endpoint = {
   endpoint: string; status?: string; revision?: number;
   lastFetchedAt?: number | null; lastAttemptAt?: number | null;
