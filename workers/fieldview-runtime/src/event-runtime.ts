@@ -321,8 +321,9 @@ export class EventRuntime {
         return Response.json({ error: "Refresh endpoints must belong to this event" }, { status: 400 });
       }
       const endpoints = requested as string[];
+      const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
       await this.schedulePolls(endpoints, 86_400_000);
-      await this.scheduleStatboticsRefresh(Date.now(), 0);
+      if (includeStatbotics) await this.scheduleStatboticsRefresh(Date.now(), 0);
       await this.alarm();
       // Explicit refreshes also force a fresh analytics publication, even when
       // the provider returns an unchanged representation or HTTP 304.
@@ -332,7 +333,7 @@ export class EventRuntime {
       await this.alarm();
       return Response.json({
         event_key: this.eventKey,
-        requested: endpoints.length + 1,
+        requested: endpoints.length + (includeStatbotics ? 1 : 0),
         attempted: true,
         state: await (async () => {
           const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
