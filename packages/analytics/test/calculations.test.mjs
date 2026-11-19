@@ -28,7 +28,7 @@ test("alliance results retain existing score residual and EPA aggregation behavi
     },
     statboticsStatus: "ready",
   }];
-  const result = buildAllianceResults(records as never);
+  const result = buildAllianceResults(records);
   assert.equal(result[0].residual, 5);
   assert.equal(result[0].preEpaTotal, 60);
   assert.equal(result[1].residual, -5);
