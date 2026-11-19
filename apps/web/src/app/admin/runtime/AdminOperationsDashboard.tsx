@@ -33,8 +33,8 @@ type InventoryPage = { total: number; cursor: number; next_cursor: number | null
 type SeasonIngest = {
   year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
   phase?: "teams" | "events" | "complete";
-  team_cursor?: number; team_total?: number; team_resource_cursor?: number;
-  event_cursor?: number; event_total?: number; event_resource_cursor?: number; next_due_at?: number | null;
+  team_cursor?: number; team_total?: number; team_resource_cursor?: number; team_resources_per_team?: number;
+  event_cursor?: number; event_total?: number; event_resource_cursor?: number; event_resources_per_event?: number; next_due_at?: number | null;
   counts?: {
     teams_complete: number; teams_partial: number; teams_failed: number;
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
@@ -354,7 +354,7 @@ export default function AdminOperationsDashboard() {
         </div>}
         {seasonIngest && seasonIngest.status !== "not_started" && <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"} phase</span><span>Teams {seasonIngest.team_cursor ?? 0}/{seasonIngest.team_total ?? 0} (resource {seasonIngest.team_resource_cursor ?? 0}/7) · Events {seasonIngest.event_cursor ?? 0}/{seasonIngest.event_total ?? 0} (resource {seasonIngest.event_resource_cursor ?? 0}/13)</span></div>
-          <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full bg-[var(--fv-brand)]" style={{ width: (((seasonIngest.team_cursor ?? 0) * 7 + (seasonIngest.team_resource_cursor ?? 0) + (seasonIngest.event_cursor ?? 0) * 13 + (seasonIngest.event_resource_cursor ?? 0)) / Math.max(1, (seasonIngest.team_total ?? 0) * 7 + (seasonIngest.event_total ?? 0) * 13)) * 100 + "%" }} /></div>
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full bg-[var(--fv-brand)]" style={{ width: (((seasonIngest.team_cursor ?? 0) * (seasonIngest.team_resources_per_team ?? 7) + (seasonIngest.team_resource_cursor ?? 0) + (seasonIngest.event_cursor ?? 0) * (seasonIngest.event_resources_per_event ?? 13) + (seasonIngest.event_resource_cursor ?? 0)) / Math.max(1, (seasonIngest.team_total ?? 0) * (seasonIngest.team_resources_per_team ?? 7) + (seasonIngest.event_total ?? 0) * (seasonIngest.event_resources_per_event ?? 13))) * 100 + "%" }} /></div>
           {seasonIngest.counts && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             {[
               ["Teams complete", seasonIngest.counts.teams_complete], ["Teams partial", seasonIngest.counts.teams_partial], ["Teams failed", seasonIngest.counts.teams_failed],
