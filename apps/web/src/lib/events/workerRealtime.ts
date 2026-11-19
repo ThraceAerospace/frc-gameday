@@ -147,6 +147,12 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     };
   }
 
+  refreshCanonicalAnalytics(eventKey: string): void {
+    if (eventKey && (this.analyticsHandlers.get(eventKey)?.size ?? 0) > 0) {
+      void this.fetchCanonicalAnalytics(eventKey);
+    }
+  }
+
   getCanonicalAnalytics(eventKey: string): CanonicalAnalyticsPublication | undefined {
     return this.analyticsPublications.get(eventKey);
   }
