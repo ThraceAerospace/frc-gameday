@@ -31,7 +31,7 @@ type Overview = {
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
 type SeasonIngest = {
-  year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
+  year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled"; history_count?: number;
   phase?: "teams" | "events" | "complete";
   team_cursor?: number; team_total?: number; team_resource_cursor?: number; team_resources_per_team?: number;
   event_cursor?: number; event_total?: number; event_resource_cursor?: number; event_resources_per_event?: number; next_due_at?: number | null;
@@ -49,7 +49,7 @@ type SeasonPreview = {
   year: number; ready: boolean; events: number; teams: number; team_pages: number;
   event_resources_per_event?: number; team_resources_per_team?: number;
   planned_resource_requests?: number; request_interval_ms?: number; estimated_minimum_duration_ms?: number;
-  estimate_note?: string; existing_job?: SeasonIngest | null;
+  estimate_note?: string; existing_job?: SeasonIngest | null; history_count?: number;
 };
 type CoverageAudit = {
   year: number; status: "not_started" | "running" | "completed" | "stale"; discovery_ready?: boolean;
