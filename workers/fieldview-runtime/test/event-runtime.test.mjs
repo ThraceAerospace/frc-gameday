@@ -780,6 +780,13 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
   assert.equal(storage.values.has("analytics:publication"), false,
     "snapshot reads must not execute or persist analytics calculations");
 
+  // The snapshot read schedules unrelated missing resources. Keep this test
+  // focused on analytics work rather than acquiring those provider resources.
+  for (const key of storage.values.keys()) {
+    if (key.startsWith("task:") && key !== "task:" + matchesEndpoint) {
+      storage.values.delete(key);
+    }
+  }
   storage.values.set("analytics:due-at", Date.now() - 1);
   await runtime.alarm();
   assert.equal(storage.values.get("analytics:status"), "succeeded", storage.values.get("analytics:last-error") ?? "no calculation error recorded");
