@@ -106,10 +106,21 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue"].includes(action)) {
+        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+        if (action.startsWith("season-ingest-")) {
+          const year = Number(body.year);
+          if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
+          const operation = action.slice("season-ingest-".length);
+          const payload = { action: operation, year, ...(operation === "start" ? { confirm: body.confirm === true } : {}) };
+          return scheduler.fetch(new Request("https://event-scheduler/admin/season-ingest", {
+            method: operation === "preview" ? "GET" : "POST",
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            ...(operation === "preview" ? {} : { body: JSON.stringify(payload) }),
+          }));
+        }
         if (action === "coverage-audit-start" || action === "coverage-audit-continue") {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid audit year is required" }, { status: 400 });
@@ -220,8 +231,8 @@ export default {
     }
 
     if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit") &&
-      (request.method === "GET" || (url.pathname === "/internal/admin/coverage-audit" && request.method === "POST"))
+      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest") &&
+      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
