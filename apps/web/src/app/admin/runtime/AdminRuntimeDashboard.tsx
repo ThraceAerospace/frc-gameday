@@ -169,7 +169,7 @@ export default function AdminRuntimeDashboard() {
     </div>
   );
 
-  return <div className="mx-auto min-h-dvh w-full max-w-[1600px] overflow-x-hidden px-4 py-7 sm:px-6 lg:px-8">
+  return <div className="custom-scrollbar mx-auto h-dvh w-full max-w-[1600px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-7 sm:px-6 lg:px-8">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</div><h1 className="mt-1 text-3xl font-bold tracking-tight">Operations console</h1><p className="mt-1 text-sm text-[var(--fv-muted)]">Inspect provider health, canonical data and scheduled work; dispatch controlled refresh and ingest operations.</p></div>
       <div className="flex items-center gap-2"><span className="text-xs text-[var(--fv-muted)]">Updated {lastUpdated ? age(lastUpdated) : "—"} · 10s</span><button onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">{loading ? "Refreshing…" : "Refresh"}</button><button onClick={() => { setAuthenticated(false); setOverview(null); setToken(""); }} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Sign out</button></div>
