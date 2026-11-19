@@ -283,7 +283,9 @@ test("assembles event-scoped team states from canonical team, event-team, and ma
   assert.equal(teamOne.team.team_number, 1);
   assert.deepEqual(teamOne.matches.map((item) => item.key), [match.key]);
   assert.deepEqual(teamFour.matches.map((item) => item.key), [match.key]);
-  assert.equal(teamOne.event_team, null);
+  assert.equal(teamOne.event_team.event_key, "2026test");
+  assert.equal(teamOne.event_team.team_key, "frc1");
+  assert.equal("tba_status" in teamOne.event_team, false);
   assert.equal(teamOne.analytics, undefined);
   assert.deepEqual(teamOne.sources.matches, sources.matches);
 });
