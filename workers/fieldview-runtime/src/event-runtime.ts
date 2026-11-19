@@ -428,6 +428,32 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  private async collectSeasonCohort(
+    eventState: ReturnType<typeof normalizeFieldViewEventState>,
+  ): Promise<import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot | undefined> {
+    const event = eventState.event;
+    const teams = eventState.teams;
+    const namespace = this.env.TEAM_RUNTIME;
+    if (!event || !teams || !namespace) return undefined;
+    const year = Number(event.key.slice(0, 4));
+    if (!Number.isSafeInteger(year) || year < 1992) return undefined;
+    const participants = teams.flatMap((team) =>
+      typeof team.team_number === "number" && typeof team.key === "string"
+        ? [{ teamNumber: team.team_number, teamKey: team.key }]
+        : [],
+    );
+    const snapshots = await Promise.all(participants.map(async ({ teamKey }) => {
+      try {
+        const stub = namespace.get(namespace.idFromName(teamKey));
+        const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
+          method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
+        }));
+        if (!response.ok) return null;
+        return await response.json() as FieldViewTeamSnapshot;
+      } catch { return null; }
+    }));
+    return buildCanonicalSeasonCohort(event, participants.map((team) => team.teamNumber), snapshots, Date.now());
+  }
   private async buildEventState(calculateAnalytics = false): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
@@ -553,9 +579,10 @@ export class EventRuntime {
       ),
     ];
     if (calculateAnalytics) {
+      const seasonCohort = await this.collectSeasonCohort(normalizedState);
       return {
         version: state.version,
-        state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords),
+        state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords, seasonCohort),
       };
     }
 
