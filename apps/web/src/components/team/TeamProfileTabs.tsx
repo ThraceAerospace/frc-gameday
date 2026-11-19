@@ -89,7 +89,10 @@ export default function TeamProfileTabs({
                 <p className="text-sm text-[var(--fv-muted)]">
                   {data.analyzedEventCount} of {data.eventCount} events analyzed · {data.matchCount} completed matches with team analytics
                 </p>
-                <span className="rounded-full border border-[var(--fv-border)] px-2.5 py-1 text-xs font-semibold text-[var(--fv-muted)]">{data.collection.state}</span>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full border border-[var(--fv-border)] px-2.5 py-1 text-xs font-semibold text-[var(--fv-muted)]">{data.collection.state}</span>
+                  <button type="button" className="text-sm font-semibold text-[var(--fv-brand)]" onClick={() => { setData(null); setRetry((value) => value + 1); }}>Refresh analysis</button>
+                </div>
               </div>
               {data.events.length === 0 ? (
                 <div className="rounded-xl border border-[var(--fv-border)] p-5 text-sm text-[var(--fv-muted)]">No official events were found for {year}.</div>
