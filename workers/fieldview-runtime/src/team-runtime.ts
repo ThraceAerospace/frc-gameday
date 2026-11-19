@@ -150,7 +150,10 @@ export class TeamRuntime {
     const yearText = url.searchParams.get("year");
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
-    if (publicRead) { await this.schedule(year, false); return this.snapshot(year); }
+    if (publicRead) {
+      if (!(admin && url.searchParams.get("noSchedule") === "1")) await this.schedule(year, false);
+      return this.snapshot(year);
+    }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
       // Explicit admin ingestion is synchronous: the 24-hour interval is only
       // the steady-state refresh cadence after this immediate acquisition.
