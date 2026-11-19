@@ -395,6 +395,7 @@ export class EventRuntime {
       return Response.json({
         event_key: this.eventKey,
         analytics: {
+          revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
           due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
           status: await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending"),
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
