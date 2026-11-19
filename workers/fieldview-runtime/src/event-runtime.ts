@@ -41,6 +41,16 @@ interface PollTask {
 const TASK_PREFIX = "task:"
 const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
+const ANALYTICS_DUE_KEY = "analytics:due-at";
+const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
+
+interface AnalyticsPublication {
+  sourceRevision: number;
+  calculatedAt: number;
+  matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
+  eventAnalytics?: unknown;
+  teamAnalytics: Array<{ team_key: string; analytics?: unknown }>;
+}
 
 function endpointStorageKey(endpoint: string): string {
   return `${ENDPOINT_PREFIX}${endpoint}`;
@@ -386,7 +396,7 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  private async buildEventState(): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
+  private async buildEventState(calculateAnalytics = false): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -510,9 +520,41 @@ export class EventRuntime {
         canonicalMatches.length, statboticsIncludedCount, now,
       ),
     ];
+    if (calculateAnalytics) {
+      return {
+        version: state.version,
+        state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords),
+      };
+    }
+
+    const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+    if (!publication) return { version: state.version, state: normalizedState };
+    const matchAnalytics = new Map(publication.matches.map((match) => [match.key, match]));
+    const matches = normalizedState.matches === undefined || normalizedState.matches === null
+      ? normalizedState.matches
+      : normalizedState.matches.map((match) => {
+          const published = matchAnalytics.get(match.key);
+          return published ? {
+            ...match,
+            ...(published.analysis === undefined ? {} : { analysis: published.analysis as typeof match.analysis }),
+            ...(published.flags === undefined ? {} : { flags: published.flags as typeof match.flags }),
+          } : match;
+        });
+    const teamAnalytics = new Map(publication.teamAnalytics.map((team) => [team.team_key, team.analytics]));
+    const team_states = normalizedState.team_states === undefined || normalizedState.team_states === null
+      ? normalizedState.team_states
+      : normalizedState.team_states.map((team) => {
+          const analytics = teamAnalytics.get(team.team_key);
+          return analytics === undefined ? team : { ...team, analytics: analytics as typeof team.analytics };
+        });
     return {
       version: state.version,
-      state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords),
+      state: {
+        ...normalizedState,
+        ...(matches === undefined ? {} : { matches }),
+        ...(team_states === undefined ? {} : { team_states }),
+        ...(publication.eventAnalytics === undefined ? {} : { analytics: publication.eventAnalytics as typeof normalizedState.analytics }),
+      },
     };
   }
 
@@ -611,11 +653,14 @@ export class EventRuntime {
           });
         }
       }
+      const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
+      const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
+      if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
       await this.rearm(transaction);
-      return due;
+      return { due, analyticsDue };
     });
 
-    for (const task of dueTasks) {
+    for (const task of dueTasks.due) {
       const succeeded = await this.pollEndpoint(task.endpoint);
       if (task.retryOnFailure === false) continue;
       await this.storage.transaction(async (transaction) => {
@@ -657,6 +702,43 @@ export class EventRuntime {
         await this.rearm(transaction);
       });
     }
+    if (dueTasks.analyticsDue) await this.recalculateAnalytics();
+  }
+
+  private async recalculateAnalytics(): Promise<void> {
+    // Run calculations from the Durable Object alarm, never from public reads.
+    // If sources change during calculation, discard the result and coalesce
+    // another run rather than publishing a mixed-revision analytics payload.
+    const calculated = await this.buildEventState(true);
+    const state = calculated.state;
+    const publication: AnalyticsPublication = {
+      sourceRevision: calculated.version,
+      calculatedAt: Date.now(),
+      matches: (state.matches ?? []).map((match) => ({
+        key: match.key,
+        ...(match.analysis === undefined ? {} : { analysis: match.analysis }),
+        ...(match.flags === undefined ? {} : { flags: match.flags }),
+      })),
+      ...(state.analytics === undefined ? {} : { eventAnalytics: state.analytics }),
+      teamAnalytics: (state.team_states ?? []).map((team) => ({
+        team_key: team.team_key,
+        ...(team.analytics === undefined ? {} : { analytics: team.analytics }),
+      })),
+    };
+    const publishedVersion = await this.storage.transaction(async (transaction) => {
+      const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
+      if (currentRevision !== calculated.version) {
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+        await this.rearm(transaction);
+        return null;
+      }
+      await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
+      const nextRevision = currentRevision + 1;
+      await transaction.put("snapshot-revision", nextRevision);
+      await this.rearm(transaction);
+      return nextRevision;
+    });
+    if (publishedVersion !== null) await this.publishSnapshotRevision(publishedVersion);
   }
 
   private async cancelRecurringPolls(clearCompletedUntil = false): Promise<void> {
@@ -678,9 +760,11 @@ export class EventRuntime {
   private async rearm(transaction: DurableObjectTransactionLike): Promise<void> {
     const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
     const completedUntil = await transaction.get<number>("lifecycle:completed-until");
+    const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
     const nextDue = [...tasks.values()].reduce<number | null>(
       (next, task) => next === null || task.dueAt < next ? task.dueAt : next,
-      completedUntil ?? null,
+      [completedUntil, analyticsDueAt].filter((value): value is number => value !== undefined)
+        .reduce<number | null>((next, value) => next === null || value < next ? value : next, null),
     );
     if (nextDue === null) await transaction.deleteAlarm();
     else await transaction.setAlarm(nextDue);
@@ -757,6 +841,7 @@ export class EventRuntime {
       if (next.revision !== latest.revision) {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
       }
 
       // Preserve each accepted upstream 200 payload as an immutable source
@@ -876,6 +961,7 @@ export class EventRuntime {
             (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update),
           );
           await transaction.put(key, next);
+          await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
           const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
           await transaction.put("snapshot-revision", snapshotRevision + 1);
         }
@@ -900,6 +986,10 @@ export class EventRuntime {
         );
       }
 
+      if (messageType !== "match_score" && messageType !== "match_video" &&
+          ["upcoming_match", "schedule_updated", "starting_comp_level", "alliance_selection"].includes(messageType)) {
+        await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
+      }
       await this.rearm(transaction);
       const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
       return { accepted: true, snapshotVersion: messageType === "match_score" || messageType === "match_video" ? snapshotVersion : null };
