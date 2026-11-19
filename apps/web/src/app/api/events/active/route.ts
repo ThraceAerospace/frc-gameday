@@ -1,10 +1,10 @@
 import { getCanonicalEventDiscovery } from "@/lib/events/serverSnapshot";
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 
 type EventState = "upcoming" | "in_progress" | "complete";
 
 type ActiveEvent = Pick<
-  TBAEvent,
+  FieldViewEvent,
   | "key"
   | "name"
   | "short_name"
@@ -16,10 +16,6 @@ type ActiveEvent = Pick<
   | "end_date"
 > & {
   state: EventState;
-  flags: {
-    hasDivisions: boolean;
-    isPastStart: boolean;
-  };
 };
 
 function parseEventDate(
@@ -87,13 +83,6 @@ function getEventState(
   return "in_progress";
 }
 
-function getEventWeight(event: ActiveEvent): number {
-  return (
-    (event.flags.hasDivisions ? 1000 : 0) +
-    (event.flags.isPastStart ? 10 : 0)
-  );
-}
-
 export async function GET() {
   try {
     const events = await getCanonicalEventDiscovery(new Date().getUTCFullYear());
@@ -123,30 +112,10 @@ export async function GET() {
         };
       })
       .filter(({ start, end }) => start >= now || end >= now)
-      .map(
-        ({
-          event,
-          start,
-          end,
-        }): ActiveEvent => ({
-          key: event.key,
-          name: event.name,
-          short_name: event.short_name,
-          event_type_string: event.event_type_string,
-          city: event.city,
-          state_prov: event.state_prov,
-          country: event.country,
-          start_date: event.start_date,
-          end_date: event.end_date,
-
-          state: getEventState(start, end, now),
-
-          flags: {
-            hasDivisions: (event.division_keys?.length ?? 0) > 0,
-            isPastStart: start <= now,
-          },
-        })
-      );
+      .map(({ event, start, end }): ActiveEvent => ({
+        event,
+        state: getEventState(start, end, now),
+      }));
 
     const stateOrder: Record<EventState, number> = {
       in_progress: 0,
@@ -158,10 +127,10 @@ export async function GET() {
       (a, b) =>
         stateOrder[a.state] - stateOrder[b.state] ||
         a.start_date.localeCompare(b.start_date) ||
-        getEventWeight(b) - getEventWeight(a)
+        (b.event.division_keys?.length ?? 0) - (a.event.division_keys?.length ?? 0)
     );
 
-    return Response.json(enriched);
+    return Response.json(enriched.map(({ event }) => event));
   } catch (error) {
     console.error("Failed to fetch active events:", error);
 
