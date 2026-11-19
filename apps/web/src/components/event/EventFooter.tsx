@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  TBAEliminationAlliance,
-  TBAEventTeamStatuses,
-} from "@/lib/tba/types";
+import type { FieldViewEventTeam, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
@@ -24,9 +21,9 @@ type EventFooterProps = {
   team?: string[];
   nextMatch?: Parameters<typeof MatchStrip>[0]["nextMatch"];
   lastMatch?: Parameters<typeof MatchStrip>[0]["lastMatch"];
-  playoffAlliances?: TBAEliminationAlliance[];
+  playoffAlliances?: FieldViewPlayoffAlliance[];
   playoffType?: number | null;
-  teamsStatuses: TBAEventTeamStatuses;
+  teamsStatuses: Record<string, FieldViewEventTeam["tba_status"]>;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
   priorityEditing?: boolean;
   activeHighlighted?: boolean;
