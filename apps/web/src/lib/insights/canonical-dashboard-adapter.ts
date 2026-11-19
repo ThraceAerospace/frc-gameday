@@ -192,6 +192,20 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
   const qualification = analytics.qualification;
   const prediction = analytics.prediction_summary ?? qualification?.score_prediction;
   const cohort = analytics.season_cohort;
+  // Older publications may not include collection counters. Reconcile them
+  // against the match-level analysis that is actually being rendered.
+  const publishedProcessedMatchCount = matches.filter(({ match }) =>
+    match.analysis !== undefined || match.flags !== undefined,
+  ).length;
+  const processedMatchCount = Math.max(
+    analytics.collection?.processed_match_count ?? 0,
+    publishedProcessedMatchCount,
+  );
+  const totalMatchCount = snapshot.matches?.length ?? analytics.collection?.total_match_count ?? matches.length;
+  const unavailableMatchCount = Math.max(
+    analytics.collection?.unavailable_match_count ?? 0,
+    matches.filter((item) => item.statboticsStatus === "unavailable").length,
+  );
   return {
     event: snapshot.event!,
     rankings: snapshot.rankings ?? null,
@@ -400,10 +414,13 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
       winPredictionAccuracy: prediction?.win_prediction_accuracy ?? null,
     },
     collection: {
-      state: analytics.collection?.state ?? "queued",
-      processedMatchCount: analytics.collection?.processed_match_count ?? 0,
-      totalMatchCount: analytics.collection?.total_match_count ?? snapshot.matches?.length ?? 0,
-      unavailableMatchCount: analytics.collection?.unavailable_match_count ?? 0,
+      state: analytics.collection?.state ??
+        (processedMatchCount >= totalMatchCount
+          ? unavailableMatchCount > 0 ? "partial" : "complete"
+          : processedMatchCount > 0 ? "partial" : "queued"),
+      processedMatchCount,
+      totalMatchCount,
+      unavailableMatchCount,
       statboticsFetchError: analytics.collection?.statbotics_fetch_error ?? null,
       updatedAt: analytics.collection?.updated_at ?? publication.calculatedAt,
     },
