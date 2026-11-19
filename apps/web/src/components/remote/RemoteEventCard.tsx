@@ -4,14 +4,15 @@ import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatche
 import { formatEventName, formatTeamNumber, matchCode, matchLongName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
+import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import { getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import NextMatchCountdown from "../match/NextMatchCountdown";
 
 type Props = {
   eventKey: string;
   position: number;
   state: TileSurfaceState;
-  eventState?: EventStateSnapshot;
+  eventSnapshot?: FieldViewEventSnapshot;
   actions: TileSurfaceActions;
 };
 
@@ -19,30 +20,21 @@ export default function RemoteEventCard({
   eventKey,
   position,
   state,
-  eventState,
+  eventSnapshot,
   actions,
 }: Props) {
-  const event = eventState?.event;
-  const matches = eventState?.matches ?? [];
-  const eventNextMatch = eventState?.eventNextMatch ?? null;
-  const websocketStatus = eventState?.websocketStatus;
-  const websocketStale = eventState?.websocketStale ?? false;
+  const event = eventSnapshot?.event ?? null;
+  const matches = eventSnapshot?.matches ?? [];
+  const eventNextMatch = getNextMatch(sortMatches(matches));
   const trackedTeams = state.eventConfigs[eventKey]?.trackedTeams ?? [];
   const { trackedNextMatches } = useTrackedMatches(matches, trackedTeams);
   const selected = state.activeKey === eventKey;
-  const upcomingMatch = eventState?.upcomingMatchKey
-    ? matches.find((item) => item.key === eventState.upcomingMatchKey) ?? null
-    : null;
-  const upcomingTeams = upcomingMatch
-    ? trackedTeams.filter((team) => [
-        ...(upcomingMatch.alliances.red.team_keys ?? []),
-        ...(upcomingMatch.alliances.blue.team_keys ?? []),
-      ].includes(team))
-    : [];
-  const upcomingAlert = Boolean(
-    eventState?.upcomingMatchKey &&
-    eventState.upcomingMatchTeamKeys.some((team) => trackedTeams.includes(team)),
-  );
+  const upcomingMatch = eventNextMatch;
+  const upcomingTeamKeys = [
+    ...(upcomingMatch?.alliances.red.team_keys ?? []),
+    ...(upcomingMatch?.alliances.blue.team_keys ?? []),
+  ];
+  const upcomingAlert = Boolean(upcomingMatch && trackedTeams.some((team) => upcomingTeamKeys.includes(team)));
 
   const match = eventNextMatch;
   const redTeams = match?.alliances.red.team_keys ?? [];
@@ -76,24 +68,10 @@ export default function RemoteEventCard({
               <span
                 className={
                   "h-1.5 w-1.5 shrink-0 rounded-full " +
-                  (websocketStatus === "connected"
-                    ? websocketStale
-                      ? "bg-[var(--fv-review)]"
-                      : "bg-green-500"
-                    : websocketStatus === "connecting"
-                      ? "bg-yellow-500"
-                      : "bg-neutral-600")
+                  (eventSnapshot ? "bg-green-500" : "bg-neutral-600")
                 }
                 title={
-                  websocketStatus === undefined
-                    ? "Waiting for display live-update status"
-                    : websocketStatus === "connected"
-                      ? websocketStale
-                        ? "WebSocket quiet; using TBA fallback polling"
-                        : "Live updates connected"
-                      : websocketStatus === "connecting"
-                        ? "Connecting to live updates"
-                        : "Live updates disconnected"
+                  eventSnapshot ? "Canonical event snapshot available" : "Waiting for canonical event snapshot"
                 }
               />
               <span className="truncate">
@@ -117,7 +95,7 @@ export default function RemoteEventCard({
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
             Next Match
           </span>
-          {match ? <NextMatchCountdown nextMatch={match} /> : null}
+          {match ? <NextMatchCountdown nextMatch={match} eventTimezone={event?.timezone} /> : null}
         </div>
 
         {match ? (
