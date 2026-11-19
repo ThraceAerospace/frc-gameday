@@ -298,6 +298,22 @@ export class EventRuntime {
       return Response.json({ lifecycle, attempted: true, event_key: this.eventKey });
     }
 
+    if (request.method === "POST" && url.pathname === "/recalculate") {
+      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+      await this.storage.put("analytics:status", "pending");
+      await this.storage.transaction((transaction) => this.rearm(transaction));
+      await this.alarm();
+      return Response.json({
+        event_key: this.eventKey,
+        analytics: {
+          status: await this.storage.get<string>("analytics:status") ?? "pending",
+          last_calculated_at: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.calculatedAt ?? null,
+          source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
+          last_error: await this.storage.get<string>("analytics:last-error") ?? null,
+        },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/refresh") {
       const body: unknown = await request.json().catch(() => ({}));
       const requested = isRecord(body) && Array.isArray(body.endpoints) ? body.endpoints : [...this.allowedEndpoints];
