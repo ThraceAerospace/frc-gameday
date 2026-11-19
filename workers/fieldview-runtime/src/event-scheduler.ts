@@ -1056,14 +1056,15 @@ export class EventScheduler {
         } else {
           const verify = await stub.fetch(new Request("https://team-runtime/state", { headers }));
           if (!verify.ok) throw new Error("Unable to verify TeamRuntime state: HTTP " + verify.status);
-          const state = await verify.json() as { endpoints?: Array<{ last_fetched_at?: number | null; status?: string }> };
+          const state = await verify.json() as { endpoints?: Array<{ last_fetched_at?: number | null; expires_at?: number | null; status?: string }> };
           const endpoints = state.endpoints ?? [];
           const acquired = endpoints.filter((item) => item.last_fetched_at != null).length;
           const unavailable = endpoints.filter((item) => item.status === "unavailable").length;
           const failed = endpoints.filter((item) => item.status === "failed").length;
+          const stale = endpoints.filter((item) => item.status === "stale" || (item.expires_at != null && item.expires_at < Date.now())).length;
           const snapshot = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers }));
           if (!snapshot.ok) throw new Error("TeamRuntime season snapshot generation returned HTTP " + snapshot.status);
-          if (acquired === resources.length && failed === 0 && unavailable === 0) job.counts.teams_complete += 1;
+          if (acquired === resources.length && failed === 0 && unavailable === 0 && stale === 0) job.counts.teams_complete += 1;
           else if (acquired > 0) job.counts.teams_partial += 1;
           else job.counts.teams_failed += 1;
           await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
