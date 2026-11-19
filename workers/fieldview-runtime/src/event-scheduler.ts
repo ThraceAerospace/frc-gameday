@@ -147,6 +147,8 @@ interface ProviderRequestLease { leaseId: string; owner: string; endpoint: strin
 
 interface SeasonIngestJob {
   year: number;
+  eventDiscoveryUpdatedAt: number;
+  teamDiscoveryUpdatedAt: number;
   status: "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
   phase: "teams" | "events" | "complete";
   teamKeys: string[];
@@ -172,7 +174,8 @@ interface SeasonIngestJob {
 
 const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
 const seasonIngestSummary = (job: SeasonIngestJob) => ({
-  year: job.year, status: job.status, phase: job.phase,
+  year: job.year, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
+  team_discovery_updated_at: job.teamDiscoveryUpdatedAt, status: job.status, phase: job.phase,
   team_cursor: job.teamCursor, team_total: job.teamKeys.length,
   team_resource_cursor: job.teamResourceCursor,
   event_cursor: job.eventCursor, event_total: job.eventKeys.length,
@@ -416,7 +419,8 @@ export class EventScheduler {
         if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
         const now = Date.now();
         job = {
-          year, status: "running", phase: "teams", teamKeys, eventKeys,
+          year, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
+          status: "running", phase: "teams", teamKeys, eventKeys,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -815,6 +819,16 @@ export class EventScheduler {
       job.recentErrors.push({ kind, key: entityKey, detail: detail.slice(0, 240), at: Date.now() });
       if (job.recentErrors.length > 100) job.recentErrors.splice(0, job.recentErrors.length - 100);
     };
+    const currentEventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
+    const currentTeamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + job.year);
+    if (currentEventDiscovery?.updatedAt !== job.eventDiscoveryUpdatedAt ||
+        currentTeamDiscovery?.updatedAt !== job.teamDiscoveryUpdatedAt) {
+      job.status = "paused";
+      recordError("event", "season-discovery", "The retained discovery snapshot changed; review and restart the job from a fresh preview.");
+      job.updatedAt = Date.now();
+      await this.storage.put(key, job);
+      return;
+    }
     const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
     const requestInterval = intervalValue === undefined ? 1_000 : Number(intervalValue);
     const retry = (detail: string, kind: "team" | "event", entityKey: string) => {
