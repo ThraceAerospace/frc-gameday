@@ -66,3 +66,16 @@ Metric-level results continue to expose their own sample size, population, compa
 6. Remove the legacy Next.js calculation/acquisition path only after backend parity and frontend consumption are established.
 
 A migration can temporarily break a view or expose an existing calculation defect; that is acceptable during this branch's development. It is not acceptable to silently change semantics or claim that the calculations are verified when they are not.
+
+## Current migration implementation
+
+- The original pure calculation implementation has been moved, without changing its calculation bodies, from `apps/web/src/lib/insights/calculations.ts` into `packages/analytics/src/calculations.ts`.
+- The web calculation module is now a compatibility re-export. This removes the implementation from the app layer while the orchestration and provider acquisition paths are migrated.
+- `packages/analytics/src/definitions.ts` contains reviewable versioned definitions for the existing score residual, EPA, team contribution, qualification, penalty, playoff, season comparison, and match-review calculations.
+- `packages/analytics/src/audit.ts` creates a deterministic SHA-256 digest over a normalized input manifest and records the exact definition versions used.
+- Match review flags are now calculated in the analytics package and attached to the server-produced event analytics response. The dashboard renders the supplied flag evidence instead of recomputing those thresholds in the browser.
+- The match flag definitions preserve the existing implementation's threshold behavior, including upper-middle median/MAD selection for even-sized samples and nearest-rank quantiles. Those conventions remain subject to independent hand verification; they were not silently corrected during migration.
+
+### Remaining ownership work
+
+The current progressive analytics job still performs orchestration and provider acquisition in the Next.js server. The next stage is to move this orchestration into the existing EventRuntime, calculate from its canonical source records, publish `FieldViewMatch.analysis` and `FieldViewMatch.flags`, and embed event/team analytics into `FieldViewEventState` and `FieldViewTeamState`. Until that stage is complete, the Worker does not yet publish the new analytics results as authoritative canonical state.
