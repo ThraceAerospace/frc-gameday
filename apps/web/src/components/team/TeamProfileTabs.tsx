@@ -37,9 +37,10 @@ export default function TeamProfileTabs({
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (tab !== "analysis" || data || loading) return;
+    if (tab !== "analysis" || data) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -57,7 +58,7 @@ export default function TeamProfileTabs({
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tab, teamNumber, year, data, loading]);
+  }, [tab, teamNumber, year, data, retry]);
 
   return (
     <section className="mt-8">
@@ -79,7 +80,7 @@ export default function TeamProfileTabs({
           {error && (
             <div className="rounded-xl border border-[var(--fv-border)] p-5 text-sm text-[var(--fv-muted)]">
               <p>{error}</p>
-              <button type="button" className="mt-3 font-semibold text-[var(--fv-brand)]" onClick={() => { setData(null); setError(null); }}>Try again</button>
+              <button type="button" className="mt-3 font-semibold text-[var(--fv-brand)]" onClick={() => { setData(null); setError(null); setRetry((value) => value + 1); }}>Try again</button>
             </div>
           )}
           {data && (
