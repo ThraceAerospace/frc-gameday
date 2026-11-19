@@ -73,10 +73,11 @@ export default function AdminOperationsDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [kind, setKind] = useState<Kind>("event");
   const [query, setQuery] = useState("");
+  const [year, setYear] = useState(new Date().getUTCFullYear());
   const [page, setPage] = useState<InventoryPage | null>(null);
   const [cursor, setCursor] = useState(0);
   const [entity, setEntity] = useState<Entity | null>(null);
-  const [selected, setSelected] = useState<{ kind: Kind; key: string } | null>(null);
+  const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
   const [tab, setTab] = useState<"home" | "events" | "teams" | "system">("home");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -103,27 +104,27 @@ export default function AdminOperationsDashboard() {
     if (!token) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ inventory: kind, q: query, cursor: String(nextCursor), limit: "50" });
+      const params = new URLSearchParams({ inventory: kind, q: query, cursor: String(nextCursor), limit: "50", year: String(year) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to search inventory");
       setPage(body as InventoryPage); setCursor(nextCursor); setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Inventory search failed"); }
     finally { setLoading(false); }
-  }, [token, kind, query, requestHeaders]);
+  }, [token, kind, query, year, requestHeaders]);
 
-  const openEntity = useCallback(async (entityKind: Kind, key: string) => {
-    setSelected({ kind: entityKind, key });
+  const openEntity = useCallback(async (entityKind: Kind, key: string, entityYear = year) => {
+    setSelected({ kind: entityKind, key, year: entityYear });
     setEntity(null); setError(""); setMessage("");
-    window.history.pushState(null, "", "/admin/runtime?" + entityKind + "=" + encodeURIComponent(key));
+    window.history.pushState(null, "", "/admin/runtime?" + entityKind + "=" + encodeURIComponent(key) + "&year=" + entityYear);
     try {
-      const params = new URLSearchParams({ kind: entityKind, key });
+      const params = new URLSearchParams({ kind: entityKind, key, year: String(entityYear) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load command center");
       setEntity({ key, status: response.status, state: body as EntityState });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load entity state"); }
-  }, [requestHeaders]);
+  }, [requestHeaders, year]);
 
   const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string) => {
     setBusy(true); setMessage(""); setError("");
@@ -136,10 +137,10 @@ export default function AdminOperationsDashboard() {
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
       setMessage(action.replaceAll("-", " ") + " accepted.");
       await refresh(true);
-      if (entityKind !== "system" && key) await openEntity(entityKind, key);
+      if (entityKind !== "system" && key) await openEntity(entityKind, key, selected?.year ?? year);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
-  }, [requestHeaders, refresh, openEntity]);
+  }, [requestHeaders, refresh, openEntity, selected, year]);
 
   useEffect(() => {
     if (!authenticated || !token) return;
@@ -157,21 +158,23 @@ export default function AdminOperationsDashboard() {
     if (!authenticated || selected) return;
     const params = new URLSearchParams(window.location.search);
     const eventKey = params.get("event"), teamKey = params.get("team");
-    if (eventKey) void openEntity("event", eventKey);
-    else if (teamKey) void openEntity("team", teamKey);
-  }, [authenticated, selected, openEntity]);
+    const selectedYear = Number(params.get("year") ?? year);
+    if (eventKey) void openEntity("event", eventKey, selectedYear);
+    else if (teamKey) void openEntity("team", teamKey, selectedYear);
+  }, [authenticated, selected, openEntity, year]);
 
   useEffect(() => {
     const handlePop = () => {
       const params = new URLSearchParams(window.location.search);
       const eventKey = params.get("event"), teamKey = params.get("team");
-      if (eventKey) void openEntity("event", eventKey);
-      else if (teamKey) void openEntity("team", teamKey);
+      const selectedYear = Number(params.get("year") ?? year);
+      if (eventKey) void openEntity("event", eventKey, selectedYear);
+      else if (teamKey) void openEntity("team", teamKey, selectedYear);
       else setSelected(null);
     };
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
-  }, [openEntity]);
+  }, [openEntity, year]);
 
   const sampled = useMemo(() => {
     const events = overview?.events ?? [], teams = overview?.teams ?? [];
@@ -224,13 +227,13 @@ export default function AdminOperationsDashboard() {
     </div>}
 
     {(tab === "events" || tab === "teams") && !selected && <section className="mt-6 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{tab === "events" ? "Event directory" : "Team directory"}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Search the full registered inventory and open an individual command center.</p></div><div className="flex gap-2"><input aria-label="Search inventory" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "events" ? "Search event key…" : "Search team key…"} className="w-64 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-sm" /><button onClick={() => void loadInventory(0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Search</button></div></div>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{tab === "events" ? "Event directory" : "Team directory"}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Search the full registered inventory and open an individual command center.</p></div><div className="flex flex-wrap gap-2"><label className="flex items-center gap-2 text-xs text-[var(--fv-muted)]">Season <input aria-label="Inventory season year" type="number" min="1992" max={new Date().getUTCFullYear() + 1} value={year} onChange={(event) => setYear(Number(event.target.value))} className="w-24 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><input aria-label="Search inventory" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "events" ? "Search event key…" : "Search team key…"} className="w-64 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-sm" /><button onClick={() => void loadInventory(0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Search</button></div></div>
       <Panel><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{page?.total ?? 0} matching registered {kind}s</p><p className="text-xs text-[var(--fv-muted)]">50 per page</p></div><div className="mt-3 divide-y divide-[var(--fv-border)]">{(page?.keys ?? []).map((key) => {
         const summary = (kind === "event" ? overview?.events : overview?.teams)?.find((item) => item.key === key);
         const state = summary?.state;
         const endpointCount = endpointRows(state).length;
         const analyticsStatus = state?.analytics?.status;
-        return <button key={key} onClick={() => void openEntity(kind, key)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-[var(--fv-brand-soft)]/30"><span><strong className="text-sm">{key}</strong><span className="ml-3 text-xs text-[var(--fv-muted)]">{endpointCount} resources{kind === "event" ? " · analytics " + (analyticsStatus ?? "not calculated") : ""}</span></span><span className="text-xs text-[var(--fv-brand)]">Open command center →</span></button>;
+        return <button key={key} onClick={() => void openEntity(kind, key, year)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-[var(--fv-brand-soft)]/30"><span><strong className="text-sm">{key}</strong><span className="ml-3 text-xs text-[var(--fv-muted)]">{endpointCount} resources{kind === "event" ? " · analytics " + (analyticsStatus ?? "not calculated") : ""}</span></span><span className="text-xs text-[var(--fv-brand)]">Open command center →</span></button>;
       })}{!page?.keys.length && <p className="py-8 text-center text-sm text-[var(--fv-muted)]">No registered objects match this search.</p>}</div><div className="mt-3 flex items-center justify-between"><button disabled={cursor === 0 || loading} onClick={() => void loadInventory(Math.max(0, cursor - 50))} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs disabled:opacity-40">Previous</button><span className="text-xs text-[var(--fv-muted)]">{page ? page.cursor + 1 : 0}–{Math.min((page?.cursor ?? 0) + 50, page?.total ?? 0)} of {page?.total ?? 0}</span><button disabled={page?.next_cursor == null || loading} onClick={() => void loadInventory(page?.next_cursor ?? 0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs disabled:opacity-40">Next</button></div></Panel>
     </section>}
 
