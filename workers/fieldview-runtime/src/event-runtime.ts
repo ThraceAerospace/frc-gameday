@@ -811,15 +811,15 @@ export class EventRuntime {
       // has a TeamRuntime season snapshot with its TBA event history available.
       // Missing Statbotics records remain explicit partial cohort rows; missing
       // team/event discovery is a hard prerequisite and is retried separately.
-      if (!seasonCollection || seasonCollection.cohort.state === "discovering") {
+      if (this.env.TEAM_RUNTIME && (!seasonCollection || seasonCollection.cohort.state === "discovering")) {
         throw new Error("SEASON_COHORT_NOT_READY: waiting for participant TeamRuntime season histories");
       }
       return {
         version: state.version,
         state: await calculateCanonicalMatchAnalytics(
           normalizedState,
-          [...inputRecords, ...seasonCollection.inputs],
-          seasonCollection.cohort,
+          [...inputRecords, ...(seasonCollection?.inputs ?? [])],
+          seasonCollection?.cohort,
         ),
       };
     }
