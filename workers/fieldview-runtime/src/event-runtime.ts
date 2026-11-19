@@ -381,6 +381,7 @@ export class EventRuntime {
           status: await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending"),
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
+          last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         lifecycle: {
           completed_until: await this.storage.get<number>("lifecycle:completed-until") ?? null,
@@ -756,6 +757,7 @@ export class EventRuntime {
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
       await transaction.put("analytics:status", "succeeded");
       await transaction.delete("analytics:last-error");
+      await transaction.delete(ANALYTICS_DUE_KEY);
       const nextRevision = currentRevision + 1;
       await transaction.put("snapshot-revision", nextRevision);
       await this.rearm(transaction);
