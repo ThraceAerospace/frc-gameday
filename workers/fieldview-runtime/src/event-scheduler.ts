@@ -187,7 +187,7 @@ const seasonIngestSummary = (job: SeasonIngestJob) => ({
   team_resource_cursor: job.teamResourceCursor, team_resources_per_team: job.teamResourceCount,
   event_cursor: job.eventCursor, event_total: job.eventKeys.length,
   event_resource_cursor: job.eventResourceCursor, event_resources_per_event: job.eventResourceCount,
-  event_resource_cursor: job.eventResourceCursor, next_due_at: job.nextDueAt ?? null,
+  next_due_at: job.nextDueAt ?? null,
   counts: job.counts, recent_errors: job.recentErrors,
   started_at: job.startedAt, updated_at: job.updatedAt,
 });
