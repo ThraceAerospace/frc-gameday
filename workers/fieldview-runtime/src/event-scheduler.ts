@@ -977,7 +977,7 @@ export class EventScheduler {
           const snapshot = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers }));
           if (!snapshot.ok) throw new Error("TeamRuntime season snapshot generation returned HTTP " + snapshot.status);
           if (acquired === resources.length && failed === 0 && unavailable === 0) job.counts.teams_complete += 1;
-          else if (acquired > 0 || unavailable > 0 || failed > 0) job.counts.teams_partial += 1;
+          else if (acquired > 0) job.counts.teams_partial += 1;
           else job.counts.teams_failed += 1;
           await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
           job.teamCursor += 1;
