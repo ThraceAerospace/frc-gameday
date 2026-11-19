@@ -248,11 +248,23 @@ export class EventScheduler {
           !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
         return Response.json({ error: "Invalid inventory query" }, { status: 400 });
       }
+      const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
+      }
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const keys = [...new Set(await this.storage.get<string[]>(storageKey) ?? [])]
+      const registered = await this.storage.get<string[]>(storageKey) ?? [];
+      const discovery = kind === "event"
+        ? await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)
+        : await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+      const discoveredKeys = kind === "event"
+        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
+        : (discovery as TeamDiscoveryCache | undefined)?.teams.map((item) => item.key) ?? [];
+      const keys = [...new Set([...registered, ...discoveredKeys])]
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
-        kind, query, total: keys.length, cursor,
+        kind, year, query, total: keys.length, cursor,
+        discovery_ready: discovery !== undefined,
         next_cursor: cursor + limit < keys.length ? cursor + limit : null,
         keys: keys.slice(cursor, cursor + limit),
       }, { headers: { "Cache-Control": "no-store" } });
@@ -265,9 +277,19 @@ export class EventScheduler {
         return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       }
       const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
+      const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid entity season year" }, { status: 400 });
+      }
       const registryKey = kind === "event" ? "registry:events" : "registry:teams";
       const registered = await this.storage.get<string[]>(registryKey) ?? [];
-      if (!registered.includes(key)) return Response.json({ error: "Entity is not registered" }, { status: 404 });
+      const discovery = kind === "event"
+        ? await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)
+        : await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+      const discovered = kind === "event"
+        ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
+        : (discovery as TeamDiscoveryCache | undefined)?.teams.some((item) => item.key === key) ?? false;
+      if (!registered.includes(key) && !discovered) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
       try {
         if (kind === "event") {
           const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(key));
