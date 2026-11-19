@@ -140,6 +140,8 @@ interface DiscoveryCache {
   checkedAt?: number;
 }
 
+interface ProviderRequestLease { leaseId: string; owner: string; endpoint: string; expiresAt: number; }
+
 interface SeasonIngestJob {
   year: number;
   status: "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
@@ -264,6 +266,47 @@ export class EventScheduler {
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+    if (request.method === "POST" && url.pathname === "/provider-request/acquire") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid provider request lease" }, { status: 400 });
+      const value = body as Record<string, unknown>;
+      if (typeof value.owner !== "string" || value.owner.length > 120 ||
+          typeof value.endpoint !== "string" || value.endpoint.length > 500) {
+        return Response.json({ error: "Provider request owner and endpoint are required" }, { status: 400 });
+      }
+      const now = Date.now();
+      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+      const interval = intervalValue === undefined ? 1_000 : Number(intervalValue);
+      if (!Number.isSafeInteger(interval) || interval < 100) return Response.json({ error: "PROVIDER_REQUEST_INTERVAL_MS must be an integer of at least 100" }, { status: 500 });
+      const result = await this.storage.transaction(async (tx) => {
+        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
+        const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
+        if (current && current.expiresAt > now) return { granted: false, retryAt: Math.max(current.expiresAt, nextAt) };
+        if (nextAt > now) return { granted: false, retryAt: nextAt };
+        const leaseId = crypto.randomUUID();
+        await tx.put("provider-gate:lease", { leaseId, owner: value.owner as string, endpoint: value.endpoint as string, expiresAt: now + 60_000 } satisfies ProviderRequestLease);
+        return { granted: true, leaseId };
+      });
+      return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (request.method === "POST" && url.pathname === "/provider-request/release") {
+      const body: unknown = await request.json().catch(() => null);
+      const leaseId = body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>).lease_id : null;
+      if (typeof leaseId !== "string") return Response.json({ error: "A provider request lease id is required" }, { status: 400 });
+      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+      const interval = intervalValue === undefined ? 1_000 : Number(intervalValue);
+      const released = await this.storage.transaction(async (tx) => {
+        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
+        if (!current || current.leaseId !== leaseId) return false;
+        await tx.delete("provider-gate:lease");
+        await tx.put("provider-gate:next-at", Date.now() + interval);
+        return true;
+      });
+      return Response.json({ released }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/register") {
       const body: unknown = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid registration" }, { status: 400 });
@@ -283,6 +326,10 @@ export class EventScheduler {
     }
 
     if (request.method === "POST" && url.pathname === "/admin/discover-year") {
+      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+      if ([...activeJobs.values()].some((job) => job.status === "running")) {
+        return Response.json({ error: "Pause or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
+      }
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
