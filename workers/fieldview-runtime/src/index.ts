@@ -145,7 +145,7 @@ export default {
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
-        const teamKey = /^\\d+$/.test(key) ? "frc" + key : key;
+        const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
         await registerRuntimeObject(env, "team", teamKey);
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
         return stub.fetch(new Request("https://team-runtime/" + action + "?year=" + year, {
