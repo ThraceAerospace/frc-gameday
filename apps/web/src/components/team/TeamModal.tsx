@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type {
-  TBATeam,
-  TBATeamEventStatus,
-} from "@/lib/tba/types";
+import type { FieldViewTeam, FieldViewEventTeam } from "@fieldview/domain";
 
 import Rank from "./Rank";
 import TeamRecord from "./Record";
@@ -12,15 +9,15 @@ import TeamRecord from "./Record";
 type TeamModalProps = {
   open: boolean;
   onClose: () => void;
-  teams?: TBATeam[];
-  teamsStatuses?: globalThis.Record<string, TBATeamEventStatus | null>;
+  teams?: FieldViewTeam[];
+  teamsStatuses?: globalThis.Record<string, FieldViewEventTeam["tba_status"] | null>;
   trackedTeams?: string[];
   remapTeams?: Record<string, string> | null;
   onToggle: (teamKey: string) => void;
 };
 
 function getDisplayTeamNumber(
-  team: TBATeam,
+  team: FieldViewTeam,
   remapTeams: Record<string, string> | null | undefined,
 ) {
   const mappedKey = remapTeams?.[team.key];
@@ -30,7 +27,7 @@ function getDisplayTeamNumber(
 }
 
 function getDisplayTeamName(
-  team: TBATeam,
+  team: FieldViewTeam,
   displayTeamNumber: string,
   isRemapped: boolean,
 ) {
