@@ -20,11 +20,13 @@ For local development, keep `FIELDVIEW_ADMIN_ACCESS_TOKEN` in the web app's igno
 - Registered EventRuntime and TeamRuntime instances.
 - Resource status, revision, last successful fetch, last attempt, expiry, HTTP status, webhook time when present, and recorded errors.
 - Task due time, interval, attempts, retry-on-failure policy when exposed, and webhook-triggered authoritative refetch times.
-- Provider/resource-specific labels for EventRuntime resources and TeamRuntime identity, district, season-event, and media endpoints.
+- Provider/resource-specific labels for EventRuntime resources and TeamRuntime identity, district, season-event, media, Statbotics, and FRC Colors endpoints.
+- Record counts, included/excluded counts, data shape, HTTP diagnostics, and EPA-bearing Statbotics match counts where the raw provider payload exposes those fields.
+- Authenticated operational controls for event refresh, individual TBA resource refresh, Statbotics refresh, analytics recalculation, team refresh/seed, and scheduler start/stop.
 - Pending Durable Object tasks, due times, intervals, attempts, and webhook-triggered authoritative refetch times.
 - The single shared Multiplexer connection and subscription counts.
 
-The dashboard refreshes every ten seconds. It is read-only; it does not start/stop the scheduler, trigger provider requests, or mutate Durable Object state.
+The dashboard refreshes every ten seconds. Its tabs cover overview, event objects, team objects, provider health, scheduled tasks, and system controls. Authenticated operations can refresh all event resources, refresh an individual TBA resource, refresh Statbotics event matches, force canonical analytics recalculation, refresh or seed a team profile, and start or stop the global scheduler. Mutations are dispatched through the Worker admin router; the browser never receives the Worker service token.
 
 ## Inventory semantics and limits
 
