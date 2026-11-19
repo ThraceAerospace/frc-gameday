@@ -67,7 +67,7 @@ The job is complete only when every discovered event has an EventState publicati
 5. **Pause, resume, cancel.** Pausing prevents new provider requests but preserves progress. Resume continues from the cursor. Cancellation is terminal and must not erase the audit record.
 6. **Bounded retry.** Retry transient failures with capped backoff and a finite attempt count. Permanent failures are recorded and skipped; they must not stall the entire season indefinitely.
 7. **Idempotency and reuse.** Skip resources already acquired for the selected season unless the operator explicitly chooses a future force-refresh mode. Completed EventState and EventAnalytics publications are reused on retry. Never discard previously acquired source data when a request fails.
-8. **Request accounting.** Distinguish planned, attempted, successful, failed, retried, and skipped requests. The estimate is a lower-bound planning figure; retries and unrelated normal polling are reported separately.
+8. **Request accounting.** Distinguish planned, attempted, successful, failed, retried, and skipped requests. The estimate assumes one request for every configured resource; cached resources reduce actual work, while retries and unrelated normal polling are reported separately.
 9. **No production cutover.** A season job is an ingestion/refresh operation, not permission to change runtime routing, deploy, or alter production configuration.
 
 ## Request estimate
@@ -89,7 +89,7 @@ The admin Worker route is the only mutation entry point. The Next.js admin API a
 The season-ingest view should require these distinct steps:
 
 1. Select a year and request a preview.
-2. Review the discovered event/team totals, resource estimate derived from the configured resource builders, shared request interval, and lower-bound duration.
+2. Review the discovered event/team totals, resource estimate derived from the configured resource builders, shared request interval, and baseline duration estimate.
 3. Explicitly confirm and start.
 4. Monitor progress and request accounting; pause, resume, or cancel as needed.
 
