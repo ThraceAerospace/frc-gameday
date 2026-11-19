@@ -237,8 +237,12 @@ export default {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
       const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const headers = new Headers(request.headers);
+      headers.set("Authorization", "Bearer " + env.RUNTIME_ADMIN_TOKEN);
       return scheduler.fetch(new Request("https://event-scheduler" + url.pathname.replace("/internal", "") + url.search, {
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+        method: request.method,
+        headers,
+        ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: request.body }),
       }));
     }
 
