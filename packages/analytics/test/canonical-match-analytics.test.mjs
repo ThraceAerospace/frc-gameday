@@ -49,7 +49,7 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
   assert.equal(calculated.analysis.alliance_epa.red.post_match_team_count, 3);
   assert.equal(calculated.flags.prediction.label, "Lean Red");
   assert.equal(calculated.analysis.audit.inputs[0].source_revision, 4);
-  assert.equal(calculated.analysis.audit.definition_versions.length, 13);
+  assert.equal(calculated.analysis.audit.definition_versions.length, 16);
   assert.equal(calculated.analysis.audit.input_digest.length, 64);
   assert.equal(result.team_states[0].matches[0], calculated);
   assert.equal(result.analytics.event_key, "2026test");
