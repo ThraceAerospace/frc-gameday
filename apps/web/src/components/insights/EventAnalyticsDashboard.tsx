@@ -909,8 +909,8 @@ function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): Tea
       matchLabel: match.match_label,
       compLevel: match.competition_level,
       event: { key: event.key, name: event.name, shortName: event.shortName, startDate: event.startDate },
-      partners: match.partner_team_numbers.map(String),
-      opponents: match.opponent_team_numbers.map(String),
+      partners: (match.partner_team_numbers ?? []).map(String),
+      opponents: (match.opponent_team_numbers ?? []).map(String),
       alliance: match.alliance,
       predicted: match.predicted_score,
       actual: match.actual_score,
@@ -920,8 +920,8 @@ function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): Tea
       opponentResidual: match.opponent_score_residual,
       alliancePreEPATotal: match.alliance_pre_epa_total,
       opponentPreEPATotal: match.opponent_pre_epa_total,
-      alliancePreComponents: match.alliance_pre_components,
-      actualComponents: match.actual_components,
+      alliancePreComponents: match.alliance_pre_components ?? {},
+      actualComponents: match.actual_components ?? {},
       redWinProbability: match.alliance === "red" ? match.win_probability : match.win_probability === null ? null : 1 - match.win_probability,
       teamWinProbability: match.win_probability,
       rpOutcomes: [],
@@ -929,8 +929,8 @@ function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): Tea
       preEPA: match.pre_match_epa,
       postEPA: match.post_match_epa,
       deltaEPA: match.epa_change,
-      preComponents: match.pre_match_components,
-      postComponents: match.post_match_components,
+      preComponents: match.pre_match_components ?? {},
+      postComponents: match.post_match_components ?? {},
       allianceDeltaSpread: match.alliance_delta_spread,
       sharedAllianceUpdate: match.shared_alliance_update,
       statboticsAvailable: match.predicted_score !== null,
@@ -1354,8 +1354,8 @@ function TeamMatchEpaLedger({analysis,name}:{analysis:TeamMatchAnalysis;name:str
     {key:"auto_epa",actual:"auto",label:"Auto",id:"auto" as const},
     {key:"teleop_epa",actual:"teleop",label:"Teleop",id:"teleop" as const},
   ].filter((row)=>selectedComponents.includes(row.id));
-  const componentSeries=componentRows.map((row)=>({...row,points:matches.flatMap((m,i)=>{const estimate=m.alliancePreComponents[row.key],actual=m.actualComponents[row.actual];return typeof estimate==="number"&&typeof actual==="number"?[{i,estimate,actual,match:m}]:[];})}));
-  const endgameSeries=selectedComponents.includes("endgame")?matches.flatMap((match)=>{const before=match.preComponents.endgame_epa,after=match.postComponents.endgame_epa;return typeof before==="number"&&typeof after==="number"?[{match,before,after,delta:after-before}]:[]}):[];
+  const componentSeries=componentRows.map((row)=>({...row,points:matches.flatMap((m,i)=>{const estimate=m.alliancePreComponents?.[row.key],actual=m.actualComponents?.[row.actual];return typeof estimate==="number"&&typeof actual==="number"?[{i,estimate,actual,match:m}]:[];})}));
+  const endgameSeries=selectedComponents.includes("endgame")?matches.flatMap((match)=>{const before=match.preComponents?.endgame_epa,after=match.postComponents?.endgame_epa;return typeof before==="number"&&typeof after==="number"?[{match,before,after,delta:after-before}]:[]}):[];
   const eventGroups=matches.reduce<{key:string;label:string;items:{match:TeamMatchRow;index:number}[]}[]>((groups,match,index)=>{
     let group=groups[groups.length-1];
     if(!group||group.key!==match.event.key){group={key:match.event.key,label:match.event.name,items:[]};groups.push(group);}
