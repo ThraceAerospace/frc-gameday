@@ -35,6 +35,7 @@ type RuntimeEntry = {
     event_key?: string;
     team_key?: string;
     lifecycle?: { completed_until?: number | null };
+    analytics?: { due_at?: number | null; status?: string; last_calculated_at?: number | null; source_revision?: number | null };
     polling?: Task[];
     endpoints?: Record<string, Endpoint> | Endpoint[];
     diagnostics?: Array<{ endpoint: string; http_status: number | null; last_error: string | null }>;
@@ -285,6 +286,17 @@ export default function AdminRuntimeDashboard() {
               </button>
               {isExpanded && <div className="border-t border-[var(--fv-border)] p-4">
                 {entry.error && <p className="mb-3 text-sm text-rose-600">{entry.error}</p>}
+                <div className="mb-4 rounded-lg border border-[var(--fv-border)] p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-bold">Canonical analytics</h3>
+                    <span className={"font-bold " + statusTone(entry.state?.analytics?.status)}>{entry.state?.analytics?.status ?? "pending"}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[var(--fv-muted)]">
+                    <span>Next calculation {dateTime(entry.state?.analytics?.due_at)}</span>
+                    <span>Last calculated {dateTime(entry.state?.analytics?.last_calculated_at)}</span>
+                    <span>Source revision {entry.state?.analytics?.source_revision ?? "—"}</span>
+                  </div>
+                </div>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--fv-muted)]">Resources</h3><div className="space-y-2">{endpoints.map((endpoint) => {
                     const last = endpoint.lastFetchedAt ?? endpoint.last_fetched_at ?? null;
