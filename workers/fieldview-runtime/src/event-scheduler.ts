@@ -338,15 +338,20 @@ export class EventScheduler {
     if (url.pathname === "/admin/coverage-audit" && request.method === "GET") {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid audit year" }, { status: 400 });
+      const eventDiscoveryReady = (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
+        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)) !== undefined;
+      const teamDiscoveryReady = (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
+        await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year)) !== undefined;
+      const discoveryReady = eventDiscoveryReady && teamDiscoveryReady;
       const audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
         event_keys: string[]; team_keys: string[];
         counts: { events_total: number; teams_total: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>("admin:coverage-audit:" + year);
-      if (!audit) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+      if (!audit) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, { headers: { "Cache-Control": "no-store" } });
       const total = audit.event_keys.length + audit.team_keys.length;
       return Response.json({
-        year: audit.year, status: audit.status, started_at: audit.started_at, updated_at: audit.updated_at,
+        year: audit.year, status: audit.status, discovery_ready: discoveryReady, started_at: audit.started_at, updated_at: audit.updated_at,
         cursor: audit.cursor, processed: audit.cursor, total, remaining: Math.max(0, total - audit.cursor), counts: audit.counts,
       }, { headers: { "Cache-Control": "no-store" } });
     }
