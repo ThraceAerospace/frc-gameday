@@ -8,7 +8,7 @@ import type {
 } from "@fieldview/provider-tba/types";
 import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
-import type { FieldViewTeam } from "./team.js";
+import type { FieldViewTeam, FieldViewTeamState } from "./team.js";
 import type { FieldViewMatch } from "./match.js";
 import type { FieldViewPlayoffAlliance } from "./playoff-alliance.js";
 
@@ -35,13 +35,11 @@ export interface FieldViewEventTeam {
 }
 
 /**
- * Canonical event aggregate composed from independently acquired TBA
- * resources. Optional means not acquired; null preserves an explicit null
- * resource value; arrays preserve an acquired empty collection.
+ * The assembled totality of what FieldView currently knows about an event.
+ * Optional resources distinguish not acquired from explicit null and empty.
  */
-export interface FieldViewEventSnapshot {
+export interface FieldViewEventState {
   event_key: EventKey;
-  /** Aggregate-level provenance remains visible even when a resource has no value. */
   sources: {
     event: FieldViewSourceMetadata;
     teams: FieldViewSourceMetadata;
@@ -57,6 +55,8 @@ export interface FieldViewEventSnapshot {
   event_teams?: FieldViewEventTeam[] | null;
   matches?: FieldViewMatch[] | null;
   playoff_alliances?: FieldViewPlayoffAlliance[] | null;
+  /** Per-team, event-scoped assembled state; absent until materialized. */
+  team_states?: FieldViewTeamState[] | null;
   /** Unchanged TBA event rankings, including extra-stat metadata. */
   rankings?: TBAEventRanking | null;
   /** Unchanged TBA event awards; recipients retain their provider shape. */
@@ -64,3 +64,6 @@ export interface FieldViewEventSnapshot {
   /** Unchanged TBA event advancement-points resource. */
   advancement_points?: TBAEventAdvancementPoints | null;
 }
+
+/** @deprecated Use FieldViewEventState. Retained during the staged migration. */
+export type FieldViewEventSnapshot = FieldViewEventState;
