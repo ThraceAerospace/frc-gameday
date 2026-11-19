@@ -1,10 +1,10 @@
 "use client";
 
 import { useSharedSecondClock } from "@/lib/time/sharedSecondClock";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch } from "@fieldview/domain";
 
 type NextMatchCountdownProps = {
-  nextMatch: TBAMatch;
+  nextMatch: FieldViewMatch;
   eventTimezone?: string | null;
 };
 
