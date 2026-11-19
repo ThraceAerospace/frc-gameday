@@ -19,6 +19,7 @@ import {
   subscribeCanonicalEventSnapshot,
   getCanonicalEventAnalytics,
   subscribeCanonicalEventAnalytics,
+  refreshCanonicalEventAnalytics,
   getCanonicalRuntimeStatus,
   subscribeCanonicalRuntimeStatus,
 } from "./sharedWorkerClient";
