@@ -373,8 +373,15 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
+      const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       return Response.json({
         event_key: this.eventKey,
+        analytics: {
+          due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+          status: await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending"),
+          last_calculated_at: analyticsPublication?.calculatedAt ?? null,
+          source_revision: analyticsPublication?.sourceRevision ?? null,
+        },
         lifecycle: {
           completed_until: await this.storage.get<number>("lifecycle:completed-until") ?? null,
         },
@@ -709,7 +716,20 @@ export class EventRuntime {
     // Run calculations from the Durable Object alarm, never from public reads.
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
-    const calculated = await this.buildEventState(true);
+    await this.storage.put("analytics:status", "running");
+    let calculated: Awaited<ReturnType<EventRuntime["buildEventState"]>>;
+    try {
+      calculated = await this.buildEventState(true);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await this.storage.transaction(async (transaction) => {
+        await transaction.put("analytics:status", "failed");
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 30_000);
+        await transaction.put("analytics:last-error", detail.slice(0, 300));
+        await this.rearm(transaction);
+      });
+      return;
+    }
     const state = calculated.state;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.version,
@@ -729,10 +749,13 @@ export class EventRuntime {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
       if (currentRevision !== calculated.version) {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+        await transaction.put("analytics:status", "pending");
         await this.rearm(transaction);
         return null;
       }
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
+      await transaction.put("analytics:status", "succeeded");
+      await transaction.delete("analytics:last-error");
       const nextRevision = currentRevision + 1;
       await transaction.put("snapshot-revision", nextRevision);
       await this.rearm(transaction);
