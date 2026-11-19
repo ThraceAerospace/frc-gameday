@@ -298,7 +298,7 @@ export class EventScheduler {
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
         kind, year, query, total: keys.length, cursor,
-        discovery_ready: discovery !== undefined,
+        discovery_ready: discovery !== undefined && (kind === "event" || (discovery as TeamDiscoveryCache).complete === true),
         next_cursor: cursor + limit < keys.length ? cursor + limit : null,
         keys: keys.slice(cursor, cursor + limit),
       }, { headers: { "Cache-Control": "no-store" } });
@@ -351,7 +351,7 @@ export class EventScheduler {
       const eventDiscoveryReady = (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
         await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)) !== undefined;
       const teamDiscoveryReady = (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year)) !== undefined;
+        await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.complete === true;
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true;
@@ -381,7 +381,7 @@ export class EventScheduler {
       let audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number;
         event_keys: string[]; team_keys: string[]; cursor: number;
-        counts: { events_total: number; teams_total: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
