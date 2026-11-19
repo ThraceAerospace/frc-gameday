@@ -76,7 +76,7 @@ export default function RemoteSurface({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {state.priority.map((tileId, position) => {
               const eventKey = state.tileEvents[tileId] ?? tileId;
-              const eventState = eventStates[eventKey];
+              const eventSnapshot = eventSnapshots[eventKey]?.snapshot;
 
               return (
                 <RemoteEventCard
@@ -85,7 +85,7 @@ export default function RemoteSurface({
                   position={position}
                   state={state}
                   actions={controller.actions}
-                  eventState={eventState}
+                  eventSnapshot={eventSnapshot}
                 />
               );
             })}
