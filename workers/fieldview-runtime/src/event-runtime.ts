@@ -553,33 +553,23 @@ export class EventRuntime {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/publish-state") {
+      const publication = await this.publishEventState();
+      return Response.json({
+        event_key: this.eventKey, status: publication.status,
+        source_revision: publication.sourceRevision, generated_at: publication.generatedAt,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "GET" && url.pathname === "/snapshot") {
       // A public read creates demand for missing or stale canonical resources.
-      // Scheduling only persists the work and arms the DO alarm; provider I/O
-      // runs asynchronously after this request returns.
+      // The admin season job uses /publish-state to avoid scheduling extra polls.
       await this.scheduleDemandIngestion();
-      const result = await this.buildEventState();
-      const eventResources = eventResourceEndpoints(this.eventKey);
-      const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-      const acquiredCount = await Promise.all([...eventResources, statboticsResource].map(async (endpoint) => {
-        const resource = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-        return resource?.lastFetchedAt != null;
-      })).then((values) => values.filter(Boolean).length);
-      const eventStatePublication: EventStatePublication = {
-        sourceRevision: result.version,
-        generatedAt: Date.now(),
-        status: acquiredCount === eventResources.length + 1 ? "complete" : acquiredCount > 0 ? "partial" : "failed",
-        state: result.state,
-      };
-      const previousPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!previousPublication || previousPublication.sourceRevision !== eventStatePublication.sourceRevision ||
-          previousPublication.status !== eventStatePublication.status) {
-        await this.storage.put(EVENT_STATE_PUBLICATION_KEY, eventStatePublication);
-      }
-      return Response.json(result.state, {
+      const publication = await this.publishEventState();
+      return Response.json(publication.state, {
         headers: {
-          "X-FieldView-Snapshot-Version": String(result.version),
-          "X-FieldView-Event-State-Status": eventStatePublication.status,
+          "X-FieldView-Snapshot-Version": String(publication.sourceRevision),
+          "X-FieldView-Event-State-Status": publication.status,
         },
       });
     }
@@ -977,6 +967,27 @@ export class EventRuntime {
     this.eventKey = eventKey;
     this.allowedEndpoints = new Set(eventResourceEndpoints(eventKey));
     return true;
+  }
+
+  private async publishEventState(): Promise<EventStatePublication> {
+    const result = await this.buildEventState();
+    const eventResources = eventResourceEndpoints(this.eventKey);
+    const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+    const acquiredCount = await Promise.all([...eventResources, statboticsResource].map(async (endpoint) => {
+      const resource = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
+      return resource?.lastFetchedAt != null;
+    })).then((values) => values.filter(Boolean).length);
+    const publication: EventStatePublication = {
+      sourceRevision: result.version,
+      generatedAt: Date.now(),
+      status: acquiredCount === eventResources.length + 1 ? "complete" : acquiredCount > 0 ? "partial" : "failed",
+      state: result.state,
+    };
+    const previous = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+    if (!previous || previous.sourceRevision !== publication.sourceRevision || previous.status !== publication.status) {
+      await this.storage.put(EVENT_STATE_PUBLICATION_KEY, publication);
+    }
+    return publication;
   }
 
   async alarm(): Promise<void> {
