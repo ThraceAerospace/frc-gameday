@@ -46,7 +46,7 @@ export interface MatchFlagContext {
   anomalyBands: Map<string, { median: number; margin: number } | null>;
   residualMagnitudes: number[];
   largeResidualThreshold: number | null;
-  allianceResultsByMatch: Map<string, typeof dataAllianceResult[]>;
+  allianceResultsByMatch: Map<string, dataAllianceResult[]>;
   phaseSampleSizes: Map<string, number>;
   penaltyByMatch: Map<string, NonNullable<EventAnalyticsResponse["qualificationAnalysis"]>["penalties"]["flaggedMatches"][number]>;
 }
