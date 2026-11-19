@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TBAEvent, TBAMatch, TBAEliminationAlliance } from "@/lib/tba/types";
+import type { FieldViewEvent, FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import { formatEventTime } from "@/lib/time";
 
 export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
@@ -71,7 +71,7 @@ function doubleEliminationBracket4AllianceInfo(setNum: number): { bracket: "Uppe
 }
 
 export function formatPlayoffMatchGroup(
-  match: Pick<TBAMatch, "comp_level" | "set_number">,
+  match: Pick<FieldViewMatch, "comp_level" | "set_number">,
   playoffType: number | null = null,
 ): string {
   const compLevel = match.comp_level.toLowerCase();
@@ -108,7 +108,7 @@ export function formatPlayoffMatchGroup(
   }
 }
 
-export function matchLongName(match: TBAMatch, eventPlayoffType: number | null = null): string {
+export function matchLongName(match: FieldViewMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
@@ -148,7 +148,7 @@ export function matchLongName(match: TBAMatch, eventPlayoffType: number | null =
   }
 }
 
-export function matchShortName(match: TBAMatch, eventPlayoffType: number | null = null): string {
+export function matchShortName(match: FieldViewMatch, eventPlayoffType: number | null = null): string {
   try {
     const compLevel = match.comp_level;
     const matchNum = match.match_number;
@@ -192,7 +192,7 @@ export function matchShortName(match: TBAMatch, eventPlayoffType: number | null 
 
 /** Compact next-match label used by TeamPill, following TBA's mobile convention. */
 export function matchAbbreviationName(
-  match: TBAMatch,
+  match: FieldViewMatch,
   eventPlayoffType: number | null = null,
 ): string {
   try {
@@ -322,7 +322,7 @@ export function formatAllianceLongName(
 
 /** Format the TBA playoff status according to the event's bracket type. */
 export function formatPlayoffLevel(
-  alliance: Pick<TBAEliminationAlliance, "status">,
+  alliance: Pick<FieldViewPlayoffAlliance, "status">,
   playoffType?: number | null,
 ): string {
   const status = alliance.status;
@@ -378,7 +378,7 @@ export function isEliminationMatch(compLevel: string | null | undefined): boolea
  */
 export function formatPlayoffAllianceName(
   teamKeys: string[],
-  playoffAlliances: TBAEliminationAlliance[] | null | undefined,
+  playoffAlliances: FieldViewPlayoffAlliance[] | null | undefined,
 ): string | null {
   if (!playoffAlliances?.length || !teamKeys.length) return null;
 
@@ -405,7 +405,7 @@ export function formatPlayoffAllianceName(
 
 
 /** Summarize the webcast availability reported by The Blue Alliance. */
-export function getEventWebcastStatus(event: TBAEvent): "Live" | "Offline" | "No Webcast" {
+export function getEventWebcastStatus(event: FieldViewEvent): "Live" | "Offline" | "No Webcast" {
   const webcasts = event.webcasts ?? [];
   if (webcasts.length === 0) return "No Webcast";
   return webcasts.some((webcast) => webcast.status === "online") ? "Live" : "Offline";
