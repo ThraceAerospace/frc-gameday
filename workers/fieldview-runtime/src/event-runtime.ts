@@ -516,6 +516,7 @@ export class EventRuntime {
         due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
         calculated_at: publication?.calculatedAt ?? null,
         source_revision: publication?.sourceRevision ?? null,
+        pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
         publication: publication ?? null,
       }, {
         headers: { "X-FieldView-Analytics-Version": String(revision), "Cache-Control": "no-store" },
@@ -545,6 +546,7 @@ export class EventRuntime {
           status: await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending"),
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
+          pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         lifecycle: {
