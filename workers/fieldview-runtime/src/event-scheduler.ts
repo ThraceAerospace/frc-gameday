@@ -463,6 +463,14 @@ export class EventScheduler {
         if (job.status === "running") job.status = "paused";
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
+        const currentEvents = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
+        const currentTeams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        if (currentEvents?.updatedAt !== job.eventDiscoveryUpdatedAt ||
+            currentTeams?.updatedAt !== job.teamDiscoveryUpdatedAt ||
+            teamResourceEndpoints(job.teamKeys[0] ?? "", year).length !== job.teamResourceCount ||
+            eventResourceEndpoints(job.eventKeys[0] ?? "").length + 1 !== job.eventResourceCount) {
+          return Response.json({ error: "The pinned discovery or resource inventory changed. Cancel this job and start a new run from a fresh preview." }, { status: 409 });
+        }
         if (job.status === "completed_with_errors") {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
