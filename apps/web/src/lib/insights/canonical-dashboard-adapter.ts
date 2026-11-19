@@ -414,10 +414,9 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
       winPredictionAccuracy: prediction?.win_prediction_accuracy ?? null,
     },
     collection: {
-      state: analytics.collection?.state ??
-        (processedMatchCount >= totalMatchCount
-          ? unavailableMatchCount > 0 ? "partial" : "complete"
-          : processedMatchCount > 0 ? "partial" : "queued"),
+      state: processedMatchCount >= totalMatchCount
+        ? unavailableMatchCount > 0 ? "partial" : "complete"
+        : analytics.collection?.state ?? (processedMatchCount > 0 ? "partial" : "queued"),
       processedMatchCount,
       totalMatchCount,
       unavailableMatchCount,
