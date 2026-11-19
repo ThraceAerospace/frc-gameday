@@ -58,6 +58,7 @@ function FindingCard({ finding }: { finding: FieldViewAnalyticsFinding }) {
 export default function EventAnalyticsDashboard({
   eventKey,
   eventName,
+  eventTimezone,
   analytics,
   teamStates,
   matches,
@@ -66,6 +67,7 @@ export default function EventAnalyticsDashboard({
 }: {
   eventKey: string;
   eventName: string;
+  eventTimezone?: string;
   analytics: FieldViewEventAnalytics | null | undefined;
   teamStates: FieldViewTeamState[] | null | undefined;
   matches: FieldViewMatch[] | null | undefined;
@@ -105,7 +107,7 @@ export default function EventAnalyticsDashboard({
       {tab === "overview" && analytics ? (
         <div className="mt-5 space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{analytics.metrics.map((metric) => <MetricCard key={metric.metric_key} metric={metric} />)}</div>
-          <AuditSummary audit={analytics.audit} />
+          <AuditSummary audit={analytics.audit} eventTimezone={eventTimezone} />
           <div><h3 className="mb-3 text-lg font-bold text-[var(--fv-text)]">Event findings</h3>{analytics.findings.length ? <div className="grid gap-3 lg:grid-cols-2">{analytics.findings.map((finding) => <FindingCard key={finding.finding_key} finding={finding} />)}</div> : <p className="text-sm text-[var(--fv-muted)]">No event-level review findings were produced.</p>}</div>
         </div>
       ) : null}
@@ -117,7 +119,7 @@ export default function EventAnalyticsDashboard({
               <h3 className="font-bold text-[var(--fv-text)]"><a className="hover:underline" href={`/team/${team.team?.team_number ?? team.team_key}`}>{team.team?.team_number ?? team.team_key} · {team.team?.nickname ?? team.team?.name ?? "Team"}</a></h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{team.analytics!.metrics.map((metric) => <MetricCard key={metric.metric_key} metric={metric} />)}</div>
               {team.analytics!.findings.length ? <div className="mt-4 grid gap-3 lg:grid-cols-2">{team.analytics!.findings.map((finding) => <FindingCard key={finding.finding_key} finding={finding} />)}</div> : null}
-              <AuditSummary audit={team.analytics!.audit} />
+              <AuditSummary audit={team.analytics!.audit} eventTimezone={eventTimezone} />
             </article>
           ))}
         </div>
@@ -141,11 +143,14 @@ export default function EventAnalyticsDashboard({
   );
 }
 
-function AuditSummary({ audit }: { audit?: { calculation_id: string; engine_version: string; calculated_at: number; input_digest: string; inputs: { input_key: string; provider: string; resource: string; status: string; included_count: number; excluded_count: number }[]; definition_versions: { definition_key: string; version: string }[]; warnings: string[] } }) {
+function AuditSummary({ audit, eventTimezone }: { audit?: { calculation_id: string; engine_version: string; calculated_at: number; input_digest: string; inputs: { input_key: string; provider: string; resource: string; status: string; included_count: number; excluded_count: number }[]; definition_versions: { definition_key: string; version: string }[]; warnings: string[] }; eventTimezone?: string }) {
   if (!audit) return null;
+  const calculatedAt = eventTimezone
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: eventTimezone }).format(new Date(audit.calculated_at))
+    : "event time zone unavailable";
   return (
     <details className="rounded-xl border border-[var(--fv-border)] p-4">
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--fv-text)]">Calculation audit · {new Date(audit.calculated_at).toLocaleString()}</summary>
+      <summary className="cursor-pointer text-sm font-semibold text-[var(--fv-text)]">Calculation audit · {calculatedAt}</summary>
       <div className="mt-3 space-y-2 text-xs text-[var(--fv-muted)]">
         <p>Engine {audit.engine_version} · Calculation {audit.calculation_id}</p>
         <p>Input digest: <code className="break-all">{audit.input_digest}</code></p>
