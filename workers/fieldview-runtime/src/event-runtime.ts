@@ -62,6 +62,7 @@ const ANALYTICS_COHORT_MAX_RETRIES = 12;
 
 interface EventStatePublication {
   sourceRevision: number;
+  snapshotVersion: number;
   generatedAt: number;
   status: "complete" | "partial" | "failed";
   state: ReturnType<typeof normalizeFieldViewEventState>;
@@ -582,7 +583,7 @@ export class EventRuntime {
       const publication = await this.publishEventState();
       return Response.json(publication.state, {
         headers: {
-          "X-FieldView-Snapshot-Version": String(publication.sourceRevision),
+          "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
           "X-FieldView-Event-State-Status": publication.status,
         },
       });
@@ -1030,12 +1031,14 @@ export class EventRuntime {
       (resource.expiresAt !== null && resource.expiresAt < Date.now()));
     const publication: EventStatePublication = {
       sourceRevision: result.sourceRevision,
+      snapshotVersion: result.version,
       generatedAt: Date.now(),
       status: acquiredCount === eventResources.length + 1 && !hasIncompleteResource ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
     };
     const previous = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-    if (!previous || previous.sourceRevision !== publication.sourceRevision || previous.status !== publication.status) {
+    if (!previous || previous.sourceRevision !== publication.sourceRevision ||
+        previous.snapshotVersion !== publication.snapshotVersion || previous.status !== publication.status) {
       await this.storage.put(EVENT_STATE_PUBLICATION_KEY, publication);
     }
     return publication;
