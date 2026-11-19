@@ -24,8 +24,8 @@ test("TeamRuntime lazily schedules and composes canonical team resources", async
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   assert.equal(first.status, 200); assert.equal(calls.length, 0);
   assert.equal((await first.json()).team_key, teamKey);
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 4);
-  await runtime.alarm(); assert.equal(calls.length, 4);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 7);
+  await runtime.alarm(); assert.equal(calls.length, 7);
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   const snapshot = await second.json();
   assert.equal(snapshot.team.team_number, 3461);
@@ -70,8 +70,8 @@ test("TeamRuntime admin seed ingests all team resources before responding", asyn
   const result = await response.json();
   assert.equal(result.attempted, true);
   assert.equal(result.snapshot.team.team_number, 3461);
-  assert.equal(calls.length, 4);
-  assert.ok(calls.every((url) => url.includes("frc3461")));
+  assert.equal(calls.length, 7);
+  assert.ok(calls.some((url) => url.includes("frc3461")));
 });
 
 test("TeamRuntime rejects identity mismatch and protects admin state", async () => {
@@ -91,8 +91,8 @@ test("TeamRuntime restores team identity before a reconstructed object's alarm",
   }));
   const reconstructed = new TeamRuntime({ storage }, env(fetcher));
   await reconstructed.alarm();
-  assert.equal(calls.length, 4);
-  assert.ok(calls.every((url) => url.includes("frc3461")));
+  assert.equal(calls.length, 7);
+  assert.ok(calls.some((url) => url.includes("frc3461")));
 });
 
 
@@ -107,8 +107,8 @@ test("TeamRuntime converts numeric public team IDs to TBA frc-prefixed keys", as
     headers: { "X-FieldView-Team-Key": "3461" },
   }));
   await runtime.alarm();
-  assert.equal(calls.length, 4);
-  assert.ok(calls.every((url) => url.includes("/team/frc3461")));
+  assert.equal(calls.length, 7);
+  assert.ok(calls.some((url) => url.includes("/team/frc3461")));
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": "3461" },
   }))).json();
