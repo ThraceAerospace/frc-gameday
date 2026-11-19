@@ -334,13 +334,13 @@ export function calculateCanonicalAggregateAnalytics(
           const redProbability = record.statbotics?.pred?.red_win_prob;
           const winProbability = typeof redProbability === "number" && redProbability >= 0 && redProbability <= 1
             ? alliance === "red" ? redProbability : 1 - redProbability : null;
-          const ownPre = record.statbotics?.pre_epas?.[String(row.team_number)]?.epa;
-          const ownPost = record.statbotics?.epas?.[String(row.team_number)]?.epa;
+          const ownPre = record.statbotics?.pre_epas?.[String(row.teamNumber)]?.epa;
+          const ownPost = record.statbotics?.epas?.[String(row.teamNumber)]?.epa;
           const preEpa = typeof ownPre === "number" && Number.isFinite(ownPre) ? ownPre : null;
           const postEpa = typeof ownPost === "number" && Number.isFinite(ownPost) ? ownPost : null;
           const winner = match.winning_alliance;
-          const ownPreRecord = record.statbotics?.pre_epas?.[String(row.team_number)];
-          const ownPostRecord = record.statbotics?.epas?.[String(row.team_number)];
+          const ownPreRecord = record.statbotics?.pre_epas?.[String(row.teamNumber)];
+          const ownPostRecord = record.statbotics?.epas?.[String(row.teamNumber)];
           const numericComponents = (value: object | null | undefined): Record<string, number> => {
             if (!value) return {};
             return Object.fromEntries(Object.entries(value).filter(([key, amount]) =>
