@@ -795,6 +795,15 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
   assert.ok(publication);
   assert.equal(publication.sourceRevision, storage.values.get("snapshot-revision") - 1);
   assert.equal(typeof publication.calculatedAt, "number");
+  assert.equal(publication.analyticsRevision, 1);
+  const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(analyticsRead.status, 200);
+  const analyticsState = await analyticsRead.json();
+  assert.equal(analyticsState.revision, 1);
+  assert.equal(analyticsState.status, "succeeded");
+  assert.equal(analyticsState.publication.sourceRevision, publication.sourceRevision);
 
   const afterCalculation = await read();
   const afterState = await afterCalculation.json();
