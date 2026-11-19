@@ -30,8 +30,9 @@ export function buildCanonicalSeasonCohort(
   const snapshotByTeam = new Map<number, FieldViewTeamSnapshot>();
   for (const snapshot of snapshots) {
     if (!snapshot) continue;
+    const parsedKey = Number(snapshot.team_key.replace(/^frc/i, ""));
     const number = finite(snapshot.team?.team_number) ??
-      finite(snapshot.team_key.replace(/^frc/i, ""));
+      (Number.isSafeInteger(parsedKey) && parsedKey > 0 ? parsedKey : null);
     if (number !== null) snapshotByTeam.set(number, snapshot);
   }
 
