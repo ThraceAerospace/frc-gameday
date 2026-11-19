@@ -954,6 +954,7 @@ export class EventRuntime {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
         await transaction.put("analytics:status", "pending");
       }
 
