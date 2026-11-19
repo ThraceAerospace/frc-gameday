@@ -105,10 +105,19 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run"].includes(action)) {
+        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+        if (action === "discover-year") {
+          const year = Number(body.year);
+          if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+            return Response.json({ error: "A valid discovery year is required" }, { status: 400 });
+          }
+          return scheduler.fetch(new Request("https://event-scheduler/admin/discover-year?year=" + year, {
+            method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+          }));
+        }
         return scheduler.fetch(new Request("https://event-scheduler/" + (action === "scheduler-start" ? "start" : action === "scheduler-stop" ? "stop" : "run"), {
           method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
         }));
