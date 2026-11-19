@@ -51,11 +51,19 @@ const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
+const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 const ANALYTICS_COHORT_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const ANALYTICS_COHORT_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_COHORT_MAX_RETRIES = 12;
+
+interface EventStatePublication {
+  sourceRevision: number;
+  generatedAt: number;
+  status: "complete" | "partial" | "failed";
+  state: ReturnType<typeof normalizeFieldViewEventState>;
+}
 
 interface AnalyticsPublication {
   sourceRevision: number;
@@ -530,8 +538,24 @@ export class EventRuntime {
       // runs asynchronously after this request returns.
       await this.scheduleDemandIngestion();
       const result = await this.buildEventState();
+      const eventResources = eventResourceEndpoints(this.eventKey);
+      const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const acquiredCount = await Promise.all([...eventResources, statboticsResource].map(async (endpoint) => {
+        const resource = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
+        return resource?.lastFetchedAt != null || resource?.lastWebhookAt != null;
+      })).then((values) => values.filter(Boolean).length);
+      const eventStatePublication: EventStatePublication = {
+        sourceRevision: result.version,
+        generatedAt: Date.now(),
+        status: acquiredCount === eventResources.length + 1 ? "complete" : acquiredCount > 0 ? "partial" : "failed",
+        state: result.state,
+      };
+      await this.storage.put(EVENT_STATE_PUBLICATION_KEY, eventStatePublication);
       return Response.json(result.state, {
-        headers: { "X-FieldView-Snapshot-Version": String(result.version) },
+        headers: {
+          "X-FieldView-Snapshot-Version": String(result.version),
+          "X-FieldView-Event-State-Status": eventStatePublication.status,
+        },
       });
     }
 
@@ -539,8 +563,14 @@ export class EventRuntime {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       return Response.json({
         event_key: this.eventKey,
+        event_state: {
+          status: eventStatePublication?.status ?? "missing",
+          generated_at: eventStatePublication?.generatedAt ?? null,
+          source_revision: eventStatePublication?.sourceRevision ?? null,
+        },
         analytics: {
           revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
           due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
