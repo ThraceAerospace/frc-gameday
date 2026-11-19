@@ -1,7 +1,7 @@
 import type {
   FieldViewAnalyticsAudit,
   FieldViewAnalyticsInputRecord,
-} from "../../../domain/src/analytics.ts";
+} from "../../domain/src/analytics.ts";
 import { getAnalyticsDefinition } from "./definitions.ts";
 
 export const FIELDVIEW_ANALYTICS_ENGINE_VERSION = "0.1.0";
