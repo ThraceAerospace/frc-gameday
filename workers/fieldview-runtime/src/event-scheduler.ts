@@ -160,6 +160,7 @@ interface SeasonIngestJob {
   eventKeys: string[];
   teamResourceCount: number;
   eventResourceCount: number;
+  teamDataChanged: boolean;
   teamCursor: number;
   teamResourceCursor: number;
   eventCursor: number;
@@ -441,7 +442,7 @@ export class EventScheduler {
         const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
         job = {
           year, runGeneration: now, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
-          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount,
+          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount, teamDataChanged: false,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -475,6 +476,7 @@ export class EventScheduler {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
           job.teamResourceCursor = 0;
+          job.teamDataChanged = false;
           job.eventCursor = 0;
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
@@ -962,7 +964,7 @@ export class EventScheduler {
           const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
           let resourceState: { status?: string; last_fetched_at?: number | null } | undefined;
           if (stateResponse.ok) {
-            const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; last_fetched_at?: number | null }> };
+            const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; revision?: number; last_fetched_at?: number | null }> };
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
           }
           if ((resourceState?.last_fetched_at != null && resourceState.status !== "failed") || resourceState?.status === "unavailable") {
@@ -986,7 +988,8 @@ export class EventScheduler {
               retry("Team resource " + resource.endpoint + " returned HTTP " + response.status, "team", teamKey);
             } else {
               job.counts.requests_attempted += 1;
-              const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
+              const result = await response.json() as { status?: string; success?: boolean; revision?: number; last_error?: string | null };
+              if (result.revision != null && result.revision !== (resourceState?.revision ?? 0)) job.teamDataChanged = true;
               if (result.status === "unavailable") {
                 job.counts.requests_unavailable += 1;
                 recordError("team", teamKey, resource.endpoint + " is unavailable");
@@ -1062,7 +1065,7 @@ export class EventScheduler {
               event_state?: { status?: string; source_revision?: number | null };
               analytics?: { status?: string; source_revision?: number | null; cohort_status?: string | null };
             };
-            const artifactsReusable = current.event_state?.status === "complete" &&
+            const artifactsReusable = !job.teamDataChanged && current.event_state?.status === "complete" &&
               current.event_state.source_revision != null &&
               current.analytics?.source_revision === current.event_state.source_revision &&
               (current.analytics?.status === "succeeded" || current.analytics?.status === "partial") &&
