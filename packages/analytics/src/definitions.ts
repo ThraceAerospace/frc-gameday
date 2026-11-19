@@ -265,6 +265,20 @@ export const FIELDVIEW_ANALYTICS_DEFINITIONS: readonly FieldViewAnalyticsDefinit
     interpretation_rules: ["Penalty points are credited to the alliance and are not attributed to a robot."],
     limitations: ["Uses the existing qualification penalty outlier calculation unchanged."],
   },
+  {
+    definition_key: "team-event-match-appearances",
+    version: "1.0.0",
+    name: "Team event match appearances",
+    description: "Counts event match alliance rosters in which the team appears.",
+    scope: "team",
+    operation_key: "buildTeamRows",
+    inputs: [{ input_key: "match-rosters", source_path: "TBA.event.matches[].alliances[red|blue].team_keys", required: true, description: "The two alliance rosters for each event match.", unit: "team keys" }],
+    population: { population_key: "event-match-rosters", inclusion_rules: ["Count one appearance for each match whose red or blue roster contains the team's TBA team key."], exclusion_rules: ["Matches that do not contain the team."] },
+    formula: { expression: "count(matches where team_key ∈ red.team_keys ∪ blue.team_keys)", steps: ["Process event match records in their existing order.", "Check both alliance team-key lists.", "Increment the team's appearance count once for each match containing it."] },
+    output_unit: "matches",
+    interpretation_rules: ["Counts participation, not completed or scored matches."],
+    limitations: ["A match is counted even if its score is not yet final."],
+  },
 ] as const;
 
 export function getAnalyticsDefinition(definitionKey: string): FieldViewAnalyticsDefinition | undefined {
