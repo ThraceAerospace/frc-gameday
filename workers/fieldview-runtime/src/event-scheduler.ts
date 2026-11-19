@@ -28,6 +28,10 @@ export const DEFAULT_EVENT_POLLING_POLICY: EventPollingPolicy = {
   completedRetentionMs: 24 * 60 * 60_000,
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function configured(value: string | number | undefined, fallback: number, name: string): number {
   const parsed = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1_000) {
@@ -164,6 +168,7 @@ interface SeasonIngestJob {
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number;
     event_analytics_waiting: number; event_analytics_failed: number;
+    event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
     requests_attempted: number; requests_succeeded: number; requests_failed: number;
     requests_skipped: number; requests_unavailable: number; requests_deferred: number;
   };
@@ -427,6 +432,7 @@ export class EventScheduler {
             event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
             event_analytics_succeeded: 0, event_analytics_partial: 0,
             event_analytics_waiting: 0, event_analytics_failed: 0,
+            event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
             requests_attempted: 0, requests_succeeded: 0, requests_failed: 0,
             requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
           },
@@ -1039,6 +1045,14 @@ export class EventScheduler {
           else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
           else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
           else job.counts.event_analytics_failed += 1;
+          const publication = isRecord(analytics.publication) ? analytics.publication : null;
+          const eventAnalytics = publication && isRecord(publication.eventAnalytics) ? publication.eventAnalytics : null;
+          const cohort = eventAnalytics && isRecord(eventAnalytics.season_cohort) ? eventAnalytics.season_cohort : null;
+          const cohortStatus = cohort?.state;
+          if (cohortStatus === "complete") job.counts.event_cohort_complete += 1;
+          else if (cohortStatus === "partial") job.counts.event_cohort_partial += 1;
+          else if (cohortStatus === "discovering" || analytics.status === "waiting-for-cohort") job.counts.event_cohort_discovering += 1;
+          else job.counts.event_cohort_missing += 1;
 
           if (event) {
             const decision = classifyEventLifecycle(event, Date.now(), eventPollingPolicy(this.env));
