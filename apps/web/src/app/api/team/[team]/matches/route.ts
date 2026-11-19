@@ -1,5 +1,6 @@
 import type { FieldViewTeamAnalytics } from "@fieldview/domain";
 import { buildSeasonDiagnostics } from "@fieldview/analytics/season-diagnostics";
+import type { SeasonMatchEvidence } from "@fieldview/analytics/season-diagnostics";
 import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 
 type TeamEventReference = {
