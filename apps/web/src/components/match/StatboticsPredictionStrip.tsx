@@ -1,19 +1,18 @@
 "use client";
 
-import type { StatboticsPrediction } from "@/lib/statbotics/types";
-import { useEventState } from "@/lib/events";
+import type { FieldViewMatch } from "@fieldview/domain";
 import { matchShortName } from "@/lib/tba/formatters";
-import type { TBAMatch } from "@/lib/tba/types";
 import StatboticsMatchPredictionBar from "./StatboticsMatchPredictionBar";
 import StatboticsMatchPredictionMetrics from "./StatboticsMatchPredictionMetrics";
 
-export default function StatboticsPredictionStrip({ match }: { match: TBAMatch | null }) {
-  const eventKey = match?.key.split("_")[0] ?? "";
-  const eventState = useEventState(eventKey);
-  const statboticsState = match ? eventState.statboticsMatches[match.key] : undefined;
-  const data = statboticsState?.data ?? null;
-  const status = statboticsState?.status ?? "loading";
-  const prediction: StatboticsPrediction | undefined = data?.pred ?? undefined;
+export default function StatboticsPredictionStrip({ match }: { match: FieldViewMatch | null }) {
+  const sourceStatus = match?.sources.statbotics_match?.status;
+  const status = sourceStatus === "available" || sourceStatus === "stale"
+    ? "ready"
+    : sourceStatus === "unavailable" || sourceStatus === "failed"
+      ? "unavailable"
+      : "loading";
+  const prediction = match?.predictions.statbotics;
 
   if (!match) {
     return <div className="flex h-[52px] items-center border-l border-t border-white/10 bg-neutral-950/95 px-3 text-xs text-neutral-500">No match available for Statbotics prediction.</div>;
