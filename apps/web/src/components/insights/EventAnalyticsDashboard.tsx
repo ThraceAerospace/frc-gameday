@@ -1435,31 +1435,29 @@ function ReviewQueue({data}:{data:EventAnalyticsResponse}) {
   const counts=new Map(tabs.map((tab)=>[tab.id,tab.id==="all"?records.length:records.filter(({summary})=>summary.reviewFlags.some((flag)=>flag===tab.id)).length]));
   const flagReasons=(record:EventAnalyticsResponse["matches"][number],summary:MatchFlagSummary)=>{
     const reasons:string[]=[];
-    const {match,statbotics}=record;
-    if(summary.modelUpset&&summary.predictedWinner&&summary.winner){
-      const p=statbotics?.pred?.red_win_prob??0;
-      const favorite=summary.predictedWinner==="red"?"Red":"Blue";
-      reasons.push(favorite+" was favored at "+Math.round(Math.max(p,1-p)*100)+"%, but "+(summary.winner==="red"?"Red":"Blue")+" won.");
+    const flags=record.flags;
+    if(summary.modelUpset&&flags?.prediction&&flags.winner){
+      const p=flags.prediction.red_win_probability;
+      const favorite=flags.prediction.predicted_winner==="red"?"Red":"Blue";
+      reasons.push(favorite+" was favored at "+Math.round(Math.max(p,1-p)*100)+"%, but "+(flags.winner==="red"?"Red":"Blue")+" won.");
     }
-    if(summary.anomalousScore){
-      const band=phaseAnomalyBand(data,match.comp_level);
-      if(band)for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&Math.abs(result.residual-band.median)>band.margin))reasons.push((item.color==="red"?"Red":"Blue")+" alliance residual "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts fell outside the phase baseline ("+(band.median>0?"+":"")+fmt(band.median)+" ± "+fmt(band.margin)+" pts).");
-    }
-    if(summary.largeResidual.red||summary.largeResidual.blue){
-      for(const item of data.allianceResults.filter((result)=>result.matchKey===match.key&&result.residual!==null&&summary.largeResidual[result.color])){
-        reasons.push((item.color==="red"?"Red":"Blue")+" alliance score delta: "+(item.residual!>0?"+":"")+fmt(item.residual)+" pts (absolute delta in the event-wide top decile).");
+    for(const color of ["red","blue"] as const){
+      for(const flag of flags?.alliances[color]??[]){
+        const alliance=color==="red"?"Red":"Blue";
+        if(flag.type==="anomalous-score"){
+          const e=flag.evidence;
+          reasons.push(alliance+" alliance residual "+(e.residual>0?"+":"")+fmt(e.residual)+" pts fell outside the phase baseline ("+(e.phase_median>0?"+":"")+fmt(e.phase_median)+" ± "+fmt(e.phase_margin)+" pts; n="+e.sample_size+").");
+        }else if(flag.type==="large-score-delta"){
+          const e=flag.evidence;
+          reasons.push(alliance+" alliance score delta: "+(e.delta>0?"+":"")+fmt(e.delta)+" pts (absolute delta in the event-wide top decile; threshold "+fmt(e.event_threshold)+" pts).");
+        }else if(flag.type==="high-penalties"){
+          const e=flag.evidence;
+          reasons.push(alliance+" alliance: "+e.penalty_points+" credited penalty points (above the alliance outlier threshold of "+fmt(e.event_threshold)+" points).");
+        }else if(flag.type==="high-alliance-epa"){
+          const e=flag.evidence;
+          reasons.push(alliance+" alliance pre-match EPA: "+fmt(e.pre_match_alliance_epa)+" (top quartile; threshold "+fmt(e.event_threshold)+").");
+        }
       }
-    }
-    if(summary.highPenalties.red||summary.highPenalties.blue){
-      const item=data.qualificationAnalysis?.penalties.flaggedMatches.find((entry)=>entry.matchKey===match.key);
-      if(item){
-        if(item.redFlagged)reasons.push("Red alliance: "+(item.redPenaltyCount===null?"penalty count unavailable":item.redPenaltyCount+" penalties")+", "+item.redPenaltyPoints+" credited penalty points (above the alliance outlier threshold).");
-        if(item.blueFlagged)reasons.push("Blue alliance: "+(item.bluePenaltyCount===null?"penalty count unavailable":item.bluePenaltyCount+" penalties")+", "+item.bluePenaltyPoints+" credited penalty points (above the alliance outlier threshold).");
-      }
-    }
-    if(summary.highAllianceEpa.red||summary.highAllianceEpa.blue){
-      const high=data.allianceResults.filter((item)=>item.matchKey===match.key&&summary.highAllianceEpa[item.color]);
-      for(const item of high)reasons.push((item.color==="red"?"Red":"Blue")+" alliance pre-match EPA: "+fmt(item.preEpaTotal)+" (top quartile).");
     }
     return reasons;
   };
