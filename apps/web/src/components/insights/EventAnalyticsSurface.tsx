@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventState } from "@/lib/events";
+import { useCanonicalRuntimeStatus } from "@/lib/events";
 import EventAnalyticsDashboard from "./EventAnalyticsDashboard";
 
 export default function EventAnalyticsSurface({
@@ -10,15 +10,15 @@ export default function EventAnalyticsSurface({
   eventKey: string;
   eventName: string;
 }) {
-  const snapshot = useEventState(eventKey);
+  const websocketStatus = useCanonicalRuntimeStatus(eventKey);
 
 
   return (
     <EventAnalyticsDashboard
       eventKey={eventKey}
       eventName={eventName}
-      websocketStatus={snapshot.websocketStatus}
-      websocketStale={snapshot.websocketStale}
+      websocketStatus={websocketStatus}
+      websocketStale={false}
     />
   );
 }
