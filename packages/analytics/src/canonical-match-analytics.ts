@@ -4,7 +4,7 @@ import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { AnalyticsMatch } from "./types.ts";
 import { buildAllianceResults } from "./calculations.ts";
 import { buildQualificationAnalysis } from "./calculations.ts";
-import { buildMatchFlags } from "./match-flags.ts";
+import { buildMatchFlagContext, buildMatchFlags } from "./match-flags.ts";
 import { createAnalyticsAudit } from "./audit.ts";
 import { calculateCanonicalAggregateAnalytics } from "./canonical-aggregate-analytics.ts";
 import type { FieldViewAnalyticsInputRecord, FieldViewSeasonCohortSnapshot } from "../../domain/src/analytics.ts";
@@ -79,6 +79,7 @@ export async function calculateCanonicalMatchAnalytics(
     eventState.event?.playoff_type,
   );
   const flagContext = { allianceResults, qualificationAnalysis };
+  const matchFlagContext = buildMatchFlagContext(flagContext);
   const audit = await createAnalyticsAudit({
     calculation_id: crypto.randomUUID(),
     calculated_at: Date.now(),
@@ -144,7 +145,7 @@ export async function calculateCanonicalMatchAnalytics(
         alliance_epa: { red: red.alliance_epa, blue: blue.alliance_epa },
         audit,
       },
-      flags: buildMatchFlags(flagContext, record),
+      flags: buildMatchFlags(flagContext, record, matchFlagContext),
     };
   });
 
