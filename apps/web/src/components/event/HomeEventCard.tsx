@@ -6,17 +6,17 @@ import {
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import HomeMatchCard from "@/components/event/HomeMatchCard";
-import type { TBAEvent, TBAMatch } from "@/lib/tba/types";
+import type { FieldViewEvent, FieldViewMatch } from "@fieldview/domain";
 import { formatEventName, getEventWebcastStatus } from "@/lib/tba/formatters";
 import { formatEventDateRange, getEventCompetitionStatus } from "@/lib/time";
 
 type HomeEventCardProps = {
-  event: TBAEvent;
-  lastMatch: TBAMatch | null;
-  nextMatch: TBAMatch | null;
+  event: FieldViewEvent;
+  lastMatch: FieldViewMatch | null;
+  nextMatch: FieldViewMatch | null;
 };
 
-function getCompetitionStatus(event: TBAEvent) {
+function getCompetitionStatus(event: FieldViewEvent) {
   const status = getEventCompetitionStatus(
     event.start_date,
     event.end_date,
