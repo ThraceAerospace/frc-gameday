@@ -20,6 +20,7 @@ import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoi
 import type { StatboticsMatch } from "../../../packages/providers/statbotics/src/types.ts";
 import type { EventKey } from "../../../packages/domain/src/ids.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
+import type { FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
 import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
 import { calculateCanonicalMatchAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
 
@@ -89,6 +90,40 @@ function toSourceMetadata(
 
 function hasAcquiredValue(state: EndpointState<unknown> | undefined): boolean {
   return Boolean(state && (state.lastFetchedAt !== null || state.lastWebhookAt !== null));
+}
+
+
+function buildAnalyticsInputRecord(
+  inputKey: string,
+  provider: string,
+  resource: string,
+  state: EndpointState<unknown> | undefined,
+  recordCount: number,
+  includedCount: number,
+  now: number,
+): FieldViewAnalyticsInputRecord {
+  const unavailable = !state || state.status === "unknown" ||
+    state.status === "unavailable" || state.status === "failed";
+  const stale = Boolean(state && (
+    state.status === "stale" ||
+    (state.expiresAt !== null && state.expiresAt < now)
+  ));
+  const status = unavailable ? "unavailable"
+    : stale || includedCount < recordCount ? "partial"
+      : "available";
+  const safeRecordCount = Math.max(0, recordCount);
+  const safeIncludedCount = Math.max(0, Math.min(safeRecordCount, includedCount));
+  return {
+    input_key: inputKey,
+    provider,
+    resource,
+    source_revision: state?.revision ?? null,
+    fetched_at: state?.lastFetchedAt ?? state?.lastWebhookAt ?? null,
+    record_count: safeRecordCount,
+    included_count: safeIncludedCount,
+    excluded_count: safeRecordCount - safeIncludedCount,
+    status,
+  };
 }
 
 export function eventResourceEndpoints(eventKey: string): string[] {
@@ -451,9 +486,33 @@ export class EventRuntime {
             : {},
         },
       });
+    const canonicalMatches = normalizedState.matches ?? [];
+    const tbaMatchRecords = Array.isArray(matchesState?.data) ? matchesState.data : [];
+    const tbaTeamRecords = Array.isArray(teamsState?.data) ? teamsState.data : [];
+    const statboticsIncludedCount = canonicalMatches.filter((match) =>
+      match.predictions.statbotics !== undefined ||
+      match.teams.red.some((team) => team.pre_epa !== undefined || team.epa !== undefined) ||
+      match.teams.blue.some((team) => team.pre_epa !== undefined || team.epa !== undefined),
+    ).length;
+    const inputRecords: FieldViewAnalyticsInputRecord[] = [
+      buildAnalyticsInputRecord(
+        "tba-event-matches", "tba", "event-matches", matchesState,
+        tbaMatchRecords.length, tbaMatchRecords.length, now,
+      ),
+      buildAnalyticsInputRecord(
+        "tba-event-teams", "tba", "event-teams", teamsState,
+        tbaTeamRecords.length,
+        tbaTeamRecords.filter((team) => typeof team.team_number === "number").length,
+        now,
+      ),
+      buildAnalyticsInputRecord(
+        "statbotics-event-matches", "statbotics", "event-matches", statboticsMatchesState,
+        canonicalMatches.length, statboticsIncludedCount, now,
+      ),
+    ];
     return {
       version: state.version,
-      state: calculateCanonicalMatchAnalytics(normalizedState),
+      state: await calculateCanonicalMatchAnalytics(normalizedState, inputRecords),
     };
   }
 
