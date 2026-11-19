@@ -1062,10 +1062,12 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey, records, team, d
 
   return <>
     <TeamAnalysisTabs analysis={legacyAnalysis} records={records} eventKey={eventKey} name={name} team={team} data={data} />
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
+    <details className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Additional canonical season diagnostics</summary>
+      <section className="overflow-hidden border-t border-slate-200 dark:border-slate-700">
     <div className="border-b border-slate-200 px-4 pt-4 dark:border-slate-700 sm:px-5">
-      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
-      <p className="mt-1 text-xs text-slate-500">Explore this team's event performance, season development, and matches worth a closer look.</p>
+      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Canonical season diagnostics</h3>
+      <p className="mt-1 text-xs text-slate-500">Extended event-balanced residual, elimination-shift, and anomaly evidence from canonical analytics.</p>
       <div role="tablist" aria-label="Team analysis sections" className="no-scrollbar mt-3 -mb-px flex gap-1 overflow-x-auto">
         {tabs.map((tab) => <button key={tab.id} type="button" role="tab" id={`team-analysis-tab-${tab.id}`} aria-controls={`team-analysis-panel-${tab.id}`} aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={"shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors " + (activeTab === tab.id ? "border-[var(--fv-brand)] text-[var(--fv-brand-strong)] dark:text-[var(--fv-brand)]" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>{tab.label}</button>)}
       </div>
@@ -1138,7 +1140,8 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey, records, team, d
         <div><h4 className="mb-2 text-base font-bold text-slate-900 dark:text-slate-100">Match-by-match EPA and score evidence</h4>{matchTable(allReviewMatches.filter((match) => match.actual_score !== null && match.opponent_actual_score !== null))}</div>
       </> : null}
     </div>
-  </section>;
+      </section>
+    </details>;
   </>;
 }
 
