@@ -1198,6 +1198,7 @@ export class EventRuntime {
     let responseState:
       | { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null }
       | { status: "not-modified"; expiresAt: number | null }
+      | { status: "unavailable"; httpStatus: number }
       | { status: "failed"; reason: string };
 
     const permit = await acquireProviderRequestPermit(this.env, "event:" + this.eventKey, endpoint);
@@ -1214,6 +1215,8 @@ export class EventRuntime {
           status: "not-modified",
           expiresAt: expiresAt ?? initial.expiresAt,
         };
+      } else if (response.status === 404) {
+        responseState = { status: "unavailable", httpStatus: response.status };
       } else if (!response.ok) {
         responseState = {
           status: "failed",
@@ -1256,7 +1259,8 @@ export class EventRuntime {
         ...next,
         lastError: responseState.status === "failed" ? responseState.reason : null,
         lastHttpStatus: responseState.status === "modified" ? 200
-          : responseState.status === "not-modified" ? 304 : null,
+          : responseState.status === "not-modified" ? 304
+            : responseState.status === "unavailable" ? responseState.httpStatus : null,
       };
       await transaction.put(key, nextWithDiagnostic);
       if (next.revision !== latest.revision) {
@@ -1277,7 +1281,9 @@ export class EventRuntime {
       // Preserve each accepted upstream 200 payload as an immutable source
       // version. The current endpoint state may also contain webhook patches;
       // source records retain exactly what TBA returned.
-      const sourceVersion = createProviderSourceVersion(latest, next, responseState, now);
+      const sourceVersion = responseState.status === "unavailable"
+        ? null
+        : createProviderSourceVersion(latest, next, responseState, now);
       if (sourceVersion) {
         await transaction.put(
           sourceStorageKey(endpoint, sourceVersion.validatorRevision),
@@ -1301,7 +1307,8 @@ export class EventRuntime {
     // A 304 without a retained representation is not a successful refresh.
     // A Statbotics 304 means its representation has not caught up to the TBA
     // change that triggered this bounded refresh. Retry without discarding data.
-    return responseState.status !== "failed" && result.status !== "failed" &&
+    return responseState.status !== "failed" && responseState.status !== "unavailable" &&
+      result.status !== "failed" && result.status !== "unavailable" &&
       !(isStatboticsEndpoint && responseState.status === "not-modified");
   }
 
