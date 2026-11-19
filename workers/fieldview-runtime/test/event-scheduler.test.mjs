@@ -211,10 +211,17 @@ test("public team discovery returns canonical team records with provenance", asy
   const updatedAt = Date.parse("2026-01-02T03:04:05.000Z");
   await storage.put("team-discovery:2026", {
     etag: '"teams-2026"',
+    pageEtags: { "0": '"teams-2026"' },
+    pageCount: 1,
+    teamCount: 1,
+    teamKeys: ["frc3461"],
+    complete: true,
     updatedAt,
     checkedAt: Date.now(),
-    teams: [{ key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" }],
   });
+  await storage.put("team-discovery:2026:page:0", [
+    { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" },
+  ]);
   const scheduler = new EventScheduler({ storage }, {});
   const response = await scheduler.fetch(new Request("https://scheduler/teams?year=2026"));
   assert.equal(response.status, 200);
