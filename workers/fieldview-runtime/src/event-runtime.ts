@@ -1191,13 +1191,13 @@ export class EventRuntime {
         isRecord(calculated.state.analytics.season_cohort)
         ? calculated.state.analytics.season_cohort.state
         : undefined;
+      const allowPartialCohort = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       const cohortIncomplete = cohortState !== undefined && cohortState !== "complete";
       const collectionPartial = isRecord(calculated.state.analytics) &&
         isRecord(calculated.state.analytics.collection) &&
         calculated.state.analytics.collection.state === "partial";
       const analyticsIncomplete = calculated.analyticsInputsComplete === false ||
         cohortIncomplete || collectionPartial || (allowPartialCohort && cohortState === undefined);
-      const allowPartialCohort = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       const cohortRetries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
       const terminalDiscoveryGap = allowPartialCohort && cohortState === "discovering";
       if (cohortIncomplete && !terminalDiscoveryGap && cohortRetries < ANALYTICS_COHORT_MAX_RETRIES) {
