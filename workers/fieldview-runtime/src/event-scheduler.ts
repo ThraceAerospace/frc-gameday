@@ -1059,10 +1059,12 @@ export class EventScheduler {
           const preflight = await stub.fetch(new Request("https://event-runtime/state", { headers }));
           if (preflight.ok) {
             const current = await preflight.json() as {
-              event_state?: { status?: string };
-              analytics?: { status?: string; cohort_status?: string | null };
+              event_state?: { status?: string; source_revision?: number | null };
+              analytics?: { status?: string; source_revision?: number | null; cohort_status?: string | null };
             };
             const artifactsReusable = current.event_state?.status === "complete" &&
+              current.event_state.source_revision != null &&
+              current.analytics?.source_revision === current.event_state.source_revision &&
               (current.analytics?.status === "succeeded" || current.analytics?.status === "partial") &&
               current.analytics?.cohort_status === "complete";
             if (artifactsReusable) {
