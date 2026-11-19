@@ -1,17 +1,13 @@
 "use client";
 
-import type {
-  TBAMatch,
-  TBAEliminationAlliance,
-  TBATeamEventStatus,
-} from "@/lib/tba/types";
+import type { FieldViewEventTeam, FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 
 import { formatAllianceShortName, formatRecord, formatTeamNumber, matchAbbreviationName } from "@/lib/tba/formatters";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 
 function allianceLabel(
   team: string,
-  alliances: TBAEliminationAlliance[],
+  alliances: FieldViewPlayoffAlliance[],
 ) {
   const teamKey = String(team).toLowerCase();
 
@@ -40,9 +36,9 @@ export default function TeamPill({
   imminentMatch = false,
 }: {
   team: string;
-  status: TBATeamEventStatus | null | undefined;
-  nextMatch: TBAMatch | null | undefined;
-  playoffAlliances?: TBAEliminationAlliance[];
+  status: FieldViewEventTeam["tba_status"] | null | undefined;
+  nextMatch: FieldViewMatch | null | undefined;
+  playoffAlliances?: FieldViewPlayoffAlliance[];
   eventTimezone?: string | null;
   playoffType?: number | null;
   priorityEditing?: boolean;
