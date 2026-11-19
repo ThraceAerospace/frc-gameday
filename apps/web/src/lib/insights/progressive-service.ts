@@ -305,21 +305,20 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
         // analytics service only projects the canonical snapshot into its
         // legacy presentation DTO; it never calls the provider.
         const canonical = await getCanonicalEventSnapshot(eventKey);
-        const colors = canonical?.snapshot.team_colors;
-        if (colors !== undefined) {
-          job.teamColors = Object.entries(colors).map(([teamNumber, color]) => ({
-            teamNumber: Number(teamNumber),
-            primaryHex: color.primary_hex,
-            secondaryHex: color.secondary_hex,
-            verified: color.verified,
+        const teamsWithColors = canonical?.snapshot.teams?.filter((team) => team.frc_colors !== undefined) ?? [];
+        if (canonical?.snapshot.teams !== undefined) {
+          job.teamColors = teamsWithColors.map((team) => ({
+            teamNumber: team.team_number,
+            primaryHex: team.frc_colors?.primary_hex ?? null,
+            secondaryHex: team.frc_colors?.secondary_hex ?? null,
+            verified: team.frc_colors?.verified ?? null,
           }));
-          const retrievedAt = canonical?.snapshot.sources.team_colors?.frc_colors_event?.retrieved_at;
-          job.teamColorsLoadedAt = retrievedAt ? Date.parse(retrievedAt) : Date.now();
-          job.teamColorsFetchError = canonical?.snapshot.sources.team_colors?.frc_colors_event?.status === "stale"
-            ? "Using stale canonical FRC Colors data"
-            : null;
+          job.teamColorsLoadedAt = Date.now();
+          job.teamColorsFetchError = teamsWithColors.length === canonical.snapshot.teams.length
+            ? null
+            : "Some team color records have not yet been acquired";
         } else {
-          job.teamColorsFetchError = "Canonical FRC Colors data has not been acquired";
+          job.teamColorsFetchError = "Canonical event team list is not available";
         }
       } catch (error) {
         job.teamColorsFetchError = error instanceof Error ? error.message : String(error);
