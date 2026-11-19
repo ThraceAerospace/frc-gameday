@@ -4,16 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { PlusIcon } from "@heroicons/react/24/outline";
 import EventView from "@/components/eventview/EventView";
 import ImminentMatchBanner from "@/components/eventview/ImminentMatchBanner";
-import { useEventState } from "@/lib/events";
+import { useCanonicalEventSnapshot } from "@/lib/events";
 import { LAYOUTS, pickLayout } from "@/lib/multiview/layouts";
 import type { TileSurfaceController } from "./TileSurfaceActions";
 import type { TileSurfaceState } from "./TileSurfaceState";
 import type { EventViewPresentation } from "@/components/eventview/EventViewConfig";
-import { TBAMatch } from "@/lib/tba/types";
+import type { MatchPresentation } from "@/components/match/MatchCard";
+import { getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 
 type SurfaceUpcomingMatchAlert = {
   eventKey: string;
-  match: TBAMatch;
+  match: MatchPresentation;
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
@@ -29,8 +30,11 @@ function SurfaceUpcomingMatchAlertSource({
   config: TileSurfaceState["eventConfigs"][string] | undefined;
   onAlert: (eventKey: string, alert: SurfaceUpcomingMatchAlert | null) => void;
 }) {
-  const { event, matches, upcomingMatchKey } = useEventState(eventKey);
-  const upcomingMatch = matches.find((match) => match.key === upcomingMatchKey) ?? null;
+  const canonical = useCanonicalEventSnapshot(eventKey);
+  const snapshot = canonical?.snapshot;
+  const event = snapshot?.event ?? null;
+  const matches = snapshot?.matches ?? [];
+  const upcomingMatch = getNextMatch(sortMatches(matches));
   const upcomingTeams = useMemo(() => {
     if (!config?.matchNotifications || !upcomingMatch) return [];
 
@@ -48,8 +52,7 @@ function SurfaceUpcomingMatchAlertSource({
       return;
     }
 
-    // A webhook may arrive before the refreshed match list is available.
-    // Keep the current banner until we can resolve the updated match.
+    // Keep the current banner until the canonical snapshot can resolve the next match.
     if (!upcomingMatch) return;
 
     if (upcomingTeams.length === 0) {
@@ -73,7 +76,7 @@ function SurfaceUpcomingMatchAlertSource({
     eventKey,
     onAlert,
     upcomingMatch,
-    upcomingMatchKey,
+    upcomingMatch?.key,
     upcomingTeams,
   ]);
 
