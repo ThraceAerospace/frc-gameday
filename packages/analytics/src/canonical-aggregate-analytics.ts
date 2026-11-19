@@ -226,8 +226,8 @@ export function calculateCanonicalAggregateAnalytics(
       root_mean_square_error: qualificationAnalysis.scorePrediction.rootMeanSquareError,
       mean_residual: qualificationAnalysis.scorePrediction.meanResidual,
       within_25_count: allianceResults.filter((item) => item.compLevel.toLowerCase() === "qm" && item.residual !== null && Math.abs(item.residual) <= 25).length,
-      win_prediction_count: winChecks.length,
-      win_prediction_accuracy: winChecks.length ? winChecks.reduce((sum, value) => sum + value, 0) / winChecks.length : null,
+      win_prediction_count: qualificationAnalysis.predictionCalibration.matchCount,
+      win_prediction_accuracy: qualificationAnalysis.predictionCalibration.accuracy,
     },
     progression: qualificationAnalysis.progression.map((item) => ({
       label: item.label, first_match: item.firstMatch, last_match: item.lastMatch,
