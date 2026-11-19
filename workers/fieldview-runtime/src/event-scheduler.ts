@@ -450,14 +450,19 @@ export class EventScheduler {
         const eventKeys = events?.events.map((item) => item.key).filter((item): item is string =>
           typeof item === "string" && /^[a-zA-Z0-9_-]+$/.test(item)) ?? [];
         const teamKeys = (teams?.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey));
-        const ready = events?.complete === true && teams?.complete === true && eventKeys.length > 0 && teamKeys.length > 0;
+        const runtimeReady = Boolean(this.env.TEAM_RUNTIME && this.env.EVENT_RUNTIME && this.env.RUNTIME_ADMIN_TOKEN && this.env.TBA_API_KEY);
+        const discoveryReady = events?.complete === true && teams?.complete === true && eventKeys.length > 0 && teamKeys.length > 0;
+        const ready = discoveryReady && runtimeReady;
         const eventResourceCount = eventKeys[0] ? eventResourceEndpoints(eventKeys[0]).length + 1 : 0;
         const teamResourceCount = teamKeys[0] ? teamResourceEndpoints(teamKeys[0], year).length : 0;
         const plannedRequests = eventKeys.length * eventResourceCount + teamKeys.length * teamResourceCount;
         const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
         const requestIntervalMs = intervalValue === undefined ? 1_000 : Number(intervalValue);
         return Response.json({
-          year, ready, events: eventKeys.length, teams: teamKeys.length,
+          year, ready, runtime_ready: runtimeReady,
+          ready_reason: !discoveryReady ? "Complete event and paginated team discovery first." :
+            !runtimeReady ? "TEAM_RUNTIME, EVENT_RUNTIME, RUNTIME_ADMIN_TOKEN, and TBA_API_KEY must be configured." : null,
+          events: eventKeys.length, teams: teamKeys.length,
           team_pages: teams?.pageCount ?? 0, event_resources_per_event: eventResourceCount,
           team_resources_per_team: teamResourceCount, planned_resource_requests: plannedRequests,
           request_interval_ms: requestIntervalMs,
@@ -469,6 +474,9 @@ export class EventScheduler {
         }, { headers: { "Cache-Control": "no-store" } });
       }
       if (action === "start") {
+        if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN || !this.env.TBA_API_KEY) {
+          return Response.json({ error: "Season ingestion requires TEAM_RUNTIME, EVENT_RUNTIME, RUNTIME_ADMIN_TOKEN, and TBA_API_KEY bindings." }, { status: 409 });
+        }
         if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
         if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
