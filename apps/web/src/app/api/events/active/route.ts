@@ -3,20 +3,7 @@ import type { FieldViewEvent } from "@fieldview/domain";
 
 type EventState = "upcoming" | "in_progress" | "complete";
 
-type ActiveEvent = Pick<
-  FieldViewEvent,
-  | "key"
-  | "name"
-  | "short_name"
-  | "event_type_string"
-  | "city"
-  | "state_prov"
-  | "country"
-  | "start_date"
-  | "end_date"
-> & {
-  state: EventState;
-};
+type ActiveEvent = { event: FieldViewEvent; state: EventState };
 
 function parseEventDate(
   dateString: string,
