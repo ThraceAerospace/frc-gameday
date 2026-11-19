@@ -589,6 +589,9 @@ export class EventRuntime {
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const eventAnalytics = analyticsPublication?.eventAnalytics;
+      const cohortStatus = isRecord(eventAnalytics) && isRecord(eventAnalytics.season_cohort)
+        ? eventAnalytics.season_cohort.state : null;
       return Response.json({
         event_key: this.eventKey,
         event_state: {
@@ -603,6 +606,7 @@ export class EventRuntime {
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
           pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
+          cohort_status: cohortStatus,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         lifecycle: {
