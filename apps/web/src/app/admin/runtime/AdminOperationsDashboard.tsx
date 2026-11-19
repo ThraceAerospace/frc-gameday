@@ -186,6 +186,12 @@ export default function AdminOperationsDashboard() {
   }, [authenticated, loadCoverageAudit]);
 
   useEffect(() => {
+    if (!authenticated || coverageAudit?.status !== "running" || busy) return;
+    const timer = window.setTimeout(() => void runCoverageAudit(), 300);
+    return () => window.clearTimeout(timer);
+  }, [authenticated, coverageAudit, busy, runCoverageAudit]);
+
+  useEffect(() => {
     if (!authenticated || (tab !== "events" && tab !== "teams")) return;
     const timer = window.setTimeout(() => void loadInventory(0), 250);
     return () => window.clearTimeout(timer);
