@@ -38,13 +38,23 @@ export function buildCanonicalSeasonCohort(
 
   const records: FieldViewSeasonCohortRecord[] = [];
   let discoveryPendingTeams = 0;
+  let historyUnavailableTeams = 0;
   let expectedRecords = 0;
 
   for (const teamNumber of teamNumbers) {
     const snapshot = snapshotByTeam.get(teamNumber) ?? null;
     const availableEvents = snapshot?.events;
-    if (!snapshot || availableEvents === undefined || availableEvents === null) {
+    if (!snapshot) {
       discoveryPendingTeams += 1;
+    } else if (availableEvents === undefined || availableEvents === null) {
+      const historySourceStatus = snapshot.sources.tba_team_events?.status;
+      if (historySourceStatus === "failed" || historySourceStatus === "unavailable") {
+        // The resource was attempted and its failure is now terminal evidence,
+        // not an indefinitely-discovering cohort. Keep the team row explicit.
+        historyUnavailableTeams += 1;
+      } else {
+        discoveryPendingTeams += 1;
+      }
     }
 
     const officialEvents = (availableEvents ?? [])
@@ -96,12 +106,13 @@ export function buildCanonicalSeasonCohort(
   const unavailable = records.filter((record) => record.status === "unavailable").length;
   return {
     state: discoveryPendingTeams > 0 ? "discovering"
-      : unavailable > 0 ? "partial" : "complete",
+      : unavailable > 0 || historyUnavailableTeams > 0 ? "partial" : "complete",
     team_count: teamNumbers.length,
     total_team_event_records: expectedRecords,
     processed_team_event_records: records.length,
     unavailable_team_event_records: unavailable,
     discovery_pending_teams: discoveryPendingTeams,
+    history_unavailable_teams: historyUnavailableTeams,
     updated_at: updatedAt,
     records,
   };
