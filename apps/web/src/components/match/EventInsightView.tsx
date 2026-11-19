@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
-import type { StatboticsMatch, StatboticsPrediction } from "@/lib/statbotics/types";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewEventSnapshot, FieldViewMatch, FieldViewMatchTeam } from "@fieldview/domain";
+import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
 import ScoreBreakdown from "./ScoreBreakdown";
@@ -33,10 +32,6 @@ function formatMetric(value: number | null | undefined): string {
     : "—";
 }
 
-function teamNumberKey(teamKey: string): string {
-  return teamKey.replace(/^frc/i, "");
-}
-
 function sumAvailableValues(values: (number | null | undefined)[]): number | undefined {
   if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
     return undefined;
@@ -44,16 +39,12 @@ function sumAvailableValues(values: (number | null | undefined)[]): number | und
   return values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 }
 
-function sumAllianceEstimates(
-  teamKeys: string[],
-  oprs: EventStateSnapshot["oprs"],
-  preEpas: StatboticsMatch["pre_epas"],
-): AllianceEstimates {
-  const teamEpas = teamKeys.map((teamKey) => preEpas?.[teamNumberKey(teamKey)]);
+function sumAllianceEstimates(teams: FieldViewMatchTeam[]): AllianceEstimates {
+  const teamEpas = teams.map((team) => team.pre_epa);
   return {
-    opr: sumAvailableValues(teamKeys.map((teamKey) => oprs?.oprs?.[teamKey])),
-    dpr: sumAvailableValues(teamKeys.map((teamKey) => oprs?.dprs?.[teamKey])),
-    ccwm: sumAvailableValues(teamKeys.map((teamKey) => oprs?.ccwms?.[teamKey])),
+    opr: sumAvailableValues(teams.map((team) => team.opr)),
+    dpr: sumAvailableValues(teams.map((team) => team.dpr)),
+    ccwm: sumAvailableValues(teams.map((team) => team.ccwm)),
     epa: sumAvailableValues(teamEpas.map((epa) => epa?.epa)),
     autoEpa: sumAvailableValues(teamEpas.map((epa) => epa?.auto_epa)),
     teleopEpa: sumAvailableValues(teamEpas.map((epa) => epa?.teleop_epa)),
@@ -66,13 +57,11 @@ function AllianceCard({
   match,
   snapshot,
   trackedTeams,
-  preEpas,
 }: {
   color: AllianceColor;
-  match: TBAMatch;
-  snapshot: EventStateSnapshot;
+  match: FieldViewMatch;
+  snapshot: FieldViewEventSnapshot;
   trackedTeams: string[];
-  preEpas: StatboticsMatch["pre_epas"];
 }) {
   const alliance = match.alliances[color];
   const allianceTeams = alliance.team_keys ?? [];
@@ -80,7 +69,9 @@ function AllianceCard({
     () => new Map(snapshot.teams.map((team) => [team.key, team.nickname ?? team.name ?? team.key] as const)),
     [snapshot.teams],
   );
-  const totals = sumAllianceEstimates(allianceTeams, snapshot.oprs, preEpas);
+  const allianceData = match.teams[color];
+  const teamDataByKey = new Map(allianceData.map((team) => [team.team_key, team] as const));
+  const totals = sumAllianceEstimates(allianceData);
   const scorePosted = typeof alliance.score === "number" && alliance.score >= 0;
   const winner = match.winning_alliance === color;
   const tied = match.winning_alliance === "";
@@ -111,7 +102,7 @@ function AllianceCard({
           <tbody className="divide-y divide-white/5">
             {allianceTeams.map((teamKey) => {
               const tracked = trackedTeams.includes(teamKey);
-              const teamEpa = preEpas?.[teamNumberKey(teamKey)];
+              const teamEpa = teamDataByKey.get(teamKey)?.pre_epa;
               return (
                 <tr key={teamKey} className={tracked ? "bg-amber-300/[0.08]" : ""}>
                   <th scope="row" className={`sticky left-0 z-10 min-w-32 ${colorClasses.sticky} px-3 py-3 text-left font-normal`}>
@@ -157,16 +148,20 @@ export default function EventInsightView({
   matchOverride = null,
 }: {
   eventKey: string;
-  snapshot: EventStateSnapshot;
+  snapshot?: FieldViewEventSnapshot;
   trackedTeams?: string[];
-  matchOverride?: TBAMatch | null;
+  matchOverride?: FieldViewMatch | null;
 }) {
-  const { event, eventNextMatch, eventLastMatch, loading, error } = snapshot;
+  const event = snapshot?.event ?? null;
+  const matches = sortMatches(snapshot?.matches ?? []);
+  const eventNextMatch = getNextMatch(matches);
+  const eventLastMatch = getLastMatch(matches);
+  const loading = snapshot === undefined;
   const [displayMatchKey, setDisplayMatchKey] = useState<string | null>(matchOverride?.key ?? eventNextMatch?.key ?? eventLastMatch?.key ?? null);
   const [resultMatchKey, setResultMatchKey] = useState<string | null>(null);
   const currentDisplayedMatch = matchOverride?.key === displayMatchKey
     ? matchOverride
-    : snapshot.matches.find((item) => item.key === displayMatchKey) ?? null;
+    : matches.find((item) => item.key === displayMatchKey) ?? null;
   const currentResultPosted = Boolean(
     currentDisplayedMatch &&
     typeof currentDisplayedMatch.alliances.red.score === "number" &&
@@ -181,11 +176,11 @@ export default function EventInsightView({
       setResultMatchKey(null);
       return;
     }
-    const nextMatch = snapshot.eventNextMatch;
+    const nextMatch = eventNextMatch;
     if (!nextMatch) {
-      if (snapshot.eventLastMatch) {
-        setDisplayMatchKey(snapshot.eventLastMatch.key);
-        if (currentResultPosted) setResultMatchKey(snapshot.eventLastMatch.key);
+      if (eventLastMatch) {
+        setDisplayMatchKey(eventLastMatch.key);
+        if (currentResultPosted) setResultMatchKey(eventLastMatch.key);
       }
       return;
     }
@@ -204,19 +199,21 @@ export default function EventInsightView({
     }
     setDisplayMatchKey(nextMatch.key);
     setResultMatchKey(null);
-  }, [matchOverride?.key, snapshot.eventNextMatch?.key, snapshot.eventLastMatch?.key, displayMatchKey, currentResultPosted]);
+  }, [matchOverride?.key, eventNextMatch?.key, eventLastMatch?.key, displayMatchKey, currentResultPosted]);
 
   const displayMatch =
     (matchOverride?.key === displayMatchKey ? matchOverride : null) ??
-    snapshot.matches.find((item) => item.key === displayMatchKey) ??
+    matches.find((item) => item.key === displayMatchKey) ??
     (eventNextMatch?.key === displayMatchKey ? eventNextMatch : null) ??
     (eventLastMatch?.key === displayMatchKey ? eventLastMatch : null);
 
-  const statboticsState = displayMatch ? snapshot.statboticsMatches[displayMatch.key] : undefined;
-  const statboticsData = statboticsState?.data ?? null;
-  const statboticsStatus = statboticsState?.status ?? "loading";
-  const prediction: StatboticsPrediction | undefined = statboticsData?.pred ?? undefined;
-  const preEpas = statboticsData?.pre_epas;
+  const sourceStatus = displayMatch?.sources.statbotics_match?.status;
+  const statboticsStatus = sourceStatus === "available" || sourceStatus === "stale"
+    ? "ready"
+    : sourceStatus === "unavailable" || sourceStatus === "failed"
+      ? "unavailable"
+      : "loading";
+  const prediction = displayMatch?.predictions.statbotics;
 
   const isPostMatch = Boolean(
     displayMatch &&
@@ -239,9 +236,9 @@ export default function EventInsightView({
         </div>
       </header>
 
-      {error ? <div className="mx-5 mt-4 rounded-lg border border-red-400/20 bg-red-950/30 p-3 text-sm text-red-200">Event data is temporarily unavailable.</div> : null}
+      
 
-      {!displayMatch ? (
+      {!displayMatch || !snapshot ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center">
           <div>
             <div className="text-base font-semibold text-neutral-200">{loading ? "Loading event and match data…" : "No upcoming match"}</div>
@@ -254,10 +251,10 @@ export default function EventInsightView({
           <MatchPredictionBar prediction={prediction} status={statboticsStatus} />
           <MatchPredictionMetrics prediction={prediction} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
-            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} preEpas={preEpas} />
+            <AllianceCard color="red" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} />
+            <AllianceCard color="blue" match={displayMatch} snapshot={snapshot} trackedTeams={trackedTeams} />
           </div>
-          {isPostMatch ? <ScoreBreakdown match={displayMatch} year={statboticsData?.year ?? Number(displayMatch.key.slice(0, 4))} /> : null}
+          {isPostMatch ? <ScoreBreakdown match={displayMatch} year={Number(displayMatch.key.slice(0, 4))} /> : null}
           <p className="mt-4 text-[10px] leading-5 text-neutral-600">Predicted values and pre-match EPAs are provided by Statbotics. Official scores and year-specific score breakdowns are from TBA. Statbotics numeric values are formatted for readability, and alliance estimates are the sum of the individual team estimates.</p>
         </div>
       )}
