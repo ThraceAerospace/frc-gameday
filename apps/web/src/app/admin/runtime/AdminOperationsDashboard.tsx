@@ -90,7 +90,7 @@ function endpointRows(state?: EntityState | null): Endpoint[] {
 function statusTone(status?: string) {
   if (status === "available" || status === "succeeded" || status === "ok") return "text-emerald-600";
   if (status === "failed" || status === "unavailable" || status === "error") return "text-rose-600";
-  if (status === "stale" || status === "pending" || status === "unknown" || status === "running") return "text-amber-600";
+  if (status === "stale" || status === "partial" || status === "waiting-for-cohort" || status === "pending" || status === "unknown" || status === "running") return "text-amber-600";
   return "text-[var(--fv-muted)]";
 }
 
