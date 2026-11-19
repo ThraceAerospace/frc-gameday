@@ -878,6 +878,11 @@ export class EventScheduler {
     await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
   }
 
+  private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
+    const current = await this.storage.get<SeasonIngestJob>(seasonIngestKey(job.year));
+    return current?.status === "running" && current.runGeneration === job.runGeneration;
+  }
+
   private async persistSeasonIngest(job: SeasonIngestJob): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const current = await tx.get<SeasonIngestJob>(seasonIngestKey(job.year));
@@ -889,6 +894,7 @@ export class EventScheduler {
 
   private async processSeasonIngest(job: SeasonIngestJob): Promise<void> {
     const key = seasonIngestKey(job.year);
+    if (!(await this.isSeasonIngestCurrent(job))) return;
     const recordError = (kind: "team" | "event", entityKey: string, detail: string) => {
       job.recentErrors.push({ kind, key: entityKey, detail: detail.slice(0, 240), at: Date.now() });
       if (job.recentErrors.length > 100) job.recentErrors.splice(0, job.recentErrors.length - 100);
@@ -956,6 +962,7 @@ export class EventScheduler {
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
           } else {
+            if (!(await this.isSeasonIngestCurrent(job))) return;
             const response = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
               method: "POST", headers: { ...headers, "Content-Type": "application/json" },
               body: JSON.stringify({ endpoint: resource.endpoint }),
@@ -1061,6 +1068,7 @@ export class EventScheduler {
             }
           }
         }
+        if (job.eventCursor === eventIndex && !(await this.isSeasonIngestCurrent(job))) return;
         if (job.eventCursor === eventIndex) {
         if (job.eventResourceCursor < resources.length) {
           const endpoint = resources[job.eventResourceCursor];
@@ -1076,6 +1084,7 @@ export class EventScheduler {
             job.resourceAttempts = 0;
             job.nextDueAt = Date.now() + 1_000;
           } else {
+            if (!(await this.isSeasonIngestCurrent(job))) return;
             const response = await stub.fetch(new Request("https://event-runtime/ingest-resource", {
               method: "POST", headers,
               body: JSON.stringify({ endpoint }),
@@ -1109,6 +1118,7 @@ export class EventScheduler {
             }
           }
         } else {
+          if (!(await this.isSeasonIngestCurrent(job))) return;
           const snapshot = await stub.fetch(new Request("https://event-runtime/publish-state", {
             method: "POST",
             headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
