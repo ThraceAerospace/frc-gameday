@@ -4,15 +4,18 @@ import { useState } from "react";
 import type {
   FieldViewAnalyticsFinding,
   FieldViewEventAnalytics,
+  FieldViewEventSnapshot,
   FieldViewMatch,
   FieldViewMetricResult,
   FieldViewTeamState,
 } from "@fieldview/domain";
+import EventInsightView from "@/components/match/EventInsightView";
 
-type Tab = "overview" | "teams" | "matches" | "findings";
+type Tab = "overview" | "live" | "teams" | "matches" | "findings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "live", label: "Live match insights" },
   { id: "teams", label: "Teams" },
   { id: "matches", label: "Match review" },
   { id: "findings", label: "Review findings" },
@@ -60,6 +63,7 @@ export default function EventAnalyticsDashboard({
   eventName,
   eventTimezone,
   analytics,
+  snapshot,
   teamStates,
   matches,
   loading,
@@ -69,6 +73,7 @@ export default function EventAnalyticsDashboard({
   eventName: string;
   eventTimezone?: string;
   analytics: FieldViewEventAnalytics | null | undefined;
+  snapshot: FieldViewEventSnapshot | undefined;
   teamStates: FieldViewTeamState[] | null | undefined;
   matches: FieldViewMatch[] | null | undefined;
   loading: boolean;
@@ -109,6 +114,12 @@ export default function EventAnalyticsDashboard({
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{analytics.metrics.map((metric) => <MetricCard key={metric.metric_key} metric={metric} />)}</div>
           <AuditSummary audit={analytics.audit} eventTimezone={eventTimezone} />
           <div><h3 className="mb-3 text-lg font-bold text-[var(--fv-text)]">Event findings</h3>{analytics.findings.length ? <div className="grid gap-3 lg:grid-cols-2">{analytics.findings.map((finding) => <FindingCard key={finding.finding_key} finding={finding} />)}</div> : <p className="text-sm text-[var(--fv-muted)]">No event-level review findings were produced.</p>}</div>
+        </div>
+      ) : null}
+
+      {tab === "live" ? (
+        <div className="mt-5 h-[min(78vh,900px)] min-h-[36rem] overflow-hidden rounded-xl bg-black">
+          {snapshot ? <EventInsightView eventKey={eventKey} snapshot={snapshot} /> : <p className="p-5 text-sm text-white/60">Waiting for the canonical event snapshot…</p>}
         </div>
       ) : null}
 
