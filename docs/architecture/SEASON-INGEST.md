@@ -51,8 +51,8 @@ The job starts only after a preview confirms complete event and paginated team d
 The coverage audit must report distinct counts for:
 
 - Events in the discovered inventory.
-- EventState publications complete, partial, missing, and failed.
-- EventAnalytics publications succeeded, partial, missing, waiting for cohort, and failed.
+- EventState publications complete, partial, stale, missing, and failed.
+- EventAnalytics publications succeeded, partial, stale, missing, waiting for cohort, and failed.
 - TeamRuntime season snapshots complete, partial, missing, and failed.
 - Events whose participant cohort is complete, partial, discovering, or missing.
 
