@@ -1310,7 +1310,7 @@ export class EventRuntime {
           responseState.status === "modified" ? responseState.data : undefined,
         );
       const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
-      return { status: next.status, representationChanged, snapshotChanged: next.revision !== latest.revision, snapshotVersion };
+      return { status: next.status, acquired: next.lastFetchedAt !== null, representationChanged, snapshotChanged: next.revision !== latest.revision, snapshotVersion };
     });
 
     if (result.snapshotChanged) await this.publishSnapshotRevision(result.snapshotVersion);
@@ -1323,7 +1323,7 @@ export class EventRuntime {
     // A Statbotics 304 means its representation has not caught up to the TBA
     // change that triggered this bounded refresh. Retry without discarding data.
     return responseState.status !== "failed" && responseState.status !== "unavailable" &&
-      result.status !== "failed" && result.status !== "unavailable" &&
+      result.status !== "failed" && result.status !== "unavailable" && result.acquired &&
       !(isStatboticsEndpoint && responseState.status === "not-modified");
   }
 
