@@ -251,8 +251,8 @@ export class EventScheduler {
         return Response.json({
           discovered: true,
           year,
-          events: (await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))?.events.length ?? 0,
-          teams: (await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.teams.length ?? 0,
+          events: (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year))?.events.length ?? 0,
+          teams: (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year))?.teams.length ?? 0,
           provider_requests: 2,
         });
       } catch (error) {
