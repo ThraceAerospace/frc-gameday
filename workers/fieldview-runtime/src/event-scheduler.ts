@@ -305,7 +305,7 @@ export class EventScheduler {
       const result = await this.storage.transaction(async (tx) => {
         const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
         const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
-        if (current && current.expiresAt > now) return { granted: false, retryAt: Math.max(current.expiresAt, nextAt) };
+        if (current && current.expiresAt > now) return { granted: false, retryAt: Math.min(current.expiresAt, now + interval) };
         if (nextAt > now) return { granted: false, retryAt: nextAt };
         const leaseId = crypto.randomUUID();
         await tx.put("provider-gate:lease", { leaseId, owner: value.owner as string, endpoint: value.endpoint as string, expiresAt: now + 60_000 } satisfies ProviderRequestLease);
