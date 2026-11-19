@@ -367,10 +367,19 @@ export class EventScheduler {
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
         if (job.status === "completed_with_errors") {
-          job.teamCursor = Math.min(job.teamCursor, job.teamKeys.length);
-          job.eventCursor = Math.min(job.eventCursor, job.eventKeys.length);
-          job.status = "running";
-        } else job.status = "running";
+          job.teamCursor = 0;
+          job.eventCursor = 0;
+          job.phase = "teams";
+          job.counts = {
+            teams_complete: 0, teams_partial: 0, teams_failed: 0,
+            event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
+            event_analytics_succeeded: 0, event_analytics_partial: 0,
+            event_analytics_waiting: 0, event_analytics_failed: 0,
+          };
+          job.recentErrors = [];
+          job.startedAt = Date.now();
+        }
+        job.status = "running";
         await this.storage.setAlarm(Date.now() + 1_000);
       } else if (action === "cancel") {
         job.status = "cancelled";
@@ -764,7 +773,7 @@ export class EventScheduler {
       } else if (job.phase === "events") {
         if (job.eventCursor >= job.eventKeys.length) {
           job.phase = "complete";
-          job.status = Object.values(job.counts).some((count) => count > 0 && false) ? "completed_with_errors" : "completed";
+          job.status = "completed";
           const failures = job.counts.teams_partial + job.counts.teams_failed + job.counts.event_state_partial +
             job.counts.event_state_failed + job.counts.event_analytics_waiting + job.counts.event_analytics_failed;
           if (failures > 0) job.status = "completed_with_errors";
