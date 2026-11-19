@@ -801,6 +801,7 @@ export class EventRuntime {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
       if (currentRevision !== calculated.version) {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
         await transaction.put("analytics:status", "pending");
         await this.rearm(transaction);
         return null;
@@ -1074,6 +1075,7 @@ export class EventRuntime {
           );
           await transaction.put(key, next);
           await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
+          await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
           await transaction.put("analytics:status", "pending");
           const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
           await transaction.put("snapshot-revision", snapshotRevision + 1);
@@ -1102,6 +1104,7 @@ export class EventRuntime {
       if (messageType !== "match_score" && messageType !== "match_video" &&
           ["upcoming_match", "schedule_updated", "starting_comp_level", "alliance_selection"].includes(messageType)) {
         await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
+        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
         await transaction.put("analytics:status", "pending");
       }
       await this.rearm(transaction);
