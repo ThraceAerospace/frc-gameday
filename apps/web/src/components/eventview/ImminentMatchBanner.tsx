@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { TBAMatch } from "@/lib/tba/types";
+import type { MatchPresentation } from "@/components/match/MatchCard";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 
 type ImminentMatchBannerProps = {
-  match: TBAMatch;
+  match: MatchPresentation;
   teams: string[];
   eventName: string;
   eventTimezone: string | null;
