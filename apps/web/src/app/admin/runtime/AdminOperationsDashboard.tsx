@@ -47,7 +47,7 @@ type SeasonIngest = {
   recent_errors?: Array<{ kind: string; key: string; detail: string; at: number }>;
 };
 type SeasonPreview = {
-  year: number; ready: boolean; events: number; teams: number; team_pages: number;
+  year: number; ready: boolean; runtime_ready?: boolean; ready_reason?: string | null; events: number; teams: number; team_pages: number;
   event_resources_per_event?: number; team_resources_per_team?: number;
   planned_resource_requests?: number; request_interval_ms?: number; estimated_minimum_duration_ms?: number;
   estimate_note?: string; existing_job?: SeasonIngest | null; history_count?: number;
@@ -346,7 +346,8 @@ export default function AdminOperationsDashboard() {
           <button disabled={busy} onClick={() => void previewSeasonIngest()} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Preview {year} inventory</button>
         </div>
         {seasonPreview && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-sm">
-          <p className="font-semibold">{seasonPreview.ready ? "Discovery is ready" : "Discovery is incomplete"}</p>
+          <p className="font-semibold">{seasonPreview.ready ? "Ready to start" : seasonPreview.runtime_ready === false ? "Runtime configuration is incomplete" : "Discovery is incomplete"}</p>
+          {seasonPreview.ready_reason && <p className="mt-1 text-xs text-amber-600">{seasonPreview.ready_reason}</p>}
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.events.toLocaleString()} events · {seasonPreview.teams.toLocaleString()} teams · {seasonPreview.team_pages} TBA team pages</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.event_resources_per_event} event resources/event · {seasonPreview.team_resources_per_team} team resources/team · {(seasonPreview.planned_resource_requests ?? 0).toLocaleString()} planned resource requests</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">Shared provider interval: {seasonPreview.request_interval_ms ?? 1000} ms · Baseline duration: {((seasonPreview.estimated_minimum_duration_ms ?? 0) / 3_600_000).toFixed(1)} hours</p>
