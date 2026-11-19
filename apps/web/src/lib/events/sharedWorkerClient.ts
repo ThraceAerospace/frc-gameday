@@ -3,7 +3,7 @@
 import { EventState, type EventStateSnapshot } from "./EventState";
 import { eventWebSocket, type EventWebSocketStatus } from "@/lib/realtime/client";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
-import type { CanonicalAnalyticsPublication } from "./workerRealtime";
+import { workerEventWebSocket, type CanonicalAnalyticsPublication } from "./workerRealtime";
 
 type SnapshotListener = () => void;
 type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
