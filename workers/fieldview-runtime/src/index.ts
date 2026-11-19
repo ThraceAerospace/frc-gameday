@@ -105,10 +105,19 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year"].includes(action)) {
+        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+        if (action === "coverage-audit-start" || action === "coverage-audit-continue") {
+          const year = Number(body.year);
+          if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid audit year is required" }, { status: 400 });
+          return scheduler.fetch(new Request("https://event-scheduler/admin/coverage-audit", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : "continue", year }),
+          }));
+        }
         if (action === "discover-year") {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) {
@@ -210,8 +219,8 @@ export default {
     }
 
     if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity") &&
-      request.method === "GET"
+      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit") &&
+      (request.method === "GET" || (url.pathname === "/internal/admin/coverage-audit" && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
