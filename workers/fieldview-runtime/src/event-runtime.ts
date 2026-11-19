@@ -508,7 +508,7 @@ export class EventRuntime {
             data_kind: Array.isArray(value) ? "array" : value === null ? "empty" : typeof value,
             lastError: diagnostic.lastError ?? null,
             lastHttpStatus: diagnostic.lastHttpStatus ?? null,
-          }];
+          }] as const;
         })),
       });
     }
