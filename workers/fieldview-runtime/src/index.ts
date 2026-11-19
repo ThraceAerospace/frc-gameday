@@ -242,7 +242,7 @@ export default {
       return scheduler.fetch(new Request("https://event-scheduler" + url.pathname.replace("/internal", "") + url.search, {
         method: request.method,
         headers,
-        ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: request.body }),
+        ...(request.method === "GET" ? {} : { body: request.body }),
       }));
     }
 
