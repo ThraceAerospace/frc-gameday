@@ -865,6 +865,7 @@ export class EventRuntime {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+        await transaction.put("analytics:status", "pending");
       }
 
       // Preserve each accepted upstream 200 payload as an immutable source
@@ -985,6 +986,7 @@ export class EventRuntime {
           );
           await transaction.put(key, next);
           await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
+          await transaction.put("analytics:status", "pending");
           const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
           await transaction.put("snapshot-revision", snapshotRevision + 1);
         }
@@ -1012,6 +1014,7 @@ export class EventRuntime {
       if (messageType !== "match_score" && messageType !== "match_video" &&
           ["upcoming_match", "schedule_updated", "starting_comp_level", "alliance_selection"].includes(messageType)) {
         await transaction.put(ANALYTICS_DUE_KEY, now + 1_000);
+        await transaction.put("analytics:status", "pending");
       }
       await this.rearm(transaction);
       const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
