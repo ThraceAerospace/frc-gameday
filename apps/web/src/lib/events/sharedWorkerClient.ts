@@ -3,6 +3,7 @@
 import { EventState, type EventStateSnapshot } from "./EventState";
 import { eventWebSocket, type EventWebSocketStatus } from "@/lib/realtime/client";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { CanonicalAnalyticsPublication } from "./workerRealtime";
 
 type SnapshotListener = () => void;
 type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
@@ -11,6 +12,8 @@ const snapshots = new Map<string, EventStateSnapshot>();
 const listeners = new Map<string, Set<SnapshotListener>>();
 const canonicalSnapshots = new Map<string, { version: number; snapshot: FieldViewEventSnapshot }>();
 const canonicalListeners = new Map<string, Set<SnapshotListener>>();
+const canonicalAnalytics = new Map<string, CanonicalAnalyticsPublication>();
+const canonicalAnalyticsListeners = new Map<string, Set<SnapshotListener>>();
 const runtimeStatusListeners = new Set<SnapshotListener>();
 let canonicalRuntimeStatus: EventWebSocketStatus = "disconnected";
 let worker: SharedWorker | null = null;
@@ -33,6 +36,7 @@ function handleWorkerMessage(event: MessageEvent) {
     type?: string;
     eventKey?: string;
     snapshot?: EventStateSnapshot | FieldViewEventSnapshot;
+    value?: CanonicalAnalyticsPublication;
     version?: number;
     status?: EventWebSocketStatus;
   };
@@ -56,6 +60,14 @@ function handleWorkerMessage(event: MessageEvent) {
         snapshot: message.snapshot as FieldViewEventSnapshot,
       });
       for (const listener of canonicalListeners.get(message.eventKey) ?? []) listener();
+    }
+    return;
+  }
+  if (message.type === "canonical-analytics" && message.eventKey && message.value) {
+    const previous = canonicalAnalytics.get(message.eventKey);
+    if (!previous || message.value.revision >= previous.revision) {
+      canonicalAnalytics.set(message.eventKey, message.value);
+      for (const listener of canonicalAnalyticsListeners.get(message.eventKey) ?? []) listener();
     }
     return;
   }
@@ -110,6 +122,9 @@ function connect() {
   for (const [eventKey, eventListeners] of canonicalListeners) {
     if (eventListeners.size > 0) nextPort.postMessage({ type: "subscribeCanonical", eventKey });
   }
+  for (const [eventKey, eventListeners] of canonicalAnalyticsListeners) {
+    if (eventListeners.size > 0) nextPort.postMessage({ type: "subscribeCanonicalAnalytics", eventKey });
+  }
 }
 
 function recover() {
@@ -124,7 +139,7 @@ function recover() {
     // The worker may already have been terminated.
   }
   oldPort?.close();
-  if (listeners.size > 0 || canonicalListeners.size > 0 || runtimeStatusListeners.size > 0 || liveRuntimeRefs > 0) connect();
+  if (listeners.size > 0 || canonicalListeners.size > 0 || canonicalAnalyticsListeners.size > 0 || runtimeStatusListeners.size > 0 || liveRuntimeRefs > 0) connect();
 }
 
 function getFallbackState(eventKey: string): EventState {
@@ -148,6 +163,32 @@ export function getCanonicalEventSnapshot(
   return canonicalSnapshots.get(eventKey);
 }
 
+export function getCanonicalEventAnalytics(eventKey: string): CanonicalAnalyticsPublication | undefined {
+  return canonicalAnalytics.get(eventKey);
+}
+
+export function subscribeCanonicalEventAnalytics(eventKey: string, listener: SnapshotListener): () => void {
+  if (!eventKey) return () => {};
+  let eventListeners = canonicalAnalyticsListeners.get(eventKey);
+  const isFirst = !eventListeners || eventListeners.size === 0;
+  if (!eventListeners) { eventListeners = new Set(); canonicalAnalyticsListeners.set(eventKey, eventListeners); }
+  eventListeners.add(listener);
+  const existingPort = port;
+  connect();
+  if (!fallbackMode && isFirst && existingPort && port === existingPort) post({ type: "subscribeCanonicalAnalytics", eventKey });
+  listener();
+  return () => {
+    const current = canonicalAnalyticsListeners.get(eventKey);
+    if (!current) return;
+    current.delete(listener);
+    if (current.size === 0) {
+      canonicalAnalyticsListeners.delete(eventKey);
+      canonicalAnalytics.delete(eventKey);
+      post({ type: "unsubscribeCanonicalAnalytics", eventKey });
+    }
+    closePortIfIdle();
+  };
+}
 export function getCanonicalRuntimeStatus(): EventWebSocketStatus {
   return canonicalRuntimeStatus;
 }
@@ -266,7 +307,7 @@ export function registerSharedLiveRuntime(): () => void {
 }
 
 function closePortIfIdle() {
-  if (listeners.size === 0 && canonicalListeners.size === 0 && runtimeStatusListeners.size === 0 && liveRuntimeRefs === 0 && port) {
+  if (listeners.size === 0 && canonicalListeners.size === 0 && canonicalAnalyticsListeners.size === 0 && runtimeStatusListeners.size === 0 && liveRuntimeRefs === 0 && port) {
       port.postMessage({ type: "close" });
       if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
