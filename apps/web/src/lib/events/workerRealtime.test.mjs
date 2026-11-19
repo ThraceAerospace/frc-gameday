@@ -145,7 +145,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
   assert.deepEqual(analyticsRevisions, [1, 2, 3]);
 
   unsubscribeFirst();
-  assert.equal(reconnectedSocket.sent.length, 1, "one remaining listener keeps the shared topic subscribed");
+  assert.equal(reconnectedSocket.sent.length, 2, "one remaining event listener and analytics subscriber keep both topics subscribed");
   unsubscribeSecond();
   unsubscribeAnalytics();
   assert.deepEqual(reconnectedSocket.sent.slice(-2).map((message) => JSON.parse(message)), [
