@@ -130,9 +130,12 @@ function mapTeamAnalytics(snapshot: FieldViewEventSnapshot, publication: NonNull
 }
 
 function mapMatch(match: FieldViewMatch, publicationMatch?: NonNullable<CanonicalAnalyticsPublication["publication"]>["matches"][number]) {
+  // Prefer the publication's latest analysis, but retain the analysis already
+  // attached to the canonical match snapshot when publication enrichment is absent.
+  const analysis = publicationMatch?.analysis ?? match.analysis;
   const enriched = {
     ...match,
-    ...(publicationMatch?.analysis ? { analysis: publicationMatch.analysis } : {}),
+    ...(analysis ? { analysis } : {}),
     ...(publicationMatch?.flags ? { flags: publicationMatch.flags } : {}),
   };
   const epaEntries = [...match.teams.red, ...match.teams.blue];
@@ -141,8 +144,13 @@ function mapMatch(match: FieldViewMatch, publicationMatch?: NonNullable<Canonica
       ? [[String(team.team_number), team.pre_epa]]
       : [],
   ));
+  const epas = Object.fromEntries(epaEntries.flatMap((team) =>
+    typeof team.team_number === "number" && team.epa
+      ? [[String(team.team_number), team.epa]]
+      : [],
+  ));
   const canonicalPrediction = match.predictions.statbotics;
-  const scoreAnalysis = publicationMatch?.analysis?.score;
+  const scoreAnalysis = analysis?.score;
   const prediction = canonicalPrediction || scoreAnalysis
     ? ({
         ...(canonicalPrediction ?? {}),
@@ -150,8 +158,8 @@ function mapMatch(match: FieldViewMatch, publicationMatch?: NonNullable<Canonica
         blue_score: canonicalPrediction?.blue_score ?? scoreAnalysis?.blue.predicted,
       })
     : undefined;
-  const statbotics = prediction || Object.keys(pre_epas).length
-    ? ({ pred: prediction, pre_epas } as unknown as StatboticsMatch)
+  const statbotics = prediction || Object.keys(pre_epas).length || Object.keys(epas).length
+    ? ({ pred: prediction, pre_epas, epas } as unknown as StatboticsMatch)
     : null;
   return {
     match: enriched,
@@ -159,6 +167,22 @@ function mapMatch(match: FieldViewMatch, publicationMatch?: NonNullable<Canonica
     flags: publicationMatch?.flags ?? match.flags,
     statboticsStatus: statbotics ? "ready" as const : "unavailable" as const,
   };
+}
+
+function findingSampleCoverage(evidence: FieldViewEventAnalytics["findings"][number]["evidence"]): "low" | "medium" | "high" {
+  const populations = evidence.flatMap((item) =>
+    item.population && item.population.total_count > 0
+      ? [item.population]
+      : [],
+  );
+  if (populations.length) {
+    const total = populations.reduce((sum, item) => sum + item.total_count, 0);
+    const eligible = populations.reduce((sum, item) => sum + item.eligible_count, 0);
+    const ratio = total > 0 ? eligible / total : 0;
+    return ratio >= 0.8 ? "high" : ratio >= 0.5 ? "medium" : "low";
+  }
+  const sampleSize = Math.max(0, ...evidence.map((item) => item.sample_size ?? 0));
+  return sampleSize >= 20 ? "high" : sampleSize >= 8 ? "medium" : "low";
 }
 
 function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldViewEventSnapshot, publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): EventAnalyticsResponse {
@@ -199,9 +223,9 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
     allianceResults: (analytics.alliance_results ?? []).map((item) => {
       const match = snapshot.matches.find((candidate) => candidate.key === item.match_key);
       const publishedMatch = publication.matches.find((candidate) => candidate.key === item.match_key);
-      const score = publishedMatch?.analysis?.score?.[item.alliance];
+      const score = (publishedMatch?.analysis ?? match?.analysis)?.score?.[item.alliance];
       const alliance = match?.alliances[item.alliance];
-      const actual = item.actual_score ?? (typeof alliance?.score === "number" && alliance.score >= 0 ? alliance.score : null);
+      const actual = item.actual_score ?? score?.actual ?? (typeof alliance?.score === "number" && alliance.score >= 0 ? alliance.score : null);
       const predicted = item.predicted_score ?? score?.predicted ?? null;
       const residual = item.score_residual ?? score?.delta ?? (
         actual !== null && predicted !== null ? actual - predicted : null
@@ -222,8 +246,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
     }),
     findings: analytics.findings.map((item) => ({
       id: item.finding_key,
-      category: item.category === "score-residual" || item.category === "penalty-frequency"
-        ? item.category : "alliance-pattern",
+      category: item.category,
       subject: item.subject_key ?? item.scope,
       title: item.title,
       description: item.summary,
@@ -231,7 +254,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
         evidence.value === null ? evidence.label : evidence.label + ": " + evidence.value + " " + evidence.unit,
       ),
       sampleSize: Math.max(0, ...item.evidence.map((evidence) => evidence.sample_size ?? evidence.population?.eligible_count ?? 0)),
-      sampleCoverage: "low",
+      sampleCoverage: findingSampleCoverage(item.evidence),
       suggestedAction: item.suggested_action,
       severity: item.severity,
     })),
