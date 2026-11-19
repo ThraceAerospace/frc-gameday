@@ -48,13 +48,15 @@ The job starts only after a preview confirms complete event and paginated team d
 
 ## Completion and coverage accounting
 
-The season job and coverage audit must report distinct counts for:
+The coverage audit must report distinct counts for:
 
 - Events in the discovered inventory.
 - EventState publications complete, partial, missing, and failed.
 - EventAnalytics publications succeeded, partial, missing, waiting for cohort, and failed.
 - TeamRuntime season snapshots complete, partial, missing, and failed.
-- Events whose participant cohort is complete, partial, or still discovering.
+- Events whose participant cohort is complete, partial, discovering, or missing.
+
+The season job must separately report TeamRuntime snapshots complete, partial, and failed; per-event EventState complete, partial, missing, and failed; per-event EventAnalytics succeeded, partial, missing, waiting-for-cohort, and failed; cohort outcomes; and provider request attempted, succeeded, failed, retried, skipped, unavailable, and deferred counts.
 
 The job reports full success only when every discovered event has a complete EventState, successful EventAnalytics, and a complete participant cohort, with all season TeamRuntime snapshots complete. Partial, waiting, missing, or failed outcomes produce a completed-with-errors result and remain separately counted.
 
