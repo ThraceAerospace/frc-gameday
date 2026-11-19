@@ -156,7 +156,17 @@ export class TeamRuntime {
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({ team_key: this.teamKey,
         polling: [...tasks.values()].map((task) => ({ endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
-        endpoints: [...states.values()].map((state) => ({ endpoint: state.endpoint, status: state.status, revision: state.revision, last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt })),
+        endpoints: [...states.values()].map((state) => {
+          const value = state.providerData ?? state.data;
+          const recordCount = Array.isArray(value) ? value.length : value == null ? 0 : 1;
+          return {
+            endpoint: state.endpoint, status: state.status, revision: state.revision,
+            last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt,
+            record_count: recordCount, included_count: recordCount, excluded_count: 0,
+            data_kind: Array.isArray(value) ? "array" : value === null ? "empty" : typeof value,
+            http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null,
+          };
+        }),
         diagnostics: [...states.values()].map((state) => ({ endpoint: state.endpoint, http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null })) });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
