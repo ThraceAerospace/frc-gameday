@@ -195,22 +195,47 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
   return {
     event: snapshot.event!,
     rankings: snapshot.rankings ?? null,
-    teams: (analytics.team_summaries ?? []).map((item) => ({
-      teamKey: item.team_key,
-      teamNumber: item.team_number,
-      name: item.name,
-      opr: item.opr,
-      dpr: item.dpr,
-      ccwm: item.ccwm,
-      epa: item.epa,
-      autoEpa: item.auto_epa,
-      teleopEpa: item.teleop_epa,
-      endgameEpa: item.endgame_epa,
-      matchesSeen: item.matches_seen,
-      epaPercentile: item.epa_percentile,
-      epaContributionPercent: item.epa_contribution_percent,
-      epaContributionSamples: item.epa_contribution_samples,
-    })),
+    // The canonical TBA roster is the source of truth for event participation.
+    // Analytics summaries are enrichment only: a missing Statbotics row must not
+    // remove a team from the investigation selector.
+    teams: snapshot.teams !== undefined && snapshot.teams !== null
+      ? snapshot.teams.flatMap((team) => {
+          if (typeof team.team_number !== "number") return [];
+          const summary = analytics.team_summaries?.find((item) => item.team_key === team.key);
+          const eventTeam = snapshot.event_teams?.find((item) => item.team_key === team.key);
+          return [{
+            teamKey: team.key,
+            teamNumber: team.team_number,
+            name: team.nickname || summary?.name || `Team ${team.team_number}`,
+            opr: summary?.opr ?? eventTeam?.opr ?? null,
+            dpr: summary?.dpr ?? eventTeam?.dpr ?? null,
+            ccwm: summary?.ccwm ?? eventTeam?.ccwm ?? null,
+            epa: summary?.epa ?? null,
+            autoEpa: summary?.auto_epa ?? null,
+            teleopEpa: summary?.teleop_epa ?? null,
+            endgameEpa: summary?.endgame_epa ?? null,
+            matchesSeen: summary?.matches_seen ?? 0,
+            epaPercentile: summary?.epa_percentile ?? null,
+            epaContributionPercent: summary?.epa_contribution_percent ?? null,
+            epaContributionSamples: summary?.epa_contribution_samples ?? 0,
+          }];
+        })
+      : (analytics.team_summaries ?? []).map((item) => ({
+          teamKey: item.team_key,
+          teamNumber: item.team_number,
+          name: item.name,
+          opr: item.opr,
+          dpr: item.dpr,
+          ccwm: item.ccwm,
+          epa: item.epa,
+          autoEpa: item.auto_epa,
+          teleopEpa: item.teleop_epa,
+          endgameEpa: item.endgame_epa,
+          matchesSeen: item.matches_seen,
+          epaPercentile: item.epa_percentile,
+          epaContributionPercent: item.epa_contribution_percent,
+          epaContributionSamples: item.epa_contribution_samples,
+        })),
     teamColors: Object.fromEntries((snapshot.teams ?? []).flatMap((team) =>
       typeof team.team_number === "number" && team.frc_colors
         ? [[String(team.team_number), {
