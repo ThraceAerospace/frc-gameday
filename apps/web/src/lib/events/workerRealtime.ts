@@ -96,6 +96,12 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     return this.snapshots.get(eventKey);
   }
 
+  refreshCanonicalSnapshot(eventKey: string): void {
+    if (eventKey && (this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
+      void this.fetchCanonicalSnapshot(eventKey);
+    }
+  }
+
   subscribeStatus(handler: StatusHandler): () => void {
     this.statusHandlers.add(handler);
     queueMicrotask(() => {
