@@ -466,7 +466,7 @@ export class EventScheduler {
             event_analytics_succeeded: 0, event_analytics_partial: 0,
             event_analytics_waiting: 0, event_analytics_failed: 0,
             event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
-            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0,
+            requests_attempted: 0, requests_succeeded: 0, requests_failed: 0, requests_retried: 0,
             requests_skipped: 0, requests_unavailable: 0, requests_deferred: 0,
           };
           job.recentErrors = [];
