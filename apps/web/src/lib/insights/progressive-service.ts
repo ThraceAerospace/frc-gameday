@@ -3,7 +3,7 @@ import { redis } from "@/lib/cache/redis";
 import { TBA } from "@/lib/tba/service";
 import { Statbotics } from "@/lib/statbotics/service";
 import type { FRCColor } from "@/lib/frc-colors/legacy-compatibility";
-import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
+import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import { sortMatches } from "@/lib/tba/matchUtils";
 import { buildAllianceResults, buildPlayoffAnalysis, buildQualificationAnalysis, buildQualificationAnomalies, buildReviewFindings, buildTeamInsights, buildTeamRows, mean, standardDeviation } from "./calculations";
 import { buildMatchFlags } from "@fieldview/analytics/match-flags";
@@ -301,23 +301,33 @@ export async function advanceEventAnalytics(eventKey: string, forceRefresh = fal
     // event endpoint, alongside the existing analytics collection job.
     if (!job.teamColorsLoadedAt || Date.now() - job.teamColorsLoadedAt >= TEAM_COLOR_REFRESH_MS) {
       try {
-        // FRC Colors is acquired and cached by EventRuntime. The Next.js
-        // analytics service only projects the canonical snapshot into its
-        // legacy presentation DTO; it never calls the provider.
+        // TeamRuntime owns the stable identity color resource. Read each
+        // event participant's canonical team snapshot; this job only projects
+        // those values into the legacy dashboard DTO and never calls FRC Colors.
         const canonical = await getCanonicalEventSnapshot(eventKey);
-        const teamsWithColors = canonical?.snapshot.teams?.filter((team) => team.frc_colors !== undefined) ?? [];
+        const eventTeams = canonical?.snapshot.teams ?? [];
+        const teamSnapshots = await Promise.all(eventTeams.map(async (team) => ({
+          teamNumber: team.team_number,
+          response: await getCanonicalTeamSnapshot(`frc${team.team_number}`, Number(eventKey.slice(0, 4))),
+        })));
+        const acquiredColors = teamSnapshots.filter(({ response }) =>
+          response?.snapshot.team?.frc_colors !== undefined);
         if (canonical?.snapshot.teams !== undefined) {
-          job.teamColors = teamsWithColors.map((team) => ({
-            teamNumber: team.team_number,
-            primaryHex: team.frc_colors?.primary_hex ?? null,
-            secondaryHex: team.frc_colors?.secondary_hex ?? null,
-            verified: team.frc_colors?.verified ?? null,
+          job.teamColors = acquiredColors.map(({ teamNumber, response }) => ({
+            teamNumber,
+            primaryHex: response!.snapshot.team!.frc_colors?.primary_hex ?? null,
+            secondaryHex: response!.snapshot.team!.frc_colors?.secondary_hex ?? null,
+            verified: response!.snapshot.team!.frc_colors?.verified ?? null,
           }));
-          job.teamColorsLoadedAt = Date.now();
-          job.teamColorsFetchError = teamsWithColors.length === canonical.snapshot.teams.length
-            ? null
-            : "Some team color records have not yet been acquired";
+          if (acquiredColors.length === eventTeams.length) {
+            job.teamColorsLoadedAt = Date.now();
+            job.teamColorsFetchError = null;
+          } else {
+            job.teamColorsLoadedAt = undefined;
+            job.teamColorsFetchError = "Some canonical team color records are still being acquired";
+          }
         } else {
+          job.teamColorsLoadedAt = undefined;
           job.teamColorsFetchError = "Canonical event team list is not available";
         }
       } catch (error) {
