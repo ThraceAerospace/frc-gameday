@@ -106,13 +106,12 @@ export function buildMatchFlags(
     : undefined;
   const highPenalties = { red: penaltyRow?.redFlagged ?? false, blue: penaltyRow?.blueFlagged ?? false };
 
-  const reviewFlags: FieldViewMatchReviewFlag[] = [
-    ...(modelUpset ? ["model-upset"] : []),
-    ...(anomalousScore ? ["anomalous-score"] : []),
-    ...(largeResidual.red || largeResidual.blue ? ["large-residual"] : []),
-    ...(highPenalties.red || highPenalties.blue ? ["high-penalties"] : []),
-    ...(highAllianceEpa.red || highAllianceEpa.blue ? ["high-alliance-epa"] : []),
-  ];
+  const reviewFlags: FieldViewMatchReviewFlag[] = [];
+  if (modelUpset) reviewFlags.push("model-upset");
+  if (anomalousScore) reviewFlags.push("anomalous-score");
+  if (largeResidual.red || largeResidual.blue) reviewFlags.push("large-residual");
+  if (highPenalties.red || highPenalties.blue) reviewFlags.push("high-penalties");
+  if (highAllianceEpa.red || highAllianceEpa.blue) reviewFlags.push("high-alliance-epa");
 
   const allianceFlags = (color: "red" | "blue"): FieldViewAllianceFlag[] => {
     const result = matchResults.find((item) => item.color === color);
@@ -124,6 +123,23 @@ export function buildMatchFlags(
           prediction_source: "statbotics",
           predicted_winner: predictedWinner,
           red_win_probability: redProbability,
+        },
+      });
+    }
+    if (anomalyBand !== null && result?.residual !== null && result?.residual !== undefined &&
+        Math.abs(result.residual - anomalyBand.median) > anomalyBand.margin &&
+        result.actual !== null && result.predicted !== null) {
+      flags.push({
+        type: "anomalous-score",
+        evidence: {
+          actual_score: result.actual,
+          predicted_score: result.predicted,
+          residual: result.residual,
+          phase_median: anomalyBand.median,
+          phase_margin: anomalyBand.margin,
+          sample_size: data.allianceResults.filter((item) =>
+            item.compLevel.toLowerCase() === match.comp_level.toLowerCase() && item.residual !== null,
+          ).length,
         },
       });
     }
