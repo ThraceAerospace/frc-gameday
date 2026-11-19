@@ -20,6 +20,7 @@ import { normalizeFieldViewEventTeam } from "./event-team.ts";
 import { normalizeFieldViewMatch } from "./match.ts";
 import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
+import { normalizeFieldViewTeamState } from "./team-state.ts";
 import { sortMatchesByTime } from "../match-order.ts";
 
 export interface NormalizeFieldViewEventSnapshotInput {
@@ -173,6 +174,38 @@ export function normalizeFieldViewEventSnapshot(
       });
     });
     result.matches = sortMatchesByTime(normalizedMatches);
+  }
+
+  if (input.tba_teams === null) {
+    result.team_states = null;
+  } else if (input.tba_teams !== undefined) {
+    result.team_states = (result.teams ?? []).map((team) => {
+      const eventTeam = result.event_teams === undefined
+        ? undefined
+        : result.event_teams === null
+          ? null
+          : result.event_teams.find((item) => item.team_key === team.key) ?? null;
+      const teamMatches = result.matches === undefined
+        ? undefined
+        : result.matches === null
+          ? null
+          : result.matches.filter((match) =>
+              match.alliances.red.team_keys.includes(team.key) ||
+              match.alliances.blue.team_keys.includes(team.key),
+            );
+      return normalizeFieldViewTeamState({
+        event_key: input.event_key,
+        team_key: team.key,
+        sources: {
+          team: input.sources.teams,
+          event_team: input.sources.event_teams,
+          matches: input.sources.matches,
+        },
+        team,
+        ...(eventTeam === undefined ? {} : { event_team: eventTeam }),
+        ...(teamMatches === undefined ? {} : { matches: teamMatches }),
+      });
+    });
   }
 
   return result;
