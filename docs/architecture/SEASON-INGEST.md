@@ -12,9 +12,19 @@ A season ingest is a deliberate, resumable operation for one TBA competition yea
 - Every team returned by TBA team discovery for the selected year.
 - Every configured event resource, including the Statbotics event-match resource.
 - Every configured team resource for that year, including TBA, Statbotics, and FRC Colors resources.
-- Canonical event analytics after the required event inputs have been acquired.
+- Canonical event analytics only after season-wide team preparation and each event's participant cohort prerequisites are satisfied.
 
 The operation must not create a Cartesian product of every team and every event. Team-season records and event participant relationships are ingested through their owning event/team resources.
+
+## Required execution order
+
+1. **Complete discovery.** Fetch the full event list and every TBA season-team page (500 teams per page) until a short final page proves pagination is complete. Never interpret a missing or empty team page cache as a zero-team season.
+2. **Prepare every season team.** Acquire the configured TeamRuntime resources for every team returned by the year-scoped TBA team list. This makes team event histories and Statbotics team-event evidence available to construct event comparison cohorts.
+3. **Acquire event inputs.** Acquire the configured resources for every event, including its authoritative participant list.
+4. **Build and validate event cohorts.** For each event, construct the cohort from all of that event's participants using their prepared TeamRuntime season snapshots. Preserve missing or unavailable evidence as explicit cohort rows; do not silently omit teams.
+5. **Calculate event analytics.** Do not publish event analytics while a participant's TeamRuntime season event history is still undiscovered. Missing Statbotics values may remain explicit partial evidence, but the participant roster/history prerequisite must be met first.
+
+EventRuntime now withholds analytics calculation while its participant cohort is still in the discovering state. The season ingest must perform the team-preparation phase first so this gate can clear predictably rather than relying on repeated event-runtime retries.
 
 ## Safety requirements
 
