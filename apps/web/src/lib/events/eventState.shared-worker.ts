@@ -17,6 +17,7 @@ type ClientMessage =
   | { type: "subscribeCanonicalAnalytics"; eventKey: string }
   | { type: "unsubscribeCanonicalAnalytics"; eventKey: string }
   | { type: "refreshCanonical"; eventKey: string }
+  | { type: "refreshCanonicalAnalytics"; eventKey: string }
   | { type: "close" }
   | { type: "ping"; nonce: number };
 
@@ -234,6 +235,9 @@ function handleMessage(port: MessagePort, message: ClientMessage) {
       break;
     case "refreshCanonical":
       workerEventWebSocket.refreshCanonicalSnapshot(message.eventKey);
+      break;
+    case "refreshCanonicalAnalytics":
+      workerEventWebSocket.refreshCanonicalAnalytics(message.eventKey);
       break;
     case "ping":
       port.postMessage({ type: "pong", nonce: message.nonce });
