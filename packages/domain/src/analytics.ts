@@ -247,6 +247,14 @@ export interface FieldViewTeamMatchEvidence {
   pre_match_epa: number | null;
   post_match_epa: number | null;
   epa_change: number | null;
+  alliance_pre_epa_total: number | null;
+  opponent_pre_epa_total: number | null;
+  alliance_pre_components: Record<string, number>;
+  actual_components: Record<string, number>;
+  pre_match_components: Record<string, number>;
+  post_match_components: Record<string, number>;
+  alliance_delta_spread: number | null;
+  shared_alliance_update: boolean;
 }
 
 /** One alliance-side observation used by event-wide score analysis. */
