@@ -338,8 +338,8 @@ export class EventScheduler {
 
     if (request.method === "POST" && url.pathname === "/admin/discover-year") {
       const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
-      if ([...activeJobs.values()].some((job) => job.status === "running")) {
-        return Response.json({ error: "Pause or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
+      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
+        return Response.json({ error: "Resume, cancel, or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
       }
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
@@ -405,7 +405,7 @@ export class EventScheduler {
       }
       if (action === "start") {
         if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
-        if (job?.status === "running") return Response.json({ error: "Season ingestion is already running", job: seasonIngestSummary(job) }, { status: 409 });
+        if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
         const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
         if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
