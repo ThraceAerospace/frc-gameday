@@ -238,6 +238,26 @@ export class EventScheduler {
       return Response.json({ registered: true });
     }
 
+    if (request.method === "POST" && url.pathname === "/admin/discover-year") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      }
+      try {
+        await this.discoverEvents(year);
+        await this.discoverTeams(year);
+        return Response.json({
+          discovered: true,
+          year,
+          events: (await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))?.events.length ?? 0,
+          teams: (await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.teams.length ?? 0,
+          provider_requests: 2,
+        });
+      } catch (error) {
+        return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
+      }
+    }
+
     if (request.method === "GET" && url.pathname === "/admin/inventory") {
       const kind = url.searchParams.get("kind");
       const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
@@ -423,6 +443,25 @@ export class EventScheduler {
     }
     await this.storage.put("scheduler:last-run-at", Date.now());
     await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+  }
+
+  private async discoverEvents(year: number): Promise<void> {
+    const cacheKey = DISCOVERY_PREFIX + year;
+    const cached = await this.storage.get<DiscoveryCache>(cacheKey);
+    const headers = new Headers();
+    if (cached?.etag) headers.set("If-None-Match", cached.etag);
+    const response = await this.api.request(TBA_ENDPOINTS.events(year), { headers });
+    if (response.status === 304 && cached) {
+      await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
+      return;
+    }
+    if (!response.ok) throw new Error("TBA event discovery failed for " + year + " with HTTP " + response.status);
+    const events = await response.json() as TBAEvent[];
+    if (!Array.isArray(events)) throw new Error("TBA event discovery returned a non-array payload");
+    const now = Date.now();
+    await this.storage.put(cacheKey, {
+      etag: response.headers.get("ETag"), events, updatedAt: now, checkedAt: now,
+    } satisfies DiscoveryCache);
   }
 
   private async discoverTeams(year: number): Promise<void> {
