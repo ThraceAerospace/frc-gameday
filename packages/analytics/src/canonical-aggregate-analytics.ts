@@ -11,6 +11,8 @@ import type {
   FieldViewQualificationAnalytics,
   FieldViewQualificationAnomaly,
   FieldViewPlayoffAnalytics,
+  FieldViewSeasonCohortSnapshot,
+  FieldViewTeamSeasonComparison,
 } from "../../domain/src/analytics.ts";
 import type { AnalyticsMatch, AllianceResult } from "./types.ts";
 import {
@@ -20,6 +22,7 @@ import {
   buildQualificationAnalysis,
   buildQualificationAnomalies,
   buildPlayoffAnalysis,
+  buildSeasonAwareTeamInsights,
   mean,
   standardDeviation,
 } from "./calculations.ts";
@@ -150,6 +153,7 @@ export function calculateCanonicalAggregateAnalytics(
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
+  seasonCohort?: FieldViewSeasonCohortSnapshot,
 ): FieldViewEventState {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
@@ -168,7 +172,33 @@ export function calculateCanonicalAggregateAnalytics(
   }
   const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
   const teamRows = buildTeamRows(teams, oprs, records);
-  const insights = buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
+  const legacyCohort = seasonCohort ? {
+    state: seasonCohort.state,
+    teamCount: seasonCohort.team_count,
+    totalTeamEventRecords: seasonCohort.total_team_event_records,
+    processedTeamEventRecords: seasonCohort.processed_team_event_records,
+    unavailableTeamEventRecords: seasonCohort.unavailable_team_event_records,
+    discoveryPendingTeams: seasonCohort.discovery_pending_teams,
+    updatedAt: seasonCohort.updated_at,
+    records: seasonCohort.records.map((item) => ({
+      teamNumber: item.team_number,
+      event: {
+        key: item.event.event_key, name: item.event.event_name,
+        short_name: item.event.short_name, startDate: item.event.start_date,
+      },
+      epaTotal: item.epa_total, epaUnitless: item.epa_unitless,
+      breakdown: item.breakdown, wins: item.wins, losses: item.losses,
+      ties: item.ties, matches: item.match_count, fetchedAt: item.fetched_at,
+      status: item.status,
+    })),
+  } : null;
+  const insights = legacyCohort && eventState.event
+    ? buildSeasonAwareTeamInsights(
+        records, allianceResults, teamRows, eventState.rankings ?? null,
+        legacyCohort, eventState.event.key, eventState.event.start_date,
+        eventState.event.playoff_type,
+      )
+    : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
   const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
   const qualificationAnalysis = buildQualificationAnalysis(
     records, records.map((record) => record.match), allianceResults, eventState.event?.playoff_type,
@@ -325,8 +355,54 @@ export function calculateCanonicalAggregateAnalytics(
               win_probability: item.winProbability, won: item.won, pre_match_epa: item.preEPA,
               post_match_epa: item.postEPA, epa_change: item.deltaEPA, reasons: item.reasons,
             })),
-            season_comparison: null,
-            season_history: [],
+            season_comparison: insight.seasonComparison ? {
+              prior_event: {
+                event_key: insight.seasonComparison.priorEvent.key,
+                event_name: insight.seasonComparison.priorEvent.name,
+                short_name: insight.seasonComparison.priorEvent.short_name,
+                start_date: insight.seasonComparison.priorEvent.startDate,
+              },
+              prior_epa: insight.seasonComparison.priorEPA,
+              current_epa: insight.seasonComparison.currentEPA,
+              current_epa_percentile: insight.seasonComparison.currentEpaPercentile,
+              prior_epa_rank: insight.seasonComparison.priorEpaRank,
+              prior_epa_cohort_size: insight.seasonComparison.priorEpaCohortSize,
+              current_epa_rank: insight.seasonComparison.currentEpaRank,
+              current_epa_cohort_size: insight.seasonComparison.currentEpaCohortSize,
+              change: insight.seasonComparison.change,
+              cohort_rank: insight.seasonComparison.cohortRank,
+              cohort_size: insight.seasonComparison.cohortSize,
+              components: {
+                auto: insight.seasonComparison.components.auto ? {
+                  prior: insight.seasonComparison.components.auto.prior,
+                  current: insight.seasonComparison.components.auto.current,
+                  change: insight.seasonComparison.components.auto.change,
+                  cohort_rank: insight.seasonComparison.components.auto.cohortRank,
+                  cohort_size: insight.seasonComparison.components.auto.cohortSize,
+                } : null,
+                teleop: insight.seasonComparison.components.teleop ? {
+                  prior: insight.seasonComparison.components.teleop.prior,
+                  current: insight.seasonComparison.components.teleop.current,
+                  change: insight.seasonComparison.components.teleop.change,
+                  cohort_rank: insight.seasonComparison.components.teleop.cohortRank,
+                  cohort_size: insight.seasonComparison.components.teleop.cohortSize,
+                } : null,
+                endgame: insight.seasonComparison.components.endgame ? {
+                  prior: insight.seasonComparison.components.endgame.prior,
+                  current: insight.seasonComparison.components.endgame.current,
+                  change: insight.seasonComparison.components.endgame.change,
+                  cohort_rank: insight.seasonComparison.components.endgame.cohortRank,
+                  cohort_size: insight.seasonComparison.components.endgame.cohortSize,
+                } : null,
+              },
+            } satisfies FieldViewTeamSeasonComparison : null,
+            season_history: insight.seasonHistory.map((item) => ({
+              event: {
+                event_key: item.event.key, event_name: item.event.name,
+                start_date: item.event.startDate,
+              },
+              epa_total: item.epaTotal, match_count: item.matches, status: item.status,
+            })),
           } : {}),
           audit,
         };
@@ -348,6 +424,7 @@ export function calculateCanonicalAggregateAnalytics(
         mean: mean(residuals), standard_deviation: standardDeviation(residuals), sample_size: residuals.length,
       },
       prediction_summary: qualificationDomain.score_prediction,
+      ...(seasonCohort ? { season_cohort: seasonCohort } : {}),
       collection: {
         state: records.some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete",
         processed_match_count: records.length,
