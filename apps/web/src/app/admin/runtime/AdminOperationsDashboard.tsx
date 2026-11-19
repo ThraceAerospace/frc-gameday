@@ -31,7 +31,7 @@ type Overview = {
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
 type CoverageAudit = {
-  year: number; status: "not_started" | "running" | "completed"; discovery_ready?: boolean;
+  year: number; status: "not_started" | "running" | "completed" | "stale"; discovery_ready?: boolean;
   started_at?: number; updated_at?: number; cursor?: number; processed?: number; total?: number; remaining?: number;
   counts?: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
 };
@@ -275,6 +275,7 @@ export default function AdminOperationsDashboard() {
             {coverageAudit.counts && <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {[["Events listed by TBA", coverageAudit.counts.events_total], ["Events already held", coverageAudit.counts.events_happened], ["Events in progress", coverageAudit.counts.events_active], ["Upcoming events", coverageAudit.counts.events_upcoming], ["Events with invalid dates/timezones", coverageAudit.counts.events_invalid_dates], ["Teams in complete TBA season inventory", coverageAudit.counts.teams_total], ["TBA team pages", coverageAudit.counts.team_pages], ["Events missing analytics", coverageAudit.counts.event_analytics_missing], ["Events with incomplete resources", coverageAudit.counts.event_resources_incomplete], ["Teams with incomplete resources", coverageAudit.counts.team_resources_incomplete], ["Missing event runtimes", coverageAudit.counts.event_runtime_missing], ["Missing team runtimes", coverageAudit.counts.team_runtime_missing], ["Read errors", coverageAudit.counts.read_errors]].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[10px] text-[var(--fv-muted)]">{label}</p><p className="text-lg font-bold tabular-nums">{value}</p></div>)}
             </div>}
+            {coverageAudit.status === "stale" && <p className="text-xs text-amber-600">This audit was created from an older or incomplete discovery snapshot. Discover all team pages and rerun the audit before relying on these counts.</p>}
             {coverageAudit.status === "running" && <p className="text-xs text-[var(--fv-muted)]">Progress is saved durably. Use “Run next batch” to continue; you can leave this page and resume later.</p>}
             {coverageAudit.status === "completed" && <p className="text-xs text-emerald-600">Full inventory audit completed for {year}. Counts cover the discovered season snapshot, not just the dashboard sample.</p>}
           </div>}
