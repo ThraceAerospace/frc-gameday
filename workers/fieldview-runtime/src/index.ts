@@ -105,11 +105,11 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop"].includes(action)) {
+        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-        return scheduler.fetch(new Request("https://event-scheduler/" + (action === "scheduler-start" ? "start" : "stop"), {
+        return scheduler.fetch(new Request("https://event-scheduler/" + (action === "scheduler-start" ? "start" : action === "scheduler-stop" ? "stop" : "run"), {
           method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
         }));
       }
@@ -133,7 +133,7 @@ export default {
           return Response.json({ error: "A resource endpoint is required" }, { status: 400 });
         }
         const path = action === "statbotics-refresh" || (action === "resource-refresh" && typeof endpoint === "string" && endpoint.startsWith("/matches?event=")) ? "statbotics-refresh" : action === "recalculate" ? "recalculate" : "refresh";
-        const payload = action === "resource-refresh" ? { endpoints: [endpoint] } : {};
+        const payload = action === "resource-refresh" ? { endpoints: [endpoint], includeStatbotics: false } : {};
         return stub.fetch(new Request("https://event-runtime/" + path, {
           method: "POST", headers, body: JSON.stringify(payload),
         }));
