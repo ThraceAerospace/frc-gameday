@@ -491,12 +491,7 @@ export class EventScheduler {
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
     const year = new Date().getUTCFullYear();
     const events = new Map<string, TBAEvent>();
-    // Keep only the current calendar year's discovery payload in durable storage.
-    const discoveryEntries = await this.storage.list<DiscoveryCache>({ prefix: DISCOVERY_PREFIX });
-    for (const key of discoveryEntries.keys()) {
-      if (key !== DISCOVERY_PREFIX + year) await this.storage.delete(key);
-    }
-
+    // Historical discovery caches are retained for season-specific admin operations.
     // FieldView only needs the current calendar year's discovery cache.
     for (const discoveryYear of [year]) {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
