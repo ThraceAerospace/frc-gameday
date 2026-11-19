@@ -113,7 +113,17 @@ export class TeamRuntime {
   private async schedule(year: number, immediate: boolean): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const now = Date.now();
-      for (const endpoint of this.endpoints(year)) {
+      // Discard malformed tasks from older/incorrect resource scheduling formats.
+      // In particular, provider identity must be stored alongside a string endpoint.
+      const existingTasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
+      for (const [key, task] of existingTasks) {
+        if (typeof task.endpoint !== "string" ||
+          (task.provider !== "tba" && task.provider !== "statbotics" && task.provider !== "frc-colors")) {
+          await tx.delete(key);
+        }
+      }
+      for (const resource of this.endpoints(year)) {
+        const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         const state = await tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
         const needsIngestion = !state || state.status === "unknown" || state.status === "stale" ||
@@ -121,7 +131,7 @@ export class TeamRuntime {
         const dueAt = immediate || (needsIngestion && previous)
           ? now
           : previous?.dueAt ?? now;
-        await tx.put(key, { endpoint, dueAt,
+        await tx.put(key, { provider, endpoint, dueAt,
           intervalMs: this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
       await this.rearm(tx);
