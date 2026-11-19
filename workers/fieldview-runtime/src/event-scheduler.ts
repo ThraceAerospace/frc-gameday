@@ -140,6 +140,34 @@ interface DiscoveryCache {
   checkedAt?: number;
 }
 
+interface SeasonIngestJob {
+  year: number;
+  status: "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
+  phase: "teams" | "events" | "complete";
+  teamKeys: string[];
+  eventKeys: string[];
+  teamCursor: number;
+  eventCursor: number;
+  counts: {
+    teams_complete: number; teams_partial: number; teams_failed: number;
+    event_state_complete: number; event_state_partial: number; event_state_failed: number;
+    event_analytics_succeeded: number; event_analytics_partial: number;
+    event_analytics_waiting: number; event_analytics_failed: number;
+  };
+  recentErrors: Array<{ kind: "team" | "event"; key: string; detail: string; at: number }>;
+  startedAt: number;
+  updatedAt: number;
+}
+
+const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
+const seasonIngestSummary = (job: SeasonIngestJob) => ({
+  year: job.year, status: job.status, phase: job.phase,
+  team_cursor: job.teamCursor, team_total: job.teamKeys.length,
+  event_cursor: job.eventCursor, event_total: job.eventKeys.length,
+  counts: job.counts, recent_errors: job.recentErrors,
+  started_at: job.startedAt, updated_at: job.updatedAt,
+});
+
 interface TeamDiscoveryCache {
   /** Page-zero ETag retained for existing public provenance fields. */
   etag: string | null;
@@ -275,6 +303,82 @@ export class EventScheduler {
       } catch (error) {
         return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
       }
+    }
+
+    if (url.pathname === "/admin/season-ingest" && request.method === "GET") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
+      const job = await this.storage.get<SeasonIngestJob>(seasonIngestKey(year));
+      return Response.json(job ? seasonIngestSummary(job) : { year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (url.pathname === "/admin/season-ingest" && request.method === "POST") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid season-ingest request" }, { status: 400 });
+      const value = body as Record<string, unknown>;
+      const year = Number(value.year), action = value.action;
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200 ||
+          !["preview", "start", "pause", "resume", "cancel"].includes(String(action))) {
+        return Response.json({ error: "Expected a valid year and preview, start, pause, resume, or cancel action" }, { status: 400 });
+      }
+      const key = seasonIngestKey(year);
+      let job = await this.storage.get<SeasonIngestJob>(key);
+      if (action === "preview") {
+        const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
+        const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        const ready = events?.complete === true && teams?.complete === true && (teams.teamKeys?.length ?? 0) > 0;
+        return Response.json({
+          year, ready, events: events?.events.length ?? 0, teams: teams?.teamKeys?.length ?? 0,
+          team_pages: teams?.pageCount ?? 0,
+          existing_job: job ? seasonIngestSummary(job) : null,
+          requires_explicit_confirmation: true,
+        }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (action === "start") {
+        if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
+        if (job?.status === "running") return Response.json({ error: "Season ingestion is already running", job: seasonIngestSummary(job) }, { status: 409 });
+        const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
+        const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
+          return Response.json({ error: "Complete event discovery and paginated team discovery before starting ingestion" }, { status: 409 });
+        }
+        const eventKeys = [...new Set(events.events.map((event) => event.key).filter((eventKey): eventKey is string => typeof eventKey === "string" && /^[a-zA-Z0-9_-]+$/.test(eventKey)))].sort();
+        const teamKeys = [...new Set(teams.teamKeys.filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
+        if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
+        const now = Date.now();
+        job = {
+          year, status: "running", phase: "teams", teamKeys, eventKeys,
+          teamCursor: 0, eventCursor: 0,
+          counts: {
+            teams_complete: 0, teams_partial: 0, teams_failed: 0,
+            event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
+            event_analytics_succeeded: 0, event_analytics_partial: 0,
+            event_analytics_waiting: 0, event_analytics_failed: 0,
+          },
+          recentErrors: [], startedAt: now, updatedAt: now,
+        };
+        await this.storage.put(key, job);
+        await this.storage.setAlarm(now + 1_000);
+        return Response.json(seasonIngestSummary(job));
+      }
+      if (!job) return Response.json({ error: "No season-ingest job exists for this year" }, { status: 404 });
+      if (action === "pause") {
+        if (job.status === "running") job.status = "paused";
+      } else if (action === "resume") {
+        if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
+        if (job.status === "completed_with_errors") {
+          job.teamCursor = Math.min(job.teamCursor, job.teamKeys.length);
+          job.eventCursor = Math.min(job.eventCursor, job.eventKeys.length);
+          job.status = "running";
+        } else job.status = "running";
+        await this.storage.setAlarm(Date.now() + 1_000);
+      } else if (action === "cancel") {
+        job.status = "cancelled";
+      }
+      job.updatedAt = Date.now();
+      await this.storage.put(key, job);
+      if (job.status !== "running" && await this.storage.get<boolean>("scheduler:enabled") !== true) await this.storage.deleteAlarm();
+      return Response.json(seasonIngestSummary(job));
     }
 
     if (request.method === "GET" && url.pathname === "/admin/inventory") {
@@ -590,6 +694,17 @@ export class EventScheduler {
   }
 
   async alarm(): Promise<void> {
+    const activeJob = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+    const runningJob = [...activeJob.values()].find((job) => job.status === "running");
+    if (runningJob) {
+      await this.processSeasonIngest(runningJob);
+      const refreshed = await this.storage.get<SeasonIngestJob>(seasonIngestKey(runningJob.year));
+      if (refreshed?.status === "running") await this.storage.setAlarm(Date.now() + 1_000);
+      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
+        await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
+      } else await this.storage.deleteAlarm();
+      return;
+    }
     if (await this.storage.get<boolean>("scheduler:enabled") !== true) return;
     const policy = eventPollingPolicy(this.env);
     try {
@@ -606,6 +721,132 @@ export class EventScheduler {
     }
     await this.storage.put("scheduler:last-run-at", Date.now());
     await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+  }
+
+  private async processSeasonIngest(job: SeasonIngestJob): Promise<void> {
+    const key = seasonIngestKey(job.year);
+    const recordError = (kind: "team" | "event", entityKey: string, detail: string) => {
+      job.recentErrors.push({ kind, key: entityKey, detail: detail.slice(0, 240), at: Date.now() });
+      if (job.recentErrors.length > 100) job.recentErrors.splice(0, job.recentErrors.length - 100);
+    };
+    try {
+      if (job.phase === "teams") {
+        if (job.teamCursor >= job.teamKeys.length) {
+          job.phase = "events";
+          job.updatedAt = Date.now();
+          await this.storage.put(key, job);
+          return;
+        }
+        const teamKey = job.teamKeys[job.teamCursor];
+        if (!this.env.TEAM_RUNTIME) throw new Error("TeamRuntime namespace is not bound");
+        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+        const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
+        const existingResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+        let acquired = 0;
+        if (existingResponse.ok) {
+          const state = await existingResponse.json() as { endpoints?: Array<{ last_fetched_at?: number | null }> };
+          acquired = (state.endpoints ?? []).filter((item) => item.last_fetched_at != null).length;
+        }
+        if (acquired < 7) {
+          const response = await stub.fetch(new Request("https://team-runtime/refresh?year=" + job.year, {
+            method: "POST", headers,
+          }));
+          if (!response.ok) throw new Error("TeamRuntime refresh returned HTTP " + response.status);
+        }
+        const verifyResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+        if (!verifyResponse.ok) throw new Error("Unable to verify TeamRuntime state: HTTP " + verifyResponse.status);
+        const verified = await verifyResponse.json() as { endpoints?: Array<{ last_fetched_at?: number | null }> };
+        const finalCount = (verified.endpoints ?? []).filter((item) => item.last_fetched_at != null).length;
+        if (finalCount >= 7) job.counts.teams_complete += 1;
+        else if (finalCount > 0) job.counts.teams_partial += 1;
+        else job.counts.teams_failed += 1;
+        await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
+      } else if (job.phase === "events") {
+        if (job.eventCursor >= job.eventKeys.length) {
+          job.phase = "complete";
+          job.status = Object.values(job.counts).some((count) => count > 0 && false) ? "completed_with_errors" : "completed";
+          const failures = job.counts.teams_partial + job.counts.teams_failed + job.counts.event_state_partial +
+            job.counts.event_state_failed + job.counts.event_analytics_waiting + job.counts.event_analytics_failed;
+          if (failures > 0) job.status = "completed_with_errors";
+          job.updatedAt = Date.now();
+          await this.storage.put(key, job);
+          return;
+        }
+        const eventKey = job.eventKeys[job.eventCursor];
+        const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
+        const event = eventDiscovery?.events.find((item) => item.key === eventKey);
+        const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+        const headers = {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        };
+        const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+        let current: { event_state?: { status?: string }; analytics?: { status?: string } } = {};
+        if (stateResponse.ok) current = await stateResponse.json() as typeof current;
+        if (current.event_state?.status !== "complete") {
+          const refresh = await stub.fetch(new Request("https://event-runtime/refresh", {
+            method: "POST", headers, body: JSON.stringify({}),
+          }));
+          if (!refresh.ok) throw new Error("EventRuntime resource refresh returned HTTP " + refresh.status);
+        }
+        const snapshot = await stub.fetch(new Request("https://event-runtime/snapshot", {
+          headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
+        }));
+        if (!snapshot.ok) throw new Error("EventState generation returned HTTP " + snapshot.status);
+        const afterState = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+        if (!afterState.ok) throw new Error("Unable to verify EventState publication");
+        const eventState = await afterState.json() as { event_state?: { status?: string }; analytics?: { status?: string } };
+        const stateStatus = eventState.event_state?.status ?? "missing";
+        if (stateStatus === "complete") job.counts.event_state_complete += 1;
+        else if (stateStatus === "partial") job.counts.event_state_partial += 1;
+        else job.counts.event_state_failed += 1;
+
+        const recalculate = await stub.fetch(new Request("https://event-runtime/recalculate", { method: "POST", headers }));
+        if (!recalculate.ok) throw new Error("EventAnalytics calculation request returned HTTP " + recalculate.status);
+        const analyticsResponse = await stub.fetch(new Request("https://event-runtime/analytics", {
+          headers: { "X-FieldView-Event-Key": eventKey },
+        }));
+        if (!analyticsResponse.ok) throw new Error("Unable to verify EventAnalytics publication");
+        const analytics = await analyticsResponse.json() as { status?: string; publication?: unknown };
+        if (analytics.status === "succeeded" && analytics.publication) job.counts.event_analytics_succeeded += 1;
+        else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
+        else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
+        else job.counts.event_analytics_failed += 1;
+
+        if (event) {
+          const decision = classifyEventLifecycle(event, Date.now(), eventPollingPolicy(this.env));
+          if (decision) {
+            await stub.fetch(new Request("https://event-runtime/lifecycle", {
+              method: "POST", headers,
+              body: JSON.stringify({
+                lifecycle: decision.lifecycle,
+                upcomingIntervalMs: eventPollingPolicy(this.env).upcomingIntervalMs,
+                activeIntervalMs: eventPollingPolicy(this.env).activeIntervalMs,
+                ...(decision.completedUntil === null ? {} : { completedUntil: decision.completedUntil }),
+              }),
+            }));
+          }
+        }
+        const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+        if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
+        const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
+        if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
+      }
+    } catch (error) {
+      const kind = job.phase === "teams" ? "team" : "event";
+      const entityKey = kind === "team" ? job.teamKeys[job.teamCursor] : job.eventKeys[job.eventCursor];
+      recordError(kind, entityKey ?? "unknown", error instanceof Error ? error.message : String(error));
+      if (kind === "team") job.counts.teams_failed += 1;
+      else {
+        job.counts.event_state_failed += 1;
+        job.counts.event_analytics_failed += 1;
+      }
+    }
+    if (job.phase === "teams") job.teamCursor += 1;
+    else if (job.phase === "events") job.eventCursor += 1;
+    job.updatedAt = Date.now();
+    await this.storage.put(key, job);
   }
 
   private async discoverEvents(year: number): Promise<void> {
