@@ -31,6 +31,7 @@ import {
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
 import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
+import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./provider-request-gate.ts";
 
 interface PollTask {
   endpoint: string;
@@ -441,6 +442,26 @@ export class EventRuntime {
           source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/ingest-resource") {
+      const body: unknown = await request.json().catch(() => null);
+      const endpoint = isRecord(body) && typeof body.endpoint === "string" ? body.endpoint : null;
+      const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      if (!endpoint || (!this.allowedEndpoints.has(endpoint) && endpoint !== statboticsEndpoint)) {
+        return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
+      }
+      const result = await this.pollEndpoint(endpoint);
+      if (typeof result !== "boolean") {
+        return Response.json({ endpoint, deferred: true, retry_at: result.deferredUntil }, { status: 202 });
+      }
+      const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
+      const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
+      return Response.json({
+        endpoint, success: result, status: state?.status ?? "unknown",
+        revision: state?.revision ?? 0, last_fetched_at: state?.lastFetchedAt ?? null,
+        http_status: diagnostic?.lastHttpStatus ?? null, last_error: diagnostic?.lastError ?? null,
       });
     }
 
@@ -972,17 +993,13 @@ export class EventRuntime {
         throw new Error("Cannot execute event alarm without persisted event identity");
       }
       for (const task of due) {
-        if (task.retryOnFailure === false) {
-          // One-shot enrichment is at-most-once: remove it before I/O so a
-          // provider failure or runtime interruption cannot create polling.
-          await transaction.delete(taskStorageKey(task.endpoint));
-        } else {
-          await transaction.put(taskStorageKey(task.endpoint), {
-            ...task,
-            dueAt: now + this.retryDelay(task),
-            attempts: task.attempts + 1,
-          });
-        }
+        // Reserve before I/O. Even at-most-once work remains persisted until
+        // the shared request gate grants a lease; a deferred request is not an attempt.
+        await transaction.put(taskStorageKey(task.endpoint), {
+          ...task,
+          dueAt: now + this.retryDelay(task),
+          attempts: task.attempts + 1,
+        });
       }
       const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
       const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
@@ -993,7 +1010,20 @@ export class EventRuntime {
 
     for (const task of dueTasks.due) {
       const succeeded = await this.pollEndpoint(task.endpoint);
-      if (task.retryOnFailure === false) continue;
+      if (typeof succeeded !== "boolean") {
+        await this.storage.transaction(async (transaction) => {
+          const key = taskStorageKey(task.endpoint);
+          const current = await transaction.get<PollTask>(key);
+          if (!current || current.generation !== task.generation) return;
+          await transaction.put(key, { ...current, attempts: task.attempts, dueAt: succeeded.deferredUntil });
+          await this.rearm(transaction);
+        });
+        continue;
+      }
+      if (task.retryOnFailure === false) {
+        await this.storage.delete(taskStorageKey(task.endpoint));
+        continue;
+      }
       await this.storage.transaction(async (transaction) => {
         const key = taskStorageKey(task.endpoint);
         const current = await transaction.get<PollTask>(key);
@@ -1157,7 +1187,7 @@ export class EventRuntime {
     else await transaction.setAlarm(nextDue);
   }
 
-  private async pollEndpoint(endpoint: string): Promise<boolean> {
+  private async pollEndpoint(endpoint: string): Promise<boolean | { deferredUntil: number }> {
     const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
@@ -1170,10 +1200,13 @@ export class EventRuntime {
       | { status: "not-modified"; expiresAt: number | null }
       | { status: "failed"; reason: string };
 
+    const permit = await acquireProviderRequestPermit(this.env, "event:" + this.eventKey, endpoint);
+    if (!permit.granted) return { deferredUntil: permit.retryAt };
     try {
-      const response = isStatboticsEndpoint
-        ? await this.statboticsApi.request(endpoint, { headers })
-        : await this.api.request(endpoint, { headers });
+      try {
+        const response = isStatboticsEndpoint
+          ? await this.statboticsApi.request(endpoint, { headers })
+          : await this.api.request(endpoint, { headers });
       const maxAge = cacheMaxAgeSeconds(response.headers.get("Cache-Control"));
       const expiresAt = maxAge === null ? null : Date.now() + maxAge * 1000;
 
@@ -1195,16 +1228,19 @@ export class EventRuntime {
           expiresAt,
         };
       }
-    } catch (error) {
-      // Keep a short, secret-free diagnostic for admin inspection. Never store
-      // response bodies, request headers, or provider credentials.
+      } catch (error) {
+        // Keep a short, secret-free diagnostic for admin inspection. Never store
+        // response bodies, request headers, or provider credentials.
       const detail = error instanceof Error
         ? `${error.name}: ${error.message}`
         : String(error);
-      responseState = {
-        status: "failed",
-        reason: detail.slice(0, 300) || "Unknown fetch or response error",
-      };
+        responseState = {
+          status: "failed",
+          reason: detail.slice(0, 300) || "Unknown fetch or response error",
+        };
+      }
+    } finally {
+      await releaseProviderRequestPermit(this.env, permit.leaseId);
     }
 
     const result = await this.storage.transaction(async (transaction) => {
