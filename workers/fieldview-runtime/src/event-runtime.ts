@@ -23,6 +23,8 @@ import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src
 import type { FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
 import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
 import { calculateCanonicalMatchAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
+import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
+import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
 
 interface PollTask {
   endpoint: string;
@@ -44,6 +46,9 @@ const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
+const ANALYTICS_COHORT_RETRY_KEY = "analytics:cohort-retries";
+const ANALYTICS_COHORT_RETRY_DELAY_MS = 5 * 60_000;
+const ANALYTICS_COHORT_MAX_RETRIES = 12;
 
 interface AnalyticsPublication {
   sourceRevision: number;
