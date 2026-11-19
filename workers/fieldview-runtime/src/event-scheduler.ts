@@ -596,7 +596,7 @@ export class EventScheduler {
     for (let page = 0; page < 100; page += 1) {
       const pageKey = String(page);
       const cachedPage = cached?.pages?.[page] ?? (page === 0 ? cached?.teams : undefined);
-      const etag = cached?.pageEtags?.[pageKey] ?? (cached?.pages ? null : null);
+      const etag = cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
       const response = await this.api.request(TBA_ENDPOINTS.teams(year, page), { headers });
@@ -609,7 +609,7 @@ export class EventScheduler {
       } else {
         if (!response.ok) throw new Error("TBA team discovery page " + page + " failed for " + year + " with HTTP " + response.status);
         pageTeams = await response.json() as TBATeam[];
-        if (!Array.isArray(pageTeams)) throw new Error("TBA team discovery page " + page + " returned a non-array payload");
+        if (!Array.isArray(pageTeams) || pageTeams.length > 500) throw new Error("TBA team discovery page " + page + " returned an invalid payload");
         pageEtags[pageKey] = response.headers.get("ETag");
       }
       pages.push(pageTeams);
@@ -619,7 +619,8 @@ export class EventScheduler {
       }
     }
     if (!complete) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
-    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string").map((team) => [team.key, team])).values()];
+    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
+    if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
     const retrievedAt = Date.now();
     await this.storage.put(key, {
       etag: pageEtags["0"] ?? null, pageEtags, pages, pageCount: pages.length,
