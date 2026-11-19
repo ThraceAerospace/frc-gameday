@@ -289,6 +289,22 @@ export class EventScheduler {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/run") {
+      const policy = eventPollingPolicy(this.env);
+      const errors: string[] = [];
+      try { await this.discoverAndSchedule(policy); }
+      catch (error) { errors.push("Event discovery: " + (error instanceof Error ? error.message : String(error))); }
+      try { await this.discoverTeams(new Date().getUTCFullYear()); }
+      catch (error) { errors.push("Team discovery: " + (error instanceof Error ? error.message : String(error))); }
+      await this.storage.put("scheduler:last-run-at", Date.now());
+      if (errors.length) await this.storage.put("scheduler:last-error", errors.join("; "));
+      else await this.storage.delete("scheduler:last-error");
+      if (await this.storage.get<boolean>("scheduler:enabled") === true) {
+        await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+      }
+      return Response.json({ ran: true, errors, scheduler_enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false });
+    }
+
     if (request.method === "POST" && url.pathname === "/start") {
       await this.storage.put("scheduler:enabled", true);
       await this.storage.setAlarm(Date.now());
