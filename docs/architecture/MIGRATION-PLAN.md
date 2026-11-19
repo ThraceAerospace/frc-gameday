@@ -355,3 +355,9 @@ The event analytics dashboard now consumes canonical EventRuntime publications a
 The Team Investigation view no longer issues two unused TeamRuntime history requests when a team is selected; those responses were never rendered. The canonical team history route remains available for compatibility and validates numeric team keys correctly. One season-wide `/api/team/[team]/matches` request remains because the existing investigation panels still depend on its season-wide match-analysis DTO. That route still uses Redis plus direct TBA/Statbotics acquisition and is explicitly outstanding migration work; do not describe the team investigation pipeline as fully canonical until its match-history aggregation and calculation ownership move into TeamRuntime/EventRuntime and `packages/analytics`.
 
 No visual redesign, merge, deployment, secret change, or production cutover is part of this slice. The latest known completed validation run was for the prior dashboard commit; the newest commits have not yet received a fresh workspace-validation result. The Vercel status check currently reports a build-rate-limit failure, not an application test result.
+
+### Dashboard canonical compatibility correction (2026-11-18)
+
+- The event analytics adapter now exposes canonical match flags on the legacy dashboard record's top-level `flags` field, matching the existing Suggested Review consumer. Keeping flags only on the nested canonical match object made every flag appear absent.
+- The adapter now falls back to canonical per-alliance match score analysis for predicted scores and score deltas when the event analytics aggregate omits those values. It does not calculate new analytics in the browser; it projects already-published EventRuntime analysis into the compatibility view model.
+- Preserve the canonical publication as the source of truth. Do not restore client-side flag calculation or provider fetches to work around missing publication data.
