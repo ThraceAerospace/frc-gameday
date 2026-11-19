@@ -81,3 +81,61 @@ test("canonical match analytics preserves absent and explicit-null match resourc
   assert.equal(await calculateCanonicalMatchAnalytics(absent), absent);
   assert.equal(await calculateCanonicalMatchAnalytics(explicitNull), explicitNull);
 });
+
+test("canonical aggregate attaches season cohort comparisons using eligible event-wide coverage", async () => {
+  const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
+    team_key: `frc${start + index}`,
+    team_number: start + index,
+    pre_epa: { epa: 10 * (index + 1) },
+    epa: { epa: 15 * (index + 1) },
+  }));
+  const match = {
+    key: "2026test_qm1", event_key: "2026test", comp_level: "qm",
+    set_number: 1, match_number: 1, winning_alliance: "red",
+    alliances: {
+      red: { team_keys: ["frc1", "frc2", "frc3"], score: 105 },
+      blue: { team_keys: ["frc4", "frc5", "frc6"], score: 90 },
+    },
+    teams: { red: teams(1), blue: teams(4) },
+    predictions: { statbotics: { red_score: 100, blue_score: 95, red_win_prob: 0.7 } },
+  };
+  const state = {
+    event_key: "2026test",
+    event: { key: "2026test", name: "Target", event_code: "test", start_date: "2026-03-01", playoff_type: 0, timezone: "America/New_York" },
+    teams: Array.from({ length: 6 }, (_, index) => ({ key: "frc" + (index + 1), team_number: index + 1 })),
+    matches: [match],
+    sources: {},
+    team_states: [{ event_key: "2026test", team_key: "frc1", sources: {}, matches: [match] }],
+  };
+  const changes = [10, 5, 4, 3, 2, 1];
+  const cohortRecords = Array.from({ length: 6 }, (_, index) => {
+    const teamNumber = index + 1;
+    const prior = 50 + index * 10;
+    const current = prior + changes[index];
+    const record = (eventKey, eventName, startDate, epa) => ({
+      team_number: teamNumber,
+      event: { event_key: eventKey, event_name: eventName, short_name: eventKey.slice(4), start_date: startDate },
+      epa_total: epa, epa_unitless: epa / 100,
+      breakdown: { auto_epa: 10 + index + (eventKey === "2026test" ? 2 : 0), teleop_epa: 20, endgame_epa: 5 },
+      wins: 4, losses: 2, ties: 0, match_count: 6, fetched_at: 1_800_000_000_000, status: "ready",
+    });
+    return [
+      record("2026prior", "Prior", "2026-02-01", prior),
+      record("2026test", "Target", "2026-03-01", current),
+    ];
+  }).flat();
+  const cohort = {
+    state: "complete", team_count: 6, total_team_event_records: 12,
+    processed_team_event_records: 12, unavailable_team_event_records: 0,
+    discovery_pending_teams: 0, updated_at: 1_800_000_000_000, records: cohortRecords,
+  };
+  const result = await calculateCanonicalMatchAnalytics(state, [], cohort);
+  const analytics = result.team_states[0].analytics;
+  assert.equal(result.analytics.season_cohort.state, "complete");
+  assert.equal(analytics.season_comparison.change, 10);
+  assert.equal(analytics.season_comparison.cohort_rank, 1);
+  assert.equal(analytics.season_comparison.cohort_size, 6);
+  assert.equal(analytics.season_comparison.prior_event.event_key, "2026prior");
+  assert.equal(analytics.season_history.length, 2);
+  assert.equal(result.matches[0].analysis.audit.definition_versions.length, 16);
+});
