@@ -132,7 +132,7 @@ export default function AdminOperationsDashboard() {
     if (!token) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const action = coverageAudit?.status === "running" ? "coverage-audit-continue" : "coverage-audit-start";
+      const action = coverageAudit?.year === year && coverageAudit.status === "running" ? "coverage-audit-continue" : "coverage-audit-start";
       const response = await fetch("/api/admin/runtime", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "system", action, year }),
@@ -140,7 +140,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Coverage audit failed");
       setCoverageAudit(body as CoverageAudit);
-      setMessage(coverageAudit?.status === "running" ? "Coverage audit batch completed." : "Coverage audit started. Run additional batches until complete.");
+      setMessage(coverageAudit?.year === year && coverageAudit.status === "running" ? "Coverage audit batch completed." : "Coverage audit started. Run additional batches until complete.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Coverage audit failed"); }
     finally { setBusy(false); }
   }, [token, requestHeaders, year, coverageAudit]);
@@ -267,7 +267,7 @@ export default function AdminOperationsDashboard() {
         <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every discovered event and team runtime in the selected season. This makes no provider API requests and processes up to 20 runtimes per batch.</p></div>
-            <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => setYear(Number(event.target.value))} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><button disabled={busy} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.status === "running" ? "Run next batch" : coverageAudit?.status === "completed" ? "Run audit again" : "Start full audit"}</button></div>
+            <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => setYear(Number(event.target.value))} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><button disabled={busy} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.year === year && coverageAudit.status === "running" ? "Run next batch" : coverageAudit?.year === year && coverageAudit.status === "completed" ? "Run audit again" : "Start full audit"}</button></div>
           </div>
           {coverageAudit && coverageAudit.year === year && <div className="mt-3 space-y-2">
             <div className="flex flex-wrap justify-between gap-2 text-xs"><span className="font-semibold capitalize">{coverageAudit.status.replaceAll("_", " ")}</span><span>{coverageAudit.processed ?? coverageAudit.cursor ?? 0} / {coverageAudit.total ?? ((coverageAudit.counts?.events_total ?? 0) + (coverageAudit.counts?.teams_total ?? 0))} runtimes inspected</span></div>
