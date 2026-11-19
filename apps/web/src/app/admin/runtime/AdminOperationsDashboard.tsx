@@ -126,12 +126,12 @@ export default function AdminOperationsDashboard() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load entity state"); }
   }, [requestHeaders, year]);
 
-  const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string) => {
+  const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string, operationYear?: number) => {
     setBusy(true); setMessage(""); setError("");
     try {
       const response = await fetch("/api/admin/runtime", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: entityKind, action, ...(key ? { key } : {}), ...(endpoint ? { endpoint } : {}) }),
+        body: JSON.stringify({ kind: entityKind, action, ...(key ? { key } : {}), ...(endpoint ? { endpoint } : {}), ...(operationYear ? { year: operationYear } : {}) }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
@@ -228,7 +228,7 @@ export default function AdminOperationsDashboard() {
 
     {(tab === "events" || tab === "teams") && !selected && <section className="mt-6 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{tab === "events" ? "Event directory" : "Team directory"}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Search the full registered inventory and open an individual command center.</p></div><div className="flex flex-wrap gap-2"><label className="flex items-center gap-2 text-xs text-[var(--fv-muted)]">Season <input aria-label="Inventory season year" type="number" min="1992" max={new Date().getUTCFullYear() + 1} value={year} onChange={(event) => setYear(Number(event.target.value))} className="w-24 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><input aria-label="Search inventory" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "events" ? "Search event key…" : "Search team key…"} className="w-64 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-sm" /><button onClick={() => void loadInventory(0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Search</button></div></div>
-      <Panel><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{page?.total ?? 0} matching registered {kind}s</p><p className="text-xs text-[var(--fv-muted)]">Season {year} · 50 per page</p></div>{page && !page.discovery_ready && <p className="mt-2 rounded-lg border border-amber-300 px-3 py-2 text-xs text-amber-700">No {year} discovery snapshot is cached yet. Results include only previously registered runtime objects.</p>}<div className="mt-3 divide-y divide-[var(--fv-border)]">{(page?.keys ?? []).map((key) => {
+      <Panel><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{page?.total ?? 0} matching registered {kind}s</p><p className="text-xs text-[var(--fv-muted)]">Season {year} · 50 per page</p></div>{page && !page.discovery_ready && <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 px-3 py-2"><p className="text-xs text-amber-700">No {year} discovery snapshot is cached yet. Results include only previously registered runtime objects.</p><button disabled={busy} onClick={async () => { await dispatch("system", "discover-year", undefined, undefined, year); await loadInventory(0); }} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Discover {year} season</button></div>}<div className="mt-3 divide-y divide-[var(--fv-border)]">{(page?.keys ?? []).map((key) => {
         const summary = (kind === "event" ? overview?.events : overview?.teams)?.find((item) => item.key === key);
         const state = summary?.state;
         const endpointCount = endpointRows(state).length;
