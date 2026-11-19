@@ -1,6 +1,6 @@
 "use client";
 
-import type { FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
+import type { MatchPresentation, PlayoffAlliancePresentation } from "./MatchCard";
 import { useEffect, useRef } from "react";
 import { hasPostedScore } from "@/lib/tba/matchUtils";
 import MatchCard from "./MatchCard";
@@ -15,12 +15,12 @@ export default function MatchStrip({
   playoffType = null,
   multiview = {},
 }: {
-  matches?: FieldViewMatch[];
+  matches?: MatchPresentation[];
   team?: string[];
-  nextMatch?: FieldViewMatch | null;
-  lastMatch?: FieldViewMatch | null;
+  nextMatch?: MatchPresentation | null;
+  lastMatch?: MatchPresentation | null;
   eventTimezone?: string | null;
-  playoffAlliances?: FieldViewPlayoffAlliance[];
+  playoffAlliances?: PlayoffAlliancePresentation[];
   playoffType?: number | null;
   multiview?: Record<string, unknown>;
 }) {
