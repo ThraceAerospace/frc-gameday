@@ -50,7 +50,6 @@ export interface FieldViewEventState {
     rankings?: FieldViewSourceMetadata;
     awards?: FieldViewSourceMetadata;
     advancement_points?: FieldViewSourceMetadata;
-    team_colors?: FieldViewSourceMetadata;
   };
   event?: FieldViewEvent | null;
   teams?: FieldViewTeam[] | null;
@@ -67,8 +66,6 @@ export interface FieldViewEventState {
   awards?: TBAAward[] | null;
   /** Unchanged TBA event advancement-points resource. */
   advancement_points?: TBAEventAdvancementPoints | null;
-  /** FRC Colors enrichment keyed by official team number; verification is retained. */
-  team_colors?: Record<string, { primary_hex: string | null; secondary_hex: string | null; verified: boolean | null }>;
 }
 
 /** @deprecated Use FieldViewEventState. Retained during the staged migration. */
