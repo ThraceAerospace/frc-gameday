@@ -144,6 +144,8 @@ export class TeamRuntime {
       await this.alarm();
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
+      const taskRegistry = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
+      const providerByEndpoint = new Map([...taskRegistry.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({
         scheduled: true,
         attempted: true,
@@ -151,6 +153,7 @@ export class TeamRuntime {
         year,
         snapshot,
         diagnostics: [...(await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values()].map((state) => ({
+          provider: providerByEndpoint.get(state.endpoint) ?? null,
           endpoint: state.endpoint,
           http_status: state.lastHttpStatus ?? null,
           last_error: state.lastError ?? null,
@@ -160,12 +163,14 @@ export class TeamRuntime {
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const providerByEndpoint = new Map([...tasks.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({ team_key: this.teamKey,
         polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
         endpoints: [...states.values()].map((state) => {
           const value = state.providerData ?? state.data;
           const recordCount = Array.isArray(value) ? value.length : value == null ? 0 : 1;
           return {
+            provider: providerByEndpoint.get(state.endpoint) ?? null,
             endpoint: state.endpoint, status: state.status, revision: state.revision,
             last_fetched_at: state.lastFetchedAt, last_attempt_at: state.lastAttemptAt,
             record_count: recordCount, included_count: recordCount, excluded_count: 0,
@@ -173,7 +178,7 @@ export class TeamRuntime {
             http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null,
           };
         }),
-        diagnostics: [...states.values()].map((state) => ({ endpoint: state.endpoint, http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null })) });
+        diagnostics: [...states.values()].map((state) => ({ provider: providerByEndpoint.get(state.endpoint) ?? null, endpoint: state.endpoint, http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null })) });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
