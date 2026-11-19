@@ -1,11 +1,11 @@
 "use client";
 
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch } from "@fieldview/domain";
 import NextMatchCountdown from "@/components/match/NextMatchCountdown";
 import { formatTeamNumber, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
 type HomeMatchCardProps = {
-  match: TBAMatch;
+  match: FieldViewMatch;
   eventTimezone?: string;
   isNext?: boolean;
 };
