@@ -238,6 +238,55 @@ export class EventScheduler {
       return Response.json({ registered: true });
     }
 
+    if (request.method === "GET" && url.pathname === "/admin/inventory") {
+      const kind = url.searchParams.get("kind");
+      const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+      const cursor = Number(url.searchParams.get("cursor") ?? "0");
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      if ((kind !== "event" && kind !== "team") ||
+          !Number.isSafeInteger(cursor) || cursor < 0 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+        return Response.json({ error: "Invalid inventory query" }, { status: 400 });
+      }
+      const storageKey = kind === "event" ? "registry:events" : "registry:teams";
+      const keys = [...new Set(await this.storage.get<string[]>(storageKey) ?? [])]
+        .filter((key) => key.toLowerCase().includes(query)).sort();
+      return Response.json({
+        kind, query, total: keys.length, cursor,
+        next_cursor: cursor + limit < keys.length ? cursor + limit : null,
+        keys: keys.slice(cursor, cursor + limit),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/admin/entity") {
+      const kind = url.searchParams.get("kind");
+      const requestedKey = url.searchParams.get("key") ?? "";
+      if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey)) {
+        return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
+      }
+      const key = kind === "team" && /^\\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
+      const registryKey = kind === "event" ? "registry:events" : "registry:teams";
+      const registered = await this.storage.get<string[]>(registryKey) ?? [];
+      if (!registered.includes(key)) return Response.json({ error: "Entity is not registered" }, { status: 404 });
+      try {
+        if (kind === "event") {
+          const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(key));
+          const response = await stub.fetch(new Request("https://event-runtime/state", {
+            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": key },
+          }));
+          return new Response(response.body, { status: response.status, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
+        }
+        if (!this.env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(key));
+        const response = await stub.fetch(new Request("https://team-runtime/state", {
+          headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": key },
+        }));
+        return new Response(response.body, { status: response.status, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
+      } catch (error) {
+        return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
+      }
+    }
+
     if (request.method === "GET" && url.pathname === "/admin/overview") {
       const eventKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:events") ?? []),
