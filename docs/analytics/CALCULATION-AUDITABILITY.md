@@ -89,3 +89,13 @@ A migration can temporarily break a view or expose an existing calculation defec
 - The full dashboard has not yet switched to canonical published analytics, and the legacy Next.js orchestration/provider path has not been removed.
 - The analytics publication currently increments the canonical event-state revision. A dedicated `analytics` Multiplexer notification and corresponding client subscription/recovery are still pending.
 - Formula hand verification remains separate; no math corrections are included in this migration.
+
+## Canonical model coverage for the original Insights panels
+
+The canonical analytics contracts in `packages/domain/src/analytics.ts` now have explicit sections for the remaining original Insights payload:
+
+- Event scope: alliance-side prediction/residual observations, event team comparison rows (OPR/DPR/CCWM and EPA), qualification calibration/progression/penalty diagnostics, qualification anomalies, playoff-alliance performance, residual and prediction summaries, collection progress, and season-cohort acquisition coverage.
+- Team-at-event scope: event rank/record and EPA movement, match-by-match EPA trend, prior-event and season-cohort comparisons (including component comparisons and cohort ranks), peer residual comparison, season history, and match review evidence.
+- The nested records retain the original panel's meaningful nulls, unavailable statuses, sample counts, and cohort coverage. The new fields are optional during staged publication so existing EventRuntime snapshots remain valid while backend population is migrated.
+
+These are domain contracts only: adding a field does not claim that EventRuntime currently calculates or publishes it. The remaining implementation work is to populate the new event/team sections from the existing calculation operations and acquire the cross-event cohort inputs through the appropriate runtime ownership boundary. Existing formulas and thresholds remain unchanged.
