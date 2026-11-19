@@ -43,6 +43,7 @@ const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
+const ANALYTICS_REVISION_KEY = "analytics:revision";
 
 interface AnalyticsPublication {
   sourceRevision: number;
@@ -205,7 +206,7 @@ export class EventRuntime {
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
-      (url.pathname === "/snapshot" || url.pathname === "/stream");
+      (url.pathname === "/snapshot" || url.pathname === "/analytics" || url.pathname === "/stream");
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -359,6 +360,22 @@ export class EventRuntime {
       pair[1].send(JSON.stringify({ type: "connected", event_key: this.eventKey, version, snapshot_required: since === null || !Number.isSafeInteger(since) || since !== version }));
       return this.env.webSocketResponseFactory ? this.env.webSocketResponseFactory(pair[0]) : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
     }
+    if (request.method === "GET" && url.pathname === "/analytics") {
+      const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      const revision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
+      return Response.json({
+        event_key: this.eventKey,
+        revision,
+        status: await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending"),
+        due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+        calculated_at: publication?.calculatedAt ?? null,
+        source_revision: publication?.sourceRevision ?? null,
+        publication: publication ?? null,
+      }, {
+        headers: { "X-FieldView-Analytics-Version": String(revision), "Cache-Control": "no-store" },
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/snapshot") {
       // A public read creates demand for missing or stale canonical resources.
       // Scheduling only persists the work and arms the DO alarm; provider I/O
@@ -754,6 +771,9 @@ export class EventRuntime {
         await this.rearm(transaction);
         return null;
       }
+      const analyticsRevision = (await transaction.get<number>(ANALYTICS_REVISION_KEY) ?? 0) + 1;
+      publication.analyticsRevision = analyticsRevision;
+      await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
       await transaction.put("analytics:status", "succeeded");
       await transaction.delete("analytics:last-error");
@@ -763,7 +783,26 @@ export class EventRuntime {
       await this.rearm(transaction);
       return nextRevision;
     });
-    if (publishedVersion !== null) await this.publishSnapshotRevision(publishedVersion);
+    if (publishedVersion !== null) {
+      const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
+      await Promise.all([
+        this.publishSnapshotRevision(publishedVersion),
+        this.publishAnalyticsRevision(analyticsRevision),
+      ]);
+    }
+  }
+
+  private async publishAnalyticsRevision(version: number): Promise<void> {
+    if (!this.env.MULTIPLEXER || !this.env.RUNTIME_ADMIN_TOKEN) return;
+    const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
+    await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ topic: "analytics", event_key: this.eventKey, version }),
+    })).catch(() => undefined);
   }
 
   private async cancelRecurringPolls(clearCompletedUntil = false): Promise<void> {
