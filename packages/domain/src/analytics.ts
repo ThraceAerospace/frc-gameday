@@ -167,3 +167,273 @@ export interface FieldViewTeamAnalytics {
   findings: FieldViewAnalyticsFinding[];
   audit?: FieldViewAnalyticsAudit;
 }
+
+/** One alliance-side observation used by event-wide score analysis. */
+export interface FieldViewAnalyticsAllianceResult {
+  match_key: string;
+  match_label: string;
+  competition_level: string;
+  alliance: "red" | "blue";
+  team_keys: TeamKey[];
+  predicted_score: number | null;
+  actual_score: number | null;
+  score_residual: number | null;
+  pre_match_epa_total: number | null;
+  winner: boolean;
+  outcome: "win" | "loss" | "tie" | "unknown";
+}
+
+/** Event-level team row used by the original Insights comparison table. */
+export interface FieldViewAnalyticsTeamSummary {
+  team_key: TeamKey;
+  team_number: number;
+  name: string;
+  opr: number | null;
+  dpr: number | null;
+  ccwm: number | null;
+  epa: number | null;
+  auto_epa: number | null;
+  teleop_epa: number | null;
+  endgame_epa: number | null;
+  matches_seen: number;
+  epa_percentile: number | null;
+  epa_contribution_percent: number | null;
+  epa_contribution_samples: number;
+}
+
+/** Qualification score-prediction diagnostics, retaining the legacy measures. */
+export interface FieldViewQualificationScorePrediction {
+  alliance_count: number;
+  mean_absolute_error: number | null;
+  root_mean_square_error: number | null;
+  mean_residual: number | null;
+  within_25_count: number;
+  win_prediction_count: number;
+  win_prediction_accuracy: number | null;
+}
+
+export interface FieldViewQualificationPredictionBin {
+  label: string;
+  count: number;
+  mean_predicted: number;
+  observed_red_win_rate: number;
+  calibration_error: number;
+}
+
+export interface FieldViewQualificationHighConfidenceMiss {
+  match_key: string;
+  match_label: string;
+  predicted_winner: "red" | "blue";
+  probability: number;
+}
+
+export interface FieldViewQualificationPenaltyMatch {
+  match_key: string;
+  match_label: string;
+  match_number: number;
+  red_penalty_count: number | null;
+  blue_penalty_count: number | null;
+  red_penalty_points: number;
+  blue_penalty_points: number;
+  total_penalty_points: number;
+  red_flagged: boolean;
+  blue_flagged: boolean;
+}
+
+/** Complete qualification diagnostics previously returned by the Insights API. */
+export interface FieldViewQualificationAnalytics {
+  prediction_calibration: {
+    match_count: number;
+    correct_count: number;
+    underdog_wins: number;
+    accuracy: number | null;
+    brier_score: number | null;
+    high_confidence_misses: FieldViewQualificationHighConfidenceMiss[];
+    bins: FieldViewQualificationPredictionBin[];
+  };
+  score_prediction: FieldViewQualificationScorePrediction;
+  progression: Array<{
+    label: string;
+    first_match: number;
+    last_match: number;
+    alliance_count: number;
+    mean_absolute_error: number | null;
+    mean_residual: number | null;
+  }>;
+  penalties: {
+    sample_size: number;
+    matches_with_penalty_points: number;
+    total_penalty_points: number;
+    mean_penalty_points: number | null;
+    median_penalty_points: number | null;
+    outlier_threshold: number | null;
+    flagged_matches: FieldViewQualificationPenaltyMatch[];
+  };
+}
+
+/** A qualification alliance-side result flagged for deeper review. */
+export interface FieldViewQualificationAnomaly {
+  anomaly_key: string;
+  match_key: string;
+  match_label: string;
+  alliance: "red" | "blue";
+  team_keys: TeamKey[];
+  predicted_score: number;
+  actual_score: number;
+  score_residual: number;
+  margin_of_error: number | null;
+  standardized_residual: number | null;
+  win_probability: number | null;
+  outside_expected_range: boolean;
+  high_confidence_miss: boolean;
+  severity: "high" | "medium";
+  reasons: string[];
+}
+
+/** One playoff match from the perspective of an official alliance. */
+export interface FieldViewPlayoffAllianceMatch {
+  match_key: string;
+  competition_level: string;
+  alliance: "red" | "blue";
+  outcome: "win" | "loss" | "tie" | "unknown";
+  score_residual: number | null;
+  actual_score: number | null;
+  predicted_score: number | null;
+}
+
+/** Aggregated playoff performance for an official TBA alliance. */
+export interface FieldViewPlayoffAlliancePerformance {
+  /** Official TBA alliance name; null when the source does not provide one. */
+  name: string | null;
+  team_keys: TeamKey[];
+  match_count: number;
+  scored_match_count: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  unknown_outcomes: number;
+  mean_predicted_score: number | null;
+  mean_actual_score: number | null;
+  mean_score_residual: number | null;
+  residual_standard_deviation: number | null;
+  matches: FieldViewPlayoffAllianceMatch[];
+}
+
+export interface FieldViewPlayoffAnalytics {
+  match_count: number;
+  alliance_count: number;
+  alliances: FieldViewPlayoffAlliancePerformance[];
+}
+
+/** Per-match team context retained by the original team-insights panel. */
+export interface FieldViewTeamAnalyticsMatch {
+  match_key: string;
+  match_label: string;
+  alliance: "red" | "blue";
+  partner_team_numbers: number[];
+  opponent_team_numbers: number[];
+  predicted_score: number | null;
+  actual_score: number | null;
+  score_residual: number | null;
+  win_probability: number | null;
+  won: boolean | null;
+  pre_match_epa: number | null;
+  post_match_epa: number | null;
+  epa_change: number | null;
+  reasons: string[];
+}
+
+export interface FieldViewTeamEPATrendPoint {
+  match_key: string;
+  match_label: string;
+  epa: number | null;
+}
+
+export interface FieldViewTeamSeasonHistoryEntry {
+  event: {
+    event_key: EventKey;
+    event_name: string;
+    start_date: string;
+  };
+  epa_total: number | null;
+  match_count: number | null;
+  status: "ready" | "unavailable";
+}
+
+export interface FieldViewTeamSeasonComponentComparison {
+  prior: number;
+  current: number;
+  change: number;
+  cohort_rank: number;
+  cohort_size: number;
+}
+
+/** Same-team, prior-event comparison and the corresponding event cohorts. */
+export interface FieldViewTeamSeasonComparison {
+  prior_event: {
+    event_key: EventKey;
+    event_name: string;
+    short_name: string | null;
+    start_date: string;
+  };
+  prior_epa: number;
+  current_epa: number;
+  current_epa_percentile: number | null;
+  prior_epa_rank: number;
+  prior_epa_cohort_size: number;
+  current_epa_rank: number;
+  current_epa_cohort_size: number;
+  change: number;
+  cohort_rank: number;
+  cohort_size: number;
+  components: {
+    auto: FieldViewTeamSeasonComponentComparison | null;
+    teleop: FieldViewTeamSeasonComponentComparison | null;
+    endgame: FieldViewTeamSeasonComponentComparison | null;
+  };
+}
+
+export interface FieldViewTeamPeerPerformance {
+  team_match_count: number;
+  peer_alliance_count: number;
+  team_mean_residual: number | null;
+  peer_mean_residual: number | null;
+  difference: number | null;
+  interpretation:
+    | "above-peers"
+    | "below-peers"
+    | "similar-to-peers"
+    | "insufficient-sample";
+}
+
+/** One team/event record in the season-wide comparison cohort. */
+export interface FieldViewSeasonCohortRecord {
+  team_number: number;
+  event: {
+    event_key: EventKey;
+    event_name: string;
+    short_name: string | null;
+    start_date: string;
+  };
+  epa_total: number | null;
+  epa_unitless: number | null;
+  breakdown: Record<string, number>;
+  wins: number | null;
+  losses: number | null;
+  ties: number | null;
+  match_count: number | null;
+  fetched_at: number;
+  status: "ready" | "unavailable";
+}
+
+/** Progress and coverage for season-cohort discovery/acquisition. */
+export interface FieldViewSeasonCohortSnapshot {
+  state: "queued" | "discovering" | "collecting" | "complete" | "partial";
+  team_count: number;
+  total_team_event_records: number;
+  processed_team_event_records: number;
+  unavailable_team_event_records: number;
+  discovery_pending_teams: number;
+  updated_at: number;
+  records: FieldViewSeasonCohortRecord[];
+}
