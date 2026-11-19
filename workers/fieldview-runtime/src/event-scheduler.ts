@@ -1,5 +1,8 @@
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
+import { eventResourceEndpoints } from "./event-runtime.ts";
+import { teamResourceEndpoints } from "./team-runtime.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
 import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
 import type { FieldViewTeam } from "../../../packages/domain/src/team.ts";
@@ -149,7 +152,11 @@ interface SeasonIngestJob {
   teamKeys: string[];
   eventKeys: string[];
   teamCursor: number;
+  teamResourceCursor: number;
   eventCursor: number;
+  eventResourceCursor: number;
+  resourceAttempts: number;
+  nextDueAt?: number;
   counts: {
     teams_complete: number; teams_partial: number; teams_failed: number;
     event_state_complete: number; event_state_partial: number; event_state_failed: number;
@@ -165,7 +172,9 @@ const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
 const seasonIngestSummary = (job: SeasonIngestJob) => ({
   year: job.year, status: job.status, phase: job.phase,
   team_cursor: job.teamCursor, team_total: job.teamKeys.length,
+  team_resource_cursor: job.teamResourceCursor,
   event_cursor: job.eventCursor, event_total: job.eventKeys.length,
+  event_resource_cursor: job.eventResourceCursor, next_due_at: job.nextDueAt ?? null,
   counts: job.counts, recent_errors: job.recentErrors,
   started_at: job.startedAt, updated_at: job.updatedAt,
 });
@@ -395,7 +404,7 @@ export class EventScheduler {
         const now = Date.now();
         job = {
           year, status: "running", phase: "teams", teamKeys, eventKeys,
-          teamCursor: 0, eventCursor: 0,
+          teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
             event_state_complete: 0, event_state_partial: 0, event_state_failed: 0,
@@ -415,7 +424,11 @@ export class EventScheduler {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
         if (job.status === "completed_with_errors") {
           job.teamCursor = 0;
+          job.teamResourceCursor = 0;
           job.eventCursor = 0;
+          job.eventResourceCursor = 0;
+          job.resourceAttempts = 0;
+          delete job.nextDueAt;
           job.phase = "teams";
           job.counts = {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -785,6 +798,21 @@ export class EventScheduler {
       job.recentErrors.push({ kind, key: entityKey, detail: detail.slice(0, 240), at: Date.now() });
       if (job.recentErrors.length > 100) job.recentErrors.splice(0, job.recentErrors.length - 100);
     };
+    const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+    const requestInterval = intervalValue === undefined ? 1_000 : Number(intervalValue);
+    const retry = (detail: string, kind: "team" | "event", entityKey: string) => {
+      job.resourceAttempts += 1;
+      if (job.resourceAttempts >= 3) {
+        recordError(kind, entityKey, detail);
+        job.resourceAttempts = 0;
+        if (kind === "team") job.teamResourceCursor += 1;
+        else job.eventResourceCursor += 1;
+        job.nextDueAt = Date.now() + 1_000;
+      } else {
+        recordError(kind, entityKey, detail + " (retry " + job.resourceAttempts + "/3)");
+        job.nextDueAt = Date.now() + Math.min(30_000, 1_000 * (2 ** job.resourceAttempts));
+      }
+    };
     try {
       if (job.phase === "teams") {
         if (job.teamCursor >= job.teamKeys.length) {
@@ -795,35 +823,70 @@ export class EventScheduler {
         }
         const teamKey = job.teamKeys[job.teamCursor];
         if (!this.env.TEAM_RUNTIME) throw new Error("TeamRuntime namespace is not bound");
+        const resources = teamResourceEndpoints(teamKey, job.year);
         const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
         const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
-        const existingResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
-        let acquired = 0;
-        if (existingResponse.ok) {
-          const state = await existingResponse.json() as { endpoints?: Array<{ last_fetched_at?: number | null }> };
-          acquired = (state.endpoints ?? []).filter((item) => item.last_fetched_at != null).length;
+        if (job.teamResourceCursor < resources.length) {
+          const resource = resources[job.teamResourceCursor];
+          const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+          let resourceState: { status?: string; last_fetched_at?: number | null } | undefined;
+          if (stateResponse.ok) {
+            const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; last_fetched_at?: number | null }> };
+            resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
+          }
+          if (resourceState?.last_fetched_at != null || resourceState?.status === "unavailable") {
+            job.teamResourceCursor += 1;
+            job.resourceAttempts = 0;
+            job.nextDueAt = Date.now() + 1_000;
+          } else {
+            const response = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+              method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: resource.endpoint }),
+            }));
+            if (response.status === 202) {
+              const deferred = await response.json() as { retry_at?: number };
+              job.nextDueAt = deferred.retry_at ?? Date.now() + requestInterval;
+            } else if (!response.ok) {
+              retry("Team resource " + resource.endpoint + " returned HTTP " + response.status, "team", teamKey);
+            } else {
+              const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
+              if (result.status === "unavailable") {
+                recordError("team", teamKey, resource.endpoint + " is unavailable");
+                job.teamResourceCursor += 1;
+                job.resourceAttempts = 0;
+                job.nextDueAt = Date.now() + 1_000;
+              } else if (result.status === "failed" || result.success === false) {
+                retry(result.last_error ?? (resource.endpoint + " failed"), "team", teamKey);
+              } else {
+                job.teamResourceCursor += 1;
+                job.resourceAttempts = 0;
+                job.nextDueAt = Date.now() + requestInterval;
+              }
+            }
+          }
+        } else {
+          const verify = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+          if (!verify.ok) throw new Error("Unable to verify TeamRuntime state: HTTP " + verify.status);
+          const state = await verify.json() as { endpoints?: Array<{ last_fetched_at?: number | null; status?: string }> };
+          const endpoints = state.endpoints ?? [];
+          const acquired = endpoints.filter((item) => item.last_fetched_at != null).length;
+          const unavailable = endpoints.filter((item) => item.status === "unavailable").length;
+          if (acquired === resources.length) job.counts.teams_complete += 1;
+          else if (acquired > 0 || unavailable > 0) job.counts.teams_partial += 1;
+          else job.counts.teams_failed += 1;
+          await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
+          job.teamCursor += 1;
+          job.teamResourceCursor = 0;
+          job.resourceAttempts = 0;
+          job.nextDueAt = Date.now() + 1_000;
         }
-        if (acquired < 7) {
-          const response = await stub.fetch(new Request("https://team-runtime/refresh?year=" + job.year, {
-            method: "POST", headers,
-          }));
-          if (!response.ok) throw new Error("TeamRuntime refresh returned HTTP " + response.status);
-        }
-        const verifyResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
-        if (!verifyResponse.ok) throw new Error("Unable to verify TeamRuntime state: HTTP " + verifyResponse.status);
-        const verified = await verifyResponse.json() as { endpoints?: Array<{ last_fetched_at?: number | null }> };
-        const finalCount = (verified.endpoints ?? []).filter((item) => item.last_fetched_at != null).length;
-        if (finalCount >= 7) job.counts.teams_complete += 1;
-        else if (finalCount > 0) job.counts.teams_partial += 1;
-        else job.counts.teams_failed += 1;
-        await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
       } else if (job.phase === "events") {
         if (job.eventCursor >= job.eventKeys.length) {
           job.phase = "complete";
-          job.status = "completed";
           const failures = job.counts.teams_partial + job.counts.teams_failed + job.counts.event_state_partial +
             job.counts.event_state_failed + job.counts.event_analytics_waiting + job.counts.event_analytics_failed;
-          if (failures > 0) job.status = "completed_with_errors";
+          job.status = failures > 0 ? "completed_with_errors" : "completed";
+          delete job.nextDueAt;
           job.updatedAt = Date.now();
           await this.storage.put(key, job);
           return;
@@ -837,29 +900,51 @@ export class EventScheduler {
           "X-FieldView-Event-Key": eventKey,
           "Content-Type": "application/json",
         };
-        const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
-        let current: { event_state?: { status?: string }; analytics?: { status?: string } } = {};
-        if (stateResponse.ok) current = await stateResponse.json() as typeof current;
-        const artifactsAlreadyComplete = current.event_state?.status === "complete" &&
-          (current.analytics?.status === "succeeded" || current.analytics?.status === "partial");
-        if (artifactsAlreadyComplete) {
-          job.counts.event_state_complete += 1;
-          if (current.analytics?.status === "succeeded") job.counts.event_analytics_succeeded += 1;
-          else job.counts.event_analytics_partial += 1;
-        } else {
-          if (current.event_state?.status !== "complete") {
-            const refresh = await stub.fetch(new Request("https://event-runtime/refresh", {
-              method: "POST", headers, body: JSON.stringify({}),
-            }));
-            if (!refresh.ok) throw new Error("EventRuntime resource refresh returned HTTP " + refresh.status);
+        const resources = [
+          ...eventResourceEndpoints(eventKey),
+          STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0),
+        ];
+        if (job.eventResourceCursor < resources.length) {
+          const endpoint = resources[job.eventResourceCursor];
+          const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+          let resourceState: { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null } | undefined;
+          if (stateResponse.ok) {
+            const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
+            resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
+          if (resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null) {
+            job.eventResourceCursor += 1;
+            job.resourceAttempts = 0;
+            job.nextDueAt = Date.now() + 1_000;
+          } else {
+            const response = await stub.fetch(new Request("https://event-runtime/ingest-resource", {
+              method: "POST", headers,
+              body: JSON.stringify({ endpoint }),
+            }));
+            if (response.status === 202) {
+              const deferred = await response.json() as { retry_at?: number };
+              job.nextDueAt = deferred.retry_at ?? Date.now() + requestInterval;
+            } else if (!response.ok) {
+              retry("Event resource " + endpoint + " returned HTTP " + response.status, "event", eventKey);
+            } else {
+              const result = await response.json() as { status?: string; success?: boolean; last_error?: string | null };
+              if (result.status === "failed" || result.success === false) {
+                retry(result.last_error ?? (endpoint + " failed"), "event", eventKey);
+              } else {
+                job.eventResourceCursor += 1;
+                job.resourceAttempts = 0;
+                job.nextDueAt = Date.now() + requestInterval;
+              }
+            }
+          }
+        } else {
           const snapshot = await stub.fetch(new Request("https://event-runtime/snapshot", {
             headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey },
           }));
           if (!snapshot.ok) throw new Error("EventState generation returned HTTP " + snapshot.status);
-          const afterState = await stub.fetch(new Request("https://event-runtime/state", { headers }));
-          if (!afterState.ok) throw new Error("Unable to verify EventState publication");
-          const eventState = await afterState.json() as { event_state?: { status?: string }; analytics?: { status?: string } };
+          const stateResponse = await stub.fetch(new Request("https://event-runtime/state", { headers }));
+          if (!stateResponse.ok) throw new Error("Unable to verify EventState publication");
+          const eventState = await stateResponse.json() as { event_state?: { status?: string } };
           const stateStatus = eventState.event_state?.status ?? "missing";
           if (stateStatus === "complete") job.counts.event_state_complete += 1;
           else if (stateStatus === "partial") job.counts.event_state_partial += 1;
@@ -876,39 +961,36 @@ export class EventScheduler {
           else if (analytics.status === "partial" && analytics.publication) job.counts.event_analytics_partial += 1;
           else if (analytics.status === "waiting-for-cohort") job.counts.event_analytics_waiting += 1;
           else job.counts.event_analytics_failed += 1;
-        }
 
-        if (event) {
-          const decision = classifyEventLifecycle(event, Date.now(), eventPollingPolicy(this.env));
-          if (decision) {
-            await stub.fetch(new Request("https://event-runtime/lifecycle", {
-              method: "POST", headers,
-              body: JSON.stringify({
-                lifecycle: decision.lifecycle,
-                upcomingIntervalMs: eventPollingPolicy(this.env).upcomingIntervalMs,
-                activeIntervalMs: eventPollingPolicy(this.env).activeIntervalMs,
-                ...(decision.completedUntil === null ? {} : { completedUntil: decision.completedUntil }),
-              }),
-            }));
+          if (event) {
+            const decision = classifyEventLifecycle(event, Date.now(), eventPollingPolicy(this.env));
+            if (decision) {
+              await stub.fetch(new Request("https://event-runtime/lifecycle", {
+                method: "POST", headers,
+                body: JSON.stringify({
+                  lifecycle: decision.lifecycle,
+                  upcomingIntervalMs: eventPollingPolicy(this.env).upcomingIntervalMs,
+                  activeIntervalMs: eventPollingPolicy(this.env).activeIntervalMs,
+                  ...(decision.completedUntil === null ? {} : { completedUntil: decision.completedUntil }),
+                }),
+              }));
+            }
           }
+          const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+          if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
+          const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
+          if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
+          job.eventCursor += 1;
+          job.eventResourceCursor = 0;
+          job.resourceAttempts = 0;
+          job.nextDueAt = Date.now() + 1_000;
         }
-        const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-        if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
-        const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
-        if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
       }
     } catch (error) {
       const kind = job.phase === "teams" ? "team" : "event";
       const entityKey = kind === "team" ? job.teamKeys[job.teamCursor] : job.eventKeys[job.eventCursor];
-      recordError(kind, entityKey ?? "unknown", error instanceof Error ? error.message : String(error));
-      if (kind === "team") job.counts.teams_failed += 1;
-      else {
-        job.counts.event_state_failed += 1;
-        job.counts.event_analytics_failed += 1;
-      }
+      retry(error instanceof Error ? error.message : String(error), kind, entityKey ?? "unknown");
     }
-    if (job.phase === "teams") job.teamCursor += 1;
-    else if (job.phase === "events") job.eventCursor += 1;
     job.updatedAt = Date.now();
     await this.storage.put(key, job);
   }
