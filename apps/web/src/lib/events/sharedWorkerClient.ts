@@ -163,6 +163,10 @@ export function getCanonicalEventSnapshot(
   return canonicalSnapshots.get(eventKey);
 }
 
+export function refreshCanonicalEventAnalytics(eventKey: string): void {
+  workerEventWebSocket.refreshCanonicalAnalytics(eventKey);
+}
+
 export function getCanonicalEventAnalytics(eventKey: string): CanonicalAnalyticsPublication | undefined {
   return canonicalAnalytics.get(eventKey);
 }
