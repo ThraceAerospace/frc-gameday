@@ -30,6 +30,11 @@ type Overview = {
   inventory: { events: number; teams: number }; truncated: boolean;
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
+type CoverageAudit = {
+  year: number; status: "not_started" | "running" | "completed";
+  started_at?: number; updated_at?: number; cursor?: number; processed?: number; total?: number; remaining?: number;
+  counts?: { events_total: number; teams_total: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+};
 
 function Panel({ children }: { children: ReactNode }) {
   return <section className="rounded-2xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 sm:p-5">{children}</section>;
@@ -75,6 +80,7 @@ export default function AdminOperationsDashboard() {
   const [query, setQuery] = useState("");
   const [year, setYear] = useState(new Date().getUTCFullYear());
   const [page, setPage] = useState<InventoryPage | null>(null);
+  const [coverageAudit, setCoverageAudit] = useState<CoverageAudit | null>(null);
   const [cursor, setCursor] = useState(0);
   const [entity, setEntity] = useState<Entity | null>(null);
   const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
@@ -113,6 +119,32 @@ export default function AdminOperationsDashboard() {
     finally { setLoading(false); }
   }, [token, kind, query, year, requestHeaders]);
 
+  const loadCoverageAudit = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await fetch("/api/admin/runtime?coverageAudit=" + year, { headers: requestHeaders, cache: "no-store" });
+      const body = await response.json();
+      if (response.ok) setCoverageAudit(body as CoverageAudit);
+    } catch { /* Keep the last known audit result visible. */ }
+  }, [token, year, requestHeaders]);
+
+  const runCoverageAudit = useCallback(async () => {
+    if (!token) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const action = coverageAudit?.status === "running" ? "coverage-audit-continue" : "coverage-audit-start";
+      const response = await fetch("/api/admin/runtime", {
+        method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "system", action, year }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Coverage audit failed");
+      setCoverageAudit(body as CoverageAudit);
+      setMessage(coverageAudit?.status === "running" ? "Coverage audit batch completed." : "Coverage audit started. Run additional batches until complete.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Coverage audit failed"); }
+    finally { setBusy(false); }
+  }, [token, requestHeaders, year, coverageAudit]);
+
   const openEntity = useCallback(async (entityKind: Kind, key: string, entityYear = year) => {
     setSelected({ kind: entityKind, key, year: entityYear });
     setEntity(null); setError(""); setMessage("");
@@ -147,6 +179,11 @@ export default function AdminOperationsDashboard() {
     const timer = window.setInterval(() => void refresh(true), 15_000);
     return () => window.clearInterval(timer);
   }, [authenticated, token, refresh]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    void loadCoverageAudit();
+  }, [authenticated, loadCoverageAudit]);
 
   useEffect(() => {
     if (!authenticated || (tab !== "events" && tab !== "teams")) return;
@@ -221,7 +258,22 @@ export default function AdminOperationsDashboard() {
       </div>
       <Panel><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview samples at most 250 objects of each type. These are sample counts, not full-inventory totals.</p></div><span className="text-xs text-[var(--fv-muted)]">{sampled.events} events · {sampled.teams} teams inspected</span></div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.eventWithoutSources}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events without completed analytics</p><p className="mt-1 text-xl font-bold">{sampled.eventAnalyticsMissing}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Teams with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.teamWithoutSources}</p></div></div>
-        <p className="mt-3 text-xs text-[var(--fv-muted)]">A complete coverage audit is not yet implemented; this view deliberately does not extrapolate beyond inspected objects.</p>
+        <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every discovered event and team runtime in the selected season. This makes no provider API requests and processes up to 20 runtimes per batch.</p></div>
+            <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => setYear(Number(event.target.value))} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><button disabled={busy} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.status === "running" ? "Run next batch" : coverageAudit?.status === "completed" ? "Run audit again" : "Start full audit"}</button></div>
+          </div>
+          {coverageAudit && coverageAudit.year === year && <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap justify-between gap-2 text-xs"><span className="font-semibold capitalize">{coverageAudit.status.replaceAll("_", " ")}</span><span>{coverageAudit.processed ?? coverageAudit.cursor ?? 0} / {coverageAudit.total ?? ((coverageAudit.counts?.events_total ?? 0) + (coverageAudit.counts?.teams_total ?? 0))} runtimes inspected</span></div>
+            <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full rounded-full bg-[var(--fv-brand)]" style={{ width: ((coverageAudit.processed ?? coverageAudit.cursor ?? 0) / Math.max(1, coverageAudit.total ?? ((coverageAudit.counts?.events_total ?? 0) + (coverageAudit.counts?.teams_total ?? 0)))) * 100 + "%" }} /></div>
+            {coverageAudit.counts && <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {[["Events", coverageAudit.counts.events_total], ["Teams", coverageAudit.counts.teams_total], ["Events missing analytics", coverageAudit.counts.event_analytics_missing], ["Events with incomplete resources", coverageAudit.counts.event_resources_incomplete], ["Teams with incomplete resources", coverageAudit.counts.team_resources_incomplete], ["Missing event runtimes", coverageAudit.counts.event_runtime_missing], ["Missing team runtimes", coverageAudit.counts.team_runtime_missing], ["Read errors", coverageAudit.counts.read_errors]].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[10px] text-[var(--fv-muted)]">{label}</p><p className="text-lg font-bold tabular-nums">{value}</p></div>)}
+            </div>}
+            {coverageAudit.status === "running" && <p className="text-xs text-[var(--fv-muted)]">Progress is saved durably. Use “Run next batch” to continue; you can leave this page and resume later.</p>}
+            {coverageAudit.status === "completed" && <p className="text-xs text-emerald-600">Full inventory audit completed for {year}. Counts cover the discovered season snapshot, not just the dashboard sample.</p>}
+          </div>}
+          {(!coverageAudit || coverageAudit.year !== year) && <p className="mt-3 text-xs text-[var(--fv-muted)]">No audit has been run for {year}. Discover the season from the event or team directory first if its snapshot is not already cached.</p>}
+        </div>
       </Panel>
       <Panel><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Global discovery scheduler</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Discovers the current season's events and teams and maintains event lifecycle polling.</p></div><strong className={overview?.scheduler.enabled ? "text-emerald-600" : "text-amber-600"}>{overview?.scheduler.enabled ? "Running" : "Stopped"}</strong></div><div className="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Last run</p>{time(overview?.scheduler.last_run_at)}</div><div><p className="text-xs text-[var(--fv-muted)]">Next alarm</p>{time(overview?.scheduler.next_alarm_at)}</div><div><p className="text-xs text-[var(--fv-muted)]">Registered inventory</p>{overview?.inventory.events ?? 0} events / {overview?.inventory.teams ?? 0} teams</div></div></Panel>
     </div>}
