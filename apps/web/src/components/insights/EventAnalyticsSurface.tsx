@@ -18,6 +18,7 @@ export default function EventAnalyticsSurface({
     <EventAnalyticsDashboard
       eventKey={eventKey}
       eventName={eventName}
+      eventTimezone={snapshot?.event?.timezone ?? undefined}
       analytics={snapshot?.analytics}
       teamStates={snapshot?.team_states}
       matches={snapshot?.matches}
