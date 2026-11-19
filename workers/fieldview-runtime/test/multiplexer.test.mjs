@@ -132,3 +132,34 @@ test("multiplexer protects internal delivery and rejects malformed browser subsc
   assert.equal(pair[1].closed, true);
   assert.equal(pair[1].closeCode, 1008);
 });
+
+
+test("analytics topic subscriptions receive independent publication revisions", async () => {
+  const storage = new MemoryStorage();
+  const sockets = [];
+  const pair = [new FakeSocket(), new FakeSocket()];
+  const mux = new Multiplexer({
+    storage,
+    acceptWebSocket(socket) { sockets.push(socket); },
+    getWebSockets() { return sockets; },
+  }, {
+    RUNTIME_ADMIN_TOKEN: "service-secret",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({}) }) },
+    webSocketPairFactory: () => pair,
+    webSocketResponseFactory: () => new Response(null, { status: 200 }),
+  });
+  await mux.fetch(new Request("https://mux/stream", { headers: { Upgrade: "websocket" } }));
+  await mux.webSocketMessage(pair[1], JSON.stringify({
+    type: "subscribe", topic: "analytics", event_key: "2026test",
+  }));
+  const notify = await mux.fetch(new Request("https://mux/internal/notify", {
+    method: "POST",
+    headers: { Authorization: "Bearer service-secret", "Content-Type": "application/json" },
+    body: JSON.stringify({ topic: "analytics", event_key: "2026test", version: 3 }),
+  }));
+  assert.deepEqual(await notify.json(), { delivered: 1 });
+  assert.deepEqual(JSON.parse(pair[1].sent.at(-1)), {
+    type: "analytics.changed", topic: "analytics", event_key: "2026test", version: 3,
+  });
+  assert.equal(await storage.get("topic:analytics:2026test") instanceof Array, true);
+});
