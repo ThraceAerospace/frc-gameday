@@ -11,9 +11,10 @@ import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvir
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
+import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./provider-request-gate.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
-interface TeamResource { provider: TeamProvider; endpoint: string; }
+export interface TeamResource { provider: TeamProvider; endpoint: string; }
 interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
 interface TeamEndpointState<T> extends EndpointState<T> {
   lastHttpStatus?: number | null;
@@ -25,6 +26,20 @@ const DAY_MS = 86_400_000;
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
+
+export function teamResourceEndpoints(teamKey: string, year: number): TeamResource[] {
+  const providerTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
+  const teamNumber = Number(providerTeamKey.replace(/^frc/i, ""));
+  return [
+    { provider: "tba", endpoint: TBA_ENDPOINTS.team(providerTeamKey) },
+    { provider: "tba", endpoint: TBA_ENDPOINTS.teamDistricts(providerTeamKey) },
+    { provider: "tba", endpoint: TBA_ENDPOINTS.teamEvents(providerTeamKey, year) },
+    { provider: "tba", endpoint: TBA_ENDPOINTS.teamMedia(providerTeamKey, year) },
+    { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamYear(teamNumber, year) },
+    { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamEvents({ team: teamNumber, year }) },
+    { provider: "frc-colors", endpoint: FRC_COLORS_ENDPOINTS.team(teamNumber) },
+  ];
+}
 
 function maxAge(value: string | null): number | null {
   const directive = value?.split(",").map((part) => part.trim()).find((part) => part.toLowerCase().startsWith("max-age="));
@@ -73,18 +88,7 @@ export class TeamRuntime {
     return interval;
   }
   private endpoints(year: number): TeamResource[] {
-    // Public team routes commonly use the numeric team number ("/team/3461"),
-    // while TBA v3 requires the provider key ("frc3461").
-    const providerTeamKey = /^\d+$/.test(this.teamKey) ? "frc" + this.teamKey : this.teamKey;
-    return [
-      { provider: "tba", endpoint: TBA_ENDPOINTS.team(providerTeamKey) },
-      { provider: "tba", endpoint: TBA_ENDPOINTS.teamDistricts(providerTeamKey) },
-      { provider: "tba", endpoint: TBA_ENDPOINTS.teamEvents(providerTeamKey, year) },
-      { provider: "tba", endpoint: TBA_ENDPOINTS.teamMedia(providerTeamKey, year) },
-      { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamYear(Number(providerTeamKey.replace(/^frc/i, "")), year) },
-      { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamEvents({ team: Number(providerTeamKey.replace(/^frc/i, "")), year }) },
-      { provider: "frc-colors", endpoint: FRC_COLORS_ENDPOINTS.team(Number(providerTeamKey.replace(/^frc/i, ""))) },
-    ];
+    return teamResourceEndpoints(this.teamKey, year);
   }
   private async bindTeamKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Team-Key");
@@ -170,6 +174,16 @@ export class TeamRuntime {
         })),
       });
     }
+    if (request.method === "POST" && url.pathname === "/ingest-resource") {
+      const body: unknown = await request.json().catch(() => null);
+      const endpoint = body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>).endpoint : null;
+      const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
+      if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
+      const result = await this.pollResourceNow(resource);
+      if ("deferredUntil" in result) return Response.json({ endpoint, deferred: true, retry_at: result.deferredUntil }, { status: 202 });
+      return Response.json({ endpoint, ...result });
+    }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
@@ -222,6 +236,54 @@ export class TeamRuntime {
       "Cache-Control": "no-store",
     } });
   }
+  private async pollResourceNow(resource: TeamResource): Promise<
+    { deferredUntil: number } |
+    { success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }
+  > {
+    const permit = await acquireProviderRequestPermit(this.env, "team:" + this.teamKey, resource.endpoint);
+    if (!permit.granted) return { deferredUntil: permit.retryAt };
+    const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
+    const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(resource.endpoint);
+    const requestState = createPollRequestSnapshot(initial), headers = new Headers();
+    if (requestState.ifNoneMatch) headers.set("If-None-Match", requestState.ifNoneMatch);
+    let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
+      { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
+      { status: "failed"; httpStatus?: number; error?: string };
+    try {
+      const client = resource.provider === "tba" ? this.api
+        : resource.provider === "statbotics" ? this.statboticsApi : this.frcColorsApi;
+      const response = await client.request(resource.endpoint, { headers });
+      const ttl = maxAge(response.headers.get("Cache-Control"));
+      const expiresAt = ttl === null ? null : Date.now() + ttl * 1000;
+      if (response.status === 304) result = { status: "not-modified", expiresAt: expiresAt ?? initial.expiresAt };
+      else if (response.status === 404) result = { status: "unavailable", httpStatus: response.status };
+      else if (!response.ok) result = { status: "failed", httpStatus: response.status };
+      else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
+    } catch (error) {
+      result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      await releaseProviderRequestPermit(this.env, permit.leaseId);
+    }
+    const next = await this.storage.transaction(async (tx) => {
+      const key = endpointKey(resource.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
+      const value = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
+      const diagnostic = {
+        ...value,
+        lastHttpStatus: "httpStatus" in result ? result.httpStatus : result.status === "modified" ? 200 : latest.lastHttpStatus ?? null,
+        lastError: "error" in result ? result.error : null,
+      };
+      await tx.put(key, diagnostic);
+      if (value.revision !== latest.revision) await tx.put("snapshot-revision", (await tx.get<number>("snapshot-revision") ?? 0) + 1);
+      return diagnostic;
+    });
+    return {
+      success: result.status !== "failed" && result.status !== "unavailable",
+      status: next.status, revision: next.revision,
+      last_fetched_at: next.lastFetchedAt,
+      http_status: next.lastHttpStatus ?? null, last_error: next.lastError ?? null,
+    };
+  }
+
   async alarm(): Promise<void> {
     if (!(await this.restoreIdentity())) return;
     const now = Date.now();
@@ -255,6 +317,12 @@ export class TeamRuntime {
       let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
         { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
         { status: "failed"; httpStatus?: number; error?: string };
+      const permit = await acquireProviderRequestPermit(this.env, "team:" + this.teamKey, task.endpoint);
+      if (!permit.granted) {
+        const current = await this.storage.get<TeamPollTask>(taskKey(task.endpoint));
+        if (current) await this.storage.put(taskKey(task.endpoint), { ...current, dueAt: permit.retryAt, attempts: task.attempts });
+        continue;
+      }
       try {
         // Provider identity is assigned when the resource is declared; never infer
         // it from endpoint paths, which may overlap across providers.
@@ -271,6 +339,8 @@ export class TeamRuntime {
         else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
       } catch (error) {
         result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+      } finally {
+        await releaseProviderRequestPermit(this.env, permit.leaseId);
       }
       const changed = await this.storage.transaction(async (tx) => {
         const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
