@@ -951,7 +951,7 @@ export class EventScheduler {
             const state = await stateResponse.json() as { endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }> };
             resourceState = state.endpoints?.["endpoint:" + endpoint];
           }
-          if (resourceState?.lastFetchedAt != null || resourceState?.lastWebhookAt != null || resourceState?.status === "unavailable") {
+          if (resourceState?.lastFetchedAt != null || resourceState?.status === "unavailable") {
             job.counts.requests_skipped += 1;
             job.eventResourceCursor += 1;
             job.resourceAttempts = 0;
@@ -1041,7 +1041,29 @@ export class EventScheduler {
     } catch (error) {
       const kind = job.phase === "teams" ? "team" : "event";
       const entityKey = kind === "team" ? job.teamKeys[job.teamCursor] : job.eventKeys[job.eventCursor];
-      retry(error instanceof Error ? error.message : String(error), kind, entityKey ?? "unknown");
+      const detail = error instanceof Error ? error.message : String(error);
+      const finalizingTeam = kind === "team" && job.teamResourceCursor >= teamResourceEndpoints(entityKey ?? "", job.year).length;
+      const finalizingEvent = kind === "event" && job.eventResourceCursor >= eventResourceEndpoints(entityKey ?? "").length + 1;
+      if (finalizingTeam || finalizingEvent) {
+        job.resourceAttempts += 1;
+        recordError(kind, entityKey ?? "unknown", detail + " (finalization retry " + job.resourceAttempts + "/3)");
+        if (job.resourceAttempts >= 3) {
+          if (kind === "team") {
+            job.counts.teams_failed += 1;
+            job.teamCursor += 1;
+            job.teamResourceCursor = 0;
+          } else {
+            job.counts.event_state_failed += 1;
+            job.counts.event_analytics_failed += 1;
+            job.eventCursor += 1;
+            job.eventResourceCursor = 0;
+          }
+          job.resourceAttempts = 0;
+        }
+        job.nextDueAt = Date.now() + Math.min(30_000, 1_000 * (2 ** job.resourceAttempts));
+      } else {
+        retry(detail, kind, entityKey ?? "unknown");
+      }
     }
     job.updatedAt = Date.now();
     await this.storage.put(key, job);
