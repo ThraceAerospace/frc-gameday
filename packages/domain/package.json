@@ -24,7 +24,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@fieldview/provider-tba": "0.1.0",
-    "@fieldview/provider-statbotics": "0.1.0"
+    "@fieldview/provider-frc-colors": "0.1.0",
+    "@fieldview/provider-statbotics": "0.1.0",
+    "@fieldview/provider-tba": "0.1.0"
   }
 }
