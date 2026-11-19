@@ -1,9 +1,7 @@
-/** @deprecated Use event-state.ts and normalizeFieldViewEventState. */
+/** @deprecated Import normalizeFieldViewEventState from event-state.ts. */
 export {
-  normalizeFieldViewEventState,
   normalizeFieldViewEventState as normalizeFieldViewEventSnapshot,
 } from "./event-state.js";
 export type {
-  NormalizeFieldViewEventStateInput,
   NormalizeFieldViewEventStateInput as NormalizeFieldViewEventSnapshotInput,
 } from "./event-state.js";
