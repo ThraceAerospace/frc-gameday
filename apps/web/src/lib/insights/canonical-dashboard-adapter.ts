@@ -34,9 +34,27 @@ function teamInsight(teamNumber: number, analytics: FieldViewTeamAnalytics): Tea
     cohortRank: comparison.cohort_rank,
     cohortSize: comparison.cohort_size,
     components: {
-      auto: comparison.components.auto,
-      teleop: comparison.components.teleop,
-      endgame: comparison.components.endgame,
+      auto: comparison.components.auto ? {
+        prior: comparison.components.auto.prior,
+        current: comparison.components.auto.current,
+        change: comparison.components.auto.change,
+        cohortRank: comparison.components.auto.cohort_rank,
+        cohortSize: comparison.components.auto.cohort_size,
+      } : null,
+      teleop: comparison.components.teleop ? {
+        prior: comparison.components.teleop.prior,
+        current: comparison.components.teleop.current,
+        change: comparison.components.teleop.change,
+        cohortRank: comparison.components.teleop.cohort_rank,
+        cohortSize: comparison.components.teleop.cohort_size,
+      } : null,
+      endgame: comparison.components.endgame ? {
+        prior: comparison.components.endgame.prior,
+        current: comparison.components.endgame.current,
+        change: comparison.components.endgame.change,
+        cohortRank: comparison.components.endgame.cohort_rank,
+        cohortSize: comparison.components.endgame.cohort_size,
+      } : null,
     },
   } : null;
   const reviewMatches: TeamInsightMatch[] = (analytics.review_matches ?? []).map((item) => ({
