@@ -358,7 +358,7 @@ export class EventScheduler {
       const audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
         event_keys: string[]; team_keys: string[];
-        counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
+        counts: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_analytics_missing: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>("admin:coverage-audit:" + year);
       if (!audit) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, { headers: { "Cache-Control": "no-store" } });
       const total = audit.event_keys.length + audit.team_keys.length;
@@ -391,10 +391,18 @@ export class EventScheduler {
         if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
         const teamKeys = [...new Set(teamDiscovery.teams.map((team) => team.key).filter((key) => typeof key === "string"))].sort();
+        const eventCounts = { events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0 };
+        for (const event of eventDiscovery.events) {
+          const lifecycle = classifyEventLifecycle(event, Date.now(), DEFAULT_EVENT_POLLING_POLICY)?.lifecycle;
+          if (lifecycle === "completed" || lifecycle === "expired") eventCounts.events_happened += 1;
+          else if (lifecycle === "active") eventCounts.events_active += 1;
+          else if (lifecycle === "upcoming") eventCounts.events_upcoming += 1;
+          else eventCounts.events_invalid_dates += 1;
+        }
         audit = {
           year, status: "running", started_at: Date.now(), updated_at: Date.now(),
           event_keys: eventKeys, team_keys: teamKeys, cursor: 0,
-          counts: { events_total: eventKeys.length, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? teamDiscovery.pages?.length ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
+          counts: { events_total: eventKeys.length, ...eventCounts, teams_total: teamKeys.length, team_pages: teamDiscovery.pageCount ?? teamDiscovery.pages?.length ?? 0, event_runtime_missing: 0, team_runtime_missing: 0, event_analytics_missing: 0, event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0 },
         };
         await this.storage.put(storageKey, audit);
       }
