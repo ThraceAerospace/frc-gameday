@@ -7,7 +7,6 @@ import type { TileSurfaceController } from "@/components/surface/TileSurfaceActi
 import { getCanonicalEventSnapshot, subscribeCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { EventStateSnapshotsProvider } from "@/lib/events/EventStateSnapshotsProvider";
 import { CanonicalEventSnapshotsProvider, type CanonicalEventSnapshotValue } from "@/lib/events/CanonicalEventSnapshotsProvider";
-import type { EventStateSnapshot } from "@/lib/events/EventState";
 import {
   createRemoteSessionActions,
   applyRemoteSessionAction,
