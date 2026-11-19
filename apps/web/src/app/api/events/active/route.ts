@@ -113,7 +113,7 @@ export async function GET() {
     enriched.sort(
       (a, b) =>
         stateOrder[a.state] - stateOrder[b.state] ||
-        a.start_date.localeCompare(b.start_date) ||
+        a.event.start_date.localeCompare(b.event.start_date) ||
         (b.event.division_keys?.length ?? 0) - (a.event.division_keys?.length ?? 0)
     );
 
