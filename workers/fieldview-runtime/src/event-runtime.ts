@@ -447,6 +447,17 @@ export class EventRuntime {
     );
     const results = await Promise.all(participants.map(async ({ teamKey }) => {
       try {
+        if (this.env.EVENT_SCHEDULER && this.env.RUNTIME_ADMIN_TOKEN) {
+          const scheduler = this.env.EVENT_SCHEDULER.get(this.env.EVENT_SCHEDULER.idFromName("global"));
+          await scheduler.fetch(new Request("https://event-scheduler/register", {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ kind: "team", key: teamKey }),
+          }));
+        }
         const stub = namespace.get(namespace.idFromName(teamKey));
         const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
           method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
