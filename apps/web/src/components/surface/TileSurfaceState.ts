@@ -1,6 +1,6 @@
 "use client";
 
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 import type { LAYOUTS } from "@/lib/multiview/layouts";
 import { createEventViewConfig, EventViewConfig } from "@/components/eventview/EventViewConfig";
 
@@ -22,7 +22,7 @@ export type TileSurfaceState = {
   imminentMatchKeys: Record<string, string>;
   eventPickerOpen: boolean;
   eventSearch: string;
-  availableEvents: TBAEvent[];
+  availableEvents: FieldViewEvent[];
   eventsLoading: boolean;
   labels: Record<string, string>;
   controlsVisible: boolean;
