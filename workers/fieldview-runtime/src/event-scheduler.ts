@@ -1047,7 +1047,7 @@ export class EventScheduler {
           ...eventResourceEndpoints(eventKey),
           STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0),
         ];
-        if (job.eventResourceCursor === 0) {
+        if (job.eventResourceCursor === 0 || job.eventResourceCursor >= resources.length) {
           const preflight = await stub.fetch(new Request("https://event-runtime/state", { headers }));
           if (preflight.ok) {
             const current = await preflight.json() as {
