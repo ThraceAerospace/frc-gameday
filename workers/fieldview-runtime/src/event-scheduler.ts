@@ -264,7 +264,7 @@ export class EventScheduler {
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey)) {
         return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       }
-      const key = kind === "team" && /^\\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
+      const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
       const registryKey = kind === "event" ? "registry:events" : "registry:teams";
       const registered = await this.storage.get<string[]>(registryKey) ?? [];
       if (!registered.includes(key)) return Response.json({ error: "Entity is not registered" }, { status: 404 });
