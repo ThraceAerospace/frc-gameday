@@ -152,6 +152,14 @@ export default function AdminOperationsDashboard() {
   }, [authenticated, tab, kind, query, loadInventory]);
 
   useEffect(() => {
+    if (!authenticated || selected) return;
+    const params = new URLSearchParams(window.location.search);
+    const eventKey = params.get("event"), teamKey = params.get("team");
+    if (eventKey) void openEntity("event", eventKey);
+    else if (teamKey) void openEntity("team", teamKey);
+  }, [authenticated, selected, openEntity]);
+
+  useEffect(() => {
     const handlePop = () => {
       const params = new URLSearchParams(window.location.search);
       const eventKey = params.get("event"), teamKey = params.get("team");
@@ -199,7 +207,7 @@ export default function AdminOperationsDashboard() {
     </header>
     {(error || message) && <div role={error ? "alert" : "status"} className={"mt-4 rounded-xl border px-4 py-3 text-sm " + (error ? "border-rose-300 text-rose-700" : "border-[var(--fv-border)]")}>{error || message}</div>}
     <nav className="mt-6 flex gap-1 overflow-x-auto border-b border-[var(--fv-border)]" aria-label="Operations sections">
-      {(["home", "events", "teams", "system"] as const).map((item) => <button key={item} onClick={() => { setTab(item); setSelected(null); setEntity(null); setQuery(""); }} className={"shrink-0 border-b-2 px-4 py-3 text-sm font-semibold capitalize " + (tab === item ? "border-[var(--fv-brand)] text-[var(--fv-text)]" : "border-transparent text-[var(--fv-muted)]")}>{item === "home" ? "Overview" : item}</button>)}
+      {(["home", "events", "teams", "system"] as const).map((item) => <button key={item} onClick={() => { setTab(item); if (item === "events" || item === "teams") setKind(item === "events" ? "event" : "team"); setSelected(null); setEntity(null); setQuery(""); window.history.pushState(null, "", "/admin/runtime"); }} className={"shrink-0 border-b-2 px-4 py-3 text-sm font-semibold capitalize " + (tab === item ? "border-[var(--fv-brand)] text-[var(--fv-text)]" : "border-transparent text-[var(--fv-muted)]")}>{item === "home" ? "Overview" : item}</button>)}
     </nav>
 
     {tab === "home" && <div className="mt-6 space-y-4">
