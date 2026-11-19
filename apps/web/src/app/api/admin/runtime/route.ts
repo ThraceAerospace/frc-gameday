@@ -28,12 +28,13 @@ export async function GET(request: Request) {
   const kind = query.get("kind");
   const key = query.get("key");
   const inventoryKind = query.get("inventory");
-  const target = kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key)
+  const target = kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key) + "&year=" + encodeURIComponent(query.get("year") ?? String(new Date().getUTCFullYear()))
     : inventoryKind ? "/internal/admin/inventory?" + new URLSearchParams({
       kind: inventoryKind,
       q: query.get("q") ?? "",
       cursor: query.get("cursor") ?? "0",
       limit: query.get("limit") ?? "50",
+      year: query.get("year") ?? String(new Date().getUTCFullYear()),
     }).toString()
     : "/internal/admin/overview";
   try {
