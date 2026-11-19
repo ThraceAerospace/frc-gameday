@@ -1,9 +1,9 @@
 "use client";
 
-import type { TBAMatch } from "@/lib/tba/types";
+import type { FieldViewMatch } from "@fieldview/domain";
 
 type ScoreBreakdownProps = {
-  match: TBAMatch;
+  match: FieldViewMatch;
   year?: number;
 };
 
