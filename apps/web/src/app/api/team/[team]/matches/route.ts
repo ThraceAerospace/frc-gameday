@@ -1,5 +1,4 @@
-import type { FieldViewTeamAnalytics } from "@fieldview/domain";
-import type { FieldViewTeamMatchEvidence } from "@fieldview/domain";
+import type { FieldViewTeamAnalytics, FieldViewTeamMatchEvidence } from "@fieldview/domain";
 import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 
 type TeamEventReference = {
@@ -69,7 +68,7 @@ function buildSeasonDiagnostics(rows: SeasonMatchEvidence[]) {
   const overall = summarizePhase(completed);
   const byEvent = new Map<string, SeasonMatchEvidence[]>();
   for (const row of completed) byEvent.set(row.event.key, [...(byEvent.get(row.event.key) ?? []), row]);
-  const eliminationEvents = [...byEvent.entries()].map(([key, items]) => {
+  const eliminationEvents = [...byEvent.values()].map((items) => {
     const qualifications = items.filter((item) => item.competition_level.toLowerCase() === "qm" && item.score_residual !== null);
     const eliminations = items.filter((item) => ["ef", "qf", "sf", "f"].includes(item.competition_level.toLowerCase()) && item.score_residual !== null);
     if (qualifications.length < 3 || eliminations.length < 2) return null;
@@ -105,7 +104,7 @@ function buildSeasonDiagnostics(rows: SeasonMatchEvidence[]) {
         ? "recurring-negative-shift" as const : "no-established-negative-shift" as const,
     events: eliminationEvents,
   };
-  const residualPatternEvents = [...byEvent.entries()].flatMap(([key, items]) => {
+  const residualPatternEvents = [...byEvent.values()].flatMap((items) => {
     const teamRows = items.filter((item) => item.score_residual !== null);
     const baseline = teamRows.flatMap((item) => item.opponent_score_residual === null ? [] : [item.opponent_score_residual]);
     if (!teamRows.length || !baseline.length) return [];
