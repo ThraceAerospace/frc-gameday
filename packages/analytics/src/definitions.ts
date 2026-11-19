@@ -1,4 +1,4 @@
-import type { FieldViewAnalyticsDefinition } from "../../../domain/src/analytics.ts";
+import type { FieldViewAnalyticsDefinition } from "../../domain/src/analytics.ts";
 
 /**
  * Reviewable descriptions of the legacy calculations being migrated.
