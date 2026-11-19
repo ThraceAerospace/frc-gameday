@@ -26,7 +26,9 @@ For local development, keep `FIELDVIEW_ADMIN_ACCESS_TOKEN` in the web app's igno
 - Pending Durable Object tasks, due times, intervals, attempts, and webhook-triggered authoritative refetch times.
 - The single shared Multiplexer connection and subscription counts.
 
-The dashboard refreshes every ten seconds. Its tabs cover overview, event objects, team objects, provider health, scheduled tasks, an attention queue, and system controls. Authenticated operations can refresh all event resources, refresh an individual TBA resource, refresh Statbotics event matches, force canonical analytics recalculation, refresh or seed a team profile, and start, stop, or manually run global discovery. Mutations are dispatched through the Worker admin router; the browser never receives the Worker service token.
+The command center refreshes its compact system overview every fifteen seconds. Event and team directories use a server-side, paginated search over the complete registered-key lists rather than filtering only the overview sample. Selecting an entity opens its own command center, addressable with an `?event=<key>` or `?team=<key>` query parameter. The entity view groups canonical analytics, provider resources, scheduled work, and entity-specific actions. Authenticated operations can refresh all event resources, refresh an individual TBA resource, refresh Statbotics event matches, force canonical analytics recalculation, refresh or seed a team profile, and start, stop, or manually run global discovery. Mutations are dispatched through the Worker admin router; the browser never receives the Worker service token.
+
+The home page deliberately reports sampled coverage separately from registered inventory totals. Its missing-resource and missing-analytics counts describe only the event/team objects returned in the current overview sample (up to 250 of each type). They are not full-inventory coverage totals. A complete, resumable coverage audit that scans all registered objects is a separate planned operation; do not extrapolate sample counts to the full inventory.
 
 ## Inventory semantics and limits
 
