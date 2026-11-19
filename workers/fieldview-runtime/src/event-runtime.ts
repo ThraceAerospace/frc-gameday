@@ -338,16 +338,19 @@ export class EventRuntime {
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-      const scheduledAt = Date.now();
-      await this.scheduleStatboticsRefresh(scheduledAt);
-      const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
-      const delayMs = overrideDelayMs ?? (configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay));
+      await this.scheduleStatboticsRefresh(Date.now(), 0);
+      await this.alarm();
+      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+      await this.storage.put("analytics:status", "pending");
+      await this.storage.transaction((transaction) => this.rearm(transaction));
+      await this.alarm();
+      const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
-        scheduled: true,
-        event_key: this.eventKey,
-        endpoint,
-        due_at: scheduledAt + delayMs,
-        delay_ms: delayMs,
+        scheduled: true, attempted: true, event_key: this.eventKey, endpoint,
+        status: state?.status ?? "unknown", revision: state?.revision ?? 0,
+        record_count: Array.isArray(state?.providerData) ? state.providerData.length : 0,
+        fetched_at: state?.lastFetchedAt ?? null,
+        analytics_status: await this.storage.get<string>("analytics:status") ?? "pending",
       });
     }
 
