@@ -7,7 +7,8 @@
   "exports": {
     "./calculations": "./src/calculations.ts",
     "./types": "./src/types.ts",
-    "./definitions": "./src/definitions.ts"
+    "./definitions": "./src/definitions.ts",
+    "./audit": "./src/audit.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
