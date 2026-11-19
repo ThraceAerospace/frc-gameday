@@ -280,7 +280,7 @@ export class TeamRuntime {
       return diagnostic;
     });
     return {
-      success: result.status !== "failed" && result.status !== "unavailable",
+      success: result.status !== "failed" && result.status !== "unavailable" && next.lastFetchedAt !== null,
       status: next.status, revision: next.revision,
       last_fetched_at: next.lastFetchedAt,
       http_status: next.lastHttpStatus ?? null, last_error: next.lastError ?? null,
