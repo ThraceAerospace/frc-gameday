@@ -1,6 +1,7 @@
 "use client";
 
-import type { FieldViewEventTeam, FieldViewPlayoffAlliance } from "@fieldview/domain";
+import type { FieldViewEventTeam } from "@fieldview/domain";
+import type { PlayoffAlliancePresentation } from "@/components/match/MatchCard";
 import type { ReactNode } from "react";
 import type { EventViewFooterMode } from "@/components/eventview/EventViewConfig";
 import MatchStrip from "@/components/match/MatchStrip";
@@ -21,7 +22,7 @@ type EventFooterProps = {
   team?: string[];
   nextMatch?: Parameters<typeof MatchStrip>[0]["nextMatch"];
   lastMatch?: Parameters<typeof MatchStrip>[0]["lastMatch"];
-  playoffAlliances?: FieldViewPlayoffAlliance[];
+  playoffAlliances?: PlayoffAlliancePresentation[];
   playoffType?: number | null;
   teamsStatuses: Record<string, FieldViewEventTeam["tba_status"]>;
   multiview?: Parameters<typeof MatchStrip>[0]["multiview"];
