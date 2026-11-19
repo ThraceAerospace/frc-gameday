@@ -1,10 +1,19 @@
-import type { TBAMatch } from "@/lib/tba/types";
+/** Minimal shared match shape used by canonical and temporary legacy consumers. */
+export interface MatchLike {
+  actual_time?: number | null;
+  predicted_time?: number | null;
+  time?: number | null;
+  alliances: {
+    red: { score: number | null; team_keys?: string[] | null };
+    blue: { score: number | null; team_keys?: string[] | null };
+  };
+}
 
-export function isPlayed(match: TBAMatch) {
+export function isPlayed<T extends MatchLike>(match: T) {
   return Boolean(match.actual_time);
 }
 
-export function hasPostedScore(match: TBAMatch) {
+export function hasPostedScore<T extends MatchLike>(match: T) {
   return (
     match.alliances.red.score != null &&
     match.alliances.red.score >= 0 &&
@@ -14,7 +23,7 @@ export function hasPostedScore(match: TBAMatch) {
 }
 
 export function matchTime(
-  match: TBAMatch,
+  match: MatchLike,
 ) {
   return (
     match.predicted_time ??
@@ -23,8 +32,8 @@ export function matchTime(
   );
 }
 
-export function sortMatches(
-  matches: TBAMatch[],
+export function sortMatches<T extends MatchLike>(
+  matches: T[],
 ) {
   return [...matches].sort(
     (a, b) =>
@@ -47,8 +56,8 @@ export function sortMatches(
  * order, so the first unscored match is the
  * next match.
  */
-export function getNextMatch(
-  matches: TBAMatch[],
+export function getNextMatch<T extends MatchLike>(
+  matches: T[],
 ) {
   return (
     matches.find(
@@ -59,10 +68,10 @@ export function getNextMatch(
   );
 }
 
-export function getLastMatch(
-  matches: TBAMatch[],
+export function getLastMatch<T extends MatchLike>(
+  matches: T[],
 ) {
-  return matches.reduce<TBAMatch | null>(
+  return matches.reduce<T | null>(
     (latest, match) => {
       if (!isPlayed(match)) {
         return latest;
@@ -82,8 +91,8 @@ export function getLastMatch(
   );
 }
 
-export function getMatchesForTeams(
-  matches: TBAMatch[],
+export function getMatchesForTeams<T extends MatchLike>(
+  matches: T[],
   teams: string[],
 ) {
   if (!teams.length) {
