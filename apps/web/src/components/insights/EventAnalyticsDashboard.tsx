@@ -424,6 +424,12 @@ type MatchFlagSummary = {
   reviewFlags: MatchReviewFlag[];
 };
 
+function quantile(values:number[],p:number):number|null {
+  if(!values.length)return null;
+  const sorted=[...values].sort((a,b)=>a-b);
+  return sorted[Math.min(sorted.length-1,Math.ceil(sorted.length*p)-1)];
+}
+
 function predictionTone(label:string):string {
   switch(label){
     case "Strong Red": return "bg-rose-800 text-white dark:bg-rose-700";
