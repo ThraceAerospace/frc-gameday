@@ -159,8 +159,8 @@ export default function AdminOperationsDashboard() {
     const params = new URLSearchParams(window.location.search);
     const eventKey = params.get("event"), teamKey = params.get("team");
     const selectedYear = Number(params.get("year") ?? year);
-    if (eventKey) void openEntity("event", eventKey, selectedYear);
-    else if (teamKey) void openEntity("team", teamKey, selectedYear);
+    if (eventKey) { setYear(selectedYear); void openEntity("event", eventKey, selectedYear); }
+    else if (teamKey) { setYear(selectedYear); void openEntity("team", teamKey, selectedYear); }
   }, [authenticated, selected, openEntity, year]);
 
   useEffect(() => {
@@ -168,8 +168,8 @@ export default function AdminOperationsDashboard() {
       const params = new URLSearchParams(window.location.search);
       const eventKey = params.get("event"), teamKey = params.get("team");
       const selectedYear = Number(params.get("year") ?? year);
-      if (eventKey) void openEntity("event", eventKey, selectedYear);
-      else if (teamKey) void openEntity("team", teamKey, selectedYear);
+      if (eventKey) { setYear(selectedYear); void openEntity("event", eventKey, selectedYear); }
+      else if (teamKey) { setYear(selectedYear); void openEntity("team", teamKey, selectedYear); }
       else setSelected(null);
     };
     window.addEventListener("popstate", handlePop);
