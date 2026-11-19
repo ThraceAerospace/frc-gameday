@@ -180,6 +180,7 @@ interface SeasonIngestJob {
 }
 
 const seasonIngestKey = (year: number) => "admin:season-ingest:" + year;
+const seasonIngestHistoryPrefix = (year: number) => "admin:season-ingest-history:" + year + ":";
 const seasonIngestSummary = (job: SeasonIngestJob) => ({
   year: job.year, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
   team_discovery_updated_at: job.teamDiscoveryUpdatedAt, status: job.status, phase: job.phase,
@@ -378,7 +379,11 @@ export class EventScheduler {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
       const job = await this.storage.get<SeasonIngestJob>(seasonIngestKey(year));
-      return Response.json(job ? seasonIngestSummary(job) : { year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+      const history = await this.storage.list<SeasonIngestJob>({ prefix: seasonIngestHistoryPrefix(year) });
+      return Response.json({
+        ...(job ? seasonIngestSummary(job) : { year, status: "not_started" }),
+        history_count: history.size,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/admin/season-ingest" && request.method === "POST") {
@@ -411,12 +416,16 @@ export class EventScheduler {
           estimated_minimum_duration_ms: plannedRequests * requestIntervalMs,
           estimate_note: "Baseline assuming one request for every configured resource; cached resources reduce the count, while retries and normal live polling may add time or requests.",
           existing_job: job ? seasonIngestSummary(job) : null,
+          history_count: (await this.storage.list<SeasonIngestJob>({ prefix: seasonIngestHistoryPrefix(year) })).size,
           requires_explicit_confirmation: true,
         }, { headers: { "Cache-Control": "no-store" } });
       }
       if (action === "start") {
         if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
         if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
+        if (job && (job.status === "completed" || job.status === "cancelled")) {
+          await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
+        }
         const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
         const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
         if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
