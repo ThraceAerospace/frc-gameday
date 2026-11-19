@@ -1,10 +1,13 @@
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
+import type { FieldViewMatchFlags } from "../../domain/src/match.ts";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventRanking, TBAMatch } from "@fieldview/provider-tba/types";
 
 export type AnalyticsMatch = {
   match: TBAMatch;
   statbotics: StatboticsMatch | null;
   statboticsStatus: "ready" | "unavailable";
+  /** Backend-computed match review classifications; absent during legacy reads. */
+  flags?: FieldViewMatchFlags;
 };
 
 export type AllianceResult = {
