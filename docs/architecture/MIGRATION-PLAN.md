@@ -228,14 +228,15 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 - A versioned definition catalog now documents current calculation inputs, source paths, inclusion/exclusion rules, formulas, thresholds, units, and limitations. The catalog records current behavior for hand verification; it does not certify the mathematics.
 - Deterministic audit-manifest hashing is implemented, including source revision/fetch metadata and the definition versions used by a run.
 - Match-review flags (model upset, phase-specific anomaly, large residual, high penalties, and high alliance EPA) are calculated by the shared analytics package; the dashboard renders server-supplied evidence rather than recalculating thresholds in the browser.
-- EventRuntime now runs the canonical match analytics calculation during `FieldViewEventState` assembly and publishes `FieldViewMatch.analysis` and `FieldViewMatch.flags`. Each match analysis includes an audit envelope with provider source revisions, fetch timestamps, record coverage, definition versions, engine version, and deterministic input digest.
+- EventRuntime now calculates and publishes `FieldViewMatch.analysis` and `FieldViewMatch.flags`, plus event-wide metrics/findings in `FieldViewEventState.analytics` and team-at-event EPA/component/percentile/contribution metrics and review findings in `FieldViewTeamState.analytics`.
+- Match, event, and team analytics share an audit envelope with provider source revisions, fetch timestamps, record coverage, definition versions, engine version, warnings, and deterministic input digest.
 - `FieldViewEventSnapshot` → `FieldViewEventState` is now the primary normalizer/Worker model naming; the old snapshot name remains as a deprecated compatibility alias. `FieldViewTeamState` is composed per team/event and preserves only that team's event participation.
-- This remains an intermediate stage: match analytics are recalculated during snapshot assembly rather than in a persisted/coalesced dependency-triggered EventRuntime job. Event-wide and team-at-event aggregate metrics/findings are not yet populated in canonical state; the full dashboard payload, season cohort, and provider orchestration still use the Next.js progressive job.
+- This remains an intermediate stage: analytics are recalculated during snapshot assembly rather than in a persisted/coalesced dependency-triggered EventRuntime job. Season-aware team comparisons, detailed qualification/playoff investigations, and the full dashboard payload still use the Next.js progressive job.
 
 **Next**
-- Move recalculation from snapshot-read time to a persisted, coalesced EventRuntime job triggered by source revision changes, without adding a second analytics Durable Object.
-- Populate event-wide metrics/findings on `FieldViewEventState` and team-at-event metrics/findings on `FieldViewTeamState`; preserve last-good values and expose partial/unavailable inputs.
-- Migrate the full event/team dashboard and season-cohort calculations to backend publication, then remove the Next.js orchestration/provider path.
+- Move recalculation from snapshot-read time to a persisted, coalesced EventRuntime job triggered by source revision changes, without adding a second analytics Durable Object; preserve last-good values and expose partial/unavailable inputs.
+- Migrate season-aware team comparisons and the remaining detailed qualification/playoff calculations to canonical backend publication.
+- Switch the full dashboard to canonical event/team analytics and remove the Next.js orchestration/provider path.
 - Add historical parity fixtures before removing the Next.js orchestration path. Independently hand-verify the math later and make any corrections as deliberate definition-version changes.
 
 **Exit criteria**
