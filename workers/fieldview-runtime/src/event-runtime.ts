@@ -56,6 +56,7 @@ const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 const ANALYTICS_COHORT_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_ALLOW_PARTIAL_COHORT_KEY = "analytics:allow-partial-cohort";
+const ANALYTICS_SEASON_TEAM_REVISION_KEY = "analytics:season-team-revision";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const ANALYTICS_COHORT_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_COHORT_MAX_RETRIES = 12;
@@ -70,6 +71,7 @@ interface EventStatePublication {
 
 interface AnalyticsPublication {
   sourceRevision: number;
+  seasonTeamRevision?: number;
   calculatedAt: number;
   analyticsRevision?: number;
   matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
@@ -400,6 +402,10 @@ export class EventRuntime {
         // partial analytics evidence instead of an endless waiting state.
         await this.storage.put(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY, true);
       }
+      if (isRecord(body) && typeof body.seasonTeamRevision === "number" &&
+          Number.isSafeInteger(body.seasonTeamRevision) && body.seasonTeamRevision >= 0) {
+        await this.storage.put(ANALYTICS_SEASON_TEAM_REVISION_KEY, body.seasonTeamRevision);
+      }
       await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
       await this.storage.put("analytics:status", "pending");
       await this.storage.transaction((transaction) => this.rearm(transaction));
@@ -558,6 +564,7 @@ export class EventRuntime {
         event_key: this.eventKey,
         revision,
         status: analyticsStatus,
+        season_team_revision: analyticsPublication?.seasonTeamRevision ?? null,
         due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
         calculated_at: publication?.calculatedAt ?? null,
         source_revision: publication?.sourceRevision ?? null,
@@ -1161,6 +1168,8 @@ export class EventRuntime {
     const state = calculated.state;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
+      ...(await this.storage.get<number>(ANALYTICS_SEASON_TEAM_REVISION_KEY) === undefined
+        ? {} : { seasonTeamRevision: await this.storage.get<number>(ANALYTICS_SEASON_TEAM_REVISION_KEY) }),
       calculatedAt: Date.now(),
       matches: (state.matches ?? []).map((match) => ({
         key: match.key,
@@ -1211,6 +1220,7 @@ export class EventRuntime {
         await transaction.put("analytics:status", analyticsIncomplete ? "partial" : "succeeded");
       }
       await transaction.delete(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY);
+      await transaction.delete(ANALYTICS_SEASON_TEAM_REVISION_KEY);
       await transaction.delete("analytics:last-error");
       const nextRevision = currentRevision + 1;
       await transaction.put("snapshot-revision", nextRevision);
