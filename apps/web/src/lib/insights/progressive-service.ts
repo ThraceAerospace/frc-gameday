@@ -169,7 +169,7 @@ function buildPayload(job: Job): EventAnalytics {
       flags: buildMatchFlags(payload, record),
     })),
   };
-}}
+}
 
 export async function getEventAnalyticsSnapshot(eventKey: string): Promise<EventAnalytics> {
   let job = await readJob(eventKey);
