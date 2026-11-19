@@ -4,6 +4,7 @@ import type { FieldViewSourceMetadata } from "./source-metadata.js";
 import type { FieldViewEventTeam } from "./event.js";
 import type { FieldViewMatch } from "./match.js";
 import type { FieldViewTeamAnalytics } from "./analytics.js";
+import type { FRCColorsTeam } from "@fieldview/provider-frc-colors/types";
 
 /** Canonical FieldView team object; TBA fields retain their exact source shape. */
 export interface FieldViewTeam extends TBATeam {
