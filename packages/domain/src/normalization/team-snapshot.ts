@@ -1,4 +1,5 @@
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
+import type { StatboticsTeamEvent, StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
 import type { FieldViewTeamSnapshot } from "../team.js";
 import type { TeamKey } from "../ids.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
@@ -12,6 +13,8 @@ export interface NormalizeFieldViewTeamSnapshotInput {
   districts?: TBADistrict[] | null;
   events?: TBAEvent[] | null;
   media?: TBAMedia[] | null;
+  statbotics?: StatboticsTeamYear | null;
+  statbotics_events?: StatboticsTeamEvent[] | null;
 }
 
 /** Compose team-scoped resources without renaming or rewriting provider fields. */
@@ -28,5 +31,7 @@ export function normalizeFieldViewTeamSnapshot(input: NormalizeFieldViewTeamSnap
     ...(input.districts === undefined ? {} : { districts: input.districts }),
     ...(input.events === undefined ? {} : { events: input.events }),
     ...(input.media === undefined ? {} : { media: input.media }),
+    ...(input.statbotics === undefined ? {} : { statbotics: input.statbotics }),
+    ...(input.statbotics_events === undefined ? {} : { statbotics_events: input.statbotics_events }),
   };
 }
