@@ -462,6 +462,7 @@ export class EventScheduler {
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
         if (job.status === "completed_with_errors") {
+          await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
           job.teamCursor = 0;
           job.teamResourceCursor = 0;
           job.eventCursor = 0;
