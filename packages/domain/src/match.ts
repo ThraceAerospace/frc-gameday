@@ -109,15 +109,35 @@ export type FieldViewAllianceFlag =
         event_threshold: number;
         sample_size: number;
       };
+    }
+  | {
+      type: "high-penalties";
+      evidence: {
+        penalty_points: number;
+        event_threshold: number;
+        sample_size: number;
+      };
     };
+
+export type FieldViewMatchReviewFlag =
+  | "model-upset"
+  | "anomalous-score"
+  | "large-residual"
+  | "high-penalties"
+  | "high-alliance-epa";
 
 export interface FieldViewMatchFlags {
   prediction: {
     label: FieldViewPredictionLabel;
     prediction_source: "statbotics";
-    predicted_winner: "red" | "blue";
+    predicted_winner: "red" | "blue" | null;
     red_win_probability: number;
   } | null;
+  /** Winner from TBA, falling back to completed alliance scores. */
+  winner: "red" | "blue" | null;
+  /** Event- and phase-level match review classifications. */
+  review_flags: FieldViewMatchReviewFlag[];
+  /** Alliance-specific classifications and their numerical evidence. */
   alliances: {
     red: FieldViewAllianceFlag[];
     blue: FieldViewAllianceFlag[];
