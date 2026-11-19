@@ -6,6 +6,7 @@ import type {
   FieldViewAnalyticsPopulation,
   FieldViewMetricResult,
   FieldViewTeamAnalytics,
+  FieldViewTeamMatchEvidence,
   FieldViewAnalyticsAllianceResult,
   FieldViewAnalyticsTeamSummary,
   FieldViewQualificationAnalytics,
@@ -321,6 +322,40 @@ export function calculateCanonicalAggregateAnalytics(
           metric("epa-contribution-percent", "team-epa-contribution-share", row.epaContributionPercent, "percent", row.epaContributionSamples, contributionPopulation, ["Mean share of eligible three-team alliance pre-match EPA totals; not measured robot-level scoring contribution."]),
           metric("matches-seen", "team-event-match-appearances", row.matchesSeen, "matches", row.matchesSeen, population("team-event-match-appearances", row.matchesSeen, row.matchesSeen), ["Counts roster appearances, including matches that are not yet scored."]),
         ];
+        const matchEvidence: FieldViewTeamMatchEvidence[] = records.flatMap((record) => {
+          const match = record.match;
+          const alliance = match.alliances.red.team_keys.includes(teamState.team_key) ? "red" as const
+            : match.alliances.blue.team_keys.includes(teamState.team_key) ? "blue" as const : null;
+          if (!alliance) return [];
+          const opponentAlliance = alliance === "red" ? "blue" as const : "red" as const;
+          const own = allianceResults.find((item) => item.matchKey === match.key && item.color === alliance);
+          const opponent = allianceResults.find((item) => item.matchKey === match.key && item.color === opponentAlliance);
+          const redProbability = record.statbotics?.pred?.red_win_prob;
+          const winProbability = typeof redProbability === "number" && redProbability >= 0 && redProbability <= 1
+            ? alliance === "red" ? redProbability : 1 - redProbability : null;
+          const ownPre = record.statbotics?.pre_epas?.[String(row.team_number)]?.epa;
+          const ownPost = record.statbotics?.epas?.[String(row.team_number)]?.epa;
+          const preEpa = typeof ownPre === "number" && Number.isFinite(ownPre) ? ownPre : null;
+          const postEpa = typeof ownPost === "number" && Number.isFinite(ownPost) ? ownPost : null;
+          const winner = match.winning_alliance;
+          return [{
+            match_key: match.key, match_label: own?.matchLabel ?? match.key,
+            competition_level: match.comp_level, alliance,
+            partner_team_numbers: match.alliances[alliance].team_keys.filter((key) => key !== teamState.team_key)
+              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+            opponent_team_numbers: match.alliances[opponentAlliance].team_keys
+              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+            predicted_score: own?.predicted ?? null, actual_score: own?.actual ?? null,
+            score_residual: own?.residual ?? null,
+            opponent_predicted_score: opponent?.predicted ?? null,
+            opponent_actual_score: opponent?.actual ?? null,
+            opponent_score_residual: opponent?.residual ?? null,
+            win_probability: winProbability,
+            won: winner === "red" || winner === "blue" ? winner === alliance : null,
+            pre_match_epa: preEpa, post_match_epa: postEpa,
+            epa_change: preEpa !== null && postEpa !== null ? postEpa - preEpa : null,
+          }];
+        });
         const teamFindings = (insight?.reviewMatches ?? [])
           .filter((item) => item.reasons.length > 0)
           .map((item) => teamFinding(teamState.team_key, item));
@@ -348,6 +383,7 @@ export function calculateCanonicalAggregateAnalytics(
               difference: insight.peerPerformance.difference,
               interpretation: insight.peerPerformance.interpretation,
             },
+            match_evidence: matchEvidence,
             review_matches: insight.reviewMatches.map((item) => ({
               match_key: item.matchKey, match_label: item.matchLabel, alliance: item.alliance,
               partner_team_numbers: item.partners, opponent_team_numbers: item.opponents,
