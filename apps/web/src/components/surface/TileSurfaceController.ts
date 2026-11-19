@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import type { TBAEvent } from "@/lib/tba/types";
+import type { FieldViewEvent } from "@fieldview/domain";
 
 import {
   LAYOUTS,
@@ -195,7 +195,7 @@ export function useTileSurfaceController({
           );
         }
 
-        const data = (await response.json()) as TBAEvent[];
+        const data = (await response.json()) as FieldViewEvent[];
 
         if (!cancelled) {
           update((current) => ({
