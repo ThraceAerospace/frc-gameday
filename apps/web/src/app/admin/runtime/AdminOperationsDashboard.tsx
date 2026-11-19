@@ -30,6 +30,18 @@ type Overview = {
   inventory: { events: number; teams: number }; truncated: boolean;
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
+type SeasonIngest = {
+  year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled";
+  phase?: "teams" | "events" | "complete";
+  team_cursor?: number; team_total?: number; event_cursor?: number; event_total?: number;
+  counts?: {
+    teams_complete: number; teams_partial: number; teams_failed: number;
+    event_state_complete: number; event_state_partial: number; event_state_failed: number;
+    event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_failed: number;
+  };
+  recent_errors?: Array<{ kind: string; key: string; detail: string; at: number }>;
+};
+type SeasonPreview = { year: number; ready: boolean; events: number; teams: number; team_pages: number; existing_job?: SeasonIngest | null };
 type CoverageAudit = {
   year: number; status: "not_started" | "running" | "completed" | "stale"; discovery_ready?: boolean;
   started_at?: number; updated_at?: number; cursor?: number; processed?: number; total?: number; remaining?: number;
@@ -81,6 +93,8 @@ export default function AdminOperationsDashboard() {
   const [year, setYear] = useState(new Date().getUTCFullYear());
   const [page, setPage] = useState<InventoryPage | null>(null);
   const [coverageAudit, setCoverageAudit] = useState<CoverageAudit | null>(null);
+  const [seasonIngest, setSeasonIngest] = useState<SeasonIngest | null>(null);
+  const [seasonPreview, setSeasonPreview] = useState<SeasonPreview | null>(null);
   const [cursor, setCursor] = useState(0);
   const [entity, setEntity] = useState<Entity | null>(null);
   const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
@@ -127,6 +141,48 @@ export default function AdminOperationsDashboard() {
       if (response.ok) setCoverageAudit(body as CoverageAudit);
     } catch { /* Keep the last known audit result visible. */ }
   }, [token, year, requestHeaders]);
+
+  const loadSeasonIngest = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await fetch("/api/admin/runtime?seasonIngest=" + year, { headers: requestHeaders, cache: "no-store" });
+      const body = await response.json();
+      if (response.ok) setSeasonIngest(body as SeasonIngest);
+    } catch { /* Preserve the last known durable job state. */ }
+  }, [token, year, requestHeaders]);
+
+  const previewSeasonIngest = useCallback(async () => {
+    if (!token) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch("/api/admin/runtime", {
+        method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "system", action: "season-ingest-preview", year }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Unable to preview season ingestion");
+      setSeasonPreview(body as SeasonPreview);
+      if (body.existing_job) setSeasonIngest(body.existing_job as SeasonIngest);
+      setMessage("Season inventory preview loaded. Review the counts before starting.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Season preview failed"); }
+    finally { setBusy(false); }
+  }, [token, requestHeaders, year]);
+
+  const controlSeasonIngest = useCallback(async (action: "start" | "pause" | "resume" | "cancel") => {
+    if (!token) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch("/api/admin/runtime", {
+        method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "system", action: "season-ingest-" + action, year, ...(action === "start" ? { confirm: true } : {}) }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Season-ingest operation failed");
+      setSeasonIngest(body as SeasonIngest);
+      setMessage(action === "start" ? "Season ingestion started and will continue in durable Worker alarms." : "Season ingestion " + action + " requested.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
+    finally { setBusy(false); }
+  }, [token, requestHeaders, year]);
 
   const runCoverageAudit = useCallback(async () => {
     if (!token) return;
@@ -184,6 +240,18 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     void loadCoverageAudit();
   }, [authenticated, loadCoverageAudit]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    void loadSeasonIngest();
+    setSeasonPreview(null);
+  }, [authenticated, loadSeasonIngest]);
+
+  useEffect(() => {
+    if (!authenticated || seasonIngest?.status !== "running") return;
+    const timer = window.setInterval(() => void loadSeasonIngest(), 3_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, seasonIngest?.status, loadSeasonIngest]);
 
   useEffect(() => {
     if (!authenticated || coverageAudit?.year !== year || coverageAudit.status !== "running" || busy) return;
@@ -262,7 +330,39 @@ export default function AdminOperationsDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[["Registered events", overview?.inventory.events ?? 0], ["Registered teams", overview?.inventory.teams ?? 0], ["Sampled events without analytics", sampled.eventAnalyticsMissing], ["Runtime errors in sample", sampled.failed]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
       </div>
-      <Panel><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview samples at most 250 objects of each type. These are sample counts, not full-inventory totals.</p></div><span className="text-xs text-[var(--fv-muted)]">{sampled.events} events · {sampled.teams} teams inspected</span></div>
+      <Panel>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h2 className="font-bold">Full-season canonical ingestion</h2><p className="mt-1 max-w-3xl text-xs text-[var(--fv-muted)]">Prepares every TeamRuntime season snapshot first, then generates EventState and EventAnalytics for every discovered event. Work is sequential, durable, resumable, and separate from the live discovery scheduler. It does not use team seed fan-out.</p></div>
+          <button disabled={busy} onClick={() => void previewSeasonIngest()} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Preview {year} inventory</button>
+        </div>
+        {seasonPreview && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-sm">
+          <p className="font-semibold">{seasonPreview.ready ? "Discovery is ready" : "Discovery is incomplete"}</p>
+          <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.events.toLocaleString()} events · {seasonPreview.teams.toLocaleString()} teams · {seasonPreview.team_pages} TBA team pages</p>
+          {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting confirms that FieldView may make provider requests for this full inventory. Each entity is processed in its own durable job step.</p>}
+        </div>}
+        {seasonIngest && seasonIngest.status !== "not_started" && <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"} phase</span><span>Teams {seasonIngest.team_cursor ?? 0}/{seasonIngest.team_total ?? 0} · Events {seasonIngest.event_cursor ?? 0}/{seasonIngest.event_total ?? 0}</span></div>
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full bg-[var(--fv-brand)]" style={{ width: (((seasonIngest.team_cursor ?? 0) + (seasonIngest.event_cursor ?? 0)) / Math.max(1, (seasonIngest.team_total ?? 0) + (seasonIngest.event_total ?? 0))) * 100 + "%" }} /></div>
+          {seasonIngest.counts && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            {[
+              ["Teams complete", seasonIngest.counts.teams_complete], ["Teams partial", seasonIngest.counts.teams_partial], ["Teams failed", seasonIngest.counts.teams_failed],
+              ["EventState complete", seasonIngest.counts.event_state_complete], ["EventState partial", seasonIngest.counts.event_state_partial], ["EventState failed", seasonIngest.counts.event_state_failed],
+              ["EventAnalytics succeeded", seasonIngest.counts.event_analytics_succeeded], ["EventAnalytics partial", seasonIngest.counts.event_analytics_partial],
+              ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed],
+            ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-lg font-bold tabular-nums">{value}</p></div>)}
+          </div>}
+          {seasonIngest.recent_errors && seasonIngest.recent_errors.length > 0 && <details className="text-xs"><summary className="cursor-pointer font-semibold">Recent ingestion errors ({seasonIngest.recent_errors.length})</summary><ul className="mt-2 space-y-1">{seasonIngest.recent_errors.slice(-10).map((item, index) => <li key={item.kind + item.key + index} className="text-rose-600">{item.kind} {item.key}: {item.detail}</li>)}</ul></details>}
+        </div>}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {!seasonIngest || seasonIngest.status === "not_started" || seasonIngest.status === "completed" || seasonIngest.status === "cancelled"
+            ? <button disabled={busy || !seasonPreview?.ready} onClick={() => void controlSeasonIngest("start")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Start full-season ingestion</button>
+            : null}
+          {seasonIngest?.status === "running" && <button disabled={busy} onClick={() => void controlSeasonIngest("pause")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Pause</button>}
+          {(seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("resume")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Resume / retry</button>}
+          {(seasonIngest?.status === "running" || seasonIngest?.status === "paused") && <button disabled={busy} onClick={() => void controlSeasonIngest("cancel")} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-40">Cancel</button>}
+        </div>
+      </Panel>
+            <Panel><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview samples at most 250 objects of each type. These are sample counts, not full-inventory totals.</p></div><span className="text-xs text-[var(--fv-muted)]">{sampled.events} events · {sampled.teams} teams inspected</span></div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.eventWithoutSources}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events without completed analytics</p><p className="mt-1 text-xl font-bold">{sampled.eventAnalyticsMissing}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Teams with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.teamWithoutSources}</p></div></div>
         <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
