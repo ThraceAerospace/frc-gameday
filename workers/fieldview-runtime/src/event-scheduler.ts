@@ -157,6 +157,8 @@ interface SeasonIngestJob {
   phase: "teams" | "events" | "complete";
   teamKeys: string[];
   eventKeys: string[];
+  teamResourceCount: number;
+  eventResourceCount: number;
   teamCursor: number;
   teamResourceCursor: number;
   eventCursor: number;
@@ -182,8 +184,9 @@ const seasonIngestSummary = (job: SeasonIngestJob) => ({
   year: job.year, event_discovery_updated_at: job.eventDiscoveryUpdatedAt,
   team_discovery_updated_at: job.teamDiscoveryUpdatedAt, status: job.status, phase: job.phase,
   team_cursor: job.teamCursor, team_total: job.teamKeys.length,
-  team_resource_cursor: job.teamResourceCursor,
+  team_resource_cursor: job.teamResourceCursor, team_resources_per_team: job.teamResourceCount,
   event_cursor: job.eventCursor, event_total: job.eventKeys.length,
+  event_resource_cursor: job.eventResourceCursor, event_resources_per_event: job.eventResourceCount,
   event_resource_cursor: job.eventResourceCursor, next_due_at: job.nextDueAt ?? null,
   counts: job.counts, recent_errors: job.recentErrors,
   started_at: job.startedAt, updated_at: job.updatedAt,
@@ -423,9 +426,11 @@ export class EventScheduler {
         const teamKeys = [...new Set((teams.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
         if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
         const now = Date.now();
+        const teamResourceCount = teamResourceEndpoints(teamKeys[0], year).length;
+        const eventResourceCount = eventResourceEndpoints(eventKeys[0]).length + 1;
         job = {
           year, eventDiscoveryUpdatedAt: events.updatedAt, teamDiscoveryUpdatedAt: teams.updatedAt,
-          status: "running", phase: "teams", teamKeys, eventKeys,
+          status: "running", phase: "teams", teamKeys, eventKeys, teamResourceCount, eventResourceCount,
           teamCursor: 0, teamResourceCursor: 0, eventCursor: 0, eventResourceCursor: 0, resourceAttempts: 0,
           counts: {
             teams_complete: 0, teams_partial: 0, teams_failed: 0,
@@ -871,6 +876,14 @@ export class EventScheduler {
         currentTeamDiscovery?.updatedAt !== job.teamDiscoveryUpdatedAt) {
       job.status = "paused";
       recordError("event", "season-discovery", "The retained discovery snapshot changed; review and restart the job from a fresh preview.");
+      job.updatedAt = Date.now();
+      await this.storage.put(key, job);
+      return;
+    }
+    if (teamResourceEndpoints(job.teamKeys[0] ?? "", job.year).length !== job.teamResourceCount ||
+        eventResourceEndpoints(job.eventKeys[0] ?? "").length + 1 !== job.eventResourceCount) {
+      job.status = "paused";
+      recordError("event", "resource-inventory", "Configured resource builders changed; review and restart from a fresh preview.");
       job.updatedAt = Date.now();
       await this.storage.put(key, job);
       return;
