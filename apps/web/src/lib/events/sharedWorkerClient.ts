@@ -1,7 +1,7 @@
 "use client";
 
 import { EventState, type EventStateSnapshot } from "./EventState";
-import { eventWebSocket } from "@/lib/realtime/client";
+import { eventWebSocket, type EventWebSocketStatus } from "@/lib/realtime/client";
 import type { FieldViewEventSnapshot } from "@fieldview/domain";
 
 type SnapshotListener = () => void;
@@ -11,6 +11,8 @@ const snapshots = new Map<string, EventStateSnapshot>();
 const listeners = new Map<string, Set<SnapshotListener>>();
 const canonicalSnapshots = new Map<string, { version: number; snapshot: FieldViewEventSnapshot }>();
 const canonicalListeners = new Map<string, Set<SnapshotListener>>();
+const runtimeStatusListeners = new Set<SnapshotListener>();
+let canonicalRuntimeStatus: EventWebSocketStatus = "disconnected";
 let worker: SharedWorker | null = null;
 let port: MessagePort | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -36,6 +38,12 @@ function handleWorkerMessage(event: MessageEvent) {
 
   if (message.type === "pong") {
     lastPongAt = Date.now();
+    return;
+  }
+  if (message.type === "runtime-status" &&
+      (message.status === "connecting" || message.status === "connected" || message.status === "disconnected")) {
+    canonicalRuntimeStatus = message.status;
+    for (const listener of runtimeStatusListeners) listener();
     return;
   }
   if (message.type === "canonical-snapshot" && message.eventKey && message.snapshot &&
@@ -137,6 +145,25 @@ export function getCanonicalEventSnapshot(
   eventKey: string,
 ): { version: number; snapshot: FieldViewEventSnapshot } | undefined {
   return canonicalSnapshots.get(eventKey);
+}
+
+export function getCanonicalRuntimeStatus(): EventWebSocketStatus {
+  return canonicalRuntimeStatus;
+}
+
+export function subscribeCanonicalRuntimeStatus(listener: SnapshotListener): () => void {
+  runtimeStatusListeners.add(listener);
+  connect();
+  listener();
+  return () => {
+    runtimeStatusListeners.delete(listener);
+    closePortIfIdle();
+  };
+}
+
+export function refreshCanonicalEventSnapshot(eventKey: string): void {
+  if (!eventKey) return;
+  post({ type: "refreshCanonical", eventKey });
 }
 
 export function subscribeCanonicalEventSnapshot(
