@@ -421,10 +421,24 @@ export class EventScheduler {
       }
       if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
       const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
+      const registeredEvents = new Set([
+        ...(await this.storage.get<string[]>("registry:events") ?? []),
+        ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
+      ]);
+      const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
       const batch = all.slice(audit.cursor, audit.cursor + 20);
       for (const item of batch) {
         try {
           const isEvent = item.kind === "event";
+          // Avoid instantiating thousands of empty Durable Objects merely to inspect missing state.
+          if (isEvent && !registeredEvents.has(item.key)) {
+            audit.counts.event_runtime_missing += 1;
+            continue;
+          }
+          if (!isEvent && !registeredTeams.has(item.key)) {
+            audit.counts.team_runtime_missing += 1;
+            continue;
+          }
           if (!isEvent && !this.env.TEAM_RUNTIME) {
             audit.counts.team_runtime_missing += 1;
             continue;
