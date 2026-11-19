@@ -12,7 +12,9 @@ import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
 
-interface TeamPollTask { endpoint: string; dueAt: number; intervalMs: number; attempts: number; }
+type TeamProvider = "tba" | "statbotics" | "frc-colors";
+interface TeamResource { provider: TeamProvider; endpoint: string; }
+interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
 interface TeamEndpointState<T> extends EndpointState<T> {
   lastHttpStatus?: number | null;
   lastError?: string | null;
@@ -70,15 +72,19 @@ export class TeamRuntime {
     }
     return interval;
   }
-  private endpoints(year: number): string[] {
+  private endpoints(year: number): TeamResource[] {
     // Public team routes commonly use the numeric team number ("/team/3461"),
     // while TBA v3 requires the provider key ("frc3461").
     const providerTeamKey = /^\d+$/.test(this.teamKey) ? "frc" + this.teamKey : this.teamKey;
-    return [TBA_ENDPOINTS.team(providerTeamKey), TBA_ENDPOINTS.teamDistricts(providerTeamKey),
-      TBA_ENDPOINTS.teamEvents(providerTeamKey, year), TBA_ENDPOINTS.teamMedia(providerTeamKey, year),
-      STATBOTICS_ENDPOINTS.teamYear(Number(providerTeamKey.replace(/^frc/i, "")), year),
-      STATBOTICS_ENDPOINTS.teamEvents({ team: Number(providerTeamKey.replace(/^frc/i, "")), year }),
-      FRC_COLORS_ENDPOINTS.team(Number(providerTeamKey.replace(/^frc/i, "")))];
+    return [
+      { provider: "tba", endpoint: TBA_ENDPOINTS.team(providerTeamKey) },
+      { provider: "tba", endpoint: TBA_ENDPOINTS.teamDistricts(providerTeamKey) },
+      { provider: "tba", endpoint: TBA_ENDPOINTS.teamEvents(providerTeamKey, year) },
+      { provider: "tba", endpoint: TBA_ENDPOINTS.teamMedia(providerTeamKey, year) },
+      { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamYear(Number(providerTeamKey.replace(/^frc/i, "")), year) },
+      { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamEvents({ team: Number(providerTeamKey.replace(/^frc/i, "")), year }) },
+      { provider: "frc-colors", endpoint: FRC_COLORS_ENDPOINTS.team(Number(providerTeamKey.replace(/^frc/i, ""))) },
+    ];
   }
   private async bindTeamKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Team-Key");
@@ -155,7 +161,7 @@ export class TeamRuntime {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({ team_key: this.teamKey,
-        polling: [...tasks.values()].map((task) => ({ endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
+        polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
         endpoints: [...states.values()].map((state) => {
           const value = state.providerData ?? state.data;
           const recordCount = Array.isArray(value) ? value.length : value == null ? 0 : 1;
@@ -172,7 +178,7 @@ export class TeamRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   private async snapshot(year: number): Promise<Response> {
-    const states = await Promise.all(this.endpoints(year).map((endpoint) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+    const states = await Promise.all(this.endpoints(year).map(({ endpoint }) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
     const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = states, now = Date.now();
     const teamSource = metadata(team, now), districtSource = metadata(districts, now);
     const eventSource = metadata(events, now), mediaSource = metadata(media, now);
@@ -223,13 +229,14 @@ export class TeamRuntime {
         { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
         { status: "failed"; httpStatus?: number; error?: string };
       try {
-        const isStatbotics = task.endpoint.startsWith("/team_year/") || task.endpoint.startsWith("/team_events?");
-        const isFRCColors = task.endpoint.startsWith("/team/");
-        const response = await (isStatbotics
-          ? this.statboticsApi.request(task.endpoint, { headers })
-          : isFRCColors
-            ? this.frcColorsApi.request(task.endpoint, { headers })
-            : this.api.request(task.endpoint, { headers })), ttl = maxAge(response.headers.get("Cache-Control"));
+        // Provider identity is assigned when the resource is declared; never infer
+        // it from endpoint paths, which may overlap across providers.
+        const client = task.provider === "tba" ? this.api
+          : task.provider === "statbotics" ? this.statboticsApi
+            : task.provider === "frc-colors" ? this.frcColorsApi : null;
+        if (!client) throw new Error(`Unsupported team resource provider: ${String(task.provider)}`);
+        const response = await client.request(task.endpoint, { headers });
+        const ttl = maxAge(response.headers.get("Cache-Control"));
         const expiresAt = ttl === null ? null : Date.now() + ttl * 1000;
         if (response.status === 304) result = { status: "not-modified", expiresAt: expiresAt ?? initial.expiresAt };
         else if (response.status === 404) result = { status: "unavailable", httpStatus: response.status };
