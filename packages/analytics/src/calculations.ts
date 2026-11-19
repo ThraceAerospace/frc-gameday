@@ -1,6 +1,6 @@
 import type { StatboticsEPA } from "@fieldview/provider-statbotics/types";
 import type { TBAEliminationAlliance } from "@fieldview/provider-tba/types";
-import { matchShortName } from "./match-label.js";
+import { matchShortName } from "./match-label.ts";
 import type { AllianceResult, AnalyticsMatch, ReviewFinding, TeamAnalyticsRow } from "./types.js";
 import type { TBAMatch } from "@fieldview/provider-tba/types";
 
