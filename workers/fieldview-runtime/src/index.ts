@@ -132,7 +132,7 @@ export default {
         if (action === "resource-refresh" && typeof endpoint !== "string") {
           return Response.json({ error: "A resource endpoint is required" }, { status: 400 });
         }
-        const path = action === "statbotics-refresh" ? "statbotics-refresh" : action === "recalculate" ? "recalculate" : "refresh";
+        const path = action === "statbotics-refresh" || (action === "resource-refresh" && typeof endpoint === "string" && endpoint.startsWith("/matches?event=")) ? "statbotics-refresh" : action === "recalculate" ? "recalculate" : "refresh";
         const payload = action === "resource-refresh" ? { endpoints: [endpoint] } : {};
         return stub.fetch(new Request("https://event-runtime/" + path, {
           method: "POST", headers, body: JSON.stringify(payload),
