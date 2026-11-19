@@ -742,7 +742,7 @@ export class EventRuntime {
     };
   }
 
-  private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
+  private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; sourceRevision: number; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -759,6 +759,10 @@ export class EventRuntime {
     // a snapshot can never combine data from opposite sides of a mutation.
     const state = await this.storage.transaction(async (transaction) => ({
       version: await transaction.get<number>("snapshot-revision") ?? 0,
+      sourceRevision: (await Promise.all([...endpoints, statboticsMatchesEndpoint].map(async (endpoint) =>
+        await transaction.get<EndpointState<unknown>>(endpointStorageKey(endpoint))))).reduce(
+          (total, resource) => total + (resource?.revision ?? 0), 0,
+        ),
       event: await transaction.get<EndpointState<unknown>>(endpointStorageKey(eventEndpoint)),
       teams: await transaction.get<EndpointState<unknown>>(endpointStorageKey(teamsEndpoint)),
       statuses: await transaction.get<EndpointState<unknown>>(endpointStorageKey(statusesEndpoint)),
@@ -891,6 +895,7 @@ export class EventRuntime {
         : [];
       return {
         version: state.version,
+        sourceRevision: state.sourceRevision,
         state: await calculateCanonicalMatchAnalytics(
           normalizedState,
           [...inputRecords, ...(seasonCollection?.inputs ?? []), ...missingCohortInput],
@@ -900,7 +905,7 @@ export class EventRuntime {
     }
 
     const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-    if (!publication) return { version: state.version, state: normalizedState };
+    if (!publication) return { version: state.version, sourceRevision: state.sourceRevision, state: normalizedState };
     const matchAnalytics = new Map(publication.matches.map((match) => [match.key, match]));
     const matches = normalizedState.matches === undefined || normalizedState.matches === null
       ? normalizedState.matches
@@ -1008,7 +1013,7 @@ export class EventRuntime {
       resource.status === "failed" || resource.status === "unavailable" ||
       (resource.expiresAt !== null && resource.expiresAt < Date.now()));
     const publication: EventStatePublication = {
-      sourceRevision: result.version,
+      sourceRevision: result.sourceRevision,
       generatedAt: Date.now(),
       status: acquiredCount === eventResources.length + 1 && !hasIncompleteResource ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
@@ -1116,7 +1121,7 @@ export class EventRuntime {
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
     await this.storage.put("analytics:status", "running");
-    let calculated: { version: number; state: ReturnType<typeof normalizeFieldViewEventState> };
+    let calculated: { version: number; sourceRevision: number; state: ReturnType<typeof normalizeFieldViewEventState> };
     try {
       const allowPartialCohort = await this.storage.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       calculated = await this.buildEventState(true, allowPartialCohort);
@@ -1134,7 +1139,7 @@ export class EventRuntime {
     }
     const state = calculated.state;
     const publication: AnalyticsPublication = {
-      sourceRevision: calculated.version,
+      sourceRevision: calculated.sourceRevision,
       calculatedAt: Date.now(),
       matches: (state.matches ?? []).map((match) => ({
         key: match.key,
