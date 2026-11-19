@@ -7,7 +7,7 @@ import { buildQualificationAnalysis } from "./calculations.ts";
 import { buildMatchFlags } from "./match-flags.ts";
 import { createAnalyticsAudit } from "./audit.ts";
 import { calculateCanonicalAggregateAnalytics } from "./canonical-aggregate-analytics.ts";
-import type { FieldViewAnalyticsInputRecord } from "../../domain/src/analytics.ts";
+import type { FieldViewAnalyticsInputRecord, FieldViewSeasonCohortSnapshot } from "../../domain/src/analytics.ts";
 
 function epaValues(
   teams: FieldViewMatch["teams"]["red"],
@@ -66,6 +66,7 @@ function toAnalyticsRecord(match: FieldViewMatch): AnalyticsMatch {
 export async function calculateCanonicalMatchAnalytics(
   eventState: FieldViewEventState,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
+  seasonCohort?: FieldViewSeasonCohortSnapshot,
 ): Promise<FieldViewEventState> {
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
 
@@ -158,5 +159,5 @@ export async function calculateCanonicalMatchAnalytics(
     ...eventState,
     matches,
     ...(team_states === undefined ? {} : { team_states }),
-  }, records, allianceResults, audit);
+  }, records, allianceResults, audit, seasonCohort);
 }
