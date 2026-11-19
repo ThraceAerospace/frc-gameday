@@ -1,6 +1,7 @@
 "use client";
 
-import type { StatboticsPrediction } from "@/lib/statbotics/types";
+import type { FieldViewMatch } from "@fieldview/domain";
+type StatboticsPrediction = NonNullable<FieldViewMatch["predictions"]["statbotics"]>;
 
 function formatProbability(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value * 100);
