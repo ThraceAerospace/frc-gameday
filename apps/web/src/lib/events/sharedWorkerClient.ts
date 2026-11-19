@@ -123,7 +123,7 @@ function recover() {
     // The worker may already have been terminated.
   }
   oldPort?.close();
-  if (listeners.size > 0 || canonicalListeners.size > 0 || liveRuntimeRefs > 0) connect();
+  if (listeners.size > 0 || canonicalListeners.size > 0 || runtimeStatusListeners.size > 0 || liveRuntimeRefs > 0) connect();
 }
 
 function getFallbackState(eventKey: string): EventState {
@@ -265,7 +265,7 @@ export function registerSharedLiveRuntime(): () => void {
 }
 
 function closePortIfIdle() {
-  if (listeners.size === 0 && canonicalListeners.size === 0 && liveRuntimeRefs === 0 && port) {
+  if (listeners.size === 0 && canonicalListeners.size === 0 && runtimeStatusListeners.size === 0 && liveRuntimeRefs === 0 && port) {
       port.postMessage({ type: "close" });
       if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
