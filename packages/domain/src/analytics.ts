@@ -523,6 +523,8 @@ export interface FieldViewSeasonCohortSnapshot {
   processed_team_event_records: number;
   unavailable_team_event_records: number;
   discovery_pending_teams: number;
+  /** Teams whose season event-history resource was attempted but unavailable. */
+  history_unavailable_teams?: number;
   updated_at: number;
   records: FieldViewSeasonCohortRecord[];
 }
