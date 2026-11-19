@@ -199,7 +199,7 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
             <TeamSnapshot teams={teams} selectedTeam={teamA} onSelect={(value)=>{setTeamA(value);setTeamFocus(value);setTeamB("");}} team={selectedFocus} insight={focusedInsight ?? null} data={data}/>
             {matchAnalysisLoading ? <p className="text-sm text-slate-500">Loading this team's season match history and model records…</p> : null}
             {matchAnalysisError ? <p role="alert" className="text-sm text-rose-700">{matchAnalysisError}</p> : null}
-            {matchAnalysisA ? <CanonicalTeamAnalysisPanel analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} eventKey={eventKey} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
+            {matchAnalysisA ? <CanonicalTeamAnalysisPanel analysis={matchAnalysisA} name={selectedA?.name ?? `Team ${teamA}`} eventKey={eventKey} records={data.matches} team={selectedA} data={data} /> : !matchAnalysisLoading && !matchAnalysisError && teamA ? <p className="text-sm text-slate-500">No season match analysis is available yet.</p> : null}
           </section>}
           {tab === "qualification" && <QualificationAnalysisPanel data={data} />}
           {tab === "playoffs" && <PlayoffAnalysisPanel data={data} />}
@@ -897,7 +897,111 @@ function TeamSnapshot({teams,selectedTeam,onSelect,team,insight,data}:{teams:Tea
 
 type TeamAnalysisTab = "qualification" | "playoffs" | "season" | "review";
 
-function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: CanonicalTeamAnalysisResponse; name: string; eventKey: string }) {
+function toLegacyTeamMatchAnalysis(analysis: CanonicalTeamAnalysisResponse): TeamMatchAnalysis {
+  const events = analysis.events;
+  const matches: TeamMatchRow[] = events.flatMap(({ event, analytics }) =>
+    (analytics?.match_evidence ?? []).map((match) => ({
+      matchKey: match.match_key,
+      matchLabel: match.match_label,
+      compLevel: match.competition_level,
+      event: { key: event.key, name: event.name, shortName: event.shortName, startDate: event.startDate },
+      partners: match.partner_team_numbers.map(String),
+      opponents: match.opponent_team_numbers.map(String),
+      alliance: match.alliance,
+      predicted: match.predicted_score,
+      actual: match.actual_score,
+      residual: match.score_residual,
+      opponentPredicted: match.opponent_predicted_score,
+      opponentActual: match.opponent_actual_score,
+      opponentResidual: match.opponent_score_residual,
+      alliancePreEPATotal: null,
+      alliancePreComponents: {},
+      actualComponents: {},
+      redWinProbability: match.alliance === "red" ? match.win_probability : match.win_probability === null ? null : 1 - match.win_probability,
+      teamWinProbability: match.win_probability,
+      rpOutcomes: [],
+      won: match.won,
+      preEPA: match.pre_match_epa,
+      postEPA: match.post_match_epa,
+      deltaEPA: match.epa_change,
+      preComponents: {},
+      postComponents: {},
+      allianceDeltaSpread: null,
+      sharedAllianceUpdate: false,
+      statboticsAvailable: match.predicted_score !== null,
+    })),
+  );
+  const phaseSummaries = analysis.phaseSummaries.map((item) => ({
+    ...item,
+    rp: [],
+  }));
+  const eventSummaries = events.map(({ event, analytics }) => {
+    const performance = analytics?.performance;
+    const rows = (analytics?.match_evidence ?? []);
+    const scored = rows.filter((match) => match.score_residual !== null);
+    const wins = rows.filter((match) => match.won === true).length;
+    const losses = rows.filter((match) => match.won === false).length;
+    return {
+      event: { key: event.key, name: event.name, shortName: event.shortName ?? undefined, startDate: event.startDate },
+      matches: performance?.completed_matches ?? rows.length,
+      wins: performance?.wins ?? wins,
+      losses: performance?.losses ?? losses,
+      ties: performance?.ties ?? Math.max(0, rows.length - wins - losses),
+      winRate: wins + losses ? wins / (wins + losses) : null,
+      meanResidual: scored.length ? scored.reduce((sum, match) => sum + (match.score_residual ?? 0), 0) / scored.length : null,
+      meanAbsoluteError: scored.length ? scored.reduce((sum, match) => sum + Math.abs(match.score_residual ?? 0), 0) / scored.length : null,
+      rootMeanSquareError: scored.length ? Math.sqrt(scored.reduce((sum, match) => sum + (match.score_residual ?? 0) ** 2, 0) / scored.length) : null,
+      meanMatchEPAChange: performance?.epa_change ?? null,
+      epaStart: performance?.epa_start ?? null,
+      epaEnd: performance?.epa_end ?? null,
+    };
+  });
+  const anomalies = analysis.anomalies.map((match) => ({
+    matchKey: match.match_key,
+    matchLabel: match.match_label,
+    event: { key: match.event.key, name: match.event.name, startDate: match.event.startDate },
+    compLevel: match.competition_level,
+    partners: match.partner_team_numbers.map(String),
+    opponents: match.opponent_team_numbers.map(String),
+    alliance: match.alliance,
+    residual: match.score_residual,
+    opponentResidual: match.opponent_score_residual,
+    teamWinProbability: match.win_probability,
+    won: match.won,
+    kinds: match.kinds,
+    reasons: match.reasons,
+    highConfidenceMiss: match.highConfidenceMiss,
+  }));
+  return {
+    team: analysis.team,
+    year: analysis.year,
+    eventCount: analysis.eventCount,
+    matchCount: analysis.matchCount,
+    anomalySummary: analysis.anomalySummary,
+    anomalies,
+    summary: { ...analysis.summary, rp: [] },
+    eventSummaries,
+    phaseSummaries,
+    eliminationShift: analysis.eliminationShift,
+    residualPattern: analysis.residualPattern,
+    matches,
+    collection: {
+      state: analysis.collection.state,
+      statboticsMatches: matches.filter((match) => match.statboticsAvailable).length,
+      totalMatches: analysis.matchesSeen,
+      updatedAt: analysis.collection.updatedAt,
+    },
+  };
+}
+
+function CanonicalTeamAnalysisPanel({ analysis, name, eventKey, records, team, data }: {
+  analysis: CanonicalTeamAnalysisResponse;
+  name: string;
+  eventKey: string;
+  records: EventAnalyticsResponse["matches"];
+  team: TeamAnalyticsRow | undefined;
+  data: EventAnalyticsResponse;
+}) {
   const [activeTab, setActiveTab] = useState<TeamAnalysisTab>("qualification");
   const tabs: { id: TeamAnalysisTab; label: string }[] = [
     { id: "qualification", label: "Qualification Analysis" },
@@ -907,6 +1011,7 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
   ];
   const current = analysis.events.find((item) => item.event.key === eventKey) ?? null;
   const currentAnalytics = current?.analytics ?? null;
+  const legacyAnalysis = useMemo(() => toLegacyTeamMatchAnalysis(analysis), [analysis]);
   const allReviewMatches = analysis.events.flatMap(({ event, analytics }) =>
     (analytics?.match_evidence ?? []).map((match) => ({ ...match, event })),
   );
@@ -955,6 +1060,8 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
   const performance = currentAnalytics?.performance;
   const peer = currentAnalytics?.peer_performance;
 
+  return <>
+    <TeamAnalysisTabs analysis={legacyAnalysis} records={records} eventKey={eventKey} name={name} team={team} data={data} />
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
     <div className="border-b border-slate-200 px-4 pt-4 dark:border-slate-700 sm:px-5">
       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Team analysis</h3>
@@ -1032,6 +1139,7 @@ function CanonicalTeamAnalysisPanel({ analysis, name, eventKey }: { analysis: Ca
       </> : null}
     </div>
   </section>;
+  </>;
 }
 
 function TeamAnalysisTabs({analysis,records,eventKey,name,team,data}:{analysis:TeamMatchAnalysis;records:EventAnalyticsResponse["matches"];eventKey:string;name:string;team:TeamAnalyticsRow|undefined;data:EventAnalyticsResponse}) {
