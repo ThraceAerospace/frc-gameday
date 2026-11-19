@@ -3,6 +3,7 @@
 import {
   useCallback,
   useContext,
+  useEffect,
   useSyncExternalStore,
 } from "react";
 import type { EventStateSnapshot } from "./EventState";
@@ -133,7 +134,11 @@ export function useCanonicalEventAnalytics(eventKey: string) {
     () => eventKey ? getCanonicalEventAnalytics(eventKey) : undefined,
     [eventKey],
   );
-  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+  const publication = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+  useEffect(() => {
+    if (eventKey) refreshCanonicalEventAnalytics(eventKey);
+  }, [eventKey]);
+  return publication;
 }
 
 /** Connection health for the shared canonical EventRuntime snapshot stream. */
