@@ -962,7 +962,7 @@ export class EventScheduler {
         if (job.teamResourceCursor < resources.length) {
           const resource = resources[job.teamResourceCursor];
           const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
-          let resourceState: { status?: string; last_fetched_at?: number | null } | undefined;
+          let resourceState: { status?: string; revision?: number; last_fetched_at?: number | null } | undefined;
           if (stateResponse.ok) {
             const state = await stateResponse.json() as { endpoints?: Array<{ endpoint: string; status?: string; revision?: number; last_fetched_at?: number | null }> };
             resourceState = state.endpoints?.find((item) => item.endpoint === resource.endpoint);
