@@ -13,7 +13,8 @@ import TeamModal from "@/components/team/TeamModal";
 import TeamPill from "@/components/team/TeamPill";
 import EventFooter from "@/components/event/EventFooter";
 import { buildStreams } from "@/lib/tba/buildStreams";
-import { useCanonicalEventSnapshot, useEventState } from "@/lib/events";
+import { useCanonicalEventSnapshot, useCanonicalRuntimeStatus } from "@/lib/events";
+import { refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import type { FieldViewEventTeam } from "@fieldview/domain";
 import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import type { BuiltStream } from "@/lib/tba/buildStreams";
@@ -61,8 +62,8 @@ export default function EventView({
   // The view's data contract is the canonical EventRuntime snapshot. The
   // legacy EventState is retained temporarily only for transport health and
   // compatibility refresh controls; it is never a source of displayed data.
-  const legacyState = useEventState(event);
   const canonical = useCanonicalEventSnapshot(event);
+  const websocketStatus = useCanonicalRuntimeStatus(event);
   const canonicalSnapshot = canonical?.snapshot;
   const eventData = canonicalSnapshot?.event ?? null;
   const teams = canonicalSnapshot?.teams ?? [];
@@ -75,9 +76,7 @@ export default function EventView({
   const alliances = canonicalSnapshot?.playoff_alliances ?? [];
   const loading = canonical === undefined;
   const error = false;
-  const websocketStatus = legacyState.websocketStatus;
-  const webSocketStale = legacyState.websocketStale;
-  const eventState = legacyState.state;
+  const webSocketStale = false;
 
   const eventConfig = config;
   const footerMode = eventConfig.footerMode;
@@ -168,11 +167,8 @@ export default function EventView({
   const presentation = eventConfig.presentation;
 
   const refreshLiveData = useCallback(() => {
-    eventState?.reloadAlliances();
-    eventState?.reloadMatches();
-    eventState?.reloadStatuses();
-    eventState?.reloadOprs();
-  }, [eventState]);
+    refreshCanonicalEventSnapshot(event);
+  }, [event]);
 
   const wssConnected = websocketStatus === "connected";
 
