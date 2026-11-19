@@ -200,7 +200,7 @@ export default async function EventPage({
               </SurfaceCard>
             </section>
           ) : activeTab === "analytics" ? (
-            <EventAnalyticsSurface eventKey={event.key} eventName={event.name} />
+            <EventAnalyticsSurface eventKey={event.key} eventName={event.name} initialSnapshot={eventSnapshot} />
           ) : (
             <section id="matches" className="mt-6">
               <SectionHeading title="Match Schedule" description={matchesAvailable ? `${sortedMatches.length} matches scheduled or recorded.` : "Match data is currently unavailable."} className="mb-3" />
