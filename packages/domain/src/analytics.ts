@@ -35,12 +35,73 @@ export interface FieldViewAnalyticsComparison {
 }
 
 /**
- * A calculated metric with separate observation and peer-comparison coverage.
- *
- * sample_size is the number of observations used to calculate value.
- * population describes the observation population. comparison, when present,
- * describes a different population used for rank/peer context.
+ * Immutable description of one calculation input at the time a run executes.
+ * The source revision and digest make the exact upstream representations
+ * traceable without copying provider credentials or transport internals.
  */
+export interface FieldViewAnalyticsInputRecord {
+  input_key: string;
+  provider: string;
+  resource: string;
+  source_revision: number | string | null;
+  fetched_at: number | null;
+  record_count: number;
+  included_count: number;
+  excluded_count: number;
+  status: "available" | "partial" | "unavailable";
+}
+
+/**
+ * Run-level audit metadata shared by metrics/findings produced together.
+ * input_digest is a deterministic digest of the normalized input manifest.
+ */
+export interface FieldViewAnalyticsAudit {
+  calculation_id: string;
+  engine_version: string;
+  calculated_at: number;
+  input_digest: string;
+  inputs: FieldViewAnalyticsInputRecord[];
+  definition_versions: Array<{ definition_key: string; version: string }>;
+  warnings: string[];
+}
+
+/**
+ * Public, reviewable specification for a registered calculation.
+ *
+ * operation_key selects an implementation from the backend's allowlisted
+ * operation registry. It is not executable source and must never be eval'd.
+ * formula and steps are the human-readable mathematical explanation shown
+ * in documentation/audit tooling.
+ */
+export interface FieldViewAnalyticsDefinition {
+  definition_key: string;
+  version: string;
+  name: string;
+  description: string;
+  scope: "match" | "alliance" | "team" | "event";
+  operation_key: string;
+  inputs: Array<{
+    input_key: string;
+    source_path: string;
+    required: boolean;
+    description: string;
+    unit: string;
+  }>;
+  population: {
+    population_key: string;
+    inclusion_rules: string[];
+    exclusion_rules: string[];
+  };
+  formula: {
+    expression: string;
+    steps: string[];
+  };
+  output_unit: string;
+  interpretation_rules: string[];
+  limitations: string[];
+}
+
+/** A calculated metric with separate observation and peer-comparison coverage. */
 interface FieldViewMetricResultBase {
   metric_key: string;
   definition_version: string;
@@ -95,11 +156,14 @@ export interface FieldViewEventAnalytics {
   event_key: EventKey;
   metrics: FieldViewMetricResult[];
   findings: FieldViewAnalyticsFinding[];
+  audit?: FieldViewAnalyticsAudit;
 }
 
-/** Team-specific and historical analytics for one canonical team identity. */
+/** Team analytics scoped to one team's participation at one event. */
 export interface FieldViewTeamAnalytics {
   team_key: TeamKey;
+  event_key: EventKey;
   metrics: FieldViewMetricResult[];
   findings: FieldViewAnalyticsFinding[];
+  audit?: FieldViewAnalyticsAudit;
 }
