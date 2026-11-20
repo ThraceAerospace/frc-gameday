@@ -398,7 +398,7 @@ export default {
     }
 
     if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed") &&
+      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/district-refresh") &&
       (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -420,6 +420,27 @@ export default {
       return scheduler.fetch(new Request("https://event-scheduler/admin/overview", {
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
+    }
+
+    // District data is owned by EventScheduler; these public routes are strictly read-only.
+    if (url.pathname === "/districts/discovery" && request.method === "GET") {
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const response = await scheduler.fetch(new Request("https://event-scheduler/districts" + url.search));
+      const headers = new Headers(response.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      return new Response(response.body, { status: response.status, headers });
+    }
+    const districtRoute = /^\\/districts\\/([a-zA-Z0-9_-]+)\\/snapshot$/.exec(url.pathname);
+    if (districtRoute && request.method === "GET") {
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      const query = new URLSearchParams(url.search);
+      query.set("key", districtRoute[1]);
+      const response = await scheduler.fetch(new Request("https://event-scheduler/district?" + query.toString()));
+      const headers = new Headers(response.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      return new Response(response.body, { status: response.status, headers });
     }
 
     // Team profiles are served by one lazy TeamRuntime per TBA team key.
