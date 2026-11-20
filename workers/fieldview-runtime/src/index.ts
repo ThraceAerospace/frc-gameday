@@ -289,8 +289,18 @@ export default {
       }
       const key = body.key;
       if (kind === "event") {
-        if (!["refresh", "recalculate", "statbotics-refresh", "resource-refresh"].includes(action)) {
+        if (!["refresh", "recalculate", "statbotics-refresh", "resource-refresh", "seed-event-teams"].includes(action)) {
           return Response.json({ error: "Unsupported event operation" }, { status: 400 });
+        }
+        if (action === "seed-event-teams") {
+          if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+          const year = body.year === undefined ? Number(key.slice(0, 4)) : Number(body.year);
+          if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid event season year" }, { status: 400 });
+          const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+          return scheduler.fetch(new Request("https://event-scheduler/admin/event-team-seed", {
+            method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ event_key: key, year }),
+          }));
         }
         await registerRuntimeObject(env, "event", key);
         const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
@@ -372,8 +382,8 @@ export default {
     }
 
     if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest") &&
-      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest") && request.method === "POST"))
+      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed") &&
+      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });

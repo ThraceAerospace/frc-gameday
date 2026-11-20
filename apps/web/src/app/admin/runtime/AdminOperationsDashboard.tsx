@@ -23,6 +23,12 @@ type EntityState = {
   diagnostics?: Array<{ endpoint: string; http_status: number | null; last_error: string | null }>;
 };
 type Entity = { key: string; status: number; error?: string; state?: EntityState | null };
+type EventTeamSeed = {
+  eventKey: string; year: number; status: "running" | "completed" | "completed_with_errors" | "not_started";
+  teamKeys?: string[]; cursor?: number; activeTeamKey?: string | null; seededTeams?: number;
+  failedTeams?: number; historicalEventsScheduled?: number; errors?: Array<{ team_key: string; detail: string }>;
+  updatedAt?: number;
+};
 type Overview = {
   generated_at: string;
   scheduler: { enabled: boolean; last_run_at: number | null; next_alarm_at: number | null; last_error: string | null; team_discovery_error: string | null };
@@ -107,6 +113,7 @@ export default function AdminOperationsDashboard() {
   const [seasonPreview, setSeasonPreview] = useState<SeasonPreview | null>(null);
   const [cursor, setCursor] = useState(0);
   const [entity, setEntity] = useState<Entity | null>(null);
+  const [eventTeamSeed, setEventTeamSeed] = useState<EventTeamSeed | null>(null);
   const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
   const [tab, setTab] = useState<"home" | "events" | "teams" | "system">("home");
   const [loading, setLoading] = useState(false);
@@ -224,6 +231,16 @@ export default function AdminOperationsDashboard() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load entity state"); }
   }, [requestHeaders, year]);
 
+  const loadEventTeamSeed = useCallback(async (eventKey: string, eventYear: number) => {
+    if (!token) return;
+    try {
+      const params = new URLSearchParams({ eventSeed: eventKey, year: String(eventYear) });
+      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const body = await response.json();
+      if (response.ok) setEventTeamSeed(body as EventTeamSeed);
+    } catch { /* The next dashboard refresh will retry the status read. */ }
+  }, [token, requestHeaders]);
+
   const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string, operationYear?: number) => {
     setBusy(true); setMessage(""); setError("");
     try {
@@ -233,12 +250,20 @@ export default function AdminOperationsDashboard() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
+      if (entityKind === "event" && action === "seed-event-teams") setEventTeamSeed(body as EventTeamSeed);
       setMessage(action.replaceAll("-", " ") + " accepted.");
       await refresh(true);
       if (entityKind !== "system" && key) await openEntity(entityKind, key, selected?.year ?? year);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
   }, [requestHeaders, refresh, openEntity, selected, year]);
+
+  useEffect(() => {
+    if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
+    void loadEventTeamSeed(selected.key, selected.year);
+    const timer = window.setInterval(() => void loadEventTeamSeed(selected.key, selected.year), 3_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, loadEventTeamSeed]);
 
   useEffect(() => {
     if (!authenticated || !token) return;
@@ -416,9 +441,10 @@ export default function AdminOperationsDashboard() {
 
     {selected && <section className="mt-6 space-y-4">
       <button onClick={() => { setSelected(null); setEntity(null); window.history.pushState(null, "", "/admin/runtime"); }} className="text-sm font-semibold text-[var(--fv-brand)]">← Back to {selected.kind} directory</button>
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--fv-brand)]">{selected.kind} command center</p><h2 className="mt-1 text-2xl font-bold">{selected.key}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">{resources.length} provider resources · {tasks.length} scheduled tasks</p></div><div className="flex flex-wrap gap-2">{isEvent ? <><button disabled={busy} onClick={() => void dispatch("event", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh event</button><button disabled={busy} onClick={() => void dispatch("event", "statbotics-refresh", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Refresh Statbotics</button><button disabled={busy} onClick={() => void dispatch("event", "recalculate", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Recalculate analytics</button></> : <><button disabled={busy} onClick={() => void dispatch("team", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh team</button><button disabled={busy} onClick={() => void dispatch("team", "seed", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Seed team + events</button></>}</div></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--fv-brand)]">{selected.kind} command center</p><h2 className="mt-1 text-2xl font-bold">{selected.key}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">{resources.length} provider resources · {tasks.length} scheduled tasks</p></div><div className="flex flex-wrap gap-2">{isEvent ? <><button disabled={busy} onClick={() => void dispatch("event", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh event</button><button disabled={busy || eventTeamSeed?.status === "running"} onClick={() => void dispatch("event", "seed-event-teams", selected.key, undefined, selected.year)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{eventTeamSeed?.status === "running" ? "Seeding event teams…" : "Seed all event teams"}</button><button disabled={busy} onClick={() => void dispatch("event", "statbotics-refresh", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Refresh Statbotics</button><button disabled={busy} onClick={() => void dispatch("event", "recalculate", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Recalculate analytics</button></> : <><button disabled={busy} onClick={() => void dispatch("team", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh team</button><button disabled={busy} onClick={() => void dispatch("team", "seed", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Seed team + events</button></>}</div></div>
       {!entity && <Panel><p className="text-sm text-[var(--fv-muted)]">Loading entity state…</p></Panel>}
       {entity && <><div className="grid gap-3 sm:grid-cols-3"><Panel><p className="text-xs text-[var(--fv-muted)]">Provider resources</p><p className="mt-1 text-2xl font-bold">{resources.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">Scheduled tasks</p><p className="mt-1 text-2xl font-bold">{tasks.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">{isEvent ? "Analytics status" : "Team runtime"}</p><p className={"mt-1 text-lg font-bold " + statusTone(isEvent ? entity.state?.analytics?.status : entity.status === 200 ? "available" : "failed")}>{isEvent ? entity.state?.analytics?.status ?? "not calculated" : entity.status === 200 ? "reachable" : "unavailable"}</p></Panel></div>
+      {isEvent && eventTeamSeed && eventTeamSeed.status !== "not_started" && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Event team seeding</h3><span className={"text-sm font-semibold " + statusTone(eventTeamSeed.status === "completed" ? "succeeded" : eventTeamSeed.status === "completed_with_errors" ? "partial" : "running")}>{eventTeamSeed.status.replaceAll("_", " ")}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-4"><div>Participants: {eventTeamSeed.teamKeys?.length ?? 0}</div><div>Teams seeded: {eventTeamSeed.seededTeams ?? 0}</div><div>Teams failed: {eventTeamSeed.failedTeams ?? 0}</div><div>Historical events scheduled: {eventTeamSeed.historicalEventsScheduled ?? 0}</div></div>{eventTeamSeed.status === "running" && <p className="mt-2 text-xs text-[var(--fv-muted)]">Current team: {eventTeamSeed.activeTeamKey ?? "Preparing"} · {eventTeamSeed.cursor ?? 0} / {eventTeamSeed.teamKeys?.length ?? 0}</p>}{eventTeamSeed.errors?.length ? <div className="mt-2 space-y-1 text-xs text-rose-600">{eventTeamSeed.errors.slice(-5).map((item, index) => <p key={item.team_key + index}>{item.team_key}: {item.detail}</p>)}</div> : null}</Panel>}
       {isEvent && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Canonical EventState</h3><span className={"text-sm font-semibold " + statusTone(entity.state?.event_state?.status)}>{entity.state?.event_state?.status ?? "missing"}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><div>Generated: {time(entity.state?.event_state?.generated_at)}</div><div>Source revision: {entity.state?.event_state?.source_revision ?? "—"}</div></div></Panel>}
       {isEvent && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Canonical EventAnalytics</h3><span className={"text-sm font-semibold " + statusTone(entity.state?.analytics?.status)}>{entity.state?.analytics?.status ?? "not calculated"}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-3"><div>Last calculated: {time(entity.state?.analytics?.last_calculated_at)}</div><div>Source revision: {entity.state?.analytics?.source_revision ?? "—"}</div><div>Season TeamRuntime revision: {entity.state?.analytics?.season_team_revision ?? "—"}</div><div>Next calculation: {time(entity.state?.analytics?.due_at)}</div></div>{entity.state?.analytics?.last_error && <p className="mt-2 text-xs text-rose-600">{entity.state.analytics.last_error}</p>}</Panel>}
       <Panel><h3 className="font-bold">Provider resources</h3><div className="mt-3 space-y-2">{resources.map((resource) => <div key={resource.endpoint} className="rounded-lg border border-[var(--fv-border)] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold capitalize">{provider(resource.endpoint)} · {endpointLabel(resource.endpoint)}</p><p className="mt-1 break-all font-mono text-[10px] text-[var(--fv-muted)]">{resource.endpoint}</p></div><span className={"text-xs font-bold " + statusTone(resource.status)}>{resource.status ?? "unknown"}</span></div><div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--fv-muted)]"><span>Revision {resource.revision ?? "—"}</span><span>Fetched {ago(resource.lastFetchedAt ?? resource.last_fetched_at)}</span><span>Attempted {ago(resource.lastAttemptAt ?? resource.last_attempt_at)}</span><span>HTTP {resource.lastHttpStatus ?? resource.http_status ?? "—"}</span><span>Records {resource.record_count ?? "—"}</span><span>Included {resource.included_count ?? "—"}</span></div>{(resource.lastError || resource.last_error) && <p className="mt-2 break-words text-xs text-rose-600">{resource.lastError ?? resource.last_error}</p>}{isEvent && <button disabled={busy} onClick={() => void dispatch("event", "resource-refresh", selected.key, resource.endpoint)} className="mt-2 rounded-md border border-[var(--fv-border)] px-2 py-1 text-xs disabled:opacity-40">Refresh resource</button>}</div>)}{!resources.length && <p className="py-6 text-sm text-[var(--fv-muted)]">No provider resources have been acquired for this object.</p>}</div></Panel>

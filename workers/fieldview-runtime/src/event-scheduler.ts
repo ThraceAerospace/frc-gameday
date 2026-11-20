@@ -212,6 +212,15 @@ interface TeamDiscoveryCache {
   checkedAt?: number;
 }
 
+interface EventTeamSeedJob {
+  eventKey: string; year: number; status: "running" | "completed" | "completed_with_errors";
+  stage: "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
+  teamAttempts: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
+  errors: Array<{ team_key: string; detail: string; at: number }>;
+  startedAt: number; updatedAt: number; nextDueAt: number;
+}
+const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
+
 export class EventScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
@@ -421,6 +430,40 @@ export class EventScheduler {
       } catch (error) {
         return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
       }
+    }
+
+    if (url.pathname === "/admin/event-team-seed" && request.method === "GET") {
+      const eventKey = url.searchParams.get("event_key") ?? "";
+      if (!/^[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
+      const job = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(eventKey));
+      return Response.json(job ?? { event_key: eventKey, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/admin/event-team-seed" && request.method === "POST") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.event_key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(body.event_key)) return Response.json({ error: "A valid event_key is required" }, { status: 400 });
+      const eventKey = body.event_key, year = Number(body.year);
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200 || !eventKey.startsWith(String(year))) return Response.json({ error: "The event key and season year must match" }, { status: 400 });
+      if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) return Response.json({ error: "TeamRuntime and EventRuntime must be bound" }, { status: 503 });
+      const seasonJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+      if ([...seasonJobs.values()].some((job) => job.status === "running" || job.status === "paused")) return Response.json({ error: "Pause or complete full-season ingestion before starting event team seeding." }, { status: 409 });
+      const current = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(eventKey));
+      if (current?.status === "running") return Response.json(current, { status: 202 });
+      const endpoint = TBA_ENDPOINTS.eventTeams(eventKey);
+      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint));
+      if (!response.ok) return Response.json({ error: "Unable to retrieve event participants (HTTP " + response.status + ")" }, { status: 502 });
+      const participants = await response.json() as TBATeam[];
+      if (!Array.isArray(participants)) return Response.json({ error: "TBA event participants response was not an array" }, { status: 502 });
+      const teamKeys = [...new Set(participants.map((team) => team.key).filter((key): key is string => typeof key === "string" && /^frc\d+$/.test(key)))].sort();
+      if (teamKeys.length === 0) return Response.json({ error: "No valid participant teams were returned for this event" }, { status: 404 });
+      const now = Date.now();
+      const job: EventTeamSeedJob = {
+        eventKey, year, status: "running", stage: "seed", teamKeys, cursor: 0, activeTeamKey: null,
+        teamAttempts: 0, seededTeams: 0, failedTeams: 0, historicalEventsScheduled: 0,
+        errors: [], startedAt: now, updatedAt: now, nextDueAt: now,
+      };
+      await this.storage.put(eventTeamSeedKey(eventKey), job);
+      await this.storage.setAlarm(now);
+      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/admin/season-ingest" && request.method === "GET") {
@@ -916,7 +959,89 @@ export class EventScheduler {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  private async processEventTeamSeed(job: EventTeamSeedJob): Promise<void> {
+    if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) throw new Error("TeamRuntime and EventRuntime must be bound");
+    if (job.cursor >= job.teamKeys.length) {
+      job.status = job.failedTeams > 0 ? "completed_with_errors" : "completed";
+      job.activeTeamKey = null; job.updatedAt = Date.now();
+      await this.storage.put(eventTeamSeedKey(job.eventKey), job); return;
+    }
+    const teamKey = job.teamKeys[job.cursor];
+    job.activeTeamKey = teamKey;
+    const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
+    try {
+      if (job.stage === "seed") {
+        const registry = await this.storage.get<string[]>("registry:teams") ?? [];
+        if (!registry.includes(teamKey)) await this.storage.put("registry:teams", [...registry, teamKey].sort());
+        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+        const response = await stub.fetch(new Request("https://team-runtime/seed?year=" + job.year, { method: "POST", headers }));
+        if (!response.ok) throw new Error("TeamRuntime seed returned HTTP " + response.status);
+        job.stage = "wait";
+        job.nextDueAt = Date.now() + Math.max(10_000, this.providerRequestInterval() * 9);
+      } else {
+        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+        const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers }));
+        if (!response.ok) throw new Error("TeamRuntime snapshot returned HTTP " + response.status);
+        const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
+        if (!Array.isArray(snapshot.events)) throw new Error("Team event history is not available yet");
+        const policy = eventPollingPolicy(this.env);
+        for (const event of snapshot.events) {
+          const eventKey = event.key;
+          if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
+          const eventRegistry = await this.storage.get<string[]>("registry:events") ?? [];
+          if (!eventRegistry.includes(eventKey)) await this.storage.put("registry:events", [...eventRegistry, eventKey].sort());
+          const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+          const lifecycle = classifyEventLifecycle({
+            start_date: String(event.start_date ?? ""), end_date: String(event.end_date ?? ""), timezone: String(event.timezone ?? ""),
+          }, Date.now(), policy);
+          const eventHeaders = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" };
+          const eventResponse = !lifecycle || lifecycle.lifecycle === "expired"
+            ? await eventStub.fetch(new Request("https://event-runtime/schedule", {
+                method: "POST", headers: eventHeaders,
+                body: JSON.stringify({ endpoints: eventResourceEndpoints(eventKey), intervalMs: 86_400_000 }),
+              }))
+            : await eventStub.fetch(new Request("https://event-runtime/lifecycle", {
+                method: "POST", headers: eventHeaders,
+                body: JSON.stringify({
+                  lifecycle: lifecycle.lifecycle, upcomingIntervalMs: policy.upcomingIntervalMs,
+                  activeIntervalMs: policy.activeIntervalMs,
+                  ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+                }),
+              }));
+          if (!eventResponse.ok) throw new Error("EventRuntime registration failed for " + eventKey + " with HTTP " + eventResponse.status);
+          job.historicalEventsScheduled += 1;
+        }
+        job.seededTeams += 1; job.cursor += 1; job.activeTeamKey = null;
+        job.stage = "seed"; job.teamAttempts = 0; job.nextDueAt = Date.now() + 100;
+      }
+    } catch (error) {
+      job.teamAttempts += 1;
+      const detail = error instanceof Error ? error.message : String(error);
+      if (job.teamAttempts >= 3) {
+        job.errors.push({ team_key: teamKey, detail: detail.slice(0, 240), at: Date.now() });
+        if (job.errors.length > 50) job.errors.splice(0, job.errors.length - 50);
+        job.failedTeams += 1; job.cursor += 1; job.activeTeamKey = null;
+        job.stage = "seed"; job.teamAttempts = 0; job.nextDueAt = Date.now() + 100;
+      } else job.nextDueAt = Date.now() + Math.min(30_000, 2_000 * (2 ** job.teamAttempts));
+    }
+    job.updatedAt = Date.now();
+    if (job.cursor >= job.teamKeys.length) {
+      job.status = job.failedTeams > 0 ? "completed_with_errors" : "completed"; job.activeTeamKey = null;
+    }
+    await this.storage.put(eventTeamSeedKey(job.eventKey), job);
+  }
+
   async alarm(): Promise<void> {
+    const eventSeedJobs = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
+    const activeEventSeed = [...eventSeedJobs.values()].find((job) => job.status === "running");
+    if (activeEventSeed) {
+      if (activeEventSeed.nextDueAt <= Date.now()) await this.processEventTeamSeed(activeEventSeed);
+      const refreshed = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(activeEventSeed.eventKey));
+      if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
+      else if (await this.storage.get<boolean>("scheduler:enabled") === true) await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
+      else await this.storage.deleteAlarm();
+      return;
+    }
     const activeJob = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
     const runningJob = [...activeJob.values()].find((job) => job.status === "running");
     if (runningJob) {

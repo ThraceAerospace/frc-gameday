@@ -30,7 +30,9 @@ export async function GET(request: Request) {
   const inventoryKind = query.get("inventory");
   const coverageAuditYear = query.get("coverageAudit");
   const seasonIngestYear = query.get("seasonIngest");
-  const target = seasonIngestYear ? "/internal/admin/season-ingest?year=" + encodeURIComponent(seasonIngestYear)
+  const eventSeedKey = query.get("eventSeed");
+  const target = eventSeedKey ? "/internal/admin/event-team-seed?event_key=" + encodeURIComponent(eventSeedKey)
+    : seasonIngestYear ? "/internal/admin/season-ingest?year=" + encodeURIComponent(seasonIngestYear)
     : coverageAuditYear ? "/internal/admin/coverage-audit?year=" + encodeURIComponent(coverageAuditYear)
     : kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key) + "&year=" + encodeURIComponent(query.get("year") ?? String(new Date().getUTCFullYear()))
     : inventoryKind ? "/internal/admin/inventory?" + new URLSearchParams({
