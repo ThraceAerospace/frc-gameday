@@ -332,12 +332,13 @@ export class TeamRuntime {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) continue;
       const result = await this.pollResourceNow(resource);
+      const retryableFailure = "deferredUntil" in result || result.status === "failed";
       const retryAt = "deferredUntil" in result ? result.deferredUntil
         : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (tx) => {
         const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
-        if (("deferredUntil" in result || !result.success) && item.attempts < 8) {
+        if (retryableFailure && item.attempts < 8) {
           next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
         }
         await tx.put(MANUAL_QUEUE_KEY, next);
