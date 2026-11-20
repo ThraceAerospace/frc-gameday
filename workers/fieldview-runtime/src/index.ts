@@ -149,9 +149,6 @@ export default {
   async fetch(request: Request, env: RuntimeEnvironment): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/tba" && request.method === "POST") {
-      if (!env.TBA_WEBHOOK_SECRET) {
-        return Response.json({ error: "Webhook secret is not configured" }, { status: 503 });
-      }
       const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
       if (declaredLength > 1_000_000) {
         return Response.json({ error: "Webhook payload too large" }, { status: 413 });
@@ -160,9 +157,20 @@ export default {
       if (rawBody.byteLength > 1_000_000) {
         return Response.json({ error: "Webhook payload too large" }, { status: 413 });
       }
+
+      // Match the established Vercel webhook authentication contract:
+      // a missing signature is a malformed request (418), while a supplied
+      // but incorrect signature is unauthorized (401).
       const signature = request.headers.get("X-TBA-HMAC");
+      if (!signature) {
+        return new Response("I'm a teapot", { status: 418 });
+      }
+      if (!env.TBA_WEBHOOK_SECRET) {
+        console.error("[WEBHOOK][TBA] TBA_WEBHOOK_SECRET is not configured");
+        return new Response("Internal Server Error", { status: 500 });
+      }
       if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
-        return Response.json({ error: "Invalid TBA webhook signature" }, { status: 401 });
+        return new Response("Unauthorized", { status: 401 });
       }
 
       let payload: unknown;
