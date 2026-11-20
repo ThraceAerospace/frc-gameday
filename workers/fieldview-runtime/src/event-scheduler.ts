@@ -1260,7 +1260,7 @@ export class EventScheduler {
           if (acquired === resources.length && failed === 0 && unavailable === 0 && stale === 0) job.counts.teams_complete += 1;
           else if (acquired > 0) job.counts.teams_partial += 1;
           else job.counts.teams_failed += 1;
-          await this.storage.put("registry:teams", [...new Set([...(await this.storage.get<string[]>("registry:teams") ?? []), teamKey])].sort());
+          // Team registration is persisted before the seed starts; do not rewrite it again on completion.
           job.teamCursor += 1;
           job.teamResourceCursor = 0;
           job.resourceAttempts = 0;
