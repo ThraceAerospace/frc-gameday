@@ -1183,11 +1183,26 @@ export class EventScheduler {
         errors.push("Team discovery: " + detail);
         await this.storage.put("scheduler:team-discovery-error", detail);
       }
+      let thisWeekPending = false;
+      try {
+        thisWeekPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
+        await this.storage.delete("scheduler:this-week-error");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        errors.push("This-week classification: " + detail);
+        await this.storage.put("scheduler:this-week-error", detail);
+        thisWeekPending = true;
+      }
       await this.storage.put("scheduler:last-run-at", Date.now());
       if (await this.storage.get<boolean>("scheduler:enabled") === true) {
         await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+      } else if (thisWeekPending) {
+        await this.storage.setAlarm(Date.now() + 1_000);
       }
-      return Response.json({ ran: true, errors, scheduler_enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false });
+      return Response.json({
+        ran: true, errors, this_week_pending: thisWeekPending,
+        scheduler_enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/start") {
@@ -1374,6 +1389,7 @@ export class EventScheduler {
         const resumeAt = refreshed?.resumeAlarmAt ?? null;
         await this.storage.setAlarm(Math.max(Date.now() + 100, resumeAt ?? Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs));
       }
+      else if (await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY)) await this.storage.setAlarm(Date.now() + 100);
       else await this.storage.deleteAlarm();
       return;
     }
@@ -1385,10 +1401,20 @@ export class EventScheduler {
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt ?? Date.now() + 1_000));
       else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
         await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
-      } else await this.storage.deleteAlarm();
+      } else if (await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY)) await this.storage.setAlarm(Date.now() + 100);
+      else await this.storage.deleteAlarm();
       return;
     }
-    if (await this.storage.get<boolean>("scheduler:enabled") !== true) return;
+    if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
+      const weeklyProgress = await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY);
+      if (!weeklyProgress) return;
+      const pending = await this.measureStage("this-week-event-classification", () =>
+        this.refreshThisWeekProjection(eventPollingPolicy(this.env)),
+      );
+      if (pending) await this.storage.setAlarm(Date.now() + 1_000);
+      else await this.storage.deleteAlarm();
+      return;
+    }
     const policy = eventPollingPolicy(this.env);
     try {
       await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
