@@ -1474,7 +1474,7 @@ export class EventScheduler {
 
     const eventsByKey = new Map(discovery.events
       .filter((event) => typeof event.key === "string")
-      .map((event) => [event.key, event]));
+      .map((event) => [event.key, event] as const));
     const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
     const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
     const batch = progress.eventKeys.slice(progress.cursor, progress.cursor + 10);
