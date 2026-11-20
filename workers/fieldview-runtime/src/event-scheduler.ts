@@ -1020,7 +1020,9 @@ export class EventScheduler {
         ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
       ])].sort();
       const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
-      const cap = 250;
+      // Keep the overview lightweight; full inventory and entity inspection
+      // are separate paginated operations.
+      const cap = 25;
       const events = await Promise.all(eventKeys.slice(0, cap).map(async (key) => {
         try {
           const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(key));
