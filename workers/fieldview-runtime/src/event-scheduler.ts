@@ -301,6 +301,20 @@ export class EventScheduler {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const startedAt = performance.now();
+    const url = new URL(request.url);
+    try {
+      return await this.handleFetch(request);
+    } finally {
+      console.log("[FV][EventScheduler] request", JSON.stringify({
+        method: request.method,
+        path: url.pathname,
+        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      }));
+    }
+  }
+
+  private async handleFetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/events") {
       const year = Number(url.searchParams.get("year"));
@@ -1039,7 +1053,7 @@ export class EventScheduler {
       const policy = eventPollingPolicy(this.env);
       const errors: string[] = [];
       try {
-        await this.discoverAndSchedule(policy);
+        await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
         await this.storage.delete("scheduler:last-error");
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -1224,10 +1238,21 @@ export class EventScheduler {
   }
 
   async alarm(): Promise<void> {
+    const startedAt = performance.now();
+    try {
+      await this.handleAlarm();
+    } finally {
+      console.log("[FV][EventScheduler] alarm", JSON.stringify({
+        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      }));
+    }
+  }
+
+  private async handleAlarm(): Promise<void> {
     const eventSeedJobs = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
     const activeEventSeed = [...eventSeedJobs.values()].find((job) => job.status === "running");
     if (activeEventSeed) {
-      if (activeEventSeed.nextDueAt <= Date.now()) await this.processEventTeamSeed(activeEventSeed);
+      if (activeEventSeed.nextDueAt <= Date.now()) await this.measureStage("event-team-seed", () => this.processEventTeamSeed(activeEventSeed));
       const refreshed = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(activeEventSeed.eventKey));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
       else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
@@ -1240,7 +1265,7 @@ export class EventScheduler {
     const activeJob = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
     const runningJob = [...activeJob.values()].find((job) => job.status === "running");
     if (runningJob) {
-      await this.processSeasonIngest(runningJob);
+      await this.measureStage("season-ingest", () => this.processSeasonIngest(runningJob));
       const refreshed = await this.storage.get<SeasonIngestJob>(seasonIngestKey(runningJob.year));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt ?? Date.now() + 1_000));
       else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
@@ -1258,7 +1283,7 @@ export class EventScheduler {
       await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
     }
     try {
-      const teamDiscovery = await this.discoverTeams(new Date().getUTCFullYear(), TEAM_DISCOVERY_PREFIX, 4);
+      const teamDiscovery = await this.measureStage("team-discovery", () => this.discoverTeams(new Date().getUTCFullYear(), TEAM_DISCOVERY_PREFIX, 4));
       if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
       else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
     } catch (error) {
@@ -1272,6 +1297,25 @@ export class EventScheduler {
     const nextDelay = teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs;
     await this.storage.setAlarm(Math.max(Date.now() + 100, Math.min(Date.now() + nextDelay, providerDeferredUntil ?? Number.MAX_SAFE_INTEGER)));
     if (providerDeferredUntil !== undefined) await this.storage.delete("scheduler:provider-deferred-until");
+  }
+
+  private async measureStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
+    const startedAt = performance.now();
+    try {
+      const result = await operation();
+      console.log("[FV][EventScheduler] alarm-stage", JSON.stringify({
+        stage, outcome: "success",
+        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      }));
+      return result;
+    } catch (error) {
+      console.error("[FV][EventScheduler] alarm-stage", JSON.stringify({
+        stage, outcome: "error",
+        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      throw error;
+    }
   }
 
   private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
