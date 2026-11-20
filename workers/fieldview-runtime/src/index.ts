@@ -681,7 +681,7 @@ export default {
     }
     const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
     context.waitUntil((async () => {
-      const response = await scheduler.fetch(new Request("https://event-scheduler/run", { method: "POST" }));
+      const response = await scheduler.fetch(new Request("https://event-scheduler/daily", { method: "POST" }));
       if (!response.ok) throw new Error("Daily EventScheduler run failed with HTTP " + response.status);
       const result = await response.json();
       console.log("[FV][Scheduler] Daily run completed", JSON.stringify(result));
