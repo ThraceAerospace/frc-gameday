@@ -18,6 +18,48 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
+test("EventRuntime does not rewrite unchanged schedules, manual queues, or alarm deadlines", async () => {
+  const storage = new MemoryStorage();
+  let taskPuts = 0, queuePuts = 0, alarmSets = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => {
+    if (String(key).startsWith("task:")) taskPuts += 1;
+    if (key === "manual:poll-queue") queuePuts += 1;
+    return originalPut(key, value);
+  };
+  const originalSetAlarm = storage.setAlarm.bind(storage);
+  storage.setAlarm = async (value) => { alarmSets += 1; return originalSetAlarm(value); };
+  const eventKey = "2026writecheck";
+  const endpoint = eventResourceEndpoints(eventKey)[0];
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+
+  const dueAt = Date.now() + 60_000;
+  await runtime.schedulePolls([endpoint], 60_000, dueAt);
+  const firstTaskPuts = taskPuts, firstAlarmSets = alarmSets;
+  assert.equal(firstTaskPuts, 1);
+  assert.equal(firstAlarmSets, 1);
+
+  await runtime.schedulePolls([endpoint], 60_000, dueAt);
+  assert.equal(taskPuts, firstTaskPuts, "identical recurring task should not be rewritten");
+  assert.equal(alarmSets, firstAlarmSets, "identical alarm deadline should not be rewritten");
+
+  await runtime.enqueueManualPolls([endpoint]);
+  const firstQueuePuts = queuePuts;
+  assert.equal(firstQueuePuts, 1);
+  await runtime.enqueueManualPolls([endpoint]);
+  assert.equal(queuePuts, firstQueuePuts, "already queued manual work should not be rewritten");
+  assert.equal(alarmSets, firstAlarmSets + 1, "only the newly earlier manual deadline should rearm");
+  await runtime.enqueueManualPolls([endpoint]);
+  assert.equal(queuePuts, firstQueuePuts);
+  assert.equal(alarmSets, firstAlarmSets + 1);
+});
+
 test("EventRuntime persists endpoint validators, source versions, and webhook patches", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
