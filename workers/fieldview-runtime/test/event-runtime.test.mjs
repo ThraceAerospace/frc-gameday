@@ -134,7 +134,7 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   assert.equal(storage.values.get(key).revision, updated.revision);
 });
 
-test("public snapshot demand schedules missing event resources asynchronously and coalesces requests", async () => {
+test("public event snapshot reads are read-only; explicit refresh processes one provider request per alarm", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0;
@@ -149,19 +149,26 @@ test("public snapshot demand schedules missing event resources asynchronously an
     headers: { "X-FieldView-Event-Key": eventKey },
   });
 
-  const first = await runtime.fetch(request());
-  assert.equal(first.status, 200);
-  assert.equal(providerCalls, 0, "public read must not wait for provider ingestion");
-  assert.equal(storage.alarmAt <= Date.now(), true);
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length,
-    eventResourceEndpoints(eventKey).length);
+  assert.equal((await runtime.fetch(request())).status, 200);
+  assert.equal((await runtime.fetch(request())).status, 200);
+  assert.equal(providerCalls, 0);
+  assert.equal(storage.alarmAt, null);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 0);
+  assert.equal(storage.values.has("manual:poll-queue"), false);
 
-  await runtime.fetch(request());
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length,
-    eventResourceEndpoints(eventKey).length, "repeat demand must reuse scheduled tasks");
-
-  await runtime.alarm();
-  assert.equal(providerCalls, eventResourceEndpoints(eventKey).length);
+  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(refresh.status, 200);
+  assert.equal(providerCalls, 1, "an alarm processes only one provider request");
+  for (let index = 0; index < eventResourceEndpoints(eventKey).length; index += 1) {
+    const queue = storage.values.get("manual:poll-queue") ?? [];
+    if (queue.length === 0) break;
+    storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
+    await runtime.alarm();
+  }
+  assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
 });
 
 test("GET snapshot composes canonical event-team domain objects with source metadata", async () => {
@@ -823,13 +830,7 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
   assert.equal(storage.values.has("analytics:publication"), false,
     "snapshot reads must not execute or persist analytics calculations");
 
-  // The snapshot read schedules unrelated missing resources. Keep this test
-  // focused on analytics work rather than acquiring those provider resources.
-  for (const key of storage.values.keys()) {
-    if (key.startsWith("task:") && key !== "task:" + matchesEndpoint) {
-      storage.values.delete(key);
-    }
-  }
+  // Public snapshot reads are read-only and do not enqueue unrelated resources.
   storage.values.set("analytics:due-at", Date.now() - 1);
   await runtime.alarm();
   assert.equal(storage.values.get("analytics:status"), "succeeded", storage.values.get("analytics:last-error") ?? "no calculation error recorded");
