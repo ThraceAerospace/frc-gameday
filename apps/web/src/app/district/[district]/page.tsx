@@ -28,21 +28,21 @@ export default async function DistrictPage({ params }: { params: Promise<{ distr
         <header className="mt-4 border-b border-slate-200 pb-6">
           <p className="font-mono text-xs text-slate-400">{district.key}</p>
           <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">{district.display_name}</h1>
-          <p className="mt-2 text-sm text-slate-500">{teams.length} teams · {events.length} events · {rankings.length} ranked teams</p>
+          <p className="mt-2 text-sm text-slate-500">{snapshot?.teams === undefined ? "Teams pending" : snapshot.teams === null ? "Teams unavailable" : `${teams.length} teams`} · {snapshot?.events === undefined ? "Events pending" : snapshot.events === null ? "Events unavailable" : `${events.length} events`} · {snapshot?.rankings === undefined ? "Rankings pending" : snapshot.rankings === null ? "Rankings unavailable" : `${rankings.length} ranked teams`}</p>
         </header>
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
           <section className="min-w-0">
             <h2 className="mb-3 text-lg font-bold text-slate-900">Events</h2>
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               {events.map((event, index) => <Link key={event.key} href={`/event/${event.key}`} className={`block px-4 py-3 hover:bg-[var(--fv-brand-soft)]/50 ${index ? "border-t border-slate-100" : ""}`}><p className="font-semibold text-slate-900">{event.name}</p><p className="mt-1 text-xs text-slate-500">{event.city}{event.state_prov ? `, ${event.state_prov}` : ""} · {event.start_date} – {event.end_date}</p></Link>)}
-              {!events.length && <p className="p-4 text-sm text-slate-500">No district events are listed.</p>}
+              {!events.length && <p className="p-4 text-sm text-slate-500">{snapshot?.events === undefined ? "District events have not been acquired." : snapshot.events === null ? "District events are unavailable." : "No district events are listed."}</p>}
             </div>
           </section>
           <section className="min-w-0">
             <h2 className="mb-3 text-lg font-bold text-slate-900">District rankings</h2>
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               {rankings.map((ranking, index) => <div key={ranking.team_key ?? index} className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0"><Link href={`/team/${ranking.team_key}?year=${year}`} className="font-mono text-sm font-semibold text-slate-800 hover:text-[var(--fv-brand)]">{ranking.team_key ? formatTeamNumber(ranking.team_key) : "—"}</Link><span className="text-sm font-semibold tabular-nums text-slate-600">{ranking.point_total ?? "—"} pts</span></div>)}
-              {!rankings.length && <p className="p-4 text-sm text-slate-500">No rankings are available yet.</p>}
+              {!rankings.length && <p className="p-4 text-sm text-slate-500">{snapshot?.rankings === undefined ? "District rankings have not been acquired." : snapshot.rankings === null ? "District rankings are unavailable." : "No rankings are available yet."}</p>}
             </div>
           </section>
         </div>
