@@ -38,6 +38,24 @@ function sortEvents(a: TeamEventReference, b: TeamEventReference) {
     a.key.localeCompare(b.key, undefined, { numeric: true });
 }
 
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(items.length, Math.max(1, concurrency)) }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 function getTeamResult(match: CanonicalMatch, teamKey: string) {
   const red = match.alliances?.red;
   const blue = match.alliances?.blue;
@@ -97,8 +115,10 @@ export default async function TeamPage({
   // Team/event pages consume only canonical snapshots. An unacquired or
   // unavailable event section remains unavailable instead of issuing a
   // second provider-shaped request from the page.
-  const eventSections: TeamEventSection[] = (await Promise.all(
-    teamEvents.map(async (teamEvent): Promise<TeamEventSection | null> => {
+  const eventSections: TeamEventSection[] = (await mapWithConcurrency(
+    teamEvents,
+    4,
+    async (teamEvent): Promise<TeamEventSection | null> => {
       const canonical = await getCanonicalEventSnapshot(teamEvent.key);
       const snapshot = canonical?.snapshot;
       const event = snapshot?.event;
@@ -126,7 +146,7 @@ export default async function TeamPage({
         advancementPoints: snapshot.advancement_points ?? null,
         rankings: snapshot.rankings ?? null,
       };
-    }),
+    },
   )).filter((section): section is TeamEventSection => section !== null);
 
   const matchDataComplete = eventSections.length === teamEvents.length &&
