@@ -25,7 +25,7 @@ export default async function DistrictsPage() {
             </Link>
           ))}
         </div>
-        {!directory && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Canonical district data is not available yet.</p>}{directory?.districts === null && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">The district directory is explicitly unavailable from the source.</p>}{directory && Array.isArray(directory.districts) && !districts.length && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No active districts are listed for {year}.</p>}
+        {!directory && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Canonical district data is not available yet.</p>}{directory?.districts === undefined && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">The district directory has not been acquired yet.</p>}{directory?.districts === null && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">The district directory is explicitly unavailable from the source.</p>}{directory && Array.isArray(directory.districts) && !districts.length && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No active districts are listed for {year}.</p>}
       </div>
     </SiteShell>
   );
