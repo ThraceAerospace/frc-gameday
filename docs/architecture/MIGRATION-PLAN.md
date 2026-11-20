@@ -16,6 +16,7 @@ This document is the working migration plan for evolving the existing FieldView 
 | Migration strategy | Incremental, with old and new implementations coexisting temporarily |
 | Backend runtime | Hybrid Cloudflare Workers and Durable Objects |
 | Canonical identity | TBA team, event, and match keys; TBA-first aggregates with field-specific provider enrichment |
+| Weekly event classification | EventScheduler evaluates inclusive date-only event ranges against Monday-Sunday in each event's own IANA timezone; it publishes a bounded, resumable daily projection and ensures EventRuntime ownership for matching events (ADR-0010) |
 
 These decisions are settled unless a concrete implementation constraint requires revisiting one.
 
@@ -367,6 +368,12 @@ The season-wide team investigation read path now delegates to the Worker. It agg
 - The adapter now falls back to canonical per-alliance match score analysis for predicted scores and score deltas when the event analytics aggregate omits those values. It does not calculate new analytics in the browser; it projects already-published EventRuntime analysis into the compatibility view model.
 - Preserve the canonical publication as the source of truth. Do not restore client-side flag calculation or provider fetches to work around missing publication data.
 
+
+### Event-local weekly classification (2026-11-20)
+
+ADR-0010 defines event-local Monday-Sunday classification using inclusive date-only ranges. EventScheduler now computes each event's local current date from its IANA timezone, compares validated `YYYY-MM-DD` start/end dates against that local week, and runs a daily bounded/resumable pass over the retained current-season discovery directory. Every matching event is sent through its EventRuntime lifecycle endpoint, including events whose end date has passed earlier in the same week (those runtimes can be marked expired to avoid unnecessary polling). The completed projection is exposed through the read-only Worker route `GET /events/this-week`; it does not trigger provider acquisition.
+
+This is a backend foundation, not the completed home-page cutover. The existing scheduler still requires explicit activation and has no Cron Trigger configured. Next.js has not yet been migrated to consume this projection, and current-match/webcast enrichment has not yet been separated from initial home-page rendering. Focused timezone/date-range and bounded-job regression tests are the immediate validation requirement. No Worker deployment or production activation has occurred.
 
 ### District runtime migration (2026-11-20)
 
