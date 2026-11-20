@@ -16,17 +16,29 @@ async function fetchCanonicalRuntime(
     console.info("[FV][NextRuntimeFetch]", JSON.stringify({
       operation,
       status: response.status,
-      duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      headers_duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
     }));
     return response;
   } catch (error) {
     console.error("[FV][NextRuntimeFetch]", JSON.stringify({
       operation,
       outcome: "error",
-      duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      total_duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
       error: error instanceof Error ? error.message : String(error),
     }));
     throw error;
+  }
+}
+
+async function readCanonicalJson<T>(operation: string, response: Response): Promise<T> {
+  const startedAt = performance.now();
+  try {
+    return await response.json() as T;
+  } finally {
+    console.info("[FV][NextRuntimeBody]", JSON.stringify({
+      operation,
+      body_parse_duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+    }));
   }
 }
 
@@ -54,7 +66,7 @@ export async function getCanonicalEventSnapshot(
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
     if (!Number.isSafeInteger(version) || version < 0) return null;
 
-    const snapshot = await response.json() as FieldViewEventSnapshot;
+    const snapshot = await readCanonicalJson<FieldViewEventSnapshot>("event-snapshot", response);
     if (snapshot.event_key !== eventKey) return null;
     return { version, snapshot };
   } catch {
@@ -83,13 +95,43 @@ export async function getCanonicalEventAnalytics(
     const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", baseUrl);
     const response = await fetchCanonicalRuntime("event-analytics", url, fetcher);
     if (!response.ok) return null;
-    const value = await response.json() as CanonicalEventAnalyticsResponse;
+    const value = await readCanonicalJson<CanonicalEventAnalyticsResponse>("event-analytics", response);
     if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) return null;
     return value;
   } catch {
     return null;
   }
 }
+
+export type CanonicalEventWeekResponse = {
+  runDate: string;
+  evaluatedAt: number;
+  events: FieldViewEvent[];
+};
+
+/** Read EventScheduler's precomputed weekly projection; never fan out to EventRuntime here. */
+export async function getCanonicalEventThisWeek(
+  fetcher: typeof fetch = fetch,
+): Promise<CanonicalEventWeekResponse | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl) return null;
+  try {
+    const url = new URL("/events/this-week", baseUrl);
+    const response = await fetchCanonicalRuntime("event-this-week", url, fetcher, {
+      cache: "force-cache",
+      next: { revalidate: 300, tags: ["fieldview-events-this-week"] },
+    });
+    if (!response.ok) return null;
+    const payload = await readCanonicalJson<CanonicalEventWeekResponse>("event-this-week", response);
+    if (typeof payload.runDate !== "string" || !Number.isFinite(payload.evaluatedAt) ||
+        !Array.isArray(payload.events) ||
+        !payload.events.every((event) => typeof event?.key === "string")) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export async function getCanonicalEventDiscovery(
   year: number,
   fetcher: typeof fetch = fetch,
@@ -107,7 +149,7 @@ export async function getCanonicalEventDiscovery(
       next: { revalidate: 300, tags: [`fieldview-event-discovery-${year}`] },
     });
     if (!response.ok) return null;
-    const payload = await response.json() as { year?: number; events?: unknown };
+    const payload = await readCanonicalJson<{ year?: number; events?: unknown }>("event-discovery", response);
     if (payload.year !== year || !Array.isArray(payload.events)) return null;
     if (!payload.events.every((event) =>
       typeof event === "object" && event !== null &&
@@ -128,7 +170,7 @@ export async function getCanonicalTeamDiscovery(
     const url = new URL(`/teams/discovery?year=${year}`, baseUrl);
     const response = await fetchCanonicalRuntime("team-discovery", url, fetcher);
     if (!response.ok) return null;
-    const payload = await response.json() as { year?: number; teams?: unknown };
+    const payload = await readCanonicalJson<{ year?: number; teams?: unknown }>("team-discovery", response);
     if (payload.year !== year || !Array.isArray(payload.teams)) return null;
     if (!payload.teams.every((team) =>
       typeof team === "object" && team !== null &&
@@ -152,7 +194,7 @@ export async function getCanonicalTeamAnalytics(
     const url = new URL("/teams/" + encodeURIComponent(teamKey) + "/analytics?year=" + year, baseUrl);
     const response = await fetchCanonicalRuntime("team-analytics", url, fetcher);
     if (!response.ok) return null;
-    const value = await response.json() as Record<string, unknown>;
+    const value = await readCanonicalJson<Record<string, unknown>>("team-analytics", response);
     if (value.team !== Number(teamKey.replace(/^frc/i, "")) || value.year !== year ||
         !Array.isArray(value.events) || typeof value.collection !== "object" || value.collection === null) return null;
     return value;
@@ -180,7 +222,7 @@ export async function getCanonicalTeamSnapshot(
     if (!response.ok) return null;
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
     if (!Number.isSafeInteger(version) || version < 0) return null;
-    const snapshot = await response.json() as FieldViewTeamSnapshot;
+    const snapshot = await readCanonicalJson<FieldViewTeamSnapshot>("team-snapshot", response);
     if (snapshot.team_key !== teamKey || snapshot.year !== year) return null;
     return { version, snapshot };
   } catch {
@@ -199,7 +241,7 @@ export async function getCanonicalDistrictDirectory(
     const url = new URL("/districts/discovery?year=" + year, baseUrl);
     const response = await fetchCanonicalRuntime("district-discovery", url, fetcher);
     if (!response.ok) return null;
-    const value = await response.json() as FieldViewDistrictDirectory;
+    const value = await readCanonicalJson<FieldViewDistrictDirectory>("district-discovery", response);
     if (value.year !== year || (value.districts !== null && value.districts !== undefined && !Array.isArray(value.districts))) return null;
     return value;
   } catch { return null; }
@@ -217,7 +259,7 @@ export async function getCanonicalDistrictSnapshot(
     const url = new URL("/districts/" + encodeURIComponent(districtKey) + "/snapshot?year=" + year, baseUrl);
     const response = await fetchCanonicalRuntime("district-snapshot", url, fetcher);
     if (!response.ok) return null;
-    const value = await response.json() as FieldViewDistrictSnapshot;
+    const value = await readCanonicalJson<FieldViewDistrictSnapshot>("district-snapshot", response);
     if (value.district_key !== districtKey || value.year !== year) return null;
     return value;
   } catch { return null; }
