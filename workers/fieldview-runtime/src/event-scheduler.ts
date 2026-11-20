@@ -5,6 +5,7 @@ import { eventResourceEndpoints } from "./event-runtime.ts";
 import { teamResourceEndpoints } from "./team-runtime.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
 import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
+import { normalizeFieldViewDistrictDirectory, normalizeFieldViewDistrictSnapshot } from "../../../packages/domain/src/normalization/district.ts";
 import type { FieldViewTeam } from "../../../packages/domain/src/team.ts";
 import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
@@ -13,6 +14,10 @@ const DISCOVERY_PREFIX = "discovery:";
 const TEAM_DISCOVERY_PREFIX = "team-discovery:";
 const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
 const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
+const DISTRICT_DIRECTORY_PREFIX = "district-directory:";
+const DISTRICT_RESOURCE_PREFIX = "district-resource:";
+
+interface DistrictResourceCache { payload?: unknown; etag: string | null; retrievedAt: number | null; checkedAt: number; status: "available" | "unavailable" | "failed"; }
 
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
@@ -279,6 +284,15 @@ export class EventScheduler {
     }
   }
 
+ 
+  private districtSource(record: DistrictResourceCache) {
+    if (record.payload !== undefined && record.retrievedAt !== null) {
+      const stale = record.status !== "available" || Date.now() - record.checkedAt > 6 * 60 * 60_000;
+      return { status: stale ? "stale" as const : "available" as const, retrieved_at: new Date(record.retrievedAt).toISOString(), ...(record.etag === null ? {} : { validator: record.etag }) };
+    }
+    return { status: record.status === "unavailable" ? "unavailable" as const : "failed" as const, retrieved_at: null, ...(record.etag === null ? {} : { validator: record.etag }) };
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/events") {
@@ -342,9 +356,103 @@ export class EventScheduler {
       );
     }
 
+ 
+    if (request.method === "GET" && url.pathname === "/districts") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid district year" }, { status: 400 });
+      const cached = await this.storage.get<DistrictResourceCache>(DISTRICT_DIRECTORY_PREFIX + year);
+      if (!cached || cached.payload === undefined) return Response.json({ error: "Canonical district directory is not available" }, { status: 503 });
+      const source = this.districtSource(cached);
+      return Response.json(normalizeFieldViewDistrictDirectory({
+        year, tba_districts: cached.payload as never, sources: { tba_districts: source },
+      }), { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=300" } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/district") {
+      const year = Number(url.searchParams.get("year"));
+      const key = url.searchParams.get("key") ?? "";
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200 || !/^[a-zA-Z0-9_-]+$/.test(key)) return Response.json({ error: "Invalid district identity" }, { status: 400 });
+      const names = ["district", "teams", "events", "rankings", "advancement"] as const;
+      const records = await Promise.all(names.map((name) => this.storage.get<DistrictResourceCache>(DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":" + name)));
+      if (records.every((record) => !record || record.payload === undefined)) return Response.json({ error: "Canonical district snapshot is not available" }, { status: 503 });
+      const sources: Record<string, unknown> = {};
+      const fields = ["tba_district", "tba_district_teams", "tba_district_events", "tba_district_rankings", "tba_district_advancement"];
+      records.forEach((record, index) => { if (record) sources[fields[index]] = this.districtSource(record); });
+      const snapshot = normalizeFieldViewDistrictSnapshot({
+        district_key: key, year,
+        ...(records[0]?.payload === undefined ? {} : { tba_district: records[0].payload as never }),
+        ...(records[1]?.payload === undefined ? {} : { tba_teams: records[1].payload as never }),
+        ...(records[2]?.payload === undefined ? {} : { tba_events: records[2].payload as never }),
+        ...(records[3]?.payload === undefined ? {} : { tba_rankings: records[3].payload as never }),
+        ...(records[4]?.payload === undefined ? {} : { tba_advancement: records[4].payload as never }),
+        sources: sources as never,
+      });
+      return Response.json(snapshot, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
+    }
+
     const authorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+ 
+    if (request.method === "POST" && url.pathname === "/admin/district-refresh") {
+      const year = Number(url.searchParams.get("year"));
+      const key = url.searchParams.get("district");
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200 || (key !== null && !/^[a-zA-Z0-9_-]+$/.test(key))) {
+        return Response.json({ error: "A valid year and optional district key are required" }, { status: 400 });
+      }
+      const results: Array<{ resource: string; status: string; http_status?: number }> = [];
+      const specs = key === null
+        ? [{ name: "districts", endpoint: TBA_ENDPOINTS.districts(year), storageKey: DISTRICT_DIRECTORY_PREFIX + year }]
+        : [
+            { name: "district", endpoint: TBA_ENDPOINTS.district(key), storageKey: DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":district" },
+            { name: "teams", endpoint: TBA_ENDPOINTS.districtTeams(key), storageKey: DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":teams" },
+            { name: "events", endpoint: TBA_ENDPOINTS.districtEvents(key), storageKey: DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":events" },
+            { name: "rankings", endpoint: TBA_ENDPOINTS.districtRankings(key), storageKey: DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":rankings" },
+            { name: "advancement", endpoint: TBA_ENDPOINTS.districtAdvancement(key), storageKey: DISTRICT_RESOURCE_PREFIX + year + ":" + key + ":advancement" },
+          ];
+      for (const spec of specs) {
+        const previous = await this.storage.get<DistrictResourceCache>(spec.storageKey);
+        const headers = new Headers();
+        if (previous?.etag) headers.set("If-None-Match", previous.etag);
+        try {
+          const response = await this.requestWithProviderGate(spec.endpoint, () => this.api.request(spec.endpoint, { headers }));
+          const now = Date.now();
+          if (response.status === 304 && previous?.payload !== undefined) {
+            const next = { ...previous, checkedAt: now, status: "available" as const };
+            if (JSON.stringify(next) !== JSON.stringify(previous)) await this.storage.put(spec.storageKey, next);
+            results.push({ resource: spec.name, status: "unchanged", http_status: 304 });
+          } else if (response.status === 404) {
+            const next: DistrictResourceCache = { etag: response.headers.get("ETag"), retrievedAt: null, checkedAt: now, status: "unavailable" };
+            await this.storage.put(spec.storageKey, next);
+            results.push({ resource: spec.name, status: "unavailable", http_status: 404 });
+          } else if (response.ok) {
+            const payload = await response.json();
+            const next: DistrictResourceCache = { payload, etag: response.headers.get("ETag"), retrievedAt: now, checkedAt: now, status: "available" };
+            if (!previous || JSON.stringify(next.payload) !== JSON.stringify(previous.payload) || next.etag !== previous.etag || previous.status !== "available") {
+              await this.storage.put(spec.storageKey, next);
+            } else if (previous.checkedAt !== now) {
+              await this.storage.put(spec.storageKey, { ...previous, checkedAt: now });
+            }
+            results.push({ resource: spec.name, status: "available", http_status: response.status });
+          } else {
+            const next: DistrictResourceCache = previous?.payload !== undefined
+              ? { ...previous, checkedAt: now, status: "failed" }
+              : { etag: previous?.etag ?? null, retrievedAt: null, checkedAt: now, status: "failed" };
+            await this.storage.put(spec.storageKey, next);
+            results.push({ resource: spec.name, status: "failed", http_status: response.status });
+          }
+        } catch {
+          const now = Date.now();
+          const next: DistrictResourceCache = previous?.payload !== undefined
+            ? { ...previous, checkedAt: now, status: "failed" }
+            : { etag: previous?.etag ?? null, retrievedAt: null, checkedAt: now, status: "failed" };
+          await this.storage.put(spec.storageKey, next);
+          results.push({ resource: spec.name, status: "failed" });
+        }
+      }
+      return Response.json({ year, district_key: key, results }, { headers: { "Cache-Control": "no-store" } });
+    }
 
     if (request.method === "POST" && url.pathname === "/provider-request/acquire") {
       const body: unknown = await request.json().catch(() => null);
