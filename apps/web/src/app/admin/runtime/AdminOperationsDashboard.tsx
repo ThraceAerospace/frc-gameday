@@ -261,13 +261,13 @@ export default function AdminOperationsDashboard() {
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
     void loadEventTeamSeed(selected.key, selected.year);
-    const timer = window.setInterval(() => void loadEventTeamSeed(selected.key, selected.year), 3_000);
+    const timer = window.setInterval(() => void loadEventTeamSeed(selected.key, selected.year), 10_000);
     return () => window.clearInterval(timer);
   }, [authenticated, selected?.kind, selected?.key, selected?.year, loadEventTeamSeed]);
 
   useEffect(() => {
     if (!authenticated || !token) return;
-    const timer = window.setInterval(() => void refresh(true), 15_000);
+    const timer = window.setInterval(() => void refresh(true), 60_000);
     return () => window.clearInterval(timer);
   }, [authenticated, token, refresh]);
 
@@ -284,7 +284,7 @@ export default function AdminOperationsDashboard() {
 
   useEffect(() => {
     if (!authenticated || seasonIngest?.status !== "running") return;
-    const timer = window.setInterval(() => void loadSeasonIngest(), 3_000);
+    const timer = window.setInterval(() => void loadSeasonIngest(), 10_000);
     return () => window.clearInterval(timer);
   }, [authenticated, seasonIngest?.status, loadSeasonIngest]);
 
