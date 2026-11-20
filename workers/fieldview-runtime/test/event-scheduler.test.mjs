@@ -608,6 +608,12 @@ test("weekly event classification uses inclusive date-only ranges and the event 
 
   const mondayMidnight = classifyEventThisWeek(fridayThroughSunday, Date.parse("2026-11-23T05:00:00.000Z"));
   assert.equal(mondayMidnight?.isThisWeek, false);
+  assert.equal(classifyEventThisWeek({
+    start_date: "2026-11-24", end_date: "2026-11-23", timezone: "America/New_York",
+  }, sundayEnd), null);
+  assert.equal(classifyEventThisWeek({
+    start_date: "2026-11-20", end_date: "2026-11-22", timezone: "Not/A-Timezone",
+  }, sundayEnd), null);
 });
 
 test("the same instant can belong to different calendar weeks in different event timezones", () => {
