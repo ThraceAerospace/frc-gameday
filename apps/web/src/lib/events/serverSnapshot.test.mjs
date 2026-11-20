@@ -46,7 +46,11 @@ test("canonical event discovery reader validates year and returns domain events"
   const { getCanonicalEventDiscovery } = await import("./serverSnapshot.ts");
   const events = await getCanonicalEventDiscovery(2026, async (url, init) => {
     requestedUrl = String(url);
-    assert.equal(init?.cache, "no-store");
+    assert.equal(init?.cache, "force-cache");
+    assert.deepEqual(init?.next, {
+      revalidate: 300,
+      tags: ["fieldview-event-discovery-2026"],
+    });
     return Response.json({
       year: 2026,
       events: [{ key: "2026test", sources: { tba_event: { status: "available" } } }],
