@@ -435,11 +435,14 @@ export class EventScheduler {
     }
 
     if (request.method === "GET" && url.pathname === "/events/this-week") {
-      const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
+      const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; checkedAt?: number; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
       if (!projection) return Response.json({ error: "This-week event projection is not ready" }, { status: 503 });
-      const retrievedAt = new Date(projection.evaluatedAt).toISOString();
+      const retrievedAt = new Date(projection.checkedAt ?? projection.evaluatedAt).toISOString();
+      const sourceStatus = Date.now() - (projection.checkedAt ?? projection.evaluatedAt) > eventPollingPolicy(this.env).discoveryIntervalMs * 2
+        ? "stale" as const
+        : "available" as const;
       const events = projection.events.map((event) => normalizeFieldViewEvent(event, {
-        tba_event: { status: "available", retrieved_at: retrievedAt },
+        tba_event: { status: sourceStatus, retrieved_at: retrievedAt },
       }));
       return Response.json(
         { runDate: projection.runDate, evaluatedAt: projection.evaluatedAt, events },
@@ -1509,14 +1512,27 @@ export class EventScheduler {
     }
     progress.cursor += batch.length;
     await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
-    await this.storage.put("scheduler:event-keys", [...scheduledKeys].sort());
-    await this.storage.put("registry:runtime-events", [...runtimeEventKeys].sort());
+    const nextScheduledKeys = [...scheduledKeys].sort();
+    const previousScheduledKeys = await this.storage.get<string[]>("scheduler:event-keys") ?? [];
+    if (JSON.stringify(previousScheduledKeys) !== JSON.stringify(nextScheduledKeys)) {
+      await this.storage.put("scheduler:event-keys", nextScheduledKeys);
+    }
+    const nextRuntimeEventKeys = [...runtimeEventKeys].sort();
+    const previousRuntimeEventKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+    if (JSON.stringify(previousRuntimeEventKeys) !== JSON.stringify(nextRuntimeEventKeys)) {
+      await this.storage.put("registry:runtime-events", nextRuntimeEventKeys);
+    }
 
     if (progress.cursor < progress.eventKeys.length) return true;
 
     const included = new Set(progress.includedKeys);
     const events = discovery.events.filter((event) => typeof event.key === "string" && included.has(event.key));
-    const projection = { evaluatedAt: now, runDate, events };
+    const projection = {
+      evaluatedAt: now,
+      runDate,
+      checkedAt: discovery.checkedAt ?? discovery.updatedAt,
+      events,
+    };
     const previous = await this.storage.get<typeof projection>(THIS_WEEK_PROJECTION_KEY);
     if (!previous || JSON.stringify(previous) !== JSON.stringify(projection)) {
       await this.storage.put(THIS_WEEK_PROJECTION_KEY, projection);
