@@ -1230,13 +1230,15 @@ export class EventScheduler {
       await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
     }
     try {
-      await this.discoverTeams(new Date().getUTCFullYear());
-      await this.storage.delete("scheduler:team-discovery-error");
+      const teamDiscovery = await this.discoverTeams(new Date().getUTCFullYear(), TEAM_DISCOVERY_PREFIX, 4);
+      if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
+      else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
     } catch (error) {
       await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
     }
     await this.storage.put("scheduler:last-run-at", Date.now());
-    await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
+    const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
+    await this.storage.setAlarm(Date.now() + (teamRefresh ? 1_000 : policy.discoveryIntervalMs));
   }
 
   private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
@@ -1638,6 +1640,7 @@ export class EventScheduler {
     while (cursor < 100 && requestCount < pageLimit) {
       const pageKey = String(cursor);
       const cachedPage = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + cursor) ??
+        await this.storage.get<TBATeam[]>(key + ":page:" + cursor) ??
         (cursor === 0 ? cached?.teams : undefined);
       const etag = refresh.pageEtags[pageKey] ?? cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
