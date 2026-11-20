@@ -221,6 +221,12 @@ export default {
       }));
     }
 
+    if (url.pathname === "/events/this-week" && request.method === "GET") {
+      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      return scheduler.fetch(new Request("https://event-scheduler/events/this-week"));
+    }
+
     if (url.pathname === "/events/discovery" && request.method === "GET") {
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
       const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
