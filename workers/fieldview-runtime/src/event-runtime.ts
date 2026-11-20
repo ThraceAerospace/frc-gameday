@@ -209,6 +209,15 @@ function hasAcquiredValue(state: EndpointState<unknown> | undefined): boolean {
   return Boolean(state && (state.lastFetchedAt !== null || state.lastWebhookAt !== null));
 }
 
+function staggeredProviderDueAt(endpoint: string, base: number, interval: number): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < endpoint.length; index += 1) {
+    hash ^= endpoint.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return base + ((hash >>> 0) % Math.max(1, interval));
+}
+
 
 function buildAnalyticsInputRecord(
   inputKey: string,
@@ -1123,42 +1132,66 @@ export class EventRuntime {
     // retry deadline; at-most-once Statbotics work is removed before its fetch.
     const dueTasks = await this.storage.transaction(async (transaction) => {
       const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
-      const due = [...tasks.values()].filter((task) => task.dueAt <= now);
+      const due = [...tasks.values()].filter((task) => task.dueAt <= now)
+        .sort((left, right) => left.dueAt - right.dueAt || left.endpoint.localeCompare(right.endpoint));
       if (due.length > 0 && !hasEventIdentity) {
         throw new Error("Cannot execute event alarm without persisted event identity");
-      }
-      for (const task of due) {
-        // Reserve before I/O. Even at-most-once work remains persisted until
-        // the shared request gate grants a lease; a deferred request is not an attempt.
-        await transaction.put(taskStorageKey(task.endpoint), {
-          ...task,
-          dueAt: now + this.retryDelay(task),
-          attempts: task.attempts + 1,
-        });
       }
       const queued = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
       if (manualDue.length > 0 && !hasEventIdentity) throw new Error("Cannot execute manual event work without persisted event identity");
-      await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
+
+      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+      const providerInterval = intervalValue === undefined ? 1_000 : Math.max(100, Number(intervalValue) || 1_000);
+      const deferAt = (endpoint: string) => staggeredProviderDueAt(endpoint, now + providerInterval, providerInterval);
+      const selectedManual = manualDue[0];
+      const selectedTask = selectedManual ? undefined : due[0];
+
+      // One provider request per alarm invocation. A refresh can enqueue many
+      // resources, but the runtime must not issue one gate RPC per resource in
+      // a single alarm and create a synchronized retry storm.
+      for (const task of due) {
+        if (selectedTask?.endpoint === task.endpoint) {
+          await transaction.put(taskStorageKey(task.endpoint), {
+            ...task,
+            dueAt: now + this.retryDelay(task),
+            attempts: task.attempts + 1,
+          });
+        } else if (task.dueAt <= now) {
+          await transaction.put(taskStorageKey(task.endpoint), { ...task, dueAt: deferAt(task.endpoint) });
+        }
+      }
+      if (selectedManual) {
+        await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) =>
+          item.endpoint === selectedManual.endpoint
+            ? { ...item, dueAt: now + 60_000 }
+            : item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
+      } else if (manualDue.length > 0) {
+        await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) =>
+          item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
+      }
+
       const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
       const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
       if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
       await this.rearm(transaction);
-      return { due, manualDue, analyticsDue };
+      return { due: selectedTask ? [selectedTask] : [], manualDue: selectedManual ? [selectedManual] : [], analyticsDue };
     });
 
     // Manual work is independent of recurring poll tasks and is always serviced first.
     for (const item of dueTasks.manualDue) {
       const result = await this.pollEndpoint(item.endpoint);
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
-      const retryableFailure = typeof result !== "boolean" || (!result && latest?.status === "failed");
-      const retryAt = typeof result !== "boolean" ? result.deferredUntil
+      const deferred = typeof result !== "boolean";
+      const retryableFailure = deferred || (!result && latest?.status === "failed");
+      const retryAt = deferred ? result.deferredUntil
         : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (transaction) => {
         const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
         if (retryableFailure && item.attempts < 8) {
-          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
+          // Gate deferral is not a provider attempt and must not consume retries.
+          next.push({ ...item, dueAt: retryAt, attempts: deferred ? item.attempts : item.attempts + 1 });
         }
         await transaction.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(transaction);
