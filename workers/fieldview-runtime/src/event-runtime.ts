@@ -1023,7 +1023,16 @@ export class EventRuntime {
             ? {}
             : { authoritativeRefetchAt: previous.authoritativeRefetchAt }),
         };
-        await transaction.put(key, task);
+        const unchangedTask = previous !== undefined &&
+          previous.endpoint === task.endpoint &&
+          previous.dueAt === task.dueAt &&
+          previous.intervalMs === task.intervalMs &&
+          previous.generation === task.generation &&
+          previous.attempts === task.attempts &&
+          previous.retryOnFailure === task.retryOnFailure &&
+          previous.maxAttempts === task.maxAttempts &&
+          previous.authoritativeRefetchAt === task.authoritativeRefetchAt;
+        if (!unchangedTask) await transaction.put(key, task);
       }
       await this.rearm(transaction);
     });
@@ -1037,7 +1046,12 @@ export class EventRuntime {
         const previous = byEndpoint.get(endpoint);
         byEndpoint.set(endpoint, { endpoint, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
       }
-      await transaction.put(MANUAL_QUEUE_KEY, [...byEndpoint.values()]);
+      const next = [...byEndpoint.values()];
+      const unchanged = current.length === next.length && current.every((item, index) =>
+        item.endpoint === next[index]?.endpoint &&
+        item.dueAt === next[index]?.dueAt &&
+        item.attempts === next[index]?.attempts);
+      if (!unchanged) await transaction.put(MANUAL_QUEUE_KEY, next);
       await this.rearm(transaction);
     });
   }
@@ -1341,8 +1355,12 @@ export class EventRuntime {
         .filter((value): value is number => value !== undefined)
         .reduce<number | null>((next, value) => next === null || value < next ? value : next, null),
     );
-    if (nextDue === null) await transaction.deleteAlarm();
-    else await transaction.setAlarm(nextDue);
+    const currentAlarm = await transaction.getAlarm?.();
+    if (nextDue === null) {
+      if (currentAlarm !== null && currentAlarm !== undefined) await transaction.deleteAlarm();
+    } else if (currentAlarm !== nextDue) {
+      await transaction.setAlarm(nextDue);
+    }
   }
 
   private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean | { deferredUntil: number }> {
