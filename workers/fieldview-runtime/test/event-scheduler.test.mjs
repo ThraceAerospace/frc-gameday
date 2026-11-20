@@ -715,3 +715,45 @@ test("weekly classification processes at most ten events per alarm batch and res
   assert.equal((await storage.get("scheduler:this-week-projection")).events.length, 11);
   assert.equal(await storage.get("scheduler:this-week-progress"), undefined);
 });
+
+test("daily scheduler endpoint runs classification without enabling continuous polling", async () => {
+  const now = Date.now();
+  const parts = new Map(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
+  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
+  const localParts = localDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
+  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
+  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const event = {
+    key: "2026daily", start_date: date(4), end_date: date(6), timezone: "America/New_York",
+  };
+  const storage = new MemoryStorage();
+  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
+    etag: null, events: [event], updatedAt: now, checkedAt: now,
+  });
+  const runtimeRequests = [];
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (request) => {
+          runtimeRequests.push(id);
+          await request.json();
+          return Response.json({ updated: true });
+        },
+      }),
+    },
+  });
+
+  const response = await scheduler.fetch(new Request("https://scheduler/daily", { method: "POST" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).pending, false);
+  assert.equal(await storage.get("scheduler:enabled"), undefined);
+  assert.equal(await storage.get("scheduler:daily-run-requested"), undefined);
+  assert.deepEqual(runtimeRequests, ["2026daily", "2026daily"]);
+  assert.deepEqual((await storage.get("scheduler:this-week-projection")).events.map((item) => item.key), ["2026daily"]);
+});
