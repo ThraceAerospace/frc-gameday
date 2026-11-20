@@ -413,10 +413,8 @@ export class EventRuntime {
           Number.isSafeInteger(body.seasonTeamRevision) && body.seasonTeamRevision >= 0) {
         await this.storage.put(ANALYTICS_SEASON_TEAM_REVISION_KEY, body.seasonTeamRevision);
       }
-      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-        await this.storage.put("analytics:status", "pending");
-      }
+      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+      await this.storage.put("analytics:status", "pending");
       await this.storage.transaction((transaction) => this.rearm(transaction));
       await this.alarm();
       return Response.json({
@@ -494,8 +492,10 @@ export class EventRuntime {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       await this.enqueueManualPolls([endpoint]);
       await this.alarm();
-      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-      await this.storage.put("analytics:status", "pending");
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+        await this.storage.put("analytics:status", "pending");
+      }
       await this.storage.transaction((transaction) => this.rearm(transaction));
       await this.alarm();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
@@ -518,6 +518,8 @@ export class EventRuntime {
       if (typeof intervalMs !== "number" || !Number.isSafeInteger(intervalMs) || intervalMs < 1_000) {
         return Response.json({ error: "intervalMs must be an integer of at least 1000" }, { status: 400 });
       }
+      if (body.analyticsEnabled === false) await this.storage.put(ANALYTICS_ENABLED_KEY, false);
+      else if (body.analyticsEnabled === true) await this.storage.put(ANALYTICS_ENABLED_KEY, true);
       const endpoints = body.endpoints as string[];
       if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
         return Response.json({ error: "Endpoint is not part of this event" }, { status: 400 });
