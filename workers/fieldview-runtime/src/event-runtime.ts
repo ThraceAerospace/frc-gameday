@@ -984,33 +984,6 @@ export class EventRuntime {
     };
   }
 
-  private async scheduleDemandIngestion(now = Date.now()): Promise<void> {
-    const defaultIntervalMs = 24 * 60 * 60_000;
-    await this.storage.transaction(async (transaction) => {
-      for (const endpoint of this.allowedEndpoints) {
-        const state = await transaction.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-        const needsIngestion = !state || state.status === "unknown" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt < now);
-        if (!needsIngestion) continue;
-
-        const key = taskStorageKey(endpoint);
-        const previous = await transaction.get<PollTask>(key);
-        const task: PollTask = previous
-          ? { ...previous, dueAt: Math.min(previous.dueAt, now) }
-          : {
-              endpoint,
-              dueAt: now,
-              intervalMs: defaultIntervalMs,
-              generation: 1,
-              attempts: 0,
-              retryOnFailure: true,
-            };
-        await transaction.put(key, task);
-      }
-      await this.rearm(transaction);
-    });
-  }
-
   async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now(), forceImmediate = false): Promise<void> {
     if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
       throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
