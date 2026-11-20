@@ -1,6 +1,6 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalDistrictDirectory } from "@/lib/events/serverSnapshot";
 
 // TBAClient uses Redis for upstream caching and fetches with cache: "no-store".
 // Keep this route dynamically rendered so Next.js does not try to ISR-cache it.
@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function DistrictsPage() {
   const year = new Date().getFullYear();
-  const districts = await TBA.getDistricts(year);
+  const directory = await getCanonicalDistrictDirectory(year);
+  const districts = directory?.districts ?? [];
   return (
     <SiteShell>
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
@@ -24,7 +25,7 @@ export default async function DistrictsPage() {
             </Link>
           ))}
         </div>
-        {!districts.length && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No active districts are listed for {year}.</p>}
+        {!directory && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Canonical district data is not available yet.</p>}{directory && !districts.length && <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No active districts are listed for {year}.</p>}
       </div>
     </SiteShell>
   );
