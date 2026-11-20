@@ -215,6 +215,8 @@ interface TeamDiscoveryCache {
   /** One ETag and payload per TBA page; TBA pages contain at most 500 teams. */
   pageEtags?: Record<string, string | null>;
   pageCount?: number;
+  /** Immutable page generation selected by the published metadata record. */
+  pagePrefix?: string;
   teamCount?: number;
   teamKeys?: string[];
   /** Legacy single-value cache shape, read only during migration. */
@@ -1642,8 +1644,9 @@ export class EventScheduler {
     if (!cache?.complete || !Number.isSafeInteger(cache.pageCount)) return null;
     if (cache.teams) return cache.teams;
     const teams: TBATeam[] = [];
+    const pagePrefix = cache.pagePrefix ?? key + ":page:";
     for (let page = 0; page < (cache.pageCount ?? 0); page += 1) {
-      const values = await this.storage.get<TBATeam[]>(key + ":page:" + page);
+      const values = await this.storage.get<TBATeam[]>(pagePrefix + page);
       if (!values) return null;
       teams.push(...values);
     }
@@ -1717,13 +1720,15 @@ export class EventScheduler {
     const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
 
-    // Publish atomically at the metadata level only after every page is present.
-    for (let page = 0; page < pages.length; page += 1) await this.storage.put(key + ":page:" + page, pages[page]);
-    for (let page = pages.length; page < (cached?.pageCount ?? 0); page += 1) await this.storage.delete(key + ":page:" + page);
+    // Publish a new immutable page generation, then atomically switch the
+    // metadata pointer. Concurrent public reads continue using the old
+    // generation until the complete replacement is visible.
     const checkedAt = Date.now();
+    const pagePrefix = key + ":snapshot:" + checkedAt + ":page:";
+    for (let page = 0; page < pages.length; page += 1) await this.storage.put(pagePrefix + page, pages[page]);
     const updatedAt = refresh.payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
     await this.storage.put(key, {
-      etag: refresh.pageEtags["0"] ?? null, pageEtags: refresh.pageEtags, pageCount: pages.length,
+      etag: refresh.pageEtags["0"] ?? null, pageEtags: refresh.pageEtags, pageCount: pages.length, pagePrefix,
       teamCount: teams.length, teamKeys: teams.map((team) => team.key).sort(),
       complete: true, updatedAt, checkedAt,
     } satisfies TeamDiscoveryCache);
