@@ -48,6 +48,12 @@ export type FieldViewSourceRecordMetadata =
  * from implying that predictions, OPRs, or playoff data are also fresh.
  */
 export interface FieldViewSourceMetadata {
+  tba_districts?: FieldViewSourceRecordMetadata;
+  tba_district?: FieldViewSourceRecordMetadata;
+  tba_district_teams?: FieldViewSourceRecordMetadata;
+  tba_district_events?: FieldViewSourceRecordMetadata;
+  tba_district_rankings?: FieldViewSourceRecordMetadata;
+  tba_district_advancement?: FieldViewSourceRecordMetadata;
   tba_team?: FieldViewSourceRecordMetadata;
   tba_team_districts?: FieldViewSourceRecordMetadata;
   tba_team_events?: FieldViewSourceRecordMetadata;
