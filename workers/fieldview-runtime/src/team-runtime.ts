@@ -120,12 +120,20 @@ export class TeamRuntime {
   private async enqueueManualPolls(resources: TeamResource[], year: number): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const current = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
+      const existing = new Map(current.map((item) => [item.endpoint, item]));
+      const ordered = new Map<string, ManualTeamPollRequest>();
+      // Preserve caller priority (team event history is first during seed),
+      // while retaining already queued work after the explicitly requested items.
       for (const resource of resources) {
-        const previous = byEndpoint.get(resource.endpoint);
-        byEndpoint.set(resource.endpoint, { endpoint: resource.endpoint, year, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
+        const previous = existing.get(resource.endpoint);
+        ordered.set(resource.endpoint, {
+          endpoint: resource.endpoint, year,
+          dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()),
+          attempts: previous?.attempts ?? 0,
+        });
       }
-      await tx.put(MANUAL_QUEUE_KEY, [...byEndpoint.values()]);
+      for (const item of current) if (!ordered.has(item.endpoint)) ordered.set(item.endpoint, item);
+      await tx.put(MANUAL_QUEUE_KEY, [...ordered.values()]);
       await this.rearm(tx);
     });
   }
