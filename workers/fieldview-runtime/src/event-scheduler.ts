@@ -1238,7 +1238,8 @@ export class EventScheduler {
     }
     await this.storage.put("scheduler:last-run-at", Date.now());
     const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
-    await this.storage.setAlarm(Date.now() + (teamRefresh ? 1_000 : policy.discoveryIntervalMs));
+    const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
+    await this.storage.setAlarm(Date.now() + (teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs));
   }
 
   private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
@@ -1737,6 +1738,10 @@ export class EventScheduler {
 
     const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
     const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
+    const lifecycleProgressKey = "scheduler:event-lifecycle-progress";
+    const lifecycleProgress = await this.storage.get<{ year: number; eventKeys: string[]; cursor: number }>(lifecycleProgressKey);
+    const lifecycleEventKeys = lifecycleProgress?.year === year ? lifecycleProgress.eventKeys : [...events.keys()].sort();
+    let lifecycleCursor = lifecycleProgress?.year === year ? lifecycleProgress.cursor : 0;
     // A previous multi-year scheduler may have left future-year EventRuntime
     // polls active. Stop those runtimes now that discovery is current-year-only.
     for (const eventKey of [...scheduledKeys]) {
@@ -1763,7 +1768,10 @@ export class EventScheduler {
     const knownEvents = [...new Set([...(await this.storage.get<string[]>("registry:events") ?? []), ...events.keys()])].sort();
     await this.storage.put("registry:events", knownEvents);
 
-    for (const event of events.values()) {
+    const lifecycleBatch = lifecycleEventKeys.slice(lifecycleCursor, lifecycleCursor + 10);
+    for (const eventKey of lifecycleBatch) {
+      const event = events.get(eventKey);
+      if (!event) continue;
       const decision = classifyEventLifecycle(event, Date.now(), policy);
       if (!decision) continue;
       // Historical event lists contain years of completed events. Only send an
@@ -1789,7 +1797,13 @@ export class EventScheduler {
       if (!response.ok) throw new Error("Failed to schedule " + event.key + ": HTTP " + response.status);
       runtimeEventKeys.add(event.key);
     }
+    lifecycleCursor += lifecycleBatch.length;
     await this.storage.put("scheduler:event-keys", [...scheduledKeys]);
     await this.storage.put("registry:runtime-events", [...runtimeEventKeys].sort());
+    if (lifecycleCursor < lifecycleEventKeys.length) {
+      await this.storage.put(lifecycleProgressKey, { year, eventKeys: lifecycleEventKeys, cursor: lifecycleCursor });
+    } else {
+      await this.storage.delete(lifecycleProgressKey);
+    }
   }
 }
