@@ -217,7 +217,7 @@ interface EventTeamSeedJob {
   stage: "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
   teamAttempts: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
   errors: Array<{ team_key: string; detail: string; at: number }>;
-  startedAt: number; updatedAt: number; nextDueAt: number;
+  startedAt: number; updatedAt: number; nextDueAt: number; resumeAlarmAt: number | null;
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
 
@@ -460,6 +460,7 @@ export class EventScheduler {
         eventKey, year, status: "running", stage: "seed", teamKeys, cursor: 0, activeTeamKey: null,
         teamAttempts: 0, seededTeams: 0, failedTeams: 0, historicalEventsScheduled: 0,
         errors: [], startedAt: now, updatedAt: now, nextDueAt: now,
+        resumeAlarmAt: await this.storage.getAlarm?.() ?? null,
       };
       await this.storage.put(eventTeamSeedKey(eventKey), job);
       await this.storage.setAlarm(now);
@@ -1038,7 +1039,10 @@ export class EventScheduler {
       if (activeEventSeed.nextDueAt <= Date.now()) await this.processEventTeamSeed(activeEventSeed);
       const refreshed = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(activeEventSeed.eventKey));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
-      else if (await this.storage.get<boolean>("scheduler:enabled") === true) await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
+      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
+        const resumeAt = refreshed?.resumeAlarmAt ?? null;
+        await this.storage.setAlarm(Math.max(Date.now() + 100, resumeAt ?? Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs));
+      }
       else await this.storage.deleteAlarm();
       return;
     }

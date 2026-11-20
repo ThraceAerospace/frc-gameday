@@ -436,6 +436,7 @@ export class EventRuntime {
       }
       const endpoints = requested as string[];
       const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
+      await this.ensureRecurringPolls(endpoints, 86_400_000);
       const manualEndpoints = [...endpoints];
       if (includeStatbotics) manualEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
       await this.enqueueManualPolls(manualEndpoints);
@@ -1037,6 +1038,21 @@ export class EventRuntime {
         byEndpoint.set(endpoint, { endpoint, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
       }
       await transaction.put(MANUAL_QUEUE_KEY, [...byEndpoint.values()]);
+      await this.rearm(transaction);
+    });
+  }
+
+  private async ensureRecurringPolls(endpoints: string[], intervalMs: number): Promise<void> {
+    await this.storage.transaction(async (transaction) => {
+      for (const endpoint of endpoints) {
+        const key = taskStorageKey(endpoint);
+        const existing = await transaction.get<PollTask>(key);
+        if (existing) continue;
+        await transaction.put(key, {
+          endpoint, dueAt: Date.now() + intervalMs, intervalMs,
+          generation: 1, attempts: 0, retryOnFailure: true,
+        } satisfies PollTask);
+      }
       await this.rearm(transaction);
     });
   }
