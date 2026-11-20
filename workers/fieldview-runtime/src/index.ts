@@ -431,7 +431,7 @@ export default {
       headers.set("Access-Control-Allow-Origin", "*");
       return new Response(response.body, { status: response.status, headers });
     }
-    const districtRoute = /^\\/districts\\/([a-zA-Z0-9_-]+)\\/snapshot$/.exec(url.pathname);
+    const districtRoute = /^\/districts\/([a-zA-Z0-9_-]+)\/snapshot$/.exec(url.pathname);
     if (districtRoute && request.method === "GET") {
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
       const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
