@@ -662,7 +662,56 @@ test("daily weekly projection initializes EventRuntime for matching events and p
   assert.deepEqual(await storage.get("registry:runtime-events"), ["2026weekly"]);
   const projection = await storage.get("scheduler:this-week-projection");
   assert.deepEqual(projection.events.map((event) => event.key), ["2026weekly"]);
+  const publicProjection = await scheduler.fetch(new Request("https://scheduler/events/this-week"));
+  assert.equal(publicProjection.status, 200);
+  assert.equal((await publicProjection.json()).events[0].key, "2026weekly");
+  assert.match(publicProjection.headers.get("Cache-Control"), /stale-while-revalidate/);
 
   await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY);
   assert.equal(runtimeRequests.length, 1, "the completed daily pass is not repeated on every alarm");
+});
+
+test("weekly classification processes at most ten events per alarm batch and resumes", async () => {
+  const now = Date.now();
+  const parts = new Map(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
+  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
+  const localParts = localDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
+  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
+  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const events = Array.from({ length: 11 }, (_, index) => ({
+    key: "2026week" + String(index).padStart(2, "0"),
+    start_date: date(4),
+    end_date: date(6),
+    timezone: "America/New_York",
+  }));
+  const storage = new MemoryStorage();
+  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
+    etag: null, events, updatedAt: now, checkedAt: now,
+  });
+  const runtimeRequests = [];
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (request) => {
+          runtimeRequests.push(id);
+          await request.json();
+          return Response.json({ updated: true });
+        },
+      }),
+    },
+  });
+
+  assert.equal(await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY), true);
+  assert.equal(runtimeRequests.length, 10);
+  assert.equal((await storage.get("scheduler:this-week-progress")).cursor, 10);
+  assert.equal(await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY), false);
+  assert.equal(runtimeRequests.length, 11);
+  assert.equal((await storage.get("scheduler:this-week-projection")).events.length, 11);
+  assert.equal(await storage.get("scheduler:this-week-progress"), undefined);
 });
