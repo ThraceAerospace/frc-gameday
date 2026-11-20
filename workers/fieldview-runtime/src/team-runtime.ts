@@ -147,7 +147,7 @@ export class TeamRuntime {
         // Resource registration must never advance an existing recurring fetch.
         const dueAt = previous?.dueAt ?? now;
         await tx.put(key, { provider, endpoint, dueAt,
-          intervalMs: this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
+          intervalMs: this.refreshIntervalMs(), attempts: previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
       await this.rearm(tx);
     });
@@ -197,8 +197,8 @@ export class TeamRuntime {
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
       await this.enqueueManualPolls([resource], year);
       await this.alarm();
-      const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
-      return Response.json({ endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
+      const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
+      return Response.json({ endpoint: resource.endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });

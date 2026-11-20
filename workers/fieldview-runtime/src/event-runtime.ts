@@ -474,14 +474,12 @@ export class EventRuntime {
       await this.enqueueManualPolls([endpoint]);
       await this.alarm();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-      return Response.json({ endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
-      const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
-        endpoint, success: result, status: state?.status ?? "unknown",
+        endpoint, queued: true, status: state?.status ?? "pending",
         revision: state?.revision ?? 0, last_fetched_at: state?.lastFetchedAt ?? null,
         http_status: diagnostic?.lastHttpStatus ?? null, last_error: diagnostic?.lastError ?? null,
-      });
+      }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
