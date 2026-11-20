@@ -1167,7 +1167,7 @@ export class EventScheduler {
       const activeEventSeeds = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
       const activeSeasonJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
       const busy = [...activeEventSeeds.values()].some((job) => job.status === "running") ||
-        [...activeSeasonJobs.values()].some((job) => job.status === "running" || job.status === "paused");
+        [...activeSeasonJobs.values()].some((job) => job.status === "running");
       await this.storage.put("scheduler:daily-run-requested", true);
       if (busy) {
         await this.storage.setAlarm(Date.now() + 1_000);
