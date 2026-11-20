@@ -28,7 +28,7 @@ export function normalizeFieldViewDistrictDirectory(
     year: input.year,
     sources: input.sources,
     ...(districts === undefined ? {} : { districts }),
-  } as FieldViewDistrictDirectory;
+  };
 }
 
 export interface NormalizeFieldViewDistrictSnapshotInput {
