@@ -1674,7 +1674,7 @@ export class EventScheduler {
     while (cursor < 100 && requestCount < pageLimit) {
       const pageKey = String(cursor);
       const cachedPage = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + cursor) ??
-        await this.storage.get<TBATeam[]>(key + ":page:" + cursor) ??
+        await this.storage.get<TBATeam[]>((cached?.pagePrefix ?? key + ":page:") + cursor) ??
         (cursor === 0 ? cached?.teams : undefined);
       const etag = refresh.pageEtags[pageKey] ?? cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
