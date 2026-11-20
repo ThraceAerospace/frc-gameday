@@ -3,7 +3,7 @@
 **Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 EventRuntime and TeamRuntime foundations in progress
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Incremental migration
-**Last updated:** 2026-11-18
+**Last updated:** 2026-11-20
 
 This document is the working migration plan for evolving the existing FieldView application into the target architecture. It is deliberately separate from the historical application audit: audit findings describe observed problems in the old implementation, while this document describes the destination and the order in which responsibilities will move.
 
@@ -366,3 +366,18 @@ The season-wide team investigation read path now delegates to the Worker. It agg
 - The event analytics adapter now exposes canonical match flags on the legacy dashboard record's top-level `flags` field, matching the existing Suggested Review consumer. Keeping flags only on the nested canonical match object made every flag appear absent.
 - The adapter now falls back to canonical per-alliance match score analysis for predicted scores and score deltas when the event analytics aggregate omits those values. It does not calculate new analytics in the browser; it projects already-published EventRuntime analysis into the compatibility view model.
 - Preserve the canonical publication as the source of truth. Do not restore client-side flag calculation or provider fetches to work around missing publication data.
+
+
+### District runtime migration (2026-11-20)
+
+The district domain boundary and ownership decision are established (see ADR-0009). EventScheduler now has canonical read endpoints for a year-scoped district directory and district snapshots, plus an authorized, explicitly invoked refresh operation. Directory and district resources retain independent payloads, ETags, retrieval/check timestamps, and resource status. A failed refresh retains the last-good payload and marks its provenance stale; a 404 is represented as unavailable. Public reads do not trigger provider acquisition. The refresh operation is bounded to one directory resource or the five resources for one district and uses the shared provider request gate.
+
+The district directory page, district detail page, directory API, district advancement API, and district CMP projection APIs now read canonical Worker snapshots rather than the legacy TBA service. The existing team-district API was already reading TeamRuntime and remains canonical.
+
+**Not complete:** district refresh is currently an explicit administrative operation. Low-frequency scheduled refresh, resumable multi-district refresh orchestration, and operational visibility for district resource coverage still need implementation. No runtime seed, Worker deployment, or production cutover has occurred. The current migration does not yet remove the legacy TBA service because other non-district consumers still depend on it.
+
+**Next**
+- Add low-frequency, bounded, resumable district refresh scheduling to EventScheduler without interfering with season-ingest, event-team-seed, or normal discovery alarms.
+- Add focused tests for 200/304/404/failure handling, last-good retention, independent resource state, and read-only public routes; validate the full workspace in CI.
+- Audit remaining district consumers and confirm no district route bypasses the canonical snapshot boundary.
+- Continue with TeamRuntime Statbotics TBA-change-triggered refresh policy, then remaining legacy EventState acquisition and analytics publication/recovery.
