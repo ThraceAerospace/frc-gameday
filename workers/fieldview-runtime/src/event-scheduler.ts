@@ -16,6 +16,9 @@ const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
 const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
 const DISTRICT_DIRECTORY_PREFIX = "district-directory:";
 const DISTRICT_RESOURCE_PREFIX = "district-resource:";
+const THIS_WEEK_PROJECTION_KEY = "scheduler:this-week-projection";
+const THIS_WEEK_PROGRESS_KEY = "scheduler:this-week-progress";
+const THIS_WEEK_LAST_RUN_KEY = "scheduler:this-week-last-run-date";
 
 interface DistrictResourceCache { payload?: unknown; etag: string | null; retrievedAt: number | null; checkedAt: number; status: "available" | "unavailable" | "failed"; }
 
@@ -90,6 +93,67 @@ function nextDateOnly(value: string): string | null {
     .toISOString().slice(0, 10);
 }
 
+function addDateOnlyDays(value: string, days: number): string | null {
+  const parts = parseDateOnly(value);
+  if (!parts) return null;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + days * 86_400_000)
+    .toISOString().slice(0, 10);
+}
+
+function dateOnlyInTimezone(now: number, timeZone: string): string | null {
+  try {
+    const values = new Map(new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      calendar: "gregory",
+      numberingSystem: "latn",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
+    return String(values.get("year")).padStart(4, "0") + "-" +
+      String(values.get("month")).padStart(2, "0") + "-" +
+      String(values.get("day")).padStart(2, "0");
+  } catch {
+    return null;
+  }
+}
+
+export interface EventWeekClassification {
+  isThisWeek: boolean;
+  localDate: string;
+  weekStart: string;
+  weekEnd: string;
+}
+
+/**
+ * Event start/end are inclusive date-only values, not timestamps. The event
+ * timezone determines today's calendar date; overlap is tested against that
+ * local Monday-Sunday week using date strings only.
+ */
+export function classifyEventThisWeek(
+  event: Pick<TBAEvent, "start_date" | "end_date" | "timezone">,
+  now: number,
+): EventWeekClassification | null {
+  const start = event.start_date;
+  const end = event.end_date;
+  if (!parseDateOnly(start) || !parseDateOnly(end) || start > end ||
+      typeof event.timezone !== "string" || event.timezone.length === 0) return null;
+  const localDate = dateOnlyInTimezone(now, event.timezone);
+  if (!localDate) return null;
+  const localParts = parseDateOnly(localDate);
+  if (!localParts) return null;
+  const weekday = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day)).getUTCDay();
+  const weekStart = addDateOnlyDays(localDate, -((weekday + 6) % 7));
+  const weekEnd = weekStart === null ? null : addDateOnlyDays(weekStart, 6);
+  if (weekStart === null || weekEnd === null) return null;
+  return {
+    isThisWeek: start <= weekEnd && end >= weekStart,
+    localDate,
+    weekStart,
+    weekEnd,
+  };
+}
+
 /** Convert local midnight in an IANA timezone to its UTC instant. */
 function zonedMidnight(value: string, timeZone: string): number | null {
   const date = parseDateOnly(value);
@@ -161,6 +225,13 @@ interface DiscoveryCache {
   updatedAt: number;
   /** Most recent successful 200/304 validation of that payload. */
   checkedAt?: number;
+}
+
+interface ThisWeekProgress {
+  runDate: string;
+  eventKeys: string[];
+  cursor: number;
+  includedKeys: string[];
 }
 
 interface ProviderRequestLease { leaseId: string; owner: string; endpoint: string; expiresAt: number; }
@@ -360,6 +431,19 @@ export class EventScheduler {
             ...(cached.etag === null ? {} : { ETag: cached.etag }),
           },
         },
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/events/this-week") {
+      const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
+      if (!projection) return Response.json({ error: "This-week event projection is not ready" }, { status: 503 });
+      const retrievedAt = new Date(projection.evaluatedAt).toISOString();
+      const events = projection.events.map((event) => normalizeFieldViewEvent(event, {
+        tba_event: { status: "available", retrieved_at: retrievedAt },
+      }));
+      return Response.json(
+        { runDate: projection.runDate, evaluatedAt: projection.evaluatedAt, events },
+        { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=300" } },
       );
     }
 
@@ -1321,13 +1405,99 @@ export class EventScheduler {
       if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
       await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
     }
+    let thisWeekRefreshPending = false;
+    try {
+      thisWeekRefreshPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
+      await this.storage.delete("scheduler:this-week-error");
+    } catch (error) {
+      await this.storage.put("scheduler:this-week-error", error instanceof Error ? error.message : String(error));
+      thisWeekRefreshPending = true;
+    }
     await this.storage.put("scheduler:last-run-at", Date.now());
     const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
     const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
     const providerDeferredUntil = await this.storage.get<number>("scheduler:provider-deferred-until");
-    const nextDelay = teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs;
+    const nextDelay = teamRefresh || lifecycleRefresh || thisWeekRefreshPending ? 1_000 : policy.discoveryIntervalMs;
     await this.storage.setAlarm(Math.max(Date.now() + 100, Math.min(Date.now() + nextDelay, providerDeferredUntil ?? Number.MAX_SAFE_INTEGER)));
     if (providerDeferredUntil !== undefined) await this.storage.delete("scheduler:provider-deferred-until");
+  }
+
+  private async refreshThisWeekProjection(policy: EventPollingPolicy): Promise<boolean> {
+    const now = Date.now();
+    const runDate = new Date(now).toISOString().slice(0, 10);
+    const year = Number(runDate.slice(0, 4));
+    const discovery = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+    if (!discovery || !Array.isArray(discovery.events)) return false;
+
+    let progress = await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY);
+    if (progress?.runDate !== runDate) {
+      if (await this.storage.get<string>(THIS_WEEK_LAST_RUN_KEY) === runDate) return false;
+      progress = {
+        runDate,
+        eventKeys: discovery.events.map((event) => event.key).filter((key): key is string =>
+          typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key),
+        ).sort(),
+        cursor: 0,
+        includedKeys: [],
+      };
+      await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
+    }
+
+    const eventsByKey = new Map(discovery.events
+      .filter((event) => typeof event.key === "string")
+      .map((event) => [event.key, event]));
+    const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
+    const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
+    const batch = progress.eventKeys.slice(progress.cursor, progress.cursor + 10);
+    for (const eventKey of batch) {
+      const event = eventsByKey.get(eventKey);
+      if (!event) continue;
+      const classification = classifyEventThisWeek(event, now);
+      if (!classification?.isThisWeek) continue;
+      progress.includedKeys.push(eventKey);
+
+      // A weekly event always gets an EventRuntime, even if its last date has
+      // passed earlier in the same Monday-Sunday window. Expired lifecycle
+      // state prevents unnecessary polling while retaining the runtime owner.
+      const lifecycle = classifyEventLifecycle(event, now, policy);
+      if (!lifecycle) continue;
+      const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+      const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lifecycle: lifecycle.lifecycle,
+          upcomingIntervalMs: policy.upcomingIntervalMs,
+          activeIntervalMs: policy.activeIntervalMs,
+          ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+        }),
+      }));
+      if (!response.ok) throw new Error("Failed to initialize this-week EventRuntime " + eventKey + ": HTTP " + response.status);
+      runtimeEventKeys.add(eventKey);
+      if (lifecycle.lifecycle === "expired") scheduledKeys.delete(eventKey);
+      else scheduledKeys.add(eventKey);
+    }
+    progress.cursor += batch.length;
+    await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
+    await this.storage.put("scheduler:event-keys", [...scheduledKeys].sort());
+    await this.storage.put("registry:runtime-events", [...runtimeEventKeys].sort());
+
+    if (progress.cursor < progress.eventKeys.length) return true;
+
+    const included = new Set(progress.includedKeys);
+    const events = discovery.events.filter((event) => typeof event.key === "string" && included.has(event.key));
+    const projection = { evaluatedAt: now, runDate, events };
+    const previous = await this.storage.get<typeof projection>(THIS_WEEK_PROJECTION_KEY);
+    if (!previous || JSON.stringify(previous) !== JSON.stringify(projection)) {
+      await this.storage.put(THIS_WEEK_PROJECTION_KEY, projection);
+    }
+    await this.storage.put(THIS_WEEK_LAST_RUN_KEY, runDate);
+    await this.storage.delete(THIS_WEEK_PROGRESS_KEY);
+    return false;
   }
 
   private async measureStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
