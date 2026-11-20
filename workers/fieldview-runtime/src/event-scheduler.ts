@@ -1617,57 +1617,82 @@ export class EventScheduler {
     return teams;
   }
 
-  private async discoverTeams(year: number, prefix = TEAM_DISCOVERY_PREFIX): Promise<{ requestCount: number; pageCount: number; teamCount: number }> {
+  private async discoverTeams(
+    year: number,
+    prefix = TEAM_DISCOVERY_PREFIX,
+    maxPages = 100,
+  ): Promise<{ requestCount: number; pageCount: number; teamCount: number; complete: boolean }> {
     const key = prefix + year;
     const cached = await this.storage.get<TeamDiscoveryCache>(key);
-    const pages: TBATeam[][] = [];
-    const pageEtags: Record<string, string | null> = {};
+    const refreshKey = key + ":refresh";
+    const refresh = await this.storage.get<{ cursor: number; pageEtags: Record<string, string | null>; payloadChanged: boolean }>(refreshKey) ??
+      { cursor: 0, pageEtags: {}, payloadChanged: !cached?.complete };
     let requestCount = 0;
     let complete = false;
-    let payloadChanged = !cached?.complete;
-    // TBA season-team endpoints are paginated in fixed groups of 500. Walk
-    // sequentially, retain per-page validators, and require a short final page.
-    for (let page = 0; page < 100; page += 1) {
-      const pageKey = String(page);
-      const cachedPage = await this.storage.get<TBATeam[]>(key + ":page:" + page) ??
-        (page === 0 ? cached?.teams : undefined);
-      const etag = cached?.pageEtags?.[pageKey] ?? null;
+    let cursor = refresh.cursor;
+    const pageLimit = Math.max(1, Math.min(100, maxPages));
+
+    // Routine scheduler runs process a bounded number of pages. Staging pages
+    // are separate from the published cache, so public reads keep seeing the
+    // last complete inventory until the replacement is complete.
+    while (cursor < 100 && requestCount < pageLimit) {
+      const pageKey = String(cursor);
+      const cachedPage = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + cursor) ??
+        (cursor === 0 ? cached?.teams : undefined);
+      const etag = refresh.pageEtags[pageKey] ?? cached?.pageEtags?.[pageKey] ?? null;
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
-      const endpoint = TBA_ENDPOINTS.teamsByYearPage(year, page);
+      const endpoint = TBA_ENDPOINTS.teamsByYearPage(year, cursor);
       const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
       requestCount += 1;
       let pageTeams: TBATeam[];
       if (response.status === 304) {
-        if (!cachedPage) throw new Error("TBA team page " + page + " returned 304 without a retained page payload");
+        if (!cachedPage) throw new Error("TBA team page " + cursor + " returned 304 without a retained page payload");
         pageTeams = cachedPage;
-        pageEtags[pageKey] = etag;
+        refresh.pageEtags[pageKey] = etag;
       } else {
-        if (!response.ok) throw new Error("TBA team discovery page " + page + " failed for " + year + " with HTTP " + response.status);
+        if (!response.ok) throw new Error("TBA team discovery page " + cursor + " failed for " + year + " with HTTP " + response.status);
         pageTeams = await response.json() as TBATeam[];
-        if (!Array.isArray(pageTeams) || pageTeams.length > 500) throw new Error("TBA team discovery page " + page + " returned an invalid payload");
-        pageEtags[pageKey] = response.headers.get("ETag");
-        payloadChanged = true;
+        if (!Array.isArray(pageTeams) || pageTeams.length > 500) throw new Error("TBA team discovery page " + cursor + " returned an invalid payload");
+        refresh.pageEtags[pageKey] = response.headers.get("ETag");
+        refresh.payloadChanged = true;
       }
-      pages.push(pageTeams);
+      await this.storage.put(key + ":refresh:page:" + cursor, pageTeams);
+      cursor += 1;
       if (pageTeams.length < 500) {
         complete = true;
         break;
       }
     }
-    if (!complete) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
-    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
+
+    if (!complete && cursor >= 100) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
+    if (!complete) {
+      await this.storage.put(refreshKey, { ...refresh, cursor });
+      return { requestCount, pageCount: cursor, teamCount: cached?.teamCount ?? 0, complete: false };
+    }
+
+    const pages: TBATeam[][] = [];
+    for (let page = 0; page < cursor; page += 1) {
+      const values = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + page);
+      if (!values) throw new Error("TBA team discovery staging page " + page + " is missing");
+      pages.push(values);
+    }
+    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
+
+    // Publish atomically at the metadata level only after every page is present.
     for (let page = 0; page < pages.length; page += 1) await this.storage.put(key + ":page:" + page, pages[page]);
     for (let page = pages.length; page < (cached?.pageCount ?? 0); page += 1) await this.storage.delete(key + ":page:" + page);
     const checkedAt = Date.now();
-    const updatedAt = payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
+    const updatedAt = refresh.payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
     await this.storage.put(key, {
-      etag: pageEtags["0"] ?? null, pageEtags, pageCount: pages.length,
+      etag: refresh.pageEtags["0"] ?? null, pageEtags: refresh.pageEtags, pageCount: pages.length,
       teamCount: teams.length, teamKeys: teams.map((team) => team.key).sort(),
       complete: true, updatedAt, checkedAt,
     } satisfies TeamDiscoveryCache);
-    return { requestCount, pageCount: pages.length, teamCount: teams.length };
+    for (let page = 0; page < cursor; page += 1) await this.storage.delete(key + ":refresh:page:" + page);
+    await this.storage.delete(refreshKey);
+    return { requestCount, pageCount: pages.length, teamCount: teams.length, complete: true };
   }
 
   private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
