@@ -415,6 +415,7 @@ test("public team season analytics aggregates canonical TeamRuntime and EventRun
           return Response.json({
             events: [
               { key: "2026alpha", name: "Alpha", event_code: "alpha", start_date: "2026-03-01", event_type: 0 },
+              { key: "2026broken", name: "Broken", start_date: "2026-04-01", event_type: 0 },
               { key: "2026offseason", name: "Offseason", start_date: "2026-10-01", event_type: 99 },
             ],
           });
@@ -426,6 +427,7 @@ test("public team season analytics aggregates canonical TeamRuntime and EventRun
       get(id) {
         return { async fetch(request) {
           calls.push({ kind: "event", id, path: new URL(request.url).pathname });
+          if (id === "2026broken") throw new Error("simulated event runtime failure");
           return Response.json({
             event: { name: "Alpha Event", short_name: "Alpha", start_date: "2026-03-01" },
             team_states: [{
@@ -450,15 +452,18 @@ test("public team season analytics aggregates canonical TeamRuntime and EventRun
   const result = await response.json();
   assert.equal(result.team, 3461);
   assert.equal(result.year, 2026);
-  assert.equal(result.eventCount, 1);
+  assert.equal(result.eventCount, 2);
   assert.equal(result.analyzedEventCount, 1);
   assert.equal(result.matchCount, 2);
   assert.equal(result.matchesSeen, 3);
   assert.equal(result.events[0].event.name, "Alpha Event");
   assert.equal(result.events[0].status, "ready");
+  assert.equal(result.events[1].status, "unavailable");
+  assert.equal(result.collection.state, "partial");
   assert.ok(calls.some((call) => call.kind === "team" && call.path === "/snapshot?year=2026"));
   assert.ok(calls.some((call) => call.kind === "event" && call.id === "2026alpha"));
   assert.equal(calls.some((call) => call.kind === "event" && call.id === "2026offseason"), false);
+  assert.ok(calls.some((call) => call.kind === "event" && call.id === "2026broken"));
 });
 
 test("public team analytics rejects invalid seasons before accessing runtimes", async () => {

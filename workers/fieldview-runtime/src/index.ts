@@ -27,10 +27,15 @@ async function buildTeamSeasonAnalyticsResponse(
   if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
   await registerRuntimeObject(env, "team", teamKey);
   const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-  const teamResponse = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
-    method: "GET",
-    headers: { "X-FieldView-Team-Key": teamKey },
-  }));
+  let teamResponse: Response;
+  try {
+    teamResponse = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
+      method: "GET",
+      headers: { "X-FieldView-Team-Key": teamKey },
+    }));
+  } catch {
+    return Response.json({ error: "Canonical team snapshot unavailable" }, { status: 503 });
+  }
   if (!teamResponse.ok) return Response.json({ error: "Canonical team snapshot unavailable" }, { status: 503 });
   const teamSnapshot = await teamResponse.json() as { events?: TeamSeasonEventReference[] | null };
   if (teamSnapshot.events === undefined || teamSnapshot.events === null) {
@@ -41,38 +46,46 @@ async function buildTeamSeasonAnalyticsResponse(
     .filter((event) => event.event_type !== 99 && event.event_type !== 100)
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
   const eventResults = await Promise.all(events.map(async (event) => {
-    await registerRuntimeObject(env, "event", event.key);
-    const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(event.key));
-    const response = await eventStub.fetch(new Request("https://event-runtime/snapshot", {
-      method: "GET",
-      headers: { "X-FieldView-Event-Key": event.key },
-    }));
-    if (!response.ok) {
+    try {
+      await registerRuntimeObject(env, "event", event.key);
+      const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(event.key));
+      const response = await eventStub.fetch(new Request("https://event-runtime/snapshot", {
+        method: "GET",
+        headers: { "X-FieldView-Event-Key": event.key },
+      }));
+      if (!response.ok) {
+        return {
+          event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
+          status: "unavailable" as const,
+          analytics: null,
+        };
+      }
+      const snapshot = await response.json() as {
+        event?: { name?: string; short_name?: string | null; start_date?: string };
+        team_states?: Array<{
+          team_key: string;
+          analytics?: FieldViewTeamAnalytics | null;
+        }>;
+      };
+      const teamState = snapshot.team_states?.find((entry) => entry.team_key === teamKey);
+      const analytics = teamState?.analytics ?? null;
+      return {
+        event: {
+          key: event.key,
+          name: snapshot.event?.name ?? event.name,
+          shortName: snapshot.event?.short_name ?? event.event_code ?? null,
+          startDate: snapshot.event?.start_date ?? event.start_date,
+        },
+        status: !analytics ? "pending" as const : "ready" as const,
+        analytics,
+      };
+    } catch {
       return {
         event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
         status: "unavailable" as const,
         analytics: null,
       };
     }
-    const snapshot = await response.json() as {
-      event?: { name?: string; short_name?: string | null; start_date?: string };
-      team_states?: Array<{
-        team_key: string;
-        analytics?: FieldViewTeamAnalytics | null;
-      }>;
-    };
-    const teamState = snapshot.team_states?.find((entry) => entry.team_key === teamKey);
-    const analytics = teamState?.analytics ?? null;
-    return {
-      event: {
-        key: event.key,
-        name: snapshot.event?.name ?? event.name,
-        shortName: snapshot.event?.short_name ?? event.event_code ?? null,
-        startDate: snapshot.event?.start_date ?? event.start_date,
-      },
-      status: !analytics ? "pending" as const : "ready" as const,
-      analytics,
-    };
   }));
 
   const seasonEvidence: SeasonMatchEvidence[] = eventResults.flatMap((entry) =>
