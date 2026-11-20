@@ -738,7 +738,13 @@ test("daily scheduler endpoint runs classification without enabling continuous p
   };
   const storage = new MemoryStorage();
   await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
-    etag: null, events: [event], updatedAt: now, checkedAt: now,
+    etag: null,
+    events: [
+      event,
+      { key: "2026later", start_date: date(7), end_date: date(8), timezone: "America/New_York" },
+    ],
+    updatedAt: now,
+    checkedAt: now,
   });
   const runtimeRequests = [];
   const scheduler = new EventScheduler({ storage }, {
