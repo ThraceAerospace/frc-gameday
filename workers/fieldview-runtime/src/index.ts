@@ -25,7 +25,6 @@ async function buildTeamSeasonAnalyticsResponse(
   year: number,
 ): Promise<Response> {
   if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
-  await registerRuntimeObject(env, "team", teamKey);
   const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
   let teamResponse: Response;
   try {
@@ -47,7 +46,6 @@ async function buildTeamSeasonAnalyticsResponse(
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
   const eventResults = await Promise.all(events.map(async (event) => {
     try {
-      await registerRuntimeObject(env, "event", event.key);
       const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(event.key));
       const response = await eventStub.fetch(new Request("https://event-runtime/snapshot", {
         method: "GET",
@@ -474,7 +472,7 @@ export default {
         return buildTeamSeasonAnalyticsResponse(env, canonicalTeamKey, year);
       }
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
-      await registerRuntimeObject(env, "team", canonicalTeamKey);
+      // Public team snapshots must not mutate the global runtime registry.
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(canonicalTeamKey));
       const response = await stub.fetch(new Request("https://team-runtime/snapshot" + url.search, {
         method: "GET", headers: { "X-FieldView-Team-Key": canonicalTeamKey },
@@ -618,7 +616,7 @@ export default {
     }
 
     if (validPublicRoute && request.method === "GET") {
-      await registerRuntimeObject(env, "event", publicEventKey);
+      // Public snapshots are read-only. Event registration belongs to discovery and lifecycle workflows.
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(publicEventKey));
       const headers = new Headers({
         "X-FieldView-Event-Key": publicEventKey,
