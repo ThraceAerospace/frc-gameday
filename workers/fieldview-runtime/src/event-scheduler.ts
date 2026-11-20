@@ -215,7 +215,7 @@ interface TeamDiscoveryCache {
 interface EventTeamSeedJob {
   eventKey: string; year: number; status: "running" | "completed" | "completed_with_errors";
   stage: "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
-  teamAttempts: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
+  teamAttempts: number; teamWaitStartedAt?: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
   errors: Array<{ team_key: string; detail: string; at: number }>;
   startedAt: number; updatedAt: number; nextDueAt: number; resumeAlarmAt: number | null;
 }
@@ -971,20 +971,58 @@ export class EventScheduler {
     job.activeTeamKey = teamKey;
     const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
     try {
+      const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
       if (job.stage === "seed") {
         const registry = await this.storage.get<string[]>("registry:teams") ?? [];
         if (!registry.includes(teamKey)) await this.storage.put("registry:teams", [...registry, teamKey].sort());
-        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
         const response = await stub.fetch(new Request("https://team-runtime/seed?year=" + job.year, { method: "POST", headers }));
         if (!response.ok) throw new Error("TeamRuntime seed returned HTTP " + response.status);
+        // Team history is a hard dependency for this job. Explicitly enqueue that
+        // resource after the general team seed so it is prioritized over the
+        // remaining team resources when the manual queue is drained.
+        const historyResource = teamResourceEndpoints(teamKey, job.year).find((resource) =>
+          resource.provider === "tba" && resource.endpoint === TBA_ENDPOINTS.teamEvents(teamKey, job.year));
+        if (!historyResource) throw new Error("Team event-history resource is not configured");
+        const historyResponse = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: historyResource.endpoint }),
+        }));
+        if (!historyResponse.ok) throw new Error("TeamRuntime event-history curation returned HTTP " + historyResponse.status);
         job.stage = "wait";
-        job.nextDueAt = Date.now() + Math.max(10_000, this.providerRequestInterval() * 9);
+        job.teamWaitStartedAt = Date.now();
+        job.nextDueAt = Date.now() + Math.max(1_000, this.providerRequestInterval() * 2);
       } else {
-        const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+        const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+        if (!stateResponse.ok) throw new Error("TeamRuntime state returned HTTP " + stateResponse.status);
+        const teamState = await stateResponse.json() as {
+          endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }>;
+        };
+        const historyEndpoint = TBA_ENDPOINTS.teamEvents(teamKey, job.year);
+        const historyState = teamState.endpoints?.find((endpoint) => endpoint.endpoint === historyEndpoint);
+        const historyFetchedAt = historyState?.last_fetched_at ?? historyState?.lastFetchedAt ?? null;
+        if (historyState?.status === "unavailable") {
+          throw new Error("Team event history is unavailable from The Blue Alliance (HTTP 404)");
+        }
+        if (historyFetchedAt === null) {
+          const elapsed = Date.now() - (job.teamWaitStartedAt ?? job.startedAt);
+          if (elapsed >= 15 * 60_000) throw new Error("Timed out waiting for immediate team event-history curation after 15 minutes");
+          // Re-enqueue if the manual queue exhausted its own transient retries.
+          // The queue deduplicates by endpoint and respects the shared provider gate.
+          const retryResponse = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+            method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: historyEndpoint }),
+          }));
+          if (!retryResponse.ok) throw new Error("TeamRuntime event-history retry returned HTTP " + retryResponse.status);
+          job.teamAttempts += 1;
+          job.nextDueAt = Date.now() + Math.min(30_000, Math.max(2_000, this.providerRequestInterval() * 3));
+          job.updatedAt = Date.now();
+          await this.storage.put(eventTeamSeedKey(job.eventKey), job);
+          return;
+        }
         const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers }));
         if (!response.ok) throw new Error("TeamRuntime snapshot returned HTTP " + response.status);
         const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
-        if (!Array.isArray(snapshot.events)) throw new Error("Team event history is not available yet");
+        if (!Array.isArray(snapshot.events)) throw new Error("Team event history was fetched but is missing from the normalized snapshot");
         const policy = eventPollingPolicy(this.env);
         for (const event of snapshot.events) {
           const eventKey = event.key;
@@ -1013,17 +1051,21 @@ export class EventScheduler {
           job.historicalEventsScheduled += 1;
         }
         job.seededTeams += 1; job.cursor += 1; job.activeTeamKey = null;
-        job.stage = "seed"; job.teamAttempts = 0; job.nextDueAt = Date.now() + 100;
+        job.stage = "seed"; job.teamAttempts = 0; job.teamWaitStartedAt = undefined; job.nextDueAt = Date.now() + 100;
       }
     } catch (error) {
       job.teamAttempts += 1;
       const detail = error instanceof Error ? error.message : String(error);
-      if (job.teamAttempts >= 3) {
+      const elapsed = Date.now() - (job.teamWaitStartedAt ?? job.startedAt);
+      const terminalUnavailable = detail.includes("is unavailable from The Blue Alliance");
+      if (terminalUnavailable || elapsed >= 15 * 60_000) {
         job.errors.push({ team_key: teamKey, detail: detail.slice(0, 240), at: Date.now() });
         if (job.errors.length > 50) job.errors.splice(0, job.errors.length - 50);
         job.failedTeams += 1; job.cursor += 1; job.activeTeamKey = null;
-        job.stage = "seed"; job.teamAttempts = 0; job.nextDueAt = Date.now() + 100;
-      } else job.nextDueAt = Date.now() + Math.min(30_000, 2_000 * (2 ** job.teamAttempts));
+        job.stage = "seed"; job.teamAttempts = 0; job.teamWaitStartedAt = undefined; job.nextDueAt = Date.now() + 100;
+      } else {
+        job.nextDueAt = Date.now() + Math.min(30_000, Math.max(2_000, 2_000 * (2 ** Math.min(job.teamAttempts, 4))));
+      }
     }
     job.updatedAt = Date.now();
     if (job.cursor >= job.teamKeys.length) {
