@@ -5,8 +5,112 @@ import { EventScheduler } from "./event-scheduler.ts";
 import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
+import { buildSeasonDiagnostics } from "../../../packages/analytics/src/season-diagnostics.ts";
+import type { SeasonMatchEvidence } from "../../../packages/analytics/src/season-diagnostics.ts";
 
 export { EventRuntime, EventScheduler, Multiplexer, TeamRuntime };
+
+type TeamSeasonEventReference = {
+  key: string;
+  name: string;
+  event_code?: string | null;
+  start_date: string;
+  event_type?: number;
+};
+
+async function buildTeamSeasonAnalyticsResponse(
+  env: RuntimeEnvironment,
+  teamKey: string,
+  year: number,
+): Promise<Response> {
+  if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
+  await registerRuntimeObject(env, "team", teamKey);
+  const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+  const teamResponse = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
+    method: "GET",
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  if (!teamResponse.ok) return Response.json({ error: "Canonical team snapshot unavailable" }, { status: 503 });
+  const teamSnapshot = await teamResponse.json() as { events?: TeamSeasonEventReference[] | null };
+  if (teamSnapshot.events === undefined || teamSnapshot.events === null) {
+    return Response.json({ error: "Team season event list is still being acquired" }, { status: 503 });
+  }
+
+  const events = teamSnapshot.events
+    .filter((event) => event.event_type !== 99 && event.event_type !== 100)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const eventResults = await Promise.all(events.map(async (event) => {
+    await registerRuntimeObject(env, "event", event.key);
+    const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(event.key));
+    const response = await eventStub.fetch(new Request("https://event-runtime/snapshot", {
+      method: "GET",
+      headers: { "X-FieldView-Event-Key": event.key },
+    }));
+    if (!response.ok) {
+      return {
+        event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
+        status: "unavailable" as const,
+        analytics: null,
+      };
+    }
+    const snapshot = await response.json() as {
+      event?: { name?: string; short_name?: string | null; start_date?: string };
+      team_states?: Array<{
+        team_key: string;
+        analytics?: { match_evidence?: Array<Omit<SeasonMatchEvidence, "event">> | null } | null;
+      }>;
+    };
+    const teamState = snapshot.team_states?.find((entry) => entry.team_key === teamKey);
+    const analytics = teamState?.analytics ?? null;
+    return {
+      event: {
+        key: event.key,
+        name: snapshot.event?.name ?? event.name,
+        shortName: snapshot.event?.short_name ?? event.event_code ?? null,
+        startDate: snapshot.event?.start_date ?? event.start_date,
+      },
+      status: !analytics ? "pending" as const : "ready" as const,
+      analytics,
+    };
+  }));
+
+  const seasonEvidence: SeasonMatchEvidence[] = eventResults.flatMap((entry) =>
+    (entry.analytics?.match_evidence ?? []).map((match) => ({ ...match, event: entry.event })),
+  );
+  const diagnostics = buildSeasonDiagnostics(seasonEvidence);
+  const ready = eventResults.filter((entry) => entry.analytics !== null);
+  const completedMatches = ready.reduce((sum, entry) =>
+    sum + (entry.analytics?.performance?.completed_matches ?? 0), 0);
+  const matchesSeen = ready.reduce((sum, entry) =>
+    sum + (entry.analytics?.performance?.matches_seen ?? 0), 0);
+
+  return Response.json({
+    team: Number(teamKey.replace(/^frc/i, "")),
+    year,
+    eventCount: events.length,
+    analyzedEventCount: ready.length,
+    matchCount: completedMatches,
+    matchesSeen,
+    events: eventResults,
+    summary: diagnostics.overall,
+    phaseSummaries: diagnostics.phaseSummaries,
+    eliminationShift: diagnostics.eliminationShift,
+    residualPattern: diagnostics.residualPattern,
+    anomalySummary: diagnostics.anomalySummary,
+    anomalies: diagnostics.anomalies,
+    collection: {
+      state: ready.length === events.length ? "complete" : ready.length > 0 ? "partial" : "pending",
+      analyzedEvents: ready.length,
+      totalEvents: events.length,
+      updatedAt: Date.now(),
+    },
+  }, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-store",
+    },
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -260,7 +364,8 @@ export default {
     const teamKey = teamParts[2];
     const teamAction = teamParts[3];
     const validTeamRoute = teamParts.length === 4 && teamParts[1] === "teams" &&
-      /^[a-zA-Z0-9_-]+$/.test(teamKey ?? "") && teamAction === "snapshot";
+      /^[a-zA-Z0-9_-]+$/.test(teamKey ?? "") &&
+      (teamAction === "snapshot" || teamAction === "analytics");
     if (validTeamRoute && request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: {
         "Access-Control-Allow-Origin": "*",
@@ -270,11 +375,19 @@ export default {
       } });
     }
     if (validTeamRoute && request.method === "GET") {
+      const canonicalTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
+      if (teamAction === "analytics") {
+        const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
+        if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
+          return Response.json({ error: "Invalid season year" }, { status: 400 });
+        }
+        return buildTeamSeasonAnalyticsResponse(env, canonicalTeamKey, year);
+      }
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
-      await registerRuntimeObject(env, "team", teamKey);
-      const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+      await registerRuntimeObject(env, "team", canonicalTeamKey);
+      const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(canonicalTeamKey));
       const response = await stub.fetch(new Request("https://team-runtime/snapshot" + url.search, {
-        method: "GET", headers: { "X-FieldView-Team-Key": teamKey },
+        method: "GET", headers: { "X-FieldView-Team-Key": canonicalTeamKey },
       }));
       const headers = new Headers(response.headers);
       headers.set("Access-Control-Allow-Origin", "*");

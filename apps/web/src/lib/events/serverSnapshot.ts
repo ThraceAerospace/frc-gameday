@@ -103,6 +103,28 @@ export async function getCanonicalTeamDiscovery(
   }
 }
 
+
+/** Read the Worker-owned season-wide team investigation result. */
+export async function getCanonicalTeamAnalytics(
+  teamKey: string,
+  year: number,
+  fetcher: typeof fetch = fetch,
+): Promise<Record<string, unknown> | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
+  try {
+    const url = new URL("/teams/" + encodeURIComponent(teamKey) + "/analytics?year=" + year, baseUrl);
+    const response = await fetcher(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const value = await response.json() as Record<string, unknown>;
+    if (value.team !== Number(teamKey.replace(/^frc/i, "")) || value.year !== year ||
+        !Array.isArray(value.events) || typeof value.collection !== "object" || value.collection === null) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export type CanonicalTeamSnapshotResponse = {
   version: number;
   snapshot: FieldViewTeamSnapshot;
