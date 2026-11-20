@@ -1736,8 +1736,16 @@ export class EventScheduler {
     const key = prefix + year;
     const cached = await this.storage.get<TeamDiscoveryCache>(key);
     const refreshKey = key + ":refresh";
-    const refresh = await this.storage.get<{ cursor: number; pageEtags: Record<string, string | null>; payloadChanged: boolean }>(refreshKey) ??
-      { cursor: 0, pageEtags: {}, payloadChanged: !cached?.complete };
+    const storedRefresh = await this.storage.get<{ cursor: number; pageEtags: Record<string, string | null>; payloadChanged: boolean }>(refreshKey);
+    const lastCheckedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
+    if (prefix === TEAM_DISCOVERY_PREFIX && cached?.complete === true && !storedRefresh &&
+        Date.now() - lastCheckedAt < eventPollingPolicy(this.env).discoveryIntervalMs) {
+      return {
+        requestCount: 0, pageCount: cached.pageCount ?? 0,
+        teamCount: cached.teamCount ?? cached.teamKeys?.length ?? 0, complete: true,
+      };
+    }
+    const refresh = storedRefresh ?? { cursor: 0, pageEtags: {}, payloadChanged: !cached?.complete };
     let requestCount = 0;
     let complete = false;
     let cursor = refresh.cursor;
@@ -1832,25 +1840,32 @@ export class EventScheduler {
       const endpoint = TBA_ENDPOINTS.events(discoveryYear);
       const cacheKey = DISCOVERY_PREFIX + discoveryYear;
       const cached = await this.storage.get<DiscoveryCache>(cacheKey);
-      const headers = new Headers();
-      if (cached?.etag) headers.set("If-None-Match", cached.etag);
-      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+      const checkedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
       let discovered: TBAEvent[];
-      if (response.status === 304 && cached) {
+      if (cached && Date.now() - checkedAt < policy.discoveryIntervalMs) {
+        // Do not consume the shared provider slot on every scheduler alarm.
+        // A fresh event directory is sufficient to continue lifecycle work.
         discovered = cached.events;
-        await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
-      } else if (response.ok) {
-        discovered = await response.json() as TBAEvent[];
-        if (!Array.isArray(discovered)) throw new Error("TBA event discovery returned a non-array payload");
-        const retrievedAt = Date.now();
-        await this.storage.put(cacheKey, {
-          etag: response.headers.get("ETag"),
-          events: discovered,
-          updatedAt: retrievedAt,
-          checkedAt: retrievedAt,
-        } satisfies DiscoveryCache);
       } else {
-        throw new Error("TBA event discovery failed for " + discoveryYear + " with HTTP " + response.status);
+        const headers = new Headers();
+        if (cached?.etag) headers.set("If-None-Match", cached.etag);
+        const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+        if (response.status === 304 && cached) {
+          discovered = cached.events;
+          await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
+        } else if (response.ok) {
+          discovered = await response.json() as TBAEvent[];
+          if (!Array.isArray(discovered)) throw new Error("TBA event discovery returned a non-array payload");
+          const retrievedAt = Date.now();
+          await this.storage.put(cacheKey, {
+            etag: response.headers.get("ETag"),
+            events: discovered,
+            updatedAt: retrievedAt,
+            checkedAt: retrievedAt,
+          } satisfies DiscoveryCache);
+        } else {
+          throw new Error("TBA event discovery failed for " + discoveryYear + " with HTTP " + response.status);
+        }
       }
       for (const event of discovered) if (event.key) events.set(event.key, event);
     }
