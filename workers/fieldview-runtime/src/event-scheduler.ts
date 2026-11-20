@@ -1276,7 +1276,7 @@ export class EventScheduler {
     if (await this.storage.get<boolean>("scheduler:enabled") !== true) return;
     const policy = eventPollingPolicy(this.env);
     try {
-      await this.discoverAndSchedule(policy);
+      await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
       await this.storage.delete("scheduler:last-error");
     } catch (error) {
       if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
