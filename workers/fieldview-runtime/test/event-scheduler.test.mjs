@@ -761,7 +761,9 @@ test("daily scheduler endpoint runs classification without enabling continuous p
     },
   });
 
-  const response = await scheduler.fetch(new Request("https://scheduler/daily", { method: "POST" }));
+  const response = await scheduler.fetch(new Request("https://scheduler/daily", {
+    method: "POST", headers: { Authorization: "Bearer runtime-token" },
+  }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).pending, false);
   assert.equal(await storage.get("scheduler:enabled"), undefined);
