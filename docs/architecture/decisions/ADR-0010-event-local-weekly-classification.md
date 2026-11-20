@@ -12,7 +12,7 @@ TBA event `start_date` and `end_date` are date-only values. They are not timesta
 
 ## Decision
 
-1. **EventScheduler owns weekly classification and publication.** It evaluates the retained current-season event directory in a backend daily job. Next.js and browsers consume the published projection; they do not discover or classify the weekly event set.
+1. **EventScheduler owns weekly classification and publication.** It evaluates the retained current-season event directory in a backend daily job, invoked by a Cloudflare Cron Trigger at 16:00 UTC. Next.js and browsers consume the published projection; they do not discover or classify the weekly event set.
 2. **The calendar week is Monday through Sunday, inclusive.** For each event, determine the current calendar date in that event's own IANA timezone, then calculate that local date's Monday 00:00 through Sunday 23:59:59 week.
 3. **Event dates are inclusive full calendar days.** `start_date` is the beginning of that date (00:00:00) and `end_date` is the end of that date (23:59:59) in the event's timezone. No provider start/end timestamps are required or inferred. A Friday-Sunday event occupies all of Friday, Saturday, and Sunday.
 4. **Classification uses date-range overlap, not lifecycle status.** An event is occurring this week exactly when its inclusive date range overlaps the event-local Monday-Sunday date range:
@@ -30,7 +30,7 @@ TBA event `start_date` and `end_date` are date-only values. They are not timesta
 - Events in different timezones can have different local dates and week boundaries at the same UTC instant. Each event is evaluated independently.
 - Daylight-saving transitions do not alter the date-only overlap calculation; timezone conversion is used only to determine the event-local current calendar date.
 - The published projection can be cached by Next.js and clients without requiring them to repeat event discovery or filtering.
-- The daily scheduler pass is intentionally not a real-time boundary trigger. It recomputes the projection on its daily cadence; the event-local timezone is nevertheless used for every classification.
+- The daily scheduler pass is intentionally not a real-time boundary trigger. The Cron Trigger invokes a bounded discovery/classification run once per day without enabling continuous hourly polling. If the weekly pass needs multiple batches, EventScheduler resumes it through its alarm. It recomputes the projection on its daily cadence; the event-local timezone is nevertheless used for every classification.
 
 ## Validation requirements
 
