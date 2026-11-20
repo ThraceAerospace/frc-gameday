@@ -37,6 +37,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Stable per-owner/endpoint jitter spreads denied runtimes across the next gate window. */
+function providerRetryJitter(owner: string, endpoint: string, interval: number): number {
+  const input = owner + "|" + endpoint;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % Math.max(1, Math.floor(interval / 2));
+}
+
 function configured(value: string | number | undefined, fallback: number, name: string): number {
   const parsed = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1_000) {
@@ -306,11 +317,15 @@ export class EventScheduler {
     try {
       return await this.handleFetch(request);
     } finally {
-      console.log("[FV][EventScheduler] request", JSON.stringify({
-        method: request.method,
-        path: url.pathname,
-        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
-      }));
+      // Provider-gate RPCs are intentionally high-frequency. Logging every
+      // acquire/release made local diagnostics unusable and amplified noise.
+      if (url.pathname !== "/provider-request/acquire" && url.pathname !== "/provider-request/release") {
+        console.log("[FV][EventScheduler] request", JSON.stringify({
+          method: request.method,
+          path: url.pathname,
+          duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+        }));
+      }
     }
   }
 
@@ -496,8 +511,13 @@ export class EventScheduler {
       const result = await this.storage.transaction(async (tx) => {
         const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
         const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
-        if (current && current.expiresAt > now) return { granted: false, retryAt: Math.min(current.expiresAt, now + interval) };
-        if (nextAt > now) return { granted: false, retryAt: nextAt };
+        if (current && current.expiresAt > now) {
+          const baseRetryAt = Math.min(current.expiresAt, now + interval);
+          return { granted: false, retryAt: baseRetryAt + providerRetryJitter(value.owner as string, value.endpoint as string, interval) };
+        }
+        if (nextAt > now) {
+          return { granted: false, retryAt: nextAt + providerRetryJitter(value.owner as string, value.endpoint as string, interval) };
+        }
         const leaseId = crypto.randomUUID();
         await tx.put("provider-gate:lease", { leaseId, owner: value.owner as string, endpoint: value.endpoint as string, expiresAt: now + 60_000 } satisfies ProviderRequestLease);
         return { granted: true, leaseId };
