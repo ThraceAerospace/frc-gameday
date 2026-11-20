@@ -484,7 +484,7 @@ export class EventRuntime {
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-      await this.scheduleStatboticsRefresh(Date.now(), 0);
+      await this.enqueueManualPolls([endpoint]);
       await this.alarm();
       await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
       await this.storage.put("analytics:status", "pending");

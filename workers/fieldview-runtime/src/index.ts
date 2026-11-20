@@ -337,7 +337,22 @@ export default {
         const teamResult = await teamResponse.clone().json() as {
           snapshot?: { events?: Array<Record<string, unknown>> | null };
         };
-        const events = Array.isArray(teamResult.snapshot?.events) ? teamResult.snapshot.events : [];
+        let events = Array.isArray(teamResult.snapshot?.events) ? teamResult.snapshot.events : null;
+        if (events === null) {
+          // TeamRuntime seeding is now queued independently of recurring polling.
+          // Let its durable alarm drain the season resources before reading history.
+          const interval = Number(env.PROVIDER_REQUEST_INTERVAL_MS ?? 1_000);
+          await new Promise<void>((resolve) => setTimeout(resolve, Math.max(8_000, interval * 9)));
+          const refreshed = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
+          }));
+          if (refreshed.ok) {
+            const snapshot = await refreshed.json() as { events?: Array<Record<string, unknown>> | null };
+            events = Array.isArray(snapshot.events) ? snapshot.events : null;
+            if (events !== null) teamResult.snapshot = snapshot;
+          }
+        }
+        if (events === null) return Response.json({ error: "TeamRuntime seed is queued, but its event history is not ready yet. Retry the seed operation shortly." }, { status: 202 });
         const policy = eventPollingPolicy(env);
         const seededEvents: Array<{ event_key: string; status: number; body: unknown }> = [];
         for (const event of events) {

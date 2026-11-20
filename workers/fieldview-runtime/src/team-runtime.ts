@@ -145,7 +145,7 @@ export class TeamRuntime {
         const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         // Resource registration must never advance an existing recurring fetch.
-        const dueAt = previous?.dueAt ?? now;
+        const dueAt = previous?.dueAt ?? (immediate ? now + this.refreshIntervalMs() : now);
         await tx.put(key, { provider, endpoint, dueAt,
           intervalMs: this.refreshIntervalMs(), attempts: previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
@@ -168,7 +168,7 @@ export class TeamRuntime {
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
       // Explicit admin ingestion is synchronous: the 24-hour interval is only
       // the steady-state refresh cadence after this immediate acquisition.
-      await this.schedule(year, false);
+      await this.schedule(year, true);
       await this.enqueueManualPolls(this.endpoints(year), year);
       await this.alarm();
       const snapshotResponse = await this.snapshot(year);
