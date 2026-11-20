@@ -154,6 +154,13 @@ interface DiscoveryCache {
 
 interface ProviderRequestLease { leaseId: string; owner: string; endpoint: string; expiresAt: number; }
 
+class ProviderGateDeferred extends Error {
+  constructor(readonly retryAt: number, endpoint: string) {
+    super("Provider request deferred until " + new Date(retryAt).toISOString() + " for " + endpoint);
+    this.name = "ProviderGateDeferred";
+  }
+}
+
 interface SeasonIngestJob {
   year: number;
   runGeneration: number;
@@ -267,10 +274,7 @@ export class EventScheduler {
         } satisfies ProviderRequestLease);
         return { granted: true as const, leaseId };
       });
-      if (!permit.granted) {
-        await new Promise<void>((resolve) => setTimeout(resolve, Math.max(10, permit.retryAt - Date.now())));
-        continue;
-      }
+      if (!permit.granted) throw new ProviderGateDeferred(permit.retryAt, endpoint);
       try {
         return await request();
       } finally {
@@ -1227,6 +1231,7 @@ export class EventScheduler {
       await this.discoverAndSchedule(policy);
       await this.storage.delete("scheduler:last-error");
     } catch (error) {
+      if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
       await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
     }
     try {
@@ -1234,12 +1239,16 @@ export class EventScheduler {
       if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
       else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
     } catch (error) {
+      if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
       await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
     }
     await this.storage.put("scheduler:last-run-at", Date.now());
     const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
     const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
-    await this.storage.setAlarm(Date.now() + (teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs));
+    const providerDeferredUntil = await this.storage.get<number>("scheduler:provider-deferred-until");
+    const nextDelay = teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs;
+    await this.storage.setAlarm(Math.max(Date.now() + 100, Math.min(Date.now() + nextDelay, providerDeferredUntil ?? Number.MAX_SAFE_INTEGER)));
+    if (providerDeferredUntil !== undefined) await this.storage.delete("scheduler:provider-deferred-until");
   }
 
   private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
