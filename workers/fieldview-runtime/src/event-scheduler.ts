@@ -969,6 +969,7 @@ export class EventScheduler {
     }
     const teamKey = job.teamKeys[job.cursor];
     job.activeTeamKey = teamKey;
+    job.teamWaitStartedAt ??= Date.now();
     const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
     try {
       const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
