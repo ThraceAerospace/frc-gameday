@@ -229,6 +229,7 @@ interface EventTeamSeedJob {
   stage: "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
   teamAttempts: number; teamWaitStartedAt?: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
   errors: Array<{ team_key: string; detail: string; at: number }>;
+  eventKeys?: string[]; eventCursor?: number;
   startedAt: number; updatedAt: number; nextDueAt: number; resumeAlarmAt: number | null;
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
@@ -1150,7 +1151,17 @@ export class EventScheduler {
         const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
         if (!Array.isArray(snapshot.events)) throw new Error("Team event history was fetched but is missing from the normalized snapshot");
         const policy = eventPollingPolicy(this.env);
-        for (const event of snapshot.events) {
+        const eventKeys = snapshot.events.map((event) => event.key).filter((key): key is string =>
+          typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key));
+        if (!job.eventKeys || JSON.stringify(job.eventKeys) !== JSON.stringify(eventKeys)) {
+          job.eventKeys = eventKeys;
+          job.eventCursor = 0;
+        }
+        const eventByKey = new Map(snapshot.events.filter((event) => typeof event.key === "string").map((event) => [String(event.key), event]));
+        let scheduledThisAlarm = 0;
+        for (let eventIndex = job.eventCursor ?? 0; eventIndex < eventKeys.length && scheduledThisAlarm < 10; eventIndex += 1) {
+          const event = eventByKey.get(eventKeys[eventIndex]);
+          if (!event) { job.eventCursor = eventIndex + 1; continue; }
           const eventKey = event.key;
           if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
           const eventRegistry = await this.storage.get<string[]>("registry:events") ?? [];
@@ -1175,7 +1186,16 @@ export class EventScheduler {
               }));
           if (!eventResponse.ok) throw new Error("EventRuntime registration failed for " + eventKey + " with HTTP " + eventResponse.status);
           job.historicalEventsScheduled += 1;
+          job.eventCursor = eventIndex + 1;
+          scheduledThisAlarm += 1;
         }
+        if ((job.eventCursor ?? 0) < eventKeys.length) {
+          job.nextDueAt = Date.now() + 100;
+          job.updatedAt = Date.now();
+          await this.storage.put(eventTeamSeedKey(job.eventKey), job);
+          return;
+        }
+        job.eventKeys = undefined; job.eventCursor = undefined;
         job.seededTeams += 1; job.cursor += 1; job.activeTeamKey = null;
         job.stage = "seed"; job.teamAttempts = 0; job.teamWaitStartedAt = undefined; job.nextDueAt = Date.now() + 100;
       }
