@@ -983,11 +983,19 @@ export class EventScheduler {
         const historyResource = teamResourceEndpoints(teamKey, job.year).find((resource) =>
           resource.provider === "tba" && resource.endpoint === TBA_ENDPOINTS.teamEvents(teamKey, job.year));
         if (!historyResource) throw new Error("Team event-history resource is not configured");
-        const historyResponse = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
-          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: historyResource.endpoint }),
-        }));
-        if (!historyResponse.ok) throw new Error("TeamRuntime event-history curation returned HTTP " + historyResponse.status);
+        const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
+        if (!stateResponse.ok) throw new Error("TeamRuntime state returned HTTP " + stateResponse.status);
+        const teamState = await stateResponse.json() as {
+          endpoints?: Array<{ endpoint?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }>;
+        };
+        const historyState = teamState.endpoints?.find((endpoint) => endpoint.endpoint === historyResource.endpoint);
+        if ((historyState?.last_fetched_at ?? historyState?.lastFetchedAt ?? null) === null) {
+          const historyResponse = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+            method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: historyResource.endpoint }),
+          }));
+          if (!historyResponse.ok) throw new Error("TeamRuntime event-history curation returned HTTP " + historyResponse.status);
+        }
         job.stage = "wait";
         job.teamWaitStartedAt = Date.now();
         job.nextDueAt = Date.now() + Math.max(1_000, this.providerRequestInterval() * 2);
