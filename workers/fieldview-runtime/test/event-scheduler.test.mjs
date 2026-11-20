@@ -287,3 +287,99 @@ test("a successful TBA 304 refreshes discovery validation time without replacing
   assert.equal(refreshed.updatedAt, old);
   assert.ok(refreshed.checkedAt > old);
 });
+
+
+test("event team seeding explicitly curates team history and waits for acquisition", async () => {
+  const storage = new MemoryStorage();
+  const historyEndpoint = "/team/frc3461/events/2026";
+  let historyTriggered = false;
+  let historyAcquired = false;
+  const teamCalls = [];
+  const eventCalls = [];
+  const env = {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    PROVIDER_REQUEST_INTERVAL_MS: "100",
+    TEAM_RUNTIME: {
+      idFromName: (key) => key,
+      get: (id) => ({
+        fetch: async (request) => {
+          const url = new URL(request.url);
+          teamCalls.push({ path: url.pathname, method: request.method });
+          if (url.pathname === "/seed") return Response.json({ scheduled: true, attempted: true });
+          if (url.pathname === "/state") {
+            return Response.json({
+              team_key: id,
+              endpoints: [{
+                endpoint: historyEndpoint,
+                status: historyAcquired ? "available" : "unknown",
+                last_fetched_at: historyAcquired ? Date.now() : null,
+              }],
+            });
+          }
+          if (url.pathname === "/ingest-resource") {
+            const body = await request.json();
+            assert.equal(body.endpoint, historyEndpoint);
+            historyTriggered = true;
+            return Response.json({ endpoint: historyEndpoint, queued: true, status: "pending" }, { status: 202 });
+          }
+          if (url.pathname === "/snapshot") {
+            return Response.json({
+              team_key: id,
+              events: [{
+                key: "2026history",
+                start_date: "2026-03-01",
+                end_date: "2026-03-02",
+                timezone: "America/New_York",
+              }],
+            });
+          }
+          return Response.json({ error: "not found" }, { status: 404 });
+        },
+      }),
+    },
+    EVENT_RUNTIME: {
+      idFromName: (key) => key,
+      get: (id) => ({
+        fetch: async (request) => {
+          eventCalls.push({ id, path: new URL(request.url).pathname, body: await request.json() });
+          return Response.json({ scheduled: true });
+        },
+      }),
+    },
+    fetcher: async (url) => {
+      assert.match(String(url), /\/event\/2026rikin\/teams$/);
+      return Response.json([{ key: "frc3461", team_number: 3461 }]);
+    },
+  };
+  const scheduler = new EventScheduler({ storage }, env);
+  const started = await scheduler.fetch(new Request("https://scheduler/admin/event-team-seed", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ event_key: "2026rikin", year: 2026 }),
+  }));
+  assert.equal(started.status, 202);
+
+  await scheduler.alarm();
+  let job = await storage.get("admin:event-team-seed:2026rikin");
+  assert.equal(job.status, "running");
+  assert.equal(job.stage, "wait");
+  assert.equal(job.failedTeams, 0);
+  assert.equal(historyTriggered, true);
+  assert.equal(eventCalls.length, 0);
+
+  historyAcquired = true;
+  job.nextDueAt = 0;
+  await storage.put("admin:event-team-seed:2026rikin", job);
+  await scheduler.alarm();
+
+  job = await storage.get("admin:event-team-seed:2026rikin");
+  assert.equal(job.status, "completed");
+  assert.equal(job.seededTeams, 1);
+  assert.equal(job.failedTeams, 0);
+  assert.equal(job.historicalEventsScheduled, 1);
+  assert.equal(eventCalls.length, 1);
+  assert.equal(eventCalls[0].id, "2026history");
+  assert.equal(eventCalls[0].body.analyticsEnabled, false);
+  assert.ok(teamCalls.some((call) => call.path === "/ingest-resource" && call.method === "POST"));
+});
