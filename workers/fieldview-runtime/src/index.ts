@@ -399,7 +399,7 @@ export default {
 
     if (
       (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/district-refresh") &&
-      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed") && request.method === "POST"))
+      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
