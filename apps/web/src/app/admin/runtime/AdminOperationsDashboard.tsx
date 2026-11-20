@@ -34,7 +34,7 @@ type Overview = {
   scheduler?: { enabled: boolean; last_run_at: number | null; next_alarm_at: number | null; last_error: string | null; team_discovery_error: string | null } | null;
   events: Entity[]; teams: Entity[];
   multiplexer: { connected_sockets: number | null; clients: number; subscriptions: Array<{ topic: string; clients: number }> } | null;
-  inventory: { events: number; teams: number }; truncated: boolean;
+  inventory?: { events: number; teams: number }; truncated: boolean;
 };
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
 type SeasonIngest = {
@@ -363,7 +363,7 @@ export default function AdminOperationsDashboard() {
 
     {tab === "home" && <div className="mt-6 space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[["Registered events", overview?.inventory.events ?? 0], ["Registered teams", overview?.inventory.teams ?? 0], ["Sampled events without analytics", sampled.eventAnalyticsMissing], ["Runtime errors in sample", sampled.failed]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
+        {[["Registered events", overview?.inventory?.events ?? "—"], ["Registered teams", overview?.inventory?.teams ?? "—"], ["Sampled events without analytics", sampled.eventAnalyticsMissing], ["Runtime errors in sample", sampled.failed]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
       </div>
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">
