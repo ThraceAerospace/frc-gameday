@@ -47,9 +47,10 @@ export default async function DistrictPage({ params }: { params: Promise<{ distr
           </section>
         </div>
         <section className="mt-8">
-          <h2 className="mb-3 text-lg font-bold text-slate-900">Teams ({teams.length})</h2>
+          <h2 className="mb-3 text-lg font-bold text-slate-900">{snapshot?.teams === undefined ? "Teams (pending)" : snapshot.teams === null ? "Teams (unavailable)" : `Teams (${teams.length})`}</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {teams.map((team) => <Link key={team.key} href={`/team/${team.team_number}?year=${year}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-[var(--fv-brand-border)] hover:bg-[var(--fv-brand-soft)]/40"><span className="font-mono text-sm font-bold text-slate-900">{team.team_number}</span><span className="ml-2 truncate text-sm text-slate-600">{team.nickname || team.name || "Team"}</span></Link>)}
+            {!teams.length && <p className="col-span-full rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500">{snapshot?.teams === undefined ? "District teams have not been acquired." : snapshot.teams === null ? "District teams are unavailable." : "No district teams are listed."}</p>}
           </div>
         </section>
       </div>
