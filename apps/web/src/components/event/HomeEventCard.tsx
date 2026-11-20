@@ -14,6 +14,7 @@ type HomeEventCardProps = {
   event: FieldViewEvent;
   lastMatch: FieldViewMatch | null;
   nextMatch: FieldViewMatch | null;
+  enrichmentPending?: boolean;
 };
 
 function getCompetitionStatus(event: FieldViewEvent) {
@@ -28,7 +29,7 @@ function getCompetitionStatus(event: FieldViewEvent) {
   return { label: "In progress", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
 }
 
-export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEventCardProps) {
+export default function HomeEventCard({ event, lastMatch, nextMatch, enrichmentPending = false }: HomeEventCardProps) {
   const eventName = formatEventName(event.short_name || event.name, event.name);
   const location = [event.city, event.state_prov, event.country].filter(Boolean).join(", ");
   const webcastStatus = getEventWebcastStatus(event);
@@ -85,7 +86,7 @@ export default function HomeEventCard({ event, lastMatch, nextMatch }: HomeEvent
               <HomeMatchCard match={lastMatch} eventTimezone={event.timezone ?? undefined} />
             ) : (
               <div className="flex min-h-[64px] items-center rounded-md border border-dashed border-slate-200 px-2.5 text-[11px] text-slate-400">
-                No completed matches yet
+                {enrichmentPending ? "Live match details load separately" : "No completed matches yet"}
               </div>
             )}
           </div>
