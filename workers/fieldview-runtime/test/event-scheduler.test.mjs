@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyEventLifecycle,
+  classifyEventThisWeek,
   DEFAULT_EVENT_POLLING_POLICY,
   eventPollingPolicy,
   EventScheduler,
@@ -580,4 +581,88 @@ test("district 404 marks a resource unavailable without discarding its last-good
   const directory = await publicResponse.json();
   assert.equal(directory.districts[0].key, "2026fim");
   assert.equal(directory.sources.tba_districts.status, "stale");
+});
+
+test("weekly event classification uses inclusive date-only ranges and the event timezone", () => {
+  const sundayEnd = Date.parse("2026-11-23T04:59:59.999Z"); // Sunday 23:59:59.999 in New York.
+  const fridayThroughSunday = {
+    start_date: "2026-11-20",
+    end_date: "2026-11-22",
+    timezone: "America/New_York",
+  };
+  const sunday = classifyEventThisWeek(fridayThroughSunday, sundayEnd);
+  assert.deepEqual(
+    { isThisWeek: sunday?.isThisWeek, localDate: sunday?.localDate, weekStart: sunday?.weekStart, weekEnd: sunday?.weekEnd },
+    { isThisWeek: true, localDate: "2026-11-22", weekStart: "2026-11-16", weekEnd: "2026-11-22" },
+  );
+
+  const thursdayThroughSaturday = classifyEventThisWeek({
+    start_date: "2026-11-19", end_date: "2026-11-21", timezone: "America/New_York",
+  }, sundayEnd);
+  assert.equal(thursdayThroughSaturday?.isThisWeek, true);
+
+  const nextMonday = classifyEventThisWeek({
+    start_date: "2026-11-23", end_date: "2026-11-24", timezone: "America/New_York",
+  }, sundayEnd);
+  assert.equal(nextMonday?.isThisWeek, false);
+
+  const mondayMidnight = classifyEventThisWeek(fridayThroughSunday, Date.parse("2026-11-23T05:00:00.000Z"));
+  assert.equal(mondayMidnight?.isThisWeek, false);
+});
+
+test("the same instant can belong to different calendar weeks in different event timezones", () => {
+  const now = Date.parse("2026-11-23T00:30:00.000Z");
+  const eventDates = { start_date: "2026-11-20", end_date: "2026-11-22" };
+  const newYork = classifyEventThisWeek({ ...eventDates, timezone: "America/New_York" }, now);
+  const tokyo = classifyEventThisWeek({ ...eventDates, timezone: "Asia/Tokyo" }, now);
+  assert.equal(newYork?.localDate, "2026-11-22");
+  assert.equal(newYork?.isThisWeek, true);
+  assert.equal(tokyo?.localDate, "2026-11-23");
+  assert.equal(tokyo?.isThisWeek, false);
+});
+
+test("daily weekly projection initializes EventRuntime for matching events and publishes only completed matches", async () => {
+  const now = Date.now();
+  const parts = new Map(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
+  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
+  const localParts = localDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
+  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
+  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const weeklyEvent = {
+    key: "2026weekly", start_date: date(4), end_date: date(6), timezone: "America/New_York",
+  };
+  const outsideEvent = {
+    key: "2026nextweek", start_date: date(7), end_date: date(8), timezone: "America/New_York",
+  };
+  const storage = new MemoryStorage();
+  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
+    etag: null, events: [weeklyEvent, outsideEvent], updatedAt: now, checkedAt: now,
+  });
+  const runtimeRequests = [];
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        fetch: async (request) => {
+          runtimeRequests.push({ id, body: await request.json() });
+          return Response.json({ updated: true });
+        },
+      }),
+    },
+  });
+
+  const pending = await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY);
+  assert.equal(pending, false);
+  assert.deepEqual(runtimeRequests.map((item) => item.id), ["2026weekly"]);
+  assert.deepEqual(await storage.get("registry:runtime-events"), ["2026weekly"]);
+  const projection = await storage.get("scheduler:this-week-projection");
+  assert.deepEqual(projection.events.map((event) => event.key), ["2026weekly"]);
+
+  await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY);
+  assert.equal(runtimeRequests.length, 1, "the completed daily pass is not repeated on every alarm");
 });
