@@ -266,10 +266,10 @@ export default function AdminOperationsDashboard() {
   }, [authenticated, selected?.kind, selected?.key, selected?.year, loadEventTeamSeed]);
 
   useEffect(() => {
-    if (!authenticated || !token) return;
+    if (!authenticated || !token || selected) return;
     const timer = window.setInterval(() => void refresh(true), 60_000);
     return () => window.clearInterval(timer);
-  }, [authenticated, token, refresh]);
+  }, [authenticated, token, refresh, selected]);
 
   useEffect(() => {
     if (!authenticated) return;
