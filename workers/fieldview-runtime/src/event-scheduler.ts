@@ -1540,26 +1540,36 @@ export class EventScheduler {
       // passed earlier in the same Monday-Sunday window. Expired lifecycle
       // state prevents unnecessary polling while retaining the runtime owner.
       const lifecycle = classifyEventLifecycle(event, now, policy);
-      if (!lifecycle) continue;
       const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-      const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": eventKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lifecycle: lifecycle.lifecycle,
-          upcomingIntervalMs: policy.upcomingIntervalMs,
-          activeIntervalMs: policy.activeIntervalMs,
-          ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
-        }),
-      }));
+      const eventHeaders = {
+        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+        "X-FieldView-Event-Key": eventKey,
+        "Content-Type": "application/json",
+      };
+      const response = lifecycle
+        ? await stub.fetch(new Request("https://event-runtime/lifecycle", {
+            method: "POST",
+            headers: eventHeaders,
+            body: JSON.stringify({
+              lifecycle: lifecycle.lifecycle,
+              upcomingIntervalMs: policy.upcomingIntervalMs,
+              activeIntervalMs: policy.activeIntervalMs,
+              ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+            }),
+          }))
+        : await stub.fetch(new Request("https://event-runtime/schedule", {
+            method: "POST",
+            headers: eventHeaders,
+            body: JSON.stringify({
+              endpoints: eventResourceEndpoints(eventKey),
+              intervalMs: 86_400_000,
+              analyticsEnabled: false,
+            }),
+          }));
       if (!response.ok) throw new Error("Failed to initialize this-week EventRuntime " + eventKey + ": HTTP " + response.status);
       runtimeEventKeys.add(eventKey);
-      if (lifecycle.lifecycle === "expired") scheduledKeys.delete(eventKey);
-      else scheduledKeys.add(eventKey);
+      if (lifecycle?.lifecycle === "expired") scheduledKeys.delete(eventKey);
+      else if (lifecycle) scheduledKeys.add(eventKey);
     }
     progress.cursor += batch.length;
     await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
