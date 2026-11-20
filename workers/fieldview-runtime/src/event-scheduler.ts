@@ -1163,6 +1163,28 @@ export class EventScheduler {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/daily") {
+      const activeEventSeeds = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
+      const activeSeasonJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+      const busy = [...activeEventSeeds.values()].some((job) => job.status === "running") ||
+        [...activeSeasonJobs.values()].some((job) => job.status === "running" || job.status === "paused");
+      await this.storage.put("scheduler:daily-run-requested", true);
+      if (busy) {
+        await this.storage.setAlarm(Date.now() + 1_000);
+        return Response.json({ queued: true, reason: "An existing bounded scheduler job has priority." }, { status: 202 });
+      }
+      try {
+        const pending = await this.runDailyClassification(eventPollingPolicy(this.env));
+        return Response.json({ queued: pending, pending });
+      } catch (error) {
+        const retryAt = error instanceof ProviderGateDeferred ? error.retryAt : Date.now() + 60_000;
+        const detail = error instanceof Error ? error.message : String(error);
+        await this.storage.put("scheduler:this-week-error", detail);
+        await this.storage.setAlarm(Math.max(Date.now() + 100, retryAt));
+        return Response.json({ queued: true, error: detail, retry_at: retryAt }, { status: 202 });
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/run") {
       const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
       if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
@@ -1392,7 +1414,11 @@ export class EventScheduler {
         const resumeAt = refreshed?.resumeAlarmAt ?? null;
         await this.storage.setAlarm(Math.max(Date.now() + 100, resumeAt ?? Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs));
       }
-      else if (await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY)) await this.storage.setAlarm(Date.now() + 100);
+      else if (
+        await this.storage.get<boolean>("scheduler:daily-run-requested") === true ||
+        await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY) ||
+        await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
+      ) await this.storage.setAlarm(Date.now() + 100);
       else await this.storage.deleteAlarm();
       return;
     }
@@ -1404,18 +1430,27 @@ export class EventScheduler {
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt ?? Date.now() + 1_000));
       else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
         await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
-      } else if (await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY)) await this.storage.setAlarm(Date.now() + 100);
+      } else if (
+        await this.storage.get<boolean>("scheduler:daily-run-requested") === true ||
+        await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY) ||
+        await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
+      ) await this.storage.setAlarm(Date.now() + 100);
       else await this.storage.deleteAlarm();
       return;
     }
     if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
+      const dailyRequested = await this.storage.get<boolean>("scheduler:daily-run-requested") === true;
       const weeklyProgress = await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY);
-      if (!weeklyProgress) return;
-      const pending = await this.measureStage("this-week-event-classification", () =>
-        this.refreshThisWeekProjection(eventPollingPolicy(this.env)),
-      );
-      if (pending) await this.storage.setAlarm(Date.now() + 1_000);
-      else await this.storage.deleteAlarm();
+      const lifecycleProgress = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
+      if (!dailyRequested && !weeklyProgress && !lifecycleProgress) return;
+      try {
+        const pending = await this.runDailyClassification(eventPollingPolicy(this.env));
+        if (!pending) await this.storage.deleteAlarm();
+      } catch (error) {
+        const retryAt = error instanceof ProviderGateDeferred ? error.retryAt : Date.now() + 60_000;
+        await this.storage.put("scheduler:this-week-error", error instanceof Error ? error.message : String(error));
+        await this.storage.setAlarm(Math.max(Date.now() + 100, retryAt));
+      }
       return;
     }
     const policy = eventPollingPolicy(this.env);
@@ -1449,6 +1484,22 @@ export class EventScheduler {
     const nextDelay = teamRefresh || lifecycleRefresh || thisWeekRefreshPending ? 1_000 : policy.discoveryIntervalMs;
     await this.storage.setAlarm(Math.max(Date.now() + 100, Math.min(Date.now() + nextDelay, providerDeferredUntil ?? Number.MAX_SAFE_INTEGER)));
     if (providerDeferredUntil !== undefined) await this.storage.delete("scheduler:provider-deferred-until");
+    if (!thisWeekRefreshPending && !lifecycleRefresh) await this.storage.delete("scheduler:daily-run-requested");
+  }
+
+  private async runDailyClassification(policy: EventPollingPolicy): Promise<boolean> {
+    await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
+    const weeklyPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
+    const lifecyclePending = (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) !== undefined;
+    const pending = weeklyPending || lifecyclePending;
+    if (pending) {
+      await this.storage.put("scheduler:daily-run-requested", true);
+      await this.storage.setAlarm(Date.now() + 1_000);
+    } else {
+      await this.storage.delete("scheduler:daily-run-requested");
+      await this.storage.delete("scheduler:this-week-error");
+    }
+    return pending;
   }
 
   private async refreshThisWeekProjection(policy: EventPollingPolicy): Promise<boolean> {
