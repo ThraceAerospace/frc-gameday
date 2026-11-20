@@ -423,8 +423,13 @@ export class EventScheduler {
             if (JSON.stringify(next) !== JSON.stringify(previous)) await this.storage.put(spec.storageKey, next);
             results.push({ resource: spec.name, status: "unchanged", http_status: 304 });
           } else if (response.status === 404) {
-            const next: DistrictResourceCache = { etag: response.headers.get("ETag"), retrievedAt: null, checkedAt: now, status: "unavailable" };
-            await this.storage.put(spec.storageKey, next);
+            // A current 404 describes source availability, not whether an older
+            // successful payload ever existed. Retain last-good data so public
+            // snapshots remain useful and expose it as stale provenance.
+            const next: DistrictResourceCache = previous?.payload !== undefined
+              ? { ...previous, checkedAt: now, status: "unavailable" }
+              : { etag: response.headers.get("ETag"), retrievedAt: null, checkedAt: now, status: "unavailable" };
+            if (JSON.stringify(next) !== JSON.stringify(previous)) await this.storage.put(spec.storageKey, next);
             results.push({ resource: spec.name, status: "unavailable", http_status: 404 });
           } else if (response.ok) {
             const payload = await response.json();
