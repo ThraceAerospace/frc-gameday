@@ -14,7 +14,17 @@ class MemoryStorage {
 }
 const env = (fetcher) => ({ TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin", TBA_WEBHOOK_SECRET: "unused", EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => new Response() }) }, fetcher });
 
-test("TeamRuntime lazily schedules and composes canonical team resources", async () => {
+async function drainManualQueue(runtime, storage, max = 20) {
+  for (let index = 0; index < max; index += 1) {
+    const queue = storage.values.get("manual:poll-queue") ?? [];
+    if (queue.length === 0) return;
+    storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
+    await runtime.alarm();
+  }
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0, "manual provider queue should drain within the test bound");
+}
+
+test("TeamRuntime public snapshots are read-only and explicit refresh composes canonical resources", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461";
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -24,8 +34,15 @@ test("TeamRuntime lazily schedules and composes canonical team resources", async
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   assert.equal(first.status, 200); assert.equal(calls.length, 0);
   assert.equal((await first.json()).team_key, teamKey);
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 7);
-  await runtime.alarm(); assert.equal(calls.length, 7);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 0);
+  assert.equal(storage.alarmAt, null);
+
+  await runtime.fetch(new Request("https://team/refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(calls.length, 1, "one alarm processes one provider request");
+  await drainManualQueue(runtime, storage);
+  assert.equal(calls.length, 7);
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   const snapshot = await second.json();
   assert.equal(snapshot.team.team_number, 3461);
@@ -44,18 +61,19 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
     return Response.json([]);
   }), "frc3461");
   const req = (method="GET") => new Request("https://team/"+(method === "POST" ? "refresh?year=2026" : "snapshot?year=2026"), { method, headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" } });
-  await runtime.fetch(req()); await runtime.alarm();
+  await runtime.fetch(req("POST")); await drainManualQueue(runtime, storage);
   fail = true;
   const refresh = await runtime.fetch(req("POST"));
   assert.equal(refresh.status, 200);
   assert.equal((await refresh.json()).attempted, true);
+  await drainManualQueue(runtime, storage);
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": "frc3461" } }))).json();
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "stale");
 });
 
 
-test("TeamRuntime admin seed ingests all team resources before responding", async () => {
+test("TeamRuntime admin seed queues durable work and alarms process it in bounded batches", async () => {
   const storage = new MemoryStorage(), calls = [];
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -69,7 +87,12 @@ test("TeamRuntime admin seed ingests all team resources before responding", asyn
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.attempted, true);
-  assert.equal(result.snapshot.team.team_number, 3461);
+  assert.equal(calls.length, 1);
+  await drainManualQueue(runtime, storage);
+  const snapshot = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal((await snapshot.json()).team.team_number, 3461);
   assert.equal(calls.length, 7);
   assert.ok(calls.some((url) => url.includes("frc3461")));
   assert.match(calls[0], /\/team\/frc3461\/events\/2026$/);
@@ -87,11 +110,11 @@ test("TeamRuntime restores team identity before a reconstructed object's alarm",
   const storage = new MemoryStorage(), calls = [];
   const fetcher = async (url) => { calls.push(String(url)); return Response.json([]); };
   const first = new TeamRuntime({ storage }, env(fetcher), "frc3461");
-  await first.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
+  await first.fetch(new Request("https://team/refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
   const reconstructed = new TeamRuntime({ storage }, env(fetcher));
-  await reconstructed.alarm();
+  await drainManualQueue(reconstructed, storage);
   assert.equal(calls.length, 7);
   assert.ok(calls.some((url) => url.includes("frc3461")));
 });
@@ -104,10 +127,10 @@ test("TeamRuntime converts numeric public team IDs to TBA frc-prefixed keys", as
     if (String(url).endsWith("/team/frc3461")) return Response.json({ key: "frc3461", team_number: 3461 });
     return Response.json([]);
   }), "3461");
-  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "3461" },
+  await runtime.fetch(new Request("https://team/refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "3461" },
   }));
-  await runtime.alarm();
+  await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7);
   assert.ok(calls.some((url) => url.includes("/team/frc3461")));
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
@@ -123,10 +146,10 @@ test("TeamRuntime preserves an explicit null team representation", async () => {
     if (String(url).endsWith("/team/frc3461")) return Response.json(null, { headers: { ETag: '"team-null"' } });
     return Response.json([]);
   }), "frc3461");
-  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
+  await runtime.fetch(new Request("https://team/refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
-  await runtime.alarm();
+  await drainManualQueue(runtime, storage);
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": "frc3461" },
   }))).json();
@@ -142,8 +165,8 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
     return Response.json([]);
   }), "2485");
   const headers = { "X-FieldView-Team-Key": "2485", Authorization: "Bearer admin" };
-  await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers }));
-  await runtime.alarm();
+  await runtime.fetch(new Request("https://team/refresh?year=2026", { method: "POST", headers }));
+  await drainManualQueue(runtime, storage);
 
   const state = await runtime.fetch(new Request("https://team/state", { headers }));
   const diagnostics = await state.json();
