@@ -46,7 +46,7 @@ export default async function HomePage() {
           {events.length ? (
             <div className="mt-5 grid gap-4 xl:grid-cols-2">
               {events.map((event) => (
-                <HomeEventCard key={event.key} event={event} lastMatch={null} nextMatch={null} />
+                <HomeEventCard key={event.key} event={event} lastMatch={null} nextMatch={null} enrichmentPending />
               ))}
             </div>
           ) : (
