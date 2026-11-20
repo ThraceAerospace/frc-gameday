@@ -33,6 +33,8 @@ import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/cano
 import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
 import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./provider-request-gate.ts";
 
+interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
+
 interface PollTask {
   endpoint: string;
   dueAt: number;
@@ -48,6 +50,7 @@ interface PollTask {
 }
 
 const TASK_PREFIX = "task:"
+const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
@@ -429,8 +432,9 @@ export class EventRuntime {
       }
       const endpoints = requested as string[];
       const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
-      await this.schedulePolls(endpoints, 86_400_000, Date.now(), true);
-      if (includeStatbotics) await this.scheduleStatboticsRefresh(Date.now(), 0);
+      const manualEndpoints = [...endpoints];
+      if (includeStatbotics) manualEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
+      await this.enqueueManualPolls(manualEndpoints);
       await this.alarm();
       // Explicit refreshes also force a fresh analytics publication, even when
       // the provider returns an unchanged representation or HTTP 304.
@@ -467,10 +471,10 @@ export class EventRuntime {
       if (!endpoint || (!this.allowedEndpoints.has(endpoint) && endpoint !== statboticsEndpoint)) {
         return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
       }
-      const result = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
-      if (typeof result !== "boolean") {
-        return Response.json({ endpoint, deferred: true, retry_at: result.deferredUntil }, { status: 202 });
-      }
+      await this.enqueueManualPolls([endpoint]);
+      await this.alarm();
+      const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
+      return Response.json({ endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
@@ -1015,6 +1019,19 @@ export class EventRuntime {
     });
   }
 
+  private async enqueueManualPolls(endpoints: string[]): Promise<void> {
+    await this.storage.transaction(async (transaction) => {
+      const current = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+      const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
+      for (const endpoint of endpoints) {
+        const previous = byEndpoint.get(endpoint);
+        byEndpoint.set(endpoint, { endpoint, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
+      }
+      await transaction.put(MANUAL_QUEUE_KEY, [...byEndpoint.values()]);
+      await this.rearm(transaction);
+    });
+  }
+
   private async restoreEventIdentity(): Promise<boolean> {
     const storedEventKey = await this.storage.get<string>("event-key");
     const eventKey = storedEventKey ?? this.eventKey;
@@ -1080,12 +1097,30 @@ export class EventRuntime {
           attempts: task.attempts + 1,
         });
       }
+      const queued = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+      const manualDue = queued.filter((item) => item.dueAt <= now);
+      if (manualDue.length > 0 && !hasEventIdentity) throw new Error("Cannot execute manual event work without persisted event identity");
+      await transaction.put(MANUAL_QUEUE_KEY, queued.filter((item) => item.dueAt > now));
       const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
       const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
       if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
       await this.rearm(transaction);
-      return { due, analyticsDue };
+      return { due, manualDue, analyticsDue };
     });
+
+    // Manual work is independent of recurring poll tasks and is always serviced first.
+    for (const item of dueTasks.manualDue) {
+      const result = await this.pollEndpoint(item.endpoint);
+      if (typeof result !== "boolean" || !result) {
+        const retryAt = typeof result !== "boolean" ? result.deferredUntil
+          : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
+        if (item.attempts < 8) await this.storage.transaction(async (transaction) => {
+          const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+          await transaction.put(MANUAL_QUEUE_KEY, [...queue.filter((queued) => queued.endpoint !== item.endpoint), { ...item, dueAt: retryAt, attempts: item.attempts + 1 }]);
+          await this.rearm(transaction);
+        });
+      }
+    }
 
     for (const task of dueTasks.due) {
       const succeeded = await this.pollEndpoint(task.endpoint);
@@ -1270,9 +1305,11 @@ export class EventRuntime {
     const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
     const completedUntil = await transaction.get<number>("lifecycle:completed-until");
     const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
+    const manualQueue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
     const nextDue = [...tasks.values()].reduce<number | null>(
       (next, task) => next === null || task.dueAt < next ? task.dueAt : next,
-      [completedUntil, analyticsDueAt].filter((value): value is number => value !== undefined)
+      [...manualQueue.map((item) => item.dueAt), completedUntil, analyticsDueAt]
+        .filter((value): value is number => value !== undefined)
         .reduce<number | null>((next, value) => next === null || value < next ? value : next, null),
     );
     if (nextDue === null) await transaction.deleteAlarm();

@@ -15,12 +15,14 @@ import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./pr
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 export interface TeamResource { provider: TeamProvider; endpoint: string; }
+interface ManualTeamPollRequest { endpoint: string; year: number; dueAt: number; attempts: number; }
 interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
 interface TeamEndpointState<T> extends EndpointState<T> {
   lastHttpStatus?: number | null;
   lastError?: string | null;
 }
 const TASK_PREFIX = "task:";
+const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
@@ -111,8 +113,21 @@ export class TeamRuntime {
   }
   private async rearm(tx: DurableObjectTransactionLike): Promise<void> {
     const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-    const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value, null);
+    const manual = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+    const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value, manual.reduce<number | null>((value, item) => value === null || item.dueAt < value ? item.dueAt : value, null));
     if (next === null) await tx.deleteAlarm(); else await tx.setAlarm(next);
+  }
+  private async enqueueManualPolls(resources: TeamResource[], year: number): Promise<void> {
+    await this.storage.transaction(async (tx) => {
+      const current = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+      const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
+      for (const resource of resources) {
+        const previous = byEndpoint.get(resource.endpoint);
+        byEndpoint.set(resource.endpoint, { endpoint: resource.endpoint, year, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
+      }
+      await tx.put(MANUAL_QUEUE_KEY, [...byEndpoint.values()]);
+      await this.rearm(tx);
+    });
   }
   private async schedule(year: number, immediate: boolean): Promise<void> {
     await this.storage.transaction(async (tx) => {
@@ -132,9 +147,8 @@ export class TeamRuntime {
         const state = await tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
         const needsIngestion = !state || state.status === "unknown" || state.status === "stale" ||
           (state.expiresAt !== null && state.expiresAt < now);
-        const dueAt = immediate || (needsIngestion && previous)
-          ? now
-          : previous?.dueAt ?? now;
+        // Resource registration must never advance an existing recurring fetch.
+        const dueAt = previous?.dueAt ?? now;
         await tx.put(key, { provider, endpoint, dueAt,
           intervalMs: this.refreshIntervalMs(), attempts: immediate ? 0 : previous?.attempts ?? 0 } satisfies TeamPollTask);
       }
@@ -157,7 +171,8 @@ export class TeamRuntime {
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
       // Explicit admin ingestion is synchronous: the 24-hour interval is only
       // the steady-state refresh cadence after this immediate acquisition.
-      await this.schedule(year, true);
+      await this.schedule(year, false);
+      await this.enqueueManualPolls(this.endpoints(year), year);
       await this.alarm();
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
@@ -183,9 +198,10 @@ export class TeamRuntime {
         ? (body as Record<string, unknown>).endpoint : null;
       const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
-      const result = await this.pollResourceNow(resource);
-      if ("deferredUntil" in result) return Response.json({ endpoint, deferred: true, retry_at: result.deferredUntil }, { status: 202 });
-      return Response.json({ endpoint, ...result });
+      await this.enqueueManualPolls([resource], year);
+      await this.alarm();
+      const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
+      return Response.json({ endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
@@ -310,9 +326,28 @@ export class TeamRuntime {
         await tx.put(key, { ...next, dueAt: retryAt });
         ready.push(next);
       }
-      await this.rearm(tx); return ready;
+      const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+      const manualDue = queued.filter((item) => item.dueAt <= now);
+      await tx.put(MANUAL_QUEUE_KEY, queued.filter((item) => item.dueAt > now));
+      await this.rearm(tx); return { ready, manualDue };
     });
-    for (const task of due) {
+    for (const item of due.manualDue) {
+      const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
+      if (!resource) continue;
+      const result = await this.pollResourceNow(resource);
+      if ("deferredUntil" in result || !result.success) {
+        if (item.attempts < 8) {
+          const retryAt = "deferredUntil" in result ? result.deferredUntil
+            : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
+          await this.storage.transaction(async (tx) => {
+            const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+            await tx.put(MANUAL_QUEUE_KEY, [...queue.filter((queued) => queued.endpoint !== item.endpoint), { ...item, dueAt: retryAt, attempts: item.attempts + 1 }]);
+            await this.rearm(tx);
+          });
+        }
+      }
+    }
+    for (const task of due.ready) {
       const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
       const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(task.endpoint);
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
