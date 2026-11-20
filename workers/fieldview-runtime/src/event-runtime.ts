@@ -1181,16 +1181,15 @@ export class EventRuntime {
     for (const item of dueTasks.manualDue) {
       const result = await this.pollEndpoint(item.endpoint);
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
-      const deferred = typeof result !== "boolean";
-      const retryableFailure = deferred || (!result && latest?.status === "failed");
-      const retryAt = deferred ? result.deferredUntil
+      const retryableFailure = typeof result !== "boolean" || (!result && latest?.status === "failed");
+      const retryAt = typeof result !== "boolean" ? result.deferredUntil
         : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (transaction) => {
         const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
         if (retryableFailure && item.attempts < 8) {
           // Gate deferral is not a provider attempt and must not consume retries.
-          next.push({ ...item, dueAt: retryAt, attempts: deferred ? item.attempts : item.attempts + 1 });
+          next.push({ ...item, dueAt: retryAt, attempts: typeof result !== "boolean" ? item.attempts : item.attempts + 1 });
         }
         await transaction.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(transaction);
