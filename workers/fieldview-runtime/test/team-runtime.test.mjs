@@ -60,13 +60,15 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
     if (String(url).endsWith("/team/frc3461")) return Response.json({ key: "frc3461", team_number: 3461 });
     return Response.json([]);
   }), "frc3461");
-  const req = (method="GET") => new Request("https://team/"+(method === "POST" ? "refresh?year=2026" : "snapshot?year=2026"), { method, headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" } });
-  await runtime.fetch(req("POST")); await drainManualQueue(runtime, storage);
+  const ingestProfile = () => new Request("https://team/ingest-resource?year=2026", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461", "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: "/team/frc3461" }),
+  });
+  await runtime.fetch(ingestProfile());
   fail = true;
-  const refresh = await runtime.fetch(req("POST"));
-  assert.equal(refresh.status, 200);
-  assert.equal((await refresh.json()).attempted, true);
-  await drainManualQueue(runtime, storage);
+  const refresh = await runtime.fetch(ingestProfile());
+  assert.equal(refresh.status, 202);
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": "frc3461" } }))).json();
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "stale");
