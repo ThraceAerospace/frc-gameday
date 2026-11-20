@@ -20,6 +20,23 @@ test("builds collection filters and pagination using Statbotics query names", ()
   );
 });
 
+test("defaults to the Chondl Statbotics v3 mirror", async () => {
+  let capturedUrl;
+  const client = new StatboticsApiClient({
+    fetch: async (url) => {
+      capturedUrl = url;
+      return new Response("{}", { status: 200 });
+    },
+  });
+
+  await client.request("/match/2026test_qm1");
+
+  assert.equal(
+    capturedUrl,
+    "https://api-statbotics.iterativerefinement.com/v3/match/2026test_qm1",
+  );
+});
+
 test("uses configured API base URL and preserves request headers and response", async () => {
   let captured;
   const response = new Response(null, { status: 304, headers: { ETag: '"v1"' } });
