@@ -23,6 +23,7 @@ TBA event `start_date` and `end_date` are date-only values. They are not timesta
 6. **Work is bounded and resumable.** The daily pass processes at most ten events per alarm batch, persists its cursor, and publishes the new projection only after the pass completes. It reuses the existing EventScheduler and EventRuntime; no additional Durable Object class is introduced.
 7. **The Worker exposes a read-only projection** at `GET /events/this-week`. It returns the completed projection and its evaluation date/time with cache headers. Reads do not trigger discovery, classification, or provider acquisition.
 8. **Live enrichment is separate from the projection.** Current match status, webcast, and other rapidly changing information must not block the initial home-page event list. Consumers may load or refresh that enrichment independently.
+9. **Conditional caching is a future optimization, not a current endpoint requirement.** The application may adopt ETags or equivalent validators on its own read endpoints in the mature architecture where they materially improve revalidation. The current home-page integration uses the projection's existing cache headers and the Next.js Data Cache; it does not require FieldView-owned endpoint ETags.
 
 ## Consequences
 
@@ -41,3 +42,5 @@ TBA event `start_date` and `end_date` are date-only values. They are not timesta
 - Invalid or reversed date ranges and invalid timezones are excluded.
 - Processing is bounded, resumable, idempotent for unchanged EventRuntime lifecycle state, and publishes only a completed projection.
 - Public projection reads are read-only and do not trigger provider requests.
+- The home page consumes `/events/this-week` directly and does not fan out to individual EventRuntime snapshots for its initial event list.
+- FieldView-owned endpoint ETags remain deferred; future conditional revalidation should be introduced selectively after measuring cache behavior.
