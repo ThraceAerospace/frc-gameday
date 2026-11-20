@@ -180,6 +180,21 @@ export default {
           !isRecord(payload.message_data)) {
         return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
       }
+
+      // Log only useful, authenticated webhook metadata. The verification key
+      // is intentionally included so it can be copied into the TBA dashboard;
+      // never log the HMAC secret, signature, or complete payload.
+      const webhookLog: Record<string, unknown> = {
+        message_type: payload.message_type,
+      };
+      if (typeof payload.message_data.event_key === "string") {
+        webhookLog.event_key = payload.message_data.event_key;
+      }
+      if (payload.message_type === "verification") {
+        webhookLog.verification_key = payload.message_data.verification_key ?? null;
+      }
+      console.log("[WEBHOOK][TBA] Received", JSON.stringify(webhookLog));
+
       if (["ping", "verification", "broadcast"].includes(payload.message_type)) {
         return Response.json({ accepted: true });
       }
