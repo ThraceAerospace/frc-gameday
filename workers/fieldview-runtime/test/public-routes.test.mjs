@@ -392,3 +392,85 @@ test("public event analytics route exposes the persisted analytics publication",
   assert.equal(forwarded.method, "GET");
   assert.equal(forwarded.headers.get("X-FieldView-Event-Key"), "2026test");
 });
+
+
+test("public team season analytics aggregates canonical TeamRuntime and EventRuntime snapshots", async () => {
+  const calls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "server-only-token",
+    EVENT_SCHEDULER: {
+      idFromName(name) { return name; },
+      get(id) {
+        return { async fetch(request) {
+          calls.push({ kind: "register", id, body: await request.json() });
+          return Response.json({ registered: true });
+        } };
+      },
+    },
+    TEAM_RUNTIME: {
+      idFromName(name) { calls.push({ kind: "team-id", name }); return name; },
+      get(id) {
+        return { async fetch(request) {
+          calls.push({ kind: "team", id, path: new URL(request.url).pathname + new URL(request.url).search });
+          return Response.json({
+            events: [
+              { key: "2026alpha", name: "Alpha", event_code: "alpha", start_date: "2026-03-01", event_type: 0 },
+              { key: "2026broken", name: "Broken", start_date: "2026-04-01", event_type: 0 },
+              { key: "2026offseason", name: "Offseason", start_date: "2026-10-01", event_type: 99 },
+            ],
+          });
+        } };
+      },
+    },
+    EVENT_RUNTIME: {
+      idFromName(name) { calls.push({ kind: "event-id", name }); return name; },
+      get(id) {
+        return { async fetch(request) {
+          calls.push({ kind: "event", id, path: new URL(request.url).pathname });
+          if (id === "2026broken") throw new Error("simulated event runtime failure");
+          return Response.json({
+            event: { name: "Alpha Event", short_name: "Alpha", start_date: "2026-03-01" },
+            team_states: [{
+              team_key: "frc3461",
+              analytics: {
+                performance: { completed_matches: 2, matches_seen: 3 },
+                match_evidence: [],
+              },
+            }],
+          });
+        } };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://runtime.example/teams/frc3461/analytics?year=2026"),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+  const result = await response.json();
+  assert.equal(result.team, 3461);
+  assert.equal(result.year, 2026);
+  assert.equal(result.eventCount, 2);
+  assert.equal(result.analyzedEventCount, 1);
+  assert.equal(result.matchCount, 2);
+  assert.equal(result.matchesSeen, 3);
+  assert.equal(result.events[0].event.name, "Alpha Event");
+  assert.equal(result.events[0].status, "ready");
+  assert.equal(result.events[1].status, "unavailable");
+  assert.equal(result.collection.state, "partial");
+  assert.ok(calls.some((call) => call.kind === "team" && call.path === "/snapshot?year=2026"));
+  assert.ok(calls.some((call) => call.kind === "event" && call.id === "2026alpha"));
+  assert.equal(calls.some((call) => call.kind === "event" && call.id === "2026offseason"), false);
+  assert.ok(calls.some((call) => call.kind === "event" && call.id === "2026broken"));
+});
+
+test("public team analytics rejects invalid seasons before accessing runtimes", async () => {
+  const response = await worker.fetch(
+    new Request("https://runtime.example/teams/frc3461/analytics?year=1800"),
+    { RUNTIME_ADMIN_TOKEN: "server-only-token" },
+  );
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Invalid season year" });
+});
