@@ -1,13 +1,18 @@
 import type { FieldViewDistrictDirectory, FieldViewDistrictSnapshot, FieldViewEvent, FieldViewEventSnapshot, FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
 
+type RuntimeFetchInit = RequestInit & {
+  next?: { revalidate?: number; tags?: string[] };
+};
+
 async function fetchCanonicalRuntime(
   operation: string,
   url: URL,
   fetcher: typeof fetch,
+  init: RuntimeFetchInit = { cache: "no-store" },
 ): Promise<Response> {
   const startedAt = performance.now();
   try {
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetcher(url, init);
     console.info("[FV][NextRuntimeFetch]", JSON.stringify({
       operation,
       status: response.status,
@@ -94,7 +99,13 @@ export async function getCanonicalEventDiscovery(
 
   try {
     const url = new URL(`/events/discovery?year=${year}`, baseUrl);
-    const response = await fetchCanonicalRuntime("event-discovery", url, fetcher);
+    // Event discovery is a large, slow-changing season directory. Cache it in
+    // the Next.js Data Cache for five minutes; the Worker response also
+    // supplies browser HTTP caching headers for client-side consumers.
+    const response = await fetchCanonicalRuntime("event-discovery", url, fetcher, {
+      cache: "force-cache",
+      next: { revalidate: 300, tags: [`fieldview-event-discovery-${year}`] },
+    });
     if (!response.ok) return null;
     const payload = await response.json() as { year?: number; events?: unknown };
     if (payload.year !== year || !Array.isArray(payload.events)) return null;
