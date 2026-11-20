@@ -29,6 +29,15 @@ const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
 
+function staggeredProviderDueAt(endpoint: string, base: number, interval: number): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < endpoint.length; index += 1) {
+    hash ^= endpoint.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return base + ((hash >>> 0) % Math.max(1, interval));
+}
+
 export function teamResourceEndpoints(teamKey: string, year: number): TeamResource[] {
   const providerTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
   const teamNumber = Number(providerTeamKey.replace(/^frc/i, ""));
@@ -187,7 +196,8 @@ export class TeamRuntime {
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
     if (publicRead) {
-      if (!(admin && url.searchParams.get("noSchedule") === "1")) await this.schedule(year, false);
+      // Snapshot reads are read-only. Provider acquisition is initiated by
+      // explicit refresh/seed operations or scheduler-owned lifecycle work.
       return this.snapshot(year);
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
@@ -338,11 +348,11 @@ export class TeamRuntime {
     const now = Date.now();
     const due = await this.storage.transaction(async (tx) => {
       const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const ready: TeamPollTask[] = [];
+      const dueTasks: TeamPollTask[] = [];
       for (const [key, task] of tasks) {
         // Durable Object storage can outlive code revisions. Never let a task
         // written with the former resource-object shape reach endpoint state
-        // handling; the next snapshot/refresh will schedule it correctly.
+        // handling; the next explicit refresh will schedule it correctly.
         if (typeof task.endpoint !== "string" ||
           (task.provider !== "tba" && task.provider !== "statbotics" && task.provider !== "frc-colors") ||
           !Number.isFinite(task.dueAt) || !Number.isFinite(task.intervalMs) ||
@@ -350,31 +360,52 @@ export class TeamRuntime {
           await tx.delete(key);
           continue;
         }
-        if (task.dueAt > now) continue;
-        const next = { ...task, attempts: task.attempts + 1 };
-        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
-        await tx.put(key, { ...next, dueAt: retryAt });
-        ready.push(next);
+        if (task.dueAt <= now) dueTasks.push(task);
       }
+      dueTasks.sort((left, right) => left.dueAt - right.dueAt || left.endpoint.localeCompare(right.endpoint));
       const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
-      if (manualDue.length > 0) {
-        await tx.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
+      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
+      const providerInterval = intervalValue === undefined ? 1_000 : Math.max(100, Number(intervalValue) || 1_000);
+      const deferAt = (endpoint: string) => staggeredProviderDueAt(endpoint, now + providerInterval, providerInterval);
+      const selectedManual = manualDue[0];
+      const selectedTask = selectedManual ? undefined : dueTasks[0];
+
+      // Process at most one provider request per alarm. Keep all remaining
+      // durable work, but spread its next due time instead of fanning out
+      // gate RPCs for every resource in the same invocation.
+      for (const task of dueTasks) {
+        if (selectedTask?.endpoint === task.endpoint) {
+          const next = { ...task, attempts: task.attempts + 1 };
+          const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
+          await tx.put(taskKey(task.endpoint), { ...next, dueAt: retryAt });
+        } else {
+          await tx.put(taskKey(task.endpoint), { ...task, dueAt: deferAt(task.endpoint) });
+        }
       }
-      await this.rearm(tx); return { ready, manualDue };
+      if (manualDue.length > 0) {
+        await tx.put(MANUAL_QUEUE_KEY, queued.map((item) =>
+          selectedManual?.endpoint === item.endpoint
+            ? { ...item, dueAt: now + 60_000 }
+            : item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
+      }
+      await this.rearm(tx);
+      return { ready: selectedTask ? [selectedTask] : [], manualDue: selectedManual ? [selectedManual] : [] };
     });
     for (const item of due.manualDue) {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) continue;
       const result = await this.pollResourceNow(resource);
-      const retryableFailure = "deferredUntil" in result || result.status === "failed";
-      const retryAt = "deferredUntil" in result ? result.deferredUntil
+      const deferred = "deferredUntil" in result;
+      const retryableFailure = deferred || result.status === "failed";
+      const retryAt = deferred ? result.deferredUntil
         : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (tx) => {
         const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
         if (retryableFailure && item.attempts < 8) {
-          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
+          // A gate denial is scheduling, not a provider attempt.
+          next.push({ ...item, dueAt: retryAt, attempts: deferred ? item.attempts : item.attempts + 1 });
         }
         await tx.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(tx);
@@ -395,8 +426,6 @@ export class TeamRuntime {
         continue;
       }
       try {
-        // Provider identity is assigned when the resource is declared; never infer
-        // it from endpoint paths, which may overlap across providers.
         const client = task.provider === "tba" ? this.api
           : task.provider === "statbotics" ? this.statboticsApi
             : task.provider === "frc-colors" ? this.frcColorsApi : null;
