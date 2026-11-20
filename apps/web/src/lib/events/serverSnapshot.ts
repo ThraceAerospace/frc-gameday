@@ -1,5 +1,30 @@
 import type { FieldViewDistrictDirectory, FieldViewDistrictSnapshot, FieldViewEvent, FieldViewEventSnapshot, FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
 
+async function fetchCanonicalRuntime(
+  operation: string,
+  url: URL,
+  fetcher: typeof fetch,
+): Promise<Response> {
+  const startedAt = performance.now();
+  try {
+    const response = await fetchCanonicalRuntime("event-snapshot", url, fetcher);
+    console.info("[FV][NextRuntimeFetch]", JSON.stringify({
+      operation,
+      status: response.status,
+      duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+    }));
+    return response;
+  } catch (error) {
+    console.error("[FV][NextRuntimeFetch]", JSON.stringify({
+      operation,
+      outcome: "error",
+      duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    throw error;
+  }
+}
+
 export type CanonicalEventSnapshotResponse = {
   version: number;
   snapshot: FieldViewEventSnapshot;
@@ -18,7 +43,7 @@ export async function getCanonicalEventSnapshot(
 
   try {
     const url = new URL(`/events/${encodeURIComponent(eventKey)}/snapshot`, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("event-analytics", url, fetcher);
     if (!response.ok) return null;
 
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
@@ -51,7 +76,7 @@ export async function getCanonicalEventAnalytics(
   if (!baseUrl || !eventKey) return null;
   try {
     const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("event-discovery", url, fetcher);
     if (!response.ok) return null;
     const value = await response.json() as CanonicalEventAnalyticsResponse;
     if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) return null;
@@ -69,7 +94,7 @@ export async function getCanonicalEventDiscovery(
 
   try {
     const url = new URL(`/events/discovery?year=${year}`, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("team-discovery", url, fetcher);
     if (!response.ok) return null;
     const payload = await response.json() as { year?: number; events?: unknown };
     if (payload.year !== year || !Array.isArray(payload.events)) return null;
@@ -90,7 +115,7 @@ export async function getCanonicalTeamDiscovery(
   if (!baseUrl || !Number.isSafeInteger(year)) return null;
   try {
     const url = new URL(`/teams/discovery?year=${year}`, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("team-analytics", url, fetcher);
     if (!response.ok) return null;
     const payload = await response.json() as { year?: number; teams?: unknown };
     if (payload.year !== year || !Array.isArray(payload.teams)) return null;
@@ -114,7 +139,7 @@ export async function getCanonicalTeamAnalytics(
   if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
   try {
     const url = new URL("/teams/" + encodeURIComponent(teamKey) + "/analytics?year=" + year, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("team-snapshot", url, fetcher);
     if (!response.ok) return null;
     const value = await response.json() as Record<string, unknown>;
     if (value.team !== Number(teamKey.replace(/^frc/i, "")) || value.year !== year ||
@@ -140,7 +165,7 @@ export async function getCanonicalTeamSnapshot(
   if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
   try {
     const url = new URL(`/teams/${encodeURIComponent(teamKey)}/snapshot?year=${year}`, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("district-discovery", url, fetcher);
     if (!response.ok) return null;
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
     if (!Number.isSafeInteger(version) || version < 0) return null;
@@ -161,7 +186,7 @@ export async function getCanonicalDistrictDirectory(
   if (!baseUrl || !Number.isSafeInteger(year)) return null;
   try {
     const url = new URL("/districts/discovery?year=" + year, baseUrl);
-    const response = await fetcher(url, { cache: "no-store" });
+    const response = await fetchCanonicalRuntime("district-snapshot", url, fetcher);
     if (!response.ok) return null;
     const value = await response.json() as FieldViewDistrictDirectory;
     if (value.year !== year || (value.districts !== null && value.districts !== undefined && !Array.isArray(value.districts))) return null;
