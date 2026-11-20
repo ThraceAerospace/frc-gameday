@@ -21,6 +21,33 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
+test("provider gate applies bounded stable jitter to denied owners", async () => {
+  const storage = new MemoryStorage();
+  const now = Date.now();
+  await storage.put("provider-gate:lease", {
+    leaseId: "held-lease", owner: "event:2026held", endpoint: "/held",
+    expiresAt: now + 60_000,
+  });
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    PROVIDER_REQUEST_INTERVAL_MS: 1_000,
+  });
+  const acquire = async () => {
+    const response = await scheduler.fetch(new Request("https://scheduler/provider-request/acquire", {
+      method: "POST",
+      headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ owner: "event:2026test", endpoint: "/events/2026test/matches" }),
+    }));
+    assert.equal(response.status, 200);
+    return (await response.json()).retryAt;
+  };
+  const first = await acquire();
+  const second = await acquire();
+  assert.ok(first >= now + 1_000);
+  assert.ok(first <= now + 1_500);
+  assert.ok(Math.abs(second - first) < 10, "the same owner/resource receives a stable retry offset");
+});
+
 test("global scheduler discovers yearly events and applies the lifecycle plan", async () => {
   const storage = new MemoryStorage();
   const currentYear = new Date().getUTCFullYear();
