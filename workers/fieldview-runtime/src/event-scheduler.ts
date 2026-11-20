@@ -166,8 +166,10 @@ interface DiscoveryCache {
 interface ProviderRequestLease { leaseId: string; owner: string; endpoint: string; expiresAt: number; }
 
 class ProviderGateDeferred extends Error {
-  constructor(readonly retryAt: number, endpoint: string) {
+  readonly retryAt: number;
+  constructor(retryAt: number, endpoint: string) {
     super("Provider request deferred until " + new Date(retryAt).toISOString() + " for " + endpoint);
+    this.retryAt = retryAt;
     this.name = "ProviderGateDeferred";
   }
 }
