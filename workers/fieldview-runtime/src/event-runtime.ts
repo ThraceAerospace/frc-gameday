@@ -607,9 +607,8 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      // A public read creates demand for missing or stale canonical resources.
-      // The admin season job uses /publish-state to avoid scheduling extra polls.
-      await this.scheduleDemandIngestion();
+      // Snapshot reads are read-only. Provider acquisition is initiated by
+      // explicit refreshes, event lifecycle scheduling, or webhook work.
       const publication = await this.publishEventState();
       return Response.json(publication.state, {
         headers: {
