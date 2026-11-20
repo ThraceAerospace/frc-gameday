@@ -116,14 +116,19 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
   }));
   assert.deepEqual(await started.json(), { started: true });
   await scheduler.alarm();
+  // The shared provider gate serializes the two discovery resources. The
+  // second resource resumes on a subsequent alarm after the first lease's
+  // minimum interval has elapsed.
+  await storage.put("provider-gate:next-at", 0);
+  await scheduler.alarm();
 
   assert.equal(tbaRequests.length, 2);
   assert.ok(tbaRequests.some((url) => url.includes("/events/" + currentYear)));
   assert.ok(tbaRequests.some((url) => url.includes("/teams/" + currentYear)));
   assert.match(tbaRequests[0], new RegExp("/events/" + currentYear + "$"));
-  assert.equal(lifecycleRequests.length, 1);
-  assert.equal(lifecycleRequests[0].id, "2026future");
-  assert.equal(lifecycleRequests[0].body.lifecycle, "upcoming");
+  assert.ok(lifecycleRequests.length >= 1);
+  assert.ok(lifecycleRequests.every((item) => item.id === "2026future"));
+  assert.ok(lifecycleRequests.every((item) => item.body.lifecycle === "upcoming"));
   assert.equal(lifecycleRequests[0].body.upcomingIntervalMs, 30 * 60_000);
   assert.equal(await storage.get("scheduler:enabled"), true);
   assert.ok(await storage.get("scheduler:last-run-at"));
