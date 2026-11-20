@@ -1487,8 +1487,42 @@ export class EventScheduler {
     if (!thisWeekRefreshPending && !lifecycleRefresh) await this.storage.delete("scheduler:daily-run-requested");
   }
 
+  private async refreshCurrentYearEventDirectory(policy: EventPollingPolicy): Promise<void> {
+    const year = new Date().getUTCFullYear();
+    const cacheKey = DISCOVERY_PREFIX + year;
+    const cached = await this.storage.get<DiscoveryCache>(cacheKey);
+    const checkedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
+    if (cached && Date.now() - checkedAt < policy.discoveryIntervalMs) return;
+
+    const endpoint = TBA_ENDPOINTS.events(year);
+    const headers = new Headers();
+    if (cached?.etag) headers.set("If-None-Match", cached.etag);
+    const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+    if (response.status === 304 && cached) {
+      const refreshed = { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache;
+      await this.storage.put(cacheKey, refreshed);
+      return;
+    }
+    if (!response.ok) throw new Error("TBA event discovery failed for " + year + " with HTTP " + response.status);
+    const events = await response.json() as TBAEvent[];
+    if (!Array.isArray(events)) throw new Error("TBA event discovery returned a non-array payload");
+    const retrievedAt = Date.now();
+    await this.storage.put(cacheKey, {
+      etag: response.headers.get("ETag"),
+      events,
+      updatedAt: retrievedAt,
+      checkedAt: retrievedAt,
+    } satisfies DiscoveryCache);
+  }
+
   private async runDailyClassification(policy: EventPollingPolicy): Promise<boolean> {
-    await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
+    await this.measureStage("event-directory-refresh", () => this.refreshCurrentYearEventDirectory(policy));
+    // If the regular scheduler had an interrupted lifecycle cursor before it
+    // was stopped, finish that existing work; do not start lifecycle polling
+    // for every event merely because the daily home-page projection ran.
+    if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) {
+      await this.measureStage("resume-event-lifecycle", () => this.discoverAndSchedule(policy));
+    }
     const weeklyPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
     const lifecyclePending = (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) !== undefined;
     const pending = weeklyPending || lifecyclePending;
