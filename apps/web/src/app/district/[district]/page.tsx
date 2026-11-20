@@ -12,7 +12,7 @@ export default async function DistrictPage({ params }: { params: Promise<{ distr
   const district = districts.find((item) => item.abbreviation.toLowerCase() === requestedKey.toLowerCase() || item.key.toLowerCase() === requestedKey.toLowerCase());
 
   if (!directory || !district) {
-    const message = !directory ? "Canonical district directory is not available yet." : directory.districts === null ? "The district directory is explicitly unavailable from the source." : `No active ${year} district matches this key.`;
+    const message = !directory ? "Canonical district directory is not available yet." : directory.districts === undefined ? "The district directory has not been acquired yet." : directory.districts === null ? "The district directory is explicitly unavailable from the source." : `No active ${year} district matches this key.`;
     return <SiteShell><div className="mx-auto max-w-5xl px-5 py-12"><h1 className="text-2xl font-bold text-slate-900">District unavailable</h1><p className="mt-2 text-sm text-slate-500">{message}</p><Link href="/districts" className="mt-5 inline-block text-sm font-semibold text-[var(--fv-brand)]">← All districts</Link></div></SiteShell>;
   }
 
