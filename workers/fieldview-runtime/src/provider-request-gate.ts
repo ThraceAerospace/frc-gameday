@@ -23,7 +23,12 @@ export async function acquireProviderRequestPermit(
   }));
   if (!response.ok) throw new Error("Shared provider request gate returned HTTP " + response.status);
   const body = await response.json() as { granted?: boolean; lease_id?: string; retry_at?: number };
-  if (body.granted === true) return { granted: true, leaseId: body.lease_id ?? null };
+  if (body.granted === true) {
+    if (typeof body.lease_id !== "string" || body.lease_id.length === 0) {
+      throw new Error("Shared provider request gate granted a permit without a releasable lease id");
+    }
+    return { granted: true, leaseId: body.lease_id };
+  }
   return { granted: false, retryAt: Number.isFinite(body.retry_at) ? Number(body.retry_at) : Date.now() + 1_000 };
 }
 
