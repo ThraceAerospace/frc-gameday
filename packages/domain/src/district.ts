@@ -9,7 +9,7 @@ export interface FieldViewDistrict extends TBADistrict {
 /** Current-season district directory, including resource-level provenance. */
 export interface FieldViewDistrictDirectory {
   year: number;
-  districts: FieldViewDistrict[] | null;
+  districts?: FieldViewDistrict[] | null;
   sources: FieldViewSourceMetadata;
 }
 
