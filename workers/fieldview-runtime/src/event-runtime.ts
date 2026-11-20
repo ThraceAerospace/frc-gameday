@@ -54,6 +54,7 @@ const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
+const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
@@ -354,6 +355,8 @@ export class EventRuntime {
       }
       const upcomingIntervalMs = body.upcomingIntervalMs;
       const activeIntervalMs = body.activeIntervalMs;
+      if (body.analyticsEnabled === false) await this.storage.put(ANALYTICS_ENABLED_KEY, false);
+      else if (body.analyticsEnabled === true) await this.storage.put(ANALYTICS_ENABLED_KEY, true);
       const completedUntil = body.completedUntil;
       if (![upcomingIntervalMs, activeIntervalMs].every((value) =>
         typeof value === "number" && Number.isSafeInteger(value) && value >= 1_000) ||
@@ -398,6 +401,7 @@ export class EventRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/recalculate") {
+      await this.storage.put(ANALYTICS_ENABLED_KEY, true);
       const body: unknown = await request.json().catch(() => null);
       if (isRecord(body) && body.allowPartialCohort === true) {
         // The season-ingest controller calls this only after it has attempted
@@ -409,8 +413,10 @@ export class EventRuntime {
           Number.isSafeInteger(body.seasonTeamRevision) && body.seasonTeamRevision >= 0) {
         await this.storage.put(ANALYTICS_SEASON_TEAM_REVISION_KEY, body.seasonTeamRevision);
       }
-      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-      await this.storage.put("analytics:status", "pending");
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+        await this.storage.put("analytics:status", "pending");
+      }
       await this.storage.transaction((transaction) => this.rearm(transaction));
       await this.alarm();
       return Response.json({
@@ -438,8 +444,10 @@ export class EventRuntime {
       await this.alarm();
       // Explicit refreshes also force a fresh analytics publication, even when
       // the provider returns an unchanged representation or HTTP 304.
-      await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-      await this.storage.put("analytics:status", "pending");
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
+        await this.storage.put("analytics:status", "pending");
+      }
       await this.storage.transaction((transaction) => this.rearm(transaction));
       await this.alarm();
       return Response.json({
@@ -1396,7 +1404,8 @@ export class EventRuntime {
         const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
         await transaction.put("snapshot-revision", snapshotRevision + 1);
         const analyticsSource = analyticsSourceForEndpoint(endpoint, this.eventKey);
-        if (analyticsSource) {
+        const analyticsEnabled = await transaction.get<boolean>(ANALYTICS_ENABLED_KEY) !== false;
+        if (analyticsSource && analyticsEnabled) {
           const matchKeys = analyticsSource === "tba-event-matches" || analyticsSource === "statbotics-event-matches"
             ? changedMatchKeys(latest.providerData, next.providerData, analyticsSource)
             : null;

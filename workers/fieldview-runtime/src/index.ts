@@ -373,13 +373,14 @@ export default {
           if (!lifecycle || lifecycle.lifecycle === "expired") {
             eventResponse = await eventStub.fetch(new Request("https://event-runtime/schedule", {
               method: "POST", headers: eventHeaders,
-              body: JSON.stringify({ endpoints: eventResourceEndpoints(eventKey), intervalMs: 86_400_000 }),
+              body: JSON.stringify({ endpoints: eventResourceEndpoints(eventKey), intervalMs: 86_400_000, analyticsEnabled: false }),
             }));
           } else {
             eventResponse = await eventStub.fetch(new Request("https://event-runtime/lifecycle", {
               method: "POST", headers: eventHeaders,
               body: JSON.stringify({
                 lifecycle: lifecycle.lifecycle,
+                analyticsEnabled: false,
                 upcomingIntervalMs: policy.upcomingIntervalMs,
                 activeIntervalMs: policy.activeIntervalMs,
                 ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
