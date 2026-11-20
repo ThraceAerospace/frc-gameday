@@ -1,24 +1,24 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import { formatTeamNumber } from "@/lib/tba/formatters";
-import { TBA } from "@/lib/tba/service";
+import { getCanonicalDistrictDirectory, getCanonicalDistrictSnapshot } from "@/lib/events/serverSnapshot";
 
 export const revalidate = 3600;
 export default async function DistrictPage({ params }: { params: Promise<{ district: string }> }) {
   const { district: requestedKey } = await params;
   const year = new Date().getFullYear();
-  const districts = await TBA.getDistricts(year);
+  const directory = await getCanonicalDistrictDirectory(year);
+  const districts = directory?.districts ?? [];
   const district = districts.find((item) => item.abbreviation.toLowerCase() === requestedKey.toLowerCase() || item.key.toLowerCase() === requestedKey.toLowerCase());
 
   if (!district) {
     return <SiteShell><div className="mx-auto max-w-5xl px-5 py-12"><h1 className="text-2xl font-bold text-slate-900">District unavailable</h1><p className="mt-2 text-sm text-slate-500">No active {year} district matches this key.</p><Link href="/districts" className="mt-5 inline-block text-sm font-semibold text-[var(--fv-brand)]">← All districts</Link></div></SiteShell>;
   }
 
-  const [teams, events, rankings] = await Promise.all([
-    TBA.getDistrictTeams(district.key),
-    TBA.getDistrictEvents(district.key),
-    TBA.getDistrictRankings(district.key),
-  ]);
+  const snapshot = await getCanonicalDistrictSnapshot(district.key, year);
+  const teams = snapshot?.teams ?? [];
+  const events = snapshot?.events ?? [];
+  const rankings = snapshot?.rankings ?? [];
 
   return (
     <SiteShell>
