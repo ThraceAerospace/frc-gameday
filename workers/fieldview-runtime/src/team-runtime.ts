@@ -201,8 +201,8 @@ export class TeamRuntime {
       return this.snapshot(year);
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
-      // Explicit admin ingestion is synchronous: the 24-hour interval is only
-      // the steady-state refresh cadence after this immediate acquisition.
+      // Explicit admin ingestion queues durable work. Each alarm processes one
+      // provider request; the 24-hour interval is the steady-state cadence.
       await this.schedule(year, true);
       const resources = this.endpoints(year);
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
