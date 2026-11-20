@@ -115,7 +115,12 @@ export class TeamRuntime {
     const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
     const manual = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
     const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value, manual.reduce<number | null>((value, item) => value === null || item.dueAt < value ? item.dueAt : value, null));
-    if (next === null) await tx.deleteAlarm(); else await tx.setAlarm(next);
+    const current = await tx.getAlarm?.();
+    if (next === null) {
+      if (current !== null && current !== undefined) await tx.deleteAlarm();
+    } else if (current !== next) {
+      await tx.setAlarm(next);
+    }
   }
   private async enqueueManualPolls(resources: TeamResource[], year: number): Promise<void> {
     await this.storage.transaction(async (tx) => {
@@ -133,7 +138,11 @@ export class TeamRuntime {
         });
       }
       for (const item of current) if (!ordered.has(item.endpoint)) ordered.set(item.endpoint, item);
-      await tx.put(MANUAL_QUEUE_KEY, [...ordered.values()]);
+      const next = [...ordered.values()];
+      const unchanged = current.length === next.length && current.every((item, index) =>
+        item.endpoint === next[index]?.endpoint && item.year === next[index]?.year &&
+        item.dueAt === next[index]?.dueAt && item.attempts === next[index]?.attempts);
+      if (!unchanged) await tx.put(MANUAL_QUEUE_KEY, next);
       await this.rearm(tx);
     });
   }
@@ -149,13 +158,21 @@ export class TeamRuntime {
           await tx.delete(key);
         }
       }
+      const intervalMs = this.refreshIntervalMs();
       for (const resource of this.endpoints(year)) {
         const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         // Resource registration must never advance an existing recurring fetch.
-        const dueAt = previous?.dueAt ?? (immediate ? now + this.refreshIntervalMs() : now);
-        await tx.put(key, { provider, endpoint, dueAt,
-          intervalMs: this.refreshIntervalMs(), attempts: previous?.attempts ?? 0 } satisfies TeamPollTask);
+        const task = {
+          provider, endpoint,
+          dueAt: previous?.dueAt ?? (immediate ? now + intervalMs : now),
+          intervalMs, attempts: previous?.attempts ?? 0,
+        } satisfies TeamPollTask;
+        if (!previous || previous.provider !== task.provider || previous.endpoint !== task.endpoint ||
+            previous.dueAt !== task.dueAt || previous.intervalMs !== task.intervalMs ||
+            previous.attempts !== task.attempts) {
+          await tx.put(key, task);
+        }
       }
       await this.rearm(tx);
     });
@@ -341,7 +358,9 @@ export class TeamRuntime {
       }
       const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
-      await tx.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
+      if (manualDue.length > 0) {
+        await tx.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
+      }
       await this.rearm(tx); return { ready, manualDue };
     });
     for (const item of due.manualDue) {
