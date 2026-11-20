@@ -38,6 +38,7 @@ export const TBA_ENDPOINTS = {
   teamEventMatchesSimple: (teamKey: string, eventKey: string) =>
     `/team/${segment(teamKey)}/event/${segment(eventKey)}/matches/simple`,
   districts: (year: number) => `/districts/${year}`,
+  district: (key: string) => `/district/${segment(key)}`,
   districtTeams: (key: string) => `/district/${segment(key)}/teams`,
   districtTeamKeys: (key: string) => `/district/${segment(key)}/teams/keys`,
   districtEvents: (key: string) => `/district/${segment(key)}/events`,
@@ -46,7 +47,7 @@ export const TBA_ENDPOINTS = {
 } as const;
 
 function segment(value: string): string {
-  if (!value || value.trim() !== value) {
+  if (!value.length || value.trim() !== value) {
     throw new Error("TBA path parameters must be non-empty and have no surrounding whitespace");
   }
   return encodeURIComponent(value);
