@@ -1065,10 +1065,41 @@ export class EventRuntime {
   }
 
   private async publishEventState(): Promise<EventStatePublication> {
-    const result = await this.buildEventState();
     const eventResources = eventResourceEndpoints(this.eventKey);
     const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const resourceStates = await Promise.all([...eventResources, statboticsResource].map((endpoint) =>
+    const allResources = [...eventResources, statboticsResource];
+
+    // Fast path: when no source or published-snapshot revision has changed,
+    // reuse the durable normalized publication. Read endpoint metadata only to
+    // keep completeness/freshness status accurate as resources expire.
+    const cached = await this.storage.transaction(async (transaction) => {
+      const previous = await transaction.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!previous) return null;
+      const version = await transaction.get<number>("snapshot-revision") ?? 0;
+      const resources = await Promise.all(allResources.map((endpoint) =>
+        transaction.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
+      const sourceRevision = resources.reduce((total, resource) => total + (resource?.revision ?? 0), 0);
+      if (previous.snapshotVersion !== version || previous.sourceRevision !== sourceRevision) return null;
+      const now = Date.now();
+      const acquiredCount = resources.filter((resource) =>
+        resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
+      const hasIncompleteResource = resources.some((resource) =>
+        !resource || resource.status === "unknown" || resource.status === "stale" ||
+        resource.status === "failed" || resource.status === "unavailable" ||
+        (resource.expiresAt !== null && resource.expiresAt < now));
+      const status = acquiredCount === allResources.length && !hasIncompleteResource
+        ? "complete" as const : acquiredCount > 0 ? "partial" as const : "failed" as const;
+      if (previous.status !== status) {
+        const updated = { ...previous, status };
+        await transaction.put(EVENT_STATE_PUBLICATION_KEY, updated);
+        return updated;
+      }
+      return previous;
+    });
+    if (cached) return cached;
+
+    const result = await this.buildEventState();
+    const resourceStates = await Promise.all(allResources.map((endpoint) =>
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
     const acquiredCount = resourceStates.filter((resource) =>
       resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
@@ -1080,7 +1111,8 @@ export class EventRuntime {
       sourceRevision: result.sourceRevision,
       snapshotVersion: result.version,
       generatedAt: Date.now(),
-      status: acquiredCount === eventResources.length + 1 && !hasIncompleteResource ? "complete" : acquiredCount > 0 ? "partial" : "failed",
+      status: acquiredCount === allResources.length && !hasIncompleteResource
+        ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
     };
     const previous = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
