@@ -21,6 +21,32 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
+test("provider gate returns a releasable lease id using the client wire contract", async () => {
+  const storage = new MemoryStorage();
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    PROVIDER_REQUEST_INTERVAL_MS: 100,
+  });
+  const acquired = await scheduler.fetch(new Request("https://scheduler/provider-request/acquire", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ owner: "event:2026test", endpoint: "/events/2026test" }),
+  }));
+  assert.equal(acquired.status, 200);
+  const permit = await acquired.json();
+  assert.equal(permit.granted, true);
+  assert.equal(typeof permit.lease_id, "string");
+  assert.equal("leaseId" in permit, false);
+
+  const released = await scheduler.fetch(new Request("https://scheduler/provider-request/release", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ lease_id: permit.lease_id }),
+  }));
+  assert.deepEqual(await released.json(), { released: true });
+  assert.equal(await storage.get("provider-gate:lease"), undefined);
+});
+
 test("provider gate applies bounded stable jitter to denied owners", async () => {
   const storage = new MemoryStorage();
   const now = Date.now();
@@ -39,7 +65,7 @@ test("provider gate applies bounded stable jitter to denied owners", async () =>
       body: JSON.stringify({ owner: "event:2026test", endpoint: "/events/2026test/matches" }),
     }));
     assert.equal(response.status, 200);
-    return (await response.json()).retryAt;
+    return (await response.json()).retry_at;
   };
   const first = await acquire();
   const second = await acquire();
