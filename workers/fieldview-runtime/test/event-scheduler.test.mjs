@@ -760,6 +760,6 @@ test("daily scheduler endpoint runs classification without enabling continuous p
   assert.equal((await response.json()).pending, false);
   assert.equal(await storage.get("scheduler:enabled"), undefined);
   assert.equal(await storage.get("scheduler:daily-run-requested"), undefined);
-  assert.deepEqual(runtimeRequests, ["2026daily", "2026daily"]);
+  assert.deepEqual(runtimeRequests, ["2026daily"]);
   assert.deepEqual((await storage.get("scheduler:this-week-projection")).events.map((item) => item.key), ["2026daily"]);
 });
