@@ -1692,6 +1692,9 @@ export class EventScheduler {
       }
       await this.storage.put(key + ":refresh:page:" + cursor, pageTeams);
       cursor += 1;
+      // Persist the cursor and validator after each page so a later alarm can
+      // resume exactly where it stopped, including after provider deferral.
+      await this.storage.put(refreshKey, { ...refresh, cursor });
       if (pageTeams.length < 500) {
         complete = true;
         break;
