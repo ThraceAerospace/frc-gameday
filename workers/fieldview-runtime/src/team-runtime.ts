@@ -169,7 +169,15 @@ export class TeamRuntime {
       // Explicit admin ingestion is synchronous: the 24-hour interval is only
       // the steady-state refresh cadence after this immediate acquisition.
       await this.schedule(year, true);
-      await this.enqueueManualPolls(this.endpoints(year), year);
+      const resources = this.endpoints(year);
+      const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
+      // Event history is the prerequisite for event-cohort seeding, so acquire
+      // it before the remaining profile and analytics resources.
+      const prioritized = [
+        ...resources.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
+        ...resources.filter((resource) => resource.endpoint !== historyEndpoint),
+      ];
+      await this.enqueueManualPolls(prioritized, year);
       await this.alarm();
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
