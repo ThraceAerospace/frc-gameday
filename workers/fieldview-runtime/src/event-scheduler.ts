@@ -452,7 +452,8 @@ export class EventScheduler {
             await this.storage.put(spec.storageKey, next);
             results.push({ resource: spec.name, status: "failed", http_status: response.status });
           }
-        } catch {
+        } catch (error) {
+          if (error instanceof ProviderGateDeferred) throw error;
           const now = Date.now();
           const next: DistrictResourceCache = previous?.payload !== undefined
             ? { ...previous, checkedAt: now, status: "failed" }
