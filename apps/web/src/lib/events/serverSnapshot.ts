@@ -164,7 +164,7 @@ export async function getCanonicalDistrictDirectory(
     const response = await fetcher(url, { cache: "no-store" });
     if (!response.ok) return null;
     const value = await response.json() as FieldViewDistrictDirectory;
-    if (value.year !== year || !Array.isArray(value.districts)) return null;
+    if (value.year !== year || (value.districts !== null && value.districts !== undefined && !Array.isArray(value.districts))) return null;
     return value;
   } catch { return null; }
 }
