@@ -524,7 +524,14 @@ export class EventScheduler {
         await tx.put("provider-gate:lease", { leaseId, owner: value.owner as string, endpoint: value.endpoint as string, expiresAt: now + 60_000 } satisfies ProviderRequestLease);
         return { granted: true, leaseId };
       });
-      return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+      // Keep the wire contract aligned with provider-request-gate.ts. A
+      // camelCase leaseId here would be ignored by the caller, preventing
+      // release and holding the global lease until its 60-second expiry.
+      return Response.json(result.granted
+        ? { granted: true, lease_id: result.leaseId }
+        : { granted: false, retry_at: result.retryAt }, {
+          headers: { "Cache-Control": "no-store" },
+        });
     }
 
     if (request.method === "POST" && url.pathname === "/provider-request/release") {
