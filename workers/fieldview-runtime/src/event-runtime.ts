@@ -1100,7 +1100,7 @@ export class EventRuntime {
       const queued = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
       if (manualDue.length > 0 && !hasEventIdentity) throw new Error("Cannot execute manual event work without persisted event identity");
-      await transaction.put(MANUAL_QUEUE_KEY, queued.filter((item) => item.dueAt > now));
+      await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
       const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
       const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
       if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
@@ -1111,15 +1111,17 @@ export class EventRuntime {
     // Manual work is independent of recurring poll tasks and is always serviced first.
     for (const item of dueTasks.manualDue) {
       const result = await this.pollEndpoint(item.endpoint);
-      if (typeof result !== "boolean" || !result) {
-        const retryAt = typeof result !== "boolean" ? result.deferredUntil
-          : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
-        if (item.attempts < 8) await this.storage.transaction(async (transaction) => {
-          const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-          await transaction.put(MANUAL_QUEUE_KEY, [...queue.filter((queued) => queued.endpoint !== item.endpoint), { ...item, dueAt: retryAt, attempts: item.attempts + 1 }]);
-          await this.rearm(transaction);
-        });
-      }
+      const retryAt = typeof result !== "boolean" ? result.deferredUntil
+        : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
+      await this.storage.transaction(async (transaction) => {
+        const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+        const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
+        if ((typeof result !== "boolean" || !result) && item.attempts < 8) {
+          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
+        }
+        await transaction.put(MANUAL_QUEUE_KEY, next);
+        await this.rearm(transaction);
+      });
     }
 
     for (const task of dueTasks.due) {

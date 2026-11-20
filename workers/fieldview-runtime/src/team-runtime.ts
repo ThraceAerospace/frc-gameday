@@ -129,7 +129,7 @@ export class TeamRuntime {
       await this.rearm(tx);
     });
   }
-  private async schedule(year: number, immediate: boolean): Promise<void> {
+  private async schedule(year: number, _immediate: boolean): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const now = Date.now();
       // Discard malformed tasks from older/incorrect resource scheduling formats.
@@ -144,9 +144,6 @@ export class TeamRuntime {
       for (const resource of this.endpoints(year)) {
         const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
-        const state = await tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint));
-        const needsIngestion = !state || state.status === "unknown" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt < now);
         // Resource registration must never advance an existing recurring fetch.
         const dueAt = previous?.dueAt ?? now;
         await tx.put(key, { provider, endpoint, dueAt,
@@ -328,24 +325,24 @@ export class TeamRuntime {
       }
       const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
-      await tx.put(MANUAL_QUEUE_KEY, queued.filter((item) => item.dueAt > now));
+      await tx.put(MANUAL_QUEUE_KEY, queued.map((item) => item.dueAt <= now ? { ...item, dueAt: now + 60_000 } : item));
       await this.rearm(tx); return { ready, manualDue };
     });
     for (const item of due.manualDue) {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) continue;
       const result = await this.pollResourceNow(resource);
-      if ("deferredUntil" in result || !result.success) {
-        if (item.attempts < 8) {
-          const retryAt = "deferredUntil" in result ? result.deferredUntil
-            : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
-          await this.storage.transaction(async (tx) => {
-            const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-            await tx.put(MANUAL_QUEUE_KEY, [...queue.filter((queued) => queued.endpoint !== item.endpoint), { ...item, dueAt: retryAt, attempts: item.attempts + 1 }]);
-            await this.rearm(tx);
-          });
+      const retryAt = "deferredUntil" in result ? result.deferredUntil
+        : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
+      await this.storage.transaction(async (tx) => {
+        const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
+        const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
+        if (("deferredUntil" in result || !result.success) && item.attempts < 8) {
+          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
         }
-      }
+        await tx.put(MANUAL_QUEUE_KEY, next);
+        await this.rearm(tx);
+      });
     }
     for (const task of due.ready) {
       const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
