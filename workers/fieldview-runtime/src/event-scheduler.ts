@@ -1694,7 +1694,7 @@ export class EventScheduler {
         refresh.pageEtags[pageKey] = response.headers.get("ETag");
         refresh.payloadChanged = true;
       }
-      await this.storage.put(key + ":refresh:page:" + cursor, pageTeams);
+      if (response.status !== 304) await this.storage.put(key + ":refresh:page:" + cursor, pageTeams);
       cursor += 1;
       // Persist the cursor and validator after each page so a later alarm can
       // resume exactly where it stopped, including after provider deferral.
@@ -1713,7 +1713,8 @@ export class EventScheduler {
 
     const pages: TBATeam[][] = [];
     for (let page = 0; page < cursor; page += 1) {
-      const values = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + page);
+      const values = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + page) ??
+        await this.storage.get<TBATeam[]>((cached?.pagePrefix ?? key + ":page:") + page);
       if (!values) throw new Error("TBA team discovery staging page " + page + " is missing");
       pages.push(values);
     }
@@ -1724,8 +1725,13 @@ export class EventScheduler {
     // metadata pointer. Concurrent public reads continue using the old
     // generation until the complete replacement is visible.
     const checkedAt = Date.now();
-    const pagePrefix = key + ":snapshot:" + checkedAt + ":page:";
-    for (let page = 0; page < pages.length; page += 1) await this.storage.put(pagePrefix + page, pages[page]);
+    const reusePublishedGeneration = !refresh.payloadChanged && Boolean(cached?.pagePrefix);
+    const pagePrefix = reusePublishedGeneration
+      ? cached!.pagePrefix!
+      : key + ":snapshot:" + checkedAt + ":page:";
+    if (!reusePublishedGeneration) {
+      for (let page = 0; page < pages.length; page += 1) await this.storage.put(pagePrefix + page, pages[page]);
+    }
     const updatedAt = refresh.payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
     await this.storage.put(key, {
       etag: refresh.pageEtags["0"] ?? null, pageEtags: refresh.pageEtags, pageCount: pages.length, pagePrefix,
