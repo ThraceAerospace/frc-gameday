@@ -669,4 +669,22 @@ export default {
     });
     return stub.fetch(forwarded);
   },
+
+  async scheduled(
+    _controller: { scheduledTime: number; cron: string },
+    env: RuntimeEnvironment,
+    context: { waitUntil(promise: Promise<unknown>): void },
+  ): Promise<void> {
+    if (!env.EVENT_SCHEDULER) {
+      console.error("[FV][Scheduler] Daily event classification skipped: EventScheduler is not bound");
+      return;
+    }
+    const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+    context.waitUntil((async () => {
+      const response = await scheduler.fetch(new Request("https://event-scheduler/run", { method: "POST" }));
+      if (!response.ok) throw new Error("Daily EventScheduler run failed with HTTP " + response.status);
+      const result = await response.json();
+      console.log("[FV][Scheduler] Daily run completed", JSON.stringify(result));
+    })());
+  },
 };
