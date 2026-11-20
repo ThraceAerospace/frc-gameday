@@ -496,3 +496,30 @@ test("district refresh failure retains last-good payload and marks it stale", as
   assert.equal(directory.districts[0].key, "2026fim");
   assert.equal(directory.sources.tba_districts.status, "stale");
 });
+
+
+test("district 404 marks a resource unavailable without discarding its last-good payload", async () => {
+  const storage = new MemoryStorage();
+  const old = {
+    payload: [{ key: "2026fim", year: 2026, abbreviation: "fim", display_name: "FIRST in Michigan" }],
+    etag: '"districts-v1"', retrievedAt: Date.now() - 60_000, checkedAt: Date.now() - 60_000, status: "available",
+  };
+  await storage.put("district-directory:2026", old);
+  const scheduler = new EventScheduler({ storage }, {
+    TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "runtime-token", PROVIDER_REQUEST_INTERVAL_MS: 100,
+    fetcher: async () => new Response("not found", { status: 404 }),
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/admin/district-refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer runtime-token" },
+  }));
+  assert.equal(response.status, 200);
+  const cached = await storage.get("district-directory:2026");
+  assert.deepEqual(cached.payload, old.payload);
+  assert.equal(cached.retrievedAt, old.retrievedAt);
+  assert.equal(cached.status, "unavailable");
+  const publicResponse = await scheduler.fetch(new Request("https://scheduler/districts?year=2026"));
+  assert.equal(publicResponse.status, 200);
+  const directory = await publicResponse.json();
+  assert.equal(directory.districts[0].key, "2026fim");
+  assert.equal(directory.sources.tba_districts.status, "stale");
+});
