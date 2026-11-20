@@ -129,7 +129,7 @@ export class TeamRuntime {
       await this.rearm(tx);
     });
   }
-  private async schedule(year: number, _immediate: boolean): Promise<void> {
+  private async schedule(year: number, immediate: boolean): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const now = Date.now();
       // Discard malformed tasks from older/incorrect resource scheduling formats.
