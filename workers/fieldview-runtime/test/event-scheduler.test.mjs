@@ -383,3 +383,65 @@ test("event team seeding explicitly curates team history and waits for acquisiti
   assert.equal(eventCalls[0].body.analyticsEnabled, false);
   assert.ok(teamCalls.some((call) => call.path === "/ingest-resource" && call.method === "POST"));
 });
+
+
+test("district public reads return canonical retained resources without provider acquisition", async () => {
+  const storage = new MemoryStorage();
+  const year = 2026;
+  const now = Date.now();
+  await storage.put("district-directory:" + year, {
+    payload: [{ key: "2026fim", year, abbreviation: "fim", display_name: "FIRST in Michigan" }],
+    etag: '"districts-v1"', retrievedAt: now, checkedAt: now, status: "available",
+  });
+  await storage.put("district-resource:" + year + ":2026fim:district", {
+    payload: { key: "2026fim", year, abbreviation: "fim", display_name: "FIRST in Michigan" },
+    etag: '"district-v1"', retrievedAt: now, checkedAt: now, status: "available",
+  });
+  await storage.put("district-resource:" + year + ":2026fim:teams", {
+    payload: [{ key: "frc3461", team_number: 3461 }], etag: '"teams-v1"', retrievedAt: now, checkedAt: now, status: "available",
+  });
+  const scheduler = new EventScheduler({ storage }, {
+    TBA_API_KEY: "test-key",
+    fetcher: async () => { throw new Error("Public reads must not acquire provider resources"); },
+  });
+  const directoryResponse = await scheduler.fetch(new Request("https://scheduler/districts?year=2026"));
+  assert.equal(directoryResponse.status, 200);
+  const directory = await directoryResponse.json();
+  assert.equal(directory.districts[0].key, "2026fim");
+  assert.equal(directory.sources.tba_districts.status, "available");
+
+  const snapshotResponse = await scheduler.fetch(new Request("https://scheduler/district?year=2026&key=2026fim"));
+  assert.equal(snapshotResponse.status, 200);
+  const snapshot = await snapshotResponse.json();
+  assert.equal(snapshot.district_key, "2026fim");
+  assert.equal(snapshot.teams[0].key, "frc3461");
+  assert.equal(snapshot.events, undefined);
+  assert.equal(snapshot.sources.tba_district_teams.status, "available");
+});
+
+test("admin district directory refresh retains TBA payload and validator", async () => {
+  const storage = new MemoryStorage();
+  const requests = [];
+  const scheduler = new EventScheduler({ storage }, {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    PROVIDER_REQUEST_INTERVAL_MS: 100,
+    fetcher: async (url, init) => {
+      requests.push({ url: String(url), headers: new Headers(init?.headers) });
+      return Response.json([{ key: "2026fim", year: 2026, abbreviation: "fim", display_name: "FIRST in Michigan" }], {
+        headers: { ETag: '"districts-v1"' },
+      });
+    },
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/admin/district-refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer runtime-token" },
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.results[0].status, "available");
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /districts\/2026$/);
+  const cached = await storage.get("district-directory:2026");
+  assert.equal(cached.payload[0].key, "2026fim");
+  assert.equal(cached.etag, '"districts-v1"');
+});
