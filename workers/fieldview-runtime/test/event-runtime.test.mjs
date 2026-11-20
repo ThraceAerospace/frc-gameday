@@ -15,6 +15,7 @@ class MemoryStorage {
   async delete(key) { return this.values.delete(key); }
   async setAlarm(value) { this.alarmAt = Number(value); }
   async deleteAlarm() { this.alarmAt = null; }
+  async getAlarm() { return this.alarmAt; }
   async transaction(callback) { return callback(this); }
 }
 
