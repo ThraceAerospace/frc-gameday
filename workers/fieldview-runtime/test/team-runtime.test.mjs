@@ -72,6 +72,7 @@ test("TeamRuntime admin seed ingests all team resources before responding", asyn
   assert.equal(result.snapshot.team.team_number, 3461);
   assert.equal(calls.length, 7);
   assert.ok(calls.some((url) => url.includes("frc3461")));
+  assert.match(calls[0], /\/team\/frc3461\/events\/2026$/);
 });
 
 test("TeamRuntime rejects identity mismatch and protects admin state", async () => {
