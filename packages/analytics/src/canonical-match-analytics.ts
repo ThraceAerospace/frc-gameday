@@ -189,7 +189,18 @@ export async function calculateCanonicalTeamEventAnalytics(
   if (!eventState.matches) return target;
 
   const records = eventState.matches.map(toAnalyticsRecord);
-  const allianceResults = buildAllianceResults(records, eventState.event?.playoff_type);
+  const engine = createFieldViewAnalyticsEngine();
+  const allianceResults = (await engine.execute({
+    definition_key: "alliance-score-residual",
+    context: { records, playoffType: eventState.event?.playoff_type },
+    resolved_inputs: {
+      "actual-score": eventState.matches.flatMap((match) => [match.alliances.red.score, match.alliances.blue.score].filter((score) => score >= 0)),
+      "predicted-score": records.flatMap((record) => [
+        record.statbotics?.pred?.red_score,
+        record.statbotics?.pred?.blue_score,
+      ].filter((score): score is number => typeof score === "number" && Number.isFinite(score))),
+    },
+  })).value as AllianceResult[];
   const audit = await createAnalyticsAudit({
     calculation_id: crypto.randomUUID(),
     calculated_at: Date.now(),
@@ -199,6 +210,7 @@ export async function calculateCanonicalTeamEventAnalytics(
       "team-event-epa",
       "team-epa-contribution-share",
       "team-event-match-appearances",
+      "team-event-investigation",
     ],
     warnings: inputRecords.filter((input) => input.status !== "available")
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
