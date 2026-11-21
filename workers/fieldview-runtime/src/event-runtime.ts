@@ -118,9 +118,13 @@ function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
     candidate.trim() === "*" || normalize(candidate) === normalize(etag));
 }
 
-function eventSnapshotEtag(publication: EventStatePublication): string {
+function eventSnapshotEtag(
+  publication: EventStatePublication,
+  comparisonInputUpdatedAt: number | undefined,
+): string {
   return 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '-' +
-    publication.sourceRevision + '-' + publication.generatedAt + '-' + publication.status + '"';
+    publication.sourceRevision + '-' + publication.generatedAt + '-' + publication.status + '-' +
+    (comparisonInputUpdatedAt ?? "none") + '"';
 }
 
 function toSourceMetadata(
@@ -762,7 +766,8 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/snapshot") {
       await this.queueSnapshotRefresh();
       const publication = await this.publishEventState();
-      const etag = eventSnapshotEtag(publication);
+      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+      const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers: {
           ETag: etag,
@@ -773,7 +778,6 @@ export class EventRuntime {
       }
       const team_states = publication.state.teams === null ? null
         : await this.readTeamEventStates(publication.state, publication.sourceRevision);
-      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
@@ -2044,8 +2048,10 @@ export class EventRuntime {
       // The revision-only notice below tells clients to recover over HTTP.
     }
     const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
-    const etag = publication ? eventSnapshotEtag(publication) : undefined;
-    const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+    const comparisonInputUpdatedAt = publication
+      ? await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY)
+      : undefined;
+    const etag = publication ? eventSnapshotEtag(publication, comparisonInputUpdatedAt) : undefined;
     const publishedState = publication?.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
       ? publication.state
       : publication?.state.analytics
