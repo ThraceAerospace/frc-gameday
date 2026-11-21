@@ -1253,9 +1253,20 @@ export class EventRuntime {
       ]);
       if (!analyticsPublication || !eventStatePublication || !eventViewPublication ||
           eventViewPublication.source_revision !== eventStatePublication.sourceRevision) {
-        await this.storage.put(ANALYTICS_DUE_KEY, now);
-        await this.storage.put("analytics:status", "pending");
-        await this.storage.transaction((transaction) => this.rearm(transaction));
+        const [existingDue, analyticsStatus] = await Promise.all([
+          this.storage.get<number>(ANALYTICS_DUE_KEY),
+          this.storage.get<string>("analytics:status"),
+        ]);
+        let changed = false;
+        if (existingDue === undefined || existingDue > now) {
+          await this.storage.put(ANALYTICS_DUE_KEY, now);
+          changed = true;
+        }
+        if (analyticsStatus !== "pending") {
+          await this.storage.put("analytics:status", "pending");
+          changed = true;
+        }
+        if (changed) await this.storage.transaction((transaction) => this.rearm(transaction));
       }
     }
   }
