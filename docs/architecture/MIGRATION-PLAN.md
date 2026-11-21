@@ -127,6 +127,21 @@ The legacy application remains operational while individual responsibilities mov
 
 Do not build a permanent dual-write system. If temporary mirroring is needed for validation, it must be read-only from the comparison side, observable, and explicitly time-limited.
 
+## 5.1 Redis retirement strategy
+
+Redis is retired incrementally by responsibility, not by globally disabling the connection or deleting the package at the start of the migration.
+
+For every Redis-backed use:
+1. Inventory its callers, data semantics, consistency requirements, and failure behavior.
+2. Implement the target owner or transport in the architecture defined above.
+3. Migrate callers and validate behavior, including concurrency, freshness, recovery, and failure cases.
+4. Remove the Redis-backed implementation from active execution paths while retaining its source code as inactive migration/rollback material.
+5. Record the deactivated responsibility and remaining Redis consumers in this plan.
+
+Do not break a feature merely to make Redis unused. In particular, remote-session signaling/presence and the legacy WebSocket bridge remain operational until their Cloudflare replacements are implemented and validated. Redis response caches, provider request coordination, webhook cache mutation, and any other provider-specific use are separate migration slices; do not assume that replacing one retires the others.
+
+The Redis client module, ioredis dependency, and old implementation files remain in the repository until a repository-wide runtime/deployment audit confirms that no valid execution path, test, script, or operational workflow requires Redis. Only then may the Redis code and dependency be deleted. Production configuration is not changed as part of branch-only migration work.
+
 ## 6. Migration phases and exit criteria
 
 ### M1 — Audit and migration mapping
