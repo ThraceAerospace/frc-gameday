@@ -355,6 +355,7 @@ export default function AdminOperationsDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[["Registered events", overview?.inventory?.events ?? "—"], ["Registered teams", overview?.inventory?.teams ?? "—"], ["Discovery scheduler", overview?.scheduler?.enabled ? "Running" : overview?.scheduler ? "Stopped" : "Unavailable"], ["Multiplexer clients", overview?.multiplexer?.clients ?? "—"]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
       </div>
+      <p className="rounded-xl border border-[var(--fv-border)] px-4 py-3 text-xs leading-5 text-[var(--fv-muted)]">Overview reads scheduler and inventory metadata only. It does not probe every EventRuntime and TeamRuntime; open an event or team below to inspect its live state and provider resources.</p>
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="font-bold">Full-season canonical ingestion</h2><p className="mt-1 max-w-3xl text-xs text-[var(--fv-muted)]">Prepares every TeamRuntime season snapshot first, then generates EventState and EventAnalytics for every discovered event. Work is sequential, durable, resumable, and separate from the live discovery scheduler. It does not use team seed fan-out.</p></div>
