@@ -168,7 +168,7 @@ The future Cloudflare implementation should satisfy the same contract. It may re
 
 The Cloudflare migration uses a different ownership model from the legacy SharedWorker/Redis lifecycle described above. The legacy sections remain historical migration context; they are not the target ownership contract.
 
-- TeamRuntime owns and persists FieldViewTeamState (team profile and season data), FieldViewTeamEventState (one team's participation at one event), and FieldViewTeamEventAnalytics. It recalculates team metrics against its own season history and makes the result reusable by any product surface.
+- TeamRuntime owns and persists FieldViewTeamState (team profile and season data), FieldViewTeamEventState (one team's participation at one event), and FieldViewTeamEventAnalytics. It combines its own season history with the shared, versioned event comparison input supplied by EventRuntime, calculates only its team's results, and makes those results reusable by any product surface.
 - EventRuntime owns FieldViewEventState and FieldViewEventAnalytics. EventAnalytics contains event-wide calculations such as match flags, prediction accuracy, field rankings, and largest/smallest team metric changes. It consumes TeamRuntime-owned event states rather than recalculating team metrics.
 - TaskScheduler performs roster reconciliation as scheduled work. Ordinary event reads do not reconcile the roster.
 - A complete event FieldView composes FieldViewEventState, FieldViewEventAnalytics, and the roster's array of FieldViewTeamEventState records. Partial results explicitly identify missing or pending team states.
