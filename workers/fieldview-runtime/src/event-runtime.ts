@@ -118,6 +118,11 @@ function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
     candidate.trim() === "*" || normalize(candidate) === normalize(etag));
 }
 
+function eventSnapshotEtag(publication: EventStatePublication): string {
+  return 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '-' +
+    publication.sourceRevision + '-' + publication.generatedAt + '-' + publication.status + '"';
+}
+
 function toSourceMetadata(
   state: EndpointState<unknown> | undefined,
   now: number,
@@ -716,7 +721,10 @@ export class EventRuntime {
             // A missed patch is recovered by the client's conditional snapshot read.
           }
         }
-        await this.publishSnapshotRevision(version, teamPatch);
+        await this.publishSnapshotRevision(
+          version,
+          teamPatch ?? { team_key: body.team_key, team_state_pending: true },
+        );
       }
       return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
     }
@@ -752,7 +760,7 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/snapshot") {
       await this.queueSnapshotRefresh();
       const publication = await this.publishEventState();
-      const etag = 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '"';
+      const etag = eventSnapshotEtag(publication);
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers: {
           ETag: etag,
@@ -2034,14 +2042,14 @@ export class EventRuntime {
       // The revision-only notice below tells clients to recover over HTTP.
     }
     const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
-    const etag = 'W/"fv-event-snapshot-v1-' + publishedVersion + '"';
+    const etag = publication ? eventSnapshotEtag(publication) : undefined;
     const data = publication && publication.snapshotVersion === publishedVersion
       ? { state: publication.state, ...(patch ?? {}) }
       : undefined;
     const message = JSON.stringify({
       type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
       version: publishedVersion,
-      ...(data ? { data, etag } : {}),
+      ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
     });
     for (const socket of this.state.getWebSockets?.() ?? []) {
       try { socket.send(message); }
@@ -2059,7 +2067,7 @@ export class EventRuntime {
       body: JSON.stringify({
         topic: "event-state", event_key: this.eventKey,
         version: publishedVersion,
-        ...(data ? { data, etag } : {}),
+        ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
       }),
     })).catch(() => undefined);
   }

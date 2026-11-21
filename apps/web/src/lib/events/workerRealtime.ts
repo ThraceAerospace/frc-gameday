@@ -17,7 +17,13 @@ export type CanonicalEventSnapshotData = {
   state: FieldViewEventState;
   team_states: FieldViewTeamEventState[];
 };
-export type CanonicalSnapshot = { version: number; snapshot: CanonicalEventSnapshotData; etag?: string };
+export type CanonicalSnapshot = {
+  version: number;
+  snapshot: CanonicalEventSnapshotData;
+  /** True only when the cache contains the complete composed snapshot, including team states. */
+  complete?: boolean;
+  etag?: string;
+};
 export type CanonicalAnalyticsPublicationPayload = {
   sourceRevision: number;
   calculatedAt: number;
@@ -435,15 +441,21 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
               ? [...teamStates, teamState]
               : teamStates.map((item, itemIndex) => itemIndex === index ? teamState : item);
           }
+          const complete = Boolean(
+            current?.complete &&
+            version === current.version + 1 &&
+            data.team_state_pending !== true,
+          );
           const value: CanonicalSnapshot = {
             version,
             snapshot: { state, team_states: teamStates },
-            ...(typeof message.etag === "string" ? { etag: message.etag } : {}),
+            complete,
+            ...(complete && typeof message.etag === "string" ? { etag: message.etag } : {}),
           };
           this.snapshots.set(eventKey, value);
           void persistRuntimeResource("snapshot:" + eventKey, value, value.etag);
           for (const handler of this.snapshotHandlers.get(eventKey) ?? []) handler(value);
-          if (!current || version > current.version + 1) {
+          if (!complete) {
             void this.fetchCanonicalSnapshot(eventKey, version);
           }
         } else {
@@ -490,10 +502,10 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       const url = new URL(`/events/${encodeURIComponent(eventKey)}/snapshot`, this.runtimeBaseUrl);
       const current = this.snapshots.get(eventKey);
       const headers = new Headers();
-      if (current?.etag) headers.set("If-None-Match", current.etag);
+      if (current?.complete && current.etag) headers.set("If-None-Match", current.etag);
       let response = await fetch(url, { cache: "no-store", headers });
       if (response.status === 304) {
-        if (current && (expectedVersion === undefined || current.version >= expectedVersion)) return;
+        if (current?.complete && (expectedVersion === undefined || current.version >= expectedVersion)) return;
         response = await fetch(url, { cache: "no-store" });
       }
       if (!response.ok) throw new Error(`Snapshot request failed: HTTP ${response.status}`);
@@ -513,6 +525,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       const value: CanonicalSnapshot = {
         version,
         snapshot,
+        complete: true,
         etag: response.headers.get("ETag") ?? undefined,
       };
       this.snapshots.set(eventKey, value);
