@@ -1202,7 +1202,7 @@ export class EventRuntime {
       };
     }
 
-    const { team_states: _unownedTeamStates, analytics: _unownedAnalytics, ...eventOwnedState } = normalizedState;
+    const { analytics: _unownedAnalytics, ...eventOwnedState } = normalizedState;
     const storedPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
     const publication = storedPublication?.sourceRevision === state.sourceRevision ? storedPublication : undefined;
     if (!publication) return { version: state.version, sourceRevision: state.sourceRevision, state: eventOwnedState };
@@ -1345,7 +1345,8 @@ export class EventRuntime {
       return previous;
     });
     if (cached) {
-      const { team_states: _legacyTeamStates, analytics: _legacyAnalytics, ...eventOwnedState } = cached.state;
+      const cachedState = cached.state as typeof cached.state & { team_states?: FieldViewTeamEventState[] | null };
+      const { team_states: _legacyTeamStates, analytics: _legacyAnalytics, ...eventOwnedState } = cachedState;
       if (_legacyTeamStates !== undefined || _legacyAnalytics !== undefined) {
         const sanitized = { ...cached, state: eventOwnedState };
         await this.storage.put(EVENT_STATE_PUBLICATION_KEY, sanitized);
