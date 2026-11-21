@@ -357,6 +357,11 @@ export class EventRuntime {
     if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
+    // Materialize the initial partial domain publication once. Subsequent
+    // reads rebuild it only when the resource revision changes.
+    if (!(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY))) {
+      await this.publishEventState();
+    }
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
@@ -2002,13 +2007,22 @@ export class EventRuntime {
   ): Promise<void> {
     // Publish the committed normalized event DTO with its revision. TeamRuntime
     // changes may add one team-event patch without copying other teams.
-    const publication = await this.publishEventState();
-    const publishedVersion = Math.max(version, publication.snapshotVersion);
+    let publication: EventStatePublication | null = null;
+    try {
+      publication = await this.publishEventState();
+    } catch {
+      // An incomplete provider representation must not make polling fail.
+      // The revision-only notice below tells clients to recover over HTTP.
+    }
+    const publishedVersion = publication?.snapshotVersion ?? version;
     const etag = 'W/"fv-event-snapshot-v1-' + publishedVersion + '"';
-    const data = { state: publication.state, ...(patch ?? {}) };
+    const data = publication
+      ? { state: publication.state, ...(patch ?? {}) }
+      : undefined;
     const message = JSON.stringify({
       type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
-      version: publishedVersion, data, etag,
+      version: publishedVersion,
+      ...(data ? { data, etag } : {}),
     });
     for (const socket of this.state.getWebSockets?.() ?? []) {
       try { socket.send(message); }
@@ -2025,7 +2039,8 @@ export class EventRuntime {
       },
       body: JSON.stringify({
         topic: "event-state", event_key: this.eventKey,
-        version: publishedVersion, data, etag,
+        version: publishedVersion,
+        ...(data ? { data, etag } : {}),
       }),
     })).catch(() => undefined);
   }
