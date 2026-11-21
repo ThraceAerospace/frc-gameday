@@ -537,7 +537,7 @@ export class TeamRuntime {
 
     const eventResults = await Promise.all(events.map(async (event) => {
       const eventState = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + event.key);
-      const inputs = await this.storage.get<{ team_source_revision: number; event_source_revision: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
+      const inputs = await this.storage.get<{ team_source_revision: number; event_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
       const current = Boolean(eventState?.analytics && inputs?.team_source_revision === teamSourceRevision &&
         inputs?.event_source_revision === eventSourceRevisions[event.key] &&
         inputs?.comparison_input_updated_at === comparisonInputUpdatedAts[event.key]);
