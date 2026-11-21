@@ -45,7 +45,7 @@ new_sqlite_classes = ["Multiplexer"]
 
 [[migrations]]
 tag = "prototype-v3"
-new_sqlite_classes = ["TaskScheduler"]
+new_sqlite_classes = ["EventScheduler"]
 
 [[migrations]]
 tag = "prototype-v4"
