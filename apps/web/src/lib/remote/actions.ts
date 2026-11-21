@@ -1,4 +1,5 @@
-import type { FieldViewEvent, FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEvent } from "@fieldview/domain";
+import type { CanonicalEventSnapshotData } from "@/lib/events/workerRealtime";
 import type { UpcomingMatchAlert, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
@@ -18,7 +19,7 @@ export type RemoteSurfaceState = Omit<
 
 export type RemoteSessionMessage =
   | { type: "action"; action: RemoteSessionAction }
-  | { type: "eventSnapshot"; eventKey: string; version: number; snapshot: FieldViewEventSnapshot }
+  | { type: "eventSnapshot"; eventKey: string; version: number; snapshot: CanonicalEventSnapshotData }
   | { type: "stateSnapshot"; state: RemoteSurfaceState };
 
 export type RemoteSessionAction =
