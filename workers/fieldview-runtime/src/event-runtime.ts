@@ -110,6 +110,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  const normalize = (value: string) => value.trim().replace(/^W\\//, "");
+  return ifNoneMatch.split(",").some((candidate) =>
+    candidate.trim() === "*" || normalize(candidate) === normalize(etag));
+}
+
 function toSourceMetadata(
   state: EndpointState<unknown> | undefined,
   now: number,
@@ -350,9 +357,6 @@ export class EventRuntime {
     if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
-    // Runtime existence implies a persisted (possibly partial) canonical EventState.
-    await this.publishEventState();
-
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
@@ -619,6 +623,12 @@ export class EventRuntime {
       const currentPublication = publication
         ? { ...publication, ...(currentEventAnalytics === undefined ? {} : { eventAnalytics: currentEventAnalytics }) }
         : null;
+      const etag = 'W/"fv-analytics-v1-' + revision + '-' + currentSourceRevision + '-' + analyticsStatus + '"';
+      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+        return new Response(null, { status: 304, headers: {
+          ETag: etag, "Cache-Control": "private, no-cache",
+        } });
+      }
       return Response.json({
         event_key: this.eventKey,
         revision,
@@ -629,7 +639,11 @@ export class EventRuntime {
         pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
         publication: currentPublication,
       }, {
-        headers: { "X-FieldView-Analytics-Version": String(revision), "Cache-Control": "no-store" },
+        headers: {
+          "X-FieldView-Analytics-Version": String(revision),
+          ETag: etag,
+          "Cache-Control": "private, no-cache",
+        },
       });
     }
 
@@ -653,6 +667,34 @@ export class EventRuntime {
         await this.rearm(transaction);
         return true;
       });
+      if (accepted) {
+        const version = await this.storage.get<number>("snapshot-revision") ?? 0;
+        let teamPatch: Record<string, unknown> | undefined;
+        const namespace = this.env.TEAM_RUNTIME;
+        if (namespace && this.env.RUNTIME_ADMIN_TOKEN) {
+          try {
+            const stub = namespace.get(namespace.idFromName(body.team_key));
+            const response = await stub.fetch(new Request(
+              "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) +
+                "&year=" + this.eventKey.slice(0, 4),
+              { headers: {
+                Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+                "X-FieldView-Team-Key": body.team_key,
+              } },
+            ));
+            if (response.ok) {
+              teamPatch = {
+                team_key: body.team_key,
+                team_state: await response.json(),
+                team_event_revision: Number(response.headers.get("X-FieldView-Team-Event-Revision")),
+              };
+            }
+          } catch {
+            // A missed patch is recovered by the client's conditional snapshot read.
+          }
+        }
+        await this.publishSnapshotRevision(version, teamPatch);
+      }
       return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
     }
 
@@ -687,6 +729,15 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/snapshot") {
       await this.queueSnapshotRefresh();
       const publication = await this.publishEventState();
+      const etag = 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '"';
+      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+        return new Response(null, { status: 304, headers: {
+          ETag: etag,
+          "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
+          "X-FieldView-Event-State-Status": publication.status,
+          "Cache-Control": "private, no-cache",
+        } });
+      }
       const team_states = publication.state.teams === null ? null
         : await this.readTeamEventStates(publication.state, publication.sourceRevision);
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
@@ -697,6 +748,8 @@ export class EventRuntime {
         headers: {
           "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
           "X-FieldView-Event-State-Status": publication.status,
+          ETag: etag,
+          "Cache-Control": "private, no-cache",
         },
       });
     }
@@ -1587,6 +1640,27 @@ export class EventRuntime {
 
   private async publishAnalyticsRevision(version: number): Promise<void> {
     if (!this.env.MULTIPLEXER || !this.env.RUNTIME_ADMIN_TOKEN) return;
+    const [publication, storedStatus, endpointStates] = await Promise.all([
+      this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
+      this.storage.get<string>("analytics:status"),
+      this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX }),
+    ]);
+    const currentSourceRevision = [...eventResourceEndpoints(this.eventKey),
+      STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)]
+      .reduce((total, endpoint) => total +
+        (endpointStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+    const status = publication && publication.sourceRevision !== currentSourceRevision
+      ? "stale" : storedStatus ?? (publication ? "succeeded" : "pending");
+    const etag = 'W/"fv-analytics-v1-' + version + '-' + currentSourceRevision + '-' + status + '"';
+    const data = {
+      event_key: this.eventKey,
+      revision: version,
+      status,
+      due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+      calculated_at: publication?.calculatedAt ?? null,
+      source_revision: publication?.sourceRevision ?? null,
+      publication,
+    };
     const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
     await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
       method: "POST",
@@ -1594,7 +1668,7 @@ export class EventRuntime {
         Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ topic: "analytics", event_key: this.eventKey, version }),
+      body: JSON.stringify({ topic: "analytics", event_key: this.eventKey, version, data, etag }),
     })).catch(() => undefined);
   }
 
@@ -1922,10 +1996,20 @@ export class EventRuntime {
     return result.accepted;
   }
 
-  private async publishSnapshotRevision(version: number): Promise<void> {
-    // Keep the legacy direct stream available during migration, while the
-    // shared multiplexer becomes the browser integration path.
-    const message = JSON.stringify({ type: "snapshot.changed", event_key: this.eventKey, version });
+  private async publishSnapshotRevision(
+    version: number,
+    patch?: Record<string, unknown>,
+  ): Promise<void> {
+    // Publish the committed normalized event DTO with its revision. TeamRuntime
+    // changes may add one team-event patch without copying other teams.
+    const publication = await this.publishEventState();
+    const publishedVersion = Math.max(version, publication.snapshotVersion);
+    const etag = 'W/"fv-event-snapshot-v1-' + publishedVersion + '"';
+    const data = { state: publication.state, ...(patch ?? {}) };
+    const message = JSON.stringify({
+      type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
+      version: publishedVersion, data, etag,
+    });
     for (const socket of this.state.getWebSockets?.() ?? []) {
       try { socket.send(message); }
       catch { try { socket.close(1011, "Subscription delivery failed"); } catch { /* already closed */ } }
@@ -1939,7 +2023,10 @@ export class EventRuntime {
         Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ topic: "event-state", event_key: this.eventKey, version }),
+      body: JSON.stringify({
+        topic: "event-state", event_key: this.eventKey,
+        version: publishedVersion, data, etag,
+      }),
     })).catch(() => undefined);
   }
 
