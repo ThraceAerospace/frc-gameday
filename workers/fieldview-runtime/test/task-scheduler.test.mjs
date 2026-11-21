@@ -19,9 +19,10 @@ class MemoryStorage {
 test("TaskScheduler orchestrates team seed across TeamRuntime and EventRuntime owners", async () => {
   const storage = new MemoryStorage();
   const calls = [];
+  const futureDate = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
   const events = [
-    { key: "2026past", start_date: "2026-03-01", end_date: "2026-03-02", timezone: "America/New_York" },
-    { key: "2026future", start_date: "2026-12-06", end_date: "2026-12-08", timezone: "America/New_York" },
+    { key: "2026past", start_date: "2000-03-01", end_date: "2000-03-02", timezone: "America/New_York" },
+    { key: "2026future", start_date: futureDate, end_date: futureDate, timezone: "America/New_York" },
   ];
   const env = {
     TBA_API_KEY: "test-key",
