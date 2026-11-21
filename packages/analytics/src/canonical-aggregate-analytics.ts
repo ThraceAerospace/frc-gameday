@@ -2,14 +2,14 @@
  * Calculate only the team-scoped event results. TeamRuntime calls this with
  * its own TeamEventState; EventRuntime never executes this calculation path.
  */
-export function calculateCanonicalTeamEventStates(
+export async function calculateCanonicalTeamEventStates(
   eventState: FieldViewEventState,
   teamStates: FieldViewTeamEventState[],
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
   comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-): FieldViewTeamEventState[] {
+): Promise<FieldViewTeamEventState[]> {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
     team_number: team.team_number,
@@ -26,7 +26,18 @@ export function calculateCanonicalTeamEventStates(
     if (team.ccwm !== undefined) ccwmValues[team.team_key] = team.ccwm;
   }
   const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
-  const teamRows = buildTeamRows(teams, oprs, records);
+  const engine = createFieldViewAnalyticsEngine();
+  const teamRowsExecution = await engine.execute({
+    definition_key: "team-event-match-appearances",
+    context: { teams, oprs, records },
+    resolved_inputs: {
+      "match-rosters": records.map((record) => ({
+        red: record.match.alliances.red.team_keys,
+        blue: record.match.alliances.blue.team_keys,
+      })),
+    },
+  });
+  const teamRows = teamRowsExecution.value as TeamAnalyticsRow[];
   const comparisonInputForInsights = comparisonInput ? {
     state: comparisonInput.state,
     teamCount: comparisonInput.team_count,
@@ -47,13 +58,36 @@ export function calculateCanonicalTeamEventStates(
       status: item.status,
     })),
   } : null;
-  const insights = comparisonInputForInsights && eventState.event
-    ? buildSeasonAwareTeamInsights(
-        records, allianceResults, teamRows, eventState.rankings ?? null,
-        comparisonInputForInsights, eventState.event.key, eventState.event.start_date,
-        eventState.event.playoff_type,
-      )
-    : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
+  const insightsExecution = comparisonInputForInsights && eventState.event
+    ? await engine.execute({
+        definition_key: "team-season-event-comparison",
+        context: {
+          records, allianceResults, teamRows, rankings: eventState.rankings ?? null,
+          comparisonInput: comparisonInputForInsights,
+          targetEventKey: eventState.event.key,
+          targetStartDate: eventState.event.start_date,
+          playoffType: eventState.event.playoff_type,
+        },
+        resolved_inputs: {
+          "current-event-team-epa": comparisonInputForInsights.records
+            .filter((item) => item.event.key === eventState.event!.key && item.status === "ready" && Number.isFinite(item.epaTotal))
+            .map((item) => item.epaTotal),
+          "prior-event-team-epa": comparisonInputForInsights.records
+            .filter((item) => item.event.startDate < eventState.event!.start_date && item.status === "ready" && Number.isFinite(item.epaTotal))
+            .map((item) => item.epaTotal),
+        },
+      })
+    : await engine.execute({
+        definition_key: "team-event-investigation",
+        context: { records, allianceResults, teamRows, rankings: eventState.rankings ?? null, playoffType: eventState.event?.playoff_type },
+        resolved_inputs: {
+          "match-records": records,
+          "alliance-results": allianceResults,
+          "team-rows": teamRows,
+          ...(eventState.rankings ? { rankings: eventState.rankings } : {}),
+        },
+      });
+  const insights = insightsExecution.value as TeamInsight[];
   const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
   const team_states = teamStates.map((teamState) => {
         const row = teamRows.find((item) => item.teamKey === teamState.team_key);
@@ -271,7 +305,7 @@ import type {
   FieldViewEventTeamSeasonComparisonInput,
   FieldViewTeamSeasonComparison,
 } from "../../domain/src/analytics.ts";
-import type { AnalyticsMatch, AllianceResult } from "./types.ts";
+import type { AnalyticsMatch, AllianceResult, TeamAnalyticsRow, TeamInsight } from "./types.ts";
 import {
   buildReviewFindings,
   buildTeamInsights,
@@ -284,6 +318,7 @@ import {
   standardDeviation,
 } from "./calculations.ts";
 import { getAnalyticsDefinition } from "./definitions.ts";
+import { createFieldViewAnalyticsEngine } from "./operations.ts";
 
 function population(key: string, totalCount: number, eligibleCount: number): FieldViewAnalyticsPopulation {
   const total = Math.max(0, totalCount);
