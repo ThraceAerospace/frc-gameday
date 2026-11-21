@@ -293,7 +293,7 @@ export class TeamRuntime {
         input_key: "event:" + eventKey + ":comparison-input",
         provider: "fieldview",
         resource: "event-team-season-comparison-input",
-        source_revision: String(comparisonInput.updated_at),
+        source_revision: JSON.stringify(comparisonInput.team_state_revisions ?? []),
         fetched_at: comparisonInput.updated_at,
         record_count: comparisonInput.total_team_event_records,
         included_count: comparisonInput.processed_team_event_records - comparisonInput.unavailable_team_event_records,
