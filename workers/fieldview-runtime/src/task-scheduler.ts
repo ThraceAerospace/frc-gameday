@@ -344,6 +344,7 @@ export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly env: RuntimeEnvironment;
+  private readonly activation: Promise<void>;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
     this.storage = state.storage;
@@ -352,6 +353,30 @@ export class TaskScheduler {
       apiKey: env.TBA_API_KEY,
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
+    // Durable Objects activate on demand. On each TaskScheduler activation,
+    // restore the current-season index invariant from its own storage and arm
+    // background discovery if the index is absent or stale. No provider or
+    // entity-runtime calls occur during activation.
+    this.activation = state.blockConcurrencyWhile
+      ? state.blockConcurrencyWhile(async () => {
+          const year = new Date().getUTCFullYear();
+          const index = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+          const checkedAt = index?.checkedAt ?? index?.updatedAt ?? 0;
+          if (!index || Date.now() - checkedAt >= eventPollingPolicy(this.env).discoveryIntervalMs) {
+            await this.queueCurrentSeasonDiscovery();
+          }
+        })
+      : Promise.resolve();
+  }
+
+  private async queueCurrentSeasonDiscovery(): Promise<void> {
+    if (await this.storage.get<boolean>("scheduler:daily-run-requested") !== true) {
+      await this.storage.put("scheduler:daily-run-requested", true);
+    }
+    const currentAlarm = await this.storage.getAlarm?.();
+    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
+      await this.storage.setAlarm(Date.now() + 100);
+    }
   }
 
 
@@ -368,6 +393,7 @@ export class TaskScheduler {
     const startedAt = performance.now();
     const url = new URL(request.url);
     try {
+      await this.activation;
       return await this.handleFetch(request);
     } finally {
       console.log("[FV][TaskScheduler] request", JSON.stringify({
@@ -386,12 +412,20 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
       const cached = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
-      if (!cached) return Response.json({ error: "Event discovery cache is not ready" }, { status: 503 });
+      const currentYear = new Date().getUTCFullYear();
+      if (!cached) {
+        if (year === currentYear) await this.queueCurrentSeasonDiscovery();
+        return Response.json({
+          year, events: [], status: "unavailable",
+          index: { status: "missing", persisted: false },
+          revalidation: year === currentYear ? "scheduled" : "on_demand",
+        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
       const retrievedAt = new Date(cached.updatedAt).toISOString();
       const checkedAt = cached.checkedAt ?? cached.updatedAt;
-      const sourceStatus = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs * 2
-        ? "stale" as const
-        : "available" as const;
+      const isStale = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs;
+      if (year === currentYear && isStale) await this.queueCurrentSeasonDiscovery();
+      const sourceStatus = isStale ? "stale" as const : "available" as const;
       const events = cached.events.map((event) => normalizeFieldViewEvent(event, {
         tba_event: {
           status: sourceStatus,
