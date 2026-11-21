@@ -1245,11 +1245,16 @@ export class EventRuntime {
         (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
       await this.enqueueManualPolls([statboticsEndpoint]);
     }
-    if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false &&
-        !(await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))) {
-      await this.storage.put(ANALYTICS_DUE_KEY, now);
-      await this.storage.put("analytics:status", "pending");
-      await this.storage.transaction((transaction) => this.rearm(transaction));
+    if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+      const [analyticsPublication, eventViewPublication] = await Promise.all([
+        this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
+        this.storage.get(EVENT_VIEW_PUBLICATION_KEY),
+      ]);
+      if (!analyticsPublication || !eventViewPublication) {
+        await this.storage.put(ANALYTICS_DUE_KEY, now);
+        await this.storage.put("analytics:status", "pending");
+        await this.storage.transaction((transaction) => this.rearm(transaction));
+      }
     }
   }
 
