@@ -74,6 +74,20 @@ Provider packages do not normalize, correlate, aggregate, or calculate FieldView
 
 Statbotics runtime data should use the official API (`https://api.statbotics.io`) when it is operational. The official service is currently unavailable; retain the configured testing mirror `https://api-statbotics.iterativerefinement.com/` until the official API is restored or a FieldView-operated compatible service is available. Do not silently replace this working testing endpoint. Keep the endpoint configurable and identify the active source in runtime provenance.
 
+## Data ownership, normalization, and cross-runtime references
+
+Canonical data has exactly one owning runtime and one authoritative persisted representation. This is a storage and contract invariant, not merely a preference for reducing payload size.
+
+- EventRuntime owns event-scoped provider resources, FieldViewEventState, and FieldViewEventAnalytics.
+- TeamRuntime owns team-scoped provider resources, FieldViewTeamState, FieldViewTeamEventState, and team-scoped analytics.
+- A runtime must not persist a complete canonical record owned by another runtime. Cross-runtime dependencies are represented by stable references that identify the owner, owner identity, record type/identity, and the source revision where relevant.
+- Because EventRuntime and TeamRuntime are separate Durable Objects with separate SQLite databases, cross-runtime references are logical foreign keys. The owner runtime validates and resolves them; no caller directly reads another runtime's SQLite storage.
+- Do not duplicate provider payloads, canonical entities, match records, or complete nested aggregates across runtime boundaries. Preserve the authoritative copy at its owner.
+- Data may be combined in memory only when a specific operation requires the combined input. Discard that working set when the operation completes; persist only the output owned by the calculating runtime and the minimal provenance needed to validate it.
+- Consumer-facing read projections are allowed only when required by a concrete read capability. They contain minimal derived fields or references, are explicitly non-authoritative, versioned, bounded, and must not embed complete foreign canonical objects.
+- Avoid unbounded nested collections in persisted cross-runtime publications. A publication must not become a second database assembled from other runtimes.
+- If an existing persisted contract violates these rules, migrate readers and writers to the normalized contract and retire the duplicated representation. Splitting or chunking an unnecessarily duplicated aggregate is not an acceptable permanent fix.
+
 ## Domain model and runtime ownership
 
 Canonical domain concepts include:
@@ -102,7 +116,7 @@ Analytics must be easy to inspect, explain, test, and modify.
 - Analytics ownership follows scope: TeamRuntime owns team and team-event calculations; EventRuntime owns event-wide calculations and aggregation over participating TeamRuntime results.
 - EventRuntime builds a versioned FieldViewEventTeamSeasonComparisonInput from the event roster and all participating FieldViewTeamState records, then supplies the same input to each TeamRuntime. TeamRuntime combines it with its own authoritative season state, calculates and persists only its own FieldViewTeamEventAnalytics / FieldViewTeamEventState. TeamRuntime must not independently discover the full event comparison population.
 - Ordinary TBA webhook delivery is scope-routed at Worker ingress: the authenticated original payload is dispatched directly to EventRuntime and every TeamRuntime whose team-specific projection is affected. EventRuntime must not relay webhooks or act as the TeamRuntime dispatcher. TeamRuntime updates only its own team/event projection and must not duplicate canonical event-owned provider resources. The shared versioned comparison-input handoff remains a separate analytics dependency; it is not a webhook relay.
-- A complete event FieldView is represented by FieldViewEventView: event-owned FieldViewEventState + FieldViewEventAnalytics + the roster's array of TeamRuntime-owned FieldViewTeamEventState records, with explicit partial-coverage metadata. TaskScheduler performs roster reconciliation on a scheduled job, not as a side effect of ordinary event reads.
+- FieldViewEventView contains event-owned state and analytics plus participant references and explicit coverage metadata; it never embeds complete TeamRuntime-owned TeamEventState records. TaskScheduler performs roster reconciliation on a scheduled job, not as a side effect of ordinary event reads.
 - Every generated model uses the FieldView prefix. Provider-originated models retain their provider prefix (TBA, Statbotics, FRCColors). Canonical names include FieldViewTeamState (team/season), FieldViewTeamEventState (team/event), FieldViewTeamEventAnalytics (team/event analytics), and FieldViewEventAnalytics (event analytics).
 
 - Metric definitions declare inputs, operation, output semantics/unit, scope, version, and relevant interpretation/limitations.
