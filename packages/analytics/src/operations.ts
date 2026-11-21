@@ -6,16 +6,18 @@ import {
   buildReviewFindings,
   buildSeasonAwareTeamInsights,
   buildTeamRows,
+  buildTeamInsights,
 } from "./calculations.ts";
 import { buildMatchFlagContext, buildMatchFlags, type MatchFlagContext } from "./match-flags.ts";
 import type {
   AllianceResult,
   AnalyticsMatch,
+  TeamAnalyticsRow,
   EventAnalyticsResponse,
   FieldViewEventTeamSeasonComparisonSnapshot,
 } from "./types.ts";
 import type { TBAEliminationAlliance, TBAMatch } from "@fieldview/provider-tba/types";
-import type { AnalyticsOperation } from "./engine.ts";
+import { AnalyticsOperationRegistry, type AnalyticsOperation } from "./engine.ts";
 
 type TeamInput = Parameters<typeof buildTeamRows>[0];
 type OprInput = Parameters<typeof buildTeamRows>[1];
@@ -25,6 +27,7 @@ export interface FieldViewAnalyticsOperationContext {
   records: AnalyticsMatch[];
   allEventMatches?: TBAMatch[];
   teams?: TeamInput;
+  teamRows?: TeamAnalyticsRow[];
   oprs?: OprInput;
   rankings?: RankingInput;
   comparisonInput?: FieldViewEventTeamSeasonComparisonSnapshot;
@@ -62,13 +65,7 @@ export function createFieldViewAnalyticsOperationRegistry(): AnalyticsOperationR
       buildSeasonAwareTeamInsights(
         required(context.records, "records"),
         required(context.allianceResults, "allianceResults"),
-        required(context.teams, "teams").map((team) => ({
-          teamKey: team.key,
-          teamNumber: team.team_number,
-          name: team.nickname || team.name || "Team " + team.team_number,
-          opr: null, dpr: null, ccwm: null, epa: null, autoEpa: null, teleopEpa: null, endgameEpa: null,
-          matchesSeen: 0, epaPercentile: null, epaContributionPercent: null, epaContributionSamples: 0,
-        })),
+        required(context.teamRows, "teamRows"),
         context.rankings ?? null,
         required(context.comparisonInput, "comparisonInput"),
         required(context.targetEventKey, "targetEventKey"),
