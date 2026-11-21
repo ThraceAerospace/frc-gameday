@@ -220,13 +220,13 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       return scheduler.fetch(new Request("https://task-scheduler/events/this-week"));
     }
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams();
       const year = url.searchParams.get("year");
@@ -297,7 +297,7 @@ export default {
           return Response.json({ error: "Unsupported event operation" }, { status: 400 });
         }
         if (action === "seed-event-teams") {
-          if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+          if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
           const year = body.year === undefined ? Number(key.slice(0, 4)) : Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid event season year" }, { status: 400 });
           const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
@@ -406,7 +406,7 @@ export default {
       (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const headers = new Headers(request.headers);
       headers.set("Authorization", "Bearer " + env.RUNTIME_ADMIN_TOKEN);
@@ -419,7 +419,7 @@ export default {
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       return scheduler.fetch(new Request("https://task-scheduler/admin/overview", {
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
@@ -428,7 +428,7 @@ export default {
 
     // District data is owned by TaskScheduler; these public routes are strictly read-only.
     if (url.pathname === "/districts/discovery" && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const response = await scheduler.fetch(new Request("https://task-scheduler/districts" + url.search));
       const headers = new Headers(response.headers);
@@ -437,7 +437,7 @@ export default {
     }
     const districtRoute = /^\/districts\/([a-zA-Z0-9_-]+)\/snapshot$/.exec(url.pathname);
     if (districtRoute && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams(url.search);
       query.set("key", districtRoute[1]);
@@ -579,7 +579,7 @@ export default {
 
     if (url.pathname === "/internal/scheduler/start" || url.pathname === "/internal/scheduler/stop" || url.pathname === "/internal/scheduler/state") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const action = url.pathname.endsWith("/start") ? "start" : url.pathname.endsWith("/stop") ? "stop" : "state";
       return scheduler.fetch(new Request("https://task-scheduler/" + action, {
@@ -674,7 +674,7 @@ export default {
     context: { waitUntil(promise: Promise<unknown>): void },
   ): Promise<void> {
     if (!env.TASK_SCHEDULER) {
-      console.error("[FV][Scheduler] Daily event classification skipped: TaskScheduler is not bound");
+      console.error("[FV][TaskScheduler] Daily event classification skipped: TaskScheduler is not bound");
       return;
     }
     const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
@@ -685,7 +685,7 @@ export default {
       }));
       if (!response.ok) throw new Error("Daily TaskScheduler run failed with HTTP " + response.status);
       const result = await response.json();
-      console.log("[FV][Scheduler] Daily run completed", JSON.stringify(result));
+      console.log("[FV][TaskScheduler] Daily run completed", JSON.stringify(result));
     })());
   },
 };
