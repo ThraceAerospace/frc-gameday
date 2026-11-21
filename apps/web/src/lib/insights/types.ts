@@ -1,5 +1,5 @@
 import type { StatboticsMatch } from "@/lib/statbotics/types";
-import type { FieldViewMatchFlags } from "@fieldview/domain";
+import type { FieldViewEventTeamComparisonAnalytics, FieldViewMatchFlags } from "@fieldview/domain";
 import type { TBAEliminationAlliance, TBAEvent, TBAEventRanking, TBAMatch } from "@/lib/tba/types";
 
 export type AnalyticsMatch = {
