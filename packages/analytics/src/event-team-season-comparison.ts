@@ -17,7 +17,7 @@ function fetchedAt(snapshot: FieldViewTeamState, fallback: number): number {
 }
 
 /**
- * Build the event-wide comparison cohort exclusively from TeamRuntime
+ * Build the event-wide comparison input exclusively from TeamRuntime
  * snapshots. Missing team/event/model records remain explicit unavailable
  * records; they are never converted to zero or silently omitted.
  */
@@ -50,7 +50,7 @@ export function buildFieldViewEventTeamSeasonComparisonInput(
       const historySourceStatus = snapshot.sources.tba_team_events?.status;
       if (historySourceStatus === "failed" || historySourceStatus === "unavailable") {
         // The resource was attempted and its failure is now terminal evidence,
-        // not an indefinitely-discovering cohort. Keep the team row explicit.
+        // not an indefinitely-discovering comparison input. Keep the team row explicit.
         historyUnavailableTeams += 1;
       } else {
         discoveryPendingTeams += 1;
