@@ -3,7 +3,7 @@ import type { FieldViewEventTeam } from "../event.js";
 import type { FieldViewMatch } from "../match.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import type { FieldViewTeam, FieldViewTeamEventState } from "../team.js";
-import type { FieldViewTeamAnalytics } from "../analytics.js";
+import type { FieldViewTeamEventAnalytics } from "../analytics.js";
 
 export interface NormalizeFieldViewTeamEventStateInput {
   event_key: EventKey;
@@ -12,7 +12,7 @@ export interface NormalizeFieldViewTeamEventStateInput {
   team?: FieldViewTeam | null;
   event_team?: FieldViewEventTeam | null;
   matches?: FieldViewMatch[] | null;
-  analytics?: FieldViewTeamAnalytics | null;
+  analytics?: FieldViewTeamEventAnalytics | null;
 }
 
 /**
