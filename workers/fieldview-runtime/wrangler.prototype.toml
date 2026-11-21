@@ -3,6 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2026-11-17"
 workers_dev = true
 
+# Persist Worker and Durable Object logs; sample traces to limit observability volume.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.1
+
 # This config is deliberately separate from wrangler.toml. It creates an
 # isolated Worker and isolated Durable Object namespaces for the prototype.
 # Do not add production routes or reuse production Durable Object namespaces.
