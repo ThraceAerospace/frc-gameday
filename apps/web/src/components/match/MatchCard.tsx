@@ -1,7 +1,6 @@
 "use client";
 
 import type { FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
-import NextMatchCountdown from "./NextMatchCountdown";
 import { formatAlliance, formatAllianceShortName, matchShortName, formatMatchEventTime } from "@/lib/tba/formatters";
 
 export type MatchPresentation = Pick<
@@ -119,13 +118,11 @@ export default function MatchCard({
       : match.time != null
         ? formatMatchEventTime(match.time, eventTimezone)
         : null
-    : isNext && (match.predicted_time != null || match.time != null)
-      ? <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
-      : match.predicted_time != null
-        ? formatMatchEventTime(match.predicted_time, eventTimezone)
-        : match.time != null
-          ? formatMatchEventTime(match.time, eventTimezone)
-          : null;
+    : match.predicted_time != null
+      ? formatMatchEventTime(match.predicted_time, eventTimezone)
+      : match.time != null
+        ? formatMatchEventTime(match.time, eventTimezone)
+        : null;
 
   const redPredictedScore = match.predictions.statbotics?.red_score;
   const bluePredictedScore = match.predictions.statbotics?.blue_score;
