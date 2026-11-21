@@ -289,9 +289,11 @@ export default function AdminOperationsDashboard() {
       void refresh(true);
       if (entityKind !== "system" && key) void openEntity(entityKind, key, operationYear ?? selected?.year ?? year);
       const label = action.replaceAll("-", " ");
-      setMessage(["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "scheduler-run"].includes(action)
-        ? label + " queued. The scheduler will advance it in the background; you can keep using the dashboard."
-        : label + " accepted.");
+      setMessage(action === "scheduler-stop" && body.admin_jobs_continuing
+        ? "Routine polling stopped. Already queued admin jobs will continue in the background."
+        : ["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "scheduler-run"].includes(action)
+          ? label + " queued. The scheduler will advance it in the background; you can keep using the dashboard."
+          : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
   }, [requestHeaders, refresh, openEntity, selected, year]);
@@ -323,16 +325,24 @@ export default function AdminOperationsDashboard() {
   useEffect(() => {
     if (!authenticated || selected?.kind !== "team") { setTeamSeedJob(null); return; }
     void loadTeamSeedJob(selected.key, selected.year);
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, loadTeamSeedJob]);
+
+  useEffect(() => {
+    if (!authenticated || selected?.kind !== "team" || teamSeedJob?.status !== "running") return;
     const timer = window.setInterval(() => void loadTeamSeedJob(selected.key, selected.year), 3_000);
     return () => window.clearInterval(timer);
-  }, [authenticated, selected?.kind, selected?.key, selected?.year, loadTeamSeedJob]);
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, teamSeedJob?.status, loadTeamSeedJob]);
 
   useEffect(() => {
     if (!authenticated) return;
     void loadDiscoveryJob();
+  }, [authenticated, loadDiscoveryJob]);
+
+  useEffect(() => {
+    if (!authenticated || discoveryJob?.status !== "running") return;
     const timer = window.setInterval(() => void loadDiscoveryJob(), 3_000);
     return () => window.clearInterval(timer);
-  }, [authenticated, loadDiscoveryJob]);
+  }, [authenticated, discoveryJob?.status, loadDiscoveryJob]);
 
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
