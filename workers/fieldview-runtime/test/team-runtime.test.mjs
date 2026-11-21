@@ -386,3 +386,15 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
   assert.equal(result.eventCount, 0);
   assert.equal(storage.values.has("team-season-analytics:2026"), true);
 });
+
+
+test("TeamRuntime always creates the current-season TeamState when first reached through a historical season", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461";
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
+  const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=2025", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(storage.values.get("team-state:2026")?.year, 2026);
+  assert.equal(storage.values.get("team-state:2025")?.year, 2025);
+});
