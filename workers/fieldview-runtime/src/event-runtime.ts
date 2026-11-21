@@ -618,6 +618,22 @@ export class EventRuntime {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/team-state-changed") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.team_key !== "string" ||
+          !/^(?:frc)?[0-9]+$/.test(body.team_key) ||
+          !Number.isSafeInteger(body.team_state_revision) || (body.team_state_revision as number) < 0) {
+        return Response.json({ error: "Invalid team state change notification" }, { status: 400 });
+      }
+      await this.storage.transaction(async (transaction) => {
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now());
+        await transaction.put("analytics:status", "pending");
+        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+        await this.rearm(transaction);
+      });
+      return Response.json({ accepted: true, event_key: this.eventKey, team_key: body.team_key });
+    }
+
     if (request.method === "POST" && url.pathname === "/publish-state") {
       const publication = await this.publishEventState();
       return Response.json({
@@ -662,6 +678,25 @@ export class EventRuntime {
           "X-FieldView-Event-State-Status": publication.status,
         },
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/view") {
+      const publication = await this.publishEventState();
+      const state = publication.state;
+      const expected = (state.teams ?? []).map((team) => team.key);
+      const present = new Set((state.team_states ?? []).map((team) => team.team_key));
+      const pending = expected.filter((teamKey) => !present.has(teamKey));
+      return Response.json({
+        event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")),
+        analytics: state.analytics ?? null,
+        team_states: state.team_states ?? [],
+        team_state_coverage: {
+          state: pending.length === 0 ? "complete" : "partial",
+          expected_count: expected.length,
+          materialized_count: present.size,
+          pending_team_keys: pending,
+        },
+      }, { headers: { "X-FieldView-Event-State-Status": publication.status, "Cache-Control": "no-store" } });
     }
 
     if (request.method === "GET" && url.pathname === "/state") {
