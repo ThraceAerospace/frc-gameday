@@ -290,9 +290,9 @@ export class TeamRuntime {
         excluded_count: Math.max(0, (teamState.events?.length ?? 0) - (teamState.statbotics_events?.length ?? 0)),
         status: teamState.events === undefined || teamState.statbotics_events === undefined ? "partial" : "available",
       }, {
-        input_key: "event:" + eventKey + ":comparison-cohort",
+        input_key: "event:" + eventKey + ":comparison-input",
         provider: "fieldview",
-        resource: "event-team-season-cohort",
+        resource: "event-team-season-comparison-input",
         source_revision: String(comparisonInput.updated_at),
         fetched_at: comparisonInput.updated_at,
         record_count: comparisonInput.total_team_event_records,
