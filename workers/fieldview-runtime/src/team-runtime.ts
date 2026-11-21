@@ -424,7 +424,7 @@ export class TeamRuntime {
         const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
         if (retryableFailure && item.attempts < 8) {
-          // A gate denial is scheduling, not a provider attempt.
+          // A provider failure is retried without discarding the last-good representation.
           next.push({ ...item, dueAt: retryAt, attempts: "deferredUntil" in result ? item.attempts : item.attempts + 1 });
         }
         await tx.put(MANUAL_QUEUE_KEY, next);
