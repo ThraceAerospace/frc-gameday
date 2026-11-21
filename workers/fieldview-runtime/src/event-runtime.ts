@@ -343,7 +343,7 @@ export class EventRuntime {
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
-      (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/stream");
+      (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -648,6 +648,26 @@ export class EventRuntime {
         return true;
       });
       return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
+    }
+
+    if (request.method === "GET" && url.pathname === "/statbotics-match") {
+      const matchKey = url.searchParams.get("match_key");
+      if (!matchKey || !/^[a-zA-Z0-9_]+$/.test(matchKey) || !matchKey.startsWith(this.eventKey + "_")) {
+        return Response.json({ error: "Invalid or mismatched Statbotics match key" }, { status: 400 });
+      }
+      // Provider acquisition is owned by EventRuntime. A read only queues
+      // missing/stale work; it never performs a provider request inline.
+      await this.queueSnapshotRefresh();
+      const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const state = await this.storage.get<EndpointState<StatboticsMatch[]>>(endpointStorageKey(endpoint));
+      if (!state || state.lastFetchedAt === null || !Array.isArray(state.data)) {
+        return Response.json({ available: false, status: state?.status ?? "pending" }, {
+          status: 503, headers: { "Cache-Control": "no-store" },
+        });
+      }
+      const match = state.data.find((item) => item.key === matchKey);
+      if (!match) return Response.json({ available: false }, { status: 404, headers: { "Cache-Control": "no-store" } });
+      return Response.json(match, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/publish-state") {
