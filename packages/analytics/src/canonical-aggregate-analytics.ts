@@ -309,11 +309,9 @@ import type { AnalyticsMatch, AllianceResult, TeamAnalyticsRow, TeamInsight } fr
 import {
   buildReviewFindings,
   buildTeamInsights,
-  buildTeamRows,
   buildQualificationAnalysis,
   buildQualificationAnomalies,
   buildPlayoffAnalysis,
-  buildSeasonAwareTeamInsights,
   mean,
   standardDeviation,
 } from "./calculations.ts";
