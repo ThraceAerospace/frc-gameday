@@ -225,17 +225,20 @@ export class TeamRuntime {
           typeof value.active !== "boolean") {
         return Response.json({ error: "Invalid event activity payload" }, { status: 400 });
       }
-      const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
-      if (value.active) activeEvents[eventKey] = { year: eventYear as number, updatedAt: Date.now() };
-      else delete activeEvents[eventKey];
-      await this.storage.put(ACTIVE_EVENTS_KEY, activeEvents);
+      const activeEvents = await this.storage.transaction(async (tx) => {
+        const current = await tx.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+        if (value.active) current[eventKey] = { year: eventYear as number, updatedAt: Date.now() };
+        else delete current[eventKey];
+        await tx.put(ACTIVE_EVENTS_KEY, current);
+        return current;
+      });
       const years = new Set<number>([eventYear as number, ...Object.values(activeEvents).map((item) => item.year)]);
       await Promise.all([...years].map((activeYear) => this.schedule(activeYear, false)));
       return Response.json({ team_key: this.teamKey, active_events: Object.keys(activeEvents).sort(), active: value.active });
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
-      // Explicit admin ingestion queues durable work. Each alarm processes one
-      // provider request; the 24-hour interval is the steady-state cadence.
+      // Explicit admin ingestion queues durable work. Independent provider
+      // resources may be fetched concurrently; the 24-hour interval is the steady-state cadence.
       await this.schedule(year, true);
       const resources = this.endpoints(year);
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
@@ -412,7 +415,7 @@ export class TeamRuntime {
     });
     await Promise.all(due.manualDue.map(async (item) => {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
-      if (!resource) continue;
+      if (!resource) return;
       const result = await this.pollResourceNow(resource);
       const retryableFailure = "deferredUntil" in result || result.status === "failed";
       const retryAt = "deferredUntil" in result ? result.deferredUntil
