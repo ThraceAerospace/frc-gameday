@@ -238,11 +238,21 @@ export class TeamRuntime {
     const publicEventStateRead = request.method === "GET" && url.pathname === "/event-state";
     const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
-    // Existing Durable Objects may still contain recurring Statbotics tasks
-    // from the previous scheduler policy. Remove them on first touch; explicit
-    // seed/refresh requests continue to enqueue one-shot Statbotics work.
-    await this.clearRecurringStatboticsTasks();
+    // Public reads must not bind identity or perform migration cleanup writes.
+    // Entity identity is established by scheduler/admin initialization before a
+    // runtime is exposed to public readers.
+    if (publicRead) {
+      if (!(await this.restoreIdentity())) {
+        return Response.json({ team_key: null, status: "unavailable", publication: "missing" }, {
+          status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
+        });
+      }
+    } else {
+      if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
+      // Retire legacy recurring Statbotics tasks only on an explicit/admin touch,
+      // never as a side effect of a public read.
+      await this.clearRecurringStatboticsTasks();
+    }
     if (request.method === "POST" && url.pathname === "/webhook") {
       const eventKey = request.headers.get("X-FieldView-Event-Key") ?? "";
       const webhookId = request.headers.get("X-FieldView-Webhook-Id") ?? "";
@@ -380,6 +390,59 @@ export class TeamRuntime {
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
+
+    if (publicRead) {
+      // Serve the last atomically published representation. A GET never
+      // rebuilds/persists a snapshot and never materializes another season.
+      const stateKey = `team-state:${year}`;
+      const publication = await this.storage.get<{
+        input_signature: string;
+        state: ReturnType<typeof normalizeFieldViewTeamState>;
+      }>(stateKey + ":publication");
+      const resources = this.endpoints(year);
+      const states = await Promise.all(resources.map(({ endpoint }) =>
+        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+      const now = Date.now();
+      const signature = JSON.stringify(states.map((state) => state ? [
+        state.revision, state.status, state.lastFetchedAt, state.expiresAt,
+        state.etag, state.expiresAt !== null && state.expiresAt < now,
+      ] : null));
+      const needed = resources.filter((resource, index) => {
+        if (resource.provider === "statbotics") return false;
+        const state = states[index];
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") ||
+          state.status === "failed" || state.status === "stale" ||
+          (state.expiresAt !== null && state.expiresAt <= now);
+      });
+      if (needed.length > 0) {
+        await this.schedule(year, true);
+        await this.enqueueManualPolls(needed, year);
+      }
+      if (!publication) {
+        return Response.json({
+          team_key: this.teamKey, year, status: "unavailable",
+          publication: { status: "missing" }, revalidation: needed.length ? "scheduled" : "pending",
+        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
+      const stale = publication.input_signature !== signature;
+      const etag = 'W/"fv-team-snapshot-v1-' + year + '-' +
+        (await this.storage.get<number>("snapshot-revision") ?? 0) + '-' +
+        await hashSignature(publication.input_signature) + '"';
+      const headers = {
+        "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
+        "X-FieldView-Publication-Status": stale ? "stale" : "available",
+        "X-FieldView-Revalidation": needed.length ? "scheduled" : "idle",
+        ETag: etag,
+        "Cache-Control": "private, no-cache",
+      };
+      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+        return new Response(null, { status: 304, headers });
+      }
+      return Response.json(publication.state, { headers });
+    }
+
+    // Internal/admin operations may materialize the requested season. Public
+    // reads above are deliberately isolated from this write-capable path.
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = new Date().getUTCFullYear();
