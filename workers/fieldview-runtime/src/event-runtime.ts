@@ -58,6 +58,7 @@ const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
+const EVENT_VIEW_PUBLICATION_KEY = "event-view:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 // Preserve the legacy storage key strings so existing Durable Object retry state survives the naming migration.
 const ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY = "analytics:cohort-retries";
@@ -796,9 +797,21 @@ export class EventRuntime {
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
-      // Team-scoped state is composed asynchronously into a separate event-view
-      // publication. Never fan out to TeamRuntime objects from this GET.
-      return Response.json({ ...publication.state, analytics, team_states: [] }, { headers });
+      const eventViewPublication = await this.storage.get<{
+        version: number; source_revision: number; status: string;
+        view: FieldViewEventView;
+      }>(EVENT_VIEW_PUBLICATION_KEY);
+      // Team-scoped state comes only from the last background-composed view.
+      return Response.json({
+        ...publication.state, analytics,
+        team_states: eventViewPublication?.view.team_states ?? [],
+      }, {
+        headers: {
+          ...headers,
+          "X-FieldView-Team-State-Coverage": eventViewPublication?.status ?? "partial",
+          ...(eventViewPublication ? { "X-FieldView-View-Version": String(eventViewPublication.version) } : {}),
+        },
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
@@ -810,6 +823,22 @@ export class EventRuntime {
           publication: { status: "missing" },
           team_state_coverage: { state: "unavailable", expected_count: 0, materialized_count: 0, pending_team_keys: [] },
         }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
+      const eventViewPublication = await this.storage.get<{
+        version: number; source_revision: number; status: string; generated_at: number;
+        view: FieldViewEventView;
+      }>(EVENT_VIEW_PUBLICATION_KEY);
+      if (eventViewPublication) {
+        return Response.json(eventViewPublication.view, {
+          headers: {
+            "X-FieldView-Event-State-Status": publication.status,
+            "X-FieldView-View-Version": String(eventViewPublication.version),
+            "X-FieldView-View-Source-Revision": String(eventViewPublication.source_revision),
+            "X-FieldView-Team-State-Coverage": eventViewPublication.status,
+            "X-FieldView-View-Generated-At": String(eventViewPublication.generated_at),
+            "Cache-Control": "no-store",
+          },
+        });
       }
       const state = publication.state;
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
@@ -1181,7 +1210,14 @@ export class EventRuntime {
     }
   }
 
-  private async buildEventState(calculateAnalytics = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
+  private async buildEventState(calculateAnalytics = false): Promise<{
+    version: number;
+    sourceRevision: number;
+    analyticsInputsComplete?: boolean;
+    state: ReturnType<typeof normalizeFieldViewEventState>;
+    eventView?: FieldViewEventView;
+    teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
+  }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -1334,10 +1370,26 @@ export class EventRuntime {
       const eventAnalytics = eventAnalyticsState.analytics
         ? { ...eventAnalyticsState.analytics, team_summaries: teamSummaries, team_comparison: teamComparison }
         : eventAnalyticsState.analytics;
+      const expectedTeamKeys = (normalizedState.teams ?? []).map((team) => team.key);
+      const presentTeamKeys = new Set(teamStates.map((teamState) => teamState.team_key));
+      const eventView: FieldViewEventView = {
+        event: Object.fromEntries(Object.entries(eventAnalyticsState)
+          .filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
+        analytics: eventAnalytics ?? null,
+        team_states: teamStates,
+        team_state_coverage: {
+          state: teamStatesComplete ? "complete" : "partial",
+          expected_count: expectedTeamCount,
+          materialized_count: teamStates.length,
+          pending_team_keys: expectedTeamKeys.filter((teamKey) => !presentTeamKeys.has(teamKey)),
+        },
+      };
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
         analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
+        teamStateRevisions: teamResults.revisions,
+        eventView,
         state: {
           ...eventAnalyticsState,
           ...(eventAnalytics === undefined ? {} : { analytics: eventAnalytics }),
@@ -1639,7 +1691,14 @@ export class EventRuntime {
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
     await this.storage.put("analytics:status", "running");
-    let calculated: { version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> };
+    let calculated: {
+      version: number;
+      sourceRevision: number;
+      analyticsInputsComplete?: boolean;
+      state: ReturnType<typeof normalizeFieldViewEventState>;
+      eventView?: FieldViewEventView;
+      teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
+    };
     try {
       calculated = await this.buildEventState(true);
     } catch (error) {
@@ -1676,6 +1735,21 @@ export class EventRuntime {
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
+      if (calculated.eventView) {
+        // Event view composition is published in the same transaction as the
+        // analytics revision, after event source revision validation. Partial
+        // coverage is explicit; failed refreshes leave the previous view intact.
+        await transaction.put(EVENT_VIEW_PUBLICATION_KEY, {
+          schema_version: 1,
+          event_key: this.eventKey,
+          version: analyticsRevision,
+          source_revision: calculated.sourceRevision,
+          generated_at: publication.calculatedAt,
+          status: calculated.eventView.team_state_coverage.state,
+          team_state_revisions: calculated.teamStateRevisions ?? [],
+          view: calculated.eventView,
+        });
+      }
       await transaction.delete(ANALYTICS_INVALIDATION_KEY);
       const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_TEAM_EVENT_STATES_KEY) === true;
       const collectionPartial = isRecord(calculated.state.analytics) &&
