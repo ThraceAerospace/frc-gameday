@@ -156,8 +156,8 @@ export default function MatchCard({
           ].join(" ")}
         >
           {/* Match identity and restored clock */}
-          <div className="relative top-px row-span-2 flex h-full min-w-max flex-col justify-center">
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <div className="row-span-2 flex h-full min-w-max flex-col justify-center gap-y-0.5">
+            <div className="flex h-4 items-center gap-1.5 whitespace-nowrap">
               {matchLevelFlags.length > 0 ? (
                 <span
                   aria-label="Match has review flags"
@@ -167,7 +167,7 @@ export default function MatchCard({
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-[10px] font-medium uppercase tracking-normal",
+                  "whitespace-nowrap text-[10px] font-semibold uppercase tracking-normal",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
@@ -177,7 +177,7 @@ export default function MatchCard({
 
             <span
               className={[
-                "mt-0.5 whitespace-nowrap font-mono text-[11px] tabular-nums",
+                "flex h-4 items-center whitespace-nowrap font-mono text-[11px] tabular-nums",
                 isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
               ].join(" ")}
             >
@@ -273,7 +273,7 @@ export default function MatchCard({
                   </span>
                   <span
                     title={`Predicted blue score: ${bluePredictedScore}`}
-                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-zinc-200"
+                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 text-xs leading-4 font-bold text-zinc-200"
                   >
                     {Math.round(bluePredictedScore!)}
                   </span>
