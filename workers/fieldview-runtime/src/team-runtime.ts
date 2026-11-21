@@ -41,10 +41,11 @@ const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
 
 function isStatboticsRefreshTrigger(resource: TeamResource): boolean {
-  return resource.provider === "tba" && (
-    /^\\/team\\/[^/]+$/.test(resource.endpoint) ||
-    /^\\/team\\/[^/]+\\/events\\/\\d{4}$/.test(resource.endpoint)
-  );
+  if (resource.provider !== "tba") return false;
+  const parts = resource.endpoint.split("/");
+  return (parts.length === 3 && parts[1] === "team" && Boolean(parts[2])) ||
+    (parts.length === 5 && parts[1] === "team" && Boolean(parts[2]) &&
+      parts[3] === "events" && /^\\d{4}$/.test(parts[4] ?? ""));
 }
 
 
@@ -815,7 +816,8 @@ export class TeamRuntime {
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
       }
       if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
-        const year = Number(task.endpoint.match(/\\/events\\/(\\d{4})$/)?.[1] ?? new Date().getUTCFullYear());
+        const endpointParts = task.endpoint.split("/");
+        const year = Number(endpointParts[4] ?? new Date().getUTCFullYear());
         await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year);
       }
     }));
