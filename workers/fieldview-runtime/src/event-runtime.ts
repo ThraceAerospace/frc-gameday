@@ -2045,8 +2045,14 @@ export class EventRuntime {
     }
     const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
     const etag = publication ? eventSnapshotEtag(publication) : undefined;
-    const data = publication && publication.snapshotVersion === publishedVersion
-      ? { state: publication.state, ...(patch ?? {}) }
+    const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+    const publishedState = publication?.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+      ? publication.state
+      : publication?.state.analytics
+        ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
+        : publication?.state;
+    const data = publication && publication.snapshotVersion === publishedVersion && publishedState
+      ? { state: publishedState, ...(patch ?? {}) }
       : undefined;
     const message = JSON.stringify({
       type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
