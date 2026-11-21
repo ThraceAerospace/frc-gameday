@@ -628,6 +628,7 @@ export class EventRuntime {
       await this.storage.transaction(async (transaction) => {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");
+        await transaction.put("snapshot-revision", (await transaction.get<number>("snapshot-revision") ?? 0) + 1);
         await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
         await this.rearm(transaction);
       });
