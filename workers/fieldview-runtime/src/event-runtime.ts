@@ -112,7 +112,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
   if (!ifNoneMatch) return false;
-  const normalize = (value: string) => value.trim().replace(/^W\\//, "");
+  const normalize = (value: string) => value.trim().replace(/^W\//, "");
   return ifNoneMatch.split(",").some((candidate) =>
     candidate.trim() === "*" || normalize(candidate) === normalize(etag));
 }
