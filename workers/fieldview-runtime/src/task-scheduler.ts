@@ -1077,6 +1077,7 @@ export class TaskScheduler {
           typeof key === "string" && /^frc\d+$/.test(key)))].sort();
         if (job.teamKeys.length === 0) throw new Error("No valid participant teams were returned for this event");
         job.stage = "seed";
+        job.teamAttempts = 0;
         job.nextDueAt = Date.now() + 100;
       } catch (error) {
         job.teamAttempts += 1;
