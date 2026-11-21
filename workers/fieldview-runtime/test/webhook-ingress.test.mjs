@@ -11,7 +11,7 @@ async function sign(secret, body) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function environment(onForward) {
+function environment(onForward, onTeamForward) {
   return {
     TBA_API_KEY: "api-key",
     TBA_WEBHOOK_SECRET: "webhook-secret",
@@ -20,6 +20,12 @@ function environment(onForward) {
       idFromName: (name) => name,
       get: (id) => ({ fetch: onForward(id) }),
     },
+    ...(onTeamForward ? {
+      TEAM_RUNTIME: {
+        idFromName: (name) => name,
+        get: (id) => ({ fetch: onTeamForward(id) }),
+      },
+    } : {}),
   };
 }
 
@@ -107,4 +113,58 @@ test("TBA ping and verification notifications are acknowledged without event rou
     assert.equal(response.status, 200);
   }
   assert.equal(called, false);
+});
+
+test("match_score webhook fans out once to the event and each unique participating team", async () => {
+  const raw = new TextEncoder().encode(JSON.stringify({
+    message_type: "match_score",
+    message_data: {
+      event_key: "2026test",
+      match: {
+        key: "2026test_qm1",
+        event_key: "2026test",
+        alliances: {
+          red: { team_keys: ["frc1", "frc2", "frc3"] },
+          blue: { team_keys: ["frc3", "frc4", "frc5"] },
+        },
+      },
+    },
+  })).buffer;
+  const signature = await sign("webhook-secret", raw);
+  const eventTargets = [], teamTargets = [];
+  const env = environment((id) => async (request) => {
+    eventTargets.push({ id, request });
+    return new Response("accepted", { status: 200 });
+  }, (id) => async (request) => {
+    teamTargets.push({ id, request });
+    return new Response("accepted", { status: 200 });
+  });
+  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(eventTargets.map((item) => item.id), ["2026test"]);
+  assert.deepEqual(teamTargets.map((item) => item.id).sort(), ["frc1", "frc2", "frc3", "frc4", "frc5"]);
+  for (const target of [...eventTargets, ...teamTargets]) {
+    assert.equal(target.request.headers.get("X-FieldView-Webhook-Id")?.length, 64);
+    assert.equal(await target.request.text(), new TextDecoder().decode(raw));
+  }
+});
+
+test("event-wide schedule_updated webhook does not guess team recipients", async () => {
+  const raw = new TextEncoder().encode(JSON.stringify({
+    message_type: "schedule_updated",
+    message_data: { event_key: "2026test" },
+  })).buffer;
+  const signature = await sign("webhook-secret", raw);
+  const eventTargets = [];
+  const env = environment((id) => async () => {
+    eventTargets.push(id);
+    return new Response("accepted", { status: 200 });
+  });
+  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(eventTargets, ["2026test"]);
 });
