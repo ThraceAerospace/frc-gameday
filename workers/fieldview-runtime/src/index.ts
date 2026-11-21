@@ -80,7 +80,11 @@ export default {
       if (["ping", "verification", "broadcast"].includes(payload.message_type)) {
         return Response.json({ accepted: true });
       }
-      const eventKey = payload.message_data.event_key;
+      const eventData = payload.message_data.event;
+      const matchData = payload.message_data.match;
+      const eventKey = payload.message_data.event_key ??
+        (isRecord(eventData) ? eventData.key : undefined) ??
+        (isRecord(matchData) ? matchData.event_key : undefined);
       if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) {
         return Response.json({ error: "Webhook has no valid event key" }, { status: 400 });
       }
