@@ -209,7 +209,12 @@ export class TeamRuntime {
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
-    // A TeamRuntime always has a persisted, possibly partial canonical state.
+    // Every TeamRuntime starts with the current season state, even when first
+    // reached through an older event. The requested season is also materialized.
+    const currentYear = new Date().getUTCFullYear();
+    if (!(await this.storage.get<unknown>("team-state:" + currentYear))) {
+      await this.snapshot(currentYear);
+    }
     const initializedState = await this.snapshot(year);
     if (publicRead || publicSeasonAnalyticsRead) {
       // Queue only missing/stale resources. Do not execute an alarm inline:
