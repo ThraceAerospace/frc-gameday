@@ -1,3 +1,260 @@
+/**
+ * Calculate only the team-scoped event results. TeamRuntime calls this with
+ * its own TeamEventState; EventRuntime never executes this calculation path.
+ */
+export function calculateCanonicalTeamEventStates(
+  eventState: FieldViewEventState,
+  records: AnalyticsMatch[],
+  allianceResults: AllianceResult[],
+  audit: FieldViewAnalyticsAudit,
+  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
+): FieldViewEventState["team_states"] {
+  const teams = (eventState.teams ?? []).map((team) => ({
+    key: team.key,
+    team_number: team.team_number,
+    nickname: team.nickname,
+    name: team.name,
+  }));
+  const eventTeams = eventState.event_teams ?? [];
+  const oprValues: Record<string, number> = {};
+  const dprValues: Record<string, number> = {};
+  const ccwmValues: Record<string, number> = {};
+  for (const team of eventTeams) {
+    if (team.opr !== undefined) oprValues[team.team_key] = team.opr;
+    if (team.dpr !== undefined) dprValues[team.team_key] = team.dpr;
+    if (team.ccwm !== undefined) ccwmValues[team.team_key] = team.ccwm;
+  }
+  const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
+  const teamRows = buildTeamRows(teams, oprs, records);
+  const comparisonInputForInsights = comparisonInput ? {
+    state: comparisonInput.state,
+    teamCount: comparisonInput.team_count,
+    totalTeamEventRecords: comparisonInput.total_team_event_records,
+    processedTeamEventRecords: comparisonInput.processed_team_event_records,
+    unavailableTeamEventRecords: comparisonInput.unavailable_team_event_records,
+    discoveryPendingTeams: comparisonInput.discovery_pending_teams,
+    updatedAt: comparisonInput.updated_at,
+    records: comparisonInput.records.map((item) => ({
+      teamNumber: item.team_number,
+      event: {
+        key: item.event.event_key, name: item.event.event_name,
+        short_name: item.event.short_name, startDate: item.event.start_date,
+      },
+      epaTotal: item.epa_total, epaUnitless: item.epa_unitless,
+      breakdown: item.breakdown, wins: item.wins, losses: item.losses,
+      ties: item.ties, matches: item.match_count, fetchedAt: item.fetched_at,
+      status: item.status,
+    })),
+  } : null;
+  const insights = comparisonInputForInsights && eventState.event
+    ? buildSeasonAwareTeamInsights(
+        records, allianceResults, teamRows, eventState.rankings ?? null,
+        comparisonInputForInsights, eventState.event.key, eventState.event.start_date,
+        eventState.event.playoff_type,
+      )
+    : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
+  const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
+  const team_states = eventState.team_states === undefined || eventState.team_states === null
+    ? eventState.team_states
+    : eventState.team_states.map((teamState) => {
+        const row = teamRows.find((item) => item.teamKey === teamState.team_key);
+        if (!row) return teamState;
+        const insight = insights.find((item) => item.teamNumber === row.teamNumber);
+        const epaPopulation = population("team-event-latest-epa", 1, row.epa === null ? 0 : 1);
+        const contributionPopulation = population("team-event-alliance-appearances", row.matchesSeen, row.epaContributionSamples);
+        const comparisonPopulation = population("event-teams-with-available-epa", teamRows.length, teamRows.filter((item) => item.epa !== null).length);
+        const epaRank = row.epa === null ? null : 1 + teamRows.filter((item) => item.epa !== null && item.epa > row.epa!).length;
+        const metrics: FieldViewMetricResult[] = [
+          metric("epa", "team-event-epa", row.epa, "EPA", row.epa === null ? 0 : 1, epaPopulation, ["Latest observed EPA; not an event-average value."]),
+          metric("auto-epa", "team-event-epa", row.autoEpa, "EPA", row.autoEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("teleop-epa", "team-event-epa", row.teleopEpa, "EPA", row.teleopEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("endgame-epa", "team-event-epa", row.endgameEpa, "EPA", row.endgameEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
+          metric("epa-percentile", "team-event-epa", row.epaPercentile, "percentile", row.epa === null ? 0 : 1, epaPopulation, ["Compared with event teams that have an available EPA value."], {
+            population: comparisonPopulation,
+            rank_position: epaRank,
+            percentile: row.epaPercentile,
+          }),
+          metric("epa-contribution-percent", "team-epa-contribution-share", row.epaContributionPercent, "percent", row.epaContributionSamples, contributionPopulation, ["Mean share of eligible three-team alliance pre-match EPA totals; not measured robot-level scoring contribution."]),
+          metric("matches-seen", "team-event-match-appearances", row.matchesSeen, "matches", row.matchesSeen, population("team-event-match-appearances", row.matchesSeen, row.matchesSeen), ["Counts roster appearances, including matches that are not yet scored."]),
+        ];
+        const matchEvidence: FieldViewTeamMatchEvidence[] = records.flatMap((record) => {
+          const match = record.match;
+          const alliance = match.alliances.red.team_keys.includes(teamState.team_key) ? "red" as const
+            : match.alliances.blue.team_keys.includes(teamState.team_key) ? "blue" as const : null;
+          if (!alliance) return [];
+          const opponentAlliance = alliance === "red" ? "blue" as const : "red" as const;
+          const own = allianceResultByMatch.get(match.key + ":" + alliance);
+          const opponent = allianceResultByMatch.get(match.key + ":" + opponentAlliance);
+          const redProbability = record.statbotics?.pred?.red_win_prob;
+          const winProbability = typeof redProbability === "number" && redProbability >= 0 && redProbability <= 1
+            ? alliance === "red" ? redProbability : 1 - redProbability : null;
+          const ownPre = record.statbotics?.pre_epas?.[String(row.teamNumber)]?.epa;
+          const ownPost = record.statbotics?.epas?.[String(row.teamNumber)]?.epa;
+          const preEpa = typeof ownPre === "number" && Number.isFinite(ownPre) ? ownPre : null;
+          const postEpa = typeof ownPost === "number" && Number.isFinite(ownPost) ? ownPost : null;
+          const winner = match.winning_alliance;
+          const ownPreRecord = record.statbotics?.pre_epas?.[String(row.teamNumber)];
+          const ownPostRecord = record.statbotics?.epas?.[String(row.teamNumber)];
+          const numericComponents = (value: object | null | undefined): Record<string, number> => {
+            if (!value) return {};
+            return Object.fromEntries(Object.entries(value).filter(([key, amount]) =>
+              typeof amount === "number" && Number.isFinite(amount) && !/^comp_\\d+_epa$/.test(key),
+            )) as Record<string, number>;
+          };
+          const allianceTeamKeys = match.alliances[alliance].team_keys;
+          const opponentTeamKeys = match.alliances[opponentAlliance].team_keys;
+          const sumPreEPA = (teamKeys: string[]) => {
+            const values = teamKeys.map((key) => {
+              const value = record.statbotics?.pre_epas?.[String(Number(key.replace(/^frc/i, "")))]?.epa;
+              return typeof value === "number" && Number.isFinite(value) ? value : null;
+            });
+            return values.every((value) => value !== null)
+              ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0) : null;
+          };
+          const alliancePreComponents: Record<string, number> = {};
+          for (const key of ["auto_epa", "teleop_epa", "endgame_epa", "rp_1_epa", "rp_2_epa", "rp_3_epa", "tiebreaker_epa"]) {
+            const values = allianceTeamKeys.map((teamKey) => {
+              const value = record.statbotics?.pre_epas?.[String(Number(teamKey.replace(/^frc/i, "")))];
+              const amount = value?.[key as keyof typeof value];
+              return typeof amount === "number" && Number.isFinite(amount) ? amount : null;
+            });
+            if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+          }
+          const scoreBreakdown = match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
+          const actualAllianceBreakdown = scoreBreakdown?.[alliance] ?? {};
+          const actualComponents: Record<string, number> = {};
+          const autoField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?auto(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          const teleopField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?teleop(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          const foulField = Object.keys(actualAllianceBreakdown).find((field) => /^foul(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
+          if (autoField) actualComponents.auto = actualAllianceBreakdown[autoField] as number;
+          if (teleopField) actualComponents.teleop = actualAllianceBreakdown[teleopField] as number;
+          if (foulField) actualComponents.fouls = actualAllianceBreakdown[foulField] as number;
+          const allianceDeltas = allianceTeamKeys.map((key) => {
+            const id = String(Number(key.replace(/^frc/i, "")));
+            const before = record.statbotics?.pre_epas?.[id]?.epa;
+            const after = record.statbotics?.epas?.[id]?.epa;
+            return typeof before === "number" && Number.isFinite(before) && typeof after === "number" && Number.isFinite(after)
+              ? after - before : null;
+          }).filter((value): value is number => value !== null);
+          const allianceDeltaSpread = allianceDeltas.length === allianceTeamKeys.length && allianceDeltas.length > 1
+            ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas) : null;
+          return [{
+            match_key: match.key, match_label: own?.matchLabel ?? match.key,
+            competition_level: match.comp_level, alliance,
+            partner_team_numbers: match.alliances[alliance].team_keys.filter((key) => key !== teamState.team_key)
+              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+            opponent_team_numbers: match.alliances[opponentAlliance].team_keys
+              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
+            predicted_score: own?.predicted ?? null, actual_score: own?.actual ?? null,
+            score_residual: own?.residual ?? null,
+            opponent_predicted_score: opponent?.predicted ?? null,
+            opponent_actual_score: opponent?.actual ?? null,
+            opponent_score_residual: opponent?.residual ?? null,
+            win_probability: winProbability,
+            won: winner === "red" || winner === "blue" ? winner === alliance : null,
+            pre_match_epa: preEpa, post_match_epa: postEpa,
+            epa_change: preEpa !== null && postEpa !== null ? postEpa - preEpa : null,
+            alliance_pre_epa_total: sumPreEPA(allianceTeamKeys),
+            opponent_pre_epa_total: sumPreEPA(opponentTeamKeys),
+            alliance_pre_components: alliancePreComponents,
+            actual_components: actualComponents,
+            pre_match_components: numericComponents(ownPreRecord),
+            post_match_components: numericComponents(ownPostRecord),
+            alliance_delta_spread: allianceDeltaSpread,
+            shared_alliance_update: allianceDeltaSpread !== null && allianceDeltaSpread < 0.000001,
+          }];
+        });
+        const teamFindings = (insight?.reviewMatches ?? [])
+          .filter((item) => item.reasons.length > 0)
+          .map((item) => teamFinding(teamState.team_key, item));
+        const analytics: FieldViewTeamEventAnalytics = {
+          team_key: teamState.team_key,
+          event_key: teamState.event_key,
+          metrics,
+          findings: teamFindings,
+          ...(insight ? {
+            summary: insight.summary,
+            performance: {
+              rank: insight.metrics.rank, wins: insight.metrics.wins, losses: insight.metrics.losses,
+              ties: insight.metrics.ties, matches_seen: insight.metrics.matchesSeen,
+              completed_matches: insight.metrics.completedMatches, epa: insight.metrics.epa,
+              epa_percentile: insight.metrics.epaPercentile, auto_epa: insight.metrics.autoEpa,
+              teleop_epa: insight.metrics.teleopEpa, endgame_epa: insight.metrics.endgameEpa,
+              epa_start: insight.metrics.epaStart, epa_end: insight.metrics.epaEnd, epa_change: insight.metrics.epaChange,
+            },
+            epa_trend: insight.epaTrend.map((point) => ({ match_key: point.matchKey, match_label: point.matchLabel, epa: point.epa })),
+            peer_performance: {
+              team_match_count: insight.peerPerformance.teamMatches,
+              peer_alliance_count: insight.peerPerformance.peerAllianceCount,
+              team_mean_residual: insight.peerPerformance.teamMeanResidual,
+              peer_mean_residual: insight.peerPerformance.peerMeanResidual,
+              difference: insight.peerPerformance.difference,
+              interpretation: insight.peerPerformance.interpretation,
+            },
+            match_evidence: matchEvidence,
+            review_matches: insight.reviewMatches.map((item) => ({
+              match_key: item.matchKey, match_label: item.matchLabel, alliance: item.alliance,
+              partner_team_numbers: item.partners, opponent_team_numbers: item.opponents,
+              predicted_score: item.predicted, actual_score: item.actual, score_residual: item.residual,
+              win_probability: item.winProbability, won: item.won, pre_match_epa: item.preEPA,
+              post_match_epa: item.postEPA, epa_change: item.deltaEPA, reasons: item.reasons,
+            })),
+            season_comparison: insight.seasonComparison ? {
+              prior_event: {
+                event_key: insight.seasonComparison.priorEvent.key,
+                event_name: insight.seasonComparison.priorEvent.name,
+                short_name: insight.seasonComparison.priorEvent.short_name,
+                start_date: insight.seasonComparison.priorEvent.startDate,
+              },
+              prior_epa: insight.seasonComparison.priorEPA,
+              current_epa: insight.seasonComparison.currentEPA,
+              current_epa_percentile: insight.seasonComparison.currentEpaPercentile,
+              prior_epa_rank: insight.seasonComparison.priorEpaRank,
+              prior_epa_cohort_size: insight.seasonComparison.priorEpaCohortSize,
+              current_epa_rank: insight.seasonComparison.currentEpaRank,
+              current_epa_cohort_size: insight.seasonComparison.currentEpaCohortSize,
+              change: insight.seasonComparison.change,
+              cohort_rank: insight.seasonComparison.cohortRank,
+              cohort_size: insight.seasonComparison.cohortSize,
+              components: {
+                auto: insight.seasonComparison.components.auto ? {
+                  prior: insight.seasonComparison.components.auto.prior,
+                  current: insight.seasonComparison.components.auto.current,
+                  change: insight.seasonComparison.components.auto.change,
+                  cohort_rank: insight.seasonComparison.components.auto.cohortRank,
+                  cohort_size: insight.seasonComparison.components.auto.cohortSize,
+                } : null,
+                teleop: insight.seasonComparison.components.teleop ? {
+                  prior: insight.seasonComparison.components.teleop.prior,
+                  current: insight.seasonComparison.components.teleop.current,
+                  change: insight.seasonComparison.components.teleop.change,
+                  cohort_rank: insight.seasonComparison.components.teleop.cohortRank,
+                  cohort_size: insight.seasonComparison.components.teleop.cohortSize,
+                } : null,
+                endgame: insight.seasonComparison.components.endgame ? {
+                  prior: insight.seasonComparison.components.endgame.prior,
+                  current: insight.seasonComparison.components.endgame.current,
+                  change: insight.seasonComparison.components.endgame.change,
+                  cohort_rank: insight.seasonComparison.components.endgame.cohortRank,
+                  cohort_size: insight.seasonComparison.components.endgame.cohortSize,
+                } : null,
+              },
+            } satisfies FieldViewTeamSeasonComparison : null,
+            season_history: insight.seasonHistory.map((item) => ({
+              event: {
+                event_key: item.event.key, event_name: item.event.name,
+                start_date: item.event.startDate,
+              },
+              epa_total: item.epaTotal, match_count: item.matches, status: item.status,
+            })),
+          } : {}),
+          audit,
+        };
+        return { ...teamState, analytics };
+      });
+  return team_states;
+}
+
 import type { FieldViewEventState } from "../../domain/src/event.ts";
 import type {
   FieldViewAnalyticsAudit,
@@ -300,205 +557,10 @@ export function calculateCanonicalAggregateAnalytics(
       })),
     })),
   };
-  const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
-  const team_states = options.includeTeamAnalytics === false || eventState.team_states === undefined || eventState.team_states === null
+  const team_states = options.includeTeamAnalytics === false
     ? eventState.team_states
-    : eventState.team_states.map((teamState) => {
-        const row = teamRows.find((item) => item.teamKey === teamState.team_key);
-        if (!row) return teamState;
-        const insight = insights.find((item) => item.teamNumber === row.teamNumber);
-        const epaPopulation = population("team-event-latest-epa", 1, row.epa === null ? 0 : 1);
-        const contributionPopulation = population("team-event-alliance-appearances", row.matchesSeen, row.epaContributionSamples);
-        const comparisonPopulation = population("event-teams-with-available-epa", teamRows.length, teamRows.filter((item) => item.epa !== null).length);
-        const epaRank = row.epa === null ? null : 1 + teamRows.filter((item) => item.epa !== null && item.epa > row.epa!).length;
-        const metrics: FieldViewMetricResult[] = [
-          metric("epa", "team-event-epa", row.epa, "EPA", row.epa === null ? 0 : 1, epaPopulation, ["Latest observed EPA; not an event-average value."]),
-          metric("auto-epa", "team-event-epa", row.autoEpa, "EPA", row.autoEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
-          metric("teleop-epa", "team-event-epa", row.teleopEpa, "EPA", row.teleopEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
-          metric("endgame-epa", "team-event-epa", row.endgameEpa, "EPA", row.endgameEpa === null ? 0 : 1, epaPopulation, ["Latest observed component EPA."]),
-          metric("epa-percentile", "team-event-epa", row.epaPercentile, "percentile", row.epa === null ? 0 : 1, epaPopulation, ["Compared with event teams that have an available EPA value."], {
-            population: comparisonPopulation,
-            rank_position: epaRank,
-            percentile: row.epaPercentile,
-          }),
-          metric("epa-contribution-percent", "team-epa-contribution-share", row.epaContributionPercent, "percent", row.epaContributionSamples, contributionPopulation, ["Mean share of eligible three-team alliance pre-match EPA totals; not measured robot-level scoring contribution."]),
-          metric("matches-seen", "team-event-match-appearances", row.matchesSeen, "matches", row.matchesSeen, population("team-event-match-appearances", row.matchesSeen, row.matchesSeen), ["Counts roster appearances, including matches that are not yet scored."]),
-        ];
-        const matchEvidence: FieldViewTeamMatchEvidence[] = records.flatMap((record) => {
-          const match = record.match;
-          const alliance = match.alliances.red.team_keys.includes(teamState.team_key) ? "red" as const
-            : match.alliances.blue.team_keys.includes(teamState.team_key) ? "blue" as const : null;
-          if (!alliance) return [];
-          const opponentAlliance = alliance === "red" ? "blue" as const : "red" as const;
-          const own = allianceResultByMatch.get(match.key + ":" + alliance);
-          const opponent = allianceResultByMatch.get(match.key + ":" + opponentAlliance);
-          const redProbability = record.statbotics?.pred?.red_win_prob;
-          const winProbability = typeof redProbability === "number" && redProbability >= 0 && redProbability <= 1
-            ? alliance === "red" ? redProbability : 1 - redProbability : null;
-          const ownPre = record.statbotics?.pre_epas?.[String(row.teamNumber)]?.epa;
-          const ownPost = record.statbotics?.epas?.[String(row.teamNumber)]?.epa;
-          const preEpa = typeof ownPre === "number" && Number.isFinite(ownPre) ? ownPre : null;
-          const postEpa = typeof ownPost === "number" && Number.isFinite(ownPost) ? ownPost : null;
-          const winner = match.winning_alliance;
-          const ownPreRecord = record.statbotics?.pre_epas?.[String(row.teamNumber)];
-          const ownPostRecord = record.statbotics?.epas?.[String(row.teamNumber)];
-          const numericComponents = (value: object | null | undefined): Record<string, number> => {
-            if (!value) return {};
-            return Object.fromEntries(Object.entries(value).filter(([key, amount]) =>
-              typeof amount === "number" && Number.isFinite(amount) && !/^comp_\\d+_epa$/.test(key),
-            )) as Record<string, number>;
-          };
-          const allianceTeamKeys = match.alliances[alliance].team_keys;
-          const opponentTeamKeys = match.alliances[opponentAlliance].team_keys;
-          const sumPreEPA = (teamKeys: string[]) => {
-            const values = teamKeys.map((key) => {
-              const value = record.statbotics?.pre_epas?.[String(Number(key.replace(/^frc/i, "")))]?.epa;
-              return typeof value === "number" && Number.isFinite(value) ? value : null;
-            });
-            return values.every((value) => value !== null)
-              ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0) : null;
-          };
-          const alliancePreComponents: Record<string, number> = {};
-          for (const key of ["auto_epa", "teleop_epa", "endgame_epa", "rp_1_epa", "rp_2_epa", "rp_3_epa", "tiebreaker_epa"]) {
-            const values = allianceTeamKeys.map((teamKey) => {
-              const value = record.statbotics?.pre_epas?.[String(Number(teamKey.replace(/^frc/i, "")))];
-              const amount = value?.[key as keyof typeof value];
-              return typeof amount === "number" && Number.isFinite(amount) ? amount : null;
-            });
-            if (values.every((value) => value !== null)) alliancePreComponents[key] = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
-          }
-          const scoreBreakdown = match.score_breakdown as unknown as Record<string, Record<string, unknown>> | null;
-          const actualAllianceBreakdown = scoreBreakdown?.[alliance] ?? {};
-          const actualComponents: Record<string, number> = {};
-          const autoField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?auto(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
-          const teleopField = Object.keys(actualAllianceBreakdown).find((field) => /^(total)?teleop(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
-          const foulField = Object.keys(actualAllianceBreakdown).find((field) => /^foul(points)?$/i.test(field.replace(/[_\\s-]/g, "")) && typeof actualAllianceBreakdown[field] === "number");
-          if (autoField) actualComponents.auto = actualAllianceBreakdown[autoField] as number;
-          if (teleopField) actualComponents.teleop = actualAllianceBreakdown[teleopField] as number;
-          if (foulField) actualComponents.fouls = actualAllianceBreakdown[foulField] as number;
-          const allianceDeltas = allianceTeamKeys.map((key) => {
-            const id = String(Number(key.replace(/^frc/i, "")));
-            const before = record.statbotics?.pre_epas?.[id]?.epa;
-            const after = record.statbotics?.epas?.[id]?.epa;
-            return typeof before === "number" && Number.isFinite(before) && typeof after === "number" && Number.isFinite(after)
-              ? after - before : null;
-          }).filter((value): value is number => value !== null);
-          const allianceDeltaSpread = allianceDeltas.length === allianceTeamKeys.length && allianceDeltas.length > 1
-            ? Math.max(...allianceDeltas) - Math.min(...allianceDeltas) : null;
-          return [{
-            match_key: match.key, match_label: own?.matchLabel ?? match.key,
-            competition_level: match.comp_level, alliance,
-            partner_team_numbers: match.alliances[alliance].team_keys.filter((key) => key !== teamState.team_key)
-              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
-            opponent_team_numbers: match.alliances[opponentAlliance].team_keys
-              .map((key) => Number(key.replace(/^frc/i, ""))).filter(Number.isFinite),
-            predicted_score: own?.predicted ?? null, actual_score: own?.actual ?? null,
-            score_residual: own?.residual ?? null,
-            opponent_predicted_score: opponent?.predicted ?? null,
-            opponent_actual_score: opponent?.actual ?? null,
-            opponent_score_residual: opponent?.residual ?? null,
-            win_probability: winProbability,
-            won: winner === "red" || winner === "blue" ? winner === alliance : null,
-            pre_match_epa: preEpa, post_match_epa: postEpa,
-            epa_change: preEpa !== null && postEpa !== null ? postEpa - preEpa : null,
-            alliance_pre_epa_total: sumPreEPA(allianceTeamKeys),
-            opponent_pre_epa_total: sumPreEPA(opponentTeamKeys),
-            alliance_pre_components: alliancePreComponents,
-            actual_components: actualComponents,
-            pre_match_components: numericComponents(ownPreRecord),
-            post_match_components: numericComponents(ownPostRecord),
-            alliance_delta_spread: allianceDeltaSpread,
-            shared_alliance_update: allianceDeltaSpread !== null && allianceDeltaSpread < 0.000001,
-          }];
-        });
-        const teamFindings = (insight?.reviewMatches ?? [])
-          .filter((item) => item.reasons.length > 0)
-          .map((item) => teamFinding(teamState.team_key, item));
-        const analytics: FieldViewTeamEventAnalytics = {
-          team_key: teamState.team_key,
-          event_key: teamState.event_key,
-          metrics,
-          findings: teamFindings,
-          ...(insight ? {
-            summary: insight.summary,
-            performance: {
-              rank: insight.metrics.rank, wins: insight.metrics.wins, losses: insight.metrics.losses,
-              ties: insight.metrics.ties, matches_seen: insight.metrics.matchesSeen,
-              completed_matches: insight.metrics.completedMatches, epa: insight.metrics.epa,
-              epa_percentile: insight.metrics.epaPercentile, auto_epa: insight.metrics.autoEpa,
-              teleop_epa: insight.metrics.teleopEpa, endgame_epa: insight.metrics.endgameEpa,
-              epa_start: insight.metrics.epaStart, epa_end: insight.metrics.epaEnd, epa_change: insight.metrics.epaChange,
-            },
-            epa_trend: insight.epaTrend.map((point) => ({ match_key: point.matchKey, match_label: point.matchLabel, epa: point.epa })),
-            peer_performance: {
-              team_match_count: insight.peerPerformance.teamMatches,
-              peer_alliance_count: insight.peerPerformance.peerAllianceCount,
-              team_mean_residual: insight.peerPerformance.teamMeanResidual,
-              peer_mean_residual: insight.peerPerformance.peerMeanResidual,
-              difference: insight.peerPerformance.difference,
-              interpretation: insight.peerPerformance.interpretation,
-            },
-            match_evidence: matchEvidence,
-            review_matches: insight.reviewMatches.map((item) => ({
-              match_key: item.matchKey, match_label: item.matchLabel, alliance: item.alliance,
-              partner_team_numbers: item.partners, opponent_team_numbers: item.opponents,
-              predicted_score: item.predicted, actual_score: item.actual, score_residual: item.residual,
-              win_probability: item.winProbability, won: item.won, pre_match_epa: item.preEPA,
-              post_match_epa: item.postEPA, epa_change: item.deltaEPA, reasons: item.reasons,
-            })),
-            season_comparison: insight.seasonComparison ? {
-              prior_event: {
-                event_key: insight.seasonComparison.priorEvent.key,
-                event_name: insight.seasonComparison.priorEvent.name,
-                short_name: insight.seasonComparison.priorEvent.short_name,
-                start_date: insight.seasonComparison.priorEvent.startDate,
-              },
-              prior_epa: insight.seasonComparison.priorEPA,
-              current_epa: insight.seasonComparison.currentEPA,
-              current_epa_percentile: insight.seasonComparison.currentEpaPercentile,
-              prior_epa_rank: insight.seasonComparison.priorEpaRank,
-              prior_epa_cohort_size: insight.seasonComparison.priorEpaCohortSize,
-              current_epa_rank: insight.seasonComparison.currentEpaRank,
-              current_epa_cohort_size: insight.seasonComparison.currentEpaCohortSize,
-              change: insight.seasonComparison.change,
-              cohort_rank: insight.seasonComparison.cohortRank,
-              cohort_size: insight.seasonComparison.cohortSize,
-              components: {
-                auto: insight.seasonComparison.components.auto ? {
-                  prior: insight.seasonComparison.components.auto.prior,
-                  current: insight.seasonComparison.components.auto.current,
-                  change: insight.seasonComparison.components.auto.change,
-                  cohort_rank: insight.seasonComparison.components.auto.cohortRank,
-                  cohort_size: insight.seasonComparison.components.auto.cohortSize,
-                } : null,
-                teleop: insight.seasonComparison.components.teleop ? {
-                  prior: insight.seasonComparison.components.teleop.prior,
-                  current: insight.seasonComparison.components.teleop.current,
-                  change: insight.seasonComparison.components.teleop.change,
-                  cohort_rank: insight.seasonComparison.components.teleop.cohortRank,
-                  cohort_size: insight.seasonComparison.components.teleop.cohortSize,
-                } : null,
-                endgame: insight.seasonComparison.components.endgame ? {
-                  prior: insight.seasonComparison.components.endgame.prior,
-                  current: insight.seasonComparison.components.endgame.current,
-                  change: insight.seasonComparison.components.endgame.change,
-                  cohort_rank: insight.seasonComparison.components.endgame.cohortRank,
-                  cohort_size: insight.seasonComparison.components.endgame.cohortSize,
-                } : null,
-              },
-            } satisfies FieldViewTeamSeasonComparison : null,
-            season_history: insight.seasonHistory.map((item) => ({
-              event: {
-                event_key: item.event.key, event_name: item.event.name,
-                start_date: item.event.startDate,
-              },
-              epa_total: item.epaTotal, match_count: item.matches, status: item.status,
-            })),
-          } : {}),
-          audit,
-        };
-        return { ...teamState, analytics };
-      });
+    : calculateCanonicalTeamEventStates(eventState, records, allianceResults, audit, comparisonInput);
+
 
   return {
     ...eventState,
