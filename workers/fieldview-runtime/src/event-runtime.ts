@@ -904,7 +904,7 @@ export class EventRuntime {
           "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey } },
         ));
-        if (!response.ok) return null;
+        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision) return null;
         return await response.json() as FieldViewTeamEventState;
       } catch {
         return null;
@@ -915,6 +915,7 @@ export class EventRuntime {
 
   private async readTeamEventStates(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
+    eventSourceRevision: number,
   ): Promise<FieldViewTeamEventState[]> {
     const namespace = this.env.TEAM_RUNTIME;
     if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return [];
@@ -925,7 +926,7 @@ export class EventRuntime {
           "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": team.key } },
         ));
-        if (!response.ok) return null;
+        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision) return null;
         return await response.json() as FieldViewTeamEventState;
       } catch {
         return null;
@@ -1099,7 +1100,7 @@ export class EventRuntime {
             ...(published.flags === undefined ? {} : { flags: published.flags as typeof match.flags }),
           } : match;
         });
-    const team_states = await this.readTeamEventStates(normalizedState);
+    const team_states = await this.readTeamEventStates(normalizedState, state.sourceRevision);
     return {
       version: state.version,
       sourceRevision: state.sourceRevision,
