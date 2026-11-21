@@ -64,7 +64,7 @@ export default function EventView({
   // compatibility refresh controls; it is never a source of displayed data.
   const canonical = useCanonicalEventSnapshot(event);
   const websocketStatus = useCanonicalRuntimeStatus(event);
-  const canonicalSnapshot = canonical?.snapshot;
+  const canonicalSnapshot = canonical?.snapshot.state;
   const eventData = canonicalSnapshot?.event ?? null;
   const teams = canonicalSnapshot?.teams ?? [];
   const matches = sortMatches(canonicalSnapshot?.matches ?? []);
