@@ -74,7 +74,10 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   const eventKey = "2026test";
   const endpoint = eventResourceEndpoints(eventKey).find((path) => path.endsWith("/matches"));
   const providerMatches = [
-    { key: "2026test_qm1", event_key: eventKey, alliances: { red: { score: 100 }, blue: { score: 90 } } },
+    { key: "2026test_qm1", event_key: eventKey, alliances: {
+      red: { score: 100, team_keys: ["frc1", "frc2", "frc3"] },
+      blue: { score: 90, team_keys: ["frc4", "frc5", "frc6"] },
+    } },
   ];
   const calls = [];
   const env = {
@@ -111,7 +114,10 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
         key: "2026test_qm1",
         event_key: eventKey,
         actual_time: 123,
-        alliances: { red: { score: 120 }, blue: { score: 90 } },
+        alliances: {
+          red: { score: 120, team_keys: ["frc1", "frc2", "frc3"] },
+          blue: { score: 90, team_keys: ["frc4", "frc5", "frc6"] },
+        },
       },
     },
   };
@@ -814,7 +820,7 @@ test("EventRuntime ignores out-of-order multiplexer registration generations", a
 });
 
 
-test("canonical analytics are coalesced into EventRuntime alarm work, persisted, and overlaid on reads", async () => {
+test("canonical analytics are coalesced into EventRuntime alarm work and published separately from event state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026analytics";
   const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
@@ -876,8 +882,8 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
 
   const afterCalculation = await read();
   const afterState = await afterCalculation.json();
-  assert.ok(afterState.analytics);
-  assert.equal(afterState.analytics.audit.calculation_id, publication.eventAnalytics.audit.calculation_id);
+  assert.equal(afterState.analytics, undefined,
+    "event-state reads must not embed EventAnalytics; consumers read the separate analytics publication");
 });
 
 
