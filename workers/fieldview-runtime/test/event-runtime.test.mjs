@@ -337,8 +337,8 @@ test("public event snapshot reads queue missing resources without running provid
     method: "POST",
     headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
   }));
-  assert.equal(refresh.status, 200);
-  assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1, "an alarm fans out all independent event resources");
+  assert.equal(refresh.status, 202);
+  assert.equal(providerCalls, 0, "admin refresh must queue provider work without blocking the request");
   for (let index = 0; index < eventResourceEndpoints(eventKey).length; index += 1) {
     const queue = storage.values.get("manual:poll-queue") ?? [];
     if (queue.length === 0) break;
