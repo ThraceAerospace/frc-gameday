@@ -333,8 +333,7 @@ export class TaskScheduler {
     } finally {
       // Provider-gate RPCs are intentionally high-frequency. Logging every
       // acquire/release made local diagnostics unusable and amplified noise.
-      if (true) {
-        console.log("[FV][TaskScheduler] request", JSON.stringify({
+      console.log("[FV][TaskScheduler] request", JSON.stringify({
           method: request.method,
           path: url.pathname,
           duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
