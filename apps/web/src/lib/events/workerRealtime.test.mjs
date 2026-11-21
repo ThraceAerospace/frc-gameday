@@ -124,6 +124,26 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received.at(-1).version, 2);
+
+  socket.receive(JSON.stringify({
+    type: "snapshot.changed",
+    topic: "event-state",
+    event_key: "2026test",
+    version: 3,
+    etag: 'W/"snapshot-3"',
+    data: {
+      team_key: "frc3461",
+      team_state: { event_key: "2026test", team_key: "frc3461", marker: "updated" },
+      event_comparison_invalidated: true,
+    },
+  }));
+  assert.equal(received.at(-1).version, 3);
+  assert.equal(received.at(-1).complete, true,
+    "a contiguous team-only delta keeps a complete cached event snapshot complete");
+  assert.equal(received.at(-1).snapshot.state.marker, 2,
+    "a team-only delta retains the unchanged event-owned state");
+  assert.equal(received.at(-1).snapshot.team_states[0].team_key, "frc3461");
+
   socket.receive(JSON.stringify({
     type: "analytics.changed",
     topic: "analytics",
