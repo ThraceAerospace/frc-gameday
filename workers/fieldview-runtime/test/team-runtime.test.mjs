@@ -448,3 +448,19 @@ test("TeamRuntime removes legacy recurring Statbotics tasks without discarding e
   assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
     "explicit one-shot Statbotics acquisition remains queued");
 });
+
+
+test("TeamRuntime alarm removes legacy recurring Statbotics tasks before processing due work", async () => {
+  const storage = new MemoryStorage();
+  const legacyEndpoint = "/team_events?team=3461&year=2026&limit=1000&offset=0";
+  storage.values.set("team-key", "frc3461");
+  storage.values.set("task:" + legacyEndpoint, {
+    provider: "statbotics", endpoint: legacyEndpoint,
+    dueAt: Date.now() - 1, intervalMs: 86_400_000, attempts: 0,
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("legacy recurring Statbotics task must not execute");
+  }));
+  await runtime.alarm();
+  assert.equal(storage.values.has("task:" + legacyEndpoint), false);
+});
