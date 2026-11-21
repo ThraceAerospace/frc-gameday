@@ -167,7 +167,7 @@ export default function MatchCard({
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-xs font-medium uppercase tracking-normal",
+                  "whitespace-nowrap text-[10px] font-medium uppercase tracking-normal",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
