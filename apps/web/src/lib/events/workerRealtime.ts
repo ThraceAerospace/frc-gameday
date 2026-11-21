@@ -410,7 +410,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     }
     if (message.type === "analytics.changed" && typeof message.event_key === "string") {
       const eventKey = message.event_key;
-      const version = typeof message.version === "number" ? message.version : undefined;
+      const version = Number.isSafeInteger(message.version) && (message.version as number) >= 0
+        ? message.version as number : undefined;
       const data = isRecord(message.data) ? message.data : null;
       const revision = data && Number.isSafeInteger(data.revision) && (data.revision as number) >= 0
         ? data.revision as number : null;
