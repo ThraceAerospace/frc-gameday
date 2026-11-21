@@ -531,6 +531,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         }
       }
     }
+  }
 
   private async fetchCanonicalAnalytics(eventKey: string, expectedRevision?: number) {
     if (!this.runtimeBaseUrl) return;
