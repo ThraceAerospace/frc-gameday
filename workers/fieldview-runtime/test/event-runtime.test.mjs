@@ -843,7 +843,7 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
     body: JSON.stringify({ action }),
   });
   const subscribed = await runtime.fetch(subscriptionRequest("subscribe"));
-  assert.deepEqual(await subscribed.json(), { registered: true, event_key: eventKey });
+  assert.deepEqual(await subscribed.json(), { registered: true, event_key: eventKey, topic: "event-state" });
   await runtime.publishSnapshotRevision(4);
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].id, "shared");
@@ -851,9 +851,41 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
   assert.deepEqual(deliveries[0].body, { topic: "event-state", event_key: eventKey, version: 4 });
 
   const unsubscribed = await runtime.fetch(subscriptionRequest("unsubscribe"));
-  assert.deepEqual(await unsubscribed.json(), { registered: false, event_key: eventKey });
+  assert.deepEqual(await unsubscribed.json(), { registered: false, event_key: eventKey, topic: "event-state" });
   await runtime.publishSnapshotRevision(5);
   assert.equal(deliveries.length, 1);
+});
+
+
+test("EventRuntime tracks analytics multiplexer registration independently", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+  const request = (action, generation) => new Request("https://event-runtime/subscriptions", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action, topic: "analytics", generation }),
+  });
+  const subscribed = await runtime.fetch(request("subscribe", 1));
+  assert.deepEqual(await subscribed.json(), {
+    registered: true, event_key: eventKey, topic: "analytics", generation: 1,
+  });
+  assert.equal(await storage.get("multiplexer:analytics"), true);
+  assert.equal(await storage.get("multiplexer:shared"), undefined);
+  const unsubscribed = await runtime.fetch(request("unsubscribe", 2));
+  assert.deepEqual(await unsubscribed.json(), {
+    registered: false, event_key: eventKey, topic: "analytics", generation: 2,
+  });
+  assert.equal(await storage.get("multiplexer:analytics"), false);
 });
 
 test("EventRuntime applies lifecycle schedules and stops recurring polling after completed retention", async () => {
@@ -998,21 +1030,21 @@ test("EventRuntime ignores out-of-order multiplexer registration generations", a
 
   const latestUnsubscribe = await runtime.fetch(request("unsubscribe", 4));
   assert.deepEqual(await latestUnsubscribe.json(), {
-    registered: false, event_key: eventKey, generation: 4,
+    registered: false, event_key: eventKey, topic: "event-state", generation: 4,
   });
   const staleSubscribe = await runtime.fetch(request("subscribe", 3));
   assert.deepEqual(await staleSubscribe.json(), {
-    registered: false, event_key: eventKey, generation: 4, stale: true,
+    registered: false, event_key: eventKey, topic: "event-state", generation: 4, stale: true,
   });
   assert.equal(await storage.get("multiplexer:shared"), false);
 
   const latestSubscribe = await runtime.fetch(request("subscribe", 5));
   assert.deepEqual(await latestSubscribe.json(), {
-    registered: true, event_key: eventKey, generation: 5,
+    registered: true, event_key: eventKey, topic: "event-state", generation: 5,
   });
   const staleUnsubscribe = await runtime.fetch(request("unsubscribe", 4));
   assert.deepEqual(await staleUnsubscribe.json(), {
-    registered: true, event_key: eventKey, generation: 5, stale: true,
+    registered: true, event_key: eventKey, topic: "event-state", generation: 5, stale: true,
   });
   assert.equal(await storage.get("multiplexer:shared"), true);
 });
