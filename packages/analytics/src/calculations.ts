@@ -253,14 +253,14 @@ function fmtValue(value: number | null): string { return value === null ? "—" 
 export function buildSeasonAwareTeamInsights(
   records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[],
   rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
-  cohort: import("./types").SeasonCohortSnapshot, targetEventKey: string, targetStartDate: string,
+  cohort: import("./types").FieldViewEventTeamSeasonComparisonSnapshot, targetEventKey: string, targetStartDate: string,
   playoffType?: number | null,
 ): import("./types").TeamInsight[] {
   const insights = buildTeamInsights(records, allianceResults, teams, rankings, playoffType);
   const finite = (value: number | null | undefined): value is number =>
     typeof value === "number" && Number.isFinite(value);
   const componentValue = (
-    record: import("./types").SeasonCohortRecord | undefined,
+    record: import("./types").FieldViewEventTeamSeasonComparisonRecord | undefined,
     keys: string[],
   ): number | null => {
     for (const key of keys) {
