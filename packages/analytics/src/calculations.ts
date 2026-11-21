@@ -109,7 +109,7 @@ export function buildTeamRows(
   }));
 }
 function sampleCoverage(n: number): ReviewFinding["sampleCoverage"] { return n >= 12 ? "high" : n >= 6 ? "medium" : "low"; }
-export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[], allEventMatches: TBAMatch[] = records.map((record) => record.match)): ReviewFinding[] {
+export function buildReviewFindings(records: AnalyticsMatch[], allianceResults: AllianceResult[]): ReviewFinding[] {
   const findings: ReviewFinding[] = [];
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const spread = standardDeviation(residuals) ?? 0;
