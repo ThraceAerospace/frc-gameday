@@ -85,15 +85,21 @@ export default function MatchCard({
   const matchFlagTitle = matchLevelFlags.join(", ");
   const redFlagTitle = redAllianceFlags.map((flag) => flag.type).join(", ");
   const blueFlagTitle = blueAllianceFlags.map((flag) => flag.type).join(", ");
-  const redTeamTextLength = red.map(formatTeamNumber).join(" ").length;
-  const blueTeamTextLength = blue.map(formatTeamNumber).join(" ").length;
+  const redAllianceLabel = formatAllianceShortName(redAlliance?.name);
+  const blueAllianceLabel = formatAllianceShortName(blueAlliance?.name);
+  const redTeamText = [redAllianceLabel, red.map(formatTeamNumber).join(" ")]
+    .filter(Boolean)
+    .join(" ");
+  const blueTeamText = [blueAllianceLabel, blue.map(formatTeamNumber).join(" ")]
+    .filter(Boolean)
+    .join(" ");
   const redTeamFontSize = Math.min(
-    12,
-    (116 - (redAllianceFlags.length > 0 ? 10 : 0)) / Math.max(1, redTeamTextLength * 0.62),
+    14,
+    (144 - (redAllianceFlags.length > 0 ? 12 : 0)) / Math.max(1, redTeamText.length * 0.60),
   );
   const blueTeamFontSize = Math.min(
-    12,
-    (116 - (blueAllianceFlags.length > 0 ? 10 : 0)) / Math.max(1, blueTeamTextLength * 0.62),
+    14,
+    (144 - (blueAllianceFlags.length > 0 ? 12 : 0)) / Math.max(1, blueTeamText.length * 0.60),
   );
 
   const prediction = match.flags?.prediction ?? null;
@@ -149,8 +155,8 @@ export default function MatchCard({
           className={[
             "grid w-fit items-center gap-x-3 leading-none",
             showRightColumn
-              ? "grid-cols-[max-content_116px_max-content]"
-              : "grid-cols-[max-content_116px]",
+              ? "grid-cols-[max-content_144px_max-content]"
+              : "grid-cols-[max-content_144px]",
           ].join(" ")}
         >
           {/* Match identity and restored clock */}
@@ -160,12 +166,12 @@ export default function MatchCard({
                 <span
                   aria-label="Match has review flags"
                   title={matchFlagTitle}
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"
                 />
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-[10px] font-bold uppercase tracking-wide",
+                  "whitespace-nowrap text-xs font-bold uppercase tracking-wide",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
@@ -184,8 +190,8 @@ export default function MatchCard({
           </div>
 
           {/* Fixed-width alliance roster: 3 five-digit numbers plus spaces */}
-          <div className="row-span-2 flex w-[116px] flex-col justify-center gap-y-0.5">
-            <div className="flex h-[14px] min-w-0 items-center gap-1 whitespace-nowrap">
+          <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-1">
+            <div className="flex h-[18px] min-w-0 items-center gap-1 whitespace-nowrap">
               {redAllianceFlags.length > 0 ? (
                 <span
                   aria-label="Red alliance has flags"
@@ -195,12 +201,15 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[14px] text-red-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[18px] text-red-400",
                   trackedRed ? "font-bold" : "font-medium",
                 ].join(" ")}
                 style={{ fontSize: `${redTeamFontSize}px` }}
-                title={`${formatAllianceShortName(redAlliance?.name)} ${red.map(formatTeamNumber).join(" ")}`.trim()}
+                title={redTeamText}
               >
+                {redAllianceLabel ? (
+                  <span className="mr-1 font-sans font-semibold opacity-80">{redAllianceLabel}</span>
+                ) : null}
                 {red.map((key, index) => (
                   <span
                     key={key}
@@ -225,12 +234,15 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[14px] text-blue-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[18px] text-blue-400",
                   trackedBlue ? "font-bold" : "font-medium",
                 ].join(" ")}
                 style={{ fontSize: `${blueTeamFontSize}px` }}
-                title={`${formatAllianceShortName(blueAlliance?.name)} ${blue.map(formatTeamNumber).join(" ")}`.trim()}
+                title={blueTeamText}
               >
+                {blueAllianceLabel ? (
+                  <span className="mr-1 font-sans font-semibold opacity-80">{blueAllianceLabel}</span>
+                ) : null}
                 {blue.map((key, index) => (
                   <span
                     key={key}
@@ -248,7 +260,7 @@ export default function MatchCard({
 
           {/* Result or prediction column; the grid track is zero-width when empty */}
           {showRightColumn ? (
-            <div className="row-span-2 flex flex-col items-end justify-center gap-y-0.5 text-right font-mono text-[10px] tabular-nums">
+            <div className="row-span-2 flex flex-col items-end justify-center gap-y-1 text-right font-mono text-[10px] tabular-nums">
               {hasResult ? (
                 <>
                   <span className="font-bold text-red-400">{redScore}</span>
