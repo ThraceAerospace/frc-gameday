@@ -787,9 +787,19 @@ export class EventRuntime {
       }
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
+      const sourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const sourceStale = [...eventResourceEndpoints(this.eventKey),
+        STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)]
+        .some((endpoint) => {
+          const source = sourceStates.get(endpointStorageKey(endpoint));
+          return !source || source.status === "failed" || source.status === "stale" ||
+            source.status === "unavailable" ||
+            (source.expiresAt !== null && source.expiresAt <= Date.now());
+        });
+      const publicationStatus = sourceStale ? "stale" : publication.status;
       const headers = {
         "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
-        "X-FieldView-Event-State-Status": publication.status,
+        "X-FieldView-Event-State-Status": publicationStatus,
         "X-FieldView-Team-State-Coverage": "partial",
         ETag: etag,
         "Cache-Control": "private, no-cache",
@@ -908,8 +918,15 @@ export class EventRuntime {
       // participant's TeamRuntime here turns one dashboard read into an N+1
       // cross-object fan-out; full team-state coverage belongs to /view.
       const teamStateCoverageStatus = rosterAvailable ? "not_inspected" : "unavailable";
+      const hasStaleSources = expectedEndpoints.some((endpoint) => {
+        const source = entries.get(endpointStorageKey(endpoint));
+        return !source || source.status === "failed" || source.status === "stale" ||
+          source.status === "unavailable" ||
+          (source.expiresAt !== null && source.expiresAt <= Date.now());
+      });
       const eventStateStatus = !eventStatePublication ? "missing"
-        : eventStatePublication.sourceRevision === currentSourceRevision ? eventStatePublication.status : "stale";
+        : eventStatePublication.sourceRevision !== currentSourceRevision || hasStaleSources
+          ? "stale" : eventStatePublication.status;
       const storedAnalyticsStatus = await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending");
       const analyticsStatus = analyticsPublication && analyticsPublication.sourceRevision !== currentSourceRevision
         ? "stale" : storedAnalyticsStatus;
