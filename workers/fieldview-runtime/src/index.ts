@@ -112,8 +112,9 @@ export default {
         }
         addTeamKey(messageData.team_key);
       } else if (messageType === "awards_posted") {
-        if (Array.isArray(messageData.recipient_list)) {
-          for (const recipient of messageData.recipient_list) {
+        const addRecipients = (recipients: unknown) => {
+          if (!Array.isArray(recipients)) return;
+          for (const recipient of recipients) {
             if (isRecord(recipient)) {
               if (typeof recipient.team_key === "string") addTeamKey(recipient.team_key);
               else if (typeof recipient.team_number === "number" && Number.isSafeInteger(recipient.team_number)) {
@@ -121,6 +122,10 @@ export default {
               }
             }
           }
+        };
+        addRecipients(messageData.recipient_list);
+        if (Array.isArray(messageData.awards)) {
+          for (const award of messageData.awards) if (isRecord(award)) addRecipients(award.recipient_list);
         }
         addTeamKey(messageData.team_key);
       } else if (messageType === "alliance_selection") {
