@@ -15,6 +15,8 @@ export interface DurableObjectStorageLike extends DurableObjectTransactionLike {
 
 export interface DurableObjectStateLike {
   storage: DurableObjectStorageLike;
+  /** Cloudflare's activation barrier; used only for bounded local storage hydration/recovery. */
+  blockConcurrencyWhile?<T>(callback: () => Promise<T>): Promise<T>;
   /** Cloudflare Durable Object WebSocket hibernation APIs. */
   acceptWebSocket?(socket: WebSocket): void;
   getWebSockets?(): WebSocket[];
