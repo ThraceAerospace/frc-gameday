@@ -28,7 +28,7 @@ export default function EventInsightsSurface({
   embedded = false,
 }: EventInsightsSurfaceProps) {
   const canonical = useCanonicalEventSnapshot(eventKey);
-  const snapshot = canonical?.snapshot;
+  const snapshot = canonical?.snapshot.state;
 
   useEffect(() => {
     if (!onClose) return;
