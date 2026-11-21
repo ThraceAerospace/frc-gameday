@@ -1534,6 +1534,10 @@ export class EventRuntime {
       const status = acquiredCount === allResources.length && !hasIncompleteResource
         ? "complete" as const : acquiredCount > 0 ? "partial" as const : "failed" as const;
       if (previous.status !== status) {
+        // A failed provider attempt changes diagnostics, not the last-good
+        // publication. Keep the prior publication intact until a successful
+        // representation change can produce a coherent replacement.
+        if (resources.some((resource) => resource?.status === "failed")) return previous;
         const updated = { ...previous, status };
         await transaction.put(EVENT_STATE_PUBLICATION_KEY, updated);
         return updated;
