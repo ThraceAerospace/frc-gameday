@@ -185,6 +185,119 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   ]);
 });
 
+test("EventRuntime republishes canonical EventState after a match-score webhook and reuses it on subsequent reads", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026publication";
+  const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
+  const now = Date.now();
+  const initialMatch = {
+    key: eventKey + "_qm1",
+    event_key: eventKey,
+    comp_level: "qm",
+    set_number: 1,
+    match_number: 1,
+    alliances: {
+      red: { score: 10, team_keys: ["frc1", "frc2", "frc3"] },
+      blue: { score: 5, team_keys: ["frc4", "frc5", "frc6"] },
+    },
+  };
+  storage.values.set("endpoint:" + matchesEndpoint, {
+    endpoint: matchesEndpoint,
+    status: "available",
+    data: [initialMatch],
+    providerData: [initialMatch],
+    etag: '"matches-v1"',
+    lastFetchedAt: now,
+    expiresAt: now + 60_000,
+    revision: 1,
+    validatorRevision: 1,
+    lastAttemptAt: now,
+    lastWebhookAt: null,
+  });
+  storage.values.set("snapshot-revision", 1);
+
+  let publicationWrites = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => {
+    if (key === "event-state:publication") publicationWrites += 1;
+    return originalPut(key, value);
+  };
+
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => new Response("unused"),
+  }, eventKey);
+  const snapshotRequest = () => new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  });
+
+  const initialResponse = await runtime.fetch(snapshotRequest());
+  assert.equal(initialResponse.status, 200);
+  assert.equal(initialResponse.headers.get("X-FieldView-Snapshot-Version"), "1");
+  const initialPublication = storage.values.get("event-state:publication");
+  assert.equal(initialPublication.snapshotVersion, 1);
+  assert.equal(initialPublication.sourceRevision, 1);
+  assert.equal(initialPublication.state.tba_matches[0].alliances.red.score, 10);
+  assert.equal(publicationWrites, 1);
+
+  const webhook = {
+    message_type: "match_score",
+    message_data: {
+      event_key: eventKey,
+      match: {
+        ...initialMatch,
+        actual_time: 123,
+        alliances: {
+          red: { score: 20, team_keys: ["frc1", "frc2", "frc3"] },
+          blue: { score: 5, team_keys: ["frc4", "frc5", "frc6"] },
+        },
+      },
+    },
+  };
+  const webhookResponse = await runtime.fetch(new Request("https://event-runtime/webhook", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "X-FieldView-Webhook-Id": "b".repeat(64),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(webhook),
+  }));
+  assert.equal(webhookResponse.status, 200);
+  assert.deepEqual(await webhookResponse.json(), { accepted: true, duplicate: false });
+
+  // Webhook processing mutates source state and invalidates the publication;
+  // it does not eagerly rebuild the canonical EventState.
+  assert.equal(storage.values.get("event-state:publication"), initialPublication);
+  assert.equal(publicationWrites, 1);
+  assert.equal(storage.values.get("snapshot-revision"), 2);
+  assert.equal(storage.values.get("endpoint:" + matchesEndpoint).revision, 2);
+
+  const updatedResponse = await runtime.fetch(snapshotRequest());
+  assert.equal(updatedResponse.status, 200);
+  assert.equal(updatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
+  const updatedSnapshot = await updatedResponse.json();
+  assert.equal(updatedSnapshot.tba_matches[0].alliances.red.score, 20);
+  assert.equal(updatedSnapshot.tba_matches[0].actual_time, 123);
+
+  const updatedPublication = storage.values.get("event-state:publication");
+  assert.notEqual(updatedPublication, initialPublication);
+  assert.equal(updatedPublication.snapshotVersion, 2);
+  assert.equal(updatedPublication.sourceRevision, 2);
+  assert.equal(updatedPublication.state.tba_matches[0].alliances.red.score, 20);
+  assert.equal(publicationWrites, 2);
+
+  const repeatedResponse = await runtime.fetch(snapshotRequest());
+  assert.equal(repeatedResponse.status, 200);
+  assert.equal(repeatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
+  assert.equal(storage.values.get("event-state:publication"), updatedPublication);
+  assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
+});
+
 test("public event snapshot reads queue missing resources without running provider I/O inline", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
