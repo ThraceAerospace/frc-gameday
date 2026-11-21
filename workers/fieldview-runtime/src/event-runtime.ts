@@ -1144,6 +1144,7 @@ export class EventRuntime {
         teamStates,
         expectedTeamCount,
         comparisonInputCollection?.comparisonInput.team_state_revisions ?? [],
+        comparisonInputCollection?.comparisonInput.updated_at ?? null,
       );
       const eventAnalytics = eventAnalyticsState.analytics
         ? { ...eventAnalyticsState.analytics, team_comparison: teamComparison }
