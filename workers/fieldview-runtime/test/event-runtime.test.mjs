@@ -1496,17 +1496,20 @@ test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-FieldView-Team-State-Coverage"), "partial",
+    "a public event view never synchronously fans out to TeamRuntime objects");
   const view = await response.json();
   assert.equal(view.event.event_key, eventKey);
   assert.equal(view.analytics, null);
-  assert.deepEqual(view.team_states, [teamEventState]);
+  assert.deepEqual(view.team_states, []);
   assert.deepEqual(view.team_state_coverage, {
-    state: "complete",
+    state: "partial",
     expected_count: 1,
-    materialized_count: 1,
-    pending_team_keys: [],
+    materialized_count: 0,
+    pending_team_keys: [teamKey],
   });
   assert.equal("team_states" in view.event, false);
+  assert.equal(response.headers.get("X-FieldView-Team-State-Coverage"), "partial");
 });
 
 test("EventRuntime admin state diagnostics do not fan out to TeamRuntime", async () => {
