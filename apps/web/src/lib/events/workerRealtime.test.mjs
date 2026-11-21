@@ -128,6 +128,22 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     type: "analytics.changed",
     topic: "analytics",
     event_key: "2026test",
+    version: 1,
+    etag: 'W/"analytics-pending"',
+    data: {
+      event_key: "2026test", revision: 1, status: "pending",
+      due_at: 2_000, calculated_at: 1_000, source_revision: 1,
+      pending_invalidation: { sources: ["tba-event-matches"] },
+      publication: { marker: 1 },
+    },
+  }));
+  assert.equal(analyticsReceived.at(-1).status, "pending",
+    "a changed validator applies status updates even when the calculation revision is unchanged");
+
+  socket.receive(JSON.stringify({
+    type: "analytics.changed",
+    topic: "analytics",
+    event_key: "2026test",
     version: 2,
     etag: 'W/"analytics-2"',
     data: {
