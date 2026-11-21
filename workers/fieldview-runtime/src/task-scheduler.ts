@@ -635,7 +635,7 @@ export class TaskScheduler {
     if (url.pathname === "/admin/team-seed" && request.method === "GET") {
       const teamKey = url.searchParams.get("team_key") ?? "";
       const year = Number(url.searchParams.get("year"));
-      if (!/^frc\\d+$/.test(teamKey) || !Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+      if (!/^frc\d+$/.test(teamKey) || !Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "A valid team_key and year are required" }, { status: 400 });
       }
       return Response.json(await this.storage.get<TeamSeedJob>(teamSeedKey(teamKey, year)) ??
@@ -644,7 +644,7 @@ export class TaskScheduler {
 
     if (url.pathname === "/admin/team-seed" && request.method === "POST") {
       const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.team_key !== "string" || !/^frc\\d+$/.test(body.team_key)) {
+      if (!isRecord(body) || typeof body.team_key !== "string" || !/^frc\d+$/.test(body.team_key)) {
         return Response.json({ error: "A valid team_key is required" }, { status: 400 });
       }
       const teamKey = body.team_key;
