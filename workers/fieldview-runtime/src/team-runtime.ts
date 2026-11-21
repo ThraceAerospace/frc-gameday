@@ -128,7 +128,7 @@ export class TeamRuntime {
           ]);
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
           for (const [key, publication] of publications) {
-            const match = /^team-state:(\\d+):publication$/.exec(key);
+            const match = /^team-state:(\d+):publication$/.exec(key);
             if (match && publication?.state) this.publishedSnapshots.set(Number(match[1]), publication);
           }
         })
