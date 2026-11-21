@@ -820,7 +820,7 @@ export class EventRuntime {
       }, {
         headers: {
           ...headers,
-          "X-FieldView-Team-State-Coverage": eventViewPublication
+          "X-FieldView-Team-State-Coverage": publicationStatus === "stale" ? "stale" : eventViewPublication
             ? (eventViewPublication.source_revision === publication.sourceRevision ? eventViewPublication.status : "stale")
             : "partial",
           ...(eventViewPublication ? { "X-FieldView-View-Version": String(eventViewPublication.version) } : {}),
@@ -838,6 +838,18 @@ export class EventRuntime {
           team_state_coverage: { state: "unavailable", expected_count: 0, materialized_count: 0, pending_team_keys: [] },
         }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
       }
+      const viewSourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const viewExpectedEndpoints = [...eventResourceEndpoints(this.eventKey),
+        STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const viewSourceRevision = viewExpectedEndpoints.reduce((total, endpoint) =>
+        total + (viewSourceStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+      const viewSourceStale = viewExpectedEndpoints.some((endpoint) => {
+        const source = viewSourceStates.get(endpointStorageKey(endpoint));
+        return !source || source.status === "failed" || source.status === "stale" ||
+          (source.expiresAt !== null && source.expiresAt <= Date.now());
+      });
+      const viewEventStateStatus = viewSourceStale || viewSourceRevision !== publication.sourceRevision
+        ? "stale" : publication.status;
       const eventViewPublication = await this.storage.get<{
         version: number; source_revision: number; status: string; generated_at: number;
         view: FieldViewEventView;
@@ -845,7 +857,7 @@ export class EventRuntime {
       if (eventViewPublication) {
         return Response.json(eventViewPublication.view, {
           headers: {
-            "X-FieldView-Event-State-Status": publication.status,
+            "X-FieldView-Event-State-Status": viewEventStateStatus,
             "X-FieldView-View-Version": String(eventViewPublication.version),
             "X-FieldView-View-Source-Revision": String(eventViewPublication.source_revision),
             "X-FieldView-Team-State-Coverage": eventViewPublication.source_revision === publication.sourceRevision
@@ -874,7 +886,7 @@ export class EventRuntime {
       };
       return Response.json(view, {
         headers: {
-          "X-FieldView-Event-State-Status": publication.status,
+          "X-FieldView-Event-State-Status": viewEventStateStatus,
           "X-FieldView-Team-State-Coverage": "partial",
           "Cache-Control": "no-store",
         },
