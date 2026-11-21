@@ -494,6 +494,8 @@ export class TeamRuntime {
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
       }
     }));
+    await Promise.all([...new Set([...due.manualDue.map((item) => item.year), ...due.ready.map(() => new Date().getUTCFullYear())])]
+      .map((year) => this.snapshot(year)));
     await this.storage.transaction((tx) => this.rearm(tx));
   }
 }
