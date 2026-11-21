@@ -51,7 +51,7 @@ test("Canonical aggregate calculates event analytics without embedding TeamEvent
   assert.equal(Object.hasOwn(result, "team_states"), false);
   assert.equal(result.analytics.metrics.find((item) => item.metric_key === "mean-score-residual").value, 0);
   assert.equal(result.analytics.alliance_results.length, 2);
-  assert.equal(result.analytics.team_summaries.length, 6);
+  assert.equal(Object.hasOwn(result.analytics, "team_summaries"), false);
   assert.ok(result.analytics.qualification);
   assert.ok(result.analytics.qualification.prediction_calibration);
   assert.ok(result.analytics.qualification.penalties);
