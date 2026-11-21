@@ -107,9 +107,12 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | Live event subscriptions and publication | Durable Object / Worker boundary |
 | Pure analytics calculations | Analytics package executed by Worker |
 | Durable analytics job coordination | EventRuntime alarm work, persisted and coalesced with event source changes |
-| Team-level persistent runtime | One lazy TeamRuntime Durable Object per TBA team key; owns team identity, districts, season event list, and team media |
+| Team-level persistent runtime | One lazy TeamRuntime Durable Object per TBA team key; owns team identity, districts, season data, team-event states, and team-scoped analytics |
+| Event-wide analytics | EventRuntime Durable Object; calculates event-level metrics from event inputs and TeamRuntime-owned team-event results |
+| Team analytics | TeamRuntime Durable Object; independently calculates and persists team/season and team/event metrics |
+| Roster reconciliation | Scheduled TaskScheduler job; ordinary event reads do not reconcile rosters |
 
-The runtime uses one `EventRuntime` per event and one lazy `TeamRuntime` per TBA team key. EventRuntime owns event-scoped resources; TeamRuntime owns team identity, district memberships, season event participation, and team media. The two runtimes remain separate consistency and refresh boundaries. Domain objects are not automatically Durable Objects: only aggregates with independently owned acquisition, persistence, and refresh lifecycles receive one. Analytics remains outside these entity runtimes.
+The runtime uses one `EventRuntime` per event and one lazy `TeamRuntime` per TBA team key. EventRuntime owns event-scoped resources, FieldViewEventState, and FieldViewEventAnalytics. TeamRuntime owns team identity, districts, season participation, FieldViewTeamState, FieldViewTeamEventState, and FieldViewTeamEventAnalytics. TeamRuntime calculates team-specific event comparisons against its own season data; EventRuntime consumes those persisted results to calculate event-wide rankings, extremes, and other field-level metrics. A complete event FieldView composes FieldViewEventState, FieldViewEventAnalytics, and the roster's FieldViewTeamEventState array. TaskScheduler performs roster reconciliation as scheduled work. The two runtimes remain separate consistency and refresh boundaries. Domain objects are not automatically Durable Objects: only aggregates with independently owned acquisition, persistence, and refresh lifecycles receive one. Analytics calculations are owned by the runtime responsible for their subject and scope.
 
 ## 5. Incremental migration model
 
