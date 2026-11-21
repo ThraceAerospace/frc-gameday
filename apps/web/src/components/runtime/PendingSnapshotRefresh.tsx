@@ -12,7 +12,15 @@ export default function PendingSnapshotRefresh({ intervalMs = 5_000 }: { interva
   const router = useRouter();
 
   useEffect(() => {
-    const timer = window.setInterval(() => router.refresh(), intervalMs);
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > 24) {
+        window.clearInterval(timer);
+        return;
+      }
+      router.refresh();
+    }, intervalMs);
     return () => window.clearInterval(timer);
   }, [intervalMs, router]);
 
