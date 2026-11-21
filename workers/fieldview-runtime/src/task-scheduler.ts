@@ -2002,7 +2002,7 @@ export class TaskScheduler {
       if (!values) throw new Error("TBA team discovery staging page " + page + " is missing");
       pages.push(values);
     }
-    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc\\d+$/.test(team.key)).map((team) => [team.key, team])).values()];
+    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc[0-9]+$/.test(team.key)).map((team) => [team.key, team])).values()];
     if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
 
     // Publish a new immutable page generation, then atomically switch the
