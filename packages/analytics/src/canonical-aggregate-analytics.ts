@@ -265,7 +265,6 @@ import type {
   FieldViewTeamEventAnalytics,
   FieldViewTeamMatchEvidence,
   FieldViewAnalyticsAllianceResult,
-  FieldViewAnalyticsTeamSummary,
   FieldViewQualificationAnalytics,
   FieldViewQualificationAnomaly,
   FieldViewPlayoffAnalytics,
@@ -412,24 +411,7 @@ export function calculateCanonicalAggregateAnalytics(
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
 ): FieldViewEventState {
-  const teams = (eventState.teams ?? []).map((team) => ({
-    key: team.key,
-    team_number: team.team_number,
-    nickname: team.nickname,
-    name: team.name,
-  }));
-  const eventTeams = eventState.event_teams ?? [];
-  const oprValues: Record<string, number> = {};
-  const dprValues: Record<string, number> = {};
-  const ccwmValues: Record<string, number> = {};
-  for (const team of eventTeams) {
-    if (team.opr !== undefined) oprValues[team.team_key] = team.opr;
-    if (team.dpr !== undefined) dprValues[team.team_key] = team.dpr;
-    if (team.ccwm !== undefined) ccwmValues[team.team_key] = team.ccwm;
-  }
-  const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
-  const teamRows = buildTeamRows(teams, oprs, records);
-  const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
+  const findings = buildReviewFindings(records, allianceResults);
   const qualificationAnalysis = buildQualificationAnalysis(
     records, records.map((record) => record.match), allianceResults, eventState.event?.playoff_type,
   );
@@ -457,13 +439,6 @@ export function calculateCanonicalAggregateAnalytics(
     alliance: item.color, team_keys: item.teamKeys, predicted_score: item.predicted,
     actual_score: item.actual, score_residual: item.residual, pre_match_epa_total: item.preEpaTotal,
     winner: item.winner, outcome: item.outcome,
-  }));
-  const teamSummaries: FieldViewAnalyticsTeamSummary[] = teamRows.map((item) => ({
-    team_key: item.teamKey, team_number: item.teamNumber, name: item.name,
-    opr: item.opr, dpr: item.dpr, ccwm: item.ccwm, epa: item.epa,
-    auto_epa: item.autoEpa, teleop_epa: item.teleopEpa, endgame_epa: item.endgameEpa,
-    matches_seen: item.matchesSeen, epa_percentile: item.epaPercentile,
-    epa_contribution_percent: item.epaContributionPercent, epa_contribution_samples: item.epaContributionSamples,
   }));
   const qualificationDomain: FieldViewQualificationAnalytics = {
     prediction_calibration: {
@@ -535,7 +510,6 @@ export function calculateCanonicalAggregateAnalytics(
       metrics: eventMetrics,
       findings: findings.map(reviewFinding),
       alliance_results: allianceResultsDomain,
-      team_summaries: teamSummaries,
       qualification: qualificationDomain,
       qualification_anomalies: qualificationAnomaliesDomain,
       playoffs: playoffsDomain,
