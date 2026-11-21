@@ -121,7 +121,7 @@ export async function calculateCanonicalMatchAnalytics(
     allianceResults.map((result) => [`${result.matchKey}:${result.color}`, result]),
   );
 
-  const matches = eventState.matches.map((match) => {
+  const matches = await Promise.all(eventState.matches.map(async (match) => {
     const analysis = (color: "red" | "blue") => {
       const result = resultByMatchAndColor.get(`${match.key}:${color}`);
       const allianceTeams = match.teams[color];
@@ -166,7 +166,7 @@ export async function calculateCanonicalMatchAnalytics(
         },
       })).value,
     };
-  });
+  }));
 
   return calculateCanonicalAggregateAnalytics({
     ...eventState,
