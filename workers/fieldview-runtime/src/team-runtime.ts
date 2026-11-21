@@ -106,7 +106,10 @@ export class TeamRuntime {
   private readonly env: RuntimeEnvironment;
   private teamKey: string;
   private readonly activation: Promise<void>;
-  private readonly publishedSnapshots = new Map<number, ReturnType<typeof normalizeFieldViewTeamState>>();
+  private readonly publishedSnapshots = new Map<number, {
+    input_signature: string;
+    state: ReturnType<typeof normalizeFieldViewTeamState>;
+  }>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
     this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
@@ -126,7 +129,7 @@ export class TeamRuntime {
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
           for (const [key, publication] of publications) {
             const match = /^team-state:(\\d+):publication$/.exec(key);
-            if (match && publication?.state) this.publishedSnapshots.set(Number(match[1]), publication.state);
+            if (match && publication?.state) this.publishedSnapshots.set(Number(match[1]), publication);
           }
         })
       : Promise.resolve();
@@ -413,12 +416,11 @@ export class TeamRuntime {
       // Serve the last atomically published representation. A GET never
       // rebuilds/persists a snapshot and never materializes another season.
       const stateKey = `team-state:${year}`;
-      const publication = this.publishedSnapshots.has(year)
-        ? { input_signature: "", state: this.publishedSnapshots.get(year)! }
-        : await this.storage.get<{
-            input_signature: string;
-            state: ReturnType<typeof normalizeFieldViewTeamState>;
-          }>(stateKey + ":publication");
+      const publication = this.publishedSnapshots.get(year) ??
+        await this.storage.get<{
+          input_signature: string;
+          state: ReturnType<typeof normalizeFieldViewTeamState>;
+        }>(stateKey + ":publication");
       const resources = this.endpoints(year);
       const states = await Promise.all(resources.map(({ endpoint }) =>
         this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
@@ -889,7 +891,7 @@ export class TeamRuntime {
       return new Response(null, { status: 304, headers: responseHeaders });
     }
     if (cached?.input_signature === signature) {
-      this.publishedSnapshots.set(year, cached.state);
+      this.publishedSnapshots.set(year, cached);
       return Response.json(cached.state, { headers: responseHeaders });
     }
 
@@ -930,7 +932,7 @@ export class TeamRuntime {
     });
     if (!published) return this.snapshot(year, request);
 
-    this.publishedSnapshots.set(year, snapshot);
+    this.publishedSnapshots.set(year, { input_signature: signature, state: snapshot });
     return Response.json(snapshot, { headers: responseHeaders });
   }
   private async pollResourceNow(resource: TeamResource): Promise<
