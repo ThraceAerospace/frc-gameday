@@ -1097,3 +1097,64 @@ test("EventRuntime builds one shared comparison input from every roster TeamStat
   assert.equal(result.comparisonInput.team_state_revisions.length, 2);
   assert.equal(result.comparisonInput.state, "complete");
 });
+
+
+test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-owned TeamEventStates", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026fieldview", teamKey = "frc3461";
+  const eventState = {
+    event_key: eventKey,
+    event: { key: eventKey, name: "FieldView Test", timezone: "America/New_York" },
+    teams: [{ key: teamKey, team_number: 3461 }],
+    sources: {},
+  };
+  storage.values.set("snapshot-revision", 1);
+  storage.values.set("event-state:publication", {
+    sourceRevision: 0,
+    snapshotVersion: 1,
+    generatedAt: Date.now(),
+    status: "complete",
+    state: eventState,
+  });
+  storage.values.set("team-state-revision:" + teamKey, 2);
+  storage.values.set("event-team-comparison-input:updated-at", 123);
+  const teamEventState = {
+    event_key: eventKey,
+    team_key: teamKey,
+    sources: { team: {}, event_team: {}, matches: {} },
+    matches: [],
+    analytics: { event_key: eventKey, team_key: teamKey, metrics: [], findings: [] },
+  };
+  const teamNamespace = {
+    idFromName: (key) => key,
+    get: () => ({
+      fetch: async () => Response.json(teamEventState, { headers: {
+        "X-FieldView-Event-Source-Revision": "0",
+        "X-FieldView-Team-Source-Revision": "2",
+        "X-FieldView-Comparison-Input-Updated-At": "123",
+        "X-FieldView-Team-Event-Revision": "4",
+      } }),
+    }),
+  };
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    TEAM_RUNTIME: teamNamespace,
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/view", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(response.status, 200);
+  const view = await response.json();
+  assert.equal(view.event.event_key, eventKey);
+  assert.equal(view.analytics, null);
+  assert.deepEqual(view.team_states, [teamEventState]);
+  assert.deepEqual(view.team_state_coverage, {
+    state: "complete",
+    expected_count: 1,
+    materialized_count: 1,
+    pending_team_keys: [],
+  });
+  assert.equal("team_states" in view.event, false);
+});
