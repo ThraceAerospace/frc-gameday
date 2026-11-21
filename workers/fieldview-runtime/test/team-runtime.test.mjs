@@ -44,7 +44,7 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(calls.length, 1, "one alarm processes one provider request");
+  assert.equal(calls.length, 7, "one alarm fans out all seven independent team resources");
   await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7);
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
@@ -79,7 +79,7 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
 });
 
 
-test("TeamRuntime admin seed queues durable work and alarms process it in bounded batches", async () => {
+test("TeamRuntime admin seed fans out independent resources concurrently", async () => {
   const storage = new MemoryStorage(), calls = [];
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -93,7 +93,7 @@ test("TeamRuntime admin seed queues durable work and alarms process it in bounde
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.attempted, true);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 7);
   await drainManualQueue(runtime, storage);
   const snapshot = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": "frc3461" },
@@ -188,4 +188,55 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
   assert.ok(calls.some((url) => url.includes("thebluealliance.com") && url.endsWith("/team/frc2485")));
   assert.ok(calls.some((url) => url.includes("statbotics") && url.includes("/team_year/2485/2026")));
   assert.ok(calls.some((url) => url.includes("frc-colors") && url.endsWith("/team/2485")));
+});
+
+test("TeamRuntime tracks multiple active events and increases polling responsiveness", async () => {
+  const storage = new MemoryStorage();
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), "frc3461");
+  const activity = (eventKey, active) => runtime.fetch(new Request("https://team/activity", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461", "Content-Type": "application/json" },
+    body: JSON.stringify({ event_key: eventKey, year: 2026, active }),
+  }));
+  assert.equal((await activity("2026eventa", true)).status, 200);
+  assert.equal((await activity("2026eventb", true)).status, 200);
+  let state = await runtime.fetch(new Request("https://team/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  let snapshot = await state.json();
+  assert.deepEqual(snapshot.active_events, ["2026eventa", "2026eventb"]);
+  assert.ok(snapshot.polling.every((task) => task.interval_ms === 60_000));
+  assert.ok(snapshot.polling.every((task) => task.due_at <= Date.now()));
+
+  await activity("2026eventa", false);
+  state = await runtime.fetch(new Request("https://team/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  snapshot = await state.json();
+  assert.deepEqual(snapshot.active_events, ["2026eventb"], "one event ending must not clear another active event");
+  assert.ok(snapshot.polling.every((task) => task.interval_ms === 60_000));
+
+  await activity("2026eventb", false);
+  state = await runtime.fetch(new Request("https://team/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  snapshot = await state.json();
+  assert.deepEqual(snapshot.active_events, []);
+  assert.ok(snapshot.polling.every((task) => task.interval_ms === 86_400_000));
+});
+
+test("TeamRuntime runs independent provider requests concurrently", async () => {
+  const storage = new MemoryStorage();
+  let inFlight = 0, maximumInFlight = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    inFlight += 1;
+    maximumInFlight = Math.max(maximumInFlight, inFlight);
+    await Promise.resolve();
+    inFlight -= 1;
+    return Response.json([]);
+  }), "frc3461");
+  await runtime.fetch(new Request("https://team/refresh?year=2026", {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one TeamRuntime");
 });
