@@ -1522,16 +1522,7 @@ export class TaskScheduler {
       if (activeEventSeed.nextDueAt <= Date.now()) await this.measureStage("event-team-seed", () => this.processEventTeamSeed(activeEventSeed));
       const refreshed = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(activeEventSeed.eventKey));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
-      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
-        const resumeAt = refreshed?.resumeAlarmAt ?? null;
-        await this.storage.setAlarm(Math.max(Date.now() + 100, resumeAt ?? Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs));
-      }
-      else if (
-        await this.storage.get<boolean>("scheduler:daily-run-requested") === true ||
-        await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY) ||
-        await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
-      ) await this.storage.setAlarm(Date.now() + 100);
-      else await this.storage.deleteAlarm();
+      else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
     const teamSeedJobs = await this.storage.list<TeamSeedJob>({ prefix: "admin:team-seed:" });
@@ -1549,14 +1540,7 @@ export class TaskScheduler {
       await this.measureStage("season-ingest", () => this.processSeasonIngest(runningJob));
       const refreshed = await this.storage.get<SeasonIngestJob>(seasonIngestKey(runningJob.year));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt ?? Date.now() + 1_000));
-      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
-        await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
-      } else if (
-        await this.storage.get<boolean>("scheduler:daily-run-requested") === true ||
-        await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY) ||
-        await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
-      ) await this.storage.setAlarm(Date.now() + 100);
-      else await this.storage.deleteAlarm();
+      else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
     const coverageAudits = await this.storage.list<CoverageAuditRecord>({ prefix: "admin:coverage-audit:" });
@@ -1576,8 +1560,7 @@ export class TaskScheduler {
       await this.measureStage("admin-discovery", () => this.processAdminDiscovery(activeDiscovery));
       const refreshed = await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(activeDiscovery.mode, activeDiscovery.year));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
-      else if (await this.storage.get<boolean>("scheduler:enabled") === true) await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
-      else await this.storage.deleteAlarm();
+      else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
     if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
