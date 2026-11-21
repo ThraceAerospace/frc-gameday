@@ -423,8 +423,11 @@ export default function AdminOperationsDashboard() {
           {(seasonIngest?.status === "running" || seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("cancel")} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-40">Cancel</button>}
         </div>
       </Panel>
-            <Panel><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview samples at most 25 objects of each type. These are sample counts, not full-inventory totals.</p></div><span className="text-xs text-[var(--fv-muted)]">{sampled.events} events · {sampled.teams} teams inspected</span></div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.eventWithoutSources}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Events without completed analytics</p><p className="mt-1 text-xl font-bold">{sampled.eventAnalyticsMissing}</p></div><div className="rounded-lg border border-[var(--fv-border)] p-3"><p className="text-xs text-[var(--fv-muted)]">Teams with no provider resources</p><p className="mt-1 text-xl font-bold">{sampled.teamWithoutSources}</p></div></div>
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold">Data coverage</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">The overview stays lightweight and does not inspect every runtime. Use the full-season audit below for comprehensive coverage; each batch is started explicitly.</p></div>
+          <span className="text-xs text-[var(--fv-muted)]">Season {year}</span>
+        </div>
         <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every event and every team in the selected season's completed TBA discovery snapshots. Team discovery walks all 500-team pages; this audit makes no provider API requests and processes up to 20 runtime reads per batch.</p></div>
