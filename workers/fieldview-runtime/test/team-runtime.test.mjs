@@ -214,6 +214,15 @@ test("TeamRuntime tracks multiple active events and increases polling responsive
   let snapshot = await state.json();
   assert.deepEqual(snapshot.active_events, ["2026eventa", "2026eventb"]);
   assert.ok(snapshot.polling.every((task) => task.interval_ms === 60_000));
+  const firstUpdatedAt = storage.values.get("activity:active-events")["2026eventa"].updatedAt;
+  const firstDueAt = snapshot.polling[0].due_at;
+  await activity("2026eventa", true);
+  assert.equal(storage.values.get("activity:active-events")["2026eventa"].updatedAt, firstUpdatedAt, "duplicate activation must be idempotent");
+  state = await runtime.fetch(new Request("https://team/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  snapshot = await state.json();
+  assert.equal(snapshot.polling[0].due_at, firstDueAt, "duplicate activation must not reschedule provider work");
   assert.ok(snapshot.polling.every((task) => task.due_at <= Date.now()));
 
   await activity("2026eventa", false);
