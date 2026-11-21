@@ -187,8 +187,10 @@ export interface FieldViewEventAnalytics {
   audit?: FieldViewAnalyticsAudit;
 }
 
+export type FieldViewTeamAnalytics = FieldViewTeamEventAnalytics;
+
 /** Team analytics scoped to one team's participation at one event. */
-export interface FieldViewTeamAnalytics {
+export interface FieldViewTeamEventAnalytics {
   team_key: TeamKey;
   event_key: EventKey;
   metrics: FieldViewMetricResult[];
@@ -221,7 +223,7 @@ export interface FieldViewTeamAnalytics {
   /** Event-by-event season history, including unavailable records. */
   season_history?: FieldViewTeamSeasonHistoryEntry[];
   /** Match-level review prompts and supporting values. */
-  review_matches?: FieldViewTeamAnalyticsMatch[];
+  review_matches?: FieldViewTeamEventAnalyticsMatch[];
   /** Complete canonical match evidence for season-level diagnostics. Includes unflagged matches. */
   match_evidence?: FieldViewTeamMatchEvidence[];
   audit?: FieldViewAnalyticsAudit;
@@ -415,7 +417,7 @@ export interface FieldViewPlayoffAnalytics {
 }
 
 /** Per-match team context retained by the original team-insights panel. */
-export interface FieldViewTeamAnalyticsMatch {
+export interface FieldViewTeamEventAnalyticsMatch {
   match_key: string;
   match_label: string;
   alliance: "red" | "blue";
