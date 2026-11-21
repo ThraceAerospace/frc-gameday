@@ -445,8 +445,10 @@ export class TeamRuntime {
         (cached?.response.collection as Record<string, unknown> | undefined)?.updatedAt ?? 0,
       );
       const freshnessStale = !checkedAt || Date.now() - checkedAt > 5 * 60_000;
+      const collectionState = (cached?.response.collection as Record<string, unknown> | undefined)?.state;
+      const partial = Boolean(cached) && collectionState !== "complete";
       const stale = revisionStale || freshnessStale;
-      if (stale) await this.queueSeasonAnalyticsRefresh(year);
+      if (stale || partial) await this.queueSeasonAnalyticsRefresh(year);
 
       const resources = this.endpoints(year);
       const states = await Promise.all(resources.map(({ endpoint }) =>
@@ -473,8 +475,8 @@ export class TeamRuntime {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-store",
-          "X-FieldView-Analytics-Status": stale ? "stale" : "available",
-          "X-FieldView-Analytics-Revalidation": stale ? "scheduled" : "idle",
+          "X-FieldView-Analytics-Status": stale ? "stale" : partial ? "partial" : "complete",
+          "X-FieldView-Analytics-Revalidation": stale || partial ? "scheduled" : "idle",
           "X-FieldView-Analytics-Checked-At": String(checkedAt),
         },
       });
@@ -893,8 +895,12 @@ export class TeamRuntime {
         JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions) &&
         JSON.stringify(cached.comparison_input_updated_ats) === JSON.stringify(comparisonInputUpdatedAts)) {
       await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() });
+      const collectionState = (cached.response.collection as Record<string, unknown> | undefined)?.state;
       return Response.json(cached.response, {
-        headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
+        headers: {
+          "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store",
+          "X-FieldView-Analytics-Status": collectionState === "complete" ? "complete" : "partial",
+        },
       });
     }
 
@@ -957,7 +963,10 @@ export class TeamRuntime {
       response: result,
     });
     return Response.json(result, {
-      headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
+      headers: {
+        "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store",
+        "X-FieldView-Analytics-Status": ready.length === events.length ? "complete" : "partial",
+      },
     });
   }
 
@@ -1285,8 +1294,11 @@ export class TeamRuntime {
       const year = Number(jobKey.slice(SEASON_ANALYTICS_DUE_PREFIX.length));
       try {
         const response = await this.buildSeasonAnalyticsResponse(year);
-        if (response.ok) await this.storage.delete(jobKey);
-        else await this.storage.put(jobKey, Date.now() + 60_000);
+        if (response.ok && response.headers.get("X-FieldView-Analytics-Status") === "complete") {
+          await this.storage.delete(jobKey);
+        } else {
+          await this.storage.put(jobKey, Date.now() + 60_000);
+        }
       } catch {
         await this.storage.put(jobKey, Date.now() + 60_000);
       }
