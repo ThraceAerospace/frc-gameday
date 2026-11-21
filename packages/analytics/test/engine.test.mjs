@@ -95,3 +95,29 @@ test("default FieldView registry covers every operation in the versioned definit
   );
   assert.ok(engine);
 });
+
+test("default engine invokes the registered alliance calculation without evaluating source paths", async () => {
+  const engine = createFieldViewAnalyticsEngine();
+  const result = await engine.execute({
+    definition_key: "alliance-score-residual",
+    context: {
+      records: [{
+        match: {
+          key: "2026test_qm1", comp_level: "qm", set_number: 1, match_number: 1,
+          winning_alliance: "red",
+          alliances: {
+            red: { team_keys: ["frc1", "frc2", "frc3"], score: 101 },
+            blue: { team_keys: ["frc4", "frc5", "frc6"], score: 95 },
+          },
+        },
+        statbotics: { pred: { red_score: 96, blue_score: 98 } },
+        statboticsStatus: "ready",
+      }],
+    },
+    resolved_inputs: { "actual-score": 101, "predicted-score": 96 },
+  });
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.definition_version, "1.0.0");
+  assert.equal(result.value[0].residual, 5);
+  assert.equal(result.value[1].residual, -3);
+});
