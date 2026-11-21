@@ -8,6 +8,7 @@ export * from "./ids.js";
 export * from "./team.js";
 export * from "./district.js";
 export * from "./event.js";
+export * from "./event-view.js";
 export * from "./match.js";
 export * from "./match-order.js";
 export * from "./playoff-alliance.js";
