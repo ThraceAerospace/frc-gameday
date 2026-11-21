@@ -299,6 +299,12 @@ interface EventTeamSeedJob {
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
 
+type CoverageAuditRecord = {
+  year: number; status: string; started_at: number; updated_at: number;
+  event_discovery_updated_at?: number; team_discovery_updated_at?: number;
+  event_keys: string[]; team_keys: string[]; cursor: number;
+  counts: Record<string, number>;
+};
 interface TeamSeedJob {
   teamKey: string;
   year: number;
@@ -953,112 +959,12 @@ export class TaskScheduler {
         await this.storage.put(storageKey, audit);
       }
       if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
-      const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
-      const registeredEvents = new Set([
-        ...(await this.storage.get<string[]>("registry:runtime-events") ?? []),
-        ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
-      ]);
-      const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
-      const batch = all.slice(audit.cursor, audit.cursor + 20);
-      for (const item of batch) {
-        try {
-          const isEvent = item.kind === "event";
-          // Avoid instantiating thousands of empty Durable Objects merely to inspect missing state.
-          if (isEvent && !registeredEvents.has(item.key)) {
-            audit.counts.event_runtime_missing += 1;
-            audit.counts.event_state_missing += 1;
-            audit.counts.event_analytics_missing += 1;
-            audit.counts.event_cohort_missing += 1;
-            continue;
-          }
-          if (!isEvent && !registeredTeams.has(item.key)) {
-            audit.counts.team_runtime_missing += 1;
-            audit.counts.team_snapshot_missing += 1;
-            continue;
-          }
-          if (!isEvent && !this.env.TEAM_RUNTIME) {
-            audit.counts.team_runtime_missing += 1;
-            audit.counts.team_snapshot_missing += 1;
-            continue;
-          }
-          const namespace = isEvent ? this.env.EVENT_RUNTIME : this.env.TEAM_RUNTIME!;
-          const stub = namespace.get(namespace.idFromName(item.key));
-          const response = await stub.fetch(new Request(isEvent ? "https://event-runtime/state" : "https://team-runtime/state", {
-            headers: {
-              Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-              [isEvent ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key"]: item.key,
-            },
-          }));
-          if (!response.ok) {
-            if (isEvent) {
-              audit.counts.event_runtime_missing += 1;
-              audit.counts.event_state_missing += 1;
-              audit.counts.event_analytics_missing += 1;
-              audit.counts.event_cohort_missing += 1;
-            } else {
-              audit.counts.team_runtime_missing += 1;
-              audit.counts.team_snapshot_missing += 1;
-            }
-            continue;
-          }
-          const state = await response.json() as {
-            endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
-              Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
-            analytics?: { status?: string; cohort_status?: string | null };
-            event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
-          };
-          const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
-          const acquiredResources = endpointStates.filter((resource) =>
-            resource.lastFetchedAt != null || resource.last_fetched_at != null || resource.lastWebhookAt != null || resource.last_webhook_at != null).length;
-          const incompleteResources = endpointStates.filter((resource) =>
-            resource.status === "failed" || resource.status === "unavailable" || resource.status === "stale" ||
-            ((resource.expiresAt ?? resource.expires_at) != null && (resource.expiresAt ?? resource.expires_at)! < Date.now())).length;
-          if (isEvent) {
-            if (acquiredResources < 13 || incompleteResources > 0) audit.counts.event_resources_incomplete += 1;
-            const eventStateStatus = state.event_state?.status ?? "missing";
-            if (eventStateStatus === "complete") audit.counts.event_state_complete += 1;
-            else if (eventStateStatus === "partial") audit.counts.event_state_partial += 1;
-            else if (eventStateStatus === "stale") audit.counts.event_state_stale += 1;
-            else if (eventStateStatus === "failed") audit.counts.event_state_failed += 1;
-            else audit.counts.event_state_missing += 1;
-            const analyticsStatus = state.analytics?.status ?? "missing";
-            if (analyticsStatus === "succeeded") audit.counts.event_analytics_succeeded += 1;
-            else if (analyticsStatus === "partial") audit.counts.event_analytics_partial += 1;
-            else if (analyticsStatus === "stale") audit.counts.event_analytics_stale += 1;
-            else if (analyticsStatus === "waiting-for-cohort") audit.counts.event_analytics_waiting += 1;
-            else if (analyticsStatus === "failed") audit.counts.event_analytics_failed += 1;
-            else audit.counts.event_analytics_missing += 1;
-            const cohortStatus = state.analytics?.cohort_status ??
-              (analyticsStatus === "waiting-for-cohort" ? "discovering" : "missing");
-            if (cohortStatus === "complete") audit.counts.event_cohort_complete += 1;
-            else if (cohortStatus === "partial") audit.counts.event_cohort_partial += 1;
-            else if (cohortStatus === "discovering") audit.counts.event_cohort_discovering += 1;
-            else audit.counts.event_cohort_missing += 1;
-          } else {
-            if (acquiredResources >= 7 && incompleteResources === 0) audit.counts.team_snapshot_complete += 1;
-            else if (acquiredResources > 0) audit.counts.team_snapshot_partial += 1;
-            else audit.counts.team_snapshot_failed += 1;
-            if (acquiredResources < 7 || incompleteResources > 0) audit.counts.team_resources_incomplete += 1;
-          }
-        } catch {
-          audit.counts.read_errors += 1;
-          if (item.kind === "event") {
-            audit.counts.event_runtime_missing += 1;
-            audit.counts.event_state_missing += 1;
-            audit.counts.event_analytics_missing += 1;
-            audit.counts.event_cohort_missing += 1;
-          } else {
-            audit.counts.team_runtime_missing += 1;
-            audit.counts.team_snapshot_missing += 1;
-          }
-        }
-      }
-      audit.cursor += batch.length;
-      audit.updated_at = Date.now();
-      if (audit.cursor >= all.length) audit.status = "completed";
-      await this.storage.put(storageKey, audit);
+      if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
+      await this.storage.setAlarm(Date.now());
       const { event_keys: _eventKeys, team_keys: _teamKeys, ...summary } = audit;
-      return Response.json({ ...summary, processed: audit.cursor, total: all.length, remaining: Math.max(0, all.length - audit.cursor) }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ ...summary, processed: audit.cursor, total: audit.event_keys.length + audit.team_keys.length,
+        remaining: Math.max(0, audit.event_keys.length + audit.team_keys.length - audit.cursor), queued: true },
+        { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "GET" && url.pathname === "/admin/overview") {
@@ -1302,6 +1208,116 @@ export class TaskScheduler {
   }
 
 
+  private async processCoverageAuditBatch(year: number): Promise<void> {
+    const storageKey = "admin:coverage-audit:" + year;
+    const audit = await this.storage.get<CoverageAuditRecord>(storageKey);
+    if (!audit || audit.status !== "running") return;
+        const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
+        const registeredEvents = new Set([
+          ...(await this.storage.get<string[]>("registry:runtime-events") ?? []),
+          ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
+        ]);
+        const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
+        const batch = all.slice(audit.cursor, audit.cursor + 5);
+        for (const item of batch) {
+          try {
+            const isEvent = item.kind === "event";
+            // Avoid instantiating thousands of empty Durable Objects merely to inspect missing state.
+            if (isEvent && !registeredEvents.has(item.key)) {
+              audit.counts.event_runtime_missing += 1;
+              audit.counts.event_state_missing += 1;
+              audit.counts.event_analytics_missing += 1;
+              audit.counts.event_cohort_missing += 1;
+              continue;
+            }
+            if (!isEvent && !registeredTeams.has(item.key)) {
+              audit.counts.team_runtime_missing += 1;
+              audit.counts.team_snapshot_missing += 1;
+              continue;
+            }
+            if (!isEvent && !this.env.TEAM_RUNTIME) {
+              audit.counts.team_runtime_missing += 1;
+              audit.counts.team_snapshot_missing += 1;
+              continue;
+            }
+            const namespace = isEvent ? this.env.EVENT_RUNTIME : this.env.TEAM_RUNTIME!;
+            const stub = namespace.get(namespace.idFromName(item.key));
+            const response = await stub.fetch(new Request(isEvent ? "https://event-runtime/state" : "https://team-runtime/state", {
+              headers: {
+                Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+                [isEvent ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key"]: item.key,
+              },
+            }));
+            if (!response.ok) {
+              if (isEvent) {
+                audit.counts.event_runtime_missing += 1;
+                audit.counts.event_state_missing += 1;
+                audit.counts.event_analytics_missing += 1;
+                audit.counts.event_cohort_missing += 1;
+              } else {
+                audit.counts.team_runtime_missing += 1;
+                audit.counts.team_snapshot_missing += 1;
+              }
+              continue;
+            }
+            const state = await response.json() as {
+              endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
+                Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
+              analytics?: { status?: string; cohort_status?: string | null };
+              event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
+            };
+            const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
+            const acquiredResources = endpointStates.filter((resource) =>
+              resource.lastFetchedAt != null || resource.last_fetched_at != null || resource.lastWebhookAt != null || resource.last_webhook_at != null).length;
+            const incompleteResources = endpointStates.filter((resource) =>
+              resource.status === "failed" || resource.status === "unavailable" || resource.status === "stale" ||
+              ((resource.expiresAt ?? resource.expires_at) != null && (resource.expiresAt ?? resource.expires_at)! < Date.now())).length;
+            if (isEvent) {
+              if (acquiredResources < 13 || incompleteResources > 0) audit.counts.event_resources_incomplete += 1;
+              const eventStateStatus = state.event_state?.status ?? "missing";
+              if (eventStateStatus === "complete") audit.counts.event_state_complete += 1;
+              else if (eventStateStatus === "partial") audit.counts.event_state_partial += 1;
+              else if (eventStateStatus === "stale") audit.counts.event_state_stale += 1;
+              else if (eventStateStatus === "failed") audit.counts.event_state_failed += 1;
+              else audit.counts.event_state_missing += 1;
+              const analyticsStatus = state.analytics?.status ?? "missing";
+              if (analyticsStatus === "succeeded") audit.counts.event_analytics_succeeded += 1;
+              else if (analyticsStatus === "partial") audit.counts.event_analytics_partial += 1;
+              else if (analyticsStatus === "stale") audit.counts.event_analytics_stale += 1;
+              else if (analyticsStatus === "waiting-for-cohort") audit.counts.event_analytics_waiting += 1;
+              else if (analyticsStatus === "failed") audit.counts.event_analytics_failed += 1;
+              else audit.counts.event_analytics_missing += 1;
+              const cohortStatus = state.analytics?.cohort_status ??
+                (analyticsStatus === "waiting-for-cohort" ? "discovering" : "missing");
+              if (cohortStatus === "complete") audit.counts.event_cohort_complete += 1;
+              else if (cohortStatus === "partial") audit.counts.event_cohort_partial += 1;
+              else if (cohortStatus === "discovering") audit.counts.event_cohort_discovering += 1;
+              else audit.counts.event_cohort_missing += 1;
+            } else {
+              if (acquiredResources >= 7 && incompleteResources === 0) audit.counts.team_snapshot_complete += 1;
+              else if (acquiredResources > 0) audit.counts.team_snapshot_partial += 1;
+              else audit.counts.team_snapshot_failed += 1;
+              if (acquiredResources < 7 || incompleteResources > 0) audit.counts.team_resources_incomplete += 1;
+            }
+          } catch {
+            audit.counts.read_errors += 1;
+            if (item.kind === "event") {
+              audit.counts.event_runtime_missing += 1;
+              audit.counts.event_state_missing += 1;
+              audit.counts.event_analytics_missing += 1;
+              audit.counts.event_cohort_missing += 1;
+            } else {
+              audit.counts.team_runtime_missing += 1;
+              audit.counts.team_snapshot_missing += 1;
+            }
+          }
+        }
+        audit.cursor += batch.length;
+        audit.updated_at = Date.now();
+        if (audit.cursor >= all.length) audit.status = "completed";
+        await this.storage.put(storageKey, audit);
+  }
+
   private async processTeamSeed(job: TeamSeedJob): Promise<void> {
     if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) throw new Error("TeamRuntime and EventRuntime must be bound");
     const key = teamSeedKey(job.teamKey, job.year);
@@ -1517,6 +1533,15 @@ export class TaskScheduler {
         await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
       ) await this.storage.setAlarm(Date.now() + 100);
       else await this.storage.deleteAlarm();
+      return;
+    }
+    const coverageAudits = await this.storage.list<CoverageAuditRecord>({ prefix: "admin:coverage-audit:" });
+    const activeCoverageAudit = [...coverageAudits.values()].find((audit) => audit.status === "running");
+    if (activeCoverageAudit) {
+      await this.measureStage("coverage-audit", () => this.processCoverageAuditBatch(activeCoverageAudit.year));
+      const refreshed = await this.storage.get<CoverageAuditRecord>("admin:coverage-audit:" + activeCoverageAudit.year);
+      if (refreshed?.status === "running") await this.storage.setAlarm(Date.now() + 250);
+      else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
     const discoveryJobs = await this.storage.list<AdminDiscoveryJob>({ prefix: "admin:discovery-job:" });
