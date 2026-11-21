@@ -1110,28 +1110,11 @@ export class TaskScheduler {
         ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
       ])].sort();
       const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
-      // Keep the overview lightweight; full inventory and entity inspection
-      // are separate paginated operations.
-      const cap = 25;
-      const events = await Promise.all(eventKeys.slice(0, cap).map(async (key) => {
-        try {
-          const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(key));
-          const response = await stub.fetch(new Request("https://event-runtime/state", {
-            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": key },
-          }));
-          return { key, status: response.status, state: response.ok ? await response.json() : null };
-        } catch (error) { return { key, status: 0, error: error instanceof Error ? error.message : String(error) }; }
-      }));
-      const teams = await Promise.all(teamKeys.slice(0, cap).map(async (key) => {
-        try {
-          if (!this.env.TEAM_RUNTIME) return { key, status: 503, error: "Team runtime is not bound" };
-          const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(key));
-          const response = await stub.fetch(new Request("https://team-runtime/state", {
-            headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": key },
-          }));
-          return { key, status: response.status, state: response.ok ? await response.json() : null };
-        } catch (error) { return { key, status: 0, error: error instanceof Error ? error.message : String(error) }; }
-      }));
+      // The overview is deliberately metadata-only. Never fan out to dozens of
+      // EventRuntime/TeamRuntime objects during a dashboard refresh; inspect a
+      // single runtime only when an operator opens its command center.
+      const events: unknown[] = [];
+      const teams: unknown[] = [];
       let multiplexer: unknown = null;
       if (this.env.MULTIPLEXER) {
         try {
@@ -1152,7 +1135,7 @@ export class TaskScheduler {
           team_discovery_error: await this.storage.get<string>("scheduler:team-discovery-error") ?? null,
         },
         events, teams, multiplexer,
-        truncated: eventKeys.length > cap || teamKeys.length > cap,
+        truncated: false,
         inventory: { events: eventKeys.length, teams: teamKeys.length },
       });
     }
