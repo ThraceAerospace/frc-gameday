@@ -113,7 +113,7 @@ function toSourceMetadata(
   now: number,
 ): FieldViewSourceRecordMetadata | undefined {
   if (!state || state.status === "unknown") return undefined;
-  if (state.status === "failed" || state.status === "unavailable") {
+  if (state.status === "failed" || state.status === "stale" || state.status === "unavailable") {
     return { status: state.status, retrieved_at: null };
   }
   const retrievedAt = state.lastFetchedAt ?? state.lastWebhookAt;
@@ -625,7 +625,7 @@ export class EventRuntime {
       const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
       if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
-          statboticsState.status === "failed" ||
+          statboticsState.status === "failed" || statboticsState.status === "stale" ||
           (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
         await this.enqueueManualPolls([statboticsEndpoint]);
       }
