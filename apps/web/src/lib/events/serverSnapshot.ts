@@ -1,4 +1,4 @@
-import type { FieldViewDistrictDirectory, FieldViewDistrictSnapshot, FieldViewEvent, FieldViewEventSnapshot, FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
+import type { FieldViewDistrictDirectory, FieldViewDistrictSnapshot, FieldViewEvent, FieldViewEventState, FieldViewTeam, FieldViewTeamState } from "@fieldview/domain";
 
 type RuntimeFetchInit = RequestInit & {
   next?: { revalidate?: number; tags?: string[] };
@@ -44,7 +44,7 @@ async function readCanonicalJson<T>(operation: string, response: Response): Prom
 
 export type CanonicalEventSnapshotResponse = {
   version: number;
-  snapshot: FieldViewEventSnapshot;
+  snapshot: FieldViewEventState;
 };
 
 /**
@@ -66,7 +66,7 @@ export async function getCanonicalEventSnapshot(
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
     if (!Number.isSafeInteger(version) || version < 0) return null;
 
-    const snapshot = await readCanonicalJson<FieldViewEventSnapshot>("event-snapshot", response);
+    const snapshot = await readCanonicalJson<FieldViewEventState>("event-snapshot", response);
     if (snapshot.event_key !== eventKey) return null;
     return { version, snapshot };
   } catch {
@@ -206,7 +206,7 @@ export async function getCanonicalTeamAnalytics(
 
 export type CanonicalTeamSnapshotResponse = {
   version: number;
-  snapshot: FieldViewTeamSnapshot;
+  snapshot: FieldViewTeamState;
 };
 
 /** Read the canonical team aggregate; null leaves the caller's compatibility path available. */
@@ -223,7 +223,7 @@ export async function getCanonicalTeamSnapshot(
     if (!response.ok) return null;
     const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
     if (!Number.isSafeInteger(version) || version < 0) return null;
-    const snapshot = await readCanonicalJson<FieldViewTeamSnapshot>("team-snapshot", response);
+    const snapshot = await readCanonicalJson<FieldViewTeamState>("team-snapshot", response);
     if (snapshot.team_key !== teamKey || snapshot.year !== year) return null;
     return { version, snapshot };
   } catch {
