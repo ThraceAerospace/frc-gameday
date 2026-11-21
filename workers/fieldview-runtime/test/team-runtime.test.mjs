@@ -299,6 +299,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     unavailable_team_event_records: 0,
     discovery_pending_teams: 0,
     updated_at: 1_800_000_000_000,
+    team_state_revisions: [{ team_key: teamKey, revision: 0 }],
     records: [{
       team_number: 3461,
       event: { event_key: eventKey, event_name: "Unit Test", short_name: "unit", start_date: "2026-03-01" },
@@ -336,4 +337,21 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   }));
   assert.equal(read.status, 200);
   assert.equal((await read.json()).analytics.team_key, teamKey);
+
+  await storage.put("snapshot-revision", 1);
+  const stale = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      event_key: eventKey,
+      event_source_revision: 4,
+      event_state: eventState,
+      comparison_input: comparisonInput,
+    }),
+  }));
+  assert.equal(stale.status, 409);
 });
