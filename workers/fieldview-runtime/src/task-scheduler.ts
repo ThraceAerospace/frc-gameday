@@ -299,7 +299,7 @@ interface EventTeamSeedJob {
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
 
-/** Generic system-wide background task and runtime lifecycle orchestrator. */
+/** System-wide discovery and cross-runtime job orchestrator; entity runtimes execute dispatched work. */
 export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
