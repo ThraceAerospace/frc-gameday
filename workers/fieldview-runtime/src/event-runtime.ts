@@ -865,7 +865,7 @@ export class EventRuntime {
       };
     });
     return {
-      cohort: buildFieldViewEventTeamSeasonComparisonInput(
+      comparisonInput: buildFieldViewEventTeamSeasonComparisonInput(
         event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
       ),
       inputs,
