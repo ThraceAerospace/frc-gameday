@@ -1736,7 +1736,17 @@ export class EventRuntime {
         Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ topic: "analytics", event_key: this.eventKey, version, data, etag }),
+      body: JSON.stringify({
+        protocol: 1,
+        schema_version: 1,
+        topic: "analytics",
+        resource: "event-analytics",
+        change: "snapshot",
+        event_key: this.eventKey,
+        version,
+        data,
+        etag,
+      }),
     })).catch(() => undefined);
   }
 
@@ -2109,7 +2119,13 @@ export class EventRuntime {
         }
       : undefined;
     const message = JSON.stringify({
-      type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
+      type: "snapshot.changed",
+      protocol: 1,
+      schema_version: 1,
+      topic: "event-state",
+      resource: "event-snapshot",
+      change: teamProjectionOnly ? "patch" : "snapshot",
+      event_key: this.eventKey,
       version: publishedVersion,
       ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
     });
@@ -2127,7 +2143,12 @@ export class EventRuntime {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        topic: "event-state", event_key: this.eventKey,
+        protocol: 1,
+        schema_version: 1,
+        topic: "event-state",
+        resource: "event-snapshot",
+        change: teamProjectionOnly ? "patch" : "snapshot",
+        event_key: this.eventKey,
         version: publishedVersion,
         ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
       }),
