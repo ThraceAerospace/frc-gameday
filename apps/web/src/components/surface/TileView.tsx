@@ -31,7 +31,7 @@ function SurfaceUpcomingMatchAlertSource({
   onAlert: (eventKey: string, alert: SurfaceUpcomingMatchAlert | null) => void;
 }) {
   const canonical = useCanonicalEventSnapshot(eventKey);
-  const snapshot = canonical?.snapshot;
+  const snapshot = canonical?.snapshot.state;
   const event = snapshot?.event ?? null;
   const matches = snapshot?.matches ?? [];
   const upcomingMatch = getNextMatch(sortMatches(matches));
