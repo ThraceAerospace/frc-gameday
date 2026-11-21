@@ -2,7 +2,7 @@
 
 import { EventState, type EventStateSnapshot } from "./EventState";
 import { eventWebSocket, type EventWebSocketStatus } from "@/lib/realtime/client";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { CanonicalEventSnapshotData } from "./workerRealtime";
 import type { CanonicalAnalyticsPublication } from "./workerRealtime";
 
 type SnapshotListener = () => void;
@@ -10,7 +10,7 @@ type ReloadResource = "all" | "matches" | "statuses" | "alliances" | "oprs";
 
 const snapshots = new Map<string, EventStateSnapshot>();
 const listeners = new Map<string, Set<SnapshotListener>>();
-const canonicalSnapshots = new Map<string, { version: number; snapshot: FieldViewEventSnapshot }>();
+const canonicalSnapshots = new Map<string, { version: number; snapshot: CanonicalEventSnapshotData }>();
 const canonicalListeners = new Map<string, Set<SnapshotListener>>();
 const canonicalAnalytics = new Map<string, CanonicalAnalyticsPublication>();
 const canonicalAnalyticsListeners = new Map<string, Set<SnapshotListener>>();
@@ -35,7 +35,7 @@ function handleWorkerMessage(event: MessageEvent) {
   const message = event.data as {
     type?: string;
     eventKey?: string;
-    snapshot?: EventStateSnapshot | FieldViewEventSnapshot;
+    snapshot?: EventStateSnapshot | CanonicalEventSnapshotData;
     value?: CanonicalAnalyticsPublication;
     version?: number;
     status?: EventWebSocketStatus;
@@ -57,7 +57,7 @@ function handleWorkerMessage(event: MessageEvent) {
     if (!previous || message.version >= previous.version) {
       canonicalSnapshots.set(message.eventKey, {
         version: message.version,
-        snapshot: message.snapshot as FieldViewEventSnapshot,
+        snapshot: message.snapshot as CanonicalEventSnapshotData,
       });
       for (const listener of canonicalListeners.get(message.eventKey) ?? []) listener();
     }
@@ -159,7 +159,7 @@ export function getEventStateSnapshot(eventKey: string): EventStateSnapshot | un
 
 export function getCanonicalEventSnapshot(
   eventKey: string,
-): { version: number; snapshot: FieldViewEventSnapshot } | undefined {
+): { version: number; snapshot: CanonicalEventSnapshotData } | undefined {
   return canonicalSnapshots.get(eventKey);
 }
 
