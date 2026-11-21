@@ -16,7 +16,7 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
-test("TaskScheduler orchestrates team seed across TeamRuntime and EventRuntime owners", async () => {
+test("TaskScheduler queues team seed and advances cross-runtime work in alarms", async () => {
   const storage = new MemoryStorage();
   const calls = [];
   const futureDate = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
@@ -31,8 +31,13 @@ test("TaskScheduler orchestrates team seed across TeamRuntime and EventRuntime o
       idFromName(name) { return name; },
       get(id) {
         return { async fetch(request) {
-          calls.push({ kind: "team", id, path: new URL(request.url).pathname });
-          return Response.json({ attempted: true, snapshot: { events } });
+          const path = new URL(request.url).pathname;
+          calls.push({ kind: "team", id, path });
+          if (path === "/state") return Response.json({ endpoints: [
+            { endpoint: "/team/frc3461/events/2026", last_fetched_at: Date.now(), status: "available" },
+          ] });
+          if (path === "/snapshot") return Response.json({ events });
+          return Response.json({ queued: true }, { status: 202 });
         } };
       },
     },
@@ -55,18 +60,24 @@ test("TaskScheduler orchestrates team seed across TeamRuntime and EventRuntime o
     body: JSON.stringify({ team_key: "frc3461", year: 2026 }),
   }));
 
-  assert.equal(response.status, 200);
-  const result = await response.json();
-  assert.equal(result.event_seed.requested, 2);
-  assert.equal(result.event_seed.attempted, 2);
-  assert.deepEqual(calls.map(({ kind, id, path }) => ({ kind, id, path })), [
-    { kind: "team", id: "frc3461", path: "/seed" },
+  assert.equal(response.status, 202);
+  assert.equal(calls.length, 0, "job submission must not wait on TeamRuntime or EventRuntime");
+  assert.equal((await response.json()).stage, "seed");
+  await scheduler.alarm();
+  assert.deepEqual(calls.map(({ kind, path }) => ({ kind, path })), [
+    { kind: "team", path: "/seed" },
+    { kind: "team", path: "/state" },
+  ]);
+  await scheduler.alarm();
+  assert.equal(calls.at(-1).path, "/snapshot");
+  await scheduler.alarm();
+  assert.deepEqual(calls.slice(-2).map(({ kind, id, path }) => ({ kind, id, path })), [
     { kind: "event", id: "2026past", path: "/schedule" },
     { kind: "event", id: "2026future", path: "/lifecycle" },
   ]);
-  assert.equal(calls[1].body.endpoints.length, 12);
-  assert.equal(calls[1].body.intervalMs, 86_400_000);
-  assert.equal(calls[2].body.lifecycle, "upcoming");
+  const job = await storage.get("admin:team-seed:frc3461:2026");
+  assert.equal(job.status, "completed");
+  assert.equal(job.scheduledEvents, 2);
   assert.deepEqual(storage.values.get("registry:teams"), ["frc3461"]);
   assert.deepEqual(storage.values.get("registry:events"), ["2026future", "2026past"]);
 });
