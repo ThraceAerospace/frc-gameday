@@ -99,8 +99,9 @@ export default {
         if (!isRecord(value) || !isRecord(value.alliances)) return;
         for (const color of ["red", "blue"]) {
           const alliance = value.alliances[color];
-          if (isRecord(alliance) && Array.isArray(alliance.team_keys)) {
-            for (const key of alliance.team_keys) addTeamKey(key);
+          if (isRecord(alliance)) {
+            const teams = Array.isArray(alliance.teams) ? alliance.teams : alliance.team_keys;
+            if (Array.isArray(teams)) for (const key of teams) addTeamKey(key);
           }
         }
       };
