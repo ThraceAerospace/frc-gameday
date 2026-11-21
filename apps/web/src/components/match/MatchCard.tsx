@@ -15,38 +15,33 @@ export type MatchPresentation = Pick<
   | "predicted_time"
   | "time"
   | "flags"
+  | "predictions"
 >;
 export type PlayoffAlliancePresentation = Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup" | "status">;
 
-const ALLIANCE_FLAG_LABELS: Record<string, { label: string; title: string }> = {
-  "high-alliance-epa": {
-    label: "High Alliance EPA",
-    title: "This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates.",
-  },
-  "large-score-delta": {
-    label: "Large Score Delta",
-    title: "This alliance's absolute actual-minus-predicted score delta is in the event-wide top decile.",
-  },
-  "high-penalties": {
-    label: "High Penalties",
-    title: "This alliance's credited penalty points exceed the event-level alliance penalty outlier threshold.",
-  },
+const MATCH_FLAG_LABELS: Record<string, string> = {
+  "model-upset": "Model Upset",
+  "anomalous-score": "Anomalous Score",
 };
 
-function AllianceFlagPills({ flags }: { flags: NonNullable<MatchPresentation["flags"]>["alliances"]["red"] }) {
-  return flags.flatMap((flag, index) => {
-    const item = ALLIANCE_FLAG_LABELS[flag.type];
-    if (!item) return [];
-    return [
-      <span
-        key={`${flag.type}-${index}`}
-        title={item.title}
-        className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-      >
-        {item.label}
-      </span>,
-    ];
-  });
+const PREDICTION_TONES: Record<string, string> = {
+  "Strong Red": "bg-rose-700 text-white",
+  "Lean Red": "bg-rose-950 text-rose-200",
+  "Toss-up": "bg-slate-700 text-slate-100",
+  "Lean Blue": "bg-blue-950 text-blue-200",
+  "Strong Blue": "bg-blue-700 text-white",
+};
+
+function MatchReviewFlagPills({ flags }: { flags: string[] }) {
+  return flags.map((flag) => (
+    <span
+      key={flag}
+      title={MATCH_FLAG_LABELS[flag] ?? flag}
+      className="inline-flex shrink-0 rounded-full bg-amber-950 px-1 py-px text-[8px] font-bold leading-3 text-amber-200"
+    >
+      {MATCH_FLAG_LABELS[flag] ?? flag}
+    </span>
+  ));
 }
 
 export default function MatchCard({
@@ -101,49 +96,41 @@ export default function MatchCard({
         ? "bg-blue-950/50"
         : "bg-zinc-800/80";
 
-  const prediction = !hasResult ? match.flags?.prediction : null;
-  const predictionBorder = prediction?.predicted_winner
-    ? prediction.label.startsWith("Strong")
-      ? prediction.predicted_winner === "red"
-        ? "border-red-500/90"
-        : "border-blue-500/90"
-      : prediction.predicted_winner === "red"
-        ? "border-red-500/55"
-        : "border-blue-500/55"
-    : null;
-
-  // Existing Gameday emphasis always wins over the prediction treatment.
   const borderClass = isNext
     ? "border-zinc-400 ring-1 ring-white/20"
     : hasTrackedTeam
       ? "tracked-accent-border"
-      : predictionBorder ?? "border-zinc-800";
+      : "border-zinc-800";
 
   const matchName = matchShortName(match, playoffType);
   const matchLevelFlags = hasResult
-    ? (match.flags?.review_flags ?? []).filter((flag) => flag === "model-upset" || flag === "anomalous-score")
-    : [];
-  const matchFlagLabels: Record<string, string> = {
-    "model-upset": "Model Upset",
-    "anomalous-score": "Anomalous Score",
-  };
-  const redAllianceFlags = hasResult
-    ? (match.flags?.alliances.red ?? []).filter((flag) => flag.type === "high-alliance-epa" || flag.type === "large-score-delta" || flag.type === "high-penalties")
-    : [];
-  const blueAllianceFlags = hasResult
-    ? (match.flags?.alliances.blue ?? []).filter((flag) => flag.type === "high-alliance-epa" || flag.type === "large-score-delta" || flag.type === "high-penalties")
+    ? (match.flags?.review_flags ?? []).filter(
+        (flag) => flag === "model-upset" || flag === "anomalous-score"
+      )
     : [];
 
-  const time =
-    isNext && (match.predicted_time != null || match.time != null) ? (
-      <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
-    ) : match.actual_time != null ? (
-      formatMatchEventTime(match.actual_time, eventTimezone)
-    ) : match.predicted_time != null ? (
-      formatMatchEventTime(match.predicted_time, eventTimezone)
-    ) : match.time != null ? (
-      formatMatchEventTime(match.time, eventTimezone)
-    ) : null;
+  const prediction = match.flags?.prediction ?? null;
+  const predictionLabel = prediction?.label ?? "Toss-up";
+  const predictionTone = PREDICTION_TONES[predictionLabel] ?? PREDICTION_TONES["Toss-up"];
+
+  const time = hasResult
+    ? match.actual_time != null
+      ? formatMatchEventTime(match.actual_time, eventTimezone)
+      : match.time != null
+        ? formatMatchEventTime(match.time, eventTimezone)
+        : null
+    : isNext && (match.predicted_time != null || match.time != null)
+      ? <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
+      : match.predicted_time != null
+        ? formatMatchEventTime(match.predicted_time, eventTimezone)
+        : match.time != null
+          ? formatMatchEventTime(match.time, eventTimezone)
+          : null;
+
+  const redPredictedScore = match.predictions.statbotics?.red_score;
+  const bluePredictedScore = match.predictions.statbotics?.blue_score;
+  const displayedRedScore = hasResult ? redScore : redPredictedScore;
+  const displayedBlueScore = hasResult ? blueScore : bluePredictedScore;
 
   return (
     <div key={match.key} data-match-key={match.key} className="shrink-0">
@@ -159,8 +146,8 @@ export default function MatchCard({
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
         ].join(" ")}
       >
-        <div className="grid grid-cols-[92px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
-          {/* Match name and compact review flag / event-local time */}
+        <div className="grid grid-cols-[92px_minmax(0,1fr)_30px] items-center gap-x-2 leading-none">
+          {/* Match name, prediction strength, and result review flags */}
           <div className="relative top-px row-span-2 flex h-full flex-col justify-center">
             <span
               className={[
@@ -171,80 +158,77 @@ export default function MatchCard({
               {matchName}
             </span>
 
-            {matchLevelFlags.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {matchLevelFlags.map((flag, index) => (
-                  <span
-                    key={`${flag}-${index}`}
-                    title={matchFlagLabels[flag]}
-                    className="inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-                  >
-                    {matchFlagLabels[flag]}
-                  </span>
-                ))}
+            {hasResult && matchLevelFlags.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-0.5">
+                <MatchReviewFlagPills flags={matchLevelFlags} />
               </div>
             ) : (
-              <span
-                className={[
-                  "mt-1 whitespace-nowrap font-mono text-[10px] tabular-nums",
-                  isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
-                ].join(" ")}
-              >
-                {time}
-              </span>
+              <div className="mt-1 flex min-h-[14px] items-center gap-1">
+                <span
+                  className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-3 ${predictionTone}`}
+                  title={prediction ? `Predicted outcome: ${prediction.label}` : "Prediction unavailable"}
+                >
+                  {predictionLabel}
+                </span>
+                <span className="whitespace-nowrap font-mono text-[9px] tabular-nums text-zinc-500">
+                  {time}
+                </span>
+              </div>
             )}
           </div>
 
           {/* Red alliance */}
           <div
             className={[
-              "flex min-w-0 items-center gap-1 text-[10px] text-red-400",
+              "min-w-0 truncate text-[10px] text-red-400",
               trackedRed ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            <span className="min-w-0 truncate">
-              {formatAllianceShortName(redAlliance?.name)}
-              {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
-            </span>
-            <div className="flex shrink-0 flex-wrap items-center gap-1"><AllianceFlagPills flags={redAllianceFlags} /></div>
+            {formatAllianceShortName(redAlliance?.name)}
+            {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
           </div>
 
           {/* Red score */}
-          <div
-            className={[
-              "text-right font-mono text-[10px] tabular-nums",
-              redScore != null
-                ? "font-bold text-red-400"
-                : "text-transparent",
-            ].join(" ")}
-          >
-            {redScore !== -1 ? redScore : ""}
+          <div className="text-right font-mono text-[10px] tabular-nums">
+            {displayedRedScore != null && displayedRedScore >= 0 ? (
+              hasResult ? (
+                <span className="font-bold text-red-400">{displayedRedScore}</span>
+              ) : (
+                <span
+                  title={`Predicted red score: ${displayedRedScore}`}
+                  className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-zinc-200"
+                >
+                  {Math.round(displayedRedScore)}
+                </span>
+              )
+            ) : null}
           </div>
 
           {/* Blue alliance */}
           <div
             className={[
-              "flex min-w-0 items-center gap-1 text-[10px] text-blue-400",
+              "min-w-0 truncate text-[10px] text-blue-400",
               trackedBlue ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            <span className="min-w-0 truncate">
-              {formatAllianceShortName(blueAlliance?.name)}
-              {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
-            </span>
-            <div className="flex shrink-0 flex-wrap items-center gap-1"><AllianceFlagPills flags={blueAllianceFlags} /></div>
+            {formatAllianceShortName(blueAlliance?.name)}
+            {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
           </div>
 
           {/* Blue score */}
-          <div
-            className={[
-              "text-right font-mono text-[10px] tabular-nums",
-              blueScore != null
-                ? "font-bold text-blue-400"
-                : "text-transparent",
-            ].join(" ")}
-          >
-            {blueScore !== -1 ? blueScore : ""}
+          <div className="text-right font-mono text-[10px] tabular-nums">
+            {displayedBlueScore != null && displayedBlueScore >= 0 ? (
+              hasResult ? (
+                <span className="font-bold text-blue-400">{displayedBlueScore}</span>
+              ) : (
+                <span
+                  title={`Predicted blue score: ${displayedBlueScore}`}
+                  className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-zinc-200"
+                >
+                  {Math.round(displayedBlueScore)}
+                </span>
+              )
+            ) : null}
           </div>
         </div>
       </article>
