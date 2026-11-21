@@ -1301,6 +1301,167 @@ export class TaskScheduler {
     await this.storage.put(eventTeamSeedKey(job.eventKey), job);
   }
 
+
+  private async processTeamSeed(job: TeamSeedJob): Promise<void> {
+    if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) throw new Error("TeamRuntime and EventRuntime must be bound");
+    const key = teamSeedKey(job.teamKey, job.year);
+    const teamHeaders = {
+      Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+      "X-FieldView-Team-Key": job.teamKey,
+    };
+    try {
+      const teamStub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(job.teamKey));
+      const historyEndpoint = TBA_ENDPOINTS.teamEvents(job.teamKey, job.year);
+      if (job.stage === "seed") {
+        const registry = await this.storage.get<string[]>("registry:teams") ?? [];
+        if (!registry.includes(job.teamKey)) await this.storage.put("registry:teams", [...registry, job.teamKey].sort());
+        const response = await teamStub.fetch(new Request("https://team-runtime/seed?year=" + job.year, { method: "POST", headers: teamHeaders }));
+        if (!response.ok) throw new Error("TeamRuntime seed returned HTTP " + response.status);
+        const historyResource = teamResourceEndpoints(job.teamKey, job.year).find((resource) =>
+          resource.provider === "tba" && resource.endpoint === historyEndpoint);
+        if (!historyResource) throw new Error("Team event-history resource is not configured");
+        const stateResponse = await teamStub.fetch(new Request("https://team-runtime/state", { headers: teamHeaders }));
+        if (!stateResponse.ok) throw new Error("TeamRuntime state returned HTTP " + stateResponse.status);
+        const state = await stateResponse.json() as { endpoints?: Array<{ endpoint?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }> };
+        const history = state.endpoints?.find((item) => item.endpoint === historyEndpoint);
+        if ((history?.last_fetched_at ?? history?.lastFetchedAt ?? null) === null) {
+          await teamStub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+            method: "POST", headers: { ...teamHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: historyEndpoint }),
+          }));
+        }
+        job.stage = "wait";
+        job.waitStartedAt = Date.now();
+        job.nextDueAt = Date.now() + 2_000;
+      } else if (job.stage === "wait") {
+        const stateResponse = await teamStub.fetch(new Request("https://team-runtime/state", { headers: teamHeaders }));
+        if (!stateResponse.ok) throw new Error("TeamRuntime state returned HTTP " + stateResponse.status);
+        const state = await stateResponse.json() as {
+          endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }>;
+        };
+        const history = state.endpoints?.find((item) => item.endpoint === historyEndpoint);
+        if (history?.status === "unavailable") throw new Error("Team event history is unavailable from The Blue Alliance (HTTP 404)");
+        const fetchedAt = history?.last_fetched_at ?? history?.lastFetchedAt ?? null;
+        if (fetchedAt === null) {
+          if (Date.now() - job.waitStartedAt >= 15 * 60_000) throw new Error("Timed out waiting for TeamRuntime event history after 15 minutes");
+          await teamStub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
+            method: "POST", headers: { ...teamHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: historyEndpoint }),
+          }));
+          job.attempts += 1;
+          job.nextDueAt = Date.now() + Math.min(30_000, 2_000 * (2 ** Math.min(job.attempts, 4)));
+        } else {
+          const snapshotResponse = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + job.year + "&noSchedule=1", { headers: teamHeaders }));
+          if (!snapshotResponse.ok) throw new Error("TeamRuntime snapshot returned HTTP " + snapshotResponse.status);
+          const snapshot = await snapshotResponse.json() as { events?: Array<Record<string, unknown>> | null };
+          if (!Array.isArray(snapshot.events)) throw new Error("Team event history is ready but missing from the normalized snapshot");
+          job.events = snapshot.events;
+          job.eventKeys = snapshot.events.map((event) => event.key).filter((value): value is string =>
+            typeof value === "string" && /^[a-zA-Z0-9_-]+$/.test(value));
+          job.eventCursor = 0;
+          job.stage = "events";
+          job.nextDueAt = Date.now() + 100;
+        }
+      } else {
+        const policy = eventPollingPolicy(this.env);
+        const eventByKey = new Map(job.events.filter((event) => typeof event.key === "string").map((event) => [String(event.key), event]));
+        const batch = job.eventKeys.slice(job.eventCursor, job.eventCursor + 10);
+        const knownEvents = new Set(await this.storage.get<string[]>("registry:events") ?? []);
+        const runtimeEvents = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
+        for (const eventKey of batch) {
+          const event = eventByKey.get(eventKey);
+          if (!event) { job.eventCursor += 1; continue; }
+          const lifecycle = classifyEventLifecycle({
+            start_date: String(event.start_date ?? ""), end_date: String(event.end_date ?? ""),
+            timezone: String(event.timezone ?? ""),
+          }, Date.now(), policy);
+          const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+          const headers = {
+            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+            "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json",
+          };
+          const response = !lifecycle || lifecycle.lifecycle === "expired"
+            ? await stub.fetch(new Request("https://event-runtime/schedule", {
+                method: "POST", headers,
+                body: JSON.stringify({ endpoints: eventResourceEndpoints(eventKey), intervalMs: 86_400_000, analyticsEnabled: false }),
+              }))
+            : await stub.fetch(new Request("https://event-runtime/lifecycle", {
+                method: "POST", headers,
+                body: JSON.stringify({
+                  lifecycle: lifecycle.lifecycle, upcomingIntervalMs: policy.upcomingIntervalMs,
+                  activeIntervalMs: policy.activeIntervalMs,
+                  ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+                }),
+              }));
+          if (!response.ok) job.errors.push({ event_key: eventKey, detail: "EventRuntime returned HTTP " + response.status, at: Date.now() });
+          else { knownEvents.add(eventKey); runtimeEvents.add(eventKey); job.scheduledEvents += 1; }
+          job.eventCursor += 1;
+        }
+        await this.storage.put("registry:events", [...knownEvents].sort());
+        await this.storage.put("registry:runtime-events", [...runtimeEvents].sort());
+        if (job.eventCursor >= job.eventKeys.length) job.status = job.errors.length ? "completed_with_errors" : "completed";
+        else job.nextDueAt = Date.now() + 100;
+      }
+    } catch (error) {
+      job.attempts += 1;
+      const detail = error instanceof Error ? error.message : String(error);
+      if (job.attempts >= 5 || detail.includes("unavailable from The Blue Alliance")) {
+        job.status = "completed_with_errors";
+        job.errors.push({ event_key: job.teamKey, detail: detail.slice(0, 240), at: Date.now() });
+      } else job.nextDueAt = Date.now() + Math.min(30_000, 1_000 * (2 ** job.attempts));
+    }
+    job.updatedAt = Date.now();
+    await this.storage.put(key, job);
+  }
+
+  private async processAdminDiscovery(job: AdminDiscoveryJob): Promise<void> {
+    const key = adminDiscoveryKey(job.mode, job.year);
+    try {
+      if (job.mode === "year") {
+        if (job.stage === "events") {
+          await this.discoverEvents(job.year);
+          const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
+          job.events = cache?.events.length ?? 0;
+          job.providerRequests += 1;
+          job.stage = "teams";
+        } else if (job.stage === "teams") {
+          const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
+          job.teams = result.teamCount;
+          job.providerRequests += result.requestCount;
+          if (result.complete) job.stage = "complete";
+        }
+      } else {
+        const policy = eventPollingPolicy(this.env);
+        if (job.stage === "events" || job.stage === "lifecycle") {
+          await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
+          const cache = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + job.year);
+          job.events = cache?.events.length ?? 0;
+          job.providerRequests += 1;
+          if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) job.stage = "lifecycle";
+          else job.stage = "teams";
+        } else if (job.stage === "teams") {
+          const result = await this.discoverTeams(job.year, TEAM_DISCOVERY_PREFIX, 4);
+          job.teams = result.teamCount;
+          job.providerRequests += result.requestCount;
+          if (result.complete) job.stage = "this-week";
+        } else if (job.stage === "this-week") {
+          const pending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
+          if (!pending) job.stage = "complete";
+        }
+      }
+      if (job.stage === "complete") {
+        job.status = "completed";
+        if (job.mode === "current") await this.storage.put("scheduler:last-run-at", Date.now());
+      } else job.nextDueAt = Date.now() + 1_000;
+      job.error = null;
+    } catch (error) {
+      job.error = error instanceof Error ? error.message : String(error);
+      job.status = "failed";
+    }
+    job.updatedAt = Date.now();
+    await this.storage.put(key, job);
+  }
+
   async alarm(): Promise<void> {
     const startedAt = performance.now();
     try {
@@ -1331,6 +1492,17 @@ export class TaskScheduler {
       else await this.storage.deleteAlarm();
       return;
     }
+    const teamSeedJobs = await this.storage.list<TeamSeedJob>({ prefix: "admin:team-seed:" });
+    const activeTeamSeed = [...teamSeedJobs.values()].find((job) => job.status === "running");
+    if (activeTeamSeed) {
+      if (activeTeamSeed.nextDueAt <= Date.now()) await this.measureStage("team-seed", () => this.processTeamSeed(activeTeamSeed));
+      const refreshed = await this.storage.get<TeamSeedJob>(teamSeedKey(activeTeamSeed.teamKey, activeTeamSeed.year));
+      if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
+      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
+        await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
+      } else await this.storage.deleteAlarm();
+      return;
+    }
     const activeJob = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
     const runningJob = [...activeJob.values()].find((job) => job.status === "running");
     if (runningJob) {
@@ -1344,6 +1516,18 @@ export class TaskScheduler {
         await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY) ||
         await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")
       ) await this.storage.setAlarm(Date.now() + 100);
+      else await this.storage.deleteAlarm();
+      return;
+    }
+    const discoveryJobs = await this.storage.list<AdminDiscoveryJob>({ prefix: "admin:discovery-job:" });
+    const activeDiscovery = [...discoveryJobs.values()]
+      .filter((job) => job.status === "running")
+      .sort((a, b) => a.updatedAt - b.updatedAt)[0];
+    if (activeDiscovery) {
+      await this.measureStage("admin-discovery", () => this.processAdminDiscovery(activeDiscovery));
+      const refreshed = await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(activeDiscovery.mode, activeDiscovery.year));
+      if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
+      else if (await this.storage.get<boolean>("scheduler:enabled") === true) await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
       else await this.storage.deleteAlarm();
       return;
     }
