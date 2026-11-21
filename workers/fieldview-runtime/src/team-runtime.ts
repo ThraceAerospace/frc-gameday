@@ -307,9 +307,9 @@ export class TeamRuntime {
       const result = calculated ?? teamEventState;
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
-      const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; cohort_updated_at: number }>(stateKey + ":inputs");
+      const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
       if (priorInputs && ((eventSourceRevision as number) < priorInputs.event_source_revision ||
-          teamSourceRevision < priorInputs.team_source_revision || comparisonInput.updated_at < priorInputs.cohort_updated_at)) {
+          teamSourceRevision < priorInputs.team_source_revision || comparisonInput.updated_at < priorInputs.comparison_input_updated_at)) {
         return Response.json({ error: "Stale event analytics input" }, { status: 409 });
       }
       if ((await this.storage.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) {
@@ -327,7 +327,7 @@ export class TeamRuntime {
         await tx.put(stateKey + ":inputs", {
           event_source_revision: eventSourceRevision,
           team_source_revision: teamSourceRevision,
-          cohort_updated_at: comparisonInput.updated_at,
+          comparison_input_updated_at: comparisonInput.updated_at,
           calculated_at: Date.now(),
         });
         return next;
