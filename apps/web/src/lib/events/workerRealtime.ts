@@ -3,7 +3,6 @@
 import type {
   FieldViewEventState,
   FieldViewEventAnalytics,
-  FieldViewTeamEventAnalytics,
   FieldViewMatchAnalysis,
   FieldViewMatchFlags,
 } from "@fieldview/domain";
