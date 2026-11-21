@@ -170,7 +170,7 @@ export default function MatchCard({
             ].join(" ")}
           >
             {formatAllianceShortName(redAlliance?.name)}
-            {formatAlliance(red, team)}
+            {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
           </div>
 
           {/* Red score */}
@@ -193,7 +193,7 @@ export default function MatchCard({
             ].join(" ")}
           >
             {formatAllianceShortName(blueAlliance?.name)}
-            {formatAlliance(blue, team)}
+            {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
           </div>
 
           {/* Blue score */}
