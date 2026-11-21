@@ -793,7 +793,6 @@ export class EventRuntime {
         .some((endpoint) => {
           const source = sourceStates.get(endpointStorageKey(endpoint));
           return !source || source.status === "failed" || source.status === "stale" ||
-            source.status === "unavailable" ||
             (source.expiresAt !== null && source.expiresAt <= Date.now());
         });
       const publicationStatus = sourceStale ? "stale" : publication.status;
@@ -921,7 +920,6 @@ export class EventRuntime {
       const hasStaleSources = expectedEndpoints.some((endpoint) => {
         const source = entries.get(endpointStorageKey(endpoint));
         return !source || source.status === "failed" || source.status === "stale" ||
-          source.status === "unavailable" ||
           (source.expiresAt !== null && source.expiresAt <= Date.now());
       });
       const eventStateStatus = !eventStatePublication ? "missing"
