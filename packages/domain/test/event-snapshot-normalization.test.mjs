@@ -252,65 +252,14 @@ test("rejects matches that belong to another event", () => {
 });
 
 
-test("assembles event-scoped team states from canonical team, event-team, and match data", () => {
-  const teams = [
-    { key: "frc1", team_number: 1 },
-    { key: "frc2", team_number: 2 },
-    { key: "frc3", team_number: 3 },
-    { key: "frc4", team_number: 4 },
-    { key: "frc5", team_number: 5 },
-    { key: "frc6", team_number: 6 },
-  ];
-  const match = {
-    key: "2026test_qm1", event_key: "2026test", comp_level: "qm",
-    set_number: 1, match_number: 1,
-    alliances: {
-      red: { team_keys: ["frc1", "frc2", "frc3"], score: -1 },
-      blue: { team_keys: ["frc4", "frc5", "frc6"], score: -1 },
-    },
-  };
+test("event normalization does not materialize TeamEventStates", () => {
   const state = normalizeFieldViewEventSnapshot({
-    event_key: "2026test",
-    tba_teams: teams,
-    tba_matches: [match],
-    sources,
-  });
-
-  assert.equal(state.team_states.length, 6);
-  const teamOne = state.team_states.find((item) => item.team_key === "frc1");
-  const teamFour = state.team_states.find((item) => item.team_key === "frc4");
-  assert.equal(teamOne.event_key, "2026test");
-  assert.equal(teamOne.team.team_number, 1);
-  assert.deepEqual(teamOne.matches.map((item) => item.key), [match.key]);
-  assert.deepEqual(teamFour.matches.map((item) => item.key), [match.key]);
-  assert.equal(teamOne.event_team.event_key, "2026test");
-  assert.equal(teamOne.event_team.team_key, "frc1");
-  assert.equal("tba_status" in teamOne.event_team, false);
-  assert.equal(teamOne.analytics, undefined);
-  assert.deepEqual(teamOne.sources.matches, sources.matches);
-});
-
-test("preserves unavailable and empty match resources inside event-scoped team states", () => {
-  const unavailableMatches = normalizeFieldViewEventSnapshot({
-    event_key: "2026test",
-    tba_teams: [{ key: "frc1", team_number: 1 }],
-    sources,
-  });
-  assert.equal("matches" in unavailableMatches.team_states[0], false);
-
-  const explicitNullMatches = normalizeFieldViewEventSnapshot({
-    event_key: "2026test",
-    tba_teams: [{ key: "frc1", team_number: 1 }],
-    tba_matches: null,
-    sources,
-  });
-  assert.equal(explicitNullMatches.team_states[0].matches, null);
-
-  const emptyMatches = normalizeFieldViewEventSnapshot({
     event_key: "2026test",
     tba_teams: [{ key: "frc1", team_number: 1 }],
     tba_matches: [],
     sources,
   });
-  assert.deepEqual(emptyMatches.team_states[0].matches, []);
+  assert.equal(state.teams.length, 1);
+  assert.deepEqual(state.matches, []);
+  assert.equal("team_states" in state, false);
 });
