@@ -1359,10 +1359,6 @@ export class EventRuntime {
         ...(match.flags === undefined ? {} : { flags: match.flags }),
       })),
       ...(state.analytics === undefined ? {} : { eventAnalytics: state.analytics }),
-      teamAnalytics: (state.team_states ?? []).map((team) => ({
-        team_key: team.team_key,
-        ...(team.analytics === undefined ? {} : { analytics: team.analytics }),
-      })),
     };
     const publishedVersion = await this.storage.transaction(async (transaction) => {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
@@ -1378,22 +1374,15 @@ export class EventRuntime {
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
       await transaction.delete(ANALYTICS_INVALIDATION_KEY);
-      const cohortState = isRecord(calculated.state.analytics) &&
-        isRecord(calculated.state.analytics.season_cohort)
-        ? calculated.state.analytics.season_cohort.state
-        : undefined;
-      const allowPartialCohort = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
-      const cohortIncomplete = cohortState !== undefined && cohortState !== "complete";
+      const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
       const collectionPartial = isRecord(calculated.state.analytics) &&
         isRecord(calculated.state.analytics.collection) &&
         calculated.state.analytics.collection.state === "partial";
-      const analyticsIncomplete = (this.env.TEAM_RUNTIME &&
-        (calculated.analyticsInputsComplete === false || collectionPartial)) ||
-        cohortIncomplete || (allowPartialCohort && cohortState === undefined);
-      const cohortRetries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
-      const terminalDiscoveryGap = allowPartialCohort && cohortState === "discovering";
-      if (cohortIncomplete && !terminalDiscoveryGap && cohortRetries < ANALYTICS_COHORT_MAX_RETRIES) {
-        await transaction.put(ANALYTICS_COHORT_RETRY_KEY, cohortRetries + 1);
+      const teamStatesIncomplete = this.env.TEAM_RUNTIME && calculated.analyticsInputsComplete === false;
+      const analyticsIncomplete = Boolean(teamStatesIncomplete || collectionPartial);
+      const retries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
+      if (teamStatesIncomplete && !allowPartialTeamStates && retries < ANALYTICS_COHORT_MAX_RETRIES) {
+        await transaction.put(ANALYTICS_COHORT_RETRY_KEY, retries + 1);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + ANALYTICS_COHORT_RETRY_DELAY_MS);
         await transaction.put("analytics:status", "partial");
       } else {
