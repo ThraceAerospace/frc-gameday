@@ -531,9 +531,9 @@ export function calculateCanonicalAggregateAnalytics(
       })),
     })),
   };
-  const team_states = options.includeTeamAnalytics === false
-    ? eventState.team_states
-    : calculateCanonicalTeamEventStates(eventState, records, allianceResults, audit, comparisonInput);
+  const team_states = options.includeTeamAnalytics === true
+    ? calculateCanonicalTeamEventStates(eventState, records, allianceResults, audit, comparisonInput)
+    : eventState.team_states;
 
 
   return {
