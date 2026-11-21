@@ -171,7 +171,7 @@ export default function MatchCard({
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-sm font-bold uppercase tracking-wide",
+                  "whitespace-nowrap text-xs font-bold uppercase tracking-wide",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
@@ -202,9 +202,9 @@ export default function MatchCard({
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-red-400",
-                  trackedRed ? "font-bold" : "font-medium",
+                  "font-bold",
                 ].join(" ")}
-                style={{ fontSize: `${redTeamFontSize}px` }}
+                style={{ fontSize: `${Math.max(10, redTeamFontSize - 1)}px` }}
                 title={redTeamText}
               >
                 {redAllianceLabel ? (
@@ -235,9 +235,9 @@ export default function MatchCard({
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-blue-400",
-                  trackedBlue ? "font-bold" : "font-medium",
+                  "font-bold",
                 ].join(" ")}
-                style={{ fontSize: `${blueTeamFontSize}px` }}
+                style={{ fontSize: `${Math.max(10, blueTeamFontSize - 1)}px` }}
                 title={blueTeamText}
               >
                 {blueAllianceLabel ? (
