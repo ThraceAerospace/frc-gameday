@@ -771,3 +771,20 @@ test("daily scheduler endpoint runs classification without enabling continuous p
   assert.deepEqual(runtimeRequests, ["2026daily"]);
   assert.deepEqual((await storage.get("scheduler:this-week-projection")).events.map((item) => item.key), ["2026daily"]);
 });
+
+
+test("missing weekly projection queues durable discovery instead of failing the public request", async () => {
+  const storage = new MemoryStorage();
+  const scheduler = new EventScheduler({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    PROVIDER_REQUEST_INTERVAL_MS: 1_000,
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/events/this-week"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json().then(({ pending, events }) => ({ pending, events })), {
+    pending: true,
+    events: [],
+  });
+  assert.equal(await storage.get("scheduler:daily-run-requested"), true);
+  assert.ok(storage.alarmAt !== null, "the scheduler alarm should own the queued generation");
+});
