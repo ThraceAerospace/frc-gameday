@@ -30,7 +30,7 @@ export interface FieldViewAnalyticsComparison {
   population: FieldViewAnalyticsPopulation;
   /** One-based rank; null when the comparison cannot be ranked reliably. */
   rank_position: number | null;
-  /** 0–100 percentile; null when the cohort is too small to support one. */
+  /** 0–100 percentile; null when the comparison population is too small to support one. */
   percentile: number | null;
 }
 
