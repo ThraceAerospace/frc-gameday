@@ -76,6 +76,27 @@ export function normalizeTbaWebhookMatch(incoming: Record<string, unknown>): Rec
   return { ...incoming, alliances: normalized };
 }
 
+/** Merge a normalized webhook Match patch without erasing omitted alliance fields. */
+export function mergeTbaWebhookMatch(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const currentAlliances = isRecord(current.alliances) ? current.alliances : null;
+  const incomingAlliances = isRecord(incoming.alliances) ? incoming.alliances : null;
+  if (!currentAlliances || !incomingAlliances) return { ...current, ...incoming };
+  const alliances: Record<string, unknown> = { ...currentAlliances };
+  for (const color of ["red", "blue"]) {
+    const previous = currentAlliances[color];
+    const update = incomingAlliances[color];
+    if (isRecord(previous) && isRecord(update)) {
+      alliances[color] = { ...previous, ...update };
+    } else if (update !== undefined) {
+      alliances[color] = update;
+    }
+  }
+  return { ...current, ...incoming, alliances };
+}
+
 /** Apply a full-match or upcoming-match webhook patch to the event match list. */
 export function reconcileWebhookEndpoint(
   endpoint: string,
@@ -94,7 +115,7 @@ export function reconcileWebhookEndpoint(
   const merged = latest.map((match) => {
     if (matchKey(match) !== key) return match;
     found = true;
-    return isRecord(match) ? { ...match, ...normalizedIncoming } : normalizedIncoming;
+    return isRecord(match) ? mergeTbaWebhookMatch(match, normalizedIncoming) : normalizedIncoming;
   });
   if (!found) merged.push(normalizedIncoming);
   return merged;
