@@ -716,7 +716,9 @@ export class EventRuntime {
                 "X-FieldView-Team-Key": body.team_key,
               } },
             ));
-            if (response.ok) {
+            const teamSourceRevision = response.headers.get("X-FieldView-Team-Source-Revision");
+            if (response.ok && teamSourceRevision !== null &&
+                Number(teamSourceRevision) === body.team_state_revision) {
               teamPatch = {
                 team_key: body.team_key,
                 team_state: await response.json(),
