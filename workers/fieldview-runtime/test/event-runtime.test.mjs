@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EventRuntime, eventResourceEndpoints } from "../src/event-runtime.ts";
+import { EventRuntime, eventResourceEndpoints, chunkSerializedEventView } from "../src/event-runtime.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 
@@ -26,6 +26,26 @@ class MemoryStorage {
     finally { release(); }
   }
 }
+
+test("event view JSON is split into bounded UTF-8-safe SQLite values", () => {
+  const payload = "🛠️".repeat(180_000);
+  const view = {
+    event: { event_key: "2026chunked" },
+    analytics: null,
+    team_states: [],
+    team_state_coverage: {
+      state: "complete",
+      expected_count: 0,
+      materialized_count: 0,
+      pending_team_keys: [],
+    },
+    diagnostic_payload: payload,
+  };
+  const chunks = chunkSerializedEventView(view);
+  assert.ok(chunks.length > 1, "large event views should span multiple storage values");
+  assert.ok(chunks.every((chunk) => Buffer.byteLength(chunk, "utf8") < 512 * 1024));
+  assert.deepEqual(JSON.parse(chunks.join("")), view);
+});
 
 test("EventRuntime hydrates its persisted event publication before serving reads", async () => {
   const storage = new MemoryStorage();
@@ -1168,6 +1188,19 @@ test("canonical analytics are coalesced into EventRuntime alarm work and publish
   assert.equal(eventViewPublication.version, publication.analyticsRevision);
   assert.equal(eventViewPublication.status, "partial",
     "event view completeness explicitly reflects missing TeamRuntime comparison inputs");
+  assert.equal(eventViewPublication.storage_format, "chunked-json-v1");
+  assert.equal("view" in eventViewPublication, false,
+    "the manifest must not inline the full event view");
+  const eventViewChunks = Array.from({ length: eventViewPublication.chunk_count }, (_, index) =>
+    storage.values.get(`event-view:publication:v${eventViewPublication.version}:chunk:${index}`));
+  assert.ok(eventViewChunks.length > 0);
+  assert.ok(eventViewChunks.every((chunk) => typeof chunk === "string"));
+  const composedView = await runtime.fetch(new Request("https://event-runtime/view", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(composedView.status, 200);
+  assert.equal((await composedView.json()).event.event_key, eventKey,
+    "the existing /view DTO is reconstructed from the versioned chunks");
   const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
