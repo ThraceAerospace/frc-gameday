@@ -102,7 +102,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | TBA / Statbotics / FRC Colors API access | Provider adapters invoked by Workers |
 | TBA and Statbotics normalization/correlation | FieldView domain layer, after unchanged provider payload receipt |
 | Other provider payloads | Passed through unchanged |
-| Scheduled refresh triggers | Durable Object alarms owned by EventRuntime and the global TaskScheduler |
+| Scheduled refresh triggers | EventRuntime and TeamRuntime alarms execute entity-local work; TaskScheduler alarms coordinate cross-runtime/system-wide jobs and dispatch commands |
 | Authoritative event state and reconciliation | EventRuntime Durable Object |
 | Event-scoped persistent coordination | EventRuntime Durable Object |
 | Live event subscriptions and publication | Durable Object / Worker boundary |
@@ -114,6 +114,19 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | Roster reconciliation | Scheduled TaskScheduler job; ordinary event reads do not reconcile rosters |
 
 The runtime uses one `EventRuntime` per event and one lazy `TeamRuntime` per TBA team key. EventRuntime owns event-scoped resources, FieldViewEventState, and FieldViewEventAnalytics. TeamRuntime owns team identity, districts, season participation, FieldViewTeamState, FieldViewTeamEventState, and FieldViewTeamEventAnalytics. EventRuntime builds one versioned comparison input from the roster's TeamStates and supplies it to each TeamRuntime; each TeamRuntime calculates its own event comparison against the shared event population and its own season history. EventRuntime consumes those persisted results to calculate event-wide rankings, extremes, and other field-level metrics. A complete event FieldView is represented by FieldViewEventView, composing FieldViewEventState, FieldViewEventAnalytics, and the roster's FieldViewTeamEventState array with explicit partial-coverage metadata. TaskScheduler performs roster reconciliation as scheduled work. The two runtimes remain separate consistency and refresh boundaries. Domain objects are not automatically Durable Objects: only aggregates with independently owned acquisition, persistence, and refresh lifecycles receive one. Analytics calculations are owned by the runtime responsible for their subject and scope.
+
+## Runtime execution and cross-runtime orchestration (2026-11-21)
+
+The scheduling boundary is now explicit:
+
+- **EventRuntime owns event-local execution.** Its durable task records and alarm drive event resource polling, webhook-triggered follow-up work, event reconciliation, analytics invalidation/publication, retries, and backoff.
+- **TeamRuntime owns team-local execution.** Its durable task records and alarm drive team resource acquisition, team/event projection work, analytics refreshes, retries, and backoff.
+- **TaskScheduler owns cross-runtime orchestration.** It discovers system entities, selects the runtimes participating in a system-wide job, persists orchestration progress/cursors, applies bounded batches and ordering, and dispatches commands to the relevant EventRuntime/TeamRuntime instances. The target runtimes execute those commands and retain ownership of provider I/O and entity state.
+- A runtime command is a trigger, not a transfer of ownership. The scheduler may tell a runtime to initialize, change lifecycle policy, refresh, or enqueue a local operation; the runtime performs that work under its own alarm/queue and persistence rules.
+- TaskScheduler must not become a general provider proxy, duplicate entity polling queues, or be called from ordinary runtime reads to register an entity. The former /register path and its per-read/per-admin-call fan-out have been removed. The scheduler's inventory is populated by its own discovery and cross-runtime orchestration workflows.
+- Global jobs remain global when they genuinely span multiple entities: event discovery/classification, roster reconciliation, season ingestion, event-team seeding, and team-seed-to-event initialization. A job's progress belongs to TaskScheduler; each entity's data and execution remain with its runtime.
+
+The first implementation slice routes team seeding through TaskScheduler: the Worker forwards the command to /admin/team-seed; TaskScheduler invokes TeamRuntime to acquire team history, then dispatches lifecycle/schedule commands to the associated EventRuntimes. It updates the scheduler inventory in batched writes. EventRuntime's analytics input collection no longer calls TaskScheduler to register each participating team during a read. This removes avoidable hot-path traffic while preserving the cross-runtime seed behavior.
 
 ## 5. Incremental migration model
 
