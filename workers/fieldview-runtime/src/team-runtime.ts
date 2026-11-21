@@ -14,7 +14,7 @@ import { normalizeFieldViewTeamState } from "../../../packages/domain/src/normal
 import { normalizeFieldViewTeamEventState } from "../../../packages/domain/src/normalization/team-event-state.ts";
 import type { FieldViewEventState } from "../../../packages/domain/src/event.ts";
 import type { FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
-import type { FieldViewSeasonCohortSnapshot, FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
+import type { FieldViewEventTeamSeasonComparisonInput, FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
 import { calculateCanonicalTeamEventAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
@@ -243,11 +243,11 @@ export class TeamRuntime {
       const input = body as Record<string, unknown>;
       const eventKey = input.event_key;
       const eventState = input.event_state as FieldViewEventState | undefined;
-      const cohort = input.cohort as FieldViewSeasonCohortSnapshot | undefined;
+      const comparisonInput = input.comparison_input as FieldViewEventTeamSeasonComparisonInput | undefined;
       const eventSourceRevision = input.event_source_revision;
       if (typeof eventKey !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) ||
           !eventState || eventState.event_key !== eventKey ||
-          !cohort || !Array.isArray(cohort.records) ||
+          !comparisonInput || !Array.isArray(comparisonInput.records) ||
           !Number.isSafeInteger(eventSourceRevision) || (eventSourceRevision as number) < 0) {
         return Response.json({ error: "Invalid team event analytics input" }, { status: 400 });
       }
@@ -293,23 +293,23 @@ export class TeamRuntime {
         input_key: "event:" + eventKey + ":comparison-cohort",
         provider: "fieldview",
         resource: "event-team-season-cohort",
-        source_revision: String(cohort.updated_at),
-        fetched_at: cohort.updated_at,
-        record_count: cohort.total_team_event_records,
-        included_count: cohort.processed_team_event_records - cohort.unavailable_team_event_records,
-        excluded_count: cohort.unavailable_team_event_records,
-        status: cohort.state === "complete" ? "available" : "partial",
+        source_revision: String(comparisonInput.updated_at),
+        fetched_at: comparisonInput.updated_at,
+        record_count: comparisonInput.total_team_event_records,
+        included_count: comparisonInput.processed_team_event_records - comparisonInput.unavailable_team_event_records,
+        excluded_count: comparisonInput.unavailable_team_event_records,
+        status: comparisonInput.state === "complete" ? "available" : "partial",
       }];
       const calculated = await calculateCanonicalTeamEventAnalytics({
         ...eventState,
         team_states: [teamEventState],
-      }, this.teamKey as FieldViewTeamEventState["team_key"], analyticsInputs, cohort);
+      }, this.teamKey as FieldViewTeamEventState["team_key"], analyticsInputs, comparisonInput);
       const result = calculated ?? teamEventState;
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
       const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; cohort_updated_at: number }>(stateKey + ":inputs");
       if (priorInputs && ((eventSourceRevision as number) < priorInputs.event_source_revision ||
-          teamSourceRevision < priorInputs.team_source_revision || cohort.updated_at < priorInputs.cohort_updated_at)) {
+          teamSourceRevision < priorInputs.team_source_revision || comparisonInput.updated_at < priorInputs.cohort_updated_at)) {
         return Response.json({ error: "Stale event analytics input" }, { status: 409 });
       }
       if ((await this.storage.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) {
@@ -327,7 +327,7 @@ export class TeamRuntime {
         await tx.put(stateKey + ":inputs", {
           event_source_revision: eventSourceRevision,
           team_source_revision: teamSourceRevision,
-          cohort_updated_at: cohort.updated_at,
+          cohort_updated_at: comparisonInput.updated_at,
           calculated_at: Date.now(),
         });
         return next;
