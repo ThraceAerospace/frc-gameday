@@ -603,7 +603,7 @@ test("Statbotics alarm restores event identity after Durable Object reconstructi
       "X-FieldView-Event-Key": eventKey,
     },
   }));
-  assert.equal(scheduled.status, 200);
+  assert.equal(scheduled.status, 202);
   assert.equal(await storage.get("event-key"), eventKey);
 
   // Cloudflare may reconstruct the Durable Object before its alarm fires.
