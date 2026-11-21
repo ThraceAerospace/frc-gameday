@@ -920,7 +920,7 @@ export class EventRuntime {
       try {
         const stub = namespace.get(namespace.idFromName(team.key));
         const response = await stub.fetch(new Request(
-          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey),
+          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": team.key } },
         ));
         if (!response.ok) return null;
