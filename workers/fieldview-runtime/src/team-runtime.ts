@@ -493,6 +493,7 @@ export class TeamRuntime {
         if (!response.ok) return [event.key, null] as const;
         const state = await response.json() as {
           source_revision?: number;
+          comparison_input_updated_at?: number | null;
           analytics?: { source_revision?: number | null; status?: string };
         };
         const analyticsRevision = state.analytics?.source_revision ?? null;
@@ -503,16 +504,35 @@ export class TeamRuntime {
         return [event.key, null] as const;
       }
     })));
+    const comparisonInputUpdatedAts = Object.fromEntries(await Promise.all(events.map(async (event) => {
+      if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) return [event.key, null] as const;
+      try {
+        const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(event.key));
+        const response = await stub.fetch(new Request("https://event-runtime/analytics-state", {
+          headers: {
+            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+            "X-FieldView-Event-Key": event.key,
+          },
+        }));
+        if (!response.ok) return [event.key, null] as const;
+        const state = await response.json() as { comparison_input_updated_at?: number | null };
+        return [event.key, state.comparison_input_updated_at ?? null] as const;
+      } catch {
+        return [event.key, null] as const;
+      }
+    })));
     const cacheKey = "team-season-analytics:" + year;
     const cached = await this.storage.get<{
       team_source_revision: number;
       event_revisions: Record<string, number>;
       event_source_revisions: Record<string, number | null>;
+      comparison_input_updated_ats: Record<string, number | null>;
       response: Record<string, unknown>;
     }>(cacheKey);
     if (cached && cached.team_source_revision === teamSourceRevision &&
         JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions) &&
-        JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions)) {
+        JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions) &&
+        JSON.stringify(cached.comparison_input_updated_ats) === JSON.stringify(comparisonInputUpdatedAts)) {
       return Response.json(cached.response, {
         headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
       });
@@ -522,7 +542,8 @@ export class TeamRuntime {
       const eventState = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + event.key);
       const inputs = await this.storage.get<{ team_source_revision: number; event_source_revision: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
       const current = Boolean(eventState?.analytics && inputs?.team_source_revision === teamSourceRevision &&
-        inputs?.event_source_revision === eventSourceRevisions[event.key]);
+        inputs?.event_source_revision === eventSourceRevisions[event.key] &&
+        inputs?.comparison_input_updated_at === comparisonInputUpdatedAts[event.key]);
       const analytics = current ? eventState!.analytics as FieldViewTeamEventAnalytics : null;
       return {
         event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
@@ -564,6 +585,7 @@ export class TeamRuntime {
       team_source_revision: teamSourceRevision,
       event_revisions: eventRevisions,
       event_source_revisions: eventSourceRevisions,
+      comparison_input_updated_ats: comparisonInputUpdatedAts,
       response: result,
     });
     return Response.json(result, {
