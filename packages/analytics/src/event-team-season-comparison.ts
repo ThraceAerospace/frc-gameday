@@ -26,6 +26,7 @@ export function buildFieldViewEventTeamSeasonComparisonInput(
   teamNumbers: number[],
   snapshots: Array<FieldViewTeamState | null>,
   updatedAt = Date.now(),
+  teamStateRevisions: Array<{ team_key: string; revision: number | null }> = [],
 ): FieldViewEventTeamSeasonComparisonInput {
   const snapshotByTeam = new Map<number, FieldViewTeamState>();
   for (const snapshot of snapshots) {
@@ -114,6 +115,7 @@ export function buildFieldViewEventTeamSeasonComparisonInput(
     discovery_pending_teams: discoveryPendingTeams,
     history_unavailable_teams: historyUnavailableTeams,
     updated_at: updatedAt,
+    team_state_revisions: teamStateRevisions,
     records,
   };
 }
