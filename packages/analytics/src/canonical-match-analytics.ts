@@ -3,12 +3,12 @@ import type { FieldViewTeamEventState } from "../../domain/src/team.ts";
 import type { FieldViewMatch } from "../../domain/src/match.ts";
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { AnalyticsMatch } from "./types.ts";
-import { buildAllianceResults } from "./calculations.ts";
-import { buildQualificationAnalysis } from "./calculations.ts";
-import { buildMatchFlagContext, buildMatchFlags } from "./match-flags.ts";
+import { buildMatchFlagContext } from "./match-flags.ts";
+import { createFieldViewAnalyticsEngine } from "./operations.ts";
 import { createAnalyticsAudit } from "./audit.ts";
 import { calculateCanonicalAggregateAnalytics, calculateCanonicalTeamEventStates } from "./canonical-aggregate-analytics.ts";
 import type { FieldViewAnalyticsInputRecord, FieldViewEventTeamSeasonComparisonInput } from "../../domain/src/analytics.ts";
+import type { AllianceResult, QualificationAnalysis } from "./types.ts";
 
 function epaValues(
   teams: FieldViewMatch["teams"]["red"],
@@ -71,13 +71,29 @@ export async function calculateCanonicalMatchAnalytics(
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
 
   const records = eventState.matches.map(toAnalyticsRecord);
-  const allianceResults = buildAllianceResults(records, eventState.event?.playoff_type);
-  const qualificationAnalysis = buildQualificationAnalysis(
-    records,
-    eventState.matches,
-    allianceResults,
-    eventState.event?.playoff_type,
-  );
+  const engine = createFieldViewAnalyticsEngine();
+  const allianceExecution = await engine.execute({
+    definition_key: "alliance-score-residual",
+    context: { records, playoffType: eventState.event?.playoff_type },
+    resolved_inputs: {
+      "actual-score": eventState.matches.flatMap((match) => [match.alliances.red.score, match.alliances.blue.score].filter((score) => score >= 0)),
+      "predicted-score": records.flatMap((record) => [
+        record.statbotics?.pred?.red_score,
+        record.statbotics?.pred?.blue_score,
+      ].filter((score): score is number => typeof score === "number" && Number.isFinite(score))),
+    },
+  });
+  const allianceResults = allianceExecution.value as AllianceResult[];
+  const qualificationExecution = await engine.execute({
+    definition_key: "qualification-prediction-calibration",
+    context: { records, allEventMatches: eventState.matches, allianceResults, playoffType: eventState.event?.playoff_type },
+    resolved_inputs: {
+      "red-win-probability": records.flatMap((record) => typeof record.statbotics?.pred?.red_win_prob === "number" ? [record.statbotics.pred.red_win_prob] : []),
+      winner: records.flatMap((record) => record.match.winning_alliance === "red" || record.match.winning_alliance === "blue" ? [record.match.winning_alliance] : []),
+      "score-residuals": allianceResults.flatMap((result) => result.compLevel.toLowerCase() === "qm" && result.residual !== null ? [result.residual] : []),
+    },
+  });
+  const qualificationAnalysis = qualificationExecution.value as QualificationAnalysis;
   const flagContext = { allianceResults, qualificationAnalysis };
   const matchFlagContext = buildMatchFlagContext(flagContext);
   const audit = await createAnalyticsAudit({
@@ -141,7 +157,14 @@ export async function calculateCanonicalMatchAnalytics(
         alliance_epa: { red: red.alliance_epa, blue: blue.alliance_epa },
         audit,
       },
-      flags: buildMatchFlags(flagContext, record, matchFlagContext),
+      flags: (await engine.execute({
+        definition_key: "match-prediction-label",
+        context: { matchFlagData: flagContext, matchRecord: record, matchFlagContext },
+        resolved_inputs: {
+          "red-win-probability": typeof record.statbotics?.pred?.red_win_prob === "number"
+            ? [record.statbotics.pred.red_win_prob] : [],
+        },
+      })).value,
     };
   });
 
