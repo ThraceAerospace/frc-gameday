@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import type { FieldViewEventSnapshot, FieldViewTeamAnalytics } from "@fieldview/domain";
+import type { FieldViewEventState, FieldViewTeamEventAnalytics } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
 import { refreshCanonicalEventAnalytics, refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
@@ -33,7 +33,7 @@ type CanonicalTeamPhaseSummary = {
 };
 type CanonicalTeamAnalysisResponse = {
   team: number; year: number; eventCount: number; analyzedEventCount: number; matchCount: number; matchesSeen: number;
-  events: { event: { key: string; name: string; shortName: string | null; startDate: string }; status: "ready" | "pending" | "unavailable"; analytics: FieldViewTeamAnalytics | null }[];
+  events: { event: { key: string; name: string; shortName: string | null; startDate: string }; status: "ready" | "pending" | "unavailable"; analytics: FieldViewTeamEventAnalytics | null }[];
   summary: Omit<CanonicalTeamPhaseSummary, "phase">;
   phaseSummaries: CanonicalTeamPhaseSummary[];
   eliminationShift: {
@@ -91,7 +91,7 @@ function teamNumberLink(teamNumber:number):ReactNode {
 export default function EventAnalyticsDashboard({ eventKey, eventName, eventState, analyticsPublication, websocketStatus, websocketStale }: {
   eventKey: string;
   eventName: string;
-  eventState: FieldViewEventSnapshot;
+  eventState: FieldViewEventState;
   analyticsPublication: CanonicalAnalyticsPublication | undefined;
   websocketStatus: "connected" | "disconnected" | "connecting";
   websocketStale: boolean;
