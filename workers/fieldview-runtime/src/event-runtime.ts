@@ -651,34 +651,7 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      // Demand-driven acquisition: persist missing/stale work and return the
-      // current publication immediately. The Durable Object alarm performs
-      // provider I/O after this request has completed.
-      const now = Date.now();
-      const resources = [...this.allowedEndpoints];
-      const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      const needed = resources.filter((endpoint) => {
-        const state = states.get(endpointStorageKey(endpoint));
-        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt <= now);
-      });
-      if (needed.length > 0) {
-        await this.ensureRecurringPolls(resources, 86_400_000);
-        await this.enqueueManualPolls(needed);
-      }
-      const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-      const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
-      if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
-          statboticsState.status === "failed" || statboticsState.status === "stale" ||
-          (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
-        await this.enqueueManualPolls([statboticsEndpoint]);
-      }
-      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false &&
-          !(await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))) {
-        await this.storage.put(ANALYTICS_DUE_KEY, now);
-        await this.storage.put("analytics:status", "pending");
-        await this.storage.transaction((transaction) => this.rearm(transaction));
-      }
+      await this.queueSnapshotRefresh();
       const publication = await this.publishEventState();
       const team_states = publication.state.teams === null ? null
         : await this.readTeamEventStates(publication.state, publication.sourceRevision);
@@ -695,6 +668,7 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
+      await this.queueSnapshotRefresh();
       const publication = await this.publishEventState();
       const state = { ...publication.state, team_states: publication.state.teams === null ? null : await this.readTeamEventStates(publication.state, publication.sourceRevision) };
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
@@ -1010,6 +984,37 @@ export class EventRuntime {
         return null;
       }
     }))).filter((item): item is FieldViewTeamEventState => item !== null);
+  }
+
+  private async queueSnapshotRefresh(): Promise<void> {
+    // Demand-driven acquisition: persist missing/stale work and return the
+    // current publication immediately. The Durable Object alarm performs
+    // provider I/O after this request has completed.
+    const now = Date.now();
+    const resources = [...this.allowedEndpoints];
+    const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+    const needed = resources.filter((endpoint) => {
+      const state = states.get(endpointStorageKey(endpoint));
+      return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
+        (state.expiresAt !== null && state.expiresAt <= now);
+    });
+    if (needed.length > 0) {
+      await this.ensureRecurringPolls(resources, 86_400_000);
+      await this.enqueueManualPolls(needed);
+    }
+    const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+    const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
+    if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
+        statboticsState.status === "failed" || statboticsState.status === "stale" ||
+        (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
+      await this.enqueueManualPolls([statboticsEndpoint]);
+    }
+    if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false &&
+        !(await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))) {
+      await this.storage.put(ANALYTICS_DUE_KEY, now);
+      await this.storage.put("analytics:status", "pending");
+      await this.storage.transaction((transaction) => this.rearm(transaction));
+    }
   }
 
   private async buildEventState(calculateAnalytics = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
