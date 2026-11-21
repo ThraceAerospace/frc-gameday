@@ -82,6 +82,27 @@ test("TaskScheduler queues team seed and advances cross-runtime work in alarms",
   assert.deepEqual(storage.values.get("registry:events"), ["2026future", "2026past"]);
 });
 
+test("TaskScheduler queues event participant discovery without provider I/O in the request", async () => {
+  const storage = new MemoryStorage();
+  let providerCalls = 0;
+  const scheduler = new TaskScheduler({ storage }, {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "admin",
+    TEAM_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => Response.json({ queued: true }, { status: 202 }) }) },
+    EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => Response.json({ queued: true }, { status: 202 }) }) },
+    fetcher: async () => { providerCalls += 1; throw new Error("provider must run in alarm"); },
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/admin/event-team-seed", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
+    body: JSON.stringify({ event_key: "2026test", year: 2026 }),
+  }));
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).stage, "discover");
+  assert.equal(providerCalls, 0);
+  assert.ok(storage.alarmAt !== null);
+});
+
 test("TaskScheduler queues manual discovery without running providers in the request", async () => {
   const storage = new MemoryStorage();
   let providerCalls = 0;
