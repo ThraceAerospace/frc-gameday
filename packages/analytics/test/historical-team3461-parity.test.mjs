@@ -19,7 +19,7 @@ import {
 } from "../src/canonical-match-analytics.ts";
 
 const fixture = JSON.parse(gunzipSync(Buffer.from(
-  readFileSync(new URL("./fixtures/team3461-2026-events.json.gz.b64", import.meta.url), "utf8").trim(),
+  [1, 2].map((part) => readFileSync(new URL(`./fixtures/team3461-full-2026-events.part${part}.b64`, import.meta.url), "utf8").trim()).join(""),
   "base64",
 )).toString("utf8"));
 
@@ -58,14 +58,14 @@ function analyticsRecords(state) {
   });
 }
 
-for (const [eventKey, expectedAppearances] of [["2026cthar", 15], ["2026mawne", 14]]) {
+for (const [eventKey, expectedEventMatches, expectedAppearances] of [["2026cthar", 89, 15], ["2026mawne", 91, 14]]) {
   test(`2026 historical ${eventKey} Team 3461 analytics preserve calculation parity`, async () => {
     const state = stateFor(eventKey);
     const records = analyticsRecords(state);
     const source = fixture[eventKey];
-    assert.equal(state.matches.length, expectedAppearances);
-    assert.equal(records.filter((record) => record.statboticsStatus === "ready").length, expectedAppearances);
-    assert.equal(new Set(state.matches.map((match) => match.key)).size, expectedAppearances);
+    assert.equal(state.matches.length, expectedEventMatches);
+    assert.equal(records.filter((record) => record.statboticsStatus === "ready").length, expectedEventMatches);
+    assert.equal(new Set(state.matches.map((match) => match.key)).size, expectedEventMatches);
 
     const directAllianceResults = buildAllianceResults(records, state.event.playoff_type);
     const directQualification = buildQualificationAnalysis(
@@ -97,9 +97,9 @@ for (const [eventKey, expectedAppearances] of [["2026cthar", 15], ["2026mawne", 
     assert.equal(eventResult.analytics.playoffs.alliance_count, directPlayoffs.allianceCount);
     assert.equal(eventResult.analytics.findings.length, directFindings.length);
 
-    const directRows = buildTeamRows(state.teams, source.oprs, records);
+    const directRows = buildTeamRows(state.teams, source.oprs ?? null, records);
     const directInsights = buildTeamInsights(
-      records, directAllianceResults, directRows, state.rankings, state.event.playoff_type,
+      records, directAllianceResults, directRows, state.rankings ?? null, state.event.playoff_type,
     );
     const directTeam = directRows.find((row) => row.teamNumber === 3461);
     const directInsight = directInsights.find((item) => item.teamNumber === 3461);
