@@ -91,8 +91,7 @@ export default function MatchCard({
     <div key={match.key} data-match-key={match.key} className="shrink-0">
       <article
         className={[
-          "shrink-0",
-          "min-w-[232px]",
+          "w-fit shrink-0",
           "rounded-md",
           "border",
           "px-2 py-1",
@@ -104,7 +103,7 @@ export default function MatchCard({
               : `border-zinc-800 ${resultBackground ?? "bg-zinc-950"}`,
         ].join(" ")}
       >
-        <div className="grid grid-cols-[92px_minmax(0,1fr)_30px] items-center gap-x-2 leading-none">
+        <div className="grid grid-cols-[max-content_max-content_max-content] items-center gap-x-2 leading-none">
           {/* Match name and time */}
           <div className="relative top-px row-span-2 flex h-full flex-col justify-center">
             <span
@@ -129,7 +128,7 @@ export default function MatchCard({
           {/* Red alliance */}
           <div
             className={[
-              "min-w-0 truncate text-[10px] text-red-400",
+              "whitespace-nowrap text-[10px] text-red-400",
               trackedRed ? "font-bold" : "font-medium",
             ].join(" ")}
           >
@@ -138,7 +137,7 @@ export default function MatchCard({
           </div>
 
           {/* Red score */}
-          <div className="text-right font-mono text-[10px] tabular-nums">
+          <div className="whitespace-nowrap text-right font-mono text-[10px] tabular-nums">
             {hasResult ? (
               <span className="font-bold text-red-400">{redScore}</span>
             ) : redPredictedScore != null && redPredictedScore >= 0 ? (
@@ -154,7 +153,7 @@ export default function MatchCard({
           {/* Blue alliance */}
           <div
             className={[
-              "min-w-0 truncate text-[10px] text-blue-400",
+              "whitespace-nowrap text-[10px] text-blue-400",
               trackedBlue ? "font-bold" : "font-medium",
             ].join(" ")}
           >
@@ -163,7 +162,7 @@ export default function MatchCard({
           </div>
 
           {/* Blue score */}
-          <div className="text-right font-mono text-[10px] tabular-nums">
+          <div className="whitespace-nowrap text-right font-mono text-[10px] tabular-nums">
             {hasResult ? (
               <span className="font-bold text-blue-400">{blueScore}</span>
             ) : bluePredictedScore != null && bluePredictedScore >= 0 ? (
