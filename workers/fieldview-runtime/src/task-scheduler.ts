@@ -959,7 +959,6 @@ export class TaskScheduler {
         await this.storage.put(storageKey, audit);
       }
       if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
-      if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
       await this.storage.setAlarm(Date.now());
       const { event_keys: _eventKeys, team_keys: _teamKeys, ...summary } = audit;
       return Response.json({ ...summary, processed: audit.cursor, total: audit.event_keys.length + audit.team_keys.length,
@@ -1052,8 +1051,21 @@ export class TaskScheduler {
     }
     if (request.method === "POST" && url.pathname === "/stop") {
       await this.storage.put("scheduler:enabled", false);
-      await this.storage.deleteAlarm();
-      return Response.json({ started: false });
+      const [eventSeeds, teamSeeds, seasonJobs, discoveryJobs, audits] = await Promise.all([
+        this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" }),
+        this.storage.list<TeamSeedJob>({ prefix: "admin:team-seed:" }),
+        this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" }),
+        this.storage.list<AdminDiscoveryJob>({ prefix: "admin:discovery-job:" }),
+        this.storage.list<CoverageAuditRecord>({ prefix: "admin:coverage-audit:" }),
+      ]);
+      const pending = [...eventSeeds.values()].some((job) => job.status === "running") ||
+        [...teamSeeds.values()].some((job) => job.status === "running") ||
+        [...seasonJobs.values()].some((job) => job.status === "running") ||
+        [...discoveryJobs.values()].some((job) => job.status === "running") ||
+        [...audits.values()].some((job) => job.status === "running");
+      if (pending) await this.storage.setAlarm(Date.now() + 100);
+      else await this.storage.deleteAlarm();
+      return Response.json({ started: false, admin_jobs_continuing: pending });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       return Response.json({
@@ -1514,9 +1526,7 @@ export class TaskScheduler {
       if (activeTeamSeed.nextDueAt <= Date.now()) await this.measureStage("team-seed", () => this.processTeamSeed(activeTeamSeed));
       const refreshed = await this.storage.get<TeamSeedJob>(teamSeedKey(activeTeamSeed.teamKey, activeTeamSeed.year));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
-      else if (await this.storage.get<boolean>("scheduler:enabled") === true) {
-        await this.storage.setAlarm(Date.now() + eventPollingPolicy(this.env).discoveryIntervalMs);
-      } else await this.storage.deleteAlarm();
+      else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
     const activeJob = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
