@@ -151,6 +151,32 @@ export interface FieldViewAnalyticsFinding {
   limitations: string[];
 }
 
+/** One team's season movement as ranked within this event's comparison population. */
+export interface FieldViewEventTeamComparisonEntry {
+  team_key: TeamKey;
+  team_number: number;
+  prior_event: FieldViewTeamSeasonComparison["prior_event"];
+  prior_epa: number;
+  current_epa: number;
+  change: number;
+  rank: number;
+  population_size: number;
+  components: FieldViewTeamSeasonComparison["components"];
+}
+
+/** Event-owned aggregation of TeamRuntime-produced season comparisons. */
+export interface FieldViewEventTeamComparisonAnalytics {
+  population: {
+    expected_team_count: number;
+    eligible_team_count: number;
+    excluded_team_count: number;
+  };
+  rankings: FieldViewEventTeamComparisonEntry[];
+  largest_change: FieldViewEventTeamComparisonEntry | null;
+  smallest_change: FieldViewEventTeamComparisonEntry | null;
+  source_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
+}
+
 /** Event-wide analytics; calculations and findings are produced server-side. */
 export interface FieldViewEventAnalytics {
   event_key: EventKey;
@@ -160,6 +186,8 @@ export interface FieldViewEventAnalytics {
   alliance_results?: FieldViewAnalyticsAllianceResult[];
   /** Event-wide team comparison rows, including OPR/DPR/CCWM and EPA coverage. */
   team_summaries?: FieldViewAnalyticsTeamSummary[];
+  /** Rankings and EPA movement aggregated from TeamRuntime-owned comparisons. */
+  team_comparison?: FieldViewEventTeamComparisonAnalytics;
   /** Full qualification diagnostics and alliance-side anomaly review. */
   qualification?: FieldViewQualificationAnalytics;
   qualification_anomalies?: FieldViewQualificationAnomaly[];
