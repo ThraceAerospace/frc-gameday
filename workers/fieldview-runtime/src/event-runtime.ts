@@ -1259,7 +1259,7 @@ export class EventRuntime {
         ]);
         let changed = false;
         if (analyticsStatus !== "running") {
-          if (existingDue === undefined || existingDue > now) {
+          if (existingDue === undefined) {
             await this.storage.put(ANALYTICS_DUE_KEY, now);
             changed = true;
           }
