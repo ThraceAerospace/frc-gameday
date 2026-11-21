@@ -348,7 +348,11 @@ export class TeamRuntime {
       ...(acquired(statboticsEvents) ? { statbotics_events: statboticsEvents!.data as StatboticsTeamEvent[] | null } : {}),
       ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeam | null } : {}),
     });
-    await this.storage.put(`team-state:${year}`, snapshot);
+    const stateKey = `team-state:${year}`;
+    const previousState = await this.storage.get<typeof snapshot>(stateKey);
+    if (!previousState || JSON.stringify(previousState) !== JSON.stringify(snapshot)) {
+      await this.storage.put(stateKey, snapshot);
+    }
     return Response.json(snapshot, { headers: {
       "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
       "Cache-Control": "no-store",
