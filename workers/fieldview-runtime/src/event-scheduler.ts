@@ -320,7 +320,7 @@ interface EventTeamSeedJob {
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
 
-export class EventScheduler {
+export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly env: RuntimeEnvironment;
@@ -393,7 +393,7 @@ export class EventScheduler {
       // Provider-gate RPCs are intentionally high-frequency. Logging every
       // acquire/release made local diagnostics unusable and amplified noise.
       if (url.pathname !== "/provider-request/acquire" && url.pathname !== "/provider-request/release") {
-        console.log("[FV][EventScheduler] request", JSON.stringify({
+        console.log("[FV][TaskScheduler] request", JSON.stringify({
           method: request.method,
           path: url.pathname,
           duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
@@ -553,7 +553,7 @@ export class EventScheduler {
         const headers = new Headers();
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
         try {
-          const response = await this.requestWithProviderGate(spec.endpoint, () => this.api.request(spec.endpoint, { headers }));
+          const response = await this.api.request(spec.endpoint, { headers });
           const now = Date.now();
           if (response.status === 304 && previous?.payload !== undefined) {
             const next = { ...previous, checkedAt: now, status: "available" as const };
@@ -712,7 +712,7 @@ export class EventScheduler {
       const current = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(eventKey));
       if (current?.status === "running") return Response.json(current, { status: 202 });
       const endpoint = TBA_ENDPOINTS.eventTeams(eventKey);
-      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint));
+      const response = await this.api.request(endpoint);
       if (!response.ok) return Response.json({ error: "Unable to retrieve event participants (HTTP " + response.status + ")" }, { status: 502 });
       const participants = await response.json() as TBATeam[];
       if (!Array.isArray(participants)) return Response.json({ error: "TBA event participants response was not an array" }, { status: 502 });
@@ -1409,7 +1409,7 @@ export class EventScheduler {
     try {
       await this.handleAlarm();
     } finally {
-      console.log("[FV][EventScheduler] alarm", JSON.stringify({
+      console.log("[FV][TaskScheduler] alarm", JSON.stringify({
         duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
       }));
     }
@@ -1509,7 +1509,7 @@ export class EventScheduler {
     const endpoint = TBA_ENDPOINTS.events(year);
     const headers = new Headers();
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
-    const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+    const response = await this.api.request(endpoint, { headers });
     if (response.status === 304 && cached) {
       const refreshed = { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache;
       await this.storage.put(cacheKey, refreshed);
@@ -1653,13 +1653,13 @@ export class EventScheduler {
     const startedAt = performance.now();
     try {
       const result = await operation();
-      console.log("[FV][EventScheduler] alarm-stage", JSON.stringify({
+      console.log("[FV][TaskScheduler] alarm-stage", JSON.stringify({
         stage, outcome: "success",
         duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
       }));
       return result;
     } catch (error) {
-      console.error("[FV][EventScheduler] alarm-stage", JSON.stringify({
+      console.error("[FV][TaskScheduler] alarm-stage", JSON.stringify({
         stage, outcome: "error",
         duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
         error: error instanceof Error ? error.message : String(error),
@@ -2018,7 +2018,7 @@ export class EventScheduler {
     const cached = await this.storage.get<DiscoveryCache>(cacheKey);
     const headers = new Headers();
     if (cached?.etag) headers.set("If-None-Match", cached.etag);
-    const response = await this.requestWithProviderGate(TBA_ENDPOINTS.events(year), () => this.api.request(TBA_ENDPOINTS.events(year), { headers }));
+    const response = await this.api.request(TBA_ENDPOINTS.events(year), { headers });
     if (response.status === 304 && cached) {
       await this.storage.put(cacheKey, { ...cached, complete: true, checkedAt: Date.now() } satisfies DiscoveryCache);
       return;
@@ -2082,7 +2082,7 @@ export class EventScheduler {
       const headers = new Headers();
       if (etag) headers.set("If-None-Match", etag);
       const endpoint = TBA_ENDPOINTS.teamsByYearPage(year, cursor);
-      const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+      const response = await this.api.request(endpoint, { headers });
       requestCount += 1;
       let pageTeams: TBATeam[];
       if (response.status === 304) {
@@ -2168,7 +2168,7 @@ export class EventScheduler {
       } else {
         const headers = new Headers();
         if (cached?.etag) headers.set("If-None-Match", cached.etag);
-        const response = await this.requestWithProviderGate(endpoint, () => this.api.request(endpoint, { headers }));
+        const response = await this.api.request(endpoint, { headers });
         if (response.status === 304 && cached) {
           discovered = cached.events;
           await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
