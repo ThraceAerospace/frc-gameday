@@ -2,7 +2,11 @@ import type { ReactNode } from "react";
 import type { FieldViewEvent, FieldViewMatch, FieldViewPlayoffAlliance } from "@fieldview/domain";
 import { formatEventTime } from "@/lib/time";
 
-export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): ReactNode {
+export function formatTeamKey(
+  teamKey: string,
+  trackedTeams: string[] = [],
+  disqualifiedTeams: string[] = [],
+): ReactNode {
   const num = formatTeamNumber(teamKey);
 
   const isTracked =
@@ -10,7 +14,12 @@ export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): Rea
       ? trackedTeams.includes(teamKey)
       : trackedTeams === teamKey;
 
-  const className = isTracked ? "p-1 font-bold tracked-accent-text" : "p-1";
+  const isDisqualified = disqualifiedTeams.includes(teamKey);
+  const className = [
+    "p-1",
+    isTracked ? "font-bold tracked-accent-text" : "",
+    isDisqualified ? "line-through" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <span key={teamKey} className={className}>
@@ -19,8 +28,12 @@ export function formatTeamKey(teamKey: string, trackedTeams: string[] = []): Rea
   );
 }
 
-export function formatAlliance(teamKeys: string[] = [], trackedTeams: string[] = []): ReactNode[] {
-  return teamKeys.map((t) => formatTeamKey(t, trackedTeams));
+export function formatAlliance(
+  teamKeys: string[] = [],
+  trackedTeams: string[] = [],
+  disqualifiedTeams: string[] = [],
+): ReactNode[] {
+  return teamKeys.map((teamKey) => formatTeamKey(teamKey, trackedTeams, disqualifiedTeams));
 }
 
 export function matchCode(matchKey: string): string {
