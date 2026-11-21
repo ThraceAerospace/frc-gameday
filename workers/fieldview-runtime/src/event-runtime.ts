@@ -58,12 +58,12 @@ const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
-const ANALYTICS_COHORT_RETRY_KEY = "analytics:cohort-retries";
-const ANALYTICS_ALLOW_PARTIAL_COHORT_KEY = "analytics:allow-partial-cohort";
+const ANALYTICS_TEAM_STATE_RETRY_KEY = "analytics:team-state-retries";
+const ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY = "analytics:allow-partial-team-states";
 const ANALYTICS_SEASON_TEAM_REVISION_KEY = "analytics:season-team-revision";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
-const ANALYTICS_COHORT_RETRY_DELAY_MS = 5 * 60_000;
-const ANALYTICS_COHORT_MAX_RETRIES = 12;
+const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
+const ANALYTICS_TEAM_STATE_MAX_RETRIES = 12;
 
 interface EventStatePublication {
   sourceRevision: number;
@@ -200,7 +200,7 @@ async function recordAnalyticsInvalidation(
     ANALYTICS_DUE_KEY,
     existingDueAt === undefined ? requestedDueAt : Math.min(existingDueAt, requestedDueAt),
   );
-  await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+  await transaction.delete(ANALYTICS_TEAM_STATE_RETRY_KEY);
   await transaction.put("analytics:status", "pending");
 }
 
@@ -433,11 +433,11 @@ export class EventRuntime {
     if (request.method === "POST" && url.pathname === "/recalculate") {
       await this.storage.put(ANALYTICS_ENABLED_KEY, true);
       const body: unknown = await request.json().catch(() => null);
-      if (isRecord(body) && body.allowPartialCohort === true) {
+      if (isRecord(body) && body.allowPartialTeamStates === true) {
         // The season-ingest controller calls this only after it has attempted
         // every TeamRuntime resource. Missing histories then become explicit
         // partial analytics evidence instead of an endless waiting state.
-        await this.storage.put(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY, true);
+        await this.storage.put(ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY, true);
       }
       if (isRecord(body) && typeof body.seasonTeamRevision === "number" &&
           Number.isSafeInteger(body.seasonTeamRevision) && body.seasonTeamRevision >= 0) {
@@ -630,7 +630,7 @@ export class EventRuntime {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");
         await transaction.put("snapshot-revision", (await transaction.get<number>("snapshot-revision") ?? 0) + 1);
-        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+        await transaction.delete(ANALYTICS_TEAM_STATE_RETRY_KEY);
         await this.rearm(transaction);
       });
       return Response.json({ accepted: true, event_key: this.eventKey, team_key: body.team_key });
@@ -708,7 +708,7 @@ export class EventRuntime {
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const eventAnalytics = analyticsPublication?.eventAnalytics;
-      const cohortStatus = isRecord(eventAnalytics) && isRecord(eventAnalytics.season_cohort)
+      const teamStateCoverageStatus = isRecord(eventAnalytics) && isRecord(eventAnalytics.season_cohort)
         ? eventAnalytics.season_cohort.state : null;
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
@@ -734,7 +734,7 @@ export class EventRuntime {
           source_revision: analyticsPublication?.sourceRevision ?? null,
           season_team_revision: analyticsPublication?.seasonTeamRevision ?? null,
           pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
-          cohort_status: cohortStatus,
+          cohort_status: teamStateCoverageStatus,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         lifecycle: {
@@ -933,7 +933,7 @@ export class EventRuntime {
     }))).filter((item): item is FieldViewTeamEventState => item !== null);
   }
 
-  private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
+  private async buildEventState(calculateAnalytics = false, allowPartialTeamStates = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
     const teamsEndpoint = endpoints[1];
@@ -1371,14 +1371,14 @@ export class EventRuntime {
     await this.storage.put("analytics:status", "running");
     let calculated: { version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> };
     try {
-      const allowPartialCohort = await this.storage.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
-      calculated = await this.buildEventState(true, allowPartialCohort);
+      const allowPartialTeamStates = await this.storage.get<boolean>(ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY) === true;
+      calculated = await this.buildEventState(true, allowPartialTeamStates);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       const waitingForCohort = detail.startsWith("SEASON_COHORT_NOT_READY:");
       await this.storage.transaction(async (transaction) => {
         await transaction.put("analytics:status", waitingForCohort ? "waiting-for-cohort" : "failed");
-        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + (waitingForCohort ? ANALYTICS_COHORT_RETRY_DELAY_MS : 30_000));
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + (waitingForCohort ? ANALYTICS_TEAM_STATE_RETRY_DELAY_MS : 30_000));
         if (waitingForCohort) await transaction.delete("analytics:last-error");
         else await transaction.put("analytics:last-error", detail.slice(0, 300));
         await this.rearm(transaction);
@@ -1402,7 +1402,7 @@ export class EventRuntime {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
       if (currentRevision !== calculated.version) {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
-        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+        await transaction.delete(ANALYTICS_TEAM_STATE_RETRY_KEY);
         await transaction.put("analytics:status", "pending");
         await this.rearm(transaction);
         return null;
@@ -1412,23 +1412,23 @@ export class EventRuntime {
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
       await transaction.delete(ANALYTICS_INVALIDATION_KEY);
-      const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY) === true;
+      const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY) === true;
       const collectionPartial = isRecord(calculated.state.analytics) &&
         isRecord(calculated.state.analytics.collection) &&
         calculated.state.analytics.collection.state === "partial";
       const teamStatesIncomplete = this.env.TEAM_RUNTIME && calculated.analyticsInputsComplete === false;
       const analyticsIncomplete = Boolean(teamStatesIncomplete || collectionPartial);
-      const retries = await transaction.get<number>(ANALYTICS_COHORT_RETRY_KEY) ?? 0;
-      if (teamStatesIncomplete && !allowPartialTeamStates && retries < ANALYTICS_COHORT_MAX_RETRIES) {
-        await transaction.put(ANALYTICS_COHORT_RETRY_KEY, retries + 1);
-        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + ANALYTICS_COHORT_RETRY_DELAY_MS);
+      const retries = await transaction.get<number>(ANALYTICS_TEAM_STATE_RETRY_KEY) ?? 0;
+      if (teamStatesIncomplete && !allowPartialTeamStates && retries < ANALYTICS_TEAM_STATE_MAX_RETRIES) {
+        await transaction.put(ANALYTICS_TEAM_STATE_RETRY_KEY, retries + 1);
+        await transaction.put(ANALYTICS_DUE_KEY, Date.now() + ANALYTICS_TEAM_STATE_RETRY_DELAY_MS);
         await transaction.put("analytics:status", "partial");
       } else {
-        await transaction.delete(ANALYTICS_COHORT_RETRY_KEY);
+        await transaction.delete(ANALYTICS_TEAM_STATE_RETRY_KEY);
         await transaction.delete(ANALYTICS_DUE_KEY);
         await transaction.put("analytics:status", analyticsIncomplete ? "partial" : "succeeded");
       }
-      await transaction.delete(ANALYTICS_ALLOW_PARTIAL_COHORT_KEY);
+      await transaction.delete(ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY);
       await transaction.delete(ANALYTICS_SEASON_TEAM_REVISION_KEY);
       await transaction.delete("analytics:last-error");
       const nextRevision = currentRevision + 1;
