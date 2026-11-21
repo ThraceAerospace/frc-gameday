@@ -372,30 +372,6 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   assert.equal(saved.event_key, eventKey);
   assert.equal(saved.analytics.team_key, teamKey);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
-  const duplicateResponse = await runtime.fetch(new Request("https://team/webhook", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer admin",
-      "X-FieldView-Team-Key": teamKey,
-      "X-FieldView-Event-Key": eventKey,
-      "X-FieldView-Webhook-Id": "a".repeat(64),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      message_type: "match_score",
-      message_data: {
-        event_key: eventKey,
-        match: {
-          key: matchKey, event_key: eventKey,
-          alliances: { red: { teams: [teamKey, "frc1", "frc2"], score: 22 }, blue: { teams: ["frc3", "frc4", "frc5"], score: 18 } },
-        },
-      },
-    }),
-  }));
-  assert.equal(duplicateResponse.status, 200);
-  assert.equal((await duplicateResponse.json()).changed, false);
-  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1, "duplicate delivery must not write another revision");
-
   const read = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
@@ -584,6 +560,29 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(updated.analysis, undefined);
   assert.equal(updated.flags, undefined);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+  const duplicateResponse = await runtime.fetch(new Request("https://team/webhook", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "X-FieldView-Event-Key": eventKey,
+      "X-FieldView-Webhook-Id": "a".repeat(64),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message_type: "match_score",
+      message_data: {
+        event_key: eventKey,
+        match: {
+          key: matchKey, event_key: eventKey,
+          alliances: { red: { teams: [teamKey, "frc1", "frc2"], score: 22 }, blue: { teams: ["frc3", "frc4", "frc5"], score: 18 } },
+        },
+      },
+    }),
+  }));
+  assert.equal(duplicateResponse.status, 200);
+  assert.equal((await duplicateResponse.json()).changed, false);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1, "duplicate delivery must not write another revision");
 });
 
 test("TeamRuntime applies upcoming-match timing only to its existing team match projection", async () => {
