@@ -3,6 +3,7 @@
 import type {
   FieldViewEventState,
   FieldViewEventAnalytics,
+  FieldViewTeamEventState,
   FieldViewMatchAnalysis,
   FieldViewMatchFlags,
 } from "@fieldview/domain";
@@ -11,7 +12,12 @@ import type { EventWebSocketMessage, EventWebSocketStatus } from "@/lib/realtime
 
 type MessageHandler = (message: EventWebSocketMessage) => void;
 type StatusHandler = (status: EventWebSocketStatus) => void;
-export type CanonicalSnapshot = { version: number; snapshot: FieldViewEventState };
+export type CanonicalEventSnapshotData = {
+  /** Event-owned state remains distinct from independently owned team-event states. */
+  state: FieldViewEventState;
+  team_states: FieldViewTeamEventState[];
+};
+export type CanonicalSnapshot = { version: number; snapshot: CanonicalEventSnapshotData };
 export type CanonicalAnalyticsPublicationPayload = {
   sourceRevision: number;
   calculatedAt: number;
@@ -323,7 +329,14 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (!response.ok) throw new Error(`Snapshot request failed: HTTP ${response.status}`);
       const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
       if (!Number.isSafeInteger(version) || version < 0) throw new Error("Snapshot response omitted a valid version");
-      const snapshot = await response.json() as FieldViewEventState;
+      const payload = await response.json() as FieldViewEventState & {
+        team_states?: FieldViewTeamEventState[] | null;
+      };
+      const { team_states, ...state } = payload;
+      const snapshot: CanonicalEventSnapshotData = {
+        state,
+        team_states: team_states ?? [],
+      };
       const current = this.snapshots.get(eventKey);
       if (current && version < current.version) return;
       if (expectedVersion !== undefined && version < expectedVersion) {
