@@ -491,8 +491,14 @@ export class TeamRuntime {
           },
         }));
         if (!response.ok) return [event.key, null] as const;
-        const state = await response.json() as { analytics?: { source_revision?: number | null } };
-        return [event.key, state.analytics?.source_revision ?? null] as const;
+        const state = await response.json() as {
+          source_revision?: number;
+          analytics?: { source_revision?: number | null; status?: string };
+        };
+        const analyticsRevision = state.analytics?.source_revision ?? null;
+        const current = analyticsRevision !== null && analyticsRevision === state.source_revision &&
+          state.analytics?.status !== "stale";
+        return [event.key, current ? analyticsRevision : null] as const;
       } catch {
         return [event.key, null] as const;
       }
