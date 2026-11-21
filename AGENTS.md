@@ -97,7 +97,7 @@ Analytics must be easy to inspect, explain, test, and modify.
 
 - Analytics ownership follows scope: TeamRuntime owns team and team-event calculations; EventRuntime owns event-wide calculations and aggregation over participating TeamRuntime results.
 - TeamRuntime recalculates team metrics against its own season data and persists the result in FieldViewTeamEventAnalytics / FieldViewTeamEventState. EventRuntime may rank or compare those results but must not reproduce their underlying team-scoped calculations.
-- A complete event FieldView is FieldViewEventState + FieldViewEventAnalytics + the roster's array of FieldViewTeamEventState records. TaskScheduler performs roster reconciliation on a scheduled job, not as a side effect of ordinary event reads.
+- A complete event FieldView is represented by FieldViewEventView: event-owned FieldViewEventState + FieldViewEventAnalytics + the roster's array of TeamRuntime-owned FieldViewTeamEventState records, with explicit partial-coverage metadata. TaskScheduler performs roster reconciliation on a scheduled job, not as a side effect of ordinary event reads.
 - Every generated model uses the FieldView prefix. Provider-originated models retain their provider prefix (TBA, Statbotics, FRCColors). Canonical names include FieldViewTeamState (team/season), FieldViewTeamEventState (team/event), FieldViewTeamEventAnalytics (team/event analytics), and FieldViewEventAnalytics (event analytics).
 
 - Metric definitions declare inputs, operation, output semantics/unit, scope, version, and relevant interpretation/limitations.
