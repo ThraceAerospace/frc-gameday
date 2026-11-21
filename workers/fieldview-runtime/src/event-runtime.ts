@@ -456,7 +456,7 @@ export class EventRuntime {
           source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
-      });
+      }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/refresh") {
@@ -497,7 +497,7 @@ export class EventRuntime {
           source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
-      });
+      }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
