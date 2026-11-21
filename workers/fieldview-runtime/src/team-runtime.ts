@@ -230,9 +230,15 @@ export class TeamRuntime {
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
       const state = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + eventKey);
       if (!state) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
+      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + eventKey + ":inputs");
       return Response.json(state, {
         headers: {
           "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
+          ...(inputs ? {
+            "X-FieldView-Event-Source-Revision": String(inputs.event_source_revision),
+            "X-FieldView-Team-Source-Revision": String(inputs.team_source_revision),
+            "X-FieldView-Comparison-Input-Updated-At": String(inputs.comparison_input_updated_at),
+          } : {}),
           "Cache-Control": "no-store",
         },
       });
