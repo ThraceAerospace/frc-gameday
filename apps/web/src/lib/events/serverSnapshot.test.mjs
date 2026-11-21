@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeFieldViewEventSnapshot } from "@fieldview/domain";
+import { normalizeFieldViewEventState } from "@fieldview/domain";
 import { getCanonicalEventSnapshot } from "./serverSnapshot.ts";
 
 test("server snapshot reader uses the configured runtime and preserves its revision", async () => {
@@ -67,7 +67,7 @@ test("canonical event discovery reader validates year and returns domain events"
 
 test("web workspace prebuild exposes the canonical domain normalizer at runtime", () => {
   const source = { status: "available", retrieved_at: "2026-01-02T03:04:05.000Z" };
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_event: { key: "2026test", name: "Test Event" },
     sources: {
@@ -82,7 +82,7 @@ test("web workspace prebuild exposes the canonical domain normalizer at runtime"
   assert.equal(snapshot.event?.sources.tba_event.status, "available");
 });
 
-test("canonical team snapshot reader validates identity, year, and revision", async () => {
+test("canonical team state reader validates identity, year, and revision", async () => {
   process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   const { getCanonicalTeamSnapshot } = await import("./serverSnapshot.ts");
   let requestedUrl = "";
