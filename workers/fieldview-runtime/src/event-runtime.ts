@@ -681,12 +681,14 @@ export class EventRuntime {
         const previousRevision = await transaction.get<number>(revisionKey) ?? -1;
         const previousEventRevision = await transaction.get<number>(eventRevisionKey) ?? -1;
         const teamEventRevision = typeof body.team_event_revision === "number"
-          ? body.team_event_revision : body.team_state_revision as number;
+          ? body.team_event_revision : null;
         const sourceChanged = (body.team_state_revision as number) > previousRevision;
-        const eventChanged = teamEventRevision > previousEventRevision;
+        const eventChanged = teamEventRevision !== null && teamEventRevision > previousEventRevision;
         if (!sourceChanged && !eventChanged) return false;
         if (sourceChanged) await transaction.put(revisionKey, body.team_state_revision);
-        if (eventChanged) await transaction.put(eventRevisionKey, teamEventRevision);
+        if (eventChanged && teamEventRevision !== null) {
+          await transaction.put(eventRevisionKey, teamEventRevision);
+        }
         await transaction.delete(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");

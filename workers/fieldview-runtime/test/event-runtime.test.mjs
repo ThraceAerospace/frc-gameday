@@ -1213,6 +1213,23 @@ test("EventRuntime invalidates event analytics when a TeamRuntime season state c
   assert.equal(duplicate.status, 200);
   assert.equal((await duplicate.json()).duplicate, true);
   assert.equal(storage.values.get("snapshot-revision"), 1);
+  const eventProjectionUpdate = await runtime.fetch(new Request("https://event-runtime/team-state-changed", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      team_key: "frc3461",
+      team_state_revision: 3,
+      team_event_revision: 1,
+    }),
+  }));
+  assert.equal(eventProjectionUpdate.status, 200);
+  assert.equal((await eventProjectionUpdate.json()).accepted, true,
+    "a team-event projection may change while the team's season revision stays the same");
+  assert.equal(storage.values.get("snapshot-revision"), 2);
 });
 
 
