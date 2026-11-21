@@ -135,7 +135,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     schema_version: 1,
     topic: "event-state",
     resource: "event-snapshot",
-    change: "snapshot",
+    change: "patch",
     event_key: "2026test",
     version: 3,
     etag: 'W/"snapshot-3"',
