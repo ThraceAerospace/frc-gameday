@@ -299,6 +299,40 @@ interface EventTeamSeedJob {
 }
 const eventTeamSeedKey = (eventKey: string) => "admin:event-team-seed:" + eventKey;
 
+interface TeamSeedJob {
+  teamKey: string;
+  year: number;
+  status: "running" | "completed" | "completed_with_errors";
+  stage: "seed" | "wait" | "events";
+  eventKeys: string[];
+  events: Array<Record<string, unknown>>;
+  eventCursor: number;
+  waitStartedAt: number;
+  attempts: number;
+  scheduledEvents: number;
+  errors: Array<{ event_key: string; detail: string; at: number }>;
+  startedAt: number;
+  updatedAt: number;
+  nextDueAt: number;
+}
+const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + teamKey + ":" + year;
+
+interface AdminDiscoveryJob {
+  year: number;
+  mode: "current" | "year";
+  status: "running" | "completed" | "failed";
+  stage: "events" | "teams" | "lifecycle" | "this-week" | "complete";
+  events: number;
+  teams: number;
+  providerRequests: number;
+  error: string | null;
+  startedAt: number;
+  updatedAt: number;
+  nextDueAt: number;
+}
+const adminDiscoveryKey = (mode: "current" | "year", year: number) => "admin:discovery-job:" + mode + ":" + year;
+
+
 /** System-wide discovery and cross-runtime job orchestrator; entity runtimes execute dispatched work. */
 export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
@@ -532,31 +566,35 @@ export class TaskScheduler {
       return Response.json({ year, district_key: key, results }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    if (request.method === "GET" && url.pathname === "/admin/discovery-job") {
+      const year = Number(url.searchParams.get("year"));
+      const mode = url.searchParams.get("mode") === "year" ? "year" : "current";
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      return Response.json(await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(mode, year)) ??
+        { year, mode, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/admin/discover-year") {
-      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
-      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
-        return Response.json({ error: "Resume, cancel, or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
-      }
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      try {
-        await this.discoverEvents(year);
-        const teamDiscovery = await this.discoverTeams(year, ADMIN_TEAM_DISCOVERY_PREFIX);
-        const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
-        return Response.json({
-          discovered: true,
-          complete: eventDiscovery?.complete === true && teamDiscovery.requestCount > 0,
-          year,
-          events: eventDiscovery?.events.length ?? 0,
-          teams: teamDiscovery.teamCount,
-          team_pages: teamDiscovery.pageCount,
-          provider_requests: 1 + teamDiscovery.requestCount,
-        });
-      } catch (error) {
-        return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
+      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
+      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
+        return Response.json({ error: "Resume, cancel, or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
       }
+      const key = adminDiscoveryKey("year", year);
+      const current = await this.storage.get<AdminDiscoveryJob>(key);
+      if (current?.status === "running") return Response.json(current, { status: 202 });
+      const now = Date.now();
+      const job: AdminDiscoveryJob = {
+        year, mode: "year", status: "running", stage: "events",
+        events: 0, teams: 0, providerRequests: 0, error: null,
+        startedAt: now, updatedAt: now, nextDueAt: now,
+      };
+      await this.storage.put(key, job);
+      await this.storage.setAlarm(now);
+      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/admin/event-team-seed" && request.method === "GET") {
@@ -594,9 +632,19 @@ export class TaskScheduler {
       return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
+    if (url.pathname === "/admin/team-seed" && request.method === "GET") {
+      const teamKey = url.searchParams.get("team_key") ?? "";
+      const year = Number(url.searchParams.get("year"));
+      if (!/^frc\\d+$/.test(teamKey) || !Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "A valid team_key and year are required" }, { status: 400 });
+      }
+      return Response.json(await this.storage.get<TeamSeedJob>(teamSeedKey(teamKey, year)) ??
+        { team_key: teamKey, year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (url.pathname === "/admin/team-seed" && request.method === "POST") {
       const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.team_key !== "string" || !/^frc\d+$/.test(body.team_key)) {
+      if (!isRecord(body) || typeof body.team_key !== "string" || !/^frc\\d+$/.test(body.team_key)) {
         return Response.json({ error: "A valid team_key is required" }, { status: 400 });
       }
       const teamKey = body.team_key;
@@ -607,109 +655,18 @@ export class TaskScheduler {
       if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) {
         return Response.json({ error: "TeamRuntime and EventRuntime must be bound" }, { status: 503 });
       }
-
-      // The scheduler coordinates this cross-runtime operation. TeamRuntime
-      // acquires and persists team resources; EventRuntime owns and executes
-      // each event's resource/lifecycle work.
-      const registeredTeams = await this.storage.get<string[]>("registry:teams") ?? [];
-      if (!registeredTeams.includes(teamKey)) {
-        await this.storage.put("registry:teams", [...registeredTeams, teamKey].sort());
-      }
-      const teamStub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
-      const teamHeaders = {
-        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-        "X-FieldView-Team-Key": teamKey,
+      const key = teamSeedKey(teamKey, year);
+      const current = await this.storage.get<TeamSeedJob>(key);
+      if (current?.status === "running") return Response.json(current, { status: 202, headers: { "Cache-Control": "no-store" } });
+      const now = Date.now();
+      const job: TeamSeedJob = {
+        teamKey, year, status: "running", stage: "seed", eventKeys: [], events: [],
+        eventCursor: 0, waitStartedAt: now, attempts: 0, scheduledEvents: 0,
+        errors: [], startedAt: now, updatedAt: now, nextDueAt: now,
       };
-      const teamResponse = await teamStub.fetch(new Request("https://team-runtime/seed?year=" + year, {
-        method: "POST",
-        headers: teamHeaders,
-      }));
-      if (!teamResponse.ok) return teamResponse;
-
-      const teamResult = await teamResponse.clone().json() as {
-        snapshot?: { events?: Array<Record<string, unknown>> | null };
-      };
-      let events = Array.isArray(teamResult.snapshot?.events) ? teamResult.snapshot.events : null;
-      if (events === null) {
-        // TeamRuntime may still be draining its durable resource queue. Wait
-        // once for its own alarm work, then read the canonical team snapshot.
-        const interval = Number(this.env.PROVIDER_REQUEST_INTERVAL_MS ?? 1_000);
-        await new Promise<void>((resolve) => setTimeout(resolve, Math.max(8_000, interval * 9)));
-        const refreshed = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
-          headers: teamHeaders,
-        }));
-        if (refreshed.ok) {
-          const snapshot = await refreshed.json() as { events?: Array<Record<string, unknown>> | null };
-          events = Array.isArray(snapshot.events) ? snapshot.events : null;
-          if (events !== null) teamResult.snapshot = snapshot;
-        }
-      }
-      if (events === null) {
-        return Response.json({
-          error: "TeamRuntime seed is queued, but its event history is not ready yet. Retry the seed operation shortly.",
-        }, { status: 202 });
-      }
-
-      const policy = eventPollingPolicy(this.env);
-      const seededEvents: Array<{ event_key: string; status: number; body: unknown }> = [];
-      const knownEvents = new Set(await this.storage.get<string[]>("registry:events") ?? []);
-      const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
-      for (const event of events) {
-        const eventKey = event.key;
-        if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
-        knownEvents.add(eventKey);
-        const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-        const lifecycle = classifyEventLifecycle({
-          start_date: String(event.start_date ?? ""),
-          end_date: String(event.end_date ?? ""),
-          timezone: String(event.timezone ?? ""),
-        }, Date.now(), policy);
-        const eventHeaders = {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": eventKey,
-          "Content-Type": "application/json",
-        };
-        const eventResponse = !lifecycle || lifecycle.lifecycle === "expired"
-          ? await eventStub.fetch(new Request("https://event-runtime/schedule", {
-              method: "POST",
-              headers: eventHeaders,
-              body: JSON.stringify({
-                endpoints: eventResourceEndpoints(eventKey),
-                intervalMs: 86_400_000,
-                analyticsEnabled: false,
-              }),
-            }))
-          : await eventStub.fetch(new Request("https://event-runtime/lifecycle", {
-              method: "POST",
-              headers: eventHeaders,
-              body: JSON.stringify({
-                lifecycle: lifecycle.lifecycle,
-                upcomingIntervalMs: policy.upcomingIntervalMs,
-                activeIntervalMs: policy.activeIntervalMs,
-                ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
-              }),
-            }));
-        if (eventResponse.ok) runtimeEventKeys.add(eventKey);
-        seededEvents.push({
-          event_key: eventKey,
-          status: eventResponse.status,
-          body: await eventResponse.json().catch(() => null),
-        });
-      }
-      const nextKnownEvents = [...knownEvents].sort();
-      const previousKnownEvents = await this.storage.get<string[]>("registry:events") ?? [];
-      if (JSON.stringify(nextKnownEvents) !== JSON.stringify(previousKnownEvents)) {
-        await this.storage.put("registry:events", nextKnownEvents);
-      }
-      const nextRuntimeEventKeys = [...runtimeEventKeys].sort();
-      const previousRuntimeEventKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-      if (JSON.stringify(nextRuntimeEventKeys) !== JSON.stringify(previousRuntimeEventKeys)) {
-        await this.storage.put("registry:runtime-events", nextRuntimeEventKeys);
-      }
-      return Response.json({
-        ...teamResult,
-        event_seed: { requested: events.length, attempted: seededEvents.length, results: seededEvents },
-      }, { status: teamResponse.status });
+      await this.storage.put(key, job);
+      await this.storage.setAlarm(now);
+      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/admin/season-ingest" && request.method === "GET") {
@@ -1167,44 +1124,19 @@ export class TaskScheduler {
       if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
         return Response.json({ error: "Pause/resume or cancel the season-ingest job before running discovery manually." }, { status: 409 });
       }
-      const policy = eventPollingPolicy(this.env);
-      const errors: string[] = [];
-      try {
-        await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
-        await this.storage.delete("scheduler:last-error");
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        errors.push("Event discovery: " + detail);
-        await this.storage.put("scheduler:last-error", detail);
-      }
-      try {
-        await this.discoverTeams(new Date().getUTCFullYear());
-        await this.storage.delete("scheduler:team-discovery-error");
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        errors.push("Team discovery: " + detail);
-        await this.storage.put("scheduler:team-discovery-error", detail);
-      }
-      let thisWeekPending = false;
-      try {
-        thisWeekPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
-        await this.storage.delete("scheduler:this-week-error");
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        errors.push("This-week classification: " + detail);
-        await this.storage.put("scheduler:this-week-error", detail);
-        thisWeekPending = true;
-      }
-      await this.storage.put("scheduler:last-run-at", Date.now());
-      if (await this.storage.get<boolean>("scheduler:enabled") === true) {
-        await this.storage.setAlarm(Date.now() + policy.discoveryIntervalMs);
-      } else if (thisWeekPending) {
-        await this.storage.setAlarm(Date.now() + 1_000);
-      }
-      return Response.json({
-        ran: true, errors, this_week_pending: thisWeekPending,
-        scheduler_enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
-      });
+      const year = new Date().getUTCFullYear();
+      const key = adminDiscoveryKey("current", year);
+      const current = await this.storage.get<AdminDiscoveryJob>(key);
+      if (current?.status === "running") return Response.json(current, { status: 202 });
+      const now = Date.now();
+      const job: AdminDiscoveryJob = {
+        year, mode: "current", status: "running", stage: "events",
+        events: 0, teams: 0, providerRequests: 0, error: null,
+        startedAt: now, updatedAt: now, nextDueAt: now,
+      };
+      await this.storage.put(key, job);
+      await this.storage.setAlarm(now);
+      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/start") {
