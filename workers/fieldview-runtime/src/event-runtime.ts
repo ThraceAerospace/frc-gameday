@@ -1258,13 +1258,15 @@ export class EventRuntime {
           this.storage.get<string>("analytics:status"),
         ]);
         let changed = false;
-        if (existingDue === undefined || existingDue > now) {
-          await this.storage.put(ANALYTICS_DUE_KEY, now);
-          changed = true;
-        }
-        if (analyticsStatus !== "pending") {
-          await this.storage.put("analytics:status", "pending");
-          changed = true;
+        if (analyticsStatus !== "running") {
+          if (existingDue === undefined || existingDue > now) {
+            await this.storage.put(ANALYTICS_DUE_KEY, now);
+            changed = true;
+          }
+          if (analyticsStatus !== "pending") {
+            await this.storage.put("analytics:status", "pending");
+            changed = true;
+          }
         }
         if (changed) await this.storage.transaction((transaction) => this.rearm(transaction));
       }
