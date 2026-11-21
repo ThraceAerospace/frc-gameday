@@ -8,7 +8,7 @@ import type { FieldViewTeamEventState } from "./team.js";
  * and analytics; TeamRuntime remains authoritative for each team event state.
  */
 export interface FieldViewEventView {
-  /** Event-owned canonical state, excluding analytics and embedded team states. */
+  /** Event-owned canonical state, separate from event analytics and the TeamEventState array. */
   event: Omit<FieldViewEventState, "analytics">;
   /** Event-wide analysis calculated by EventRuntime. */
   analytics: FieldViewEventAnalytics | null;
