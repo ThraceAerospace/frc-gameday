@@ -44,13 +44,9 @@ function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
     candidate.trim() === "*" || normalize(candidate) === normalize(etag));
 }
 
-function hashSignature(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16);
+async function hashSignature(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
@@ -789,7 +785,8 @@ export class TeamRuntime {
       input_signature: string;
       state: ReturnType<typeof normalizeFieldViewTeamState>;
     }>(publicationKey);
-    const etag = 'W/"fv-team-snapshot-v1-' + year + '-' + inputs.revision + '-' + hashSignature(signature) + '"';
+    const signatureHash = await hashSignature(signature);
+    const etag = 'W/"fv-team-snapshot-v1-' + year + '-' + inputs.revision + '-' + signatureHash + '"';
     const responseHeaders = {
       "X-FieldView-Snapshot-Version": String(inputs.revision),
       ETag: etag,
