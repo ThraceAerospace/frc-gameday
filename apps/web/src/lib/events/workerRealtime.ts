@@ -62,7 +62,10 @@ const RUNTIME_CACHE_STORE = "resources";
 let runtimeCacheDatabase: Promise<IDBDatabase | null> | null = null;
 
 function openRuntimeCache(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  // The canonical transport runs in a browser Window/Worker. Node 24 also
+  // exposes IndexedDB, but opening it in the test runner keeps its event loop
+  // alive and is not a browser cache.
+  if (typeof self === "undefined" || typeof indexedDB === "undefined") return Promise.resolve(null);
   if (runtimeCacheDatabase) return runtimeCacheDatabase;
   runtimeCacheDatabase = new Promise((resolve) => {
     try {

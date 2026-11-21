@@ -201,6 +201,7 @@ test("SharedWorker hydrates canonical snapshots from IndexedDB before reconnect 
   globalThis.WebSocket = FakeWebSocket;
   globalThis.location = { protocol: "https:", host: "fieldview.example.test" };
   const records = new Map();
+  globalThis.self = globalThis;
   globalThis.indexedDB = {
     open() {
       const request = {};
@@ -277,4 +278,5 @@ test("SharedWorker hydrates canonical snapshots from IndexedDB before reconnect 
   unsubscribeSecond();
   secondWorker.release();
   delete globalThis.indexedDB;
+  delete globalThis.self;
 });
