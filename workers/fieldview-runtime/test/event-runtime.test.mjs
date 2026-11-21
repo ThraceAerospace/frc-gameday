@@ -814,7 +814,12 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
     TBA_API_KEY: "test-api-key",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => Response.json([], { headers: { ETag: '"analytics-v1"' } }),
+    fetcher: async (url) => String(url) === TBA_ENDPOINTS.event(eventKey)
+      ? Response.json({
+          key: eventKey, name: "Analytics Test", event_code: "analytics",
+          start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York",
+        }, { headers: { ETag: '"analytics-v1"' } })
+      : Response.json([], { headers: { ETag: '"analytics-v1"' } }),
   }, eventKey);
 
   await runtime.schedulePolls([matchesEndpoint], 60_000, Date.now() - 1);
@@ -832,7 +837,17 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
   assert.equal(storage.values.has("analytics:publication"), false,
     "snapshot reads must not execute or persist analytics calculations");
 
-  // Public snapshot reads are read-only and do not enqueue unrelated resources.
+  // The read has queued all missing inputs. Drain those durable provider jobs
+  // while holding analytics for a separate explicit calculation assertion.
+  storage.values.set("analytics:due-at", Date.now() + 60_000);
+  for (let index = 0; index < eventResourceEndpoints(eventKey).length + 2; index += 1) {
+    const queue = storage.values.get("manual:poll-queue") ?? [];
+    if (queue.length === 0) break;
+    storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
+    await runtime.alarm();
+  }
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
+
   storage.values.set("analytics:due-at", Date.now() - 1);
   await runtime.alarm();
   assert.equal(storage.values.get("analytics:status"), "succeeded", storage.values.get("analytics:last-error") ?? "no calculation error recorded");
