@@ -330,33 +330,6 @@ export class EventRuntime {
     return true;
   }
 
-  private async syncTeamActivity(active: boolean): Promise<void> {
-    const namespace = this.env.TEAM_RUNTIME;
-    if (!namespace) return;
-    const roster = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(TBA_ENDPOINTS.eventTeams(this.eventKey)));
-    const teamKeys = Array.isArray(roster?.data)
-      ? [...new Set(roster.data.map((team) => team?.key).filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))]
-      : [];
-    const currentTeamKeys = new Set(teamKeys);
-    const previousTeamKeys = await this.storage.get<string[]>("activity:team-keys") ?? [];
-    const notifyTeamKeys = [...new Set([...previousTeamKeys, ...teamKeys])];
-    const year = Number(this.eventKey.slice(0, 4));
-    await Promise.all(notifyTeamKeys.map(async (teamKey) => {
-      const shouldBeActive = active && currentTeamKeys.has(teamKey);
-      const stub = namespace.get(namespace.idFromName(teamKey));
-      const response = await stub.fetch(new Request("https://team-runtime/activity?year=" + year, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Team-Key": teamKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ event_key: this.eventKey, year, active: shouldBeActive }),
-      }));
-      if (!response.ok) throw new Error("Failed to update TeamRuntime activity for " + teamKey + ": HTTP " + response.status);
-    }));
-    await this.storage.put("activity:team-keys", active ? teamKeys : []);
-  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -1896,11 +1869,6 @@ export class EventRuntime {
     if (!options.suppressStatboticsRefresh && result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
       await this.scheduleStatboticsRefresh(Date.now());
     }
-    if (endpoint === TBA_ENDPOINTS.eventTeams(this.eventKey) && result.representationChanged &&
-        await this.storage.get<string>("lifecycle:state") === "active") {
-      await this.syncTeamActivity(true);
-    }
-
     // A 304 without a retained representation is not a successful refresh.
     // A Statbotics 304 means its representation has not caught up to the TBA
     // change that triggered this bounded refresh. Retry without discarding data.
