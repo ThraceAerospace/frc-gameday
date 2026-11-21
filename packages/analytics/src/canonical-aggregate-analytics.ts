@@ -431,33 +431,6 @@ export function calculateCanonicalAggregateAnalytics(
   }
   const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
   const teamRows = buildTeamRows(teams, oprs, records);
-  const comparisonInputForInsights = comparisonInput ? {
-    state: comparisonInput.state,
-    teamCount: comparisonInput.team_count,
-    totalTeamEventRecords: comparisonInput.total_team_event_records,
-    processedTeamEventRecords: comparisonInput.processed_team_event_records,
-    unavailableTeamEventRecords: comparisonInput.unavailable_team_event_records,
-    discoveryPendingTeams: comparisonInput.discovery_pending_teams,
-    updatedAt: comparisonInput.updated_at,
-    records: comparisonInput.records.map((item) => ({
-      teamNumber: item.team_number,
-      event: {
-        key: item.event.event_key, name: item.event.event_name,
-        short_name: item.event.short_name, startDate: item.event.start_date,
-      },
-      epaTotal: item.epa_total, epaUnitless: item.epa_unitless,
-      breakdown: item.breakdown, wins: item.wins, losses: item.losses,
-      ties: item.ties, matches: item.match_count, fetchedAt: item.fetched_at,
-      status: item.status,
-    })),
-  } : null;
-  const insights = comparisonInputForInsights && eventState.event
-    ? buildSeasonAwareTeamInsights(
-        records, allianceResults, teamRows, eventState.rankings ?? null,
-        comparisonInputForInsights, eventState.event.key, eventState.event.start_date,
-        eventState.event.playoff_type,
-      )
-    : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
   const findings = buildReviewFindings(records, allianceResults, teamRows, eventState.matches ?? []);
   const qualificationAnalysis = buildQualificationAnalysis(
     records, records.map((record) => record.match), allianceResults, eventState.event?.playoff_type,
