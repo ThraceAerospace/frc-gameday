@@ -4,11 +4,12 @@
  */
 export function calculateCanonicalTeamEventStates(
   eventState: FieldViewEventState,
+  teamStates: FieldViewTeamEventState[],
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
   comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-): FieldViewEventState["team_states"] {
+): FieldViewTeamEventState[] {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
     team_number: team.team_number,
@@ -54,9 +55,7 @@ export function calculateCanonicalTeamEventStates(
       )
     : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
   const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
-  const team_states = eventState.team_states === undefined || eventState.team_states === null
-    ? eventState.team_states
-    : eventState.team_states.map((teamState) => {
+  const team_states = teamStates.map((teamState) => {
         const row = teamRows.find((item) => item.teamKey === teamState.team_key);
         if (!row) return teamState;
         const insight = insights.find((item) => item.teamNumber === row.teamNumber);
@@ -256,6 +255,7 @@ export function calculateCanonicalTeamEventStates(
 }
 
 import type { FieldViewEventState } from "../../domain/src/event.ts";
+import type { FieldViewTeamEventState } from "../../domain/src/team.ts";
 import type {
   FieldViewAnalyticsAudit,
   FieldViewAnalyticsEvidence,
@@ -531,11 +531,6 @@ export function calculateCanonicalAggregateAnalytics(
       })),
     })),
   };
-  const team_states = options.includeTeamAnalytics === true
-    ? calculateCanonicalTeamEventStates(eventState, records, allianceResults, audit, comparisonInput)
-    : eventState.team_states;
-
-
   return {
     ...eventState,
     analytics: {
@@ -560,6 +555,5 @@ export function calculateCanonicalAggregateAnalytics(
       },
       audit,
     },
-    ...(team_states === undefined ? {} : { team_states }),
   };
 }
