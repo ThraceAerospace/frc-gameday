@@ -298,6 +298,7 @@ export class EventRuntime {
   private eventKey: string;
   private allowedEndpoints: Set<string>;
   private readonly activation: Promise<void>;
+  private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private hydratedPublication: EventStatePublication | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
@@ -314,6 +315,7 @@ export class EventRuntime {
     });
     this.eventKey = eventKey ?? "";
     this.allowedEndpoints = new Set(this.eventKey ? eventResourceEndpoints(this.eventKey) : []);
+    this.hydrationMode = state.blockConcurrencyWhile ? "platform-barrier" : "storage-backed";
     // Hydrate only this object's persisted identity/publication. No provider
     // acquisition, analytics work, or cross-runtime calls occur during activation.
     this.activation = state.blockConcurrencyWhile
@@ -894,6 +896,9 @@ export class EventRuntime {
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const eventViewPublication = await this.storage.get<{
+        version: number; source_revision: number; status: string; generated_at: number;
+      }>(EVENT_VIEW_PUBLICATION_KEY);
       const rosterAvailable = Array.isArray(eventStatePublication?.state.teams);
       const expectedTeamCount = eventStatePublication?.state.teams?.length ?? 0;
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
@@ -911,6 +916,27 @@ export class EventRuntime {
       return Response.json({
         event_key: this.eventKey,
         source_revision: currentSourceRevision,
+        readiness: {
+          hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
+          event_state_publication: {
+            exists: Boolean(eventStatePublication),
+            status: eventStateStatus,
+            version: eventStatePublication?.snapshotVersion ?? null,
+            source_revision: eventStatePublication?.sourceRevision ?? null,
+            generated_at: eventStatePublication?.generatedAt ?? null,
+          },
+          event_view_publication: {
+            exists: Boolean(eventViewPublication),
+            status: eventViewPublication
+              ? (eventViewPublication.source_revision === eventStatePublication?.sourceRevision ? eventViewPublication.status : "stale")
+              : "missing",
+            version: eventViewPublication?.version ?? null,
+            source_revision: eventViewPublication?.source_revision ?? null,
+            generated_at: eventViewPublication?.generated_at ?? null,
+          },
+          pending_revalidation_count: tasks.size,
+          last_error: await this.storage.get<string>("analytics:last-error") ?? await this.storage.get<string>("scheduler:last-error") ?? null,
+        },
         event_state: {
           status: eventStateStatus,
           generated_at: eventStatePublication?.generatedAt ?? null,
