@@ -2,6 +2,7 @@ import type {
   FieldViewEventState,
   FieldViewEventAnalytics,
   FieldViewTeamEventAnalytics,
+  FieldViewTeamEventState,
   FieldViewMatch,
 } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
@@ -119,9 +120,9 @@ function teamInsight(teamNumber: number, analytics: FieldViewTeamEventAnalytics)
   };
 }
 
-function mapTeamAnalytics(snapshot: FieldViewEventState): TeamInsight[] {
+function mapTeamAnalytics(snapshot: FieldViewEventState, teamStates: FieldViewTeamEventState[]): TeamInsight[] {
   const teamNumbers = new Map((snapshot.teams ?? []).map((team) => [team.key, team.team_number]));
-  return (snapshot.team_states ?? []).flatMap((item) => {
+  return teamStates.flatMap((item) => {
     const teamNumber = teamNumbers.get(item.team_key);
     return typeof teamNumber === "number" && item.analytics
       ? [teamInsight(teamNumber, item.analytics)]
@@ -185,7 +186,7 @@ function findingSampleCoverage(evidence: FieldViewEventAnalytics["findings"][num
   return sampleSize >= 20 ? "high" : sampleSize >= 8 ? "medium" : "low";
 }
 
-function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldViewEventState, publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): EventAnalyticsResponse {
+function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldViewEventState, teamStates: FieldViewTeamEventState[], publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): EventAnalyticsResponse {
   const matches = (snapshot.matches ?? []).map((match) =>
     mapMatch(match, publication.matches.find((item) => item.key === match.key)),
   );
@@ -372,7 +373,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
         })),
       })),
     } : undefined,
-    teamInsights: mapTeamAnalytics(snapshot),
+    teamInsights: mapTeamAnalytics(snapshot, teamStates),
     teamComparison: analytics.team_comparison ?? null,
     matchCount: snapshot.matches?.length ?? 0,
     loadedMatchCount: matches.length,
@@ -408,8 +409,9 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
 
 export function toEventAnalyticsDashboardData(
   snapshot: FieldViewEventState,
+  teamStates: FieldViewTeamEventState[],
   publication: CanonicalAnalyticsPublication | undefined,
 ): EventAnalyticsResponse | null {
   if (!snapshot.event || !publication?.publication?.eventAnalytics) return null;
-  return mapEventAnalytics(publication.publication.eventAnalytics, snapshot, publication.publication);
+  return mapEventAnalytics(publication.publication.eventAnalytics, snapshot, teamStates, publication.publication);
 }
