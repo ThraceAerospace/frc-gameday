@@ -1,6 +1,5 @@
 import type { FieldViewEventState } from "../../domain/src/event.ts";
 import type { FieldViewTeamEventState } from "../../domain/src/team.ts";
-import type { TeamKey } from "../../domain/src/ids.ts";
 import type { FieldViewMatch } from "../../domain/src/match.ts";
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { AnalyticsMatch } from "./types.ts";
