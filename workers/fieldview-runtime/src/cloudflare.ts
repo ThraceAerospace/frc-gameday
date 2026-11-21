@@ -37,9 +37,10 @@ export interface RuntimeEnvironment {
   RUNTIME_ADMIN_TOKEN: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;
   TEAM_REFRESH_INTERVAL_MS?: string | number;
+  TEAM_ACTIVE_REFRESH_INTERVAL_MS?: string | number;
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
-  EVENT_SCHEDULER?: DurableObjectNamespaceLike;
+  TASK_SCHEDULER?: DurableObjectNamespaceLike;
   EVENT_DISCOVERY_INTERVAL_MS?: string | number;
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
