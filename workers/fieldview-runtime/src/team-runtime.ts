@@ -795,6 +795,7 @@ export class TeamRuntime {
       return Response.json({ team_key: this.teamKey, snapshot_revision: snapshotRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
+          hydrated_scope: ["team_identity", "team_state_publications"],
           publications: [...this.publishedSnapshots.entries()].map(([year, publication]) => ({
             year, exists: true, input_signature: publication.input_signature,
             snapshot_revision: snapshotRevision,
