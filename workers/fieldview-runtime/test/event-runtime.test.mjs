@@ -324,13 +324,15 @@ test("public event snapshot reads queue missing resources without running provid
     headers: { "X-FieldView-Event-Key": eventKey },
   });
 
-  assert.equal((await runtime.fetch(request())).status, 200);
-  assert.equal((await runtime.fetch(request())).status, 200);
+  const firstRead = await runtime.fetch(request());
+  assert.equal(firstRead.status, 503, "a missing publication is explicitly unavailable rather than built inline");
+  assert.equal((await firstRead.json()).publication.status, "missing");
+  assert.equal((await runtime.fetch(request())).status, 503);
   assert.equal(providerCalls, 0, "snapshot requests must not wait for provider work");
   assert.ok(storage.alarmAt !== null, "missing resources should arm durable background work");
   assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, eventResourceEndpoints(eventKey).length);
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
-  assert.equal((await runtime.fetch(request())).status, 200, "repeated reads should coalesce queued work");
+  assert.equal((await runtime.fetch(request())).status, 503, "repeated reads keep returning the unavailable state until a publication exists");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
 
   const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
@@ -418,6 +420,11 @@ test("GET snapshot composes canonical event-team domain objects with source meta
     fetcher: async () => new Response("unused"),
   };
   const runtime = new EventRuntime({ storage }, env, eventKey);
+  const publish = await runtime.fetch(new Request("https://event-runtime/publish-state", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(publish.status, 200, "an explicit runtime command creates the initial publication");
   const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
