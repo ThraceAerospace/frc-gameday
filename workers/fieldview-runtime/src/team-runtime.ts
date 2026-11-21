@@ -304,6 +304,7 @@ export class TeamRuntime {
           return revision;
         });
         if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
+        await this.notifyEventRuntimeStateChange(eventKey, nextRevision).catch(() => undefined);
         return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
       }
       const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
@@ -348,6 +349,7 @@ export class TeamRuntime {
           return revision;
         });
         if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
+        await this.notifyEventRuntimeStateChange(eventKey, nextRevision).catch(() => undefined);
         return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
       }
       return Response.json({ accepted: true, affected: true, changed: false,
@@ -862,6 +864,27 @@ export class TeamRuntime {
     };
   }
 
+  private async notifyEventRuntimeStateChange(
+    eventKey: string,
+    teamEventRevision: number,
+  ): Promise<void> {
+    if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) return;
+    const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+    await stub.fetch(new Request("https://event-runtime/team-state-changed", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+        "X-FieldView-Event-Key": eventKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        team_key: this.teamKey,
+        team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+        team_event_revision: teamEventRevision,
+      }),
+    }));
+  }
+
   private async notifyEventsOfSeasonStateChange(year: number): Promise<void> {
     if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) return;
     const persisted = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
@@ -873,19 +896,10 @@ export class TeamRuntime {
     const relevant = [...eventKeys].filter((eventKey) => Number(eventKey.slice(0, 4)) === year);
     await Promise.all(relevant.map(async (eventKey) => {
       try {
-        const stub = this.env.EVENT_RUNTIME!.get(this.env.EVENT_RUNTIME!.idFromName(eventKey));
-        await stub.fetch(new Request("https://event-runtime/team-state-changed", {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-            "X-FieldView-Event-Key": eventKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            team_key: this.teamKey,
-            team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
-          }),
-        }));
+        await this.notifyEventRuntimeStateChange(
+          eventKey,
+          await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0,
+        );
       } catch {
         // EventRuntime reconciliation is recoverable through its next scheduled refresh.
       }

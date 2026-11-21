@@ -64,6 +64,7 @@ const ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_ALLOW_PARTIAL_TEAM_EVENT_STATES_KEY = "analytics:allow-partial-cohort";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
+const TEAM_EVENT_REVISION_PREFIX = "team-event-revision:";
 const EVENT_COMPARISON_INPUT_UPDATED_AT_KEY = "event-team-comparison-input:updated-at";
 const EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY = "event-team-comparison-input:last-updated-at";
 const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
@@ -656,14 +657,23 @@ export class EventRuntime {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || typeof body.team_key !== "string" ||
           !/^(?:frc)?[0-9]+$/.test(body.team_key) ||
-          !Number.isSafeInteger(body.team_state_revision) || (body.team_state_revision as number) < 0) {
+          !Number.isSafeInteger(body.team_state_revision) || (body.team_state_revision as number) < 0 ||
+          (body.team_event_revision !== undefined &&
+            (!Number.isSafeInteger(body.team_event_revision) || (body.team_event_revision as number) < 0))) {
         return Response.json({ error: "Invalid team state change notification" }, { status: 400 });
       }
       const accepted = await this.storage.transaction(async (transaction) => {
         const revisionKey = TEAM_STATE_REVISION_PREFIX + body.team_key;
+        const eventRevisionKey = TEAM_EVENT_REVISION_PREFIX + body.team_key;
         const previousRevision = await transaction.get<number>(revisionKey) ?? -1;
-        if ((body.team_state_revision as number) <= previousRevision) return false;
-        await transaction.put(revisionKey, body.team_state_revision);
+        const previousEventRevision = await transaction.get<number>(eventRevisionKey) ?? -1;
+        const teamEventRevision = typeof body.team_event_revision === "number"
+          ? body.team_event_revision : body.team_state_revision as number;
+        const sourceChanged = (body.team_state_revision as number) > previousRevision;
+        const eventChanged = teamEventRevision > previousEventRevision;
+        if (!sourceChanged && !eventChanged) return false;
+        if (sourceChanged) await transaction.put(revisionKey, body.team_state_revision);
+        if (eventChanged) await transaction.put(eventRevisionKey, teamEventRevision);
         await transaction.delete(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");
