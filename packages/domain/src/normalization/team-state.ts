@@ -1,1 +1,39 @@
-export * from "./team-event-state.js";
+import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
+import type { StatboticsTeamEvent, StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
+import type { FRCColorsTeam } from "@fieldview/provider-frc-colors/types";
+import type { FieldViewTeamState } from "../team.js";
+import type { TeamKey } from "../ids.js";
+import type { FieldViewSourceMetadata } from "../source-metadata.js";
+import { normalizeFieldViewTeam } from "./team.ts";
+
+export interface NormalizeFieldViewTeamStateInput {
+  team_key: TeamKey;
+  year: number;
+  sources: FieldViewSourceMetadata;
+  team?: TBATeam | null;
+  districts?: TBADistrict[] | null;
+  events?: TBAEvent[] | null;
+  media?: TBAMedia[] | null;
+  statbotics?: StatboticsTeamYear | null;
+  statbotics_events?: StatboticsTeamEvent[] | null;
+  frc_colors?: FRCColorsTeam | null;
+}
+
+/** Compose team-scoped resources without renaming or rewriting provider fields. */
+export function normalizeFieldViewTeamState(input: NormalizeFieldViewTeamStateInput): FieldViewTeamState {
+  return {
+    team_key: input.team_key,
+    year: input.year,
+    sources: input.sources,
+    ...(input.team === undefined ? {} : {
+      team: input.team === null ? null : normalizeFieldViewTeam(input.team, {
+        ...(input.sources.tba_team === undefined ? {} : { tba_team: input.sources.tba_team }),
+      }, input.frc_colors),
+    }),
+    ...(input.districts === undefined ? {} : { districts: input.districts }),
+    ...(input.events === undefined ? {} : { events: input.events }),
+    ...(input.media === undefined ? {} : { media: input.media }),
+    ...(input.statbotics === undefined ? {} : { statbotics: input.statbotics }),
+    ...(input.statbotics_events === undefined ? {} : { statbotics_events: input.statbotics_events }),
+  };
+}
