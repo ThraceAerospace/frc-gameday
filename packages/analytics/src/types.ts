@@ -198,8 +198,8 @@ export type TeamSeasonComponentComparison = {
   prior: number;
   current: number;
   change: number;
-  cohortRank: number;
-  cohortSize: number;
+  comparisonRank: number;
+  comparisonSize: number;
 };
 
 export type TeamSeasonComparison = {
@@ -208,12 +208,12 @@ export type TeamSeasonComparison = {
   currentEPA: number;
   currentEpaPercentile: number | null;
   priorEpaRank: number;
-  priorEpaCohortSize: number;
+  priorEpaComparisonSize: number;
   currentEpaRank: number;
-  currentEpaCohortSize: number;
+  currentEpaComparisonSize: number;
   change: number;
-  cohortRank: number;
-  cohortSize: number;
+  comparisonRank: number;
+  comparisonSize: number;
   components: {
     auto: TeamSeasonComponentComparison | null;
     teleop: TeamSeasonComponentComparison | null;
