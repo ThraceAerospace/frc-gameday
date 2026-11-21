@@ -289,7 +289,6 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     event_teams: [{ event_key: eventKey, team_key: teamKey, sources: {} }],
     matches: [],
     sources: { teams: {}, event_teams: {}, matches: {} },
-    team_states: [{ event_key: eventKey, team_key: teamKey, sources: {}, matches: [] }],
   };
   const comparisonInput = {
     state: "complete",
