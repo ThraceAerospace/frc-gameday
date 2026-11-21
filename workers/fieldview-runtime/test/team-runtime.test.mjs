@@ -24,7 +24,7 @@ async function drainManualQueue(runtime, storage, max = 20) {
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0, "manual provider queue should drain within the test bound");
 }
 
-test("TeamRuntime public snapshots are read-only and explicit refresh composes canonical resources", async () => {
+test("TeamRuntime public snapshots queue missing resources without blocking on provider I/O", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461";
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -32,10 +32,14 @@ test("TeamRuntime public snapshots are read-only and explicit refresh composes c
     return Response.json([]);
   }), teamKey);
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
-  assert.equal(first.status, 200); assert.equal(calls.length, 0);
+  assert.equal(first.status, 200); assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
   assert.equal((await first.json()).team_key, teamKey);
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 0);
-  assert.equal(storage.alarmAt, null);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 7);
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
+  assert.ok(storage.alarmAt !== null);
+  const repeated = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
+  assert.equal(repeated.status, 200);
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7, "repeated reads should coalesce queued work");
 
   await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
