@@ -25,8 +25,9 @@ export default function PendingSnapshotRefresh({ intervalMs = 5_000 }: { interva
   }, [intervalMs, router]);
 
   return (
-    <span className="sr-only" role="status" aria-live="polite">
-      Data is loading. This page will refresh automatically.
-    </span>
+    <div className="my-4 flex items-center gap-3 rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-card)] px-4 py-3 text-sm text-[var(--fv-muted)]" role="status" aria-live="polite">
+      <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-[var(--fv-brand)]" aria-hidden="true" />
+      <span>Loading canonical data. This section will update automatically.</span>
+    </div>
   );
 }
