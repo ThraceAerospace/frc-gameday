@@ -17,6 +17,11 @@ export async function GET(request: Request) {
   if (!validAdminToken(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Authentication is a local credential check. Do not make login depend on
+  // TaskScheduler availability or Durable Object health.
+  if (new URL(request.url).searchParams.get("auth") === "1") {
+    return NextResponse.json({ authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+  }
   const runtimeUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
   const runtimeToken = process.env.RUNTIME_ADMIN_TOKEN;
   if (!runtimeUrl || !runtimeToken) {
