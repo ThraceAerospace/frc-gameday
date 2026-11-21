@@ -29,7 +29,7 @@ import {
   type AnalyticsInvalidation,
   type AnalyticsSourceKey,
 } from "../../../packages/analytics/src/invalidation.ts";
-import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
+import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../packages/analytics/src/event-team-season-comparison.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
 import type { FieldViewEventView } from "../../../packages/domain/src/event-view.ts";
 
@@ -791,10 +791,10 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  private async collectSeasonCohort(
+  private async collectEventTeamSeasonComparisonInput(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
   ): Promise<{
-    cohort: import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot;
+    comparisonInput: import("../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput;
     inputs: FieldViewAnalyticsInputRecord[];
   } | undefined> {
     const event = eventState.event;
@@ -865,7 +865,7 @@ export class EventRuntime {
       };
     });
     return {
-      cohort: buildCanonicalSeasonCohort(
+      cohort: buildFieldViewEventTeamSeasonComparisonInput(
         event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
       ),
       inputs,
@@ -874,7 +874,7 @@ export class EventRuntime {
 
   private async calculateTeamEventStates(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
-    cohort: import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot,
+    comparisonInput: import("../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput,
     eventSourceRevision: number,
   ): Promise<FieldViewTeamEventState[]> {
     const namespace = this.env.TEAM_RUNTIME;
@@ -896,7 +896,7 @@ export class EventRuntime {
             event_key: this.eventKey,
             event_source_revision: eventSourceRevision,
             event_state: eventState,
-            cohort,
+            comparison_input: comparisonInput,
           }),
         }));
         if (!calculated.ok) return null;
@@ -1062,8 +1062,8 @@ export class EventRuntime {
       ),
     ];
     if (calculateAnalytics) {
-      const seasonCollection = await this.collectSeasonCohort(normalizedState);
-      const analyticsInputs = [...inputRecords, ...(seasonCollection?.inputs ?? [])];
+      const comparisonInputCollection = await this.collectEventTeamSeasonComparisonInput(normalizedState);
+      const analyticsInputs = [...inputRecords, ...(comparisonInputCollection?.inputs ?? [])];
       // EventRuntime calculates event/match analytics only. TeamRuntime owns
       // the per-team calculations and persists each TeamEventState.
       const eventAnalyticsState = await calculateCanonicalMatchAnalytics(
@@ -1072,12 +1072,12 @@ export class EventRuntime {
         undefined,
         { includeTeamAnalytics: false },
       );
-      const teamStates = seasonCollection
-        ? await this.calculateTeamEventStates(eventAnalyticsState, seasonCollection.cohort, state.sourceRevision)
+      const teamStates = comparisonInputCollection
+        ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
         : [];
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
       const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
-        seasonCollection?.cohort.state === "complete";
+        comparisonInputCollection?.comparisonInput.state === "complete";
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
