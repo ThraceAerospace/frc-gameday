@@ -372,6 +372,49 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
   assert.equal(calls.length, 2);
 });
 
+test("EventRuntime serves event-scoped Statbotics matches from its durable provider state", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026test";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const records = [{
+    key: "2026test_qm1",
+    pred: { red_score: 105, blue_score: 95, red_win_prob: 0.6 },
+  }];
+  storage.values.set("endpoint:" + endpoint, {
+    endpoint,
+    status: "available",
+    revision: 1,
+    lastFetchedAt: Date.now(),
+    lastWebhookAt: null,
+    expiresAt: Date.now() + 60_000,
+    etag: '"statbotics-v1"',
+    data: records,
+    providerData: records,
+  });
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => { providerCalls += 1; return Response.json([]); },
+  }, eventKey);
+  const headers = { "X-FieldView-Event-Key": eventKey };
+  const response = await runtime.fetch(new Request(
+    "https://event-runtime/statbotics-match?match_key=2026test_qm1",
+    { headers },
+  ));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), records[0]);
+  assert.equal(providerCalls, 0, "a cached Statbotics read must not perform provider I/O");
+
+  const mismatch = await runtime.fetch(new Request(
+    "https://event-runtime/statbotics-match?match_key=2026other_qm1",
+    { headers },
+  ));
+  assert.equal(mismatch.status, 400, "match keys cannot cross event Durable Object boundaries");
+});
+
 test("Statbotics alarm restores event identity after Durable Object reconstruction", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
