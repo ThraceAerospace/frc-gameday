@@ -795,7 +795,7 @@ export class EventRuntime {
         if (!response.ok) return { teamKey, snapshot: null, revision: null };
         return {
           teamKey,
-          snapshot: await response.json() as FieldViewTeamSnapshot,
+          snapshot: await response.json() as FieldViewTeamState,
           revision: response.headers.get("X-FieldView-Snapshot-Version") === null
             ? null : Number(response.headers.get("X-FieldView-Snapshot-Version")),
         };
