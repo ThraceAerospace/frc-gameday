@@ -42,13 +42,17 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   assert.equal(first.status, 200); assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
   assert.equal((await first.json()).team_key, teamKey);
+  const firstEtag = first.headers.get("ETag");
+  assert.ok(firstEtag);
   assert.equal(storage.values.get("team-state:2026")?.team_key, teamKey, "the partial canonical TeamState is persisted before provider acquisition");
   assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 5, "only TBA and FRC Colors resources receive recurring tasks");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "initial public reads do not schedule recurring Statbotics acquisition");
   assert.ok(storage.alarmAt !== null);
-  const repeated = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
-  assert.equal(repeated.status, 200);
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "repeated reads should coalesce queued work");
+  const repeated = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey, "If-None-Match": firstEtag },
+  }));
+  assert.equal(repeated.status, 304, "an unchanged canonical TeamState is validated without retransmitting its body");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "validated reads do not duplicate queued work");
 
   await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
