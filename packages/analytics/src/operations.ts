@@ -17,7 +17,8 @@ import type {
   FieldViewEventTeamSeasonComparisonSnapshot,
 } from "./types.ts";
 import type { TBAEliminationAlliance, TBAMatch } from "@fieldview/provider-tba/types";
-import { AnalyticsOperationRegistry, type AnalyticsOperation } from "./engine.ts";
+import { AnalyticsEngine, AnalyticsOperationRegistry, type AnalyticsOperation } from "./engine.ts";
+import { FIELDVIEW_ANALYTICS_DEFINITIONS } from "./definitions.ts";
 
 type TeamInput = Parameters<typeof buildTeamRows>[0];
 type OprInput = Parameters<typeof buildTeamRows>[1];
@@ -82,4 +83,9 @@ export function createFieldViewAnalyticsOperationRegistry(): AnalyticsOperationR
       );
     } },
   ]);
+}
+
+/** Ready-to-use engine bound to the reviewed, versioned catalog and explicit operation allowlist. */
+export function createFieldViewAnalyticsEngine(): AnalyticsEngine {
+  return new AnalyticsEngine(FIELDVIEW_ANALYTICS_DEFINITIONS, createFieldViewAnalyticsOperationRegistry());
 }
