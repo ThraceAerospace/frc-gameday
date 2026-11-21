@@ -83,3 +83,32 @@ test("TaskScheduler protects cross-runtime seed orchestration with the admin aut
   }));
   assert.equal(response.status, 401);
 });
+
+test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
+  const storage = new MemoryStorage();
+  await storage.put("registry:events", ["2026test"]);
+  await storage.put("registry:teams", ["frc3461"]);
+  await storage.put("scheduler:enabled", true);
+  const forbiddenNamespace = {
+    idFromName(name) { return name; },
+    get() {
+      return { async fetch() { throw new Error("overview must not query entity runtimes"); } };
+    },
+  };
+  const scheduler = new TaskScheduler({ storage }, {
+    TBA_API_KEY: "test-key",
+    RUNTIME_ADMIN_TOKEN: "admin",
+    EVENT_RUNTIME: forbiddenNamespace,
+    TEAM_RUNTIME: forbiddenNamespace,
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/admin/overview", {
+    headers: { Authorization: "Bearer admin" },
+  }));
+
+  assert.equal(response.status, 200);
+  const overview = await response.json();
+  assert.deepEqual(overview.inventory, { events: 1, teams: 1 });
+  assert.deepEqual(overview.events, []);
+  assert.deepEqual(overview.teams, []);
+  assert.equal(overview.scheduler.enabled, true);
+});
