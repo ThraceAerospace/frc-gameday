@@ -886,7 +886,7 @@ export class EventRuntime {
           "X-FieldView-Team-Key": teamKey,
           "Content-Type": "application/json",
         };
-        const calculated = await stub.fetch(new Request("https://team-runtime/event-analytics", {
+        const calculated = await stub.fetch(new Request("https://team-runtime/event-analytics?year=" + this.eventKey.slice(0, 4), {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -898,7 +898,7 @@ export class EventRuntime {
         }));
         if (!calculated.ok) return null;
         const response = await stub.fetch(new Request(
-          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey),
+          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey } },
         ));
         if (!response.ok) return null;
