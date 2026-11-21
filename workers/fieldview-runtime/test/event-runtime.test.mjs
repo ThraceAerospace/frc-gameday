@@ -1130,6 +1130,12 @@ test("canonical analytics are coalesced into EventRuntime alarm work and publish
   assert.equal(publication.sourceRevision, storage.values.get("snapshot-revision") - 1);
   assert.equal(typeof publication.calculatedAt, "number");
   assert.equal(publication.analyticsRevision, 1);
+  const eventViewPublication = storage.values.get("event-view:publication");
+  assert.ok(eventViewPublication, "the alarm publishes an event view alongside the analytics revision");
+  assert.equal(eventViewPublication.source_revision, publication.sourceRevision);
+  assert.equal(eventViewPublication.version, publication.analyticsRevision);
+  assert.equal(eventViewPublication.status, "partial",
+    "event view completeness explicitly reflects missing TeamRuntime comparison inputs");
   const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
