@@ -308,7 +308,7 @@ export class TeamRuntime {
         if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
         const current = currentMatches[index];
         const merged = {
-          ...mergeTbaWebhookMatch(current, updatedMatch),
+          ...mergeTbaWebhookMatch(current as unknown as Record<string, unknown>, updatedMatch),
           // Preserve FieldView enrichments and invalidate only score-derived
           // analysis when the source score changes.
           predictions: current.predictions,
