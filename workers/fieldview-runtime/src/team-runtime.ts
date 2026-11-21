@@ -139,6 +139,18 @@ export class TeamRuntime {
     if (this.teamKey && this.teamKey !== key) throw new Error("Durable Object team identity mismatch");
     this.teamKey = key; return true;
   }
+  private async clearRecurringStatboticsTasks(): Promise<void> {
+    const existing = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
+    if (![...existing.values()].some((task) => task.provider === "statbotics")) return;
+    await this.storage.transaction(async (tx) => {
+      const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
+      for (const [key, task] of tasks) {
+        if (task.provider === "statbotics") await tx.delete(key);
+      }
+      await this.rearm(tx);
+    });
+  }
+
   private async rearm(tx: DurableObjectTransactionLike): Promise<void> {
     const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
     const manual = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
@@ -214,6 +226,10 @@ export class TeamRuntime {
     const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
+    // Existing Durable Objects may still contain recurring Statbotics tasks
+    // from the previous scheduler policy. Remove them on first touch; explicit
+    // seed/refresh requests continue to enqueue one-shot Statbotics work.
+    await this.clearRecurringStatboticsTasks();
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
