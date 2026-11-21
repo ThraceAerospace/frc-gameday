@@ -58,6 +58,7 @@ const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
+// Keep the existing storage keys so already-persisted retry state survives the naming migration.
 const ANALYTICS_TEAM_STATE_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY = "analytics:allow-partial-cohort";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
