@@ -109,7 +109,7 @@ export default function MatchCard({
     : [];
 
   const prediction = match.flags?.prediction ?? null;
-  const predictionLabel = prediction?.label ?? "Toss-up";
+  const predictionLabel = prediction?.label ?? "—";
   const predictionTone = PREDICTION_TONES[predictionLabel] ?? PREDICTION_TONES["Toss-up"];
 
   const time = hasResult
