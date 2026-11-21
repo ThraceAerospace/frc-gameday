@@ -95,11 +95,11 @@ export default function MatchCard({
     .join(" ");
   const redTeamFontSize = Math.min(
     14,
-    (144 - (redAllianceFlags.length > 0 ? 12 : 0)) / Math.max(1, redTeamText.length * 0.60),
+    144 / Math.max(1, redTeamText.length * 0.60),
   );
   const blueTeamFontSize = Math.min(
     14,
-    (144 - (blueAllianceFlags.length > 0 ? 12 : 0)) / Math.max(1, blueTeamText.length * 0.60),
+    144 / Math.max(1, blueTeamText.length * 0.60),
   );
 
   const prediction = match.flags?.prediction ?? null;
@@ -171,7 +171,7 @@ export default function MatchCard({
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-xs font-bold uppercase tracking-wide",
+                  "whitespace-nowrap text-xs font-medium uppercase tracking-normal",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
@@ -181,7 +181,7 @@ export default function MatchCard({
 
             <span
               className={[
-                "mt-1 whitespace-nowrap font-mono text-[10px] tabular-nums",
+                "mt-0.5 whitespace-nowrap font-mono text-[11px] tabular-nums",
                 isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
               ].join(" ")}
             >
@@ -190,15 +190,8 @@ export default function MatchCard({
           </div>
 
           {/* Fixed-width alliance roster with playoff alliance labels */}
-          <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-0.5">
-            <div className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap">
-              {redAllianceFlags.length > 0 ? (
-                <span
-                  aria-label="Red alliance has flags"
-                  title={redFlagTitle}
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"
-                />
-              ) : null}
+          <div className="row-span-2 flex h-9 w-[144px] flex-col justify-center gap-y-0.5">
+            <div className="flex h-4 min-w-0 items-center whitespace-nowrap">
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-red-400",
@@ -224,14 +217,7 @@ export default function MatchCard({
               </div>
             </div>
 
-            <div className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap">
-              {blueAllianceFlags.length > 0 ? (
-                <span
-                  aria-label="Blue alliance has flags"
-                  title={blueFlagTitle}
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"
-                />
-              ) : null}
+            <div className="flex h-4 min-w-0 items-center whitespace-nowrap">
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-blue-400",
