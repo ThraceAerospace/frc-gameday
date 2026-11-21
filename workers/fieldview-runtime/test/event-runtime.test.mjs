@@ -1496,3 +1496,39 @@ test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-
   });
   assert.equal("team_states" in view.event, false);
 });
+
+test("EventRuntime admin state diagnostics do not fan out to TeamRuntime", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026adminstate";
+  storage.values.set("event-state:publication", {
+    sourceRevision: 0,
+    snapshotVersion: 1,
+    generatedAt: Date.now(),
+    status: "complete",
+    state: { event_key: eventKey, teams: [{ key: "frc3461" }] },
+  });
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    TEAM_RUNTIME: {
+      idFromName: (key) => key,
+      get: () => ({ fetch: async () => { throw new Error("admin state must not query TeamRuntime"); } }),
+    },
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+
+  const response = await runtime.fetch(new Request("https://event-runtime/state", {
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+    },
+  }));
+  assert.equal(response.status, 200);
+  const state = await response.json();
+  assert.deepEqual(state.analytics.team_state_coverage, {
+    status: "not_inspected",
+    expected: 1,
+    materialized: null,
+  });
+});
