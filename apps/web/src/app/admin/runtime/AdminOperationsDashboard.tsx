@@ -146,7 +146,7 @@ export default function AdminOperationsDashboard() {
       setOverview(body as Overview); setAuthenticated(true); setError(""); setUpdatedAt(Date.now());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load runtime state");
-      if (!quiet) setAuthenticated(false);
+      // Keep an authenticated operator in the panel when runtime health is degraded.
     } finally { if (!quiet) setLoading(false); }
   }, [token, requestHeaders]);
 
@@ -422,7 +422,25 @@ export default function AdminOperationsDashboard() {
     <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</p>
     <h1 className="mt-1 text-3xl font-bold">Command center</h1>
     <p className="mt-2 text-sm text-[var(--fv-muted)]">Authenticate to inspect event and team runtimes and manage controlled ingestion.</p>
-    <form className="mt-7 space-y-3" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
+    <form className="mt-7 space-y-3" onSubmit={async (event) => {
+      event.preventDefault();
+      if (!token) return;
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch("/api/admin/runtime?auth=1", { headers: requestHeaders, cache: "no-store" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Unauthorized");
+        setAuthenticated(true);
+        setLoading(false);
+        // Load runtime status separately; an unavailable runtime must not reject
+        // valid dashboard credentials or trap the operator on the login screen.
+        void refresh(true);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Authentication failed");
+        setLoading(false);
+      }
+    }}>
       <label htmlFor="admin-token" className="block text-sm font-semibold">Dashboard access token</label>
       <input id="admin-token" type="password" autoComplete="current-password" value={token} onChange={(event) => setToken(event.target.value)} className="w-full rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-3 text-sm" placeholder="Enter admin access token" />
       {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
