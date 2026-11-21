@@ -461,24 +461,40 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         const state = isRecord(data?.state) && data.state.event_key === eventKey
           ? data.state as unknown as FieldViewEventState : null;
         const current = this.snapshots.get(eventKey);
-        if (state && version !== undefined && (!current || version > current.version)) {
+        const teamState = isRecord(data?.team_state) &&
+          typeof data.team_key === "string" &&
+          (data.team_state as Record<string, unknown>).team_key === data.team_key
+          ? data.team_state as unknown as FieldViewTeamEventState : null;
+        const canApplyTeamDelta = Boolean(
+          !state && current?.complete && teamState &&
+          version !== undefined && version === current.version + 1 &&
+          data?.team_state_pending !== true,
+        );
+        if ((state || canApplyTeamDelta) && version !== undefined &&
+            (!current || version > current.version)) {
           let teamStates = current?.snapshot.team_states ?? [];
-          if (isRecord(data?.team_state) && typeof data.team_key === "string" &&
-              (data.team_state as Record<string, unknown>).team_key === data.team_key) {
-            const teamState = data.team_state as unknown as FieldViewTeamEventState;
+          if (teamState && typeof data?.team_key === "string") {
             const index = teamStates.findIndex((item) => item.team_key === data.team_key);
             teamStates = index < 0
               ? [...teamStates, teamState]
               : teamStates.map((item, itemIndex) => itemIndex === index ? teamState : item);
           }
+          let nextState = state ?? current!.snapshot.state;
+          if (data?.event_comparison_invalidated === true && isRecord(nextState.analytics)) {
+            nextState = {
+              ...nextState,
+              analytics: { ...nextState.analytics, team_comparison: undefined },
+            } as FieldViewEventState;
+          }
           const complete = Boolean(
             current?.complete &&
             version === current.version + 1 &&
-            data?.team_state_pending !== true,
+            data?.team_state_pending !== true &&
+            (state !== null || teamState !== null),
           );
           const value: CanonicalSnapshot = {
             version,
-            snapshot: { state, team_states: teamStates },
+            snapshot: { state: nextState, team_states: teamStates },
             complete,
             ...(complete && typeof message.etag === "string" ? { etag: message.etag } : {}),
           };
@@ -493,7 +509,6 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         }
       }
     }
-  }
 
   private async fetchCanonicalAnalytics(eventKey: string, expectedRevision?: number) {
     if (!this.runtimeBaseUrl) return;
