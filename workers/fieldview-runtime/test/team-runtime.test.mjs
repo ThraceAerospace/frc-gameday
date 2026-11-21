@@ -54,12 +54,13 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(repeated.status, 304, "an unchanged canonical TeamState is validated without retransmitting its body");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "validated reads do not duplicate queued work");
 
-  await runtime.fetch(new Request("https://team/refresh?year=2026", {
+  const refresh = await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(calls.length, 7, "one alarm fans out all seven independent team resources");
+  assert.equal(refresh.status, 202, "admin refresh returns after durably queueing work");
+  assert.equal(calls.length, 0, "provider I/O must not run inline with the admin request");
   await drainManualQueue(runtime, storage);
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 7, "the TeamRuntime alarm fans out all seven independent resources");
   assert.equal(storage.values.get("team-state:2026")?.team?.team_number, 3461, "provider polling refreshes the persisted canonical TeamState");
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   const snapshot = await second.json();
