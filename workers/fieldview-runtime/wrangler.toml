@@ -1,3 +1,4 @@
+# Production-oriented configuration. This file is not used by the isolated prototype deployment.
 name = "fieldview-runtime"
 main = "src/index.ts"
 compatibility_date = "2026-11-17"
@@ -15,8 +16,8 @@ name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
 [[durable_objects.bindings]]
-name = "EVENT_SCHEDULER"
-class_name = "EventScheduler"
+name = "TASK_SCHEDULER"
+class_name = "TaskScheduler"
 
 [[durable_objects.bindings]]
 name = "TEAM_RUNTIME"
@@ -37,6 +38,10 @@ new_sqlite_classes = ["EventScheduler"]
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["TeamRuntime"]
+
+[[migrations]]
+tag = "v5"
+renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
 [triggers]
 crons = ["0 16 * * *"]
