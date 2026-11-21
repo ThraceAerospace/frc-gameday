@@ -330,7 +330,7 @@ interface AdminDiscoveryJob {
   stage: "events" | "teams" | "lifecycle" | "this-week" | "complete";
   events: number;
   teams: number;
-  providerRequests: number;
+  steps: number;
   error: string | null;
   startedAt: number;
   updatedAt: number;
@@ -595,7 +595,7 @@ export class TaskScheduler {
       const now = Date.now();
       const job: AdminDiscoveryJob = {
         year, mode: "year", status: "running", stage: "events",
-        events: 0, teams: 0, providerRequests: 0, error: null,
+        events: 0, teams: 0, steps: 0, error: null,
         startedAt: now, updatedAt: now, nextDueAt: now,
       };
       await this.storage.put(key, job);
@@ -1016,7 +1016,7 @@ export class TaskScheduler {
       const now = Date.now();
       const job: AdminDiscoveryJob = {
         year, mode: "current", status: "running", stage: "events",
-        events: 0, teams: 0, providerRequests: 0, error: null,
+        events: 0, teams: 0, steps: 0, error: null,
         startedAt: now, updatedAt: now, nextDueAt: now,
       };
       await this.storage.put(key, job);
@@ -1445,18 +1445,19 @@ export class TaskScheduler {
 
   private async processAdminDiscovery(job: AdminDiscoveryJob): Promise<void> {
     const key = adminDiscoveryKey(job.mode, job.year);
+    job.steps += 1;
     try {
       if (job.mode === "year") {
         if (job.stage === "events") {
           await this.discoverEvents(job.year);
           const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
           job.events = cache?.events.length ?? 0;
-          job.providerRequests += 1;
+          job.steps += 1;
           job.stage = "teams";
         } else if (job.stage === "teams") {
           const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
           job.teams = result.teamCount;
-          job.providerRequests += result.requestCount;
+          job.steps += 1;
           if (result.complete) job.stage = "complete";
         }
       } else {
@@ -1465,13 +1466,13 @@ export class TaskScheduler {
           await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
           const cache = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + job.year);
           job.events = cache?.events.length ?? 0;
-          job.providerRequests += 1;
+          job.steps += 1;
           if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) job.stage = "lifecycle";
           else job.stage = "teams";
         } else if (job.stage === "teams") {
           const result = await this.discoverTeams(job.year, TEAM_DISCOVERY_PREFIX, 4);
           job.teams = result.teamCount;
-          job.providerRequests += result.requestCount;
+          job.steps += 1;
           if (result.complete) job.stage = "this-week";
         } else if (job.stage === "this-week") {
           const pending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
