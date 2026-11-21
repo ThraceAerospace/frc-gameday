@@ -507,15 +507,24 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
     lastWebhookAt: null,
   });
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
-  const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=2026", {
+  let providerCalls = 0;
+  const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 200);
-  const result = await response.json();
+  assert.equal(response.status, 503, "the first analytics read reports unavailable while background initialization is queued");
+  assert.equal(storage.values.has("team-season-analytics:" + year), false);
+  assert.equal(providerCalls, 0, "the analytics GET does not acquire provider data or calculate inline");
+  assert.ok(storage.values.has("season-analytics:due:" + year));
+  await runtime.alarm();
+  const refreshed = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(refreshed.status, 200);
+  const result = await refreshed.json();
   assert.equal(result.team, 3461);
   assert.equal(result.year, year);
   assert.equal(result.eventCount, 0);
-  assert.equal(storage.values.has("team-season-analytics:2026"), true);
+  assert.equal(storage.values.has("team-season-analytics:" + year), true);
 });
 
 
@@ -526,9 +535,14 @@ test("TeamRuntime always creates the current-season TeamState when first reached
   const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + historicalYear, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 200);
-  assert.equal(storage.values.get("team-state:" + currentYear)?.year, currentYear);
-  assert.equal(storage.values.get("team-state:" + historicalYear)?.year, historicalYear);
+  assert.equal(response.status, 503, "a cold historical read does not synchronously materialize either season");
+  assert.equal(storage.values.has("team-state:" + currentYear), false);
+  assert.equal(storage.values.has("team-state:" + historicalYear), false);
+  await runtime.alarm();
+  assert.equal(storage.values.get("team-state:" + currentYear)?.year, currentYear,
+    "background runtime initialization restores the current-season state");
+  assert.equal(storage.values.get("team-state:" + historicalYear)?.year, historicalYear,
+    "the requested historical season is materialized in background");
 });
 
 
