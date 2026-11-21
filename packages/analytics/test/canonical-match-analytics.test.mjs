@@ -124,7 +124,7 @@ test("TeamRuntime calculates its own season comparison from the shared event inp
   assert.equal(analytics.season_comparison.comparison_size, 6);
   assert.equal(analytics.season_comparison.prior_event.event_key, "2026prior");
   assert.equal(analytics.season_history.length, 2);
-  assert.equal(analytics.audit.definition_versions.length, 4);
+  assert.equal(analytics.audit.definition_versions.length, 5);
 });
 
 
