@@ -214,8 +214,6 @@ export interface FieldViewEventAnalytics {
     statbotics_fetch_error?: string | null;
     updated_at: number;
   };
-  /** @deprecated The comparison input is an EventRuntime calculation dependency, not EventAnalytics output. */
-  season_cohort?: FieldViewEventTeamSeasonComparisonInput;
   audit?: FieldViewAnalyticsAudit;
 }
 
@@ -565,9 +563,3 @@ export interface FieldViewEventTeamSeasonComparisonInput {
   team_state_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
   records: FieldViewEventTeamSeasonRecord[];
 }
-
-
-/** @deprecated Use FieldViewEventTeamSeasonRecord. */
-export type FieldViewSeasonCohortRecord = FieldViewEventTeamSeasonRecord;
-/** @deprecated Use FieldViewEventTeamSeasonComparisonInput. */
-export type FieldViewSeasonCohortSnapshot = FieldViewEventTeamSeasonComparisonInput;
