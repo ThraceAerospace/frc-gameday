@@ -114,6 +114,7 @@ export type EventAnalyticsResponse = {
   qualificationAnalysis?: QualificationAnalysis;
   playoffAnalysis?: PlayoffAnalysis;
   teamInsights?: TeamInsight[];
+  teamComparison?: FieldViewEventTeamComparisonAnalytics | null;
   matchCount: number;
   loadedMatchCount: number;
   offset: number;
