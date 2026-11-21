@@ -259,7 +259,7 @@ export default {
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
-        const teamKey = /^\\d+$/.test(key) ? "frc" + key : key;
+        const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
         if (action === "seed") {
           if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
           const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
