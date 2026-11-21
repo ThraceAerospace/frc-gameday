@@ -105,6 +105,8 @@ export class TeamRuntime {
   private readonly frcColorsApi: FRCColorsApiClient;
   private readonly env: RuntimeEnvironment;
   private teamKey: string;
+  private readonly activation: Promise<void>;
+  private readonly publishedSnapshots = new Map<number, ReturnType<typeof normalizeFieldViewTeamState>>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
     this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
@@ -113,6 +115,21 @@ export class TeamRuntime {
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
     this.frcColorsApi = new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {});
+    // Restore only this TeamRuntime's persisted identity and publications.
+    // Provider refresh and cross-runtime work remain alarm-driven.
+    this.activation = state.blockConcurrencyWhile
+      ? state.blockConcurrencyWhile(async () => {
+          const [storedKey, publications] = await Promise.all([
+            this.storage.get<string>("team-key"),
+            this.storage.list<{ input_signature: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
+          ]);
+          if (storedKey && !this.teamKey) this.teamKey = storedKey;
+          for (const [key, publication] of publications) {
+            const match = /^team-state:(\\d+):publication$/.exec(key);
+            if (match && publication?.state) this.publishedSnapshots.set(Number(match[1]), publication.state);
+          }
+        })
+      : Promise.resolve();
   }
   private refreshIntervalMs(): number {
     const configured = this.env.TEAM_REFRESH_INTERVAL_MS;
@@ -232,6 +249,7 @@ export class TeamRuntime {
     });
   }
   async fetch(request: Request): Promise<Response> {
+    await this.activation;
     const url = new URL(request.url);
     const admin = Boolean(this.env.RUNTIME_ADMIN_TOKEN) && request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" && url.pathname === "/snapshot";
@@ -395,10 +413,12 @@ export class TeamRuntime {
       // Serve the last atomically published representation. A GET never
       // rebuilds/persists a snapshot and never materializes another season.
       const stateKey = `team-state:${year}`;
-      const publication = await this.storage.get<{
-        input_signature: string;
-        state: ReturnType<typeof normalizeFieldViewTeamState>;
-      }>(stateKey + ":publication");
+      const publication = this.publishedSnapshots.has(year)
+        ? { input_signature: "", state: this.publishedSnapshots.get(year)! }
+        : await this.storage.get<{
+            input_signature: string;
+            state: ReturnType<typeof normalizeFieldViewTeamState>;
+          }>(stateKey + ":publication");
       const resources = this.endpoints(year);
       const states = await Promise.all(resources.map(({ endpoint }) =>
         this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
@@ -869,6 +889,7 @@ export class TeamRuntime {
       return new Response(null, { status: 304, headers: responseHeaders });
     }
     if (cached?.input_signature === signature) {
+      this.publishedSnapshots.set(year, cached.state);
       return Response.json(cached.state, { headers: responseHeaders });
     }
 
@@ -909,6 +930,7 @@ export class TeamRuntime {
     });
     if (!published) return this.snapshot(year, request);
 
+    this.publishedSnapshots.set(year, snapshot);
     return Response.json(snapshot, { headers: responseHeaders });
   }
   private async pollResourceNow(resource: TeamResource): Promise<
