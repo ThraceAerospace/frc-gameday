@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { EventStateSnapshot } from "./EventState";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { CanonicalEventSnapshotData } from "./workerRealtime";
 import type { EventWebSocketStatus } from "@/lib/realtime/client";
 import { EventStateSnapshotsContext } from "./EventStateSnapshotsProvider";
 import { CanonicalEventSnapshotsContext } from "./CanonicalEventSnapshotsProvider";
@@ -104,7 +104,7 @@ export function useEventState(eventKey: string) {
  */
 export function useCanonicalEventSnapshot(eventKey: string): {
   version: number;
-  snapshot: FieldViewEventSnapshot;
+  snapshot: CanonicalEventSnapshotData;
 } | undefined {
   const remoteSnapshots = useContext(CanonicalEventSnapshotsContext);
   const enabled = remoteSnapshots === null && Boolean(eventKey);
