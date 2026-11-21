@@ -27,7 +27,7 @@ export interface DurableObjectNamespaceLike {
 
 export interface RuntimeEnvironment {
   TBA_API_KEY: string;
-  /** Approved official or FieldView-operated compatible Statbotics API base URL. */
+  /** Official Statbotics API when available; currently the configured testing mirror is retained while official service is unavailable. */
   STATBOTICS_API_BASE_URL?: string;
   /** Delay for the one-shot authoritative TBA REST refetch after a webhook (default 65000 ms). */
   TBA_AUTHORITATIVE_REFETCH_DELAY_MS?: string | number;
