@@ -41,15 +41,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Stable per-owner/endpoint jitter spreads denied runtimes across the next gate window. */
-function providerRetryJitter(owner: string, endpoint: string, interval: number): number {
-  const input = owner + "|" + endpoint;
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0) % Math.max(1, Math.floor(interval / 2));
-}
 
 function configured(value: string | number | undefined, fallback: number, name: string): number {
   const parsed = value === undefined ? fallback : Number(value);
@@ -234,16 +225,6 @@ interface ThisWeekProgress {
   includedKeys: string[];
 }
 
-interface ProviderRequestLease { leaseId: string; owner: string; endpoint: string; expiresAt: number; }
-
-class ProviderGateDeferred extends Error {
-  readonly retryAt: number;
-  constructor(retryAt: number, endpoint: string) {
-    super("Provider request deferred until " + new Date(retryAt).toISOString() + " for " + endpoint);
-    this.retryAt = retryAt;
-    this.name = "ProviderGateDeferred";
-  }
-}
 
 interface SeasonIngestJob {
   year: number;
@@ -334,46 +315,6 @@ export class TaskScheduler {
     });
   }
 
-  private providerRequestInterval(): number {
-    const value = this.env.PROVIDER_REQUEST_INTERVAL_MS;
-    const interval = value === undefined ? 1_000 : Number(value);
-    if (!Number.isSafeInteger(interval) || interval < 100) {
-      throw new Error("PROVIDER_REQUEST_INTERVAL_MS must be an integer of at least 100");
-    }
-    return interval;
-  }
-
-  /** Scheduler-owned discovery requests use the same lease as EventRuntime and TeamRuntime. */
-  private async requestWithProviderGate(endpoint: string, request: () => Promise<Response>): Promise<Response> {
-    const interval = this.providerRequestInterval();
-    while (true) {
-      const now = Date.now();
-      const permit = await this.storage.transaction(async (tx) => {
-        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
-        const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
-        if (current && current.expiresAt > now) {
-          return { granted: false as const, retryAt: Math.min(current.expiresAt, now + interval) };
-        }
-        if (nextAt > now) return { granted: false as const, retryAt: nextAt };
-        const leaseId = crypto.randomUUID();
-        await tx.put("provider-gate:lease", {
-          leaseId, owner: "scheduler:discovery", endpoint, expiresAt: now + 60_000,
-        } satisfies ProviderRequestLease);
-        return { granted: true as const, leaseId };
-      });
-      if (!permit.granted) throw new ProviderGateDeferred(permit.retryAt, endpoint);
-      try {
-        return await request();
-      } finally {
-        await this.storage.transaction(async (tx) => {
-          const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
-          if (!current || current.leaseId !== permit.leaseId) return;
-          await tx.delete("provider-gate:lease");
-          await tx.put("provider-gate:next-at", Date.now() + interval);
-        });
-      }
-    }
-  }
 
  
   private districtSource(record: DistrictResourceCache) {
@@ -585,7 +526,6 @@ export class TaskScheduler {
             results.push({ resource: spec.name, status: "failed", http_status: response.status });
           }
         } catch (error) {
-          if (error instanceof ProviderGateDeferred) throw error;
           const now = Date.now();
           const next: DistrictResourceCache = previous?.payload !== undefined
             ? { ...previous, checkedAt: now, status: "failed" }
@@ -595,59 +535,6 @@ export class TaskScheduler {
         }
       }
       return Response.json({ year, district_key: key, results }, { headers: { "Cache-Control": "no-store" } });
-    }
-
-    if (request.method === "POST" && url.pathname === "/provider-request/acquire") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid provider request lease" }, { status: 400 });
-      const value = body as Record<string, unknown>;
-      if (typeof value.owner !== "string" || value.owner.length > 120 ||
-          typeof value.endpoint !== "string" || value.endpoint.length > 500) {
-        return Response.json({ error: "Provider request owner and endpoint are required" }, { status: 400 });
-      }
-      const now = Date.now();
-      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
-      const interval = intervalValue === undefined ? 1_000 : Number(intervalValue);
-      if (!Number.isSafeInteger(interval) || interval < 100) return Response.json({ error: "PROVIDER_REQUEST_INTERVAL_MS must be an integer of at least 100" }, { status: 500 });
-      const result = await this.storage.transaction(async (tx) => {
-        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
-        const nextAt = await tx.get<number>("provider-gate:next-at") ?? 0;
-        if (current && current.expiresAt > now) {
-          const baseRetryAt = Math.min(current.expiresAt, now + interval);
-          return { granted: false, retryAt: baseRetryAt + providerRetryJitter(value.owner as string, value.endpoint as string, interval) };
-        }
-        if (nextAt > now) {
-          return { granted: false, retryAt: nextAt + providerRetryJitter(value.owner as string, value.endpoint as string, interval) };
-        }
-        const leaseId = crypto.randomUUID();
-        await tx.put("provider-gate:lease", { leaseId, owner: value.owner as string, endpoint: value.endpoint as string, expiresAt: now + 60_000 } satisfies ProviderRequestLease);
-        return { granted: true, leaseId };
-      });
-      // Keep the wire contract aligned with provider-request-gate.ts. A
-      // camelCase leaseId here would be ignored by the caller, preventing
-      // release and holding the global lease until its 60-second expiry.
-      return Response.json(result.granted
-        ? { granted: true, lease_id: result.leaseId }
-        : { granted: false, retry_at: result.retryAt }, {
-          headers: { "Cache-Control": "no-store" },
-        });
-    }
-
-    if (request.method === "POST" && url.pathname === "/provider-request/release") {
-      const body: unknown = await request.json().catch(() => null);
-      const leaseId = body && typeof body === "object" && !Array.isArray(body)
-        ? (body as Record<string, unknown>).lease_id : null;
-      if (typeof leaseId !== "string") return Response.json({ error: "A provider request lease id is required" }, { status: 400 });
-      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
-      const interval = intervalValue === undefined ? 1_000 : Number(intervalValue);
-      const released = await this.storage.transaction(async (tx) => {
-        const current = await tx.get<ProviderRequestLease>("provider-gate:lease");
-        if (!current || current.leaseId !== leaseId) return false;
-        await tx.delete("provider-gate:lease");
-        await tx.put("provider-gate:next-at", Date.now() + interval);
-        return true;
-      });
-      return Response.json({ released }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/register") {
@@ -1470,7 +1357,6 @@ export class TaskScheduler {
       await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
       await this.storage.delete("scheduler:last-error");
     } catch (error) {
-      if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
       await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
     }
     try {
@@ -1478,7 +1364,6 @@ export class TaskScheduler {
       if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
       else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
     } catch (error) {
-      if (error instanceof ProviderGateDeferred) await this.storage.put("scheduler:provider-deferred-until", error.retryAt);
       await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
     }
     let thisWeekRefreshPending = false;
