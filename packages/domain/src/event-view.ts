@@ -9,7 +9,7 @@ import type { FieldViewTeamEventState } from "./team.js";
  */
 export interface FieldViewEventView {
   /** Event-owned canonical state, excluding analytics and embedded team states. */
-  event: Omit<FieldViewEventState, "analytics" | "team_states">;
+  event: Omit<FieldViewEventState, "analytics">;
   /** Event-wide analysis calculated by EventRuntime. */
   analytics: FieldViewEventAnalytics | null;
   /** Independently persisted team/event states, one per available roster member. */
