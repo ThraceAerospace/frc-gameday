@@ -1236,14 +1236,14 @@ export class EventRuntime {
     });
     if (needed.length > 0) {
       await this.ensureRecurringPolls(resources, 86_400_000);
-      await this.enqueueManualPolls(needed);
+      await this.enqueueManualPolls(needed, false);
     }
     const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
     if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
         statboticsState.status === "failed" || statboticsState.status === "stale" ||
         (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
-      await this.enqueueManualPolls([statboticsEndpoint]);
+      await this.enqueueManualPolls([statboticsEndpoint], false);
     }
     if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
       const [analyticsPublication, eventStatePublication, eventViewPublication] = await Promise.all([
@@ -1520,13 +1520,19 @@ export class EventRuntime {
     });
   }
 
-  private async enqueueManualPolls(endpoints: string[]): Promise<void> {
+  private async enqueueManualPolls(endpoints: string[], immediate = true): Promise<void> {
     await this.storage.transaction(async (transaction) => {
       const current = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
       for (const endpoint of endpoints) {
         const previous = byEndpoint.get(endpoint);
-        byEndpoint.set(endpoint, { endpoint, dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()), attempts: previous?.attempts ?? 0 });
+        byEndpoint.set(endpoint, {
+          endpoint,
+          // Read-driven refreshes coalesce behind an existing retry deadline.
+          // A newly queued resource is still eligible immediately.
+          dueAt: immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
+          attempts: previous?.attempts ?? 0,
+        });
       }
       const next = [...byEndpoint.values()];
       const unchanged = current.length === next.length && current.every((item, index) =>
