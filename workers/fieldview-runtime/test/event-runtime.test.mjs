@@ -134,7 +134,7 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
   assert.equal(storage.values.get(key).revision, updated.revision);
 });
 
-test("public event snapshot reads are read-only; explicit refresh processes one provider request per alarm", async () => {
+test("public event snapshot reads queue missing resources without running provider I/O inline", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0;
@@ -151,10 +151,12 @@ test("public event snapshot reads are read-only; explicit refresh processes one 
 
   assert.equal((await runtime.fetch(request())).status, 200);
   assert.equal((await runtime.fetch(request())).status, 200);
-  assert.equal(providerCalls, 0);
-  assert.equal(storage.alarmAt, null);
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 0);
-  assert.equal(storage.values.has("manual:poll-queue"), false);
+  assert.equal(providerCalls, 0, "snapshot requests must not wait for provider work");
+  assert.ok(storage.alarmAt !== null, "missing resources should arm durable background work");
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, eventResourceEndpoints(eventKey).length);
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
+  assert.equal((await runtime.fetch(request())).status, 200, "repeated reads should coalesce queued work");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
 
   const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
     method: "POST",
@@ -585,8 +587,8 @@ test("public snapshot and stream reads need no user credential while state inspe
   }));
   assert.equal(authorizedState.status, 200);
   const diagnostics = await authorizedState.json();
-  assert.equal(diagnostics.polling.length, 0, "public snapshot reads must not create provider polling tasks");
-  assert.equal(storage.alarmAt, null);
+  assert.equal(diagnostics.polling.length, eventResourceEndpoints(eventKey).length, "public reads should register recurring tasks for missing resources");
+  assert.ok(storage.alarmAt !== null);
   assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
   const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
