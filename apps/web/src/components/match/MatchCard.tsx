@@ -158,23 +158,21 @@ export default function MatchCard({
               {matchName}
             </span>
 
-            {hasResult && matchLevelFlags.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-0.5">
+            <div className="mt-1 flex min-h-[14px] flex-wrap items-center gap-1">
+              <span
+                className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-3 ${predictionTone}`}
+                title={prediction ? `Predicted outcome: ${prediction.label}` : "Prediction unavailable"}
+              >
+                {predictionLabel}
+              </span>
+              {hasResult && matchLevelFlags.length > 0 ? (
                 <MatchReviewFlagPills flags={matchLevelFlags} />
-              </div>
-            ) : (
-              <div className="mt-1 flex min-h-[14px] items-center gap-1">
-                <span
-                  className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-3 ${predictionTone}`}
-                  title={prediction ? `Predicted outcome: ${prediction.label}` : "Prediction unavailable"}
-                >
-                  {predictionLabel}
-                </span>
+              ) : (
                 <span className="whitespace-nowrap font-mono text-[9px] tabular-nums text-zinc-500">
                   {time}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Red alliance */}
