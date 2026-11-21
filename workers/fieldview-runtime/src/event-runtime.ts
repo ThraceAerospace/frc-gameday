@@ -1221,15 +1221,14 @@ export class EventRuntime {
     await Promise.all(dueTasks.manualDue.map(async (item) => {
       const result = await this.pollEndpoint(item.endpoint);
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
-      const retryableFailure = typeof result !== "boolean" || (!result && latest?.status === "failed");
-      const retryAt = typeof result !== "boolean" ? result.deferredUntil
-        : Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
+      const retryableFailure = !result && latest?.status === "failed";
+      const retryAt = Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (transaction) => {
         const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
         const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
         if (retryableFailure && item.attempts < 8) {
-          // Gate deferral is not a provider attempt and must not consume retries.
-          next.push({ ...item, dueAt: retryAt, attempts: typeof result !== "boolean" ? item.attempts : item.attempts + 1 });
+          // Provider failures are retried without discarding the last-good representation.
+          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
         }
         await transaction.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(transaction);
@@ -1434,7 +1433,7 @@ export class EventRuntime {
     }
   }
 
-  private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean | { deferredUntil: number }> {
+  private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean> {
     const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
