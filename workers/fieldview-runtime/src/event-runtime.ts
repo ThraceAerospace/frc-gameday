@@ -61,6 +61,7 @@ const ANALYTICS_REVISION_KEY = "analytics:revision";
 const ANALYTICS_TEAM_STATE_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY = "analytics:allow-partial-cohort";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
+const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
 const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_TEAM_STATE_MAX_RETRIES = 12;
 
@@ -619,14 +620,19 @@ export class EventRuntime {
           !Number.isSafeInteger(body.team_state_revision) || (body.team_state_revision as number) < 0) {
         return Response.json({ error: "Invalid team state change notification" }, { status: 400 });
       }
-      await this.storage.transaction(async (transaction) => {
+      const accepted = await this.storage.transaction(async (transaction) => {
+        const revisionKey = TEAM_STATE_REVISION_PREFIX + body.team_key;
+        const previousRevision = await transaction.get<number>(revisionKey) ?? -1;
+        if ((body.team_state_revision as number) <= previousRevision) return false;
+        await transaction.put(revisionKey, body.team_state_revision);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");
         await transaction.put("snapshot-revision", (await transaction.get<number>("snapshot-revision") ?? 0) + 1);
         await transaction.delete(ANALYTICS_TEAM_STATE_RETRY_KEY);
         await this.rearm(transaction);
+        return true;
       });
-      return Response.json({ accepted: true, event_key: this.eventKey, team_key: body.team_key });
+      return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
     }
 
     if (request.method === "POST" && url.pathname === "/publish-state") {
