@@ -97,7 +97,11 @@ export default function MatchCard({
       : predictionBorder ?? "border-zinc-800";
 
   const matchName = matchShortName(match, playoffType);
-  const reviewFlags = hasResult ? (match.flags?.review_flags ?? []) : [];
+  const reviewFlags = hasResult
+    ? (match.flags?.review_flags ?? []).filter((flag) => flag !== "high-alliance-epa")
+    : [];
+  const redHighAllianceEpa = hasResult && (match.flags?.alliances.red ?? []).some((flag) => flag.type === "high-alliance-epa");
+  const blueHighAllianceEpa = hasResult && (match.flags?.alliances.blue ?? []).some((flag) => flag.type === "high-alliance-epa");
   const primaryReviewFlag = reviewFlags[0];
   const primaryReviewLabel = primaryReviewFlag
     ? MATCH_FLAG_LABELS[primaryReviewFlag]
@@ -165,12 +169,22 @@ export default function MatchCard({
           {/* Red alliance */}
           <div
             className={[
-              "min-w-0 truncate text-[10px] text-red-400",
+              "flex min-w-0 items-center gap-1 text-[10px] text-red-400",
               trackedRed ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            {formatAllianceShortName(redAlliance?.name)}
-            {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
+            <span className="min-w-0 truncate">
+              {formatAllianceShortName(redAlliance?.name)}
+              {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
+            </span>
+            {redHighAllianceEpa ? (
+              <span
+                title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates."
+                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+              >
+                High Alliance EPA
+              </span>
+            ) : null}
           </div>
 
           {/* Red score */}
@@ -188,12 +202,22 @@ export default function MatchCard({
           {/* Blue alliance */}
           <div
             className={[
-              "min-w-0 truncate text-[10px] text-blue-400",
+              "flex min-w-0 items-center gap-1 text-[10px] text-blue-400",
               trackedBlue ? "font-bold" : "font-medium",
             ].join(" ")}
           >
-            {formatAllianceShortName(blueAlliance?.name)}
-            {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
+            <span className="min-w-0 truncate">
+              {formatAllianceShortName(blueAlliance?.name)}
+              {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
+            </span>
+            {blueHighAllianceEpa ? (
+              <span
+                title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates."
+                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+              >
+                High Alliance EPA
+              </span>
+            ) : null}
           </div>
 
           {/* Blue score */}
