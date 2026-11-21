@@ -522,7 +522,7 @@ export class TeamRuntime {
       const eventState = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + event.key);
       const inputs = await this.storage.get<{ team_source_revision: number; event_source_revision: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
       const current = Boolean(eventState?.analytics && inputs?.team_source_revision === teamSourceRevision &&
-        inputs.event_source_revision === eventSourceRevisions[event.key]);
+        inputs?.event_source_revision === eventSourceRevisions[event.key]);
       const analytics = current ? eventState!.analytics as FieldViewTeamEventAnalytics : null;
       return {
         event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
