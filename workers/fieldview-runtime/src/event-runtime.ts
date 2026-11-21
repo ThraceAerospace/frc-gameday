@@ -706,6 +706,24 @@ export class EventRuntime {
       return Response.json(view, { headers: { "X-FieldView-Event-State-Status": publication.status, "Cache-Control": "no-store" } });
     }
 
+    if (request.method === "GET" && url.pathname === "/analytics-state") {
+      const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
+        total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+      const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      return Response.json({
+        event_key: this.eventKey,
+        source_revision: currentSourceRevision,
+        analytics: {
+          source_revision: publication?.sourceRevision ?? null,
+          revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
+          status: publication && publication.sourceRevision !== currentSourceRevision
+            ? "stale" : await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending"),
+        },
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
