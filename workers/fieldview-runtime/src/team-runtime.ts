@@ -307,14 +307,20 @@ export class TeamRuntime {
         const index = currentMatches.findIndex((item) => item.key === matchKey);
         if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
         const current = currentMatches[index];
+        const mergedSource = mergeTbaWebhookMatch(
+          current as unknown as Record<string, unknown>, updatedMatch,
+        );
+        const scoreInputsChanged = envelope.message_type === "match_score" && [
+          "alliances", "score_breakdown", "actual_time", "post_result_time", "winning_alliance",
+        ].some((key) => JSON.stringify((current as unknown as Record<string, unknown>)[key]) !== JSON.stringify(mergedSource[key]));
         const merged = {
-          ...mergeTbaWebhookMatch(current as unknown as Record<string, unknown>, updatedMatch),
-          // Preserve FieldView enrichments and invalidate only score-derived
-          // analysis when the source score changes.
+          ...mergedSource,
+          // Preserve FieldView enrichments. Only invalidate score-derived
+          // analysis when one of its actual source inputs changed.
           predictions: current.predictions,
           teams: current.teams,
           sources: current.sources,
-          ...(envelope.message_type === "match_score" ? { analysis: undefined, flags: undefined } : {}),
+          ...(scoreInputsChanged ? { analysis: undefined, flags: undefined } : {}),
         } as typeof current;
         if (JSON.stringify(current) === JSON.stringify(merged)) {
           return Response.json({ accepted: true, affected: true, changed: false,
