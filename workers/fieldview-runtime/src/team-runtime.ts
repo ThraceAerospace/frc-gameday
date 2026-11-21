@@ -622,8 +622,38 @@ export class TeamRuntime {
   }
 
   private async snapshot(year: number): Promise<Response> {
-    const states = await Promise.all(this.endpoints(year).map(({ endpoint }) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-    const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = states, now = Date.now();
+    const resources = this.endpoints(year);
+    const now = Date.now();
+    const inputSignature = (states: Array<TeamEndpointState<unknown> | undefined>) => JSON.stringify(
+      states.map((state) => state ? [
+        state.revision,
+        state.status,
+        state.lastFetchedAt,
+        state.expiresAt,
+        state.etag,
+        state.expiresAt !== null && state.expiresAt < now,
+      ] : null),
+    );
+    const stateKey = `team-state:${year}`;
+    const publicationKey = stateKey + ":publication";
+    const inputs = await this.storage.transaction(async (tx) => ({
+      states: await Promise.all(resources.map(({ endpoint }) =>
+        tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
+      revision: await tx.get<number>("snapshot-revision") ?? 0,
+    }));
+    const signature = inputSignature(inputs.states);
+    const cached = await this.storage.get<{
+      input_signature: string;
+      state: ReturnType<typeof normalizeFieldViewTeamState>;
+    }>(publicationKey);
+    if (cached?.input_signature === signature) {
+      return Response.json(cached.state, { headers: {
+        "X-FieldView-Snapshot-Version": String(inputs.revision),
+        "Cache-Control": "no-store",
+      } });
+    }
+
+    const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = inputs.states;
     const teamSource = metadata(team, now), districtSource = metadata(districts, now);
     const eventSource = metadata(events, now), mediaSource = metadata(media, now);
     const statboticsYearSource = metadata(statboticsYear, now), statboticsEventsSource = metadata(statboticsEvents, now);
@@ -646,13 +676,22 @@ export class TeamRuntime {
       ...(acquired(statboticsEvents) ? { statbotics_events: statboticsEvents!.data as StatboticsTeamEvent[] | null } : {}),
       ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeam | null } : {}),
     });
-    const stateKey = `team-state:${year}`;
-    const previousState = await this.storage.get<typeof snapshot>(stateKey);
-    if (!previousState || JSON.stringify(previousState) !== JSON.stringify(snapshot)) {
-      await this.storage.put(stateKey, snapshot);
-    }
+
+    // Publish only if the provider inputs still match the exact read set used
+    // to build this object. The publication and compatibility state key move
+    // together in one transaction, so readers never observe a partial state.
+    const published = await this.storage.transaction(async (tx) => {
+      const currentStates = await Promise.all(resources.map(({ endpoint }) =>
+        tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+      if (inputSignature(currentStates) !== signature) return false;
+      await tx.put(publicationKey, { input_signature: signature, state: snapshot });
+      await tx.put(stateKey, snapshot);
+      return true;
+    });
+    if (!published) return this.snapshot(year);
+
     return Response.json(snapshot, { headers: {
-      "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
+      "X-FieldView-Snapshot-Version": String(inputs.revision),
       "Cache-Control": "no-store",
     } });
   }
