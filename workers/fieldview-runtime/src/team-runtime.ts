@@ -407,7 +407,7 @@ export class TeamRuntime {
       await this.schedule(year, true);
       const resources = this.endpoints(year);
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
-      // Event history is the prerequisite for event-cohort seeding, so acquire
+      // Event history is the prerequisite for event season-comparison input acquisition, so acquire
       // it before the remaining profile and analytics resources.
       const prioritized = [
         ...resources.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
