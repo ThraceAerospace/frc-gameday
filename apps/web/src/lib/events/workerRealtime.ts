@@ -412,7 +412,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       const eventKey = message.event_key;
       const version = typeof message.version === "number" ? message.version : undefined;
       const data = isRecord(message.data) ? message.data : null;
-      const revision = data && Number.isSafeInteger(data.revision) ? data.revision as number : null;
+      const revision = data && Number.isSafeInteger(data.revision) && (data.revision as number) >= 0
+        ? data.revision as number : null;
       if (message.protocol === 1 && message.schema_version === 1 &&
           message.resource === "event-analytics" && message.change === "snapshot" &&
           data && data.event_key === eventKey && revision !== null &&
@@ -451,7 +452,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     if (message.type === "snapshot.changed" && typeof message.event_key === "string") {
       const eventKey = message.event_key;
       this.acknowledgedSubscriptions.add("event-state:" + eventKey);
-      const version = typeof message.version === "number" ? message.version : undefined;
+      const version = Number.isSafeInteger(message.version) && (message.version as number) >= 0
+        ? message.version as number : undefined;
       const eventMessage: EventWebSocketMessage = {
         type: "snapshot.changed",
         eventKey,
@@ -475,12 +477,12 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
           (data.team_state as Record<string, unknown>).team_key === data.team_key
           ? data.team_state as unknown as FieldViewTeamEventState : null;
         const canApplyTeamDelta = Boolean(
-          !state && current?.complete && teamState &&
+          message.change === "patch" && !state && current?.complete && teamState &&
           version !== undefined && version === current.version + 1 &&
           data?.team_state_pending !== true,
         );
-        if ((state || canApplyTeamDelta) && version !== undefined &&
-            (!current || version > current.version)) {
+        if (((message.change === "snapshot" && state) || canApplyTeamDelta) &&
+            version !== undefined && (!current || version > current.version)) {
           let teamStates = current?.snapshot.team_states ?? [];
           if (teamState && typeof data?.team_key === "string") {
             const index = teamStates.findIndex((item) => item.team_key === data.team_key);
