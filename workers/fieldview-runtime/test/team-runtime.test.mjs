@@ -56,6 +56,7 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(calls.length, 7, "one alarm fans out all seven independent team resources");
   await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7);
+  assert.equal(storage.values.get("team-state:2026")?.team?.team_number, 3461, "provider polling refreshes the persisted canonical TeamState");
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   const snapshot = await second.json();
   assert.equal(snapshot.team.team_number, 3461);
