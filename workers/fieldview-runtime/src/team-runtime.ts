@@ -37,6 +37,22 @@ const TASK_PREFIX = "task:";
 const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
+function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  const normalize = (value: string) => value.trim().replace(/^W\//, "");
+  return ifNoneMatch.split(",").some((candidate) =>
+    candidate.trim() === "*" || normalize(candidate) === normalize(etag));
+}
+
+function hashSignature(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
@@ -364,10 +380,11 @@ export class TeamRuntime {
     const currentYear = new Date().getUTCFullYear();
     const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear)
       ? null
-      : await this.snapshot(currentYear);
+      : await this.snapshot(currentYear, publicRead && year === currentYear ? request : undefined);
     const initializedState = year === currentYear && initializedCurrentState
       ? initializedCurrentState
-      : await this.snapshot(year);
+      : await this.snapshot(year, publicRead ? request : undefined);
+    if (publicRead && initializedState.status === 304) return initializedState;
     if (publicRead || publicSeasonAnalyticsRead) {
       // Queue only missing/stale resources. Do not execute an alarm inline:
       // the caller receives the best current snapshot while durable work runs.
@@ -747,7 +764,7 @@ export class TeamRuntime {
     });
   }
 
-  private async snapshot(year: number): Promise<Response> {
+  private async snapshot(year: number, request?: Request): Promise<Response> {
     const resources = this.endpoints(year);
     const now = Date.now();
     const inputSignature = (states: Array<TeamEndpointState<unknown> | undefined>) => JSON.stringify(
@@ -772,11 +789,17 @@ export class TeamRuntime {
       input_signature: string;
       state: ReturnType<typeof normalizeFieldViewTeamState>;
     }>(publicationKey);
+    const etag = 'W/"fv-team-snapshot-v1-' + year + '-' + inputs.revision + '-' + hashSignature(signature) + '"';
+    const responseHeaders = {
+      "X-FieldView-Snapshot-Version": String(inputs.revision),
+      ETag: etag,
+      "Cache-Control": "private, no-cache",
+    };
+    if (etagMatches(request?.headers.get("If-None-Match") ?? null, etag)) {
+      return new Response(null, { status: 304, headers: responseHeaders });
+    }
     if (cached?.input_signature === signature) {
-      return Response.json(cached.state, { headers: {
-        "X-FieldView-Snapshot-Version": String(inputs.revision),
-        "Cache-Control": "no-store",
-      } });
+      return Response.json(cached.state, { headers: responseHeaders });
     }
 
     const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = inputs.states;
@@ -816,10 +839,7 @@ export class TeamRuntime {
     });
     if (!published) return this.snapshot(year);
 
-    return Response.json(snapshot, { headers: {
-      "X-FieldView-Snapshot-Version": String(inputs.revision),
-      "Cache-Control": "no-store",
-    } });
+    return Response.json(snapshot, { headers: responseHeaders });
   }
   private async pollResourceNow(resource: TeamResource): Promise<
     { success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }
