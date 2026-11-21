@@ -1,5 +1,5 @@
 import type { FieldViewEvent } from "../../domain/src/event.ts";
-import type { FieldViewTeamSnapshot } from "../../domain/src/team.ts";
+import type { FieldViewTeamState } from "../../domain/src/team.ts";
 import type {
   FieldViewSeasonCohortRecord,
   FieldViewSeasonCohortSnapshot,
@@ -9,7 +9,7 @@ function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function fetchedAt(snapshot: FieldViewTeamSnapshot, fallback: number): number {
+function fetchedAt(snapshot: FieldViewTeamState, fallback: number): number {
   const retrievedAt = snapshot.sources.statbotics_team_events?.retrieved_at;
   if (typeof retrievedAt !== "string") return fallback;
   const parsed = Date.parse(retrievedAt);
@@ -24,10 +24,10 @@ function fetchedAt(snapshot: FieldViewTeamSnapshot, fallback: number): number {
 export function buildCanonicalSeasonCohort(
   targetEvent: Pick<FieldViewEvent, "key" | "name" | "event_code" | "start_date">,
   teamNumbers: number[],
-  snapshots: Array<FieldViewTeamSnapshot | null>,
+  snapshots: Array<FieldViewTeamState | null>,
   updatedAt = Date.now(),
 ): FieldViewSeasonCohortSnapshot {
-  const snapshotByTeam = new Map<number, FieldViewTeamSnapshot>();
+  const snapshotByTeam = new Map<number, FieldViewTeamState>();
   for (const snapshot of snapshots) {
     if (!snapshot) continue;
     const parsedKey = Number(snapshot.team_key.replace(/^frc/i, ""));
