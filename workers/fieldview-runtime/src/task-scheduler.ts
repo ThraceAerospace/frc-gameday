@@ -374,7 +374,7 @@ export class TaskScheduler {
       await this.storage.put("scheduler:daily-run-requested", true);
     }
     const currentAlarm = await this.storage.getAlarm?.();
-    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
+    if (currentAlarm === null || currentAlarm === undefined) {
       await this.storage.setAlarm(Date.now() + 100);
     }
   }
