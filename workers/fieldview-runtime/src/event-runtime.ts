@@ -30,7 +30,7 @@ import {
   type AnalyticsSourceKey,
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
-import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
+import type { FieldViewTeamState } from "../../../packages/domain/src/team.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
