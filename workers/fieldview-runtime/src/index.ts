@@ -7,7 +7,7 @@ import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { buildSeasonDiagnostics } from "../../../packages/analytics/src/season-diagnostics.ts";
 import type { SeasonMatchEvidence } from "../../../packages/analytics/src/season-diagnostics.ts";
-import type { FieldViewTeamAnalytics } from "../../../packages/domain/src/analytics.ts";
+import type { FieldViewTeamEventAnalytics } from "../../../packages/domain/src/analytics.ts";
 
 export { EventRuntime, TaskScheduler, Multiplexer, TeamRuntime };
 
@@ -62,7 +62,7 @@ async function buildTeamSeasonAnalyticsResponse(
         event?: { name?: string; short_name?: string | null; start_date?: string };
         team_states?: Array<{
           team_key: string;
-          analytics?: FieldViewTeamAnalytics | null;
+          analytics?: FieldViewTeamEventAnalytics | null;
         }>;
       };
       const teamState = snapshot.team_states?.find((entry) => entry.team_key === teamKey);
