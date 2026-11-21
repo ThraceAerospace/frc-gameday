@@ -82,7 +82,7 @@ test("canonical match analytics preserves absent and explicit-null match resourc
   assert.equal(await calculateCanonicalMatchAnalytics(explicitNull), explicitNull);
 });
 
-test("TeamRuntime calculates its own season comparison from the event cohort", async () => {
+test("TeamRuntime calculates its own season comparison from the shared event input", async () => {
   const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
     team_key: `frc${start + index}`,
     team_number: start + index,
