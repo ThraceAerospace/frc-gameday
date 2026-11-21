@@ -158,6 +158,36 @@ test("TaskScheduler protects cross-runtime seed orchestration with the admin aut
   assert.equal(response.status, 401);
 });
 
+test("TaskScheduler queues coverage audit without reading entity runtimes in the request", async () => {
+  const storage = new MemoryStorage();
+  await storage.put("admin-discovery:2026", {
+    etag: null, complete: true, events: [
+      { key: "2026test", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
+    ], updatedAt: Date.now(),
+  });
+  await storage.put("admin-team-discovery:2026", {
+    etag: null, complete: true, teamKeys: ["frc3461"], teamCount: 1, pageCount: 1, updatedAt: Date.now(),
+  });
+  let runtimeCalls = 0;
+  const forbiddenNamespace = {
+    idFromName(name) { return name; },
+    get() { return { async fetch() { runtimeCalls += 1; throw new Error("audit reads belong in alarms"); } }; },
+  };
+  const scheduler = new TaskScheduler({ storage }, {
+    TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin",
+    EVENT_RUNTIME: forbiddenNamespace, TEAM_RUNTIME: forbiddenNamespace,
+  });
+  const response = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "start", year: 2026 }),
+  }));
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).queued, true);
+  assert.equal(runtimeCalls, 0, "coverage audit submission must not wait on EventRuntime or TeamRuntime");
+  assert.ok(storage.alarmAt !== null);
+});
+
 test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
   const storage = new MemoryStorage();
   await storage.put("registry:events", ["2026test"]);
