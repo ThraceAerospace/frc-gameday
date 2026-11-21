@@ -42,22 +42,35 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
   globalThis.location = { protocol: "https:", host: "fieldview.example.test" };
   const fetchedVersions = [];
   const analyticsRevisions = [];
-  globalThis.fetch = async (input) => {
+  const conditionalRequests = [];
+  globalThis.fetch = async (input, init = {}) => {
     const url = String(input);
+    const headers = new Headers(init.headers);
+    const validator = headers.get("If-None-Match");
+    if (validator) conditionalRequests.push(validator);
     if (url.endsWith("/analytics")) {
+      if (validator === 'W/"analytics-1"') {
+        return new Response(null, { status: 304, headers: { ETag: validator } });
+      }
       const revision = analyticsRevisions.length + 1;
       analyticsRevisions.push(revision);
       return Response.json({
         event_key: "2026test", revision, status: "succeeded",
         due_at: null, calculated_at: 1_000, source_revision: revision,
         publication: { marker: revision },
-      });
+      }, { headers: { ETag: 'W/"analytics-1"' } });
+    }
+    if (validator === 'W/"snapshot-1"') {
+      return new Response(null, { status: 304, headers: { ETag: validator } });
     }
     const version = fetchedVersions.length + 1;
     fetchedVersions.push(version);
     return Response.json(
       { event_key: "2026test", marker: version },
-      { headers: { "X-FieldView-Snapshot-Version": String(version) } },
+      { headers: {
+        "X-FieldView-Snapshot-Version": String(version),
+        ETag: 'W/"snapshot-1"',
+      } },
     );
   };
 
@@ -106,6 +119,8 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     topic: "event-state",
     event_key: "2026test",
     version: 2,
+    etag: 'W/"snapshot-2"',
+    data: { state: { event_key: "2026test", marker: 2 } },
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received.at(-1).version, 2);
@@ -114,6 +129,12 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     topic: "analytics",
     event_key: "2026test",
     version: 2,
+    etag: 'W/"analytics-2"',
+    data: {
+      event_key: "2026test", revision: 2, status: "succeeded",
+      due_at: null, calculated_at: 2_000, source_revision: 2,
+      publication: { marker: 2 },
+    },
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(analyticsReceived.at(-1).revision, 2);
@@ -139,10 +160,12 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     event_key: "2026test",
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(received.at(-1).version, 3);
-  assert.equal(analyticsReceived.at(-1).revision, 3);
-  assert.deepEqual(fetchedVersions, [1, 2, 3]);
-  assert.deepEqual(analyticsRevisions, [1, 2, 3]);
+  assert.equal(received.at(-1).version, 2, "304 recovery keeps the locally cached snapshot");
+  assert.equal(analyticsReceived.at(-1).revision, 2, "304 recovery keeps the locally cached analytics");
+  assert.deepEqual(fetchedVersions, [1], "data-bearing publications avoid another snapshot read");
+  assert.deepEqual(analyticsRevisions, [1], "data-bearing publications avoid another analytics read");
+  assert.ok(conditionalRequests.includes('W/"snapshot-2"'));
+  assert.ok(conditionalRequests.includes('W/"analytics-2"'));
 
   unsubscribeFirst();
   assert.equal(reconnectedSocket.sent.length, 2, "one remaining event listener and analytics subscriber keep both topics subscribed");
