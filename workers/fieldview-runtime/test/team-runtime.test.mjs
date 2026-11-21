@@ -426,3 +426,25 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
   const polling = [...storage.values.entries()].filter(([key]) => key.startsWith("task:"));
   assert.ok(polling.every(([key]) => !key.includes("/team_year/") && !key.includes("/team_events?")), "Statbotics resources remain event-driven after acquisition");
 });
+
+
+test("TeamRuntime removes legacy recurring Statbotics tasks without discarding explicit one-shot work", async () => {
+  const storage = new MemoryStorage();
+  const legacyEndpoint = "/team_year/3461/2026";
+  storage.values.set("task:" + legacyEndpoint, {
+    provider: "statbotics", endpoint: legacyEndpoint,
+    dueAt: Date.now() + 86_400_000, intervalMs: 86_400_000, attempts: 0,
+  });
+  storage.values.set("manual:poll-queue", [{
+    endpoint: legacyEndpoint, year: 2026, dueAt: Date.now() + 60_000, attempts: 0,
+  }]);
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), "frc3461");
+
+  const response = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(storage.values.has("task:" + legacyEndpoint), false, "legacy recurring Statbotics poll is removed");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
+    "explicit one-shot Statbotics acquisition remains queued");
+});
