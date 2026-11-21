@@ -270,6 +270,9 @@ export class TeamRuntime {
           status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
         });
       }
+      if (request.headers.get("X-FieldView-Team-Key") !== this.teamKey) {
+        return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
+      }
     } else {
       if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
       // Retire legacy recurring Statbotics tasks only on an explicit/admin touch,
