@@ -58,7 +58,7 @@ function postSnapshot(port: MessagePort, eventKey: string, snapshot: EventStateS
 function postCanonicalSnapshot(
   port: MessagePort,
   eventKey: string,
-  value: { version: number; snapshot: import("@fieldview/domain").FieldViewEventSnapshot },
+  value: import("./workerRealtime").CanonicalSnapshot,
 ) {
   try {
     port.postMessage({
