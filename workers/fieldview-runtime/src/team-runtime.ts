@@ -837,7 +837,7 @@ export class TeamRuntime {
       await tx.put(stateKey, snapshot);
       return true;
     });
-    if (!published) return this.snapshot(year);
+    if (!published) return this.snapshot(year, request);
 
     return Response.json(snapshot, { headers: responseHeaders });
   }
