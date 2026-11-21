@@ -5,7 +5,7 @@ import type {
   FieldViewAnalyticsFinding,
   FieldViewAnalyticsPopulation,
   FieldViewMetricResult,
-  FieldViewTeamAnalytics,
+  FieldViewTeamEventAnalytics,
   FieldViewTeamMatchEvidence,
   FieldViewAnalyticsAllianceResult,
   FieldViewAnalyticsTeamSummary,
@@ -155,6 +155,7 @@ export function calculateCanonicalAggregateAnalytics(
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
   seasonCohort?: FieldViewSeasonCohortSnapshot,
+  options: { includeTeamAnalytics?: boolean; includeEventAnalytics?: boolean } = {},
 ): FieldViewEventState {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
@@ -300,7 +301,7 @@ export function calculateCanonicalAggregateAnalytics(
     })),
   };
   const allianceResultByMatch = new Map(allianceResults.map((item) => [item.matchKey + ":" + item.color, item]));
-  const team_states = eventState.team_states === undefined || eventState.team_states === null
+  const team_states = options.includeTeamAnalytics === false || eventState.team_states === undefined || eventState.team_states === null
     ? eventState.team_states
     : eventState.team_states.map((teamState) => {
         const row = teamRows.find((item) => item.teamKey === teamState.team_key);
@@ -413,7 +414,7 @@ export function calculateCanonicalAggregateAnalytics(
         const teamFindings = (insight?.reviewMatches ?? [])
           .filter((item) => item.reasons.length > 0)
           .map((item) => teamFinding(teamState.team_key, item));
-        const analytics: FieldViewTeamAnalytics = {
+        const analytics: FieldViewTeamEventAnalytics = {
           team_key: teamState.team_key,
           event_key: teamState.event_key,
           metrics,
@@ -501,7 +502,7 @@ export function calculateCanonicalAggregateAnalytics(
 
   return {
     ...eventState,
-    analytics: {
+    ...(options.includeEventAnalytics === false ? {} : { analytics: {
       event_key: eventState.event_key,
       metrics: eventMetrics,
       findings: findings.map(reviewFinding),
@@ -514,7 +515,6 @@ export function calculateCanonicalAggregateAnalytics(
         mean: mean(residuals), standard_deviation: standardDeviation(residuals), sample_size: residuals.length,
       },
       prediction_summary: qualificationDomain.score_prediction,
-      ...(seasonCohort ? { season_cohort: seasonCohort } : {}),
       collection: {
         state: records.some((record) => record.statboticsStatus === "unavailable") ? "partial" : "complete",
         processed_match_count: records.length,
@@ -523,7 +523,7 @@ export function calculateCanonicalAggregateAnalytics(
         updated_at: audit.calculated_at,
       },
       audit,
-    },
+    } }),
     ...(team_states === undefined ? {} : { team_states }),
   };
 }
