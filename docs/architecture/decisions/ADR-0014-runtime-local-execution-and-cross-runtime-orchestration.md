@@ -48,7 +48,20 @@ TaskScheduler triggers jobs; target runtimes execute them. TaskScheduler must no
 
 A runtime must not call TaskScheduler during an ordinary snapshot, analytics, state, or refresh request merely to register itself. The per-request /register endpoint is removed. TaskScheduler populates and updates its inventory through its own discovery and cross-runtime orchestration workflows. Inventory is operational metadata, not a prerequisite for a runtime to serve its own state.
 
-### 4. Cross-runtime operations enter through TaskScheduler
+### 4. Admin jobs are asynchronous and alarm-driven
+
+An admin request is a submission boundary, not an execution boundary:
+
+1. Validate the command and persist a job record with a stable identity, status, progress cursor, retry timing, and timestamps.
+2. Arm the TaskScheduler alarm and return HTTP 202 with the accepted job state. Do not fetch provider data, wait for a runtime alarm, or iterate across target runtimes in the request handler.
+3. TaskScheduler advances cross-runtime jobs in bounded alarm steps. Each step dispatches a command to the owning runtime and persists its cursor/progress before yielding.
+4. EventRuntime and TeamRuntime enqueue local work and return immediately. Their own alarms execute provider I/O, reconciliation, publication, and retries.
+5. Read-only admin status routes return persisted job state. The dashboard polls status independently; a running job must never keep an HTTP request or global dashboard busy state open.
+6. Routine scheduler stop disables periodic work only. It must preserve alarms for already accepted admin jobs.
+
+This applies to team seeding, event-team seeding, manual discovery, full-season ingestion, and coverage audits. Manual /run, /daily, and historical season discovery are also queue operations. Event lifecycle changes, resource refreshes, and team seed commands must not invoke alarm handlers inline or synchronously fan out from EventRuntime to TeamRuntime.
+
+### 5. Cross-runtime operations enter through TaskScheduler
 
 The Worker remains a stateless routing/authentication boundary. It forwards cross-runtime admin commands to TaskScheduler. TaskScheduler persists or executes the orchestration and dispatches commands to the appropriate runtimes.
 
