@@ -1138,6 +1138,7 @@ export class EventRuntime {
         : [];
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
       const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
+        teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null) &&
         comparisonInputCollection?.comparisonInput.state === "complete";
       const teamComparison = calculateFieldViewEventTeamComparisonAnalytics(
         teamStates,
