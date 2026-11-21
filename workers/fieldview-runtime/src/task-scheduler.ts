@@ -2040,8 +2040,8 @@ export class TaskScheduler {
       const checkedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
       let discovered: TBAEvent[];
       if (cached && Date.now() - checkedAt < policy.discoveryIntervalMs) {
-        // Do not consume the shared provider slot on every scheduler alarm.
-        // A fresh event directory is sufficient to continue lifecycle work.
+        // Avoid unnecessary provider requests while the retained event
+        // directory is still within its configured freshness interval.
         discovered = cached.events;
       } else {
         const headers = new Headers();
