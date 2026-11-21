@@ -196,8 +196,21 @@ export class TeamRuntime {
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
     if (publicRead) {
-      // Snapshot reads are read-only. Provider acquisition is initiated by
-      // explicit refresh/seed operations or scheduler-owned lifecycle work.
+      // Queue only missing/stale resources. Do not execute an alarm inline:
+      // the caller receives the best current snapshot while durable work runs.
+      const resources = this.endpoints(year);
+      const states = await Promise.all(resources.map(({ endpoint }) =>
+        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+      const now = Date.now();
+      const needed = resources.filter((resource, index) => {
+        const state = states[index];
+        return !state || state.lastFetchedAt === null || state.status === "failed" ||
+          (state.expiresAt !== null && state.expiresAt <= now);
+      });
+      if (needed.length > 0) {
+        await this.schedule(year, true);
+        await this.enqueueManualPolls(needed, year);
+      }
       return this.snapshot(year);
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
