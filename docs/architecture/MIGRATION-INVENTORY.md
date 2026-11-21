@@ -199,3 +199,11 @@ These must be resolved through focused decision records before implementing thei
 5. Define versioned domain and client contracts before replacing legacy acquisition or publishing new state.
 
 **Current implementation status:** the migration plan and inventory are documentation only. The repository still has one root Next.js app and the legacy Redis/SharedWorker/Vercel data path. No Cloudflare Worker, Durable Object, workspace package, or production infrastructure is claimed to exist.
+
+
+## Runtime ownership correction (2026-11-20)
+
+- EventRuntime: event-scoped TBA and Statbotics data only; coordinates with TeamRuntime instances for participating-team data; no team-scoped data persistence.
+- TeamRuntime: team-scoped TBA and Statbotics data plus FRC-Colors; durable ETags and cached representations; active-event membership awareness and activity-sensitive polling.
+- TaskScheduler: generic daily/background job and lifecycle orchestrator, including event discovery, EventRuntime creation, and event-week classification. It must not proxy normal runtime provider traffic.
+- EventRuntime and TeamRuntime provider requests are concurrent within and across Durable Objects. A global request lease or mutex is prohibited.
