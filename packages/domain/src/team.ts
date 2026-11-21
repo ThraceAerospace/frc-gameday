@@ -18,9 +18,9 @@ export interface FieldViewTeam extends TBATeam {
 
 /**
  * Team-profile aggregate for one season. This is distinct from
- * FieldViewTeamState, which is scoped to one team's participation at an event.
+ * FieldViewTeamEventState, which is scoped to one team's participation at an event.
  */
-export interface FieldViewTeamSnapshot {
+export interface FieldViewTeamState {
   team_key: TeamKey;
   year: number;
   sources: FieldViewSourceMetadata;
@@ -39,7 +39,7 @@ export interface FieldViewTeamSnapshot {
  * Match objects retain their complete canonical alliance context; the state
  * selects only matches in which this team appeared.
  */
-export interface FieldViewTeamState {
+export interface FieldViewTeamEventState {
   event_key: EventKey;
   team_key: TeamKey;
   sources: {
