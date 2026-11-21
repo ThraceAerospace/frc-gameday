@@ -113,30 +113,7 @@ export default {
           for (const key of messageData.team_keys) addTeamKey(key);
         }
         addTeamKey(messageData.team_key);
-      } else if (messageType === "awards_posted") {
-        const addRecipients = (recipients: unknown) => {
-          if (!Array.isArray(recipients)) return;
-          for (const recipient of recipients) {
-            if (isRecord(recipient)) {
-              if (typeof recipient.team_key === "string") addTeamKey(recipient.team_key);
-              else if (typeof recipient.team_number === "number" && Number.isSafeInteger(recipient.team_number)) {
-                addTeamKey("frc" + recipient.team_number);
-              }
-            }
-          }
-        };
-        addRecipients(messageData.recipient_list);
-        if (Array.isArray(messageData.awards)) {
-          for (const award of messageData.awards) if (isRecord(award)) addRecipients(award.recipient_list);
-        }
-        addTeamKey(messageData.team_key);
-      } else if (messageType === "alliance_selection") {
-        // TBA payload variants may include explicit selected team keys. Never
-        // infer recipients from array positions or an event metadata object.
-        const candidates = messageData.team_keys;
-        if (Array.isArray(candidates)) for (const key of candidates) addTeamKey(key);
-        addTeamKey(messageData.team_key);
-      } else if (!["schedule_updated", "starting_comp_level"].includes(messageType)) {
+      } else if (!["awards_posted", "alliance_selection", "schedule_updated", "starting_comp_level"].includes(messageType)) {
         return Response.json({ error: "Unsupported TBA webhook message type" }, { status: 400 });
       }
 
