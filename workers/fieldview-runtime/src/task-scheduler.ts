@@ -1185,7 +1185,7 @@ export class TaskScheduler {
         }
         job.stage = "wait";
         job.teamWaitStartedAt = Date.now();
-        job.nextDueAt = Date.now() + Math.max(1_000, this.providerRequestInterval() * 2);
+        job.nextDueAt = Date.now() + 2_000;
       } else {
         const stateResponse = await stub.fetch(new Request("https://team-runtime/state", { headers }));
         if (!stateResponse.ok) throw new Error("TeamRuntime state returned HTTP " + stateResponse.status);
@@ -1202,14 +1202,14 @@ export class TaskScheduler {
           const elapsed = Date.now() - (job.teamWaitStartedAt ?? job.startedAt);
           if (elapsed >= 15 * 60_000) throw new Error("Timed out waiting for immediate team event-history curation after 15 minutes");
           // Re-enqueue if the manual queue exhausted its own transient retries.
-          // The queue deduplicates by endpoint and respects the shared provider gate.
+          // The queue deduplicates by endpoint; retry after a short backoff.
           const retryResponse = await stub.fetch(new Request("https://team-runtime/ingest-resource?year=" + job.year, {
             method: "POST", headers: { ...headers, "Content-Type": "application/json" },
             body: JSON.stringify({ endpoint: historyEndpoint }),
           }));
           if (!retryResponse.ok) throw new Error("TeamRuntime event-history retry returned HTTP " + retryResponse.status);
           job.teamAttempts += 1;
-          job.nextDueAt = Date.now() + Math.min(30_000, Math.max(2_000, this.providerRequestInterval() * 3));
+          job.nextDueAt = Date.now() + 3_000;
           job.updatedAt = Date.now();
           await this.storage.put(eventTeamSeedKey(job.eventKey), job);
           return;
