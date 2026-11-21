@@ -259,7 +259,8 @@ export class TeamRuntime {
           for (const color of ["red", "blue"]) {
             const alliance = (alliances as Record<string, unknown>)[color];
             if (alliance && typeof alliance === "object" && !Array.isArray(alliance)) {
-              const keys = (alliance as Record<string, unknown>).team_keys;
+              const value = alliance as Record<string, unknown>;
+              const keys = Array.isArray(value.teams) ? value.teams : value.team_keys;
               if (Array.isArray(keys)) for (const key of keys) if (typeof key === "string") targetKeys.add(key);
             }
           }
