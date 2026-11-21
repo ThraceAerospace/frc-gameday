@@ -124,8 +124,8 @@ test("match_score webhook fans out once to the event and each unique participati
         key: "2026test_qm1",
         event_key: "2026test",
         alliances: {
-          red: { team_keys: ["frc1", "frc2", "frc3"] },
-          blue: { team_keys: ["frc3", "frc4", "frc5"] },
+          red: { teams: ["frc1", "frc2", "frc3"] },
+          blue: { teams: ["frc3", "frc4", "frc5"] },
         },
       },
     },
