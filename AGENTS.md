@@ -72,7 +72,7 @@ Provider packages must not expose raw provider response objects directly to the 
 
 Provider packages do not normalize, correlate, aggregate, or calculate FieldView values. They deliver unchanged provider payloads to the FieldView domain. The domain owns canonical model construction, cross-source associations, and explicitly approved transformations; analytics calculations remain in the analytics layer. Preserve field-level source precedence and partial-failure semantics.
 
-Statbotics runtime data may come only from the official API (`https://api.statbotics.io`) or a FieldView-operated compatible fork. Do not use a community-operated mirror. Keep the provider endpoint configurable only for approved compatible endpoints.
+Statbotics runtime data should use the official API (`https://api.statbotics.io`) when it is operational. The official service is currently unavailable; retain the configured testing mirror `https://api-statbotics.iterativerefinement.com/` until the official API is restored or a FieldView-operated compatible service is available. Do not silently replace this working testing endpoint. Keep the endpoint configurable and identify the active source in runtime provenance.
 
 ## Domain model and runtime ownership
 
@@ -205,3 +205,21 @@ This list is provisional; re-scan the source and deployment settings before chan
 ## Agent documentation
 
 `CLAUDE.md` must remain the one-line pointer `@AGENTS.md` so all repository agents use this source of truth.
+
+
+## Runtime readiness, cache hydration, and read behavior
+
+**Durable persistence is the readiness boundary.** A runtime with previously persisted source records and canonical publications must be able to serve its last usable data immediately after activation without provider I/O, cross-runtime fan-out, or waiting for analytics calculation.
+
+- Public client reads are read-first and non-blocking: return the newest usable persisted publication immediately, even when stale. If freshness has expired or a source is missing, enqueue local revalidation and arm the owning runtime's alarm; never make the client wait for revalidation.
+- A failed refresh must not replace or erase the last usable publication. If no publication has ever existed, return an explicit partial/unavailable state promptly while background initialization proceeds.
+- On every Durable Object activation, hydrate the runtime's in-memory indexes/cache from its own durable storage before serving requests. Use the platform-supported initialization/concurrency mechanism so requests cannot observe a half-hydrated cache. Do not make provider requests during cache hydration.
+- EventRuntime hydrates only event-owned state. TeamRuntime hydrates only team-owned state. Each runtime independently manages its local warm-up, revalidation queue, retries, and alarms. TaskScheduler must not hydrate entity runtimes or become a read dependency.
+- Object activation is not a global application-start event: Durable Objects are activated on demand. Therefore each activation must restore its own cache from durable storage, and system-wide invariants must be maintained by durable scheduled work rather than relying on every object starting simultaneously.
+- The current season is a mandatory system invariant. System discovery must always maintain a durable current-season event index. The current season and its known event set must be available from persisted data immediately; discovery/reconciliation runs in the background and updates that index atomically. Do not defer the initial current-season discovery until a visitor opens an event page.
+- Event/team detail refresh may remain lazy. When a detail runtime is idle, it need not continuously poll, but its last published state must remain readable immediately and stale state must trigger asynchronous revalidation.
+- A published event view must not require synchronous fan-out to every TeamRuntime on an ordinary client GET. Cross-runtime composition and analytics are background publication work; the event runtime serves its last complete or explicitly partial versioned view.
+- Readiness must be explicit and inspectable: distinguish durable source coverage, canonical publication existence/version, in-memory hydration completion, freshness, queued revalidation, and last refresh failure. The Cloudflare `hasStoredData` flag alone is not readiness.
+- Keep the configured Statbotics testing mirror `https://api-statbotics.iterativerefinement.com/` while the official API is unavailable; preserve its source provenance.
+
+See ADR-0015 for the read-first persistence-equals-readiness decision.
