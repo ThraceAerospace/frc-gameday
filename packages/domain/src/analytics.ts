@@ -166,6 +166,8 @@ export interface FieldViewEventTeamComparisonEntry {
 
 /** Event-owned aggregation of TeamRuntime-produced season comparisons. */
 export interface FieldViewEventTeamComparisonAnalytics {
+  /** Version of the shared comparison input used for this aggregation. */
+  input_updated_at: number | null;
   population: {
     expected_team_count: number;
     eligible_team_count: number;
