@@ -599,14 +599,19 @@ export class TeamRuntime {
         ...resources.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
       await this.enqueueManualPolls(prioritized, year);
-      await this.alarm();
+      // Refresh requests only enqueue durable work. The Durable Object alarm
+      // performs provider I/O after this request has returned. Seed remains a
+      // synchronous orchestration primitive for TaskScheduler's cross-runtime
+      // seed workflow.
+      if (url.pathname === "/seed") await this.alarm();
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
       const taskRegistry = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const providerByEndpoint = new Map([...taskRegistry.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({
         scheduled: true,
-        attempted: true,
+        queued: url.pathname === "/refresh",
+        attempted: url.pathname === "/seed",
         team_key: this.teamKey,
         year,
         snapshot,
@@ -616,7 +621,7 @@ export class TeamRuntime {
           http_status: state.lastHttpStatus ?? null,
           last_error: state.lastError ?? null,
         })),
-      });
+      }, { status: url.pathname === "/refresh" ? 202 : 200 });
     }
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
       const body: unknown = await request.json().catch(() => null);
