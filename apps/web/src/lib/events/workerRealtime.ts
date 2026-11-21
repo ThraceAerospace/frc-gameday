@@ -444,7 +444,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
           const complete = Boolean(
             current?.complete &&
             version === current.version + 1 &&
-            data.team_state_pending !== true,
+            data?.team_state_pending !== true,
           );
           const value: CanonicalSnapshot = {
             version,
