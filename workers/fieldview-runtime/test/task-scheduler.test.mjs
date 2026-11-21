@@ -162,11 +162,13 @@ test("TaskScheduler queues coverage audit without reading entity runtimes in the
   const storage = new MemoryStorage();
   await storage.put("admin-discovery:2026", {
     etag: null, complete: true, events: [
-      { key: "2026test", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
+      { key: "2026testa", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
+      { key: "2026testb", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
+      { key: "2026testc", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
     ], updatedAt: Date.now(),
   });
   await storage.put("admin-team-discovery:2026", {
-    etag: null, complete: true, teamKeys: ["frc3461"], teamCount: 1, pageCount: 1, updatedAt: Date.now(),
+    etag: null, complete: true, teamKeys: ["frc3461", "frc254", "frc1678"], teamCount: 3, pageCount: 1, updatedAt: Date.now(),
   });
   let runtimeCalls = 0;
   const forbiddenNamespace = {
@@ -186,6 +188,17 @@ test("TaskScheduler queues coverage audit without reading entity runtimes in the
   assert.equal((await response.json()).queued, true);
   assert.equal(runtimeCalls, 0, "coverage audit submission must not wait on EventRuntime or TeamRuntime");
   assert.ok(storage.alarmAt !== null);
+  await scheduler.alarm();
+  assert.equal((await storage.get("admin:coverage-audit:2026")).status, "paused",
+    "one alarm processes only one bounded audit batch and pauses for operator continuation");
+  const continueResponse = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "continue", year: 2026 }),
+  }));
+  assert.equal(continueResponse.status, 202);
+  await scheduler.alarm();
+  assert.equal((await storage.get("admin:coverage-audit:2026")).status, "completed");
 });
 
 test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
