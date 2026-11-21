@@ -66,7 +66,12 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     const version = fetchedVersions.length + 1;
     fetchedVersions.push(version);
     return Response.json(
-      { event_key: "2026test", marker: version },
+      {
+        event_key: "2026test",
+        marker: version,
+        teams: [{ key: "frc3461" }],
+        team_states: [{ event_key: "2026test", team_key: "frc3461", marker: "initial" }],
+      },
       { headers: {
         "X-FieldView-Snapshot-Version": String(version),
         ETag: 'W/"snapshot-1"',
@@ -124,7 +129,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     event_key: "2026test",
     version: 2,
     etag: 'W/"snapshot-2"',
-    data: { state: { event_key: "2026test", marker: 2 } },
+    data: { state: { event_key: "2026test", marker: 2, teams: [{ key: "frc3461" }] } },
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received.at(-1).version, 2);
@@ -276,7 +281,7 @@ test("SharedWorker hydrates canonical snapshots from IndexedDB before reconnect 
   globalThis.fetch = async () => {
     fetchCount += 1;
     return Response.json(
-      { event_key: "2026cache", marker: "persisted", team_states: [] },
+      { event_key: "2026cache", marker: "persisted", teams: [], team_states: [] },
       { headers: {
         "X-FieldView-Snapshot-Version": "7",
         ETag: 'W/"snapshot-cache-7"',
