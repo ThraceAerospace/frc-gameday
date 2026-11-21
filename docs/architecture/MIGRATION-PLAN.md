@@ -128,6 +128,12 @@ The scheduling boundary is now explicit:
 
 The first implementation slice routes team seeding through TaskScheduler: the Worker forwards the command to /admin/team-seed; TaskScheduler invokes TeamRuntime to acquire team history, then dispatches lifecycle/schedule commands to the associated EventRuntimes. It updates the scheduler inventory in batched writes. EventRuntime's analytics input collection no longer calls TaskScheduler to register each participating team during a read. This removes avoidable hot-path traffic while preserving the cross-runtime seed behavior.
 
+### Asynchronous admin job execution (2026-11-21)
+
+All long-running admin work now follows a durable submit/observe/execute lifecycle. The HTTP request persists a job, arms TaskScheduler, and returns HTTP 202; it does not perform provider requests or wait for a runtime alarm. TaskScheduler advances cross-runtime work through bounded alarm steps with persisted cursors and status. EventRuntime and TeamRuntime accept commands by queuing their local work and returning immediately; their own alarms perform provider acquisition and reconciliation. The admin API exposes read-only job status, and the dashboard polls that state while remaining interactive.
+
+This contract covers team seed, event-team seed (including participant discovery), manual current-year discovery, historical-year discovery, coverage audits, and existing season ingestion. Manual discovery and daily classification no longer run inline in POST handlers. Event lifecycle commands no longer invoke EventRuntime alarm handlers inline or synchronously fan out to TeamRuntime. Stopping routine polling leaves accepted admin jobs scheduled and resumable.
+
 ## 5. Incremental migration model
 
 The legacy application remains operational while individual responsibilities move to the new implementation.
