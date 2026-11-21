@@ -3,7 +3,7 @@ import type { TeamKey, EventKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
 import type { FieldViewEventTeam } from "./event.js";
 import type { FieldViewMatch } from "./match.js";
-import type { FieldViewTeamAnalytics } from "./analytics.js";
+import type { FieldViewTeamEventAnalytics } from "./analytics.js";
 
 /** Canonical FieldView team object; TBA fields retain their exact source shape. */
 export interface FieldViewTeam extends TBATeam {
@@ -50,7 +50,7 @@ export interface FieldViewTeamEventState {
   team?: FieldViewTeam | null;
   event_team?: FieldViewEventTeam | null;
   matches?: FieldViewMatch[] | null;
-  analytics?: FieldViewTeamAnalytics | null;
+  analytics?: FieldViewTeamEventAnalytics | null;
 }
 
 /** A team's season-scoped Statbotics record correlated by official TBA team number. */
