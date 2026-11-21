@@ -919,9 +919,9 @@ export class EventRuntime {
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
     comparisonInput: import("../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput,
     eventSourceRevision: number,
-  ): Promise<FieldViewTeamEventState[]> {
+  ): Promise<{ states: FieldViewTeamEventState[]; revisions: Array<{ team_key: string; revision: number | null }> }> {
     const namespace = this.env.TEAM_RUNTIME;
-    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return [];
+    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return { states: [], revisions: [] };
     const teams = eventState.teams ?? [];
     const results = await Promise.all(teams.map(async (team) => {
       const teamKey = team.key;
@@ -953,12 +953,21 @@ export class EventRuntime {
             Number(response.headers.get("X-FieldView-Team-Source-Revision")) !== expectedTeamRevision ||
             currentComparisonInputUpdatedAt !== comparisonInput.updated_at ||
             Number(response.headers.get("X-FieldView-Comparison-Input-Updated-At")) !== comparisonInput.updated_at) return null;
-        return await response.json() as FieldViewTeamEventState;
+        const revision = Number(response.headers.get("X-FieldView-Team-Event-Revision"));
+        return {
+          team_key: teamKey,
+          revision: Number.isSafeInteger(revision) ? revision : null,
+          state: await response.json() as FieldViewTeamEventState,
+        };
       } catch {
         return null;
       }
     }));
-    return results.filter((item): item is FieldViewTeamEventState => item !== null);
+    const available = results.filter((item): item is { team_key: string; revision: number | null; state: FieldViewTeamEventState } => item !== null);
+    return {
+      states: available.map((item) => item.state),
+      revisions: available.map(({ team_key, revision }) => ({ team_key, revision })),
+    };
   }
 
   private async readTeamEventStates(
@@ -1156,9 +1165,10 @@ export class EventRuntime {
         undefined,
         { includeTeamAnalytics: false },
       );
-      const teamStates = comparisonInputCollection
+      const teamResults = comparisonInputCollection
         ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
-        : [];
+        : { states: [], revisions: [] };
+      const teamStates = teamResults.states;
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
       const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
         teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null) &&
@@ -1167,6 +1177,7 @@ export class EventRuntime {
         teamStates,
         expectedTeamCount,
         comparisonInputCollection?.comparisonInput.team_state_revisions ?? [],
+        teamResults.revisions,
         comparisonInputCollection?.comparisonInput.updated_at ?? null,
       );
       const eventAnalytics = eventAnalyticsState.analytics
