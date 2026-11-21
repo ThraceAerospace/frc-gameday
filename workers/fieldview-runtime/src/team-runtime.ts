@@ -7,6 +7,7 @@ import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
 import type { FRCColorsTeam } from "../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
+import { normalizeTbaWebhookMatch } from "./reconciliation.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
@@ -295,7 +296,7 @@ export class TeamRuntime {
       const existing = await this.storage.get<FieldViewTeamEventState>(storageKey);
       if (!existing) return Response.json({ accepted: true, affected: true, projection: "not-yet-materialized" });
       const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
-        ? match as Record<string, unknown> : null;
+        ? normalizeTbaWebhookMatch(match as Record<string, unknown>) : null;
       if (updatedMatch && (envelope.message_type === "match_score" || envelope.message_type === "match_video")) {
         const matchKey = updatedMatch.key;
         if (typeof matchKey !== "string" || updatedMatch.event_key !== eventKey) {
