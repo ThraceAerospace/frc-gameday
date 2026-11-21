@@ -203,7 +203,7 @@ export class TeamRuntime {
       await tx.setAlarm(next);
     }
   }
-  private async enqueueManualPolls(resources: TeamResource[], year: number): Promise<void> {
+  private async enqueueManualPolls(resources: TeamResource[], year: number, immediate = true): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const current = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const existing = new Map(current.map((item) => [item.endpoint, item]));
@@ -214,7 +214,9 @@ export class TeamRuntime {
         const previous = existing.get(resource.endpoint);
         ordered.set(resource.endpoint, {
           endpoint: resource.endpoint, year,
-          dueAt: Math.min(previous?.dueAt ?? Date.now(), Date.now()),
+          // Read-driven refreshes coalesce behind an existing retry deadline.
+          // A newly queued resource is still eligible immediately.
+          dueAt: immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
           attempts: previous?.attempts ?? 0,
         });
       }
@@ -463,7 +465,7 @@ export class TeamRuntime {
       });
       if (needed.length > 0) {
         await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year);
+        await this.enqueueManualPolls(needed, year, false);
       }
       if (!cached) {
         return Response.json({
@@ -509,7 +511,7 @@ export class TeamRuntime {
       });
       if (needed.length > 0) {
         await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year);
+        await this.enqueueManualPolls(needed, year, false);
       }
       if (!publication) {
         return Response.json({
