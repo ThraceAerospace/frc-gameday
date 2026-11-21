@@ -54,6 +54,8 @@ export function createFieldViewAnalyticsOperationRegistry(): AnalyticsOperationR
       buildAllianceResults(required(context.records, "records"), context.playoffType) },
     { operation_key: "buildTeamRows", execute: (context: FieldViewAnalyticsOperationContext) =>
       buildTeamRows(required(context.teams, "teams"), context.oprs ?? null, required(context.records, "records")) },
+    { operation_key: "buildTeamInsights", execute: (context: FieldViewAnalyticsOperationContext) =>
+      buildTeamInsights(required(context.records, "records"), required(context.allianceResults, "allianceResults"), required(context.teamRows, "teamRows"), context.rankings ?? null, context.playoffType) },
     { operation_key: "buildReviewFindings", execute: (context: FieldViewAnalyticsOperationContext) =>
       buildReviewFindings(required(context.records, "records"), required(context.allianceResults, "allianceResults")) },
     { operation_key: "buildQualificationAnomalies", execute: (context: FieldViewAnalyticsOperationContext) =>
