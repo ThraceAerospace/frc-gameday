@@ -277,3 +277,63 @@ test("TeamRuntime initializes a persisted partial TeamState on its first non-sna
     sources: {},
   });
 });
+
+
+test("TeamRuntime calculates and persists its own TeamEventState", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", eventKey = "2026unit";
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
+  const eventState = {
+    event_key: eventKey,
+    event: { key: eventKey, name: "Unit Test", event_code: "unit", start_date: "2026-03-01", playoff_type: 0 },
+    teams: [{ key: teamKey, team_number: 3461, nickname: "Test Team" }],
+    event_teams: [{ event_key: eventKey, team_key: teamKey, sources: {} }],
+    matches: [],
+    sources: { teams: {}, event_teams: {}, matches: {} },
+    team_states: [{ event_key: eventKey, team_key: teamKey, sources: {}, matches: [] }],
+  };
+  const cohort = {
+    state: "complete",
+    team_count: 1,
+    total_team_event_records: 1,
+    processed_team_event_records: 1,
+    unavailable_team_event_records: 0,
+    discovery_pending_teams: 0,
+    updated_at: 1_800_000_000_000,
+    records: [{
+      team_number: 3461,
+      event: { event_key: eventKey, event_name: "Unit Test", short_name: "unit", start_date: "2026-03-01" },
+      epa_total: 20,
+      epa_unitless: 0.2,
+      breakdown: { auto_epa: 5, teleop_epa: 10, endgame_epa: 5 },
+      wins: 0, losses: 0, ties: 0, match_count: 0,
+      fetched_at: 1_800_000_000_000,
+      status: "ready",
+    }],
+  };
+  const response = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      event_key: eventKey,
+      event_source_revision: 4,
+      event_state: eventState,
+      cohort,
+    }),
+  }));
+  assert.equal(response.status, 200);
+  const saved = storage.values.get("team-event-state:" + eventKey);
+  assert.equal(saved.team_key, teamKey);
+  assert.equal(saved.event_key, eventKey);
+  assert.equal(saved.analytics.team_key, teamKey);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+
+  const read = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(read.status, 200);
+  assert.equal((await read.json()).analytics.team_key, teamKey);
+});
