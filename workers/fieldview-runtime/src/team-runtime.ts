@@ -254,14 +254,18 @@ export class TeamRuntime {
       const year = Number(eventKey.slice(0, 4));
       const teamStateResponse = await this.snapshot(year);
       const teamState = await teamStateResponse.json() as ReturnType<typeof normalizeFieldViewTeamState>;
-      const eventTeam = eventState.event_teams?.find((item) => item.team_key === this.teamKey) ?? null;
+      const eventTeam = eventState.event_teams === undefined ? undefined
+        : eventState.event_teams === null ? null
+          : eventState.event_teams.find((item) => item.team_key === this.teamKey) ?? null;
       if (!eventState.teams?.some((item) => item.key === this.teamKey)) {
         return Response.json({ error: "Team is not in the supplied event roster" }, { status: 409 });
       }
-      const teamMatches = eventState.matches?.filter((match) =>
-        match.alliances.red.team_keys.includes(this.teamKey) ||
-        match.alliances.blue.team_keys.includes(this.teamKey),
-      ) ?? null;
+      const teamMatches = eventState.matches === undefined ? undefined
+        : eventState.matches === null ? null
+          : eventState.matches.filter((match) =>
+              match.alliances.red.team_keys.includes(this.teamKey) ||
+              match.alliances.blue.team_keys.includes(this.teamKey),
+            );
       const teamEventState = normalizeFieldViewTeamEventState({
         event_key: eventKey as FieldViewTeamEventState["event_key"],
         team_key: this.teamKey as FieldViewTeamEventState["team_key"],
@@ -271,8 +275,8 @@ export class TeamRuntime {
           matches: eventState.sources.matches,
         },
         ...(teamState.team === undefined ? {} : { team: teamState.team }),
-        ...(eventTeam === null ? {} : { event_team: eventTeam }),
-        ...(teamMatches === null ? {} : { matches: teamMatches }),
+        ...(eventTeam === undefined ? {} : { event_team: eventTeam }),
+        ...(teamMatches === undefined ? {} : { matches: teamMatches }),
       });
       const teamSourceRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const analyticsInputs: FieldViewAnalyticsInputRecord[] = [{
@@ -304,7 +308,8 @@ export class TeamRuntime {
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
       const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; cohort_updated_at: number }>(stateKey + ":inputs");
-      if (priorInputs && (eventSourceRevision as number) < priorInputs.event_source_revision) {
+      if (priorInputs && ((eventSourceRevision as number) < priorInputs.event_source_revision ||
+          teamSourceRevision < priorInputs.team_source_revision || cohort.updated_at < priorInputs.cohort_updated_at)) {
         return Response.json({ error: "Stale event analytics input" }, { status: 409 });
       }
       if ((await this.storage.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) {
