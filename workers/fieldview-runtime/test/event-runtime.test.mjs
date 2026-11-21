@@ -1042,6 +1042,9 @@ test("EventRuntime builds one shared comparison input from every roster TeamStat
       statbotics_events: [{
         event: "2026priorA", epa: { total_points: 20, unitless: 0.2, breakdown: { auto_epa: 5 } },
         record: { total: { wins: 3, losses: 1, ties: 0, count: 4 } },
+      }, {
+        event: "2026target", epa: { total_points: 25, unitless: 0.25, breakdown: { auto_epa: 6 } },
+        record: { total: { wins: 1, losses: 0, ties: 0, count: 1 } },
       }],
     }],
     ["frc254", {
@@ -1054,6 +1057,9 @@ test("EventRuntime builds one shared comparison input from every roster TeamStat
       statbotics_events: [{
         event: "2026priorB", epa: { total_points: 30, unitless: 0.3, breakdown: { auto_epa: 7 } },
         record: { total: { wins: 4, losses: 0, ties: 0, count: 4 } },
+      }, {
+        event: "2026target", epa: { total_points: 32, unitless: 0.32, breakdown: { auto_epa: 8 } },
+        record: { total: { wins: 1, losses: 0, ties: 0, count: 1 } },
       }],
     }],
   ]);
