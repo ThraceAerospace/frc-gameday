@@ -162,3 +162,17 @@ The future Cloudflare implementation should satisfy the same contract. It may re
 4. Migrate the analytics dashboard to consume the shared model without changing its calculations or visual behavior.
 5. Reuse the same analytics data/components on team, match, event, and remote surfaces.
 6. Only then evaluate moving acquisition/persistence to Cloudflare behind the same contracts.
+
+
+## Target Cloudflare ownership model (ADR-0011)
+
+The Cloudflare migration uses a different ownership model from the legacy SharedWorker/Redis lifecycle described above. The legacy sections remain historical migration context; they are not the target ownership contract.
+
+- TeamRuntime owns and persists FieldViewTeamState (team profile and season data), FieldViewTeamEventState (one team's participation at one event), and FieldViewTeamEventAnalytics. It recalculates team metrics against its own season history and makes the result reusable by any product surface.
+- EventRuntime owns FieldViewEventState and FieldViewEventAnalytics. EventAnalytics contains event-wide calculations such as match flags, prediction accuracy, field rankings, and largest/smallest team metric changes. It consumes TeamRuntime-owned event states rather than recalculating team metrics.
+- TaskScheduler performs roster reconciliation as scheduled work. Ordinary event reads do not reconcile the roster.
+- A complete event FieldView composes FieldViewEventState, FieldViewEventAnalytics, and the roster's array of FieldViewTeamEventState records. Partial results explicitly identify missing or pending team states.
+
+The old season-cohort implementation is transitional. Historical comparison inputs are team-owned season data; TeamRuntime calculates and persists each team's event comparison. EventRuntime aggregates those results into event-wide analysis without storing a duplicate cohort as a separate product model.
+
+See [ADR-0011](architecture/decisions/ADR-0011-ANALYTICS-OWNERSHIP.md) for the accepted decision and [MIGRATION-PLAN.md](architecture/MIGRATION-PLAN.md) for implementation sequencing.
