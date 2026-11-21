@@ -343,13 +343,15 @@ export class EventRuntime {
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
-      (url.pathname === "/snapshot" || url.pathname === "/analytics" || url.pathname === "/stream");
+      (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/stream");
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
+    // Runtime existence implies a persisted (possibly partial) canonical EventState.
+    await this.publishEventState();
 
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
