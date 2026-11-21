@@ -189,14 +189,14 @@ export default function MatchCard({
             </span>
           </div>
 
-          {/* Fixed-width alliance roster: 3 five-digit numbers plus spaces */}
+          {/* Fixed-width alliance roster with playoff alliance labels */}
           <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-1">
             <div className="flex h-[18px] min-w-0 items-center gap-1 whitespace-nowrap">
               {redAllianceFlags.length > 0 ? (
                 <span
                   aria-label="Red alliance has flags"
                   title={redFlagTitle}
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"
                 />
               ) : null}
               <div
@@ -224,12 +224,12 @@ export default function MatchCard({
               </div>
             </div>
 
-            <div className="flex h-[14px] min-w-0 items-center gap-1 whitespace-nowrap">
+            <div className="flex h-[18px] min-w-0 items-center gap-1 whitespace-nowrap">
               {blueAllianceFlags.length > 0 ? (
                 <span
                   aria-label="Blue alliance has flags"
                   title={blueFlagTitle}
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"
                 />
               ) : null}
               <div
