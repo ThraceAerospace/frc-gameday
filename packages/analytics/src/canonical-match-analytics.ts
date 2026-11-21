@@ -203,7 +203,7 @@ export async function calculateCanonicalTeamEventAnalytics(
     warnings: inputRecords.filter((input) => input.status !== "available")
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
   });
-  const calculated = calculateCanonicalTeamEventStates(
+  const calculated = await calculateCanonicalTeamEventStates(
     eventState,
     [target],
     records,
