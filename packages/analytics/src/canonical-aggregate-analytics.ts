@@ -403,8 +403,9 @@ function teamFinding(
 }
 
 /**
- * Publishes event-wide and team-at-event analytics in their canonical state
- * owners. All values come from the same backend calculation run/audit.
+ * Calculate event-wide analytics. The optional compatibility path can attach
+ * team analytics, while TeamRuntime calls calculateCanonicalTeamEventStates
+ * directly and never executes this event-wide aggregate.
  */
 export function calculateCanonicalAggregateAnalytics(
   eventState: FieldViewEventState,
@@ -412,7 +413,7 @@ export function calculateCanonicalAggregateAnalytics(
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
   comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-  options: { includeTeamAnalytics?: boolean; includeEventAnalytics?: boolean } = {},
+  options: { includeTeamAnalytics?: boolean } = {},
 ): FieldViewEventState {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
@@ -537,7 +538,7 @@ export function calculateCanonicalAggregateAnalytics(
 
   return {
     ...eventState,
-    ...(options.includeEventAnalytics === false ? {} : { analytics: {
+    analytics: {
       event_key: eventState.event_key,
       metrics: eventMetrics,
       findings: findings.map(reviewFinding),
@@ -558,7 +559,7 @@ export function calculateCanonicalAggregateAnalytics(
         updated_at: audit.calculated_at,
       },
       audit,
-    } }),
+    },
     ...(team_states === undefined ? {} : { team_states }),
   };
 }
