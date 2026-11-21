@@ -1376,10 +1376,8 @@ export class TaskScheduler {
     await this.storage.put("scheduler:last-run-at", Date.now());
     const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
     const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
-    const providerDeferredUntil = await this.storage.get<number>("scheduler:provider-deferred-until");
     const nextDelay = teamRefresh || lifecycleRefresh || thisWeekRefreshPending ? 1_000 : policy.discoveryIntervalMs;
-    await this.storage.setAlarm(Math.max(Date.now() + 100, Math.min(Date.now() + nextDelay, providerDeferredUntil ?? Number.MAX_SAFE_INTEGER)));
-    if (providerDeferredUntil !== undefined) await this.storage.delete("scheduler:provider-deferred-until");
+    await this.storage.setAlarm(Date.now() + nextDelay);
     if (!thisWeekRefreshPending && !lifecycleRefresh) await this.storage.delete("scheduler:daily-run-requested");
   }
 
