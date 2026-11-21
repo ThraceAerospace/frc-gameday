@@ -5,8 +5,8 @@ import {
   classifyEventThisWeek,
   DEFAULT_EVENT_POLLING_POLICY,
   eventPollingPolicy,
-  EventScheduler,
-} from "../src/event-scheduler.ts";
+  TaskScheduler,
+} from "../src/task-scheduler.ts";
 
 class MemoryStorage {
   values = new Map();
@@ -21,59 +21,6 @@ class MemoryStorage {
   }
   async transaction(callback) { return callback(this); }
 }
-
-test("provider gate returns a releasable lease id using the client wire contract", async () => {
-  const storage = new MemoryStorage();
-  const scheduler = new EventScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    PROVIDER_REQUEST_INTERVAL_MS: 100,
-  });
-  const acquired = await scheduler.fetch(new Request("https://scheduler/provider-request/acquire", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
-    body: JSON.stringify({ owner: "event:2026test", endpoint: "/events/2026test" }),
-  }));
-  assert.equal(acquired.status, 200);
-  const permit = await acquired.json();
-  assert.equal(permit.granted, true);
-  assert.equal(typeof permit.lease_id, "string");
-  assert.equal("leaseId" in permit, false);
-
-  const released = await scheduler.fetch(new Request("https://scheduler/provider-request/release", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
-    body: JSON.stringify({ lease_id: permit.lease_id }),
-  }));
-  assert.deepEqual(await released.json(), { released: true });
-  assert.equal(await storage.get("provider-gate:lease"), undefined);
-});
-
-test("provider gate applies bounded stable jitter to denied owners", async () => {
-  const storage = new MemoryStorage();
-  const now = Date.now();
-  await storage.put("provider-gate:lease", {
-    leaseId: "held-lease", owner: "event:2026held", endpoint: "/held",
-    expiresAt: now + 60_000,
-  });
-  const scheduler = new EventScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    PROVIDER_REQUEST_INTERVAL_MS: 1_000,
-  });
-  const acquire = async () => {
-    const response = await scheduler.fetch(new Request("https://scheduler/provider-request/acquire", {
-      method: "POST",
-      headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ owner: "event:2026test", endpoint: "/events/2026test/matches" }),
-    }));
-    assert.equal(response.status, 200);
-    return (await response.json()).retry_at;
-  };
-  const first = await acquire();
-  const second = await acquire();
-  assert.ok(first >= now + 1_000);
-  assert.ok(first <= now + 1_500);
-  assert.ok(Math.abs(second - first) < 10, "the same owner/resource receives a stable retry offset");
-});
 
 test("global scheduler discovers yearly events and applies the lifecycle plan", async () => {
   const storage = new MemoryStorage();
@@ -110,18 +57,15 @@ test("global scheduler discovers yearly events and applies the lifecycle plan", 
       return Response.json(events, { headers: { ETag: '"events-' + year + '"' } });
     },
   };
-  const scheduler = new EventScheduler({ storage }, env);
+  const scheduler = new TaskScheduler({ storage }, env);
   const started = await scheduler.fetch(new Request("https://scheduler/start", {
     method: "POST",
     headers: { Authorization: "Bearer runtime-token" },
   }));
   assert.deepEqual(await started.json(), { started: true });
   await scheduler.alarm();
-  // The shared provider gate serializes the two discovery resources. The
-  // second resource resumes on a subsequent alarm after the first lease's
-  // minimum interval has elapsed.
-  await storage.put("provider-gate:next-at", 0);
-  await scheduler.alarm();
+  // Event and team discovery no longer depend on a shared provider-request
+  // lease. Both discovery stages complete during the same scheduler alarm.
 
   assert.equal(tbaRequests.length, 2);
   assert.ok(tbaRequests.some((url) => url.includes("/events/" + currentYear)));
@@ -171,7 +115,7 @@ test("current-year discovery prunes old caches and stops previously scheduled fu
     },
     fetcher: async () => Response.json([], { headers: { ETag: '"current-new"' } }),
   };
-  const scheduler = new EventScheduler({ storage }, env);
+  const scheduler = new TaskScheduler({ storage }, env);
   await scheduler.fetch(new Request("https://scheduler/start", {
     method: "POST",
     headers: { Authorization: "Bearer runtime-token" },
@@ -250,7 +194,7 @@ test("public event discovery returns cached canonical events with provenance", a
       timezone: "America/New_York",
     }],
   });
-  const scheduler = new EventScheduler({ storage }, {});
+  const scheduler = new TaskScheduler({ storage }, {});
   const response = await scheduler.fetch(new Request("https://scheduler/events?year=2026"));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("ETag"), '"events-2026"');
@@ -281,7 +225,7 @@ test("public team discovery returns canonical team records with provenance", asy
   await storage.put("team-discovery:2026:page:0", [
     { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" },
   ]);
-  const scheduler = new EventScheduler({ storage }, {});
+  const scheduler = new TaskScheduler({ storage }, {});
   const response = await scheduler.fetch(new Request("https://scheduler/teams?year=2026"));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("ETag"), '"teams-2026"');
@@ -293,7 +237,7 @@ test("public team discovery returns canonical team records with provenance", asy
 });
 
 test("public event discovery rejects invalid years and reports a cold cache", async () => {
-  const scheduler = new EventScheduler({ storage: new MemoryStorage() }, {});
+  const scheduler = new TaskScheduler({ storage: new MemoryStorage() }, {});
   assert.equal((await scheduler.fetch(new Request("https://scheduler/events?year=abc"))).status, 400);
   assert.equal((await scheduler.fetch(new Request("https://scheduler/events?year=2026"))).status, 503);
 });
@@ -313,7 +257,7 @@ test("stale discovery cache provenance remains stale after missed validation cyc
       timezone: "America/New_York",
     }],
   });
-  const scheduler = new EventScheduler({ storage }, {});
+  const scheduler = new TaskScheduler({ storage }, {});
   const response = await scheduler.fetch(new Request("https://scheduler/events?year=2026"));
   const payload = await response.json();
   assert.equal(payload.events[0].sources.tba_event.status, "stale");
@@ -331,7 +275,7 @@ test("a successful TBA 304 refreshes discovery validation time without replacing
       checkedAt: old,
     });
   }
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({}) }) },
@@ -411,7 +355,7 @@ test("event team seeding explicitly curates team history and waits for acquisiti
       return Response.json([{ key: "frc3461", team_number: 3461 }]);
     },
   };
-  const scheduler = new EventScheduler({ storage }, env);
+  const scheduler = new TaskScheduler({ storage }, env);
   const started = await scheduler.fetch(new Request("https://scheduler/admin/event-team-seed", {
     method: "POST",
     headers: { Authorization: "Bearer runtime-token", "Content-Type": "application/json" },
@@ -459,7 +403,7 @@ test("district public reads return canonical retained resources without provider
   await storage.put("district-resource:" + year + ":2026fim:teams", {
     payload: [{ key: "frc3461", team_number: 3461 }], etag: '"teams-v1"', retrievedAt: now, checkedAt: now, status: "available",
   });
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key",
     fetcher: async () => { throw new Error("Public reads must not acquire provider resources"); },
   });
@@ -481,7 +425,7 @@ test("district public reads return canonical retained resources without provider
 test("admin district directory refresh retains TBA payload and validator", async () => {
   const storage = new MemoryStorage();
   const requests = [];
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     PROVIDER_REQUEST_INTERVAL_MS: 100,
@@ -514,7 +458,7 @@ test("district 304 validation retains the last-good payload", async () => {
   };
   await storage.put("district-directory:2026", old);
   let requestHeaders;
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "runtime-token", PROVIDER_REQUEST_INTERVAL_MS: 100,
     fetcher: async (_url, init) => {
       requestHeaders = new Headers(init?.headers);
@@ -539,7 +483,7 @@ test("district refresh failure retains last-good payload and marks it stale", as
     etag: '"districts-v1"', retrievedAt: Date.now() - 60_000, checkedAt: Date.now() - 60_000, status: "available",
   };
   await storage.put("district-directory:2026", old);
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "runtime-token", PROVIDER_REQUEST_INTERVAL_MS: 100,
     fetcher: async () => new Response("upstream unavailable", { status: 503 }),
   });
@@ -564,7 +508,7 @@ test("district 404 marks a resource unavailable without discarding its last-good
     etag: '"districts-v1"', retrievedAt: Date.now() - 60_000, checkedAt: Date.now() - 60_000, status: "available",
   };
   await storage.put("district-directory:2026", old);
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "runtime-token", PROVIDER_REQUEST_INTERVAL_MS: 100,
     fetcher: async () => new Response("not found", { status: 404 }),
   });
@@ -649,7 +593,7 @@ test("daily weekly projection initializes EventRuntime for matching events and p
     etag: null, events: [weeklyEvent, outsideEvent], updatedAt: now, checkedAt: now,
   });
   const runtimeRequests = [];
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: {
       idFromName: (name) => name,
@@ -699,7 +643,7 @@ test("weekly classification processes at most ten events per alarm batch and res
     etag: null, events, updatedAt: now, checkedAt: now,
   });
   const runtimeRequests = [];
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: {
       idFromName: (name) => name,
@@ -747,7 +691,7 @@ test("daily scheduler endpoint runs classification without enabling continuous p
     checkedAt: now,
   });
   const runtimeRequests = [];
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: {
       idFromName: (name) => name,
@@ -775,7 +719,7 @@ test("daily scheduler endpoint runs classification without enabling continuous p
 
 test("missing weekly projection queues durable discovery instead of failing the public request", async () => {
   const storage = new MemoryStorage();
-  const scheduler = new EventScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage }, {
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     PROVIDER_REQUEST_INTERVAL_MS: 1_000,
   });
