@@ -734,7 +734,13 @@ export class EventRuntime {
         }
         await this.publishSnapshotRevision(
           version,
-          teamPatch ?? { team_key: body.team_key, team_state_pending: true },
+          teamPatch
+            ? { ...teamPatch, event_comparison_invalidated: true }
+            : {
+                team_key: body.team_key,
+                team_state_pending: true,
+                event_comparison_invalidated: true,
+              },
         );
       }
       return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
@@ -2055,20 +2061,32 @@ export class EventRuntime {
     version: number,
     patch?: Record<string, unknown>,
   ): Promise<void> {
-    // Publish the committed normalized event DTO with its revision. TeamRuntime
-    // changes may add one team-event patch without copying other teams.
+    // A TeamRuntime projection update is already a complete, scoped delta.
+    // Rebuilding the event DTO here would reread every event endpoint and
+    // fan out to every TeamRuntime just to publish one team's changed state.
+    const teamProjectionOnly = Boolean(
+      patch && typeof patch.team_key === "string" && !("state" in patch),
+    );
     let publication: EventStatePublication | null = null;
     try {
-      publication = await this.publishEventState();
+      publication = teamProjectionOnly
+        ? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY) ??
+          await this.publishEventState()
+        : await this.publishEventState();
     } catch {
       // An incomplete provider representation must not make polling fail.
       // The revision-only notice below tells clients to recover over HTTP.
     }
     const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
+    const versionedPublication = publication
+      ? { ...publication, snapshotVersion: publishedVersion }
+      : null;
     const comparisonInputUpdatedAt = publication
       ? await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY)
       : undefined;
-    const etag = publication ? eventSnapshotEtag(publication, comparisonInputUpdatedAt) : undefined;
+    const etag = versionedPublication
+      ? eventSnapshotEtag(versionedPublication, comparisonInputUpdatedAt)
+      : undefined;
     const publishedState = publication
       ? publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state
@@ -2076,8 +2094,12 @@ export class EventRuntime {
           ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
           : publication.state
       : undefined;
-    const data = publication && publication.snapshotVersion === publishedVersion && publishedState
-      ? { state: publishedState, ...(patch ?? {}) }
+    const data = publication && publishedState &&
+        (teamProjectionOnly || publication.snapshotVersion === publishedVersion)
+      ? {
+          ...(teamProjectionOnly ? {} : { state: publishedState }),
+          ...(patch ?? {}),
+        }
       : undefined;
     const message = JSON.stringify({
       type: "snapshot.changed", topic: "event-state", event_key: this.eventKey,
