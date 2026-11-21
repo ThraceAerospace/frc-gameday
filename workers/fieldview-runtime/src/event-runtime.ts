@@ -296,6 +296,8 @@ export class EventRuntime {
   private readonly env: RuntimeEnvironment;
   private eventKey: string;
   private allowedEndpoints: Set<string>;
+  private readonly activation: Promise<void>;
+  private hydratedPublication: EventStatePublication | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     this.state = state;
@@ -311,6 +313,21 @@ export class EventRuntime {
     });
     this.eventKey = eventKey ?? "";
     this.allowedEndpoints = new Set(this.eventKey ? eventResourceEndpoints(this.eventKey) : []);
+    // Hydrate only this object's persisted identity/publication. No provider
+    // acquisition, analytics work, or cross-runtime calls occur during activation.
+    this.activation = state.blockConcurrencyWhile
+      ? state.blockConcurrencyWhile(async () => {
+          const [storedKey, publication] = await Promise.all([
+            this.storage.get<string>("event-key"),
+            this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
+          ]);
+          if (storedKey && !this.eventKey) {
+            this.eventKey = storedKey;
+            this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
+          }
+          this.hydratedPublication = publication;
+        })
+      : Promise.resolve();
   }
 
   private async bindEventKey(request: Request): Promise<boolean> {
@@ -342,6 +359,7 @@ export class EventRuntime {
 
 
   async fetch(request: Request): Promise<Response> {
+    await this.activation;
     const url = new URL(request.url);
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
@@ -756,7 +774,7 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       await this.queueSnapshotRefresh();
-      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!publication) {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
@@ -1470,11 +1488,13 @@ export class EventRuntime {
       return previous;
     });
     if (cached) {
+      this.hydratedPublication = cached;
       const cachedState = cached.state as typeof cached.state & { team_states?: FieldViewTeamEventState[] | null };
       const { team_states: _legacyTeamStates, analytics: _legacyAnalytics, ...eventOwnedState } = cachedState;
       if (_legacyTeamStates !== undefined || _legacyAnalytics !== undefined) {
         const sanitized = { ...cached, state: eventOwnedState };
         await this.storage.put(EVENT_STATE_PUBLICATION_KEY, sanitized);
+        this.hydratedPublication = sanitized;
         return sanitized;
       }
       return cached;
@@ -1502,6 +1522,7 @@ export class EventRuntime {
         previous.snapshotVersion !== publication.snapshotVersion || previous.status !== publication.status) {
       await this.storage.put(EVENT_STATE_PUBLICATION_KEY, publication);
     }
+    this.hydratedPublication = publication;
     return publication;
   }
 
