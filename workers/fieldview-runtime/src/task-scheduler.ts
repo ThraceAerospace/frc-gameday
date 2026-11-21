@@ -756,7 +756,7 @@ export class TaskScheduler {
         };
         await this.storage.put(key, job);
         await this.storage.setAlarm(now + 1_000);
-        return Response.json(seasonIngestSummary(job));
+        return Response.json(seasonIngestSummary(job), { status: 202, headers: { "Cache-Control": "no-store" } });
       }
       if (!job) return Response.json({ error: "No season-ingest job exists for this year" }, { status: 404 });
       if (action === "pause") {
