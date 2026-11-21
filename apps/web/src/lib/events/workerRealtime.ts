@@ -409,7 +409,33 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       return;
     }
     if (message.type === "analytics.changed" && typeof message.event_key === "string") {
-      void this.fetchCanonicalAnalytics(message.event_key, typeof message.version === "number" ? message.version : undefined);
+      const eventKey = message.event_key;
+      const version = typeof message.version === "number" ? message.version : undefined;
+      const data = isRecord(message.data) ? message.data : null;
+      const revision = data && Number.isSafeInteger(data.revision) ? data.revision as number : null;
+      if (data && data.event_key === eventKey && revision !== null &&
+          version !== undefined && revision === version &&
+          (data.status === "pending" || data.status === "stale" ||
+            data.status === "partial" || data.status === "succeeded" ||
+            data.status === "failed")) {
+        const current = this.analyticsPublications.get(eventKey);
+        const etag = typeof message.etag === "string" ? message.etag : undefined;
+        const isNewer = !current || revision > current.revision;
+        const sameRevisionChanged = Boolean(
+          current && revision === current.revision && etag && etag !== current.etag,
+        );
+        if (isNewer || sameRevisionChanged) {
+          const publication = data as unknown as CanonicalAnalyticsPublication;
+          const value = { ...publication, ...(etag ? { etag } : {}) };
+          this.analyticsPublications.set(eventKey, value);
+          void persistRuntimeResource("analytics:" + eventKey, value, value.etag);
+          for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(value);
+        }
+        return;
+      }
+      // Older runtimes may send revision-only notices. Recover conditionally;
+      // a complete data-bearing publication never needs a follow-up GET.
+      void this.fetchCanonicalAnalytics(eventKey, version);
       return;
     }
     if (message.type === "subscribed" && message.topic === "event-state" &&
