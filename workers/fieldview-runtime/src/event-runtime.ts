@@ -330,6 +330,16 @@ export class EventRuntime {
     return true;
   }
 
+  private async restoreEventKey(request: Request): Promise<boolean> {
+    const requested = request.headers.get("X-FieldView-Event-Key");
+    const stored = await this.storage.get<string>("event-key");
+    if (!stored || !/^[a-zA-Z0-9_-]+$/.test(stored) || (requested && requested !== stored)) return false;
+    if (this.eventKey && this.eventKey !== stored) return false;
+    this.eventKey = stored;
+    this.allowedEndpoints = new Set(eventResourceEndpoints(stored));
+    return true;
+  }
+
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -340,14 +350,17 @@ export class EventRuntime {
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!(await this.bindEventKey(request))) {
+    if (publicRead) {
+      if (!(await this.restoreEventKey(request))) {
+        return Response.json({ event_key: null, status: "unavailable", publication: "missing" }, {
+          status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
+        });
+      }
+    } else if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
-    // Materialize the initial partial domain publication once. Subsequent
-    // reads rebuild it only when the resource revision changes.
-    if (!(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY))) {
-      await this.publishEventState();
-    }
+    // Public reads never create or replace a publication. Explicit runtime
+    // commands and the local alarm own publication work.
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
@@ -743,56 +756,67 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       await this.queueSnapshotRefresh();
-      const publication = await this.publishEventState();
+      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!publication) {
+        return Response.json({
+          event_key: this.eventKey, status: "unavailable",
+          publication: { status: "missing" }, team_state_coverage: { status: "unavailable", expected_count: 0, materialized_count: 0 },
+        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
+      const headers = {
+        "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
+        "X-FieldView-Event-State-Status": publication.status,
+        "X-FieldView-Team-State-Coverage": "partial",
+        ETag: etag,
+        "Cache-Control": "private, no-cache",
+      };
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        return new Response(null, { status: 304, headers: {
-          ETag: etag,
-          "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
-          "X-FieldView-Event-State-Status": publication.status,
-          "Cache-Control": "private, no-cache",
-        } });
+        return new Response(null, { status: 304, headers });
       }
-      const team_states = publication.state.teams === null ? null
-        : await this.readTeamEventStates(publication.state, publication.sourceRevision);
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
-      return Response.json({ ...publication.state, analytics, team_states }, {
-        headers: {
-          "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
-          "X-FieldView-Event-State-Status": publication.status,
-          ETag: etag,
-          "Cache-Control": "private, no-cache",
-        },
-      });
+      // Team-scoped state is composed asynchronously into a separate event-view
+      // publication. Never fan out to TeamRuntime objects from this GET.
+      return Response.json({ ...publication.state, analytics, team_states: [] }, { headers });
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
       await this.queueSnapshotRefresh();
-      const publication = await this.publishEventState();
-      const state = { ...publication.state, team_states: publication.state.teams === null ? null : await this.readTeamEventStates(publication.state, publication.sourceRevision) };
+      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!publication) {
+        return Response.json({
+          event_key: this.eventKey, status: "unavailable",
+          publication: { status: "missing" },
+          team_state_coverage: { state: "unavailable", expected_count: 0, materialized_count: 0, pending_team_keys: [] },
+        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
+      const state = publication.state;
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const analytics = state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? state.analytics
         : state.analytics ? { ...state.analytics, team_comparison: undefined } : state.analytics;
-      const rosterAvailable = Array.isArray(state.teams);
       const expected = (state.teams ?? []).map((team) => team.key);
-      const present = new Set((state.team_states ?? []).map((team) => team.team_key));
-      const pending = expected.filter((teamKey) => !present.has(teamKey));
       const view: FieldViewEventView = {
         event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
         analytics: analytics ?? null,
-        team_states: state.team_states ?? [],
+        team_states: [],
         team_state_coverage: {
-          state: rosterAvailable && pending.length === 0 ? "complete" : "partial",
+          state: expected.length === 0 && Array.isArray(state.teams) ? "complete" : "partial",
           expected_count: expected.length,
-          materialized_count: present.size,
-          pending_team_keys: pending,
+          materialized_count: 0,
+          pending_team_keys: expected,
         },
       };
-      return Response.json(view, { headers: { "X-FieldView-Event-State-Status": publication.status, "Cache-Control": "no-store" } });
+      return Response.json(view, {
+        headers: {
+          "X-FieldView-Event-State-Status": publication.status,
+          "X-FieldView-Team-State-Coverage": "partial",
+          "Cache-Control": "no-store",
+        },
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/analytics-state") {
