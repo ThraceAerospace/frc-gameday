@@ -738,9 +738,18 @@ test("versioned WebSocket subscriptions announce gaps and publish snapshot revis
   assert.deepEqual(JSON.parse(serverSocket.sent[0]), { type: "connected", event_key: eventKey, version: 0, snapshot_required: false });
   await runtime.schedulePolls([endpoint], 60_000, Date.now() - 1);
   await runtime.alarm();
-  assert.deepEqual(JSON.parse(serverSocket.sent[1]), {
-    type: "snapshot.changed", topic: "event-state", event_key: eventKey, version: 1,
-  });
+  const publication = JSON.parse(serverSocket.sent[1]);
+  assert.equal(publication.type, "snapshot.changed");
+  assert.equal(publication.protocol, 1);
+  assert.equal(publication.schema_version, 1);
+  assert.equal(publication.topic, "event-state");
+  assert.equal(publication.resource, "event-snapshot");
+  assert.equal(publication.change, "snapshot");
+  assert.equal(publication.event_key, eventKey);
+  assert.equal(publication.version, 1);
+  assert.equal(publication.data.state.event_key, eventKey);
+  assert.equal(publication.data.state.matches[0].key, "2026test_qm1");
+  assert.ok(publication.etag);
   runtime.webSocketMessage(serverSocket, "ping");
   assert.equal(serverSocket.sent[2], "pong");
 });
