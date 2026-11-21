@@ -133,19 +133,56 @@ test("EventRuntime persists endpoint validators, source versions, and webhook pa
     body: rawPayload,
   });
 
-  const accepted = await runtime.fetch(makeRequest());
-  assert.equal(accepted.status, 200);
-  const updated = storage.values.get(key);
-  assert.equal(updated.data[0].actual_time, 123);
-  assert.deepEqual(updated.providerData, providerMatches);
-  assert.equal(updated.etag, '"matches-v1"');
-  assert.equal(updated.lastWebhookAt !== null, true);
-  assert.equal(storage.values.get("snapshot-revision"), 2);
-  assert.equal(storage.values.get("webhook:" + webhookId).rawPayload, rawPayload);
+  const originalConsoleInfo = console.info;
+  const webhookLogs = [];
+  console.info = (...args) => webhookLogs.push(args.join(" "));
+  try {
+    const accepted = await runtime.fetch(makeRequest());
+    assert.equal(accepted.status, 200);
+    const updated = storage.values.get(key);
+    assert.equal(updated.data[0].actual_time, 123);
+    assert.deepEqual(updated.providerData, providerMatches);
+    assert.equal(updated.etag, '"matches-v1"');
+    assert.equal(updated.lastWebhookAt !== null, true);
+    assert.equal(storage.values.get("snapshot-revision"), 2);
+    assert.equal(storage.values.get("webhook:" + webhookId).rawPayload, rawPayload);
 
-  const duplicate = await runtime.fetch(makeRequest());
-  assert.deepEqual(await duplicate.json(), { accepted: true, duplicate: true });
-  assert.equal(storage.values.get(key).revision, updated.revision);
+    const duplicate = await runtime.fetch(makeRequest());
+    assert.deepEqual(await duplicate.json(), { accepted: true, duplicate: true });
+    assert.equal(storage.values.get(key).revision, updated.revision);
+  } finally {
+    console.info = originalConsoleInfo;
+  }
+
+  const parsedWebhookLogs = webhookLogs.map((line) => {
+    const jsonStart = line.indexOf("{");
+    assert.ok(jsonStart >= 0, "webhook log should include a JSON payload");
+    return JSON.parse(line.slice(jsonStart));
+  });
+  assert.deepEqual(parsedWebhookLogs, [
+    {
+      event_key: eventKey,
+      webhook_id: webhookId,
+      message_type: "match_score",
+      match_key: "2026test_qm1",
+      accepted: true,
+      duplicate: false,
+      snapshot_revision_before: 1,
+      snapshot_revision_after: 2,
+      snapshot_revision_changed: true,
+    },
+    {
+      event_key: eventKey,
+      webhook_id: webhookId,
+      message_type: "match_score",
+      match_key: "2026test_qm1",
+      accepted: false,
+      duplicate: true,
+      snapshot_revision_before: 2,
+      snapshot_revision_after: 2,
+      snapshot_revision_changed: false,
+    },
+  ]);
 });
 
 test("public event snapshot reads queue missing resources without running provider I/O inline", async () => {

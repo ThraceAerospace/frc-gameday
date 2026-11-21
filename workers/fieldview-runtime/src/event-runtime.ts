@@ -1825,7 +1825,15 @@ export class EventRuntime {
 
     const result = await this.storage.transaction(async (transaction) => {
       const webhookKey = "webhook:" + webhookId;
-      if (await transaction.get(webhookKey) !== undefined) return { accepted: false, snapshotVersion: null as number | null };
+      const snapshotRevisionBefore = await transaction.get<number>("snapshot-revision") ?? 0;
+      if (await transaction.get(webhookKey) !== undefined) {
+        return {
+          accepted: false,
+          snapshotVersion: null as number | null,
+          snapshotRevisionBefore,
+          snapshotRevisionAfter: snapshotRevisionBefore,
+        };
+      }
       await transaction.put(webhookKey, { receivedAt: now, messageType, rawPayload });
 
       if (messageType === "match_score" || messageType === "match_video") {
@@ -1874,9 +1882,30 @@ export class EventRuntime {
         await recordAnalyticsInvalidation(transaction, "tba-team-event-statuses", now);
       }
       await this.rearm(transaction);
-      const snapshotVersion = await transaction.get<number>("snapshot-revision") ?? 0;
-      return { accepted: true, snapshotVersion: messageType === "match_score" || messageType === "match_video" ? snapshotVersion : null };
+      const snapshotRevisionAfter = await transaction.get<number>("snapshot-revision") ?? snapshotRevisionBefore;
+      return {
+        accepted: true,
+        snapshotVersion: messageType === "match_score" || messageType === "match_video"
+          ? snapshotRevisionAfter
+          : null,
+        snapshotRevisionBefore,
+        snapshotRevisionAfter,
+      };
     });
+
+    const match = isRecord(messageData.match) ? messageData.match : null;
+    console.info("[FV][EventRuntime][TBAWebhook] " + JSON.stringify({
+      event_key: eventKey,
+      webhook_id: webhookId,
+      message_type: messageType,
+      ...(match && typeof match.key === "string" ? { match_key: match.key } : {}),
+      accepted: result.accepted,
+      duplicate: !result.accepted,
+      snapshot_revision_before: result.snapshotRevisionBefore,
+      snapshot_revision_after: result.snapshotRevisionAfter,
+      snapshot_revision_changed: result.snapshotRevisionAfter !== result.snapshotRevisionBefore,
+    }));
+
     if (result.snapshotVersion !== null) await this.publishSnapshotRevision(result.snapshotVersion);
     return result.accepted;
   }
