@@ -182,8 +182,8 @@ export interface FieldViewEventAnalytics {
     statbotics_fetch_error?: string | null;
     updated_at: number;
   };
-  /** Cross-event comparison collection and its acquisition coverage. */
-  season_cohort?: FieldViewSeasonCohortSnapshot;
+  /** @deprecated The comparison input is an EventRuntime calculation dependency, not EventAnalytics output. */
+  season_cohort?: FieldViewEventTeamSeasonComparisonInput;
   audit?: FieldViewAnalyticsAudit;
 }
 
@@ -497,8 +497,8 @@ export interface FieldViewTeamPeerPerformance {
     | "insufficient-sample";
 }
 
-/** One team/event record in the season-wide comparison cohort. */
-export interface FieldViewSeasonCohortRecord {
+/** One team's historical event result used as an input to event-team comparisons. */
+export interface FieldViewEventTeamSeasonRecord {
   team_number: number;
   event: {
     event_key: EventKey;
@@ -517,8 +517,8 @@ export interface FieldViewSeasonCohortRecord {
   status: "ready" | "unavailable";
 }
 
-/** Progress and coverage for season-cohort discovery/acquisition. */
-export interface FieldViewSeasonCohortSnapshot {
+/** EventRuntime-built season comparison input shared with participating TeamRuntimes. */
+export interface FieldViewEventTeamSeasonComparisonInput {
   state: "queued" | "discovering" | "collecting" | "complete" | "partial";
   team_count: number;
   total_team_event_records: number;
@@ -528,5 +528,11 @@ export interface FieldViewSeasonCohortSnapshot {
   /** Teams whose season event-history resource was attempted but unavailable. */
   history_unavailable_teams?: number;
   updated_at: number;
-  records: FieldViewSeasonCohortRecord[];
+  records: FieldViewEventTeamSeasonRecord[];
 }
+
+
+/** @deprecated Use FieldViewEventTeamSeasonRecord. */
+export type FieldViewSeasonCohortRecord = FieldViewEventTeamSeasonRecord;
+/** @deprecated Use FieldViewEventTeamSeasonComparisonInput. */
+export type FieldViewSeasonCohortSnapshot = FieldViewEventTeamSeasonComparisonInput;
