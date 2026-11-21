@@ -1237,16 +1237,6 @@ export class EventRuntime {
 
     await Promise.all(dueTasks.due.map(async (task) => {
       const succeeded = await this.pollEndpoint(task.endpoint);
-      if (typeof succeeded !== "boolean") {
-        await this.storage.transaction(async (transaction) => {
-          const key = taskStorageKey(task.endpoint);
-          const current = await transaction.get<PollTask>(key);
-          if (!current || current.generation !== task.generation) return;
-          await transaction.put(key, { ...current, attempts: task.attempts, dueAt: succeeded.deferredUntil });
-          await this.rearm(transaction);
-        });
-        return;
-      }
       if (task.retryOnFailure === false) {
         await this.storage.delete(taskStorageKey(task.endpoint));
         return;
