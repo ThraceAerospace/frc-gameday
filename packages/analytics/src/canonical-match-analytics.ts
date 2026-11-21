@@ -1,4 +1,6 @@
 import type { FieldViewEventState } from "../../domain/src/event.ts";
+import type { FieldViewTeamEventState } from "../../domain/src/team.ts";
+import type { TeamKey } from "../../domain/src/ids.ts";
 import type { FieldViewMatch } from "../../domain/src/match.ts";
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { AnalyticsMatch } from "./types.ts";
@@ -67,6 +69,7 @@ export async function calculateCanonicalMatchAnalytics(
   eventState: FieldViewEventState,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
   seasonCohort?: FieldViewSeasonCohortSnapshot,
+  options: { includeTeamAnalytics?: boolean } = {},
 ): Promise<FieldViewEventState> {
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
 
@@ -163,5 +166,46 @@ export async function calculateCanonicalMatchAnalytics(
     ...eventState,
     matches,
     ...(team_states === undefined ? {} : { team_states }),
-  }, records, allianceResults, audit, seasonCohort);
+  }, records, allianceResults, audit, seasonCohort, { includeTeamAnalytics: options.includeTeamAnalytics });
+}
+
+
+/**
+ * Calculate one team's event analytics inside TeamRuntime. The supplied event
+ * state is a calculation context (all event teams and matches), while only the
+ * requested team's TeamEventState is returned and persisted by its owner.
+ */
+export async function calculateCanonicalTeamEventAnalytics(
+  eventState: FieldViewEventState,
+  teamKey: TeamKey,
+  inputRecords: FieldViewAnalyticsInputRecord[] = [],
+  seasonCohort?: FieldViewSeasonCohortSnapshot,
+): Promise<FieldViewTeamEventState | null> {
+  const target = eventState.team_states?.find((item) => item.team_key === teamKey);
+  if (!target || !eventState.matches) return target ?? null;
+
+  const records = eventState.matches.map(toAnalyticsRecord);
+  const allianceResults = buildAllianceResults(records, eventState.event?.playoff_type);
+  const audit = await createAnalyticsAudit({
+    calculation_id: crypto.randomUUID(),
+    calculated_at: Date.now(),
+    inputs: inputRecords,
+    definition_keys: [
+      "team-season-event-comparison",
+      "team-event-epa",
+      "team-epa-contribution-share",
+      "team-event-match-appearances",
+    ],
+    warnings: inputRecords.filter((input) => input.status !== "available")
+      .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
+  });
+  const calculated = calculateCanonicalAggregateAnalytics(
+    { ...eventState, team_states: [target] },
+    records,
+    allianceResults,
+    audit,
+    seasonCohort,
+    { includeTeamAnalytics: true, includeEventAnalytics: false },
+  );
+  return calculated.team_states?.[0] ?? target;
 }
