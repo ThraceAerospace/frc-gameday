@@ -113,7 +113,7 @@ function toSourceMetadata(
   now: number,
 ): FieldViewSourceRecordMetadata | undefined {
   if (!state || state.status === "unknown") return undefined;
-  if (state.status === "failed" || state.status === "stale" || state.status === "unavailable") {
+  if (state.status === "failed" || state.status === "unavailable") {
     return { status: state.status, retrieved_at: null };
   }
   const retrievedAt = state.lastFetchedAt ?? state.lastWebhookAt;
