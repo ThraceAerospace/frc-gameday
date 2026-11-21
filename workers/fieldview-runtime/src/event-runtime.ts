@@ -2052,11 +2052,13 @@ export class EventRuntime {
       ? await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY)
       : undefined;
     const etag = publication ? eventSnapshotEtag(publication, comparisonInputUpdatedAt) : undefined;
-    const publishedState = publication?.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
-      ? publication.state
-      : publication?.state.analytics
-        ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
-        : publication?.state;
+    const publishedState = publication
+      ? publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+        ? publication.state
+        : publication.state.analytics
+          ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
+          : publication.state
+      : undefined;
     const data = publication && publication.snapshotVersion === publishedVersion && publishedState
       ? { state: publishedState, ...(patch ?? {}) }
       : undefined;
