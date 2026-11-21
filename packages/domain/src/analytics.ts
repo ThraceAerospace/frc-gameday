@@ -562,7 +562,7 @@ export interface FieldViewEventTeamSeasonComparisonInput {
   history_unavailable_teams?: number;
   updated_at: number;
   /** Revisions of the TeamRuntime season states used to build this input. */
-  team_state_revisions?: Array<{ team_key: TeamKey; revision: number | null }>;
+  team_state_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
   records: FieldViewEventTeamSeasonRecord[];
 }
 
