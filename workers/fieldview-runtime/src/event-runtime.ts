@@ -1198,7 +1198,6 @@ export class EventRuntime {
         state: {
           ...eventAnalyticsState,
           ...(eventAnalytics === undefined ? {} : { analytics: eventAnalytics }),
-          team_states: normalizedState.teams === null ? null : teamStates,
         },
       };
     }
