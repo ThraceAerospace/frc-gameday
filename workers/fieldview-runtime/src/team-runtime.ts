@@ -267,12 +267,23 @@ export class TeamRuntime {
       } else {
         if (Array.isArray(data.team_keys)) for (const key of data.team_keys) if (typeof key === "string") targetKeys.add(key);
         if (typeof data.team_key === "string") targetKeys.add(data.team_key);
-        if (envelope.message_type === "awards_posted" && Array.isArray(data.recipient_list)) {
-          for (const recipient of data.recipient_list) {
-            if (recipient && typeof recipient === "object" && !Array.isArray(recipient)) {
-              const value = recipient as Record<string, unknown>;
-              if (typeof value.team_key === "string") targetKeys.add(value.team_key);
-              else if (typeof value.team_number === "number" && Number.isSafeInteger(value.team_number)) targetKeys.add("frc" + value.team_number);
+        if (envelope.message_type === "awards_posted") {
+          const addRecipients = (recipients: unknown) => {
+            if (!Array.isArray(recipients)) return;
+            for (const recipient of recipients) {
+              if (recipient && typeof recipient === "object" && !Array.isArray(recipient)) {
+                const value = recipient as Record<string, unknown>;
+                if (typeof value.team_key === "string") targetKeys.add(value.team_key);
+                else if (typeof value.team_number === "number" && Number.isSafeInteger(value.team_number)) targetKeys.add("frc" + value.team_number);
+              }
+            }
+          };
+          addRecipients(data.recipient_list);
+          if (Array.isArray(data.awards)) {
+            for (const award of data.awards) {
+              if (award && typeof award === "object" && !Array.isArray(award)) {
+                addRecipients((award as Record<string, unknown>).recipient_list);
+              }
             }
           }
         }
