@@ -173,6 +173,6 @@ The Cloudflare migration uses a different ownership model from the legacy Shared
 - TaskScheduler performs roster reconciliation as scheduled work. Ordinary event reads do not reconcile the roster.
 - A complete event FieldView composes FieldViewEventState, FieldViewEventAnalytics, and the roster's array of FieldViewTeamEventState records. Partial results explicitly identify missing or pending team states.
 
-The old season-cohort implementation is transitional. Historical comparison inputs are team-owned season data; TeamRuntime calculates and persists each team's event comparison. EventRuntime aggregates those results into event-wide analysis without storing a duplicate cohort as a separate product model.
+The former “season cohort” is now called FieldViewEventTeamSeasonComparisonInput. EventRuntime builds one versioned comparison input from every participating team's FieldViewTeamState and supplies it to each TeamRuntime. Each TeamRuntime combines that shared event population with its own authoritative season state, then persists only its own FieldViewTeamEventAnalytics and FieldViewTeamEventState. EventRuntime aggregates those team-owned results into FieldViewEventAnalytics; it does not persist duplicate team analytics or publish the full comparison input as a product model.
 
 See [ADR-0011](architecture/decisions/ADR-0011-ANALYTICS-OWNERSHIP.md) for the accepted decision and [MIGRATION-PLAN.md](architecture/MIGRATION-PLAN.md) for implementation sequencing.
