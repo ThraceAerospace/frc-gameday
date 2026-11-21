@@ -20,7 +20,7 @@ import { normalizeFieldViewEventTeam } from "./event-team.ts";
 import { normalizeFieldViewMatch } from "./match.ts";
 import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
-import { normalizeFieldViewTeamState } from "./team-state.ts";
+import { normalizeFieldViewTeamEventState } from "./team-state.ts";
 import { sortMatchesByTime } from "../match-order.ts";
 
 export interface NormalizeFieldViewEventStateInput {
@@ -193,7 +193,7 @@ export function normalizeFieldViewEventState(
               match.alliances.red.team_keys.includes(team.key) ||
               match.alliances.blue.team_keys.includes(team.key),
             );
-      return normalizeFieldViewTeamState({
+      return normalizeFieldViewTeamEventState({
         event_key: input.event_key,
         team_key: team.key,
         sources: {
