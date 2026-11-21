@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, type ReactNode } from "react";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { CanonicalEventSnapshotData } from "./workerRealtime";
 
 export type CanonicalEventSnapshotValue = {
   version: number;
-  snapshot: FieldViewEventSnapshot;
+  snapshot: CanonicalEventSnapshotData;
 };
 
 export const CanonicalEventSnapshotsContext = createContext<Record<string, CanonicalEventSnapshotValue> | null>(null);
