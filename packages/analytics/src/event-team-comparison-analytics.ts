@@ -1,6 +1,7 @@
 import type {
   FieldViewEventTeamComparisonAnalytics,
   FieldViewTeamEventState,
+  TeamKey,
 } from "../../domain/src/index.ts";
 
 /**
@@ -53,7 +54,7 @@ export function calculateFieldViewEventTeamComparisonAnalytics(
     smallest_change: ranked.at(-1) ?? null,
     mean_change: meanChange,
     source_revisions: sourceRevisions.map((item) => ({
-      team_key: item.team_key as FieldViewEventTeamComparisonAnalytics["source_revisions"][number]["team_key"],
+      team_key: item.team_key as TeamKey,
       revision: item.revision,
     })),
   };
