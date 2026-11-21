@@ -212,10 +212,12 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = new Date().getUTCFullYear();
-    if (!(await this.storage.get<unknown>("team-state:" + currentYear))) {
-      await this.snapshot(currentYear);
-    }
-    const initializedState = await this.snapshot(year);
+    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear)
+      ? null
+      : await this.snapshot(currentYear);
+    const initializedState = year === currentYear && initializedCurrentState
+      ? initializedCurrentState
+      : await this.snapshot(year);
     if (publicRead || publicSeasonAnalyticsRead) {
       // Queue only missing/stale resources. Do not execute an alarm inline:
       // the caller receives the best current snapshot while durable work runs.
