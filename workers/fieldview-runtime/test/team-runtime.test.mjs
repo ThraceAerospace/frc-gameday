@@ -543,7 +543,7 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
         event_key: eventKey,
         match: {
           key: matchKey, event_key: eventKey,
-          alliances: { red: { team_keys: [teamKey, "frc1", "frc2"], score: 22 }, blue: { team_keys: ["frc3", "frc4", "frc5"], score: 18 } },
+          alliances: { red: { teams: [teamKey, "frc1", "frc2"], score: 22 }, blue: { teams: ["frc3", "frc4", "frc5"], score: 18 } },
         },
       },
     }),
@@ -553,6 +553,8 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(result.changed, true);
   const updated = storage.values.get("team-event-state:" + eventKey).matches[0];
   assert.equal(updated.alliances.red.score, 22);
+  assert.deepEqual(updated.alliances.red.team_keys, [teamKey, "frc1", "frc2"]);
+  assert.equal("teams" in updated.alliances.red, false);
   assert.deepEqual(updated.predictions, currentMatch.predictions);
   assert.deepEqual(updated.teams, currentMatch.teams);
   assert.deepEqual(updated.sources, currentMatch.sources);
