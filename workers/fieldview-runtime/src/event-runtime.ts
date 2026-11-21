@@ -30,7 +30,7 @@ import {
   type AnalyticsSourceKey,
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
-import type { FieldViewTeamState } from "../../../packages/domain/src/team.ts";
+import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
@@ -79,7 +79,6 @@ interface AnalyticsPublication {
   analyticsRevision?: number;
   matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
   eventAnalytics?: unknown;
-  teamAnalytics: Array<{ team_key: string; analytics?: unknown }>;
 }
 
 function endpointStorageKey(endpoint: string): string {
@@ -835,6 +834,67 @@ export class EventRuntime {
     };
   }
 
+  private async calculateTeamEventStates(
+    eventState: ReturnType<typeof normalizeFieldViewEventState>,
+    cohort: import("../../../packages/domain/src/analytics.ts").FieldViewSeasonCohortSnapshot,
+    eventSourceRevision: number,
+  ): Promise<FieldViewTeamEventState[]> {
+    const namespace = this.env.TEAM_RUNTIME;
+    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return [];
+    const teams = eventState.teams ?? [];
+    const results = await Promise.all(teams.map(async (team) => {
+      const teamKey = team.key;
+      try {
+        const stub = namespace.get(namespace.idFromName(teamKey));
+        const headers = {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Team-Key": teamKey,
+          "Content-Type": "application/json",
+        };
+        const calculated = await stub.fetch(new Request("https://team-runtime/event-analytics", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            event_key: this.eventKey,
+            event_source_revision: eventSourceRevision,
+            event_state: eventState,
+            cohort,
+          }),
+        }));
+        if (!calculated.ok) return null;
+        const response = await stub.fetch(new Request(
+          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey),
+          { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey } },
+        ));
+        if (!response.ok) return null;
+        return await response.json() as FieldViewTeamEventState;
+      } catch {
+        return null;
+      }
+    }));
+    return results.filter((item): item is FieldViewTeamEventState => item !== null);
+  }
+
+  private async readTeamEventStates(
+    eventState: ReturnType<typeof normalizeFieldViewEventState>,
+  ): Promise<FieldViewTeamEventState[]> {
+    const namespace = this.env.TEAM_RUNTIME;
+    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return [];
+    return (await Promise.all((eventState.teams ?? []).map(async (team) => {
+      try {
+        const stub = namespace.get(namespace.idFromName(team.key));
+        const response = await stub.fetch(new Request(
+          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey),
+          { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": team.key } },
+        ));
+        if (!response.ok) return null;
+        return await response.json() as FieldViewTeamEventState;
+      } catch {
+        return null;
+      }
+    }))).filter((item): item is FieldViewTeamEventState => item !== null);
+  }
+
   private async buildEventState(calculateAnalytics = false, allowPartialCohort = false): Promise<{ version: number; sourceRevision: number; analyticsInputsComplete?: boolean; state: ReturnType<typeof normalizeFieldViewEventState> }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
     const eventEndpoint = endpoints[0];
@@ -965,37 +1025,26 @@ export class EventRuntime {
     ];
     if (calculateAnalytics) {
       const seasonCollection = await this.collectSeasonCohort(normalizedState);
-      // Event-level analytics must not be published until every event participant
-      // has a TeamRuntime season snapshot with its TBA event history available.
-      // Missing Statbotics records remain explicit partial cohort rows; missing
-      // team/event discovery is a hard prerequisite and is retried separately.
-      if (this.env.TEAM_RUNTIME && !allowPartialCohort &&
-          (!seasonCollection || seasonCollection.cohort.state === "discovering")) {
-        throw new Error("SEASON_COHORT_NOT_READY: waiting for participant TeamRuntime season histories");
-      }
-      const missingCohortInput: FieldViewAnalyticsInputRecord[] = !seasonCollection && allowPartialCohort
-        ? [{
-            input_key: "season-cohort",
-            provider: "fieldview",
-            resource: "team-season-cohort",
-            source_revision: null,
-            fetched_at: null,
-            record_count: normalizedState.teams?.length ?? 0,
-            included_count: 0,
-            excluded_count: normalizedState.teams?.length ?? 0,
-            status: "unavailable",
-          }]
+      const analyticsInputs = [...inputRecords, ...(seasonCollection?.inputs ?? [])];
+      // EventRuntime calculates event/match analytics only. TeamRuntime owns
+      // the per-team calculations and persists each TeamEventState.
+      const eventAnalyticsState = await calculateCanonicalMatchAnalytics(
+        normalizedState,
+        inputRecords,
+        undefined,
+        { includeTeamAnalytics: false },
+      );
+      const teamStates = seasonCollection
+        ? await this.calculateTeamEventStates(eventAnalyticsState, seasonCollection.cohort, state.sourceRevision)
         : [];
-      const analyticsInputs = [...inputRecords, ...(seasonCollection?.inputs ?? []), ...missingCohortInput];
+      const expectedTeamCount = normalizedState.teams?.length ?? 0;
+      const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
+        seasonCollection?.cohort.state === "complete";
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
-        analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available"),
-        state: await calculateCanonicalMatchAnalytics(
-          normalizedState,
-          analyticsInputs,
-          seasonCollection?.cohort,
-        ),
+        analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
+        state: { ...eventAnalyticsState, team_states: teamStates },
       };
     }
 
@@ -1012,20 +1061,14 @@ export class EventRuntime {
             ...(published.flags === undefined ? {} : { flags: published.flags as typeof match.flags }),
           } : match;
         });
-    const teamAnalytics = new Map(publication.teamAnalytics.map((team) => [team.team_key, team.analytics]));
-    const team_states = normalizedState.team_states === undefined || normalizedState.team_states === null
-      ? normalizedState.team_states
-      : normalizedState.team_states.map((team) => {
-          const analytics = teamAnalytics.get(team.team_key);
-          return analytics === undefined ? team : { ...team, analytics: analytics as typeof team.analytics };
-        });
+    const team_states = await this.readTeamEventStates(normalizedState);
     return {
       version: state.version,
       sourceRevision: state.sourceRevision,
       state: {
         ...normalizedState,
         ...(matches === undefined ? {} : { matches }),
-        ...(team_states === undefined ? {} : { team_states }),
+        team_states,
         ...(publication.eventAnalytics === undefined ? {} : { analytics: publication.eventAnalytics as typeof normalizedState.analytics }),
       },
     };
