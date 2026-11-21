@@ -494,9 +494,9 @@ export default {
     const validPublicRoute = publicParts.length === 4 &&
       publicParts[1] === "events" &&
       /^[a-zA-Z0-9_-]+$/.test(publicEventKey ?? "") &&
-      (publicAction === "snapshot" || publicAction === "analytics" || publicAction === "stream");
+      (publicAction === "snapshot" || publicAction === "analytics" || publicAction === "statbotics-match" || publicAction === "stream");
 
-    if (validPublicRoute && ["snapshot", "analytics"].includes(publicAction ?? "") && request.method === "OPTIONS") {
+    if (validPublicRoute && ["snapshot", "analytics", "statbotics-match"].includes(publicAction ?? "") && request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
         headers: {
