@@ -177,7 +177,8 @@ export interface FieldViewEventTeamComparisonAnalytics {
   largest_change: FieldViewEventTeamComparisonEntry | null;
   smallest_change: FieldViewEventTeamComparisonEntry | null;
   mean_change: number | null;
-  source_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
+  team_state_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
+  team_event_state_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
 }
 
 /** Event-wide analytics; calculations and findings are produced server-side. */
