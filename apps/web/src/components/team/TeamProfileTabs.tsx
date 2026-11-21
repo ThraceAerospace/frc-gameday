@@ -128,7 +128,7 @@ export default function TeamProfileTabs({
                               <div className="rounded-lg border border-[var(--fv-border)] p-3 text-sm">
                                 <p className="font-semibold text-[var(--fv-text)]">Compared with previous event</p>
                                 <p className="mt-1 text-[var(--fv-muted)]">{analytics.season_comparison.prior_event.event_name}: {number(analytics.season_comparison.prior_epa)} → {number(analytics.season_comparison.current_epa)} EPA ({signed(analytics.season_comparison.change)})</p>
-                                <p className="mt-1 text-xs text-[var(--fv-muted)]">Change rank {analytics.season_comparison.cohort_rank} of {analytics.season_comparison.cohort_size} eligible teams</p>
+                                <p className="mt-1 text-xs text-[var(--fv-muted)]">Change rank {analytics.season_comparison.comparison_rank} of {analytics.season_comparison.comparison_size} eligible teams</p>
                               </div>
                             )}
                             {analytics.peer_performance && (
