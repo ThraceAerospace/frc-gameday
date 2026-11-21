@@ -957,4 +957,16 @@ test("EventRuntime invalidates event analytics when a TeamRuntime season state c
   assert.equal(storage.values.get("analytics:status"), "pending");
   assert.ok(storage.values.get("analytics:due-at") <= Date.now());
   assert.equal(storage.values.get("snapshot-revision"), 1);
+  const duplicate = await runtime.fetch(new Request("https://event-runtime/team-state-changed", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ team_key: "frc3461", team_state_revision: 3 }),
+  }));
+  assert.equal(duplicate.status, 200);
+  assert.equal((await duplicate.json()).duplicate, true);
+  assert.equal(storage.values.get("snapshot-revision"), 1);
 });
