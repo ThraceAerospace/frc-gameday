@@ -18,6 +18,7 @@ import type {
 } from "@fieldview/domain";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
+import PendingSnapshotRefresh from "@/components/runtime/PendingSnapshotRefresh";
 
 
 function normalizeTeamKey(value: string): string {
@@ -163,6 +164,7 @@ export default async function TeamPage({
 
   return (
     <SiteShell>
+      {!team || !canonicalTeam || eventSections.length < teamEvents.length ? <PendingSnapshotRefresh /> : null}
       <PageContainer className="max-w-7xl">
         <PageHeader
           eyebrow="Team profile"
