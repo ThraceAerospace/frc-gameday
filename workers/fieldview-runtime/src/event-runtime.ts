@@ -30,6 +30,7 @@ import {
   type AnalyticsSourceKey,
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../packages/analytics/src/event-team-season-comparison.ts";
+import { calculateFieldViewEventTeamComparisonAnalytics } from "../../../packages/analytics/src/event-team-comparison-analytics.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
 import type { FieldViewEventView } from "../../../packages/domain/src/event-view.ts";
 
@@ -1138,11 +1139,23 @@ export class EventRuntime {
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
       const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
         comparisonInputCollection?.comparisonInput.state === "complete";
+      const teamComparison = calculateFieldViewEventTeamComparisonAnalytics(
+        teamStates,
+        expectedTeamCount,
+        comparisonInputCollection?.comparisonInput.team_state_revisions ?? [],
+      );
+      const eventAnalytics = eventAnalyticsState.analytics
+        ? { ...eventAnalyticsState.analytics, team_comparison: teamComparison }
+        : eventAnalyticsState.analytics;
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
         analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
-        state: { ...eventAnalyticsState, team_states: normalizedState.teams === null ? null : teamStates },
+        state: {
+          ...eventAnalyticsState,
+          ...(eventAnalytics === undefined ? {} : { analytics: eventAnalytics }),
+          team_states: normalizedState.teams === null ? null : teamStates,
+        },
       };
     }
 
