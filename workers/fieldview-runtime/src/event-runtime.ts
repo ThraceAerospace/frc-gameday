@@ -1113,6 +1113,11 @@ export class EventRuntime {
         !resource || resource.status === "unknown" || resource.status === "stale" ||
         resource.status === "failed" || resource.status === "unavailable" ||
         (resource.expiresAt !== null && resource.expiresAt < now));
+      // The cached normalized DTO embeds source freshness metadata. Rebuild it
+      // when a source expires so callers see stale provenance, not old "available".
+      if (resources.some((resource) => resource?.expiresAt !== null && resource?.expiresAt !== undefined && resource.expiresAt < now)) {
+        return null;
+      }
       const status = acquiredCount === allResources.length && !hasIncompleteResource
         ? "complete" as const : acquiredCount > 0 ? "partial" as const : "failed" as const;
       if (previous.status !== status) {
