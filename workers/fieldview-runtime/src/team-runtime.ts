@@ -330,7 +330,7 @@ export class TeamRuntime {
     const eventSource = metadata(events, now), mediaSource = metadata(media, now);
     const statboticsYearSource = metadata(statboticsYear, now), statboticsEventsSource = metadata(statboticsEvents, now);
     const frcColorsSource = metadata(frcColors, now);
-    const snapshot = normalizeFieldViewTeamSnapshot({ team_key: this.teamKey, year,
+    const snapshot = normalizeFieldViewTeamState({ team_key: this.teamKey, year,
       sources: {
         ...(teamSource ? { tba_team: teamSource } : {}),
         ...(districtSource ? { tba_team_districts: districtSource } : {}),
