@@ -199,7 +199,7 @@ test("shared public stream route forwards to the single multiplexer without cred
 test("public event discovery route reads the global scheduler cache without credentials", async () => {
   const calls = [];
   const env = {
-    EVENT_SCHEDULER: {
+    TASK_SCHEDULER: {
       idFromName(name) { calls.push({ operation: "id", name }); return name; },
       get(id) {
         return {
@@ -238,7 +238,7 @@ test("public event discovery route reads the global scheduler cache without cred
 test("public team discovery route reads the global scheduler cache without credentials", async () => {
   const calls = [];
   const env = {
-    EVENT_SCHEDULER: {
+    TASK_SCHEDULER: {
       idFromName(name) { calls.push({ operation: "id", name }); return name; },
       get(id) {
         return {
@@ -398,7 +398,7 @@ test("public team season analytics aggregates canonical TeamRuntime and EventRun
   const calls = [];
   const env = {
     RUNTIME_ADMIN_TOKEN: "server-only-token",
-    EVENT_SCHEDULER: {
+    TASK_SCHEDULER: {
       idFromName(name) { return name; },
       get(id) {
         return { async fetch(request) {
