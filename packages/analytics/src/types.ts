@@ -169,7 +169,7 @@ export type TeamInsight = {
 };
 
 
-export type SeasonCohortRecord = {
+export type FieldViewEventTeamSeasonComparisonRecord = {
   teamNumber: number;
   event: { key: string; name: string; short_name: string | null; startDate: string };
   epaTotal: number | null;
@@ -183,7 +183,7 @@ export type SeasonCohortRecord = {
   status: "ready" | "unavailable";
 };
 
-export type SeasonCohortSnapshot = {
+export type FieldViewEventTeamSeasonComparisonSnapshot = {
   state: "queued" | "discovering" | "collecting" | "complete" | "partial";
   teamCount: number;
   totalTeamEventRecords: number;
@@ -191,7 +191,7 @@ export type SeasonCohortSnapshot = {
   unavailableTeamEventRecords: number;
   discoveryPendingTeams: number;
   updatedAt: number;
-  records: SeasonCohortRecord[];
+  records: FieldViewEventTeamSeasonComparisonRecord[];
 };
 
 export type TeamSeasonComponentComparison = {
@@ -220,3 +220,9 @@ export type TeamSeasonComparison = {
     endgame: TeamSeasonComponentComparison | null;
   };
 };
+
+
+/** @deprecated Use FieldViewEventTeamSeasonComparisonRecord. */
+export type SeasonCohortRecord = FieldViewEventTeamSeasonComparisonRecord;
+/** @deprecated Use FieldViewEventTeamSeasonComparisonSnapshot. */
+export type SeasonCohortSnapshot = FieldViewEventTeamSeasonComparisonSnapshot;
