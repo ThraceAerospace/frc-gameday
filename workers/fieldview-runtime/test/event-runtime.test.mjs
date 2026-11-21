@@ -814,7 +814,7 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
     TBA_API_KEY: "test-api-key",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async (url) => String(url) === TBA_ENDPOINTS.event(eventKey)
+    fetcher: async (url) => String(url).endsWith(TBA_ENDPOINTS.event(eventKey))
       ? Response.json({
           key: eventKey, name: "Analytics Test", event_code: "analytics",
           start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York",
