@@ -132,7 +132,7 @@ export default function MatchCard({
           "w-fit",
           "rounded-md",
           "border",
-          "h-[44px] box-border px-2 py-1",
+          "h-[44px] box-border px-2 py-1 text-[10px]",
           "transition-colors",
           borderClass,
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
@@ -168,7 +168,7 @@ export default function MatchCard({
 
             <span
               className={[
-                "flex h-4 items-center whitespace-nowrap font-mono text-[11px] tabular-nums",
+                "flex h-4 items-center whitespace-nowrap font-mono text-[10px] tabular-nums",
                 isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
               ].join(" ")}
             >
@@ -182,9 +182,8 @@ export default function MatchCard({
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-red-400",
-                  "font-bold",
+                  "font-bold text-[10px]",
                 ].join(" ")}
-                className="text-[10px]"
                 title={redTeamText}
               >
                 {redAllianceLabel ? (
@@ -208,9 +207,8 @@ export default function MatchCard({
               <div
                 className={[
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-blue-400",
-                  "font-bold",
+                  "font-bold text-[10px]",
                 ].join(" ")}
-                className="text-[10px]"
                 title={blueTeamText}
               >
                 {blueAllianceLabel ? (
@@ -264,7 +262,7 @@ export default function MatchCard({
                   </span>
                   <span
                     title={`Predicted blue score: ${bluePredictedScore}`}
-                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 text-xs leading-4 font-bold text-zinc-200"
+                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 text-[10px] leading-4 font-bold text-zinc-200"
                   >
                     {Math.round(bluePredictedScore!)}
                   </span>
