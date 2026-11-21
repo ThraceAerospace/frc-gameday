@@ -351,10 +351,11 @@ export class EventRuntime {
   private async restoreEventKey(request: Request): Promise<boolean> {
     const requested = request.headers.get("X-FieldView-Event-Key");
     const stored = await this.storage.get<string>("event-key");
-    if (!stored || !/^[a-zA-Z0-9_-]+$/.test(stored) || (requested && requested !== stored)) return false;
-    if (this.eventKey && this.eventKey !== stored) return false;
-    this.eventKey = stored;
-    this.allowedEndpoints = new Set(eventResourceEndpoints(stored));
+    const eventKey = stored ?? this.eventKey;
+    if (!eventKey || !/^[a-zA-Z0-9_-]+$/.test(eventKey) || (requested && requested !== eventKey)) return false;
+    if (this.eventKey && this.eventKey !== eventKey) return false;
+    this.eventKey = eventKey;
+    this.allowedEndpoints = new Set(eventResourceEndpoints(eventKey));
     return true;
   }
 
