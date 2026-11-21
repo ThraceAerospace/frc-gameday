@@ -285,6 +285,101 @@ export class TeamRuntime {
         },
       });
     }
+    if (request.method === "POST" && url.pathname === "/webhook") {
+      const eventKey = request.headers.get("X-FieldView-Event-Key") ?? "";
+      const webhookId = request.headers.get("X-FieldView-Webhook-Id") ?? "";
+      if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) || !/^[a-f0-9]{64}$/.test(webhookId)) {
+        return Response.json({ error: "Invalid webhook identity" }, { status: 400 });
+      }
+      const rawPayload = await request.text();
+      let payload: unknown;
+      try { payload = JSON.parse(rawPayload); }
+      catch { return Response.json({ error: "Invalid webhook JSON" }, { status: 400 }); }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
+      }
+      const envelope = payload as Record<string, unknown>;
+      const messageData = envelope.message_data;
+      if (typeof envelope.message_type !== "string" || !messageData || typeof messageData !== "object" || Array.isArray(messageData)) {
+        return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
+      }
+      const data = messageData as Record<string, unknown>;
+      const targetKeys = new Set<string>();
+      const match = data.match;
+      if ((envelope.message_type === "match_score" || envelope.message_type === "match_video") &&
+          match && typeof match === "object" && !Array.isArray(match)) {
+        const value = match as Record<string, unknown>;
+        const alliances = value.alliances;
+        if (alliances && typeof alliances === "object" && !Array.isArray(alliances)) {
+          for (const color of ["red", "blue"]) {
+            const alliance = (alliances as Record<string, unknown>)[color];
+            if (alliance && typeof alliance === "object" && !Array.isArray(alliance)) {
+              const keys = (alliance as Record<string, unknown>).team_keys;
+              if (Array.isArray(keys)) for (const key of keys) if (typeof key === "string") targetKeys.add(key);
+            }
+          }
+        }
+      } else {
+        if (Array.isArray(data.team_keys)) for (const key of data.team_keys) if (typeof key === "string") targetKeys.add(key);
+        if (typeof data.team_key === "string") targetKeys.add(data.team_key);
+        if (envelope.message_type === "awards_posted" && Array.isArray(data.recipient_list)) {
+          for (const recipient of data.recipient_list) {
+            if (recipient && typeof recipient === "object" && !Array.isArray(recipient)) {
+              const value = recipient as Record<string, unknown>;
+              if (typeof value.team_key === "string") targetKeys.add(value.team_key);
+              else if (typeof value.team_number === "number" && Number.isSafeInteger(value.team_number)) targetKeys.add("frc" + value.team_number);
+            }
+          }
+        }
+      }
+      if (!targetKeys.has(this.teamKey)) return Response.json({ accepted: true, affected: false });
+      const storageKey = TEAM_EVENT_STATE_PREFIX + eventKey;
+      const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
+      const existing = await this.storage.get<FieldViewTeamEventState>(storageKey);
+      if (!existing) return Response.json({ accepted: true, affected: true, projection: "not-yet-materialized" });
+      const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
+        ? match as Record<string, unknown> : null;
+      if (updatedMatch && (envelope.message_type === "match_score" || envelope.message_type === "match_video")) {
+        const matchKey = updatedMatch.key;
+        if (typeof matchKey !== "string" || updatedMatch.event_key !== eventKey) {
+          return Response.json({ error: "Webhook match identity mismatch" }, { status: 400 });
+        }
+        const currentMatches = existing.matches ?? [];
+        const index = currentMatches.findIndex((item) => item.key === matchKey);
+        if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
+        const current = currentMatches[index];
+        const merged = {
+          ...current,
+          ...updatedMatch,
+          // Preserve FieldView enrichments and invalidate only score-derived
+          // analysis when the source score changes.
+          predictions: current.predictions,
+          teams: current.teams,
+          sources: current.sources,
+          ...(envelope.message_type === "match_score" ? { analysis: undefined, flags: undefined } : {}),
+        } as typeof current;
+        if (JSON.stringify(current) === JSON.stringify(merged)) {
+          return Response.json({ accepted: true, affected: true, changed: false,
+            revision: await this.storage.get<number>(revisionKey) ?? 0 });
+        }
+        const nextMatches = [...currentMatches];
+        nextMatches[index] = merged;
+        const nextState: FieldViewTeamEventState = { ...existing, matches: nextMatches };
+        const nextRevision = await this.storage.transaction(async (tx) => {
+          const latest = await tx.get<FieldViewTeamEventState>(storageKey);
+          if (!latest || JSON.stringify(latest) !== JSON.stringify(existing)) return null;
+          const revision = (await tx.get<number>(revisionKey) ?? 0) + 1;
+          await tx.put(storageKey, nextState);
+          await tx.put(revisionKey, revision);
+          return revision;
+        });
+        if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
+        return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
+      }
+      return Response.json({ accepted: true, affected: true, changed: false,
+        revision: await this.storage.get<number>(revisionKey) ?? 0 });
+    }
+
     if (request.method === "POST" && url.pathname === "/event-analytics") {
       const body: unknown = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Expected event analytics input" }, { status: 400 });
