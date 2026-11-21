@@ -498,10 +498,19 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
               analytics: { ...nextState.analytics, team_comparison: undefined },
             } as FieldViewEventState;
           }
+          const rosterKeys = Array.isArray(nextState.teams)
+            ? nextState.teams.flatMap((team) =>
+                isRecord(team) && typeof team.key === "string" ? [team.key] : [])
+            : null;
+          const cachedTeamKeys = new Set(teamStates.map((item) => item.team_key));
+          const rosterComplete = rosterKeys !== null &&
+            rosterKeys.length === teamStates.length &&
+            rosterKeys.every((teamKey) => cachedTeamKeys.has(teamKey));
           const complete = Boolean(
             current?.complete &&
             version === current.version + 1 &&
             data?.team_state_pending !== true &&
+            rosterComplete &&
             (state !== null || teamState !== null),
           );
           const value: CanonicalSnapshot = {
@@ -572,9 +581,18 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         team_states?: FieldViewTeamEventState[] | null;
       };
       const { team_states, ...state } = payload;
+      const normalizedTeamStates = team_states ?? [];
+      const expectedTeamKeys = Array.isArray(state.teams)
+        ? state.teams.flatMap((team) =>
+            isRecord(team) && typeof team.key === "string" ? [team.key] : [])
+        : null;
+      const receivedTeamKeys = new Set(normalizedTeamStates.map((team) => team.team_key));
+      const complete = expectedTeamKeys !== null &&
+        expectedTeamKeys.length === normalizedTeamStates.length &&
+        expectedTeamKeys.every((teamKey) => receivedTeamKeys.has(teamKey));
       const snapshot: CanonicalEventSnapshotData = {
         state,
-        team_states: team_states ?? [],
+        team_states: normalizedTeamStates,
       };
       const latest = this.snapshots.get(eventKey);
       if (latest && version < latest.version) return;
@@ -582,7 +600,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       const value: CanonicalSnapshot = {
         version,
         snapshot,
-        complete: true,
+        complete,
         etag: response.headers.get("ETag") ?? undefined,
       };
       this.snapshots.set(eventKey, value);
