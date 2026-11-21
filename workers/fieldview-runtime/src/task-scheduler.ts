@@ -1084,7 +1084,7 @@ export class TaskScheduler {
         const participants = await response.json() as TBATeam[];
         if (!Array.isArray(participants)) throw new Error("TBA event participants response was not an array");
         job.teamKeys = [...new Set(participants.map((team) => team.key).filter((key): key is string =>
-          typeof key === "string" && /^frc\\d+$/.test(key)))].sort();
+          typeof key === "string" && /^frc\d+$/.test(key)))].sort();
         if (job.teamKeys.length === 0) throw new Error("No valid participant teams were returned for this event");
         job.stage = "seed";
         job.nextDueAt = Date.now() + 100;
