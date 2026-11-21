@@ -437,8 +437,7 @@ export class EventRuntime {
       await this.storage.put("lifecycle:state", lifecycle);
       if (lifecycle === "expired") {
         await this.cancelRecurringPolls(true);
-        await this.syncTeamActivity(false);
-        return Response.json({ lifecycle, scheduled: 0, event_key: this.eventKey });
+        return Response.json({ lifecycle, queued: true, scheduled: 0, event_key: this.eventKey }, { status: 202 });
       }
       if (lifecycle === "upcoming") {
         await this.schedulePolls([...this.allowedEndpoints], upcomingIntervalMs as number);
@@ -459,10 +458,9 @@ export class EventRuntime {
           await this.rearm(transaction);
         });
       }
-      await this.syncTeamActivity(lifecycle === "active");
-      // Lifecycle activation is also the initial-ingestion trigger.
-      await this.alarm();
-      return Response.json({ lifecycle, attempted: true, event_key: this.eventKey });
+      // EventRuntime owns the local polling queue. The Durable Object alarm
+      // executes its work after this cross-runtime lifecycle command returns.
+      return Response.json({ lifecycle, queued: true, event_key: this.eventKey }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/recalculate") {
