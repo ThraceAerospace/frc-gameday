@@ -1027,3 +1027,67 @@ test("EventRuntime persists a partial EventState on its first non-snapshot reque
   assert.equal(publication.state.event_key, eventKey);
   assert.equal(Object.hasOwn(publication.state, "team_states"), false);
 });
+
+
+test("EventRuntime builds one shared comparison input from every roster TeamState", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026target";
+  const teamSnapshots = new Map([
+    ["frc3461", {
+      team_key: "frc3461", year: 2026, team: { team_number: 3461 },
+      sources: { statbotics_team_events: { status: "available", retrieved_at: "2026-03-10T12:00:00.000Z" } },
+      events: [
+        { key: "2026priorA", name: "Prior A", event_code: "priorA", start_date: "2026-03-01", event_type: 0 },
+        { key: "2026target", name: "Target", event_code: "target", start_date: "2026-03-10", event_type: 0 },
+      ],
+      statbotics_events: [{
+        event: "2026priorA", epa: { total_points: 20, unitless: 0.2, breakdown: { auto_epa: 5 } },
+        record: { total: { wins: 3, losses: 1, ties: 0, count: 4 } },
+      }],
+    }],
+    ["frc254", {
+      team_key: "frc254", year: 2026, team: { team_number: 254 },
+      sources: { statbotics_team_events: { status: "available", retrieved_at: "2026-03-10T12:00:00.000Z" } },
+      events: [
+        { key: "2026priorB", name: "Prior B", event_code: "priorB", start_date: "2026-03-02", event_type: 0 },
+        { key: "2026target", name: "Target", event_code: "target", start_date: "2026-03-10", event_type: 0 },
+      ],
+      statbotics_events: [{
+        event: "2026priorB", epa: { total_points: 30, unitless: 0.3, breakdown: { auto_epa: 7 } },
+        record: { total: { wins: 4, losses: 0, ties: 0, count: 4 } },
+      }],
+    }],
+  ]);
+  const teamNamespace = {
+    idFromName: (key) => key,
+    get: (key) => ({
+      fetch: async () => {
+        const snapshot = teamSnapshots.get(key);
+        return snapshot
+          ? Response.json(snapshot, { headers: { "X-FieldView-Snapshot-Version": "2" } })
+          : new Response(null, { status: 404 });
+      },
+    }),
+  };
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    TEAM_RUNTIME: teamNamespace,
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  const eventState = {
+    event: { key: eventKey, name: "Target", event_code: "target", start_date: "2026-03-10" },
+    teams: [{ key: "frc3461", team_number: 3461 }, { key: "frc254", team_number: 254 }],
+  };
+  const result = await runtime.collectEventTeamSeasonComparisonInput(eventState);
+  assert.ok(result);
+  assert.equal(result.comparisonInput.team_count, 2);
+  assert.deepEqual(
+    [...new Set(result.comparisonInput.records.map((record) => record.team_number))].sort((a, b) => a - b),
+    [254, 3461],
+  );
+  assert.ok(result.comparisonInput.records.some((record) => record.team_number === 3461 && record.event.event_key === "2026priorA"));
+  assert.ok(result.comparisonInput.records.some((record) => record.team_number === 254 && record.event.event_key === "2026priorB"));
+  assert.equal(result.comparisonInput.team_state_revisions.length, 2);
+  assert.equal(result.comparisonInput.state, "complete");
+});
