@@ -107,6 +107,7 @@ export type CanonicalEventWeekResponse = {
   runDate: string;
   evaluatedAt: number;
   events: FieldViewEvent[];
+  pending?: boolean;
 };
 
 /** Read EventScheduler's precomputed weekly projection; never fan out to EventRuntime here. */
@@ -118,8 +119,8 @@ export async function getCanonicalEventThisWeek(
   try {
     const url = new URL("/events/this-week", baseUrl);
     const response = await fetchCanonicalRuntime("event-this-week", url, fetcher, {
-      cache: "force-cache",
-      next: { revalidate: 300, tags: ["fieldview-events-this-week"] },
+      // Pending responses must never be cached as an empty weekly projection.
+      cache: "no-store",
     });
     if (!response.ok) return null;
     const payload = await readCanonicalJson<CanonicalEventWeekResponse>("event-this-week", response);
