@@ -193,7 +193,7 @@ export default function MatchCard({
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-red-400",
                   "font-bold",
                 ].join(" ")}
-                style={{ fontSize: `${Math.max(10, redTeamFontSize)}px` }}
+                style={{ fontSize: `${Math.max(10, redTeamFontSize - 2)}px` }}
                 title={redTeamText}
               >
                 {redAllianceLabel ? (
@@ -219,7 +219,7 @@ export default function MatchCard({
                   "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-blue-400",
                   "font-bold",
                 ].join(" ")}
-                style={{ fontSize: `${Math.max(10, blueTeamFontSize)}px` }}
+                style={{ fontSize: `${Math.max(10, blueTeamFontSize - 2)}px` }}
                 title={blueTeamText}
               >
                 {blueAllianceLabel ? (
