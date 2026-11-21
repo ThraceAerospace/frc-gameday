@@ -11,6 +11,7 @@ export function calculateFieldViewEventTeamComparisonAnalytics(
   teamStates: FieldViewTeamEventState[],
   expectedTeamCount: number,
   sourceRevisions: Array<{ team_key: string; revision: number | null }>,
+  inputUpdatedAt: number | null,
 ): FieldViewEventTeamComparisonAnalytics {
   const ranked = teamStates.flatMap((teamState) => {
     const comparison = teamState.analytics?.season_comparison;
@@ -41,6 +42,7 @@ export function calculateFieldViewEventTeamComparisonAnalytics(
     ? ranked.reduce((sum, entry) => sum + entry.change, 0) / ranked.length
     : null;
   return {
+    input_updated_at: inputUpdatedAt,
     population: {
       expected_team_count: expectedTeamCount,
       eligible_team_count: ranked.length,
