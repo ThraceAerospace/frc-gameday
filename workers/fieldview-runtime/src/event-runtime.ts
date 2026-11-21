@@ -725,6 +725,7 @@ export class EventRuntime {
       return Response.json({
         event_key: this.eventKey,
         source_revision: currentSourceRevision,
+        comparison_input_updated_at: await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null,
         analytics: {
           source_revision: publication?.sourceRevision ?? null,
           revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
