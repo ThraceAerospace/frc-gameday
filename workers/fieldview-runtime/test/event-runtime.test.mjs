@@ -281,8 +281,8 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(updatedResponse.status, 200);
   assert.equal(updatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
   const updatedSnapshot = await updatedResponse.json();
-  assert.equal(updatedSnapshot.tba_matches[0].alliances.red.score, 20);
-  assert.equal(updatedSnapshot.tba_matches[0].actual_time, 123);
+  assert.equal(updatedSnapshot.matches[0].alliances.red.score, 20);
+  assert.equal(updatedSnapshot.matches[0].actual_time, 123);
 
   const updatedPublication = storage.values.get("event-state:publication");
   assert.notEqual(updatedPublication, initialPublication);
