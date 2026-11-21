@@ -41,6 +41,7 @@ export type CanonicalAnalyticsPublication = {
   revision: number;
   status: string;
   due_at: number | null;
+  pending_invalidation?: Record<string, unknown> | null;
   calculated_at: number | null;
   source_revision: number | null;
   publication: CanonicalAnalyticsPublicationPayload | null;

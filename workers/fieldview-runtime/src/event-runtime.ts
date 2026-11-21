@@ -646,7 +646,10 @@ export class EventRuntime {
       const currentPublication = publication
         ? { ...publication, ...(currentEventAnalytics === undefined ? {} : { eventAnalytics: currentEventAnalytics }) }
         : null;
-      const etag = 'W/"fv-analytics-v1-' + revision + '-' + currentSourceRevision + '-' + analyticsStatus + '"';
+      const dueAt = await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null;
+      const pendingInvalidation = await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null;
+      const etag = 'W/"fv-analytics-v1-' + revision + '-' + currentSourceRevision + '-' +
+        analyticsStatus + '-' + (dueAt ?? "none") + '-' + (pendingInvalidation?.requested_at ?? "none") + '"';
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers: {
           ETag: etag, "Cache-Control": "private, no-cache",
@@ -656,10 +659,10 @@ export class EventRuntime {
         event_key: this.eventKey,
         revision,
         status: analyticsStatus,
-        due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+        due_at: dueAt,
         calculated_at: publication?.calculatedAt ?? null,
         source_revision: publication?.sourceRevision ?? null,
-        pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
+        pending_invalidation: pendingInvalidation,
         publication: currentPublication,
       }, {
         headers: {
@@ -1699,14 +1702,18 @@ export class EventRuntime {
     const currentPublication = publication
       ? { ...publication, ...(currentEventAnalytics === undefined ? {} : { eventAnalytics: currentEventAnalytics }) }
       : null;
-    const etag = 'W/"fv-analytics-v1-' + version + '-' + currentSourceRevision + '-' + status + '"';
+    const dueAt = await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null;
+    const pendingInvalidation = await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null;
+    const etag = 'W/"fv-analytics-v1-' + version + '-' + currentSourceRevision + '-' +
+      status + '-' + (dueAt ?? "none") + '-' + (pendingInvalidation?.requested_at ?? "none") + '"';
     const data = {
       event_key: this.eventKey,
       revision: version,
       status,
-      due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+      due_at: dueAt,
       calculated_at: publication?.calculatedAt ?? null,
       source_revision: publication?.sourceRevision ?? null,
+      pending_invalidation: pendingInvalidation,
       publication: currentPublication,
     };
     const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
