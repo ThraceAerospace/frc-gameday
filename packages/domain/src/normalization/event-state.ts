@@ -13,14 +13,14 @@ import type {
 } from "@fieldview/provider-tba/types";
 import type { StatboticsMatch } from "@fieldview/provider-statbotics/types";
 import type { EventKey } from "../ids.js";
-import type { FieldViewEventSnapshot } from "../event.js";
+import type { FieldViewEventState } from "../event.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import { normalizeFieldViewEvent } from "./event.ts";
 import { normalizeFieldViewEventTeam } from "./event-team.ts";
 import { normalizeFieldViewMatch } from "./match.ts";
 import { normalizeFieldViewPlayoffAlliance } from "./playoff-alliance.ts";
 import { normalizeFieldViewTeam } from "./team.ts";
-import { normalizeFieldViewTeamEventState } from "./team-state.ts";
+import { normalizeFieldViewTeamEventState } from "./team-event-state.ts";
 import { sortMatchesByTime } from "../match-order.ts";
 
 export interface NormalizeFieldViewEventStateInput {
@@ -52,7 +52,7 @@ export interface NormalizeFieldViewEventStateInput {
 /** Compose the canonical event, team, event-team, match, and playoff objects. */
 export function normalizeFieldViewEventState(
   input: NormalizeFieldViewEventStateInput,
-): FieldViewEventSnapshot {
+): FieldViewEventState {
   if (input.tba_event && input.tba_event.key !== input.event_key) {
     throw new Error("TBA event key does not match the requested FieldView event key");
   }
@@ -67,7 +67,7 @@ export function normalizeFieldViewEventState(
       match.key === undefined ? [] : [[match.key, match] as const]),
   );
 
-  const result: FieldViewEventSnapshot = {
+  const result: FieldViewEventState = {
     event_key: input.event_key,
     sources: input.sources,
   };
