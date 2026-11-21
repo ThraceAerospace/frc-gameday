@@ -113,7 +113,7 @@ export type EventAnalyticsResponse = {
   qualificationAnalysis?: QualificationAnalysis;
   playoffAnalysis?: PlayoffAnalysis;
   teamInsights?: TeamInsight[];
-  seasonCohort?: SeasonCohortSnapshot;
+  eventTeamSeasonComparisonInput?: FieldViewEventTeamSeasonComparisonSnapshot;
   matchCount: number;
   loadedMatchCount: number;
   offset: number;
