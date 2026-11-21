@@ -675,7 +675,9 @@ export class EventRuntime {
         await this.storage.transaction((transaction) => this.rearm(transaction));
       }
       const publication = await this.publishEventState();
-      return Response.json(publication.state, {
+      const team_states = publication.state.teams === null ? null
+        : await this.readTeamEventStates(publication.state, publication.sourceRevision);
+      return Response.json({ ...publication.state, team_states }, {
         headers: {
           "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
           "X-FieldView-Event-State-Status": publication.status,
@@ -685,7 +687,7 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.publishEventState();
-      const state = publication.state;
+      const state = { ...publication.state, team_states: publication.state.teams === null ? null : await this.readTeamEventStates(publication.state, publication.sourceRevision) };
       const rosterAvailable = Array.isArray(state.teams);
       const expected = (state.teams ?? []).map((team) => team.key);
       const present = new Set((state.team_states ?? []).map((team) => team.team_key));
@@ -710,7 +712,10 @@ export class EventRuntime {
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const expectedTeamCount = eventStatePublication?.state.teams?.length ?? 0;
-      const materializedTeamCount = eventStatePublication?.state.team_states?.length ?? 0;
+      const currentTeamStates = eventStatePublication
+        ? await this.readTeamEventStates(eventStatePublication.state, currentSourceRevision)
+        : [];
+      const materializedTeamCount = currentTeamStates.length;
       const teamStateCoverageStatus = materializedTeamCount === expectedTeamCount ? "complete" : "partial";
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
@@ -1134,14 +1139,13 @@ export class EventRuntime {
             ...(published.flags === undefined ? {} : { flags: published.flags as typeof match.flags }),
           } : match;
         });
-    const team_states = await this.readTeamEventStates(normalizedState, state.sourceRevision);
+    const { team_states: _unownedTeamStates, ...eventOwnedState } = normalizedState;
     return {
       version: state.version,
       sourceRevision: state.sourceRevision,
       state: {
-        ...normalizedState,
+        ...eventOwnedState,
         ...(matches === undefined ? {} : { matches }),
-        team_states: normalizedState.teams === null ? null : team_states,
         ...(publication.eventAnalytics === undefined ? {} : { analytics: publication.eventAnalytics as typeof normalizedState.analytics }),
       },
     };
