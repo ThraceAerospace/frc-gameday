@@ -301,8 +301,13 @@ export class TeamRuntime {
           ...(typeof data.predicted_time === "number" && Number.isFinite(data.predicted_time) ? { predicted_time: data.predicted_time } : {}),
         };
         if (JSON.stringify(current) === JSON.stringify(patch)) {
-          return Response.json({ accepted: true, affected: true, changed: false,
-            revision: await this.storage.get<number>(revisionKey) ?? 0 });
+          const revision = await this.storage.get<number>(revisionKey) ?? 0;
+          return Response.json({
+            accepted: true, affected: true, changed: false,
+            revision, team_event_revision: revision,
+            team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+            team_state: existing,
+          });
         }
         const nextMatches = [...currentMatches];
         nextMatches[index] = patch;
@@ -316,8 +321,12 @@ export class TeamRuntime {
           return revision;
         });
         if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
-        await this.notifyEventRuntimeStateChange(eventKey, nextRevision).catch(() => undefined);
-        return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
+        return Response.json({
+          accepted: true, affected: true, changed: true,
+          revision: nextRevision, team_event_revision: nextRevision,
+          team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+          team_state: nextState,
+        });
       }
       const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
         ? normalizeTbaWebhookMatch(match as Record<string, unknown>) : null;
