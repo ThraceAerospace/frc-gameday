@@ -4,6 +4,7 @@ import SiteShell from "@/components/navigation/SiteShell";
 import HomeEventCard from "@/components/event/HomeEventCard";
 import { getCanonicalEventThisWeek } from "@/lib/events/serverSnapshot";
 import { getEventCompetitionStatus } from "@/lib/time";
+import PendingSnapshotRefresh from "@/components/runtime/PendingSnapshotRefresh";
 
 export const revalidate = 300;
 
@@ -50,10 +51,11 @@ export default async function HomePage() {
               ))}
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-              {projection ? "There are no events scheduled for this week." : "The weekly event list is temporarily unavailable."}
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500" aria-live="polite">
+              {projection?.pending ? "Preparing this week's event list…" : projection ? "There are no events scheduled for this week." : "The weekly event list is temporarily unavailable."}
             </div>
           )}
+          {projection?.pending ? <PendingSnapshotRefresh /> : null}
 
           <Link href="/events" className="mt-4 block text-center text-sm font-semibold text-[var(--fv-brand)] sm:hidden">Browse all events →</Link>
         </section>
