@@ -607,8 +607,34 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      // Snapshot reads are read-only. Provider acquisition is initiated by
-      // explicit refreshes, event lifecycle scheduling, or webhook work.
+      // Demand-driven acquisition: persist missing/stale work and return the
+      // current publication immediately. The Durable Object alarm performs
+      // provider I/O after this request has completed.
+      const now = Date.now();
+      const resources = [...this.allowedEndpoints];
+      const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const needed = resources.filter((endpoint) => {
+        const state = states.get(endpointStorageKey(endpoint));
+        return !state || state.lastFetchedAt === null || state.status === "failed" ||
+          (state.expiresAt !== null && state.expiresAt <= now);
+      });
+      if (needed.length > 0) {
+        await this.ensureRecurringPolls(resources, 86_400_000);
+        await this.enqueueManualPolls(needed);
+      }
+      const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
+      if (!statboticsState || statboticsState.lastFetchedAt === null ||
+          statboticsState.status === "failed" ||
+          (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
+        await this.enqueueManualPolls([statboticsEndpoint]);
+      }
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false &&
+          !(await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))) {
+        await this.storage.put(ANALYTICS_DUE_KEY, now);
+        await this.storage.put("analytics:status", "pending");
+        await this.storage.transaction((transaction) => this.rearm(transaction));
+      }
       const publication = await this.publishEventState();
       return Response.json(publication.state, {
         headers: {
