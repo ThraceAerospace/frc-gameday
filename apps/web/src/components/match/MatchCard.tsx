@@ -18,20 +18,34 @@ export type MatchPresentation = Pick<
 >;
 export type PlayoffAlliancePresentation = Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup" | "status">;
 
-const ALLIANCE_FLAG_LABELS: Record<string, { label: string; title: string; className: string }> = {
-  "predicted-win": { label: "Predicted Win", title: "Statbotics predicted this alliance to win", className: "border-white/20 bg-white/5 text-zinc-300" },
-  "predicted-loss": { label: "Predicted Loss", title: "Statbotics predicted this alliance to lose", className: "border-white/20 bg-white/5 text-zinc-300" },
-  "high-alliance-epa": { label: "High Alliance EPA", title: "This alliance's combined pre-match EPA is above the event's 75th-percentile threshold", className: "border-[var(--fv-metric-above)]/60 bg-[var(--fv-metric-above)]/10 text-[var(--fv-metric-above)]" },
-  "large-score-delta": { label: "Large Score Delta", title: "This alliance's actual score differed substantially from its predicted score", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
-  "anomalous-score": { label: "Anomalous Score", title: "This alliance's score residual is unusual for this match phase", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
-  "high-penalties": { label: "High Penalties", title: "This alliance received an unusually high number of penalty points", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
+const ALLIANCE_FLAG_LABELS: Record<string, { label: string; title: string }> = {
+  "high-alliance-epa": {
+    label: "High Alliance EPA",
+    title: "This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates.",
+  },
+  "large-score-delta": {
+    label: "Large Score Delta",
+    title: "This alliance's absolute actual-minus-predicted score delta is in the event-wide top decile.",
+  },
+  "high-penalties": {
+    label: "High Penalties",
+    title: "This alliance's credited penalty points exceed the event-level alliance penalty outlier threshold.",
+  },
 };
 
 function AllianceFlagPills({ flags }: { flags: NonNullable<MatchPresentation["flags"]>["alliances"]["red"] }) {
-  return flags.map((flag, index) => {
+  return flags.flatMap((flag, index) => {
     const item = ALLIANCE_FLAG_LABELS[flag.type];
-    if (!item) return null;
-    return <span key={`${flag.type}-${index}`} title={item.title} className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold leading-3 ${item.className}`}>{item.label}</span>;
+    if (!item) return [];
+    return [
+      <span
+        key={`${flag.type}-${index}`}
+        title={item.title}
+        className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      >
+        {item.label}
+      </span>,
+    ];
   });
 }
 
@@ -106,9 +120,19 @@ export default function MatchCard({
       : predictionBorder ?? "border-zinc-800";
 
   const matchName = matchShortName(match, playoffType);
-  const modelUpset = hasResult && (match.flags?.review_flags ?? []).includes("model-upset");
-  const redAllianceFlags = hasResult ? (match.flags?.alliances.red ?? []) : [];
-  const blueAllianceFlags = hasResult ? (match.flags?.alliances.blue ?? []) : [];
+  const matchLevelFlags = hasResult
+    ? (match.flags?.review_flags ?? []).filter((flag) => flag === "model-upset" || flag === "anomalous-score")
+    : [];
+  const matchFlagLabels: Record<string, string> = {
+    "model-upset": "Model Upset",
+    "anomalous-score": "Anomalous Score",
+  };
+  const redAllianceFlags = hasResult
+    ? (match.flags?.alliances.red ?? []).filter((flag) => flag.type === "high-alliance-epa" || flag.type === "large-score-delta" || flag.type === "high-penalties")
+    : [];
+  const blueAllianceFlags = hasResult
+    ? (match.flags?.alliances.blue ?? []).filter((flag) => flag.type === "high-alliance-epa" || flag.type === "large-score-delta" || flag.type === "high-penalties")
+    : [];
 
   const time =
     isNext && (match.predicted_time != null || match.time != null) ? (
@@ -145,17 +169,30 @@ export default function MatchCard({
               ].join(" ")}
             >
               {matchName}
-              {modelUpset ? <span title="The match result differed from the model's predicted favorite." className="ml-1 inline-flex items-center rounded-full border border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 px-1.5 py-0.5 text-[9px] font-semibold leading-3 text-[var(--fv-review)]">Model Upset</span> : null}
             </span>
 
-            <span
-              className={[
-                "mt-1 whitespace-nowrap font-mono text-[10px] tabular-nums",
-                isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
-              ].join(" ")}
-            >
-              {time}
-            </span>
+            {matchLevelFlags.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {matchLevelFlags.map((flag, index) => (
+                  <span
+                    key={`${flag}-${index}`}
+                    title={matchFlagLabels[flag]}
+                    className="inline-flex rounded-full px-1.5 py-1 text-[9px] font-bold leading-3 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                  >
+                    {matchFlagLabels[flag]}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span
+                className={[
+                  "mt-1 whitespace-nowrap font-mono text-[10px] tabular-nums",
+                  isNext ? "font-semibold text-zinc-200" : "text-zinc-500",
+                ].join(" ")}
+              >
+                {time}
+              </span>
+            )}
           </div>
 
           {/* Red alliance */}
