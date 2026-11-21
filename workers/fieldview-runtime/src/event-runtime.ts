@@ -615,7 +615,7 @@ export class EventRuntime {
       const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const needed = resources.filter((endpoint) => {
         const state = states.get(endpointStorageKey(endpoint));
-        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" ||
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
           (state.expiresAt !== null && state.expiresAt <= now);
       });
       if (needed.length > 0) {
