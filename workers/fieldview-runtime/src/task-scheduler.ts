@@ -40,8 +40,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Stable per-owner/endpoint jitter spreads denied runtimes across the next gate window. */
-
 function configured(value: string | number | undefined, fallback: number, name: string): number {
   const parsed = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1_000) {
