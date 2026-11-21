@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateCanonicalMatchAnalytics, calculateCanonicalTeamEventAnalytics } from "../src/canonical-match-analytics.ts";
 
-test("EventRuntime canonical enrichment publishes match score and EPA analysis plus flags", async () => {
+test("Canonical aggregate can optionally attach TeamEventAnalytics for compatibility", async () => {
   const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
     team_key: `frc${start + index}`,
     team_number: start + index,
