@@ -11,10 +11,17 @@ import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvir
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewTeamState } from "../../../packages/domain/src/normalization/team-state.ts";
+import { normalizeFieldViewTeamEventState } from "../../../packages/domain/src/normalization/team-event-state.ts";
+import type { FieldViewEventState } from "../../../packages/domain/src/event.ts";
+import type { FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
+import type { FieldViewSeasonCohortSnapshot, FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
+import { calculateCanonicalTeamEventAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
 const ACTIVE_EVENTS_KEY = "activity:active-events";
+const TEAM_EVENT_STATE_PREFIX = "team-event-state:";
+const TEAM_EVENT_REVISION_PREFIX = "team-event-revision:";
 export interface TeamResource { provider: TeamProvider; endpoint: string; }
 interface ManualTeamPollRequest { endpoint: string; year: number; dueAt: number; attempts: number; }
 interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
@@ -192,7 +199,8 @@ export class TeamRuntime {
     const url = new URL(request.url);
     const admin = Boolean(this.env.RUNTIME_ADMIN_TOKEN) && request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" && url.pathname === "/snapshot";
-    if (!admin && !publicRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const publicEventStateRead = request.method === "GET" && url.pathname === "/event-state";
+    if (!admin && !publicRead && !publicEventStateRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
     const yearText = url.searchParams.get("year");
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
@@ -216,6 +224,104 @@ export class TeamRuntime {
         await this.enqueueManualPolls(needed, year);
       }
       return initializedState;
+    }
+    if (publicEventStateRead) {
+      const eventKey = url.searchParams.get("event_key") ?? "";
+      if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
+      const state = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + eventKey);
+      if (!state) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
+      return Response.json(state, {
+        headers: {
+          "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    if (request.method === "POST" && url.pathname === "/event-analytics") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Expected event analytics input" }, { status: 400 });
+      const input = body as Record<string, unknown>;
+      const eventKey = input.event_key;
+      const eventState = input.event_state as FieldViewEventState | undefined;
+      const cohort = input.cohort as FieldViewSeasonCohortSnapshot | undefined;
+      const eventSourceRevision = input.event_source_revision;
+      if (typeof eventKey !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) ||
+          !eventState || eventState.event_key !== eventKey ||
+          !cohort || !Array.isArray(cohort.records) ||
+          !Number.isSafeInteger(eventSourceRevision) || (eventSourceRevision as number) < 0) {
+        return Response.json({ error: "Invalid team event analytics input" }, { status: 400 });
+      }
+      const year = Number(eventKey.slice(0, 4));
+      const teamStateResponse = await this.snapshot(year);
+      const teamState = await teamStateResponse.json() as ReturnType<typeof normalizeFieldViewTeamState>;
+      const teamNumber = Number(this.teamKey.replace(/^frc/i, ""));
+      const eventTeam = eventState.event_teams?.find((item) => item.team_key === this.teamKey) ?? null;
+      if (!eventState.teams?.some((item) => item.key === this.teamKey)) {
+        return Response.json({ error: "Team is not in the supplied event roster" }, { status: 409 });
+      }
+      const teamMatches = eventState.matches?.filter((match) =>
+        match.alliances.red.team_keys.includes(this.teamKey) ||
+        match.alliances.blue.team_keys.includes(this.teamKey),
+      ) ?? null;
+      const teamEventState = normalizeFieldViewTeamEventState({
+        event_key: eventKey as FieldViewTeamEventState["event_key"],
+        team_key: this.teamKey as FieldViewTeamEventState["team_key"],
+        sources: {
+          team: teamState.sources,
+          event_team: eventState.sources.event_teams,
+          matches: eventState.sources.matches,
+        },
+        ...(teamState.team === undefined ? {} : { team: teamState.team }),
+        ...(eventTeam === null ? {} : { event_team: eventTeam }),
+        ...(teamMatches === null ? {} : { matches: teamMatches }),
+      });
+      const teamSourceRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const analyticsInputs: FieldViewAnalyticsInputRecord[] = [{
+        input_key: "team:" + this.teamKey + ":season-state",
+        provider: "fieldview",
+        resource: "team-state",
+        source_revision: teamSourceRevision,
+        fetched_at: Date.now(),
+        record_count: teamState.events?.length ?? 0,
+        included_count: teamState.statbotics_events?.length ?? 0,
+        excluded_count: Math.max(0, (teamState.events?.length ?? 0) - (teamState.statbotics_events?.length ?? 0)),
+        status: teamState.events === undefined || teamState.statbotics_events === undefined ? "partial" : "available",
+      }, {
+        input_key: "event:" + eventKey + ":comparison-cohort",
+        provider: "fieldview",
+        resource: "event-team-season-cohort",
+        source_revision: String(cohort.updated_at),
+        fetched_at: cohort.updated_at,
+        record_count: cohort.total_team_event_records,
+        included_count: cohort.processed_team_event_records - cohort.unavailable_team_event_records,
+        excluded_count: cohort.unavailable_team_event_records,
+        status: cohort.state === "complete" ? "available" : "partial",
+      }];
+      const calculated = await calculateCanonicalTeamEventAnalytics({
+        ...eventState,
+        team_states: [teamEventState],
+      }, this.teamKey as FieldViewTeamEventState["team_key"], analyticsInputs, cohort);
+      const result = calculated ?? teamEventState;
+      const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
+      const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
+      const prior = await this.storage.get<FieldViewTeamEventState>(stateKey);
+      if (prior && JSON.stringify(prior) === JSON.stringify(result)) {
+        return Response.json({ team_key: this.teamKey, event_key: eventKey, changed: false,
+          revision: await this.storage.get<number>(revisionKey) ?? 0 });
+      }
+      const revision = await this.storage.transaction(async (tx) => {
+        const next = (await tx.get<number>(revisionKey) ?? 0) + 1;
+        await tx.put(stateKey, result);
+        await tx.put(revisionKey, next);
+        await tx.put(stateKey + ":inputs", {
+          event_source_revision: eventSourceRevision,
+          team_source_revision: teamSourceRevision,
+          cohort_updated_at: cohort.updated_at,
+          calculated_at: Date.now(),
+        });
+        return next;
+      });
+      return Response.json({ team_key: this.teamKey, event_key: eventKey, changed: true, revision });
     }
     if (request.method === "POST" && url.pathname === "/activity") {
       const body: unknown = await request.json().catch(() => null);
