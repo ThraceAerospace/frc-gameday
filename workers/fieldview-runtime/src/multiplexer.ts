@@ -177,8 +177,10 @@ export class Multiplexer {
       await tx.put(generationKey, generation);
       return { added: true, generation };
     });
-    if (!changed.added || subscription.topic !== "event-state") return { ok: true };
-    const response = await this.syncEventStateSubscription(subscription.event_key, true, changed.generation);
+    if (!changed.added) return { ok: true };
+    const response = await this.syncRuntimeSubscription(
+      subscription.topic, subscription.event_key, true, changed.generation,
+    );
     if (!response) {
       await this.removeSubscription(clientId, subscription);
       return { ok: false };
@@ -203,14 +205,15 @@ export class Multiplexer {
       await tx.put(generationKey, generation);
       return { removed: true, desired: clients.length > 0, generation };
     });
-    if (changed.removed && subscription.topic === "event-state") {
-      await this.syncEventStateSubscription(
-        subscription.event_key, changed.desired, changed.generation,
+    if (changed.removed) {
+      await this.syncRuntimeSubscription(
+        subscription.topic, subscription.event_key, changed.desired, changed.generation,
       );
     }
   }
 
-  private async syncEventStateSubscription(
+  private async syncRuntimeSubscription(
+    topic: Topic,
     eventKey: string,
     registered: boolean,
     generation: number,
@@ -227,6 +230,7 @@ export class Multiplexer {
         },
         body: JSON.stringify({
           action: registered ? "subscribe" : "unsubscribe",
+          topic,
           generation,
         }),
       }),

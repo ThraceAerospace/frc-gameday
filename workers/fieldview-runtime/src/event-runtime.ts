@@ -366,27 +366,35 @@ export class EventRuntime {
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
+          (body.topic !== undefined && body.topic !== "event-state" && body.topic !== "analytics") ||
           (body.generation !== undefined &&
             (!Number.isSafeInteger(body.generation) || (body.generation as number) < 1))) {
-        return Response.json({ error: "Expected subscribe or unsubscribe action and an optional positive generation" }, { status: 400 });
+        return Response.json({ error: "Expected a valid topic, subscribe or unsubscribe action, and an optional positive generation" }, { status: 400 });
       }
+      const topic = body.topic === "analytics" ? "analytics" : "event-state";
+      const generationKey = topic === "analytics"
+        ? "multiplexer:analytics-registration-generation"
+        : "multiplexer:registration-generation";
+      const registeredKey = topic === "analytics" ? "multiplexer:analytics" : "multiplexer:shared";
       if (typeof body.generation === "number") {
-        const currentGeneration = await this.storage.get<number>("multiplexer:registration-generation") ?? 0;
+        const currentGeneration = await this.storage.get<number>(generationKey) ?? 0;
         if (body.generation <= currentGeneration) {
           return Response.json({
-            registered: await this.storage.get<boolean>("multiplexer:shared") === true,
+            registered: await this.storage.get<boolean>(registeredKey) === true,
             event_key: this.eventKey,
+            topic,
             generation: currentGeneration,
             stale: true,
           });
         }
-        await this.storage.put("multiplexer:registration-generation", body.generation);
+        await this.storage.put(generationKey, body.generation);
       }
       const registered = body.action === "subscribe";
-      await this.storage.put("multiplexer:shared", registered);
+      await this.storage.put(registeredKey, registered);
       return Response.json({
         registered,
         event_key: this.eventKey,
+        topic,
         ...(typeof body.generation === "number" ? { generation: body.generation } : {}),
       });
     }
@@ -1654,7 +1662,8 @@ export class EventRuntime {
   }
 
   private async publishAnalyticsRevision(version: number): Promise<void> {
-    if (!this.env.MULTIPLEXER || !this.env.RUNTIME_ADMIN_TOKEN) return;
+    if (!this.env.MULTIPLEXER || !this.env.RUNTIME_ADMIN_TOKEN ||
+        await this.storage.get<boolean>("multiplexer:analytics") !== true) return;
     const [publication, storedStatus, endpointStates] = await Promise.all([
       this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
       this.storage.get<string>("analytics:status"),
