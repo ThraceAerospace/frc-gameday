@@ -4,6 +4,15 @@ main = "src/index.ts"
 compatibility_date = "2026-11-17"
 workers_dev = false
 
+# Persist Worker and Durable Object logs; sample traces to limit observability volume.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.1
+
 [vars]
 PROVIDER_REQUEST_INTERVAL_MS = "1000"
 
