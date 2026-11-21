@@ -484,7 +484,7 @@ export class TeamRuntime {
       if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) return [event.key, null] as const;
       try {
         const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(event.key));
-        const response = await stub.fetch(new Request("https://event-runtime/state", {
+        const response = await stub.fetch(new Request("https://event-runtime/analytics-state", {
           headers: {
             Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
             "X-FieldView-Event-Key": event.key,
