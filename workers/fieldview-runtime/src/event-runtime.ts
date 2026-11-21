@@ -1889,8 +1889,11 @@ export class EventRuntime {
         await recordAnalyticsInvalidation(transaction, "tba-event-alliances", now);
         await recordAnalyticsInvalidation(transaction, "tba-team-event-statuses", now);
       }
-      await this.rearm(transaction);
       const snapshotRevisionAfter = await transaction.get<number>("snapshot-revision") ?? snapshotRevisionBefore;
+      if (snapshotRevisionAfter !== snapshotRevisionBefore ||
+          !["match_score", "match_video"].includes(messageType)) {
+        await this.rearm(transaction);
+      }
       return {
         accepted: true,
         snapshotVersion: snapshotRevisionAfter !== snapshotRevisionBefore &&
