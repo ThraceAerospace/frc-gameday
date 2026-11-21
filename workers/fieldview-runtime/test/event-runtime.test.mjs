@@ -230,13 +230,20 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     fetcher: async () => new Response("unused"),
   }, eventKey);
-  const snapshotRequest = () => new Request("https://event-runtime/snapshot", {
-    headers: { "X-FieldView-Event-Key": eventKey },
+  const snapshotRequest = (etag) => new Request("https://event-runtime/snapshot", {
+    headers: {
+      "X-FieldView-Event-Key": eventKey,
+      ...(etag ? { "If-None-Match": etag } : {}),
+    },
   });
 
   const initialResponse = await runtime.fetch(snapshotRequest());
   assert.equal(initialResponse.status, 200);
   assert.equal(initialResponse.headers.get("X-FieldView-Snapshot-Version"), "1");
+  const initialEtag = initialResponse.headers.get("ETag");
+  assert.ok(initialEtag);
+  const unchangedResponse = await runtime.fetch(snapshotRequest(initialEtag));
+  assert.equal(unchangedResponse.status, 304, "matching validators avoid the composed snapshot body");
   const initialPublication = storage.values.get("event-state:publication");
   assert.equal(initialPublication.snapshotVersion, 1);
   assert.equal(initialPublication.sourceRevision, 1);
@@ -283,6 +290,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   const updatedResponse = await runtime.fetch(snapshotRequest());
   assert.equal(updatedResponse.status, 200);
   assert.equal(updatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
+  assert.notEqual(updatedResponse.headers.get("ETag"), initialEtag);
   const updatedSnapshot = await updatedResponse.json();
   assert.equal(updatedSnapshot.matches[0].alliances.red.score, 20);
   assert.equal(updatedSnapshot.matches[0].actual_time, 123);
@@ -294,8 +302,8 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(updatedPublication.state.matches[0].alliances.red.score, 20);
   assert.equal(publicationWrites, 2);
 
-  const repeatedResponse = await runtime.fetch(snapshotRequest());
-  assert.equal(repeatedResponse.status, 200);
+  const repeatedResponse = await runtime.fetch(snapshotRequest(updatedResponse.headers.get("ETag")));
+  assert.equal(repeatedResponse.status, 304);
   assert.equal(repeatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
   assert.equal(storage.values.get("event-state:publication"), updatedPublication);
   assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
