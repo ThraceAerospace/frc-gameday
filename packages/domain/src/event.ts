@@ -8,7 +8,7 @@ import type {
 } from "@fieldview/provider-tba/types";
 import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
-import type { FieldViewTeam, FieldViewTeamEventState } from "./team.js";
+import type { FieldViewTeam } from "./team.js";
 import type { FieldViewMatch } from "./match.js";
 import type { FieldViewEventAnalytics } from "./analytics.js";
 import type { FieldViewPlayoffAlliance } from "./playoff-alliance.js";
@@ -56,8 +56,6 @@ export interface FieldViewEventState {
   event_teams?: FieldViewEventTeam[] | null;
   matches?: FieldViewMatch[] | null;
   playoff_alliances?: FieldViewPlayoffAlliance[] | null;
-  /** Per-team, event-scoped assembled state; absent until materialized. */
-  team_states?: FieldViewTeamEventState[] | null;
   /** Backend-calculated event-wide analytics; null means explicitly unavailable. */
   analytics?: FieldViewEventAnalytics | null;
   /** Unchanged TBA event rankings, including extra-stat metadata. */
