@@ -45,6 +45,7 @@ test("EventRuntime ranks TeamRuntime comparisons and exposes largest and smalles
       { team_key: "frc1678", revision: 8 },
       { team_key: "frc9999", revision: null },
     ],
+    1_800_000_000_000,
   );
   assert.equal(result.population.expected_team_count, 4);
   assert.equal(result.population.eligible_team_count, 3);
