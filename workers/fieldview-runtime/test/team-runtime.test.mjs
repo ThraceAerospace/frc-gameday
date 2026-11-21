@@ -10,7 +10,15 @@ class MemoryStorage {
   async delete(key) { return this.values.delete(key); }
   async setAlarm(value) { this.alarmAt = Number(value); }
   async deleteAlarm() { this.alarmAt = null; }
-  async transaction(callback) { return callback(this); }
+  transactionTail = Promise.resolve();
+  async transaction(callback) {
+    const previous = this.transactionTail;
+    let release;
+    this.transactionTail = new Promise((resolve) => { release = resolve; });
+    await previous;
+    try { return await callback(this); }
+    finally { release(); }
+  }
 }
 const env = (fetcher) => ({ TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin", TBA_WEBHOOK_SECRET: "unused", EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => new Response() }) }, fetcher });
 
