@@ -1,7 +1,7 @@
 import type {
-  FieldViewEventSnapshot,
+  FieldViewEventState,
   FieldViewEventAnalytics,
-  FieldViewTeamAnalytics,
+  FieldViewTeamEventAnalytics,
   FieldViewMatch,
 } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import type { StatboticsMatch } from "@/lib/statbotics/types";
 
-function teamInsight(teamNumber: number, analytics: FieldViewTeamAnalytics): TeamInsight {
+function teamInsight(teamNumber: number, analytics: FieldViewTeamEventAnalytics): TeamInsight {
   const performance = analytics.performance;
   const comparison = analytics.season_comparison;
   const seasonComparison: TeamSeasonComparison | null = comparison ? {
@@ -119,9 +119,9 @@ function teamInsight(teamNumber: number, analytics: FieldViewTeamAnalytics): Tea
   };
 }
 
-function mapTeamAnalytics(snapshot: FieldViewEventSnapshot, publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): TeamInsight[] {
+function mapTeamAnalytics(snapshot: FieldViewEventState): TeamInsight[] {
   const teamNumbers = new Map((snapshot.teams ?? []).map((team) => [team.key, team.team_number]));
-  return publication.teamAnalytics.flatMap((item) => {
+  return (snapshot.team_states ?? []).flatMap((item) => {
     const teamNumber = teamNumbers.get(item.team_key);
     return typeof teamNumber === "number" && item.analytics
       ? [teamInsight(teamNumber, item.analytics)]
@@ -185,7 +185,7 @@ function findingSampleCoverage(evidence: FieldViewEventAnalytics["findings"][num
   return sampleSize >= 20 ? "high" : sampleSize >= 8 ? "medium" : "low";
 }
 
-function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldViewEventSnapshot, publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): EventAnalyticsResponse {
+function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldViewEventState, publication: NonNullable<CanonicalAnalyticsPublication["publication"]>): EventAnalyticsResponse {
   const matches = (snapshot.matches ?? []).map((match) =>
     mapMatch(match, publication.matches.find((item) => item.key === match.key)),
   );
@@ -372,7 +372,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
         })),
       })),
     } : undefined,
-    teamInsights: mapTeamAnalytics(snapshot, publication),
+    teamInsights: mapTeamAnalytics(snapshot),
     matchCount: snapshot.matches?.length ?? 0,
     loadedMatchCount: matches.length,
     offset: 0,
@@ -406,7 +406,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
 }
 
 export function toEventAnalyticsDashboardData(
-  snapshot: FieldViewEventSnapshot,
+  snapshot: FieldViewEventState,
   publication: CanonicalAnalyticsPublication | undefined,
 ): EventAnalyticsResponse | null {
   if (!snapshot.event || !publication?.publication?.eventAnalytics) return null;
