@@ -970,3 +970,36 @@ test("EventRuntime invalidates event analytics when a TeamRuntime season state c
   assert.equal((await duplicate.json()).duplicate, true);
   assert.equal(storage.values.get("snapshot-revision"), 1);
 });
+
+
+test("EventRuntime removes legacy embedded TeamEventStates from its durable event publication", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026ownership";
+  storage.values.set("snapshot-revision", 1);
+  storage.values.set("event-state:publication", {
+    sourceRevision: 0,
+    snapshotVersion: 1,
+    generatedAt: Date.now(),
+    status: "failed",
+    state: {
+      event_key: eventKey,
+      sources: {},
+      teams: [],
+      team_states: [{ event_key: eventKey, team_key: "frc3461", sources: {} }],
+    },
+  });
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(response.status, 200);
+  const persisted = storage.values.get("event-state:publication");
+  assert.equal(Object.hasOwn(persisted.state, "team_states"), false);
+  const composed = await response.json();
+  assert.deepEqual(composed.team_states, []);
+});
