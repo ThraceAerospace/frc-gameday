@@ -477,7 +477,6 @@ export class EventRuntime {
       await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
       await this.storage.put("analytics:status", "pending");
       await this.storage.transaction((transaction) => this.rearm(transaction));
-      await this.alarm();
       return Response.json({
         event_key: this.eventKey,
         analytics: {
@@ -501,7 +500,6 @@ export class EventRuntime {
       const manualEndpoints = [...endpoints];
       if (includeStatbotics) manualEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
       await this.enqueueManualPolls(manualEndpoints);
-      await this.alarm();
       // Explicit refreshes also force a fresh analytics publication, even when
       // the provider returns an unchanged representation or HTTP 304.
       if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
@@ -509,11 +507,10 @@ export class EventRuntime {
         await this.storage.put("analytics:status", "pending");
       }
       await this.storage.transaction((transaction) => this.rearm(transaction));
-      await this.alarm();
       return Response.json({
         event_key: this.eventKey,
         requested: endpoints.length + (includeStatbotics ? 1 : 0),
-        attempted: true,
+        queued: true,
         state: await (async () => {
           const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
           return [...entries.values()].map((state) => ({
@@ -540,7 +537,6 @@ export class EventRuntime {
         return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
       }
       await this.enqueueManualPolls([endpoint]);
-      await this.alarm();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
@@ -553,13 +549,11 @@ export class EventRuntime {
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       await this.enqueueManualPolls([endpoint]);
-      await this.alarm();
       if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
         await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
         await this.storage.put("analytics:status", "pending");
       }
       await this.storage.transaction((transaction) => this.rearm(transaction));
-      await this.alarm();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
         scheduled: true, attempted: true, event_key: this.eventKey, endpoint,
@@ -587,8 +581,7 @@ export class EventRuntime {
         return Response.json({ error: "Endpoint is not part of this event" }, { status: 400 });
       }
       await this.schedulePolls(endpoints, intervalMs);
-      await this.alarm();
-      return Response.json({ scheduled: endpoints.length, attempted: true, event_key: this.eventKey });
+      return Response.json({ scheduled: endpoints.length, queued: true, event_key: this.eventKey }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
