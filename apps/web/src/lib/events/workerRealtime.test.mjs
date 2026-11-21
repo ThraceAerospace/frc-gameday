@@ -49,7 +49,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     const validator = headers.get("If-None-Match");
     if (validator) conditionalRequests.push(validator);
     if (url.endsWith("/analytics")) {
-      if (validator === 'W/"analytics-1"') {
+      if (validator?.startsWith('W/"analytics-')) {
         return new Response(null, { status: 304, headers: { ETag: validator } });
       }
       const revision = analyticsRevisions.length + 1;
@@ -60,7 +60,7 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
         publication: { marker: revision },
       }, { headers: { ETag: 'W/"analytics-1"' } });
     }
-    if (validator === 'W/"snapshot-1"') {
+    if (validator?.startsWith('W/"snapshot-')) {
       return new Response(null, { status: 304, headers: { ETag: validator } });
     }
     const version = fetchedVersions.length + 1;
