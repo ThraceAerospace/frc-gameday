@@ -1246,11 +1246,13 @@ export class EventRuntime {
       await this.enqueueManualPolls([statboticsEndpoint]);
     }
     if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-      const [analyticsPublication, eventViewPublication] = await Promise.all([
+      const [analyticsPublication, eventStatePublication, eventViewPublication] = await Promise.all([
         this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
-        this.storage.get(EVENT_VIEW_PUBLICATION_KEY),
+        this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
+        this.storage.get<{ source_revision: number }>(EVENT_VIEW_PUBLICATION_KEY),
       ]);
-      if (!analyticsPublication || !eventViewPublication) {
+      if (!analyticsPublication || !eventStatePublication || !eventViewPublication ||
+          eventViewPublication.source_revision !== eventStatePublication.sourceRevision) {
         await this.storage.put(ANALYTICS_DUE_KEY, now);
         await this.storage.put("analytics:status", "pending");
         await this.storage.transaction((transaction) => this.rearm(transaction));
