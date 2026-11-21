@@ -151,7 +151,7 @@ export default function MatchCard({
               {matchName}
             </span>
 
-            <div className="mt-1 flex min-h-[14px] flex-wrap items-center gap-1">
+            <div className="mt-1 flex min-h-[14px] flex-nowrap items-center gap-1 whitespace-nowrap">
               <span
                 className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-3 ${predictionTone}`}
                 title={prediction ? `Predicted outcome: ${prediction.label}` : "Prediction unavailable"}
