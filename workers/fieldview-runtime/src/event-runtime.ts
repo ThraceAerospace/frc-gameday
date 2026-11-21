@@ -1167,12 +1167,7 @@ export class EventRuntime {
       const analyticsInputs = [...inputRecords, ...(comparisonInputCollection?.inputs ?? [])];
       // EventRuntime calculates event/match analytics only. TeamRuntime owns
       // the per-team calculations and persists each TeamEventState.
-      const eventAnalyticsState = await calculateCanonicalMatchAnalytics(
-        normalizedState,
-        inputRecords,
-        undefined,
-        { includeTeamAnalytics: false },
-      );
+      const eventAnalyticsState = await calculateCanonicalMatchAnalytics(normalizedState, inputRecords);
       const teamResults = comparisonInputCollection
         ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
         : { states: [], revisions: [] };
