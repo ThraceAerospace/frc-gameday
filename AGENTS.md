@@ -81,7 +81,7 @@ Canonical domain concepts include:
 - `FieldViewEvent` and `FieldViewEventTeam`;
 - `FieldViewMatch` and `FieldViewPlayoffAlliance`;
 - `FieldViewDistrict`;
-- `FieldViewEventAnalytics` and `FieldViewTeamAnalytics`.
+- `FieldViewEventAnalytics`, `FieldViewTeamEventAnalytics`, and the canonical team/event state aggregates.
 
 A domain object is data; a runtime is machinery that acquires, reconciles, persists, and publishes data. Do not create a Durable Object for every interface or DTO.
 
