@@ -103,8 +103,23 @@ for (const [eventKey, expectedEventMatches, expectedAppearances] of [["2026cthar
     );
     const directTeam = directRows.find((row) => row.teamNumber === 3461);
     const directInsight = directInsights.find((item) => item.teamNumber === 3461);
+    const directSeasonInsights = eventKey === "2026cthar"
+      ? buildSeasonAwareTeamInsights(
+          records, directAllianceResults, directRows, state.rankings ?? null, {
+            state: "complete", team_count: 1, total_team_event_records: 2,
+            processed_team_event_records: 2, unavailable_team_event_records: 0,
+            discovery_pending_teams: 0, updated_at: 1_780_000_000_000,
+            records: [
+              { team_number: 3461, event: { event_key: "2026mawne", event_name: "NE District Western NE Event", short_name: "Western NE", start_date: "2026-03-13" }, epa_total: 14.7, epa_unitless: 1422, breakdown: { auto_epa: 4.17, teleop_epa: 11.72, endgame_epa: -1.18 }, wins: 4, losses: 10, ties: 0, match_count: 14, fetched_at: 1_780_000_000_000, status: "ready" },
+              { team_number: 3461, event: { event_key: "2026cthar", event_name: "NE District Hartford Event", short_name: "Hartford", start_date: "2026-03-27" }, epa_total: 45.72, epa_unitless: 1505, breakdown: { auto_epa: 7.66, teleop_epa: 25.63, endgame_epa: 12.43 }, wins: 8, losses: 7, ties: 0, match_count: 15, fetched_at: 1_780_000_000_000, status: "ready" },
+            ],
+          }, eventKey, state.event.start_date, state.event.playoff_type,
+        )
+      : null;
+    const directSeasonInsight = directSeasonInsights?.find((item) => item.teamNumber === 3461);
     assert.ok(directTeam);
     assert.ok(directInsight);
+    const expectedInsight = directSeasonInsight ?? directInsight;
 
     const comparisonInput = {
       state: "complete",
@@ -144,14 +159,9 @@ for (const [eventKey, expectedEventMatches, expectedAppearances] of [["2026cthar
     assert.equal(teamResult.analytics.performance.auto_epa, directTeam.autoEpa);
     assert.equal(teamResult.analytics.performance.teleop_epa, directTeam.teleopEpa);
     assert.equal(teamResult.analytics.performance.endgame_epa, directTeam.endgameEpa);
-    assert.deepEqual(teamResult.analytics.summary, directInsight.summary);
+    assert.deepEqual(teamResult.analytics.summary, expectedInsight.summary);
     assert.equal(teamResult.analytics.review_matches.length, directInsight.reviewMatches.length);
     if (eventKey === "2026cthar") {
-      const directSeasonInsights = buildSeasonAwareTeamInsights(
-        records, directAllianceResults, directRows, state.rankings, comparisonInput,
-        eventKey, state.event.start_date, state.event.playoff_type,
-      );
-      const directSeasonInsight = directSeasonInsights.find((item) => item.teamNumber === 3461);
       assert.ok(directSeasonInsight?.seasonComparison);
       assert.equal(teamResult.analytics.season_comparison.change, 31.02);
       assert.equal(teamResult.analytics.season_comparison.prior_event.event_key, "2026mawne");
