@@ -122,8 +122,11 @@ function eventSnapshotEtag(
   publication: EventStatePublication,
   comparisonInputUpdatedAt: number | undefined,
 ): string {
+  // generatedAt is publication metadata, not representation identity. Including
+  // it would invalidate an otherwise identical ETag when a cached publication
+  // is rebuilt after a team-only revision or a client reconnects.
   return 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '-' +
-    publication.sourceRevision + '-' + publication.generatedAt + '-' + publication.status + '-' +
+    publication.sourceRevision + '-' + publication.status + '-' +
     (comparisonInputUpdatedAt ?? "none") + '"';
 }
 
