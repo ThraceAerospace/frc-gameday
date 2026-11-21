@@ -1,6 +1,6 @@
 import type { FieldViewAnalyticsDefinition } from "../../domain/src/analytics.ts";
 
-export type AnalyticsOperation<TContext = unknown, TResult = unknown> = {
+export type AnalyticsOperation<TContext = any, TResult = any> = {
   operation_key: string;
   execute(context: TContext, inputs: Readonly<Record<string, unknown>>): TResult | Promise<TResult>;
 };
@@ -32,13 +32,13 @@ export class AnalyticsExecutionError extends Error {
 
 /** Explicit allowlist. Definitions select a registered key; they cannot supply executable code. */
 export class AnalyticsOperationRegistry {
-  private readonly operations = new Map<string, AnalyticsOperation>();
+  private readonly operations = new Map<string, AnalyticsOperation<any, any>>();
 
   constructor(operations: readonly AnalyticsOperation[] = []) {
     for (const operation of operations) this.register(operation);
   }
 
-  register(operation: AnalyticsOperation): void {
+  register(operation: AnalyticsOperation<any, any>): void {
     if (!operation.operation_key.trim()) throw new Error("Analytics operation key must not be empty");
     if (this.operations.has(operation.operation_key)) {
       throw new AnalyticsExecutionError("duplicate-operation", "Analytics operation already registered: " + operation.operation_key);
@@ -46,7 +46,7 @@ export class AnalyticsOperationRegistry {
     this.operations.set(operation.operation_key, operation);
   }
 
-  get(operationKey: string): AnalyticsOperation | undefined {
+  get(operationKey: string): AnalyticsOperation<any, any> | undefined {
     return this.operations.get(operationKey);
   }
 
@@ -84,7 +84,7 @@ export class AnalyticsEngine {
     this.definitions = indexed;
   }
 
-  async execute<TContext = unknown, TResult = unknown>(
+  async execute<TContext = any, TResult = any>(
     input: AnalyticsExecutionInput<TContext>,
   ): Promise<AnalyticsExecutionResult<TResult>> {
     const definition = this.definitions.get(input.definition_key);
