@@ -113,11 +113,7 @@ export default function MatchCard({
   const predictionTone = PREDICTION_TONES[predictionLabel] ?? PREDICTION_TONES["Toss-up"];
 
   const time = hasResult
-    ? match.actual_time != null
-      ? formatMatchEventTime(match.actual_time, eventTimezone)
-      : match.time != null
-        ? formatMatchEventTime(match.time, eventTimezone)
-        : null
+    ? null
     : match.predicted_time != null
       ? formatMatchEventTime(match.predicted_time, eventTimezone)
       : match.time != null
