@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EventRuntime, eventResourceEndpoints, chunkSerializedEventView } from "../src/event-runtime.ts";
+import { EventRuntime, eventResourceEndpoints } from "../src/event-runtime.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 
@@ -26,26 +26,6 @@ class MemoryStorage {
     finally { release(); }
   }
 }
-
-test("event view JSON is split into bounded UTF-8-safe SQLite values", () => {
-  const payload = "🛠️".repeat(180_000);
-  const view = {
-    event: { event_key: "2026chunked" },
-    analytics: null,
-    team_states: [],
-    team_state_coverage: {
-      state: "complete",
-      expected_count: 0,
-      materialized_count: 0,
-      pending_team_keys: [],
-    },
-    diagnostic_payload: payload,
-  };
-  const chunks = chunkSerializedEventView(view);
-  assert.ok(chunks.length > 1, "large event views should span multiple storage values");
-  assert.ok(chunks.every((chunk) => Buffer.byteLength(chunk, "utf8") < 512 * 1024));
-  assert.deepEqual(JSON.parse(chunks.join("")), view);
-});
 
 test("EventRuntime hydrates its persisted event publication before serving reads", async () => {
   const storage = new MemoryStorage();
@@ -1182,25 +1162,21 @@ test("canonical analytics are coalesced into EventRuntime alarm work and publish
   assert.equal(publication.sourceRevision, storage.values.get("snapshot-revision") - 1);
   assert.equal(typeof publication.calculatedAt, "number");
   assert.equal(publication.analyticsRevision, 1);
-  const eventViewPublication = storage.values.get("event-view:publication");
-  assert.ok(eventViewPublication, "the alarm publishes an event view alongside the analytics revision");
-  assert.equal(eventViewPublication.source_revision, publication.sourceRevision);
-  assert.equal(eventViewPublication.version, publication.analyticsRevision);
-  assert.equal(eventViewPublication.status, "partial",
-    "event view completeness explicitly reflects missing TeamRuntime comparison inputs");
-  assert.equal(eventViewPublication.storage_format, "chunked-json-v1");
-  assert.equal("view" in eventViewPublication, false,
-    "the manifest must not inline the full event view");
-  const eventViewChunks = Array.from({ length: eventViewPublication.chunk_count }, (_, index) =>
-    storage.values.get(`event-view:publication:v${eventViewPublication.version}:chunk:${index}`));
-  assert.ok(eventViewChunks.length > 0);
-  assert.ok(eventViewChunks.every((chunk) => typeof chunk === "string"));
+  assert.deepEqual(publication.teamStateRevisions, [],
+    "only the revisions used as analytics inputs are persisted, not the team-state records");
+  assert.equal(storage.values.has("event-view:publication"), false,
+    "EventRuntime does not persist a second composed copy of participant team states");
+  assert.equal([...storage.values.keys()].some((key) => key.startsWith("event-view:publication:v")), false,
+    "the old chunked aggregate is not written");
   const composedView = await runtime.fetch(new Request("https://event-runtime/view", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
   assert.equal(composedView.status, 200);
-  assert.equal((await composedView.json()).event.event_key, eventKey,
-    "the existing /view DTO is reconstructed from the versioned chunks");
+  const view = await composedView.json();
+  assert.equal(view.event.event_key, eventKey);
+  assert.equal("team_states" in view, false);
+  assert.deepEqual(view.team_state_refs, [],
+    "the view contains references, never embedded TeamEventState records");
   const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -1422,7 +1398,8 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
   const persisted = storage.values.get("event-state:publication");
   assert.equal(Object.hasOwn(persisted.state, "team_states"), false);
   const composed = await response.json();
-  assert.deepEqual(composed.team_states, []);
+  assert.equal("team_states" in composed, false,
+    "the event snapshot never embeds TeamRuntime-owned state");
 });
 
 
@@ -1572,7 +1549,9 @@ test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-
   const view = await response.json();
   assert.equal(view.event.event_key, eventKey);
   assert.equal(view.analytics, null);
-  assert.deepEqual(view.team_states, []);
+  assert.deepEqual(view.team_state_refs, [{
+    owner: "team-runtime", owner_id: teamKey, record_type: "team-event-state", record_id: eventKey, revision: null,
+  }]);
   assert.deepEqual(view.team_state_coverage, {
     state: "partial",
     expected_count: 1,
