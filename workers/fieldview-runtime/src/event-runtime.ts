@@ -903,6 +903,7 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
+      const manualQueue = await this.storage.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const eventViewPublication = await this.storage.get<{
@@ -943,13 +944,17 @@ export class EventRuntime {
           event_view_publication: {
             exists: Boolean(eventViewPublication),
             status: eventViewPublication
-              ? (eventViewPublication.source_revision === eventStatePublication?.sourceRevision ? eventViewPublication.status : "stale")
+              ? (eventStateStatus === "stale" || eventViewPublication.source_revision !== eventStatePublication?.sourceRevision
+                  ? "stale" : eventViewPublication.status)
               : "missing",
             version: eventViewPublication?.version ?? null,
             source_revision: eventViewPublication?.source_revision ?? null,
             generated_at: eventViewPublication?.generated_at ?? null,
           },
-          pending_revalidation_count: tasks.size,
+          pending_revalidation_count: tasks.size + manualQueue.length,
+          pending_manual_revalidation_count: manualQueue.length,
+          next_revalidation_at: [...tasks.values()].reduce<number | null>((earliest, task) =>
+            earliest === null || task.dueAt < earliest ? task.dueAt : earliest, null),
           last_error: await this.storage.get<string>("analytics:last-error") ?? await this.storage.get<string>("scheduler:last-error") ?? null,
         },
         event_state: {
