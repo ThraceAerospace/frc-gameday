@@ -31,6 +31,7 @@ import {
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
+import type { FieldViewEventView } from "../../../packages/domain/src/event-view.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
@@ -687,8 +688,8 @@ export class EventRuntime {
       const expected = (state.teams ?? []).map((team) => team.key);
       const present = new Set((state.team_states ?? []).map((team) => team.team_key));
       const pending = expected.filter((teamKey) => !present.has(teamKey));
-      return Response.json({
-        event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")),
+      const view: FieldViewEventView = {
+        event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
         analytics: state.analytics ?? null,
         team_states: state.team_states ?? [],
         team_state_coverage: {
@@ -697,7 +698,8 @@ export class EventRuntime {
           materialized_count: present.size,
           pending_team_keys: pending,
         },
-      }, { headers: { "X-FieldView-Event-State-Status": publication.status, "Cache-Control": "no-store" } });
+      };
+      return Response.json(view, { headers: { "X-FieldView-Event-State-Status": publication.status, "Cache-Control": "no-store" } });
     }
 
     if (request.method === "GET" && url.pathname === "/state") {
