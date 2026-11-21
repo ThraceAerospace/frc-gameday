@@ -18,8 +18,6 @@ export type MatchPresentation = Pick<
 >;
 export type PlayoffAlliancePresentation = Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup" | "status">;
 
-type AllianceFlag = NonNullable<FieldViewMatch["flags"]>["alliances"]["red"][number];
-
 const MATCH_FLAG_LABELS: Record<string, { short: string; full: string }> = {
   "model-upset": { short: "UPSET", full: "Model Upset" },
   "anomalous-score": { short: "ANOM", full: "Anomalous Score" },
@@ -27,47 +25,6 @@ const MATCH_FLAG_LABELS: Record<string, { short: string; full: string }> = {
   "high-penalties": { short: "PEN", full: "High Penalties" },
   "high-alliance-epa": { short: "EPA", full: "High Alliance EPA" },
 };
-
-function getAllianceFlagPresentation(flags: AllianceFlag[]) {
-  // Keep prediction win/loss labels out of the score column: the card border
-  // already communicates the predicted winner. Prefer review-worthy findings.
-  const priority: AllianceFlag["type"][] = [
-    "anomalous-score",
-    "high-penalties",
-    "large-score-delta",
-    "high-alliance-epa",
-  ];
-  const flag = priority
-    .map((type) => flags.find((candidate) => candidate.type === type))
-    .find((candidate) => candidate !== undefined);
-
-  if (!flag) return null;
-
-  switch (flag.type) {
-    case "anomalous-score":
-      return {
-        short: "ANOM",
-        title: `Anomalous Score · actual ${flag.evidence.actual_score}, predicted ${flag.evidence.predicted_score}`,
-      };
-    case "high-penalties":
-      return {
-        short: "PEN+",
-        title: `High Penalties · ${flag.evidence.penalty_points} penalty points (threshold ${flag.evidence.event_threshold})`,
-      };
-    case "large-score-delta":
-      return {
-        short: "Δ",
-        title: `Large Score Delta · ${flag.evidence.delta > 0 ? "+" : ""}${flag.evidence.delta.toFixed(1)} points (threshold ${flag.evidence.event_threshold.toFixed(1)})`,
-      };
-    case "high-alliance-epa":
-      return {
-        short: "EPA+",
-        title: `High Alliance EPA · ${flag.evidence.pre_match_alliance_epa.toFixed(1)} pre-match EPA (threshold ${flag.evidence.event_threshold.toFixed(1)})`,
-      };
-    default:
-      return null;
-  }
-}
 
 export default function MatchCard({
   match,
@@ -169,13 +126,6 @@ export default function MatchCard({
       formatMatchEventTime(match.time, eventTimezone)
     ) : null;
 
-  const redAllianceFlag = redScore == null || redScore < 0
-    ? getAllianceFlagPresentation(match.flags?.alliances.red ?? [])
-    : null;
-  const blueAllianceFlag = blueScore == null || blueScore < 0
-    ? getAllianceFlagPresentation(match.flags?.alliances.blue ?? [])
-    : null;
-
   return (
     <div key={match.key} data-match-key={match.key} className="shrink-0">
       <article
@@ -190,7 +140,7 @@ export default function MatchCard({
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
         ].join(" ")}
       >
-        <div className="grid grid-cols-[92px_minmax(0,1fr)_44px] items-center gap-x-2 leading-none">
+        <div className="grid grid-cols-[92px_minmax(0,1fr)_24px] items-center gap-x-2 leading-none">
           {/* Match name and compact review flag / event-local time */}
           <div className="relative top-px row-span-2 flex h-full flex-col justify-center">
             <span
@@ -227,16 +177,12 @@ export default function MatchCard({
           <div
             className={[
               "text-right font-mono text-[10px] tabular-nums",
-              redScore != null && redScore >= 0
+              redScore != null
                 ? "font-bold text-red-400"
-                : "font-semibold text-red-300",
+                : "text-transparent",
             ].join(" ")}
-            title={redAllianceFlag?.title}
-            aria-label={redAllianceFlag?.title}
           >
-            {redScore != null && redScore >= 0
-              ? redScore
-              : redAllianceFlag?.short ?? ""}
+            {redScore !== -1 ? redScore : ""}
           </div>
 
           {/* Blue alliance */}
@@ -254,16 +200,12 @@ export default function MatchCard({
           <div
             className={[
               "text-right font-mono text-[10px] tabular-nums",
-              blueScore != null && blueScore >= 0
+              blueScore != null
                 ? "font-bold text-blue-400"
-                : "font-semibold text-blue-300",
+                : "text-transparent",
             ].join(" ")}
-            title={blueAllianceFlag?.title}
-            aria-label={blueAllianceFlag?.title}
           >
-            {blueScore != null && blueScore >= 0
-              ? blueScore
-              : blueAllianceFlag?.short ?? ""}
+            {blueScore !== -1 ? blueScore : ""}
           </div>
         </div>
       </article>
