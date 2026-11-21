@@ -56,3 +56,16 @@ test("first match webhook initializes event match state as an array", () => {
     [incoming],
   );
 });
+
+test("webhook Match alliance teams are normalized to canonical team_keys", () => {
+  const result = reconcileWebhookEndpoint("/event/2026test/matches", [], {
+    key: "2026test_qm1",
+    event_key: "2026test",
+    alliances: {
+      red: { score: 100, teams: ["frc1", "frc2", "frc3"] },
+      blue: { score: 90, teams: ["frc4", "frc5", "frc6"] },
+    },
+  });
+  assert.deepEqual(result[0].alliances.red, { score: 100, team_keys: ["frc1", "frc2", "frc3"] });
+  assert.deepEqual(result[0].alliances.blue, { score: 90, team_keys: ["frc4", "frc5", "frc6"] });
+});
