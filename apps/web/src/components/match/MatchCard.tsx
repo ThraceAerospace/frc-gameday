@@ -173,7 +173,7 @@ export default function MatchCard({
             {formatAlliance(red, team)}
           </div>
 
-          {/* Red score, or its highest-ranked available alliance flag */}
+          {/* Red score */}
           <div
             className={[
               "text-right font-mono text-[10px] tabular-nums",
@@ -196,7 +196,7 @@ export default function MatchCard({
             {formatAlliance(blue, team)}
           </div>
 
-          {/* Blue score, or its highest-ranked available alliance flag */}
+          {/* Blue score */}
           <div
             className={[
               "text-right font-mono text-[10px] tabular-nums",
