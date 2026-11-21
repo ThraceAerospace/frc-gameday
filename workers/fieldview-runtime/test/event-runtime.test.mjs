@@ -16,7 +16,15 @@ class MemoryStorage {
   async setAlarm(value) { this.alarmAt = Number(value); }
   async deleteAlarm() { this.alarmAt = null; }
   async getAlarm() { return this.alarmAt; }
-  async transaction(callback) { return callback(this); }
+  transactionTail = Promise.resolve();
+  async transaction(callback) {
+    const previous = this.transactionTail;
+    let release;
+    this.transactionTail = new Promise((resolve) => { release = resolve; });
+    await previous;
+    try { return await callback(this); }
+    finally { release(); }
+  }
 }
 
 test("EventRuntime does not rewrite unchanged schedules, manual queues, or alarm deadlines", async () => {
