@@ -32,6 +32,40 @@ async function drainManualQueue(runtime, storage, max = 20) {
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0, "manual provider queue should drain within the test bound");
 }
 
+test("TeamRuntime does not replace a last-good publication after a failed provider refresh", async () => {
+  const storage = new MemoryStorage();
+  const teamKey = "frc3461", year = 2026;
+  const resources = teamResourceEndpoints(teamKey, year);
+  const lastFetchedAt = Date.now() - 60_000;
+  const failedState = {
+    endpoint: resources[0].endpoint, status: "failed", data: { key: teamKey, team_number: 3461 },
+    providerData: { key: teamKey, team_number: 3461 }, etag: '"last-good"',
+    lastFetchedAt, expiresAt: Date.now() - 1, revision: 3,
+    validatorRevision: 3, lastAttemptAt: Date.now(), lastWebhookAt: null,
+    lastError: "provider unavailable",
+  };
+  storage.values.set("endpoint:" + resources[0].endpoint, failedState);
+  const representationSignature = JSON.stringify(resources.map((resource, index) => index === 0
+    ? [failedState.revision, failedState.lastFetchedAt, failedState.etag]
+    : null));
+  const lastGood = { team_key: teamKey, year, team: { team_number: 3461 }, sources: {} };
+  const publication = {
+    input_signature: "previous-publication-signature",
+    representation_signature: representationSignature,
+    state: lastGood,
+  };
+  storage.values.set("team-state:" + year + ":publication", publication);
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("snapshot must not retry provider I/O");
+  }), teamKey);
+
+  const response = await runtime.snapshot(year);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), lastGood);
+  assert.equal(storage.values.get("team-state:" + year + ":publication"), publication,
+    "failed revalidation must preserve the exact last-good publication record");
+});
+
 test("TeamRuntime hydrates persisted season publications before serving reads", async () => {
   const storage = new MemoryStorage();
   const state = { team_key: "frc3461", year: 2026, events: [], sources: {} };
