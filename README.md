@@ -20,7 +20,7 @@ The current implementation described below is the legacy system being migrated. 
 
 - [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks.
 - [Migration inventory](docs/architecture/MIGRATION-INVENTORY.md) — current routes, dependencies, environment variables, and target ownership mapping.
-- [Architecture decisions](docs/architecture/decisions/) — accepted repository/runtime direction and open EventRuntime, publication, and persistence decisions.
+- [Architecture decisions](docs/architecture/decisions/) — accepted repository/runtime direction, including [analytics ownership (ADR-0011)](docs/architecture/decisions/ADR-0011-ANALYTICS-OWNERSHIP.md).
 
 ## Current architecture (legacy implementation)
 
