@@ -178,3 +178,87 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
   workerEventWebSocket.release();
   assert.equal(reconnectedSocket.readyState, FakeWebSocket.CLOSED);
 });
+
+
+test("SharedWorker hydrates canonical snapshots from IndexedDB before reconnect recovery", async () => {
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  globalThis.WebSocket = FakeWebSocket;
+  globalThis.location = { protocol: "https:", host: "fieldview.example.test" };
+  const records = new Map();
+  globalThis.indexedDB = {
+    open() {
+      const request = {};
+      const database = {
+        objectStoreNames: { contains: () => true },
+        createObjectStore() {},
+        transaction() {
+          const transaction = {};
+          transaction.objectStore = () => ({
+            get(key) {
+              const result = {};
+              queueMicrotask(() => {
+                result.result = records.get(key);
+                result.onsuccess?.();
+              });
+              return result;
+            },
+            put(value) {
+              records.set(value.key, structuredClone(value));
+              queueMicrotask(() => transaction.oncomplete?.());
+            },
+          });
+          return transaction;
+        },
+      };
+      queueMicrotask(() => {
+        request.result = database;
+        request.onupgradeneeded?.();
+        request.onsuccess?.();
+      });
+      return request;
+    },
+  };
+
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return Response.json(
+      { event_key: "2026cache", marker: "persisted", team_states: [] },
+      { headers: {
+        "X-FieldView-Snapshot-Version": "7",
+        ETag: 'W/"snapshot-cache-7"',
+      } },
+    );
+  };
+
+  const firstModule = await import("./workerRealtime.ts?indexeddb-writer");
+  const firstWorker = firstModule.workerEventWebSocket;
+  firstWorker.retain();
+  const firstValues = [];
+  const unsubscribeFirst = firstWorker.subscribeCanonicalSnapshot("2026cache", (value) => firstValues.push(value));
+  const firstSocket = FakeWebSocket.instances.at(-1);
+  firstSocket.open();
+  firstSocket.receive(JSON.stringify({
+    type: "subscribed", topic: "event-state", event_key: "2026cache",
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(firstValues.at(-1).version, 7);
+  assert.equal(firstValues.at(-1).complete, true);
+  assert.ok(records.has("snapshot:2026cache"));
+  unsubscribeFirst();
+  firstWorker.release();
+
+  const secondModule = await import("./workerRealtime.ts?indexeddb-reader");
+  const secondWorker = secondModule.workerEventWebSocket;
+  const restoredValues = [];
+  secondWorker.retain();
+  const unsubscribeSecond = secondWorker.subscribeCanonicalSnapshot("2026cache", (value) => restoredValues.push(value));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(restoredValues.at(-1).version, 7);
+  assert.equal(restoredValues.at(-1).snapshot.state.marker, "persisted");
+  assert.equal(fetchCount, 1, "hydration serves the persisted representation without an immediate network read");
+  unsubscribeSecond();
+  secondWorker.release();
+  delete globalThis.indexedDB;
+});
