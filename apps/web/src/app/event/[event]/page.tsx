@@ -126,6 +126,7 @@ export default async function EventPage({
   return (
     <SiteShell>
       <div className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
+        {!teamsAvailable || !matchesAvailable ? <PendingSnapshotRefresh /> : null}
         <PageContainer>
           <SurfaceCard className="overflow-hidden rounded-2xl">
             <div className="p-5 sm:p-8">
