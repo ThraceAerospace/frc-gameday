@@ -38,9 +38,9 @@ test("TaskScheduler activation recovers the current-season event index without r
     },
   });
 
+  const initial = await scheduler.fetch(new Request("https://scheduler/events?year=" + year));
   assert.equal(storage.values.get("scheduler:daily-run-requested"), true);
   assert.ok(storage.alarmAt !== null, "activation arms background current-season discovery");
-  const initial = await scheduler.fetch(new Request("https://scheduler/events?year=" + year));
   assert.equal(initial.status, 503);
   assert.equal((await initial.json()).index.status, "missing");
   assert.equal(providerCalls, 0, "the public read never performs provider I/O");
