@@ -27,6 +27,38 @@ class MemoryStorage {
   }
 }
 
+test("EventRuntime hydrates its persisted event publication before serving reads", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026hydrated";
+  storage.values.set("event-key", eventKey);
+  storage.values.set("snapshot-revision", 4);
+  storage.values.set("event-state:publication", {
+    sourceRevision: 7, snapshotVersion: 4, generatedAt: Date.now(), status: "partial",
+    state: { event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {} },
+  });
+  let providerCalls = 0, teamCalls = 0, activationCalls = 0;
+  const runtime = new EventRuntime({
+    storage,
+    blockConcurrencyWhile: async (callback) => { activationCalls += 1; await callback(); },
+  }, {
+    TBA_API_KEY: "test-api-key", TBA_WEBHOOK_SECRET: "unused", RUNTIME_ADMIN_TOKEN: "admin",
+    TEAM_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => { teamCalls += 1; return Response.json({}); } }) },
+    fetcher: async () => { providerCalls += 1; return Response.json([]); },
+  });
+  const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).event.key, eventKey);
+  assert.equal(activationCalls, 1);
+  assert.equal(providerCalls, 0);
+  assert.equal(teamCalls, 0, "event snapshot reads never fan out to TeamRuntime");
+  const diagnostics = await runtime.fetch(new Request("https://event-runtime/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal((await diagnostics.json()).readiness.hydration, "complete");
+});
+
 test("EventRuntime does not rewrite unchanged schedules, manual queues, or alarm deadlines", async () => {
   const storage = new MemoryStorage();
   let taskPuts = 0, queuePuts = 0, alarmSets = 0;
