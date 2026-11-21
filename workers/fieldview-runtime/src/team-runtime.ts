@@ -211,7 +211,7 @@ export class TeamRuntime {
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
     // A TeamRuntime always has a persisted, possibly partial canonical state.
     const initializedState = await this.snapshot(year);
-    if (publicRead) {
+    if (publicRead || publicSeasonAnalyticsRead) {
       // Queue only missing/stale resources. Do not execute an alarm inline:
       // the caller receives the best current snapshot while durable work runs.
       const resources = this.endpoints(year);
@@ -227,7 +227,7 @@ export class TeamRuntime {
         await this.schedule(year, true);
         await this.enqueueManualPolls(needed, year);
       }
-      return initializedState;
+      if (publicRead) return initializedState;
     }
     if (publicSeasonAnalyticsRead) {
       return this.buildSeasonAnalyticsResponse(year);
