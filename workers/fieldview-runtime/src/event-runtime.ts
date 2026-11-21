@@ -875,14 +875,25 @@ export class EventRuntime {
       event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
       results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
     );
-    await this.storage.transaction(async (transaction) => {
+    const comparisonInputAccepted = await this.storage.transaction(async (transaction) => {
       for (const item of results) {
-        if (item.revision !== null) {
-          await transaction.put(TEAM_STATE_REVISION_PREFIX + item.teamKey, item.revision);
+        if (item.revision === null) continue;
+        const key = TEAM_STATE_REVISION_PREFIX + item.teamKey;
+        const latestRevision = await transaction.get<number>(key);
+        if (latestRevision !== undefined && latestRevision > item.revision) return false;
+      }
+      for (const item of results) {
+        if (item.revision === null) continue;
+        const key = TEAM_STATE_REVISION_PREFIX + item.teamKey;
+        const latestRevision = await transaction.get<number>(key);
+        if (latestRevision === undefined || item.revision > latestRevision) {
+          await transaction.put(key, item.revision);
         }
       }
       await transaction.put(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY, comparisonInput.updated_at);
+      return true;
     });
+    if (!comparisonInputAccepted) return undefined;
     return { comparisonInput, inputs };
   }
 
