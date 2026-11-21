@@ -436,7 +436,19 @@ export class EventScheduler {
 
     if (request.method === "GET" && url.pathname === "/events/this-week") {
       const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; checkedAt?: number; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
-      if (!projection) return Response.json({ error: "This-week event projection is not ready" }, { status: 503 });
+      if (!projection) {
+        // A public read is also a demand signal. Kick the existing durable
+        // daily discovery/classification workflow, but never run it inline.
+        await this.storage.put("scheduler:daily-run-requested", true);
+        const currentAlarm = await this.storage.getAlarm?.();
+        if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
+          await this.storage.setAlarm(Date.now() + 100);
+        }
+        return Response.json(
+          { runDate: "", evaluatedAt: Date.now(), events: [], pending: true },
+          { headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+        );
+      }
       const retrievedAt = new Date(projection.checkedAt ?? projection.evaluatedAt).toISOString();
       const sourceStatus = Date.now() - (projection.checkedAt ?? projection.evaluatedAt) > eventPollingPolicy(this.env).discoveryIntervalMs * 2
         ? "stale" as const
