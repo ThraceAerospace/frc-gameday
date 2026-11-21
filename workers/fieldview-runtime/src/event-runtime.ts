@@ -1848,18 +1848,20 @@ export class EventRuntime {
           const key = endpointStorageKey(matchesEndpoint);
           const current = await transaction.get<EndpointState<unknown>>(key) ??
             createEndpointState<unknown>(matchesEndpoint);
-          const next = applyWebhookUpdate(
-            current, match, now,
-            (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update),
-          );
-          await transaction.put(key, next);
-          if (messageType === "match_score") {
-            await recordAnalyticsInvalidation(transaction, "tba-event-matches", now, [match.key]);
+          const reconciled = reconcileWebhookEndpoint(matchesEndpoint, current.data, match);
+          const changed = JSON.stringify(current.data) !== JSON.stringify(reconciled);
+          if (changed) {
+            const next = applyWebhookUpdate(current, match, now,
+              (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update));
+            await transaction.put(key, next);
+            if (messageType === "match_score") {
+              await recordAnalyticsInvalidation(transaction, "tba-event-matches", now, [match.key]);
+            }
+            const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
+            await transaction.put("snapshot-revision", snapshotRevision + 1);
           }
-          const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
-          await transaction.put("snapshot-revision", snapshotRevision + 1);
+          if (changed) await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
         }
-        await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
       } else if (
         messageType === "upcoming_match" ||
         messageType === "schedule_updated" ||
@@ -1891,7 +1893,8 @@ export class EventRuntime {
       const snapshotRevisionAfter = await transaction.get<number>("snapshot-revision") ?? snapshotRevisionBefore;
       return {
         accepted: true,
-        snapshotVersion: messageType === "match_score" || messageType === "match_video"
+        snapshotVersion: snapshotRevisionAfter !== snapshotRevisionBefore &&
+          (messageType === "match_score" || messageType === "match_video")
           ? snapshotRevisionAfter
           : null,
         snapshotRevisionBefore,
