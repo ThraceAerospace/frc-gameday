@@ -933,3 +933,28 @@ test("EventRuntime coordinates active competition with every participating TeamR
   assert.ok(notifications.every((item) => item.body.event_key === eventKey));
   assert.ok(notifications.every((item) => item.url.includes("year=2026")));
 });
+
+
+test("EventRuntime invalidates event analytics when a TeamRuntime season state changes", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026teamchange";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/team-state-changed", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ team_key: "frc3461", team_state_revision: 3 }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(storage.values.get("analytics:status"), "pending");
+  assert.ok(storage.values.get("analytics:due-at") <= Date.now());
+  assert.equal(storage.values.get("snapshot-revision"), 1);
+});
