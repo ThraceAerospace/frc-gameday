@@ -12,7 +12,8 @@
     "./match-flags": "./src/match-flags.ts",
     "./season-diagnostics": "./src/season-diagnostics.ts",
     "./invalidation": "./src/invalidation.ts",
-    "./engine": "./src/engine.ts"
+    "./engine": "./src/engine.ts",
+    "./operations": "./src/operations.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
