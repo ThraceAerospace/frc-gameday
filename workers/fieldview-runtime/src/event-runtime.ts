@@ -1689,6 +1689,14 @@ export class EventRuntime {
         (endpointStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
     const status = publication && publication.sourceRevision !== currentSourceRevision
       ? "stale" : storedStatus ?? (publication ? "succeeded" : "pending");
+    const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+    const storedEventAnalytics = publication?.eventAnalytics as ReturnType<typeof normalizeFieldViewEventState>["analytics"] | undefined;
+    const currentEventAnalytics = storedEventAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+      ? storedEventAnalytics
+      : storedEventAnalytics ? { ...storedEventAnalytics, team_comparison: undefined } : storedEventAnalytics;
+    const currentPublication = publication
+      ? { ...publication, ...(currentEventAnalytics === undefined ? {} : { eventAnalytics: currentEventAnalytics }) }
+      : null;
     const etag = 'W/"fv-analytics-v1-' + version + '-' + currentSourceRevision + '-' + status + '"';
     const data = {
       event_key: this.eventKey,
@@ -1697,7 +1705,7 @@ export class EventRuntime {
       due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
       calculated_at: publication?.calculatedAt ?? null,
       source_revision: publication?.sourceRevision ?? null,
-      publication,
+      publication: currentPublication,
     };
     const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
     await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
