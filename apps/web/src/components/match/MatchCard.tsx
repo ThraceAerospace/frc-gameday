@@ -18,13 +18,22 @@ export type MatchPresentation = Pick<
 >;
 export type PlayoffAlliancePresentation = Pick<FieldViewPlayoffAlliance, "name" | "picks" | "backup" | "status">;
 
-const MATCH_FLAG_LABELS: Record<string, { short: string; full: string }> = {
-  "model-upset": { short: "UPSET", full: "Model Upset" },
-  "anomalous-score": { short: "ANOM", full: "Anomalous Score" },
-  "large-residual": { short: "DELTA", full: "Large Residual" },
-  "high-penalties": { short: "PEN", full: "High Penalties" },
-  "high-alliance-epa": { short: "EPA", full: "High Alliance EPA" },
+const ALLIANCE_FLAG_LABELS: Record<string, { label: string; title: string; className: string }> = {
+  "predicted-win": { label: "Predicted Win", title: "Statbotics predicted this alliance to win", className: "border-white/20 bg-white/5 text-zinc-300" },
+  "predicted-loss": { label: "Predicted Loss", title: "Statbotics predicted this alliance to lose", className: "border-white/20 bg-white/5 text-zinc-300" },
+  "high-alliance-epa": { label: "High Alliance EPA", title: "This alliance's combined pre-match EPA is above the event's 75th-percentile threshold", className: "border-[var(--fv-metric-above)]/60 bg-[var(--fv-metric-above)]/10 text-[var(--fv-metric-above)]" },
+  "large-score-delta": { label: "Large Score Delta", title: "This alliance's actual score differed substantially from its predicted score", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
+  "anomalous-score": { label: "Anomalous Score", title: "This alliance's score residual is unusual for this match phase", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
+  "high-penalties": { label: "High Penalties", title: "This alliance received an unusually high number of penalty points", className: "border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 text-[var(--fv-review)]" },
 };
+
+function AllianceFlagPills({ flags }: { flags: NonNullable<MatchPresentation["flags"]>["alliances"]["red"] }) {
+  return flags.map((flag, index) => {
+    const item = ALLIANCE_FLAG_LABELS[flag.type];
+    if (!item) return null;
+    return <span key={`${flag.type}-${index}`} title={item.title} className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold leading-3 ${item.className}`}>{item.label}</span>;
+  });
+}
 
 export default function MatchCard({
   match,
@@ -97,31 +106,13 @@ export default function MatchCard({
       : predictionBorder ?? "border-zinc-800";
 
   const matchName = matchShortName(match, playoffType);
-  const reviewFlags = hasResult
-    ? (match.flags?.review_flags ?? []).filter((flag) => flag !== "high-alliance-epa")
-    : [];
-  const redHighAllianceEpa = hasResult && (match.flags?.alliances.red ?? []).some((flag) => flag.type === "high-alliance-epa");
-  const blueHighAllianceEpa = hasResult && (match.flags?.alliances.blue ?? []).some((flag) => flag.type === "high-alliance-epa");
-  const primaryReviewFlag = reviewFlags[0];
-  const primaryReviewLabel = primaryReviewFlag
-    ? MATCH_FLAG_LABELS[primaryReviewFlag]
-    : null;
-  const reviewFlagTitle = reviewFlags
-    .map((flag) => MATCH_FLAG_LABELS[flag]?.full ?? flag)
-    .join(" · ");
+  const modelUpset = hasResult && (match.flags?.review_flags ?? []).includes("model-upset");
+  const redAllianceFlags = hasResult ? (match.flags?.alliances.red ?? []) : [];
+  const blueAllianceFlags = hasResult ? (match.flags?.alliances.blue ?? []) : [];
 
   const time =
     isNext && (match.predicted_time != null || match.time != null) ? (
       <NextMatchCountdown nextMatch={match} eventTimezone={eventTimezone} />
-    ) : primaryReviewLabel ? (
-      <span
-        className="font-semibold text-[var(--fv-review)]"
-        title={reviewFlagTitle}
-        aria-label={`${reviewFlagTitle}${reviewFlags.length > 1 ? `, plus ${reviewFlags.length - 1} more flags` : ""}`}
-      >
-        {primaryReviewLabel.short}
-        {reviewFlags.length > 1 ? ` +${reviewFlags.length - 1}` : ""}
-      </span>
     ) : match.actual_time != null ? (
       formatMatchEventTime(match.actual_time, eventTimezone)
     ) : match.predicted_time != null ? (
@@ -154,6 +145,7 @@ export default function MatchCard({
               ].join(" ")}
             >
               {matchName}
+              {modelUpset ? <span title="The match result differed from the model's predicted favorite." className="ml-1 inline-flex items-center rounded-full border border-[var(--fv-review)]/60 bg-[var(--fv-review)]/10 px-1.5 py-0.5 text-[9px] font-semibold leading-3 text-[var(--fv-review)]">Model Upset</span> : null}
             </span>
 
             <span
@@ -177,14 +169,7 @@ export default function MatchCard({
               {formatAllianceShortName(redAlliance?.name)}
               {formatAlliance(red, team, match.alliances.red.dq_team_keys ?? [])}
             </span>
-            {redHighAllianceEpa ? (
-              <span
-                title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates."
-                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-              >
-                High Alliance EPA
-              </span>
-            ) : null}
+            <div className="flex shrink-0 flex-wrap items-center gap-1"><AllianceFlagPills flags={redAllianceFlags} /></div>
           </div>
 
           {/* Red score */}
@@ -210,14 +195,7 @@ export default function MatchCard({
               {formatAllianceShortName(blueAlliance?.name)}
               {formatAlliance(blue, team, match.alliances.blue.dq_team_keys ?? [])}
             </span>
-            {blueHighAllianceEpa ? (
-              <span
-                title="This alliance's combined pre-match EPA is in the top quartile of the event's available alliance estimates."
-                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-3 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-              >
-                High Alliance EPA
-              </span>
-            ) : null}
+            <div className="flex shrink-0 flex-wrap items-center gap-1"><AllianceFlagPills flags={blueAllianceFlags} /></div>
           </div>
 
           {/* Blue score */}
