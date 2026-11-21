@@ -8,7 +8,7 @@ import { buildAllianceResults } from "./calculations.ts";
 import { buildQualificationAnalysis } from "./calculations.ts";
 import { buildMatchFlagContext, buildMatchFlags } from "./match-flags.ts";
 import { createAnalyticsAudit } from "./audit.ts";
-import { calculateCanonicalAggregateAnalytics } from "./canonical-aggregate-analytics.ts";
+import { calculateCanonicalAggregateAnalytics, calculateCanonicalTeamEventStates } from "./canonical-aggregate-analytics.ts";
 import type { FieldViewAnalyticsInputRecord, FieldViewEventTeamSeasonComparisonInput } from "../../domain/src/analytics.ts";
 
 function epaValues(
@@ -199,13 +199,12 @@ export async function calculateCanonicalTeamEventAnalytics(
     warnings: inputRecords.filter((input) => input.status !== "available")
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
   });
-  const calculated = calculateCanonicalAggregateAnalytics(
+  const calculated = calculateCanonicalTeamEventStates(
     { ...eventState, team_states: [target] },
     records,
     allianceResults,
     audit,
     comparisonInput,
-    { includeTeamAnalytics: true, includeEventAnalytics: false },
   );
-  return calculated.team_states?.[0] ?? target;
+  return calculated?.[0] ?? target;
 }
