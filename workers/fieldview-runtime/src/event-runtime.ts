@@ -31,7 +31,6 @@ import {
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildCanonicalSeasonCohort } from "../../../packages/analytics/src/canonical-season-cohort.ts";
 import type { FieldViewTeamSnapshot } from "../../../packages/domain/src/team.ts";
-import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./provider-request-gate.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
@@ -209,14 +208,6 @@ function hasAcquiredValue(state: EndpointState<unknown> | undefined): boolean {
   return Boolean(state && (state.lastFetchedAt !== null || state.lastWebhookAt !== null));
 }
 
-function staggeredProviderDueAt(endpoint: string, base: number, interval: number): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < endpoint.length; index += 1) {
-    hash ^= endpoint.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return base + ((hash >>> 0) % Math.max(1, interval));
-}
 
 
 function buildAnalyticsInputRecord(
@@ -316,6 +307,29 @@ export class EventRuntime {
     return true;
   }
 
+  private async syncTeamActivity(active: boolean): Promise<void> {
+    const namespace = this.env.TEAM_RUNTIME;
+    if (!namespace) return;
+    const roster = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(TBA_ENDPOINTS.eventTeams(this.eventKey)));
+    const teamKeys = Array.isArray(roster?.data)
+      ? [...new Set(roster.data.map((team) => team?.key).filter((key): key is string => typeof key === "string" && /^frc\\d+$/.test(key)))]
+      : [];
+    const year = Number(this.eventKey.slice(0, 4));
+    await Promise.all(teamKeys.map(async (teamKey) => {
+      const stub = namespace.get(namespace.idFromName(teamKey));
+      const response = await stub.fetch(new Request("https://team-runtime/activity", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Team-Key": teamKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ event_key: this.eventKey, year, active }),
+      }));
+      if (!response.ok) throw new Error("Failed to update TeamRuntime activity for " + teamKey + ": HTTP " + response.status);
+    }));
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
@@ -380,8 +394,10 @@ export class EventRuntime {
         TBA_ENDPOINTS.eventPredictions(this.eventKey),
       ];
       const lifecycle = body.lifecycle;
+      await this.storage.put("lifecycle:state", lifecycle);
       if (lifecycle === "expired") {
         await this.cancelRecurringPolls(true);
+        await this.syncTeamActivity(false);
         return Response.json({ lifecycle, scheduled: 0, event_key: this.eventKey });
       }
       if (lifecycle === "upcoming") {
@@ -403,8 +419,8 @@ export class EventRuntime {
           await this.rearm(transaction);
         });
       }
-      // Lifecycle activation is also the initial-ingestion trigger. Do not
-      // leave a newly scheduled event waiting for its next polling interval.
+      await this.syncTeamActivity(lifecycle === "active");
+      // Lifecycle activation is also the initial-ingestion trigger.
       await this.alarm();
       return Response.json({ lifecycle, attempted: true, event_key: this.eventKey });
     }
@@ -1176,45 +1192,28 @@ export class EventRuntime {
       const manualDue = queued.filter((item) => item.dueAt <= now);
       if (manualDue.length > 0 && !hasEventIdentity) throw new Error("Cannot execute manual event work without persisted event identity");
 
-      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
-      const providerInterval = intervalValue === undefined ? 1_000 : Math.max(100, Number(intervalValue) || 1_000);
-      const deferAt = (endpoint: string) => staggeredProviderDueAt(endpoint, now + providerInterval, providerInterval);
-      const selectedManual = manualDue[0];
-      const selectedTask = selectedManual ? undefined : due[0];
-
-      // One provider request per alarm invocation. A refresh can enqueue many
-      // resources, but the runtime must not issue one gate RPC per resource in
-      // a single alarm and create a synchronized retry storm.
-      for (const task of due) {
-        if (selectedTask?.endpoint === task.endpoint) {
-          await transaction.put(taskStorageKey(task.endpoint), {
-            ...task,
-            dueAt: now + this.retryDelay(task),
-            attempts: task.attempts + 1,
-          });
-        } else if (task.dueAt <= now) {
-          await transaction.put(taskStorageKey(task.endpoint), { ...task, dueAt: deferAt(task.endpoint) });
-        }
+      const manualEndpoints = new Set(manualDue.map((item) => item.endpoint));
+      const readyTasks = due.filter((task) => !manualEndpoints.has(task.endpoint));
+      for (const task of readyTasks) {
+        await transaction.put(taskStorageKey(task.endpoint), {
+          ...task, dueAt: now + this.retryDelay(task), attempts: task.attempts + 1,
+        });
       }
-      if (selectedManual) {
+      if (manualDue.length > 0) {
+        const dueEndpoints = new Set(manualDue.map((item) => item.endpoint));
         await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) =>
-          item.endpoint === selectedManual.endpoint
-            ? { ...item, dueAt: now + 60_000 }
-            : item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
-      } else if (manualDue.length > 0) {
-        await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) =>
-          item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
+          dueEndpoints.has(item.endpoint) ? { ...item, dueAt: now + 60_000 } : item));
       }
 
       const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
       const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
       if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
       await this.rearm(transaction);
-      return { due: selectedTask ? [selectedTask] : [], manualDue: selectedManual ? [selectedManual] : [], analyticsDue };
+      return { due: readyTasks, manualDue, analyticsDue };
     });
 
     // Manual work is independent of recurring poll tasks and is always serviced first.
-    for (const item of dueTasks.manualDue) {
+    await Promise.all(dueTasks.manualDue.map(async (item) => {
       const result = await this.pollEndpoint(item.endpoint);
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
       const retryableFailure = typeof result !== "boolean" || (!result && latest?.status === "failed");
@@ -1230,9 +1229,9 @@ export class EventRuntime {
         await transaction.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(transaction);
       });
-    }
+    }));
 
-    for (const task of dueTasks.due) {
+    await Promise.all(dueTasks.due.map(async (task) => {
       const succeeded = await this.pollEndpoint(task.endpoint);
       if (typeof succeeded !== "boolean") {
         await this.storage.transaction(async (transaction) => {
@@ -1242,7 +1241,7 @@ export class EventRuntime {
           await transaction.put(key, { ...current, attempts: task.attempts, dueAt: succeeded.deferredUntil });
           await this.rearm(transaction);
         });
-        continue;
+        return;
       }
       if (task.retryOnFailure === false) {
         await this.storage.delete(taskStorageKey(task.endpoint));
@@ -1286,7 +1285,7 @@ export class EventRuntime {
         }
         await this.rearm(transaction);
       });
-    }
+    }));
     if (dueTasks.analyticsDue) await this.recalculateAnalytics();
   }
 
@@ -1444,9 +1443,7 @@ export class EventRuntime {
       | { status: "unavailable"; httpStatus: number }
       | { status: "failed"; reason: string };
 
-    const permit = await acquireProviderRequestPermit(this.env, "event:" + this.eventKey, endpoint);
-    if (!permit.granted) return { deferredUntil: permit.retryAt };
-    try {
+    {
       const response = isStatboticsEndpoint
         ? await this.statboticsApi.request(endpoint, { headers })
         : await this.api.request(endpoint, { headers });
@@ -1481,8 +1478,6 @@ export class EventRuntime {
         status: "failed",
         reason: detail.slice(0, 300) || "Unknown fetch or response error",
       };
-    } finally {
-      await releaseProviderRequestPermit(this.env, permit.leaseId);
     }
 
     const result = await this.storage.transaction(async (transaction) => {
@@ -1546,6 +1541,10 @@ export class EventRuntime {
 
     if (!options.suppressStatboticsRefresh && result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
       await this.scheduleStatboticsRefresh(Date.now());
+    }
+    if (endpoint === TBA_ENDPOINTS.eventTeams(this.eventKey) &&
+        await this.storage.get<string>("lifecycle:state") === "active") {
+      await this.syncTeamActivity(true);
     }
 
     // A 304 without a retained representation is not a successful refresh.
