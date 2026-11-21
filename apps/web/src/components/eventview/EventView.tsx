@@ -200,8 +200,8 @@ export default function EventView({
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (
-        event.key.toLowerCase() !==
-        "r"
+        typeof event.key !== "string" ||
+        event.key.toLowerCase() !== "r"
       ) {
         return;
       }
