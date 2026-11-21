@@ -300,6 +300,10 @@ export class EventRuntime {
   private readonly activation: Promise<void>;
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private hydratedPublication: EventStatePublication | undefined;
+  private hydratedEventViewPublication: {
+    version: number; source_revision: number; status: string; generated_at: number;
+    view: FieldViewEventView;
+  } | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     this.state = state;
@@ -320,15 +324,20 @@ export class EventRuntime {
     // acquisition, analytics work, or cross-runtime calls occur during activation.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
-          const [storedKey, publication] = await Promise.all([
+          const [storedKey, publication, eventViewPublication] = await Promise.all([
             this.storage.get<string>("event-key"),
             this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
+            this.storage.get<{
+              version: number; source_revision: number; status: string; generated_at: number;
+              view: FieldViewEventView;
+            }>(EVENT_VIEW_PUBLICATION_KEY),
           ]);
           if (storedKey && !this.eventKey) {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
           }
           this.hydratedPublication = publication;
+          this.hydratedEventViewPublication = eventViewPublication;
         })
       : Promise.resolve();
   }
@@ -809,7 +818,7 @@ export class EventRuntime {
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
-      const eventViewPublication = await this.storage.get<{
+      const eventViewPublication = this.hydratedEventViewPublication ?? await this.storage.get<{
         version: number; source_revision: number; status: string;
         view: FieldViewEventView;
       }>(EVENT_VIEW_PUBLICATION_KEY);
@@ -850,7 +859,7 @@ export class EventRuntime {
       });
       const viewEventStateStatus = viewSourceStale || viewSourceRevision !== publication.sourceRevision
         ? "stale" : publication.status;
-      const eventViewPublication = await this.storage.get<{
+      const eventViewPublication = this.hydratedEventViewPublication ?? await this.storage.get<{
         version: number; source_revision: number; status: string; generated_at: number;
         view: FieldViewEventView;
       }>(EVENT_VIEW_PUBLICATION_KEY);
@@ -946,6 +955,7 @@ export class EventRuntime {
         source_revision: currentSourceRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
+          hydrated_scope: ["event_identity", "event_state_publication", "event_view_publication"],
           event_state_publication: {
             exists: Boolean(eventStatePublication),
             status: eventStateStatus,
@@ -1815,6 +1825,9 @@ export class EventRuntime {
       return nextRevision;
     });
     if (publishedVersion !== null) {
+      if (calculated.eventView) {
+        this.hydratedEventViewPublication = await this.storage.get(EVENT_VIEW_PUBLICATION_KEY);
+      }
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       await Promise.all([
         this.publishSnapshotRevision(publishedVersion),
