@@ -17,7 +17,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings.
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, and ADR-0014 for the runtime execution/orchestration contract.
 
 ## Non-negotiable product and data principles
 
