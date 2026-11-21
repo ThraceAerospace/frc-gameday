@@ -996,25 +996,12 @@ export class TaskScheduler {
     }
 
     if (request.method === "POST" && url.pathname === "/daily") {
-      const activeEventSeeds = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
-      const activeSeasonJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
-      const busy = [...activeEventSeeds.values()].some((job) => job.status === "running") ||
-        [...activeSeasonJobs.values()].some((job) => job.status === "running");
       await this.storage.put("scheduler:daily-run-requested", true);
-      if (busy) {
-        await this.storage.setAlarm(Date.now() + 1_000);
-        return Response.json({ queued: true, reason: "An existing bounded scheduler job has priority." }, { status: 202 });
+      const currentAlarm = await this.storage.getAlarm?.();
+      if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
+        await this.storage.setAlarm(Date.now() + 100);
       }
-      try {
-        const pending = await this.runDailyClassification(eventPollingPolicy(this.env));
-        return Response.json({ queued: pending, pending });
-      } catch (error) {
-        const retryAt = Date.now() + 60_000;
-        const detail = error instanceof Error ? error.message : String(error);
-        await this.storage.put("scheduler:this-week-error", detail);
-        await this.storage.setAlarm(Math.max(Date.now() + 100, retryAt));
-        return Response.json({ queued: true, error: detail, retry_at: retryAt }, { status: 202 });
-      }
+      return Response.json({ queued: true, pending: true }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/run") {
