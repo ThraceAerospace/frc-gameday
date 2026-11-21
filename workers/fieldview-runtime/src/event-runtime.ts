@@ -58,7 +58,6 @@ const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
-const EVENT_VIEW_PUBLICATION_KEY = "event-view:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 // Preserve the legacy storage key strings so existing Durable Object retry state survives the naming migration.
 const ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY = "analytics:cohort-retries";
@@ -85,44 +84,6 @@ interface AnalyticsPublication {
   analyticsRevision?: number;
   matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
   eventAnalytics?: unknown;
-}
-
-interface EventViewPublication {
-  schema_version: 1;
-  event_key: string;
-  version: number;
-  source_revision: number;
-  generated_at: number;
-  status: string;
-  team_state_revisions: Array<{ team_key: string; revision: number | null }>;
-  view: FieldViewEventView;
-}
-
-interface EventViewPublicationManifest extends Omit<EventViewPublication, "view"> {
-  storage_format: "chunked-json-v1";
-  chunk_count: number;
-}
-
-const EVENT_VIEW_CHUNK_SIZE_CODE_UNITS = 128 * 1024;
-
-function eventViewChunkKey(version: number, index: number): string {
-  return `event-view:publication:v${version}:chunk:${index}`;
-}
-
-/** Keep each SQLite value comfortably below the per-value/row size limit. */
-export function chunkSerializedEventView(view: FieldViewEventView): string[] {
-  const serialized = JSON.stringify(view);
-  if (serialized === undefined) throw new Error("Event view could not be serialized");
-  const chunks: string[] = [];
-  for (let start = 0; start < serialized.length;) {
-    let end = Math.min(start + EVENT_VIEW_CHUNK_SIZE_CODE_UNITS, serialized.length);
-    // Never split a UTF-16 surrogate pair between separately UTF-8-encoded chunks.
-    const last = serialized.charCodeAt(end - 1);
-    if (end < serialized.length && last >= 0xD800 && last <= 0xDBFF) end -= 1;
-    chunks.push(serialized.slice(start, end));
-    start = end;
-  }
-  return chunks;
 }
 
 function endpointStorageKey(endpoint: string): string {
@@ -338,7 +299,6 @@ export class EventRuntime {
   private readonly activation: Promise<void>;
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private hydratedPublication: EventStatePublication | undefined;
-  private hydratedEventViewPublication: EventViewPublication | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     this.state = state;
@@ -363,51 +323,13 @@ export class EventRuntime {
             this.storage.get<string>("event-key"),
             this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
           ]);
-          const eventViewPublication = await this.loadEventViewPublication();
           if (storedKey && !this.eventKey) {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
           }
           this.hydratedPublication = publication;
-          this.hydratedEventViewPublication = eventViewPublication;
         })
       : Promise.resolve();
-  }
-
-  private async loadEventViewPublication(): Promise<EventViewPublication | undefined> {
-    const stored = await this.storage.get<EventViewPublicationManifest | EventViewPublication>(EVENT_VIEW_PUBLICATION_KEY);
-    if (!stored) return undefined;
-    // Read legacy inline publications during the rolling storage-format migration.
-    if ("view" in stored && stored.view) return stored as EventViewPublication;
-    if (!("storage_format" in stored) || stored.storage_format !== "chunked-json-v1" ||
-        !Number.isSafeInteger(stored.chunk_count) || stored.chunk_count < 1) return undefined;
-    const chunks = await Promise.all(Array.from({ length: stored.chunk_count }, (_, index) =>
-      this.storage.get<string>(eventViewChunkKey(stored.version, index))));
-    if (chunks.some((chunk) => typeof chunk !== "string")) {
-      console.error("[FV][EventRuntime] Event view publication has missing chunks", {
-        event_key: this.eventKey, version: stored.version, expected_chunks: stored.chunk_count,
-      });
-      return undefined;
-    }
-    try {
-      const view = JSON.parse((chunks as string[]).join("")) as FieldViewEventView;
-      return {
-        schema_version: stored.schema_version,
-        event_key: stored.event_key,
-        version: stored.version,
-        source_revision: stored.source_revision,
-        generated_at: stored.generated_at,
-        status: stored.status,
-        team_state_revisions: stored.team_state_revisions,
-        view,
-      };
-    } catch (error) {
-      console.error("[FV][EventRuntime] Event view publication chunks are invalid", {
-        event_key: this.eventKey, version: stored.version,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return undefined;
-    }
   }
 
   private async bindEventKey(request: Request): Promise<boolean> {
@@ -886,20 +808,7 @@ export class EventRuntime {
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
-      const eventViewPublication = this.hydratedEventViewPublication ?? await this.loadEventViewPublication();
-      // Team-scoped state comes only from the last background-composed view.
-      return Response.json({
-        ...publication.state, analytics,
-        team_states: eventViewPublication?.view.team_states ?? [],
-      }, {
-        headers: {
-          ...headers,
-          "X-FieldView-Team-State-Coverage": publicationStatus === "stale" ? "stale" : eventViewPublication
-            ? (eventViewPublication.source_revision === publication.sourceRevision ? eventViewPublication.status : "stale")
-            : "partial",
-          ...(eventViewPublication ? { "X-FieldView-View-Version": String(eventViewPublication.version) } : {}),
-        },
-      });
+      return Response.json({ ...publication.state, analytics }, { headers });
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
@@ -924,41 +833,46 @@ export class EventRuntime {
       });
       const viewEventStateStatus = viewSourceStale || viewSourceRevision !== publication.sourceRevision
         ? "stale" : publication.status;
-      const eventViewPublication = this.hydratedEventViewPublication ?? await this.loadEventViewPublication();
-      if (eventViewPublication) {
-        return Response.json(eventViewPublication.view, {
-          headers: {
-            "X-FieldView-Event-State-Status": viewEventStateStatus,
-            "X-FieldView-View-Version": String(eventViewPublication.version),
-            "X-FieldView-View-Source-Revision": String(eventViewPublication.source_revision),
-            "X-FieldView-Team-State-Coverage": eventViewPublication.source_revision === publication.sourceRevision
-              ? eventViewPublication.status : "stale",
-            "X-FieldView-View-Generated-At": String(eventViewPublication.generated_at),
-            "Cache-Control": "no-store",
-          },
-        });
-      }
-      const state = publication.state;
-      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
-      const analytics = state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
-        ? state.analytics
-        : state.analytics ? { ...state.analytics, team_comparison: undefined } : state.analytics;
-      const expected = (state.teams ?? []).map((team) => team.key);
+      const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      const analyticsIsCurrent = analyticsPublication?.sourceRevision === publication.sourceRevision;
+      const analytics = analyticsIsCurrent
+        ? analyticsPublication?.eventAnalytics as FieldViewEventView["analytics"] ?? null
+        : null;
+      const expected = (publication.state.teams ?? []).map((team) => team.key);
+      const teamStateRevisions = analyticsIsCurrent ? analyticsPublication?.teamStateRevisions ?? [] : [];
+      const teamStateRefs: FieldViewEventView["team_state_refs"] = teamStateRevisions.map((item) => ({
+        owner: "team-runtime",
+        owner_id: item.team_key as FieldViewEventView["team_state_refs"][number]["owner_id"],
+        record_type: "team-event-state",
+        record_id: this.eventKey as FieldViewEventView["team_state_refs"][number]["record_id"],
+        revision: item.revision,
+      }));
+      const availableTeamKeys = new Set(teamStateRefs.map((item) => item.owner_id));
+      const pendingTeamKeys = expected.filter((teamKey) => !availableTeamKeys.has(teamKey));
+      const analyticsStatus = await this.storage.get<string>("analytics:status");
+      const teamStatesComplete = analyticsIsCurrent && analyticsStatus === "succeeded" &&
+        expected.length === teamStateRefs.length;
       const view: FieldViewEventView = {
-        event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
-        analytics: analytics ?? null,
-        team_states: [],
+        event: Object.fromEntries(Object.entries(publication.state)
+          .filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
+        analytics,
+        team_state_refs: teamStateRefs,
         team_state_coverage: {
-          state: expected.length === 0 && Array.isArray(state.teams) ? "complete" : "partial",
+          state: teamStatesComplete || (expected.length === 0 && Array.isArray(publication.state.teams))
+            ? "complete" : "partial",
           expected_count: expected.length,
-          materialized_count: 0,
-          pending_team_keys: expected,
+          materialized_count: teamStateRefs.length,
+          pending_team_keys: pendingTeamKeys,
         },
       };
       return Response.json(view, {
         headers: {
           "X-FieldView-Event-State-Status": viewEventStateStatus,
-          "X-FieldView-Team-State-Coverage": "partial",
+          "X-FieldView-Team-State-Coverage": view.team_state_coverage.state,
+          ...(analyticsIsCurrent ? {
+            "X-FieldView-Analytics-Revision": String(analyticsPublication?.analyticsRevision ?? 0),
+            "X-FieldView-Analytics-Source-Revision": String(analyticsPublication?.sourceRevision),
+          } : {}),
           "Cache-Control": "no-store",
         },
       });
@@ -989,9 +903,6 @@ export class EventRuntime {
       const manualQueue = await this.storage.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const eventViewPublication = await this.storage.get<{
-        version: number; source_revision: number; status: string; generated_at: number;
-      }>(EVENT_VIEW_PUBLICATION_KEY);
       const rosterAvailable = Array.isArray(eventStatePublication?.state.teams);
       const expectedTeamCount = eventStatePublication?.state.teams?.length ?? 0;
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
@@ -1017,23 +928,13 @@ export class EventRuntime {
         source_revision: currentSourceRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
-          hydrated_scope: ["event_identity", "event_state_publication", "event_view_publication"],
+          hydrated_scope: ["event_identity", "event_state_publication", "analytics_publication"],
           event_state_publication: {
             exists: Boolean(eventStatePublication),
             status: eventStateStatus,
             version: eventStatePublication?.snapshotVersion ?? null,
             source_revision: eventStatePublication?.sourceRevision ?? null,
             generated_at: eventStatePublication?.generatedAt ?? null,
-          },
-          event_view_publication: {
-            exists: Boolean(eventViewPublication),
-            status: eventViewPublication
-              ? (eventStateStatus === "stale" || eventViewPublication.source_revision !== eventStatePublication?.sourceRevision
-                  ? "stale" : eventViewPublication.status)
-              : "missing",
-            version: eventViewPublication?.version ?? null,
-            source_revision: eventViewPublication?.source_revision ?? null,
-            generated_at: eventViewPublication?.generated_at ?? null,
           },
           pending_revalidation_count: tasks.size + manualQueue.length,
           pending_manual_revalidation_count: manualQueue.length,
@@ -1308,13 +1209,12 @@ export class EventRuntime {
       await this.enqueueManualPolls([statboticsEndpoint], false);
     }
     if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-      const [analyticsPublication, eventStatePublication, eventViewPublication] = await Promise.all([
+      const [analyticsPublication, eventStatePublication] = await Promise.all([
         this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
         this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
-        this.storage.get<{ source_revision: number }>(EVENT_VIEW_PUBLICATION_KEY),
       ]);
-      if (!analyticsPublication || !eventStatePublication || !eventViewPublication ||
-          eventViewPublication.source_revision !== eventStatePublication.sourceRevision) {
+      if (!analyticsPublication || !eventStatePublication ||
+          analyticsPublication.sourceRevision !== eventStatePublication.sourceRevision) {
         const [existingDue, analyticsStatus] = await Promise.all([
           this.storage.get<number>(ANALYTICS_DUE_KEY),
           this.storage.get<string>("analytics:status"),
@@ -1340,7 +1240,6 @@ export class EventRuntime {
     sourceRevision: number;
     analyticsInputsComplete?: boolean;
     state: ReturnType<typeof normalizeFieldViewEventState>;
-    eventView?: FieldViewEventView;
     teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
   }> {
     const endpoints = eventResourceEndpoints(this.eventKey);
@@ -1495,26 +1394,11 @@ export class EventRuntime {
       const eventAnalytics = eventAnalyticsState.analytics
         ? { ...eventAnalyticsState.analytics, team_summaries: teamSummaries, team_comparison: teamComparison }
         : eventAnalyticsState.analytics;
-      const expectedTeamKeys = (normalizedState.teams ?? []).map((team) => team.key);
-      const presentTeamKeys = new Set(teamStates.map((teamState) => teamState.team_key));
-      const eventView: FieldViewEventView = {
-        event: Object.fromEntries(Object.entries(eventAnalyticsState)
-          .filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
-        analytics: eventAnalytics ?? null,
-        team_states: teamStates,
-        team_state_coverage: {
-          state: teamStatesComplete ? "complete" : "partial",
-          expected_count: expectedTeamCount,
-          materialized_count: teamStates.length,
-          pending_team_keys: expectedTeamKeys.filter((teamKey) => !presentTeamKeys.has(teamKey)),
-        },
-      };
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
         analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
         teamStateRevisions: teamResults.revisions,
-        eventView,
         state: {
           ...eventAnalyticsState,
           ...(eventAnalytics === undefined ? {} : { analytics: eventAnalytics }),
@@ -1834,8 +1718,7 @@ export class EventRuntime {
       sourceRevision: number;
       analyticsInputsComplete?: boolean;
       state: ReturnType<typeof normalizeFieldViewEventState>;
-      eventView?: FieldViewEventView;
-      teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
+        teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
     };
     try {
       calculated = await this.buildEventState(true);
@@ -1850,9 +1733,6 @@ export class EventRuntime {
       return;
     }
     const state = calculated.state;
-    const eventViewChunks = calculated.eventView
-      ? chunkSerializedEventView(calculated.eventView)
-      : null;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
       calculatedAt: Date.now(),
@@ -1862,6 +1742,7 @@ export class EventRuntime {
         ...(match.flags === undefined ? {} : { flags: match.flags }),
       })),
       ...(state.analytics === undefined ? {} : { eventAnalytics: state.analytics }),
+      teamStateRevisions: calculated.teamStateRevisions ?? [],
     };
     const publishedVersion = await this.storage.transaction(async (transaction) => {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
@@ -1876,34 +1757,6 @@ export class EventRuntime {
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
-      if (calculated.eventView && eventViewChunks) {
-        // Write bounded chunks first and switch the manifest in the same
-        // transaction. Readers can observe only the previous complete version
-        // or the new complete version, never a partially written publication.
-        const previous = await transaction.get<EventViewPublicationManifest | EventViewPublication>(
-          EVENT_VIEW_PUBLICATION_KEY,
-        );
-        for (let index = 0; index < eventViewChunks.length; index += 1) {
-          await transaction.put(eventViewChunkKey(analyticsRevision, index), eventViewChunks[index]);
-        }
-        const manifest: EventViewPublicationManifest = {
-          schema_version: 1,
-          event_key: this.eventKey,
-          version: analyticsRevision,
-          source_revision: calculated.sourceRevision,
-          generated_at: publication.calculatedAt,
-          status: calculated.analyticsInputsComplete ? "complete" : "partial",
-          team_state_revisions: calculated.teamStateRevisions ?? [],
-          storage_format: "chunked-json-v1",
-          chunk_count: eventViewChunks.length,
-        };
-        await transaction.put(EVENT_VIEW_PUBLICATION_KEY, manifest);
-        if (previous && "storage_format" in previous && previous.storage_format === "chunked-json-v1") {
-          for (let index = 0; index < previous.chunk_count; index += 1) {
-            await transaction.delete(eventViewChunkKey(previous.version, index));
-          }
-        }
-      }
       await transaction.delete(ANALYTICS_INVALIDATION_KEY);
       const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_TEAM_EVENT_STATES_KEY) === true;
       const collectionPartial = isRecord(calculated.state.analytics) &&
@@ -1929,9 +1782,6 @@ export class EventRuntime {
       return nextRevision;
     });
     if (publishedVersion !== null) {
-      if (calculated.eventView) {
-        this.hydratedEventViewPublication = await this.loadEventViewPublication();
-      }
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       await Promise.all([
         this.publishSnapshotRevision(publishedVersion),
