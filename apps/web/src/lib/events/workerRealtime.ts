@@ -17,7 +17,7 @@ export type CanonicalEventSnapshotData = {
   state: FieldViewEventState;
   team_states: FieldViewTeamEventState[];
 };
-export type CanonicalSnapshot = { version: number; snapshot: CanonicalEventSnapshotData };
+export type CanonicalSnapshot = { version: number; snapshot: CanonicalEventSnapshotData; etag?: string };
 export type CanonicalAnalyticsPublicationPayload = {
   sourceRevision: number;
   calculatedAt: number;
@@ -38,6 +38,7 @@ export type CanonicalAnalyticsPublication = {
   calculated_at: number | null;
   source_revision: number | null;
   publication: CanonicalAnalyticsPublicationPayload | null;
+  etag?: string;
 };
 type AnalyticsHandler = (value: CanonicalAnalyticsPublication) => void;
 type SnapshotHandler = (value: CanonicalSnapshot) => void;
@@ -53,6 +54,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   private readonly analyticsPublications = new Map<string, CanonicalAnalyticsPublication>();
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly snapshots = new Map<string, CanonicalSnapshot>();
+  private readonly snapshotHydrations = new Map<string, Promise<void>>();
+  private readonly analyticsHydrations = new Map<string, Promise<void>>();
   private readonly sentSubscriptions = new Set<string>();
   private readonly acknowledgedSubscriptions = new Set<string>();
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
@@ -108,6 +111,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     handlers.add(handler);
     const cached = this.snapshots.get(eventKey);
     if (cached) queueMicrotask(() => { if (handlers?.has(handler)) handler(cached); });
+    void this.hydrateSnapshot(eventKey);
     this.disposed = false;
     this.ensureConnected();
     if (first) this.sendSubscription("event-state", eventKey, true);
@@ -135,6 +139,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     handlers.add(handler);
     const cached = this.analyticsPublications.get(eventKey);
     if (cached) queueMicrotask(() => { if (handlers?.has(handler)) handler(cached); });
+    void this.hydrateAnalytics(eventKey);
     this.disposed = false;
     this.ensureConnected();
     if (first) this.sendSubscription("analytics", eventKey, true);
@@ -267,6 +272,47 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     });
   }
 
+
+  private hydrateSnapshot(eventKey: string): Promise<void> {
+    if (this.snapshots.has(eventKey)) return Promise.resolve();
+    const existing = this.snapshotHydrations.get(eventKey);
+    if (existing) return existing;
+    const hydration = (async () => {
+      const record = await readPersistedResource("snapshot:" + eventKey);
+      if (!record || !isRecord(record.value)) return;
+      const value = record.value as unknown as CanonicalSnapshot;
+      if (!Number.isSafeInteger(value.version) || value.version < 0 ||
+          !isRecord(value.snapshot) || !isRecord(value.snapshot.state) ||
+          !Array.isArray(value.snapshot.team_states)) return;
+      const current = this.snapshots.get(eventKey);
+      if (current && current.version >= value.version) return;
+      const restored = { ...value, etag: record.etag ?? value.etag };
+      this.snapshots.set(eventKey, restored);
+      for (const handler of this.snapshotHandlers.get(eventKey) ?? []) handler(restored);
+    })().catch(() => undefined).finally(() => this.snapshotHydrations.delete(eventKey));
+    this.snapshotHydrations.set(eventKey, hydration);
+    return hydration;
+  }
+
+  private hydrateAnalytics(eventKey: string): Promise<void> {
+    if (this.analyticsPublications.has(eventKey)) return Promise.resolve();
+    const existing = this.analyticsHydrations.get(eventKey);
+    if (existing) return existing;
+    const hydration = (async () => {
+      const record = await readPersistedResource("analytics:" + eventKey);
+      if (!record || !isRecord(record.value)) return;
+      const value = record.value as unknown as CanonicalAnalyticsPublication;
+      if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) return;
+      const current = this.analyticsPublications.get(eventKey);
+      if (current && current.revision >= value.revision) return;
+      const restored = { ...value, etag: record.etag ?? value.etag };
+      this.analyticsPublications.set(eventKey, restored);
+      for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(restored);
+    })().catch(() => undefined).finally(() => this.analyticsHydrations.delete(eventKey));
+    this.analyticsHydrations.set(eventKey, hydration);
+    return hydration;
+  }
+
   private handleRuntimeMessage(message: Record<string, unknown>) {
     if (message.type === "pong" || message.type === "connected") return;
     if (message.type === "subscribed" && message.topic === "analytics" &&
@@ -297,35 +343,81 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       };
       for (const handler of this.handlers.get(eventKey) ?? []) handler(eventMessage);
       if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
-        void this.fetchCanonicalSnapshot(eventKey, version);
+        const data = isRecord(message.data) ? message.data : null;
+        const state = isRecord(data?.state) && data.state.event_key === eventKey
+          ? data.state as unknown as FieldViewEventState : null;
+        const current = this.snapshots.get(eventKey);
+        if (state && version !== undefined && (!current || version > current.version)) {
+          let teamStates = current?.snapshot.team_states ?? [];
+          if (isRecord(data?.team_state) && typeof data.team_key === "string" &&
+              (data.team_state as Record<string, unknown>).team_key === data.team_key) {
+            const teamState = data.team_state as unknown as FieldViewTeamEventState;
+            const index = teamStates.findIndex((item) => item.team_key === data.team_key);
+            teamStates = index < 0
+              ? [...teamStates, teamState]
+              : teamStates.map((item, itemIndex) => itemIndex === index ? teamState : item);
+          }
+          const value: CanonicalSnapshot = {
+            version,
+            snapshot: { state, team_states: teamStates },
+            ...(typeof message.etag === "string" ? { etag: message.etag } : {}),
+          };
+          this.snapshots.set(eventKey, value);
+          void persistRuntimeResource("snapshot:" + eventKey, value, value.etag);
+          for (const handler of this.snapshotHandlers.get(eventKey) ?? []) handler(value);
+          if (!current || version > current.version + 1) {
+            void this.fetchCanonicalSnapshot(eventKey, version);
+          }
+        } else {
+          void this.fetchCanonicalSnapshot(eventKey, version);
+        }
       }
     }
   }
 
   private async fetchCanonicalAnalytics(eventKey: string, expectedRevision?: number) {
     if (!this.runtimeBaseUrl) return;
+    await this.hydrateAnalytics(eventKey);
     try {
       const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", this.runtimeBaseUrl);
-      const response = await fetch(url, { cache: "no-store" });
+      const current = this.analyticsPublications.get(eventKey);
+      const headers = new Headers();
+      if (current?.etag) headers.set("If-None-Match", current.etag);
+      let response = await fetch(url, { cache: "no-store", headers });
+      if (response.status === 304) {
+        if (current && (expectedRevision === undefined || current.revision >= expectedRevision)) return;
+        response = await fetch(url, { cache: "no-store" });
+      }
       if (!response.ok) throw new Error("Analytics request failed: HTTP " + response.status);
       const value = await response.json() as CanonicalAnalyticsPublication;
       if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) {
         throw new Error("Analytics response omitted a valid event identity or revision");
       }
-      const current = this.analyticsPublications.get(eventKey);
-      if (current && value.revision < current.revision) return;
-      if (expectedRevision !== undefined && value.revision < expectedRevision) return;
-      this.analyticsPublications.set(eventKey, value);
-      for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(value);
+      const next = { ...value, etag: response.headers.get("ETag") ?? undefined };
+      const latest = this.analyticsPublications.get(eventKey);
+      if (latest && next.revision < latest.revision) return;
+      if (expectedRevision !== undefined && next.revision < expectedRevision) return;
+      this.analyticsPublications.set(eventKey, next);
+      void persistRuntimeResource("analytics:" + eventKey, next, next.etag);
+      for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(next);
     } catch (error) {
       console.warn("[SharedEventWorker] Canonical analytics recovery failed", eventKey, error);
     }
   }
+
   private async fetchCanonicalSnapshot(eventKey: string, expectedVersion?: number) {
     if (!this.runtimeBaseUrl) return;
+    await this.hydrateSnapshot(eventKey);
     try {
       const url = new URL(`/events/${encodeURIComponent(eventKey)}/snapshot`, this.runtimeBaseUrl);
-      const response = await fetch(url, { cache: "no-store" });
+      const current = this.snapshots.get(eventKey);
+      const headers = new Headers();
+      if (current?.etag) headers.set("If-None-Match", current.etag);
+      let response = await fetch(url, { cache: "no-store", headers });
+      if (response.status === 304) {
+        if (current && (expectedVersion === undefined || current.version >= expectedVersion)) return;
+        response = await fetch(url, { cache: "no-store" });
+      }
       if (!response.ok) throw new Error(`Snapshot request failed: HTTP ${response.status}`);
       const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
       if (!Number.isSafeInteger(version) || version < 0) throw new Error("Snapshot response omitted a valid version");
@@ -337,15 +429,16 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         state,
         team_states: team_states ?? [],
       };
-      const current = this.snapshots.get(eventKey);
-      if (current && version < current.version) return;
-      if (expectedVersion !== undefined && version < expectedVersion) {
-        // The revision notification is newer than this read; keep the last
-        // good snapshot and let the next notification/reconnect recover it.
-        return;
-      }
-      const value = { version, snapshot };
+      const latest = this.snapshots.get(eventKey);
+      if (latest && version < latest.version) return;
+      if (expectedVersion !== undefined && version < expectedVersion) return;
+      const value: CanonicalSnapshot = {
+        version,
+        snapshot,
+        etag: response.headers.get("ETag") ?? undefined,
+      };
       this.snapshots.set(eventKey, value);
+      void persistRuntimeResource("snapshot:" + eventKey, value, value.etag);
       for (const handler of this.snapshotHandlers.get(eventKey) ?? []) handler(value);
     } catch (error) {
       console.warn("[SharedEventWorker] Canonical snapshot recovery failed", eventKey, error);
