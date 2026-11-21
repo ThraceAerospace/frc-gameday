@@ -317,7 +317,7 @@ export class EventRuntime {
     const year = Number(this.eventKey.slice(0, 4));
     await Promise.all(teamKeys.map(async (teamKey) => {
       const stub = namespace.get(namespace.idFromName(teamKey));
-      const response = await stub.fetch(new Request("https://team-runtime/activity", {
+      const response = await stub.fetch(new Request("https://team-runtime/activity?year=" + year, {
         method: "POST",
         headers: {
           Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
