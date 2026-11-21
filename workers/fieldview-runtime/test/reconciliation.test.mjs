@@ -69,3 +69,19 @@ test("webhook Match alliance teams are normalized to canonical team_keys", () =>
   assert.deepEqual(result[0].alliances.red, { score: 100, team_keys: ["frc1", "frc2", "frc3"] });
   assert.deepEqual(result[0].alliances.blue, { score: 90, team_keys: ["frc4", "frc5", "frc6"] });
 });
+
+test("partial webhook alliance updates preserve omitted team identities and opposing alliance", () => {
+  const current = {
+    key: "2026test_qm1",
+    alliances: {
+      red: { team_keys: ["frc1", "frc2", "frc3"], score: -1 },
+      blue: { team_keys: ["frc4", "frc5", "frc6"], score: -1 },
+    },
+  };
+  const result = reconcileWebhookEndpoint("/event/2026test/matches", [current], {
+    key: "2026test_qm1",
+    alliances: { red: { score: 100 } },
+  });
+  assert.deepEqual(result[0].alliances.red, { team_keys: ["frc1", "frc2", "frc3"], score: 100 });
+  assert.deepEqual(result[0].alliances.blue, current.alliances.blue);
+});
