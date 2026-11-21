@@ -582,7 +582,9 @@ export class EventRuntime {
       if (messageEventKey !== this.eventKey) {
         return Response.json({ error: "Webhook event key mismatch" }, { status: 400 });
       }
-      await this.storage.put(ANALYTICS_ENABLED_KEY, true);
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== true) {
+        await this.storage.put(ANALYTICS_ENABLED_KEY, true);
+      }
       const accepted = await this.applyTbaWebhook(
         webhookId, payload.message_type, payload.message_data, rawPayload,
       );
