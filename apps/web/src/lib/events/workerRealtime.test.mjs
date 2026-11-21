@@ -116,7 +116,11 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
 
   socket.receive(JSON.stringify({
     type: "snapshot.changed",
+    protocol: 1,
+    schema_version: 1,
     topic: "event-state",
+    resource: "event-snapshot",
+    change: "snapshot",
     event_key: "2026test",
     version: 2,
     etag: 'W/"snapshot-2"',
@@ -127,7 +131,11 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
 
   socket.receive(JSON.stringify({
     type: "snapshot.changed",
+    protocol: 1,
+    schema_version: 1,
     topic: "event-state",
+    resource: "event-snapshot",
+    change: "snapshot",
     event_key: "2026test",
     version: 3,
     etag: 'W/"snapshot-3"',
@@ -146,7 +154,11 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
 
   socket.receive(JSON.stringify({
     type: "analytics.changed",
+    protocol: 1,
+    schema_version: 1,
     topic: "analytics",
+    resource: "event-analytics",
+    change: "snapshot",
     event_key: "2026test",
     version: 1,
     etag: 'W/"analytics-pending"',
@@ -162,7 +174,11 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
 
   socket.receive(JSON.stringify({
     type: "analytics.changed",
+    protocol: 1,
+    schema_version: 1,
     topic: "analytics",
+    resource: "event-analytics",
+    change: "snapshot",
     event_key: "2026test",
     version: 2,
     etag: 'W/"analytics-2"',
