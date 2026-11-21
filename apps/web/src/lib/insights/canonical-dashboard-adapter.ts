@@ -373,6 +373,7 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
       })),
     } : undefined,
     teamInsights: mapTeamAnalytics(snapshot),
+    teamComparison: analytics.team_comparison ?? null,
     matchCount: snapshot.matches?.length ?? 0,
     loadedMatchCount: matches.length,
     offset: 0,
