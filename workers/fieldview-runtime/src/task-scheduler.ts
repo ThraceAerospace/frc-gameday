@@ -1004,6 +1004,12 @@ export class TaskScheduler {
     }
 
     if (request.method === "GET" && url.pathname === "/admin/overview") {
+      const currentSeasonYear = new Date().getUTCFullYear();
+      const currentSeasonIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentSeasonYear);
+      const currentSeasonCheckedAt = currentSeasonIndex?.checkedAt ?? currentSeasonIndex?.updatedAt ?? null;
+      const currentSeasonIndexStatus = !currentSeasonIndex ? "missing"
+        : currentSeasonCheckedAt !== null && Date.now() - currentSeasonCheckedAt > eventPollingPolicy(this.env).discoveryIntervalMs
+          ? "stale" : "available";
       const eventKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:events") ?? []),
         ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
@@ -1032,6 +1038,17 @@ export class TaskScheduler {
           next_alarm_at: await this.storage.getAlarm?.() ?? null,
           last_error: await this.storage.get<string>("scheduler:last-error") ?? null,
           team_discovery_error: await this.storage.get<string>("scheduler:team-discovery-error") ?? null,
+          current_season_index: {
+            year: currentSeasonYear,
+            status: currentSeasonIndexStatus,
+            persisted: Boolean(currentSeasonIndex),
+            event_count: currentSeasonIndex?.events.length ?? 0,
+            updated_at: currentSeasonIndex?.updatedAt ?? null,
+            checked_at: currentSeasonCheckedAt,
+            revalidation_pending: currentSeasonIndexStatus !== "available" ||
+              await this.storage.get<boolean>("scheduler:daily-run-requested") === true,
+            last_error: await this.storage.get<string>("scheduler:current-season-index-error") ?? null,
+          },
         },
         events, teams, multiplexer,
         truncated: false,
