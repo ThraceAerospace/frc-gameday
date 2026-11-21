@@ -17,6 +17,7 @@ This document is the working migration plan for evolving the existing FieldView 
 | Backend runtime | Hybrid Cloudflare Workers and Durable Objects |
 | Canonical identity | TBA team, event, and match keys; TBA-first aggregates with field-specific provider enrichment |
 | Weekly event classification | TaskScheduler evaluates inclusive date-only event ranges against Monday-Sunday in each event's own IANA timezone; it publishes a bounded, resumable daily projection and ensures EventRuntime ownership for matching events (ADR-0010) |
+| TBA webhook routing | Worker ingress validates and scope-routes each original webhook directly to EventRuntime and affected TeamRuntimes; no EventRuntime relay or per-webhook TaskScheduler registration (ADR-0012) |
 
 These decisions are settled unless a concrete implementation constraint requires revisiting one.
 
