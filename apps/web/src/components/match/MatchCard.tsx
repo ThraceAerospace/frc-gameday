@@ -132,7 +132,7 @@ export default function MatchCard({
           "w-fit",
           "rounded-md",
           "border",
-          "h-[44px] box-border px-2 py-1 text-[10px]",
+          "h-[42px] box-border px-2 py-[3px] text-[10px]",
           "transition-colors",
           borderClass,
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
