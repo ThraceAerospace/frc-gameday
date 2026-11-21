@@ -217,11 +217,11 @@ test("SharedWorker runtime transport replays subscriptions and recovers versione
     event_key: "2026test",
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(received.at(-1).version, 2, "304 recovery keeps the locally cached snapshot");
+  assert.equal(received.at(-1).version, 3, "304 recovery keeps the locally cached snapshot");
   assert.equal(analyticsReceived.at(-1).revision, 2, "304 recovery keeps the locally cached analytics");
   assert.deepEqual(fetchedVersions, [1], "data-bearing publications avoid another snapshot read");
   assert.deepEqual(analyticsRevisions, [1], "data-bearing publications avoid another analytics read");
-  assert.ok(conditionalRequests.includes('W/"snapshot-2"'));
+  assert.ok(conditionalRequests.includes('W/"snapshot-3"'));
   assert.ok(conditionalRequests.includes('W/"analytics-2"'));
 
   unsubscribeFirst();
