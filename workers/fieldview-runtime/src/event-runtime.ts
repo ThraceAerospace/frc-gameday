@@ -768,9 +768,9 @@ export class EventRuntime {
     );
     const results = await Promise.all(participants.map(async ({ teamKey }) => {
       try {
-        if (this.env.EVENT_SCHEDULER && this.env.RUNTIME_ADMIN_TOKEN) {
-          const scheduler = this.env.EVENT_SCHEDULER.get(this.env.EVENT_SCHEDULER.idFromName("global"));
-          await scheduler.fetch(new Request("https://event-scheduler/register", {
+        if (this.env.TASK_SCHEDULER && this.env.RUNTIME_ADMIN_TOKEN) {
+          const scheduler = this.env.TASK_SCHEDULER.get(this.env.TASK_SCHEDULER.idFromName("global"));
+          await scheduler.fetch(new Request("https://task-scheduler/register", {
             method: "POST",
             headers: {
               Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
@@ -1245,7 +1245,7 @@ export class EventRuntime {
       }
       if (task.retryOnFailure === false) {
         await this.storage.delete(taskStorageKey(task.endpoint));
-        continue;
+        return;
       }
       await this.storage.transaction(async (transaction) => {
         const key = taskStorageKey(task.endpoint);
@@ -1443,7 +1443,7 @@ export class EventRuntime {
       | { status: "unavailable"; httpStatus: number }
       | { status: "failed"; reason: string };
 
-    {
+    try {
       const response = isStatboticsEndpoint
         ? await this.statboticsApi.request(endpoint, { headers })
         : await this.api.request(endpoint, { headers });
