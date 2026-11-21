@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCanonicalMatchAnalytics } from "../src/canonical-match-analytics.ts";
+import { calculateCanonicalMatchAnalytics, calculateCanonicalTeamEventAnalytics } from "../src/canonical-match-analytics.ts";
 
 test("EventRuntime canonical enrichment publishes match score and EPA analysis plus flags", async () => {
   const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
@@ -82,7 +82,7 @@ test("canonical match analytics preserves absent and explicit-null match resourc
   assert.equal(await calculateCanonicalMatchAnalytics(explicitNull), explicitNull);
 });
 
-test("canonical aggregate attaches season cohort comparisons using eligible event-wide coverage", async () => {
+test("TeamRuntime calculates its own season comparison from the event cohort", async () => {
   const teams = (start) => Array.from({ length: 3 }, (_, index) => ({
     team_key: `frc${start + index}`,
     team_number: start + index,
@@ -129,13 +129,42 @@ test("canonical aggregate attaches season cohort comparisons using eligible even
     processed_team_event_records: 12, unavailable_team_event_records: 0,
     discovery_pending_teams: 0, updated_at: 1_800_000_000_000, records: cohortRecords,
   };
-  const result = await calculateCanonicalMatchAnalytics(state, [], cohort);
-  const analytics = result.team_states[0].analytics;
-  assert.equal(result.analytics.season_cohort.state, "complete");
+  const result = await calculateCanonicalTeamEventAnalytics(state, "frc1", [], cohort);
+  const analytics = result.analytics;
+  assert.ok(analytics);
   assert.equal(analytics.season_comparison.change, 10);
   assert.equal(analytics.season_comparison.cohort_rank, 1);
   assert.equal(analytics.season_comparison.cohort_size, 6);
   assert.equal(analytics.season_comparison.prior_event.event_key, "2026prior");
   assert.equal(analytics.season_history.length, 2);
   assert.equal(result.matches[0].analysis.audit.definition_versions.length, 16);
+});
+
+
+test("EventRuntime calculates event analytics without calculating team analytics", async () => {
+  const match = {
+    key: "2026split_qm1", event_key: "2026split", comp_level: "qm",
+    set_number: 1, match_number: 1, winning_alliance: "red",
+    alliances: {
+      red: { team_keys: ["frc1", "frc2", "frc3"], score: 100 },
+      blue: { team_keys: ["frc4", "frc5", "frc6"], score: 90 },
+    },
+    teams: {
+      red: Array.from({ length: 3 }, (_, index) => ({ team_key: "frc" + (index + 1), team_number: index + 1, pre_epa: { epa: 10 }, epa: { epa: 12 } })),
+      blue: Array.from({ length: 3 }, (_, index) => ({ team_key: "frc" + (index + 4), team_number: index + 4, pre_epa: { epa: 10 }, epa: { epa: 11 } })),
+    },
+    predictions: { statbotics: { red_score: 95, blue_score: 95, red_win_prob: 0.6 } },
+  };
+  const state = {
+    event_key: "2026split",
+    event: { key: "2026split", playoff_type: 0, timezone: "America/New_York" },
+    teams: Array.from({ length: 6 }, (_, index) => ({ key: "frc" + (index + 1), team_number: index + 1 })),
+    matches: [match],
+    sources: {},
+    team_states: [{ event_key: "2026split", team_key: "frc1", sources: {}, matches: [match] }],
+  };
+  const result = await calculateCanonicalMatchAnalytics(state, [], undefined, { includeTeamAnalytics: false });
+  assert.ok(result.analytics);
+  assert.equal(result.team_states[0].analytics, undefined);
+  assert.ok(result.matches[0].flags);
 });
