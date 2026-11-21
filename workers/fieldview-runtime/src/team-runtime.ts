@@ -506,8 +506,9 @@ export class TeamRuntime {
           analytics?: { source_revision?: number | null; status?: string };
         };
         const analyticsRevision = state.analytics?.source_revision ?? null;
+        const analyticsStatus = state.analytics?.status;
         const current = analyticsRevision !== null && analyticsRevision === state.source_revision &&
-          state.analytics?.status !== "stale";
+          analyticsStatus !== "stale" && analyticsStatus !== "failed" && analyticsStatus !== "pending";
         return [event.key, {
           source_revision: current ? analyticsRevision : null,
           comparison_input_updated_at: state.comparison_input_updated_at ?? null,
