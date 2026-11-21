@@ -42,6 +42,7 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   assert.equal(first.status, 200); assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
   assert.equal((await first.json()).team_key, teamKey);
+  assert.equal(storage.values.get("team-state:2026")?.team_key, teamKey, "the partial canonical TeamState is persisted before provider acquisition");
   assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 7);
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
   assert.ok(storage.alarmAt !== null);
@@ -256,4 +257,22 @@ test("TeamRuntime runs independent provider requests concurrently", async () => 
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
   assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one TeamRuntime");
+});
+
+
+test("TeamRuntime initializes a persisted partial TeamState on its first non-snapshot request", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461";
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
+  const response = await runtime.fetch(new Request("https://team/state?year=2026", {
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+    },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(storage.values.get("team-state:2026"), {
+    team_key: teamKey,
+    year: 2026,
+    sources: {},
+  });
 });
