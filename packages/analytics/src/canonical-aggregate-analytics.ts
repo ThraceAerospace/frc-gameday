@@ -356,7 +356,7 @@ function metric(
 }
 
 function reviewFinding(
-  finding: ReturnType<typeof buildReviewFindings>[number],
+  finding: ReviewFinding,
 ): FieldViewAnalyticsFinding {
   const sourcePopulation = population(
     finding.category === "alliance-pattern"
