@@ -112,6 +112,7 @@ function eventViewChunkKey(version: number, index: number): string {
 /** Keep each SQLite value comfortably below the per-value/row size limit. */
 export function chunkSerializedEventView(view: FieldViewEventView): string[] {
   const serialized = JSON.stringify(view);
+  if (serialized === undefined) throw new Error("Event view could not be serialized");
   const chunks: string[] = [];
   for (let start = 0; start < serialized.length;) {
     let end = Math.min(start + EVENT_VIEW_CHUNK_SIZE_CODE_UNITS, serialized.length);
