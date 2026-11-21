@@ -285,6 +285,10 @@ export class TeamRuntime {
         ...(teamMatches === undefined ? {} : { matches: teamMatches }),
       });
       const teamSourceRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const suppliedTeamRevision = comparisonInput.team_state_revisions?.find((item) => item.team_key === this.teamKey)?.revision;
+      if (suppliedTeamRevision !== null && suppliedTeamRevision !== undefined && suppliedTeamRevision !== teamSourceRevision) {
+        return Response.json({ error: "Comparison input contains a stale TeamState revision" }, { status: 409 });
+      }
       const analyticsInputs: FieldViewAnalyticsInputRecord[] = [{
         input_key: "team:" + this.teamKey + ":season-state",
         provider: "fieldview",
