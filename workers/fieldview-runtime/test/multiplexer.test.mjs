@@ -79,13 +79,19 @@ test("one multiplexer deduplicates upstream event registration and filters per c
   const notify = await mux.fetch(new Request("https://mux/internal/notify", {
     method: "POST",
     headers: { Authorization: "Bearer service-secret", "Content-Type": "application/json" },
-    body: JSON.stringify({ topic: "event-state", event_key: "2026test", version: 7,
+    body: JSON.stringify({
+      protocol: 1, schema_version: 1, topic: "event-state",
+      resource: "event-snapshot", change: "snapshot",
+      event_key: "2026test", version: 7,
       data: { state: { event_key: "2026test", marker: "committed" } },
-      etag: 'W/"event-7"' }),
+      etag: 'W/"event-7"',
+    }),
   }));
   assert.deepEqual(await notify.json(), { delivered: 2 });
   const expected = {
-    type: "snapshot.changed", topic: "event-state", event_key: "2026test", version: 7,
+    type: "snapshot.changed", protocol: 1, schema_version: 1,
+    topic: "event-state", resource: "event-snapshot", change: "snapshot",
+    event_key: "2026test", version: 7,
     data: { state: { event_key: "2026test", marker: "committed" } },
     etag: 'W/"event-7"',
   };
@@ -163,7 +169,9 @@ test("analytics topic subscriptions receive independent publication revisions", 
   }));
   assert.deepEqual(await notify.json(), { delivered: 1 });
   assert.deepEqual(JSON.parse(pair[1].sent.at(-1)), {
-    type: "analytics.changed", topic: "analytics", event_key: "2026test", version: 3,
+    type: "analytics.changed", protocol: 1, schema_version: 1,
+    topic: "analytics", resource: "event-analytics", change: "snapshot",
+    event_key: "2026test", version: 3,
   });
   assert.equal(await storage.get("topic:analytics:2026test") instanceof Array, true);
 });
