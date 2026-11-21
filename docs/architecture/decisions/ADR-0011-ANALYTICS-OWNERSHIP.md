@@ -65,4 +65,4 @@ The old term “season cohort” is replaced by **FieldViewEventTeamSeasonCompar
 - Team analytics are reusable across product surfaces without requiring an event analytics request.
 - EventRuntime no longer owns team analytics persistence or team-specific calculation retries. It owns comparison-input assembly and retries delivery/recalculation when team states are missing or stale.
 - Runtime communication carries TeamState source revisions into FieldViewEventTeamSeasonComparisonInput and event source revisions into TeamRuntime calculations, allowing stale or incomplete results to be detected.
-- Existing EventRuntime team-analytics/cohort publication is transitional and must be migrated; it is not the target ownership model.
+- The former EventRuntime-owned team analytics/cohort publication has been replaced by the shared comparison-input handoff and TeamRuntime-owned TeamEventState persistence. The legacy Redis implementation remains historical migration context only.
