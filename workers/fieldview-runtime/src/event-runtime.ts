@@ -30,7 +30,7 @@ import {
   type AnalyticsSourceKey,
 } from "../../../packages/analytics/src/invalidation.ts";
 import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../packages/analytics/src/event-team-season-comparison.ts";
-import { calculateFieldViewEventTeamComparisonAnalytics } from "../../../packages/analytics/src/event-team-comparison-analytics.ts";
+import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../packages/analytics/src/event-team-comparison-analytics.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
 import type { FieldViewEventView } from "../../../packages/domain/src/event-view.ts";
 
@@ -1183,8 +1183,9 @@ export class EventRuntime {
         teamResults.revisions,
         comparisonInputCollection?.comparisonInput.updated_at ?? null,
       );
+      const teamSummaries = buildFieldViewEventTeamSummaries(normalizedState, teamStates);
       const eventAnalytics = eventAnalyticsState.analytics
-        ? { ...eventAnalyticsState.analytics, team_comparison: teamComparison }
+        ? { ...eventAnalyticsState.analytics, team_summaries: teamSummaries, team_comparison: teamComparison }
         : eventAnalyticsState.analytics;
       return {
         version: state.version,
