@@ -32,6 +32,31 @@ async function drainManualQueue(runtime, storage, max = 20) {
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0, "manual provider queue should drain within the test bound");
 }
 
+test("TeamRuntime hydrates persisted season publications before serving reads", async () => {
+  const storage = new MemoryStorage();
+  const state = { team_key: "frc3461", year: 2026, events: [], sources: {} };
+  storage.values.set("team-key", "frc3461");
+  storage.values.set("team-state:2026:publication", { input_signature: "persisted-signature", state });
+  let providerCalls = 0, activationCalls = 0;
+  const runtime = new TeamRuntime({
+    storage,
+    blockConcurrencyWhile: async (callback) => { activationCalls += 1; await callback(); },
+  }, env(async () => { providerCalls += 1; return Response.json([]); }));
+  const response = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).team_key, "frc3461");
+  assert.equal(activationCalls, 1);
+  assert.equal(providerCalls, 0);
+  const diagnostics = await runtime.fetch(new Request("https://team/state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  const readiness = (await diagnostics.json()).readiness;
+  assert.equal(readiness.hydration, "complete");
+  assert.equal(readiness.publications.length, 1);
+});
+
 test("TeamRuntime public snapshots queue missing resources without blocking on provider I/O", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461";
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
