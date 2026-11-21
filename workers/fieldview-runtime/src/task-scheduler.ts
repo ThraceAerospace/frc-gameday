@@ -652,13 +652,12 @@ export class TaskScheduler {
 
       const policy = eventPollingPolicy(this.env);
       const seededEvents: Array<{ event_key: string; status: number; body: unknown }> = [];
+      const knownEvents = new Set(await this.storage.get<string[]>("registry:events") ?? []);
+      const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
       for (const event of events) {
         const eventKey = event.key;
         if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
-        const registeredEvents = await this.storage.get<string[]>("registry:events") ?? [];
-        if (!registeredEvents.includes(eventKey)) {
-          await this.storage.put("registry:events", [...registeredEvents, eventKey].sort());
-        }
+        knownEvents.add(eventKey);
         const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
         const lifecycle = classifyEventLifecycle({
           start_date: String(event.start_date ?? ""),
@@ -690,11 +689,22 @@ export class TaskScheduler {
                 ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
               }),
             }));
+        if (eventResponse.ok) runtimeEventKeys.add(eventKey);
         seededEvents.push({
           event_key: eventKey,
           status: eventResponse.status,
           body: await eventResponse.json().catch(() => null),
         });
+      }
+      const nextKnownEvents = [...knownEvents].sort();
+      const previousKnownEvents = await this.storage.get<string[]>("registry:events") ?? [];
+      if (JSON.stringify(nextKnownEvents) !== JSON.stringify(previousKnownEvents)) {
+        await this.storage.put("registry:events", nextKnownEvents);
+      }
+      const nextRuntimeEventKeys = [...runtimeEventKeys].sort();
+      const previousRuntimeEventKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
+      if (JSON.stringify(nextRuntimeEventKeys) !== JSON.stringify(previousRuntimeEventKeys)) {
+        await this.storage.put("registry:runtime-events", nextRuntimeEventKeys);
       }
       return Response.json({
         ...teamResult,
