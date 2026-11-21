@@ -1,7 +1,7 @@
 import { EventRuntime, eventResourceEndpoints } from "./event-runtime.ts";
-import { classifyEventLifecycle, eventPollingPolicy } from "./event-scheduler.ts";
+import { classifyEventLifecycle, eventPollingPolicy } from "./task-scheduler.ts";
 import { Multiplexer } from "./multiplexer.ts";
-import { EventScheduler } from "./event-scheduler.ts";
+import { TaskScheduler } from "./task-scheduler.ts";
 import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
@@ -9,7 +9,7 @@ import { buildSeasonDiagnostics } from "../../../packages/analytics/src/season-d
 import type { SeasonMatchEvidence } from "../../../packages/analytics/src/season-diagnostics.ts";
 import type { FieldViewTeamAnalytics } from "../../../packages/domain/src/analytics.ts";
 
-export { EventRuntime, EventScheduler, Multiplexer, TeamRuntime };
+export { EventRuntime, TaskScheduler, Multiplexer, TeamRuntime };
 
 type TeamSeasonEventReference = {
   key: string;
@@ -134,9 +134,9 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeObject(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!env.EVENT_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return;
-  const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-  await scheduler.fetch(new Request("https://event-scheduler/register", {
+  if (!env.TASK_SCHEDULER || !env.RUNTIME_ADMIN_TOKEN) return;
+  const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+  await scheduler.fetch(new Request("https://task-scheduler/register", {
     method: "POST",
     headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify({ kind, key }),
@@ -220,27 +220,27 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-      return scheduler.fetch(new Request("https://event-scheduler/events/this-week"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+      return scheduler.fetch(new Request("https://task-scheduler/events/this-week"));
     }
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams();
       const year = url.searchParams.get("year");
       if (year !== null) query.set("year", year);
-      return scheduler.fetch(new Request("https://event-scheduler/events?" + query.toString()));
+      return scheduler.fetch(new Request("https://task-scheduler/events?" + query.toString()));
     }
 
     if (url.pathname === "/teams/discovery" && request.method === "GET") {
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Team discovery is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Team discovery is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams();
       const year = url.searchParams.get("year");
       if (year !== null) query.set("year", year);
-      return scheduler.fetch(new Request("https://event-scheduler/teams?" + query.toString()));
+      return scheduler.fetch(new Request("https://task-scheduler/teams?" + query.toString()));
     }
 
     if (url.pathname === "/internal/admin/operations" && request.method === "POST") {
@@ -251,16 +251,16 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.EVENT_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
+        if (!env.TASK_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
-        const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+        const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
         if (action.startsWith("season-ingest-")) {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
           const operation = action.slice("season-ingest-".length);
           const payload = { action: operation, year, ...(operation === "start" ? { confirm: body.confirm === true } : {}) };
-          return scheduler.fetch(new Request("https://event-scheduler/admin/season-ingest", {
+          return scheduler.fetch(new Request("https://task-scheduler/admin/season-ingest", {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -269,7 +269,7 @@ export default {
         if (action === "coverage-audit-start" || action === "coverage-audit-continue") {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid audit year is required" }, { status: 400 });
-          return scheduler.fetch(new Request("https://event-scheduler/admin/coverage-audit", {
+          return scheduler.fetch(new Request("https://task-scheduler/admin/coverage-audit", {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : "continue", year }),
@@ -280,11 +280,11 @@ export default {
           if (!Number.isInteger(year) || year < 1992 || year > 2200) {
             return Response.json({ error: "A valid discovery year is required" }, { status: 400 });
           }
-          return scheduler.fetch(new Request("https://event-scheduler/admin/discover-year?year=" + year, {
+          return scheduler.fetch(new Request("https://task-scheduler/admin/discover-year?year=" + year, {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
           }));
         }
-        return scheduler.fetch(new Request("https://event-scheduler/" + (action === "scheduler-start" ? "start" : action === "scheduler-stop" ? "stop" : "run"), {
+        return scheduler.fetch(new Request("https://task-scheduler/" + (action === "scheduler-start" ? "start" : action === "scheduler-stop" ? "stop" : "run"), {
           method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
         }));
       }
@@ -297,11 +297,11 @@ export default {
           return Response.json({ error: "Unsupported event operation" }, { status: 400 });
         }
         if (action === "seed-event-teams") {
-          if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+          if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
           const year = body.year === undefined ? Number(key.slice(0, 4)) : Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid event season year" }, { status: 400 });
-          const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-          return scheduler.fetch(new Request("https://event-scheduler/admin/event-team-seed", {
+          const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+          return scheduler.fetch(new Request("https://task-scheduler/admin/event-team-seed", {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ event_key: key, year }),
           }));
@@ -406,11 +406,11 @@ export default {
       (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const headers = new Headers(request.headers);
       headers.set("Authorization", "Bearer " + env.RUNTIME_ADMIN_TOKEN);
-      return scheduler.fetch(new Request("https://event-scheduler" + url.pathname.replace("/internal", "") + url.search, {
+      return scheduler.fetch(new Request("https://task-scheduler" + url.pathname.replace("/internal", "") + url.search, {
         method: request.method,
         headers,
         ...(request.method === "GET" ? {} : { body: request.body }),
@@ -419,29 +419,29 @@ export default {
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-      return scheduler.fetch(new Request("https://event-scheduler/admin/overview", {
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+      return scheduler.fetch(new Request("https://task-scheduler/admin/overview", {
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
     }
 
-    // District data is owned by EventScheduler; these public routes are strictly read-only.
+    // District data is owned by TaskScheduler; these public routes are strictly read-only.
     if (url.pathname === "/districts/discovery" && request.method === "GET") {
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
-      const response = await scheduler.fetch(new Request("https://event-scheduler/districts" + url.search));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+      const response = await scheduler.fetch(new Request("https://task-scheduler/districts" + url.search));
       const headers = new Headers(response.headers);
       headers.set("Access-Control-Allow-Origin", "*");
       return new Response(response.body, { status: response.status, headers });
     }
     const districtRoute = /^\/districts\/([a-zA-Z0-9_-]+)\/snapshot$/.exec(url.pathname);
     if (districtRoute && request.method === "GET") {
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams(url.search);
       query.set("key", districtRoute[1]);
-      const response = await scheduler.fetch(new Request("https://event-scheduler/district?" + query.toString()));
+      const response = await scheduler.fetch(new Request("https://task-scheduler/district?" + query.toString()));
       const headers = new Headers(response.headers);
       headers.set("Access-Control-Allow-Origin", "*");
       return new Response(response.body, { status: response.status, headers });
@@ -579,10 +579,10 @@ export default {
 
     if (url.pathname === "/internal/scheduler/start" || url.pathname === "/internal/scheduler/stop" || url.pathname === "/internal/scheduler/state") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.EVENT_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
-      const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+      if (!env.TASK_SCHEDULER) return Response.json({ error: "Event scheduler is not bound" }, { status: 503 });
+      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const action = url.pathname.endsWith("/start") ? "start" : url.pathname.endsWith("/stop") ? "stop" : "state";
-      return scheduler.fetch(new Request("https://event-scheduler/" + action, {
+      return scheduler.fetch(new Request("https://task-scheduler/" + action, {
         method: action === "state" ? "GET" : "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
@@ -673,17 +673,17 @@ export default {
     env: RuntimeEnvironment,
     context: { waitUntil(promise: Promise<unknown>): void },
   ): Promise<void> {
-    if (!env.EVENT_SCHEDULER) {
-      console.error("[FV][Scheduler] Daily event classification skipped: EventScheduler is not bound");
+    if (!env.TASK_SCHEDULER) {
+      console.error("[FV][Scheduler] Daily event classification skipped: TaskScheduler is not bound");
       return;
     }
-    const scheduler = env.EVENT_SCHEDULER.get(env.EVENT_SCHEDULER.idFromName("global"));
+    const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
     context.waitUntil((async () => {
-      const response = await scheduler.fetch(new Request("https://event-scheduler/daily", {
+      const response = await scheduler.fetch(new Request("https://task-scheduler/daily", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
-      if (!response.ok) throw new Error("Daily EventScheduler run failed with HTTP " + response.status);
+      if (!response.ok) throw new Error("Daily TaskScheduler run failed with HTTP " + response.status);
       const result = await response.json();
       console.log("[FV][Scheduler] Daily run completed", JSON.stringify(result));
     })());
