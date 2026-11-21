@@ -57,10 +57,12 @@ export class AnalyticsOperationRegistry {
 
 export class AnalyticsEngine {
   private readonly definitions: ReadonlyMap<string, FieldViewAnalyticsDefinition>;
+  private readonly registry: AnalyticsOperationRegistry;
   constructor(
     definitions: readonly FieldViewAnalyticsDefinition[],
-    private readonly registry: AnalyticsOperationRegistry,
+    registry: AnalyticsOperationRegistry,
   ) {
+    this.registry = registry;
     const indexed = new Map<string, FieldViewAnalyticsDefinition>();
     for (const definition of definitions) {
       if (!definition.definition_key.trim() || !definition.version.trim()) {
