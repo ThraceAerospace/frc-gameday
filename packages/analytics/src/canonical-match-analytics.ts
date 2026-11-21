@@ -68,8 +68,6 @@ function toAnalyticsRecord(match: FieldViewMatch): AnalyticsMatch {
 export async function calculateCanonicalMatchAnalytics(
   eventState: FieldViewEventState,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
-  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-  options: { includeTeamAnalytics?: boolean } = {},
 ): Promise<FieldViewEventState> {
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
 
@@ -100,10 +98,6 @@ export async function calculateCanonicalMatchAnalytics(
       "qualification-residual-anomaly",
       "qualification-penalty-outliers",
       "playoff-alliance-performance",
-      ...(comparisonInput ? ["team-season-event-comparison"] : []),
-      "team-event-epa",
-      "team-epa-contribution-share",
-      "team-event-match-appearances",
     ],
     warnings: inputRecords.filter((input) => input.status !== "available")
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
@@ -152,21 +146,10 @@ export async function calculateCanonicalMatchAnalytics(
     };
   });
 
-  const matchByKey = new Map(matches.map((match) => [match.key, match]));
-  const team_states = eventState.team_states === undefined || eventState.team_states === null
-    ? eventState.team_states
-    : eventState.team_states.map((teamState) => ({
-        ...teamState,
-        ...(teamState.matches === undefined || teamState.matches === null
-          ? {}
-          : { matches: teamState.matches.map((match) => matchByKey.get(match.key) ?? match) }),
-      }));
-
   return calculateCanonicalAggregateAnalytics({
     ...eventState,
     matches,
-    ...(team_states === undefined ? {} : { team_states }),
-  }, records, allianceResults, audit, comparisonInput, { includeTeamAnalytics: options.includeTeamAnalytics });
+  }, records, allianceResults, audit);
 }
 
 
@@ -177,12 +160,11 @@ export async function calculateCanonicalMatchAnalytics(
  */
 export async function calculateCanonicalTeamEventAnalytics(
   eventState: FieldViewEventState,
-  teamKey: TeamKey,
+  target: FieldViewTeamEventState,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
   comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-): Promise<FieldViewTeamEventState | null> {
-  const target = eventState.team_states?.find((item) => item.team_key === teamKey);
-  if (!target || !eventState.matches) return target ?? null;
+): Promise<FieldViewTeamEventState> {
+  if (!eventState.matches) return target;
 
   const records = eventState.matches.map(toAnalyticsRecord);
   const allianceResults = buildAllianceResults(records, eventState.event?.playoff_type);
@@ -200,11 +182,12 @@ export async function calculateCanonicalTeamEventAnalytics(
       .map((input) => `${input.provider}/${input.resource} input is ${input.status}`),
   });
   const calculated = calculateCanonicalTeamEventStates(
-    { ...eventState, team_states: [target] },
+    eventState,
+    [target],
     records,
     allianceResults,
     audit,
     comparisonInput,
   );
-  return calculated?.[0] ?? target;
+  return calculated[0] ?? target;
 }
