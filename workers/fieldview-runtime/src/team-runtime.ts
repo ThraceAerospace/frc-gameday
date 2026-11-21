@@ -831,12 +831,14 @@ export class TeamRuntime {
   private async queueSeasonAnalyticsRefresh(year: number): Promise<void> {
     const key = SEASON_ANALYTICS_DUE_PREFIX + year;
     const existing = await this.storage.get<number>(key);
-    if (existing === undefined || existing > Date.now()) {
-      await this.storage.put(key, Date.now());
-    }
-    const currentAlarm = await this.storage.getAlarm?.();
-    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
-      await this.storage.setAlarm(Date.now() + 100);
+    const dueAt = existing ?? Date.now();
+    if (existing === undefined) await this.storage.put(key, dueAt);
+    // Do not move an existing retry deadline forward on every stale read.
+    if (existing === undefined || existing <= Date.now()) {
+      const currentAlarm = await this.storage.getAlarm?.();
+      if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
+        await this.storage.setAlarm(Date.now() + 100);
+      }
     }
   }
 
