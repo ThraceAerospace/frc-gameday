@@ -871,3 +871,57 @@ test("canonical analytics are coalesced into EventRuntime alarm work, persisted,
   assert.ok(afterState.analytics);
   assert.equal(afterState.analytics.audit.calculation_id, publication.eventAnalytics.audit.calculation_id);
 });
+
+
+test("EventRuntime runs independent provider requests concurrently", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026parallel";
+  let inFlight = 0, maximumInFlight = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    fetcher: async () => {
+      inFlight += 1;
+      maximumInFlight = Math.max(maximumInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return Response.json([]);
+    },
+  }, eventKey);
+  const endpoints = eventResourceEndpoints(eventKey).slice(0, 4);
+  await runtime.schedulePolls(endpoints, 60_000, Date.now() - 1);
+  await runtime.alarm();
+  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one EventRuntime");
+});
+
+test("EventRuntime coordinates active competition with every participating TeamRuntime", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026coordination", notifications = [];
+  const namespace = {
+    idFromName: (teamKey) => teamKey,
+    get: (teamKey) => ({
+      fetch: async (request) => {
+        notifications.push({ teamKey, url: request.url, body: await request.json() });
+        return Response.json({ ok: true });
+      },
+    }),
+  };
+  const rosterEndpoint = TBA_ENDPOINTS.eventTeams(eventKey);
+  storage.values.set("endpoint:" + rosterEndpoint, {
+    endpoint: rosterEndpoint,
+    data: [{ key: "frc3461" }, { key: "frc254" }, { key: "frc3461" }],
+  });
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
+    TEAM_RUNTIME: namespace,
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  await runtime.syncTeamActivity(true);
+  assert.deepEqual(notifications.map((item) => item.teamKey).sort(), ["frc254", "frc3461"]);
+  assert.ok(notifications.every((item) => item.body.active === true));
+  assert.ok(notifications.every((item) => item.body.event_key === eventKey));
+  assert.ok(notifications.every((item) => item.url.includes("year=2026")));
+});
