@@ -38,7 +38,7 @@ test("EventRuntime canonical enrichment publishes match score and EPA analysis p
     input_key: "matches", provider: "tba", resource: "event-matches",
     source_revision: 4, fetched_at: 1_800_000_000_000, record_count: 1,
     included_count: 1, excluded_count: 0, status: "available",
-  }]);
+  }], undefined, { includeTeamAnalytics: true });
   const calculated = result.matches[0];
   assert.equal(calculated.analysis.score.red.actual, 105);
   assert.equal(calculated.analysis.score.red.predicted, 100);
