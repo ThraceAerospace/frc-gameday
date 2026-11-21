@@ -60,7 +60,7 @@ function maxAge(value: string | null): number | null {
 }
 function metadata(state: EndpointState<unknown> | undefined, now: number): FieldViewSourceRecordMetadata | undefined {
   if (!state || state.status === "unknown") return undefined;
-  if (state.status === "failed" || state.status === "unavailable") return { status: state.status, retrieved_at: null };
+  if (state.status === "failed" || state.status === "stale" || state.status === "unavailable") return { status: state.status, retrieved_at: null };
   const retrieved = state.lastFetchedAt ?? state.lastWebhookAt;
   if (retrieved === null) return { status: "failed", retrieved_at: null };
   return {
