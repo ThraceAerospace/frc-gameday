@@ -1821,7 +1821,7 @@ export class EventRuntime {
           version: analyticsRevision,
           source_revision: calculated.sourceRevision,
           generated_at: publication.calculatedAt,
-          status: calculated.eventView.team_state_coverage.state,
+          status: calculated.analyticsInputsComplete ? "complete" : "partial",
           team_state_revisions: calculated.teamStateRevisions ?? [],
           view: calculated.eventView,
         });
