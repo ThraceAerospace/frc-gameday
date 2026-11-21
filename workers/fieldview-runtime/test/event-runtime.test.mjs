@@ -270,10 +270,13 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(webhookResponse.status, 200);
   assert.deepEqual(await webhookResponse.json(), { accepted: true, duplicate: false });
 
-  // Webhook processing mutates source state and invalidates the publication;
-  // it does not eagerly rebuild the canonical EventState.
-  assert.equal(storage.values.get("event-state:publication"), initialPublication);
-  assert.equal(publicationWrites, 1);
+  // The committed webhook update rebuilds the normalized publication before
+  // broadcasting it, so subscribers receive usable FieldView data.
+  const webhookPublication = storage.values.get("event-state:publication");
+  assert.notEqual(webhookPublication, initialPublication);
+  assert.equal(webhookPublication.snapshotVersion, 2);
+  assert.equal(webhookPublication.state.matches[0].alliances.red.score, 20);
+  assert.equal(publicationWrites, 2);
   assert.equal(storage.values.get("snapshot-revision"), 2);
   assert.equal(storage.values.get("endpoint:" + matchesEndpoint).revision, 2);
 
@@ -285,7 +288,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(updatedSnapshot.matches[0].actual_time, 123);
 
   const updatedPublication = storage.values.get("event-state:publication");
-  assert.notEqual(updatedPublication, initialPublication);
+  assert.equal(updatedPublication, webhookPublication);
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
   assert.equal(updatedPublication.state.matches[0].alliances.red.score, 20);
@@ -727,7 +730,9 @@ test("versioned WebSocket subscriptions announce gaps and publish snapshot revis
   assert.deepEqual(JSON.parse(serverSocket.sent[0]), { type: "connected", event_key: eventKey, version: 0, snapshot_required: false });
   await runtime.schedulePolls([endpoint], 60_000, Date.now() - 1);
   await runtime.alarm();
-  assert.deepEqual(JSON.parse(serverSocket.sent[1]), { type: "snapshot.changed", event_key: eventKey, version: 1 });
+  assert.deepEqual(JSON.parse(serverSocket.sent[1]), {
+    type: "snapshot.changed", topic: "event-state", event_key: eventKey, version: 1,
+  });
   runtime.webSocketMessage(serverSocket, "ping");
   assert.equal(serverSocket.sent[2], "pong");
 });

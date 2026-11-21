@@ -2024,9 +2024,9 @@ export class EventRuntime {
       // An incomplete provider representation must not make polling fail.
       // The revision-only notice below tells clients to recover over HTTP.
     }
-    const publishedVersion = publication?.snapshotVersion ?? version;
+    const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
     const etag = 'W/"fv-event-snapshot-v1-' + publishedVersion + '"';
-    const data = publication
+    const data = publication && publication.snapshotVersion === publishedVersion
       ? { state: publication.state, ...(patch ?? {}) }
       : undefined;
     const message = JSON.stringify({
