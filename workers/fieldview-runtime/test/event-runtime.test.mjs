@@ -1233,6 +1233,74 @@ test("EventRuntime invalidates event analytics when a TeamRuntime season state c
 });
 
 
+test("EventRuntime publishes a team-only websocket delta without rebuilding the event snapshot", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026teamdelta";
+  storage.values.set("snapshot-revision", 0);
+  storage.values.set("event-state:publication", {
+    sourceRevision: 0,
+    snapshotVersion: 0,
+    generatedAt: 1_000,
+    status: "partial",
+    state: {
+      event_key: eventKey,
+      teams: [],
+      analytics: { team_comparison: { input_updated_at: 10 } },
+    },
+  });
+  const messages = [];
+  const teamEventState = {
+    event_key: eventKey,
+    team_key: "frc3461",
+    sources: {},
+  };
+  const runtime = new EventRuntime({
+    storage,
+    getWebSockets: () => [{ send: (message) => messages.push(JSON.parse(message)) }],
+  }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    TEAM_RUNTIME: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async () => Response.json(teamEventState, {
+          headers: {
+            "X-FieldView-Team-Source-Revision": "3",
+            "X-FieldView-Team-Event-Revision": "1",
+          },
+        }),
+      }),
+    },
+    fetcher: async () => {
+      throw new Error("team-only publication must not fetch provider data");
+    },
+  }, eventKey);
+
+  const response = await runtime.fetch(new Request("https://event-runtime/team-state-changed", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      team_key: "frc3461",
+      team_state_revision: 3,
+      team_event_revision: 1,
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].version, 1);
+  assert.equal(messages[0].data.team_key, "frc3461");
+  assert.deepEqual(messages[0].data.team_state, teamEventState);
+  assert.equal("state" in messages[0].data, false,
+    "team projection notifications carry only the changed team projection");
+  assert.equal(storage.values.get("event-state:publication").snapshotVersion, 0,
+    "the unchanged event-owned publication is not rewritten");
+});
+
 test("EventRuntime removes legacy embedded TeamEventStates from its durable event publication", async () => {
   const storage = new MemoryStorage(), eventKey = "2026ownership";
   storage.values.set("snapshot-revision", 1);
