@@ -615,7 +615,7 @@ export class EventRuntime {
       const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const needed = resources.filter((endpoint) => {
         const state = states.get(endpointStorageKey(endpoint));
-        return !state || state.lastFetchedAt === null || state.status === "failed" ||
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" ||
           (state.expiresAt !== null && state.expiresAt <= now);
       });
       if (needed.length > 0) {
@@ -624,7 +624,7 @@ export class EventRuntime {
       }
       const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
-      if (!statboticsState || statboticsState.lastFetchedAt === null ||
+      if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
           statboticsState.status === "failed" ||
           (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
         await this.enqueueManualPolls([statboticsEndpoint]);
