@@ -109,6 +109,7 @@ export class TeamRuntime {
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private readonly publishedSnapshots = new Map<number, {
     input_signature: string;
+    representation_signature?: string;
     state: ReturnType<typeof normalizeFieldViewTeamState>;
   }>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
@@ -126,7 +127,7 @@ export class TeamRuntime {
       ? state.blockConcurrencyWhile(async () => {
           const [storedKey, publications] = await Promise.all([
             this.storage.get<string>("team-key"),
-            this.storage.list<{ input_signature: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
+            this.storage.list<{ input_signature: string; representation_signature?: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
           ]);
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
           for (const [key, publication] of publications) {
@@ -424,6 +425,7 @@ export class TeamRuntime {
       const publication = this.publishedSnapshots.get(year) ??
         await this.storage.get<{
           input_signature: string;
+          representation_signature?: string;
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
       const resources = this.endpoints(year);
@@ -897,8 +899,12 @@ export class TeamRuntime {
       revision: await tx.get<number>("snapshot-revision") ?? 0,
     }));
     const signature = inputSignature(inputs.states);
+    const representationSignature = JSON.stringify(inputs.states.map((state) => state ? [
+      state.revision, state.lastFetchedAt, state.etag,
+    ] : null));
     const cached = await this.storage.get<{
       input_signature: string;
+      representation_signature?: string;
       state: ReturnType<typeof normalizeFieldViewTeamState>;
     }>(publicationKey);
     const signatureHash = await hashSignature(signature);
@@ -914,6 +920,17 @@ export class TeamRuntime {
     if (cached?.input_signature === signature) {
       this.publishedSnapshots.set(year, cached);
       return Response.json(cached.state, { headers: responseHeaders });
+    }
+    const failedInput = inputs.states.some((state) => state?.status === "failed");
+    if (cached && failedInput &&
+        (cached.representation_signature === undefined ||
+          cached.representation_signature === representationSignature)) {
+      // Provider failure is not a new publication. Keep serving the previous
+      // last-good snapshot; public reads expose it as stale and retry locally.
+      this.publishedSnapshots.set(year, cached);
+      return Response.json(cached.state, {
+        headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },
+      });
     }
 
     const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = inputs.states;
@@ -947,13 +964,13 @@ export class TeamRuntime {
       const currentStates = await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
       if (inputSignature(currentStates) !== signature) return false;
-      await tx.put(publicationKey, { input_signature: signature, state: snapshot });
+      await tx.put(publicationKey, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
       await tx.put(stateKey, snapshot);
       return true;
     });
     if (!published) return this.snapshot(year, request);
 
-    this.publishedSnapshots.set(year, { input_signature: signature, state: snapshot });
+    this.publishedSnapshots.set(year, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
     return Response.json(snapshot, { headers: responseHeaders });
   }
   private async pollResourceNow(resource: TeamResource): Promise<
