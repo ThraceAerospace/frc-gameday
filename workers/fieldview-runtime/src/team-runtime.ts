@@ -241,7 +241,14 @@ export class TeamRuntime {
         if (changed) await tx.put(ACTIVE_EVENTS_KEY, current);
         return current;
       });
-      if (changed) {
+      const activeInterval = Object.keys(activeEvents).length > 0;
+      const expectedInterval = activeInterval ? this.activeRefreshIntervalMs() : this.refreshIntervalMs();
+      const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
+      const scheduleMissingOrOutdated = this.endpoints(eventYear as number).some((resource) => {
+        const task = tasks.get(taskKey(resource.endpoint));
+        return !task || task.intervalMs !== expectedInterval;
+      });
+      if (changed || scheduleMissingOrOutdated) {
         const years = new Set<number>([eventYear as number, ...Object.values(activeEvents).map((item) => item.year)]);
         await Promise.all([...years].map((activeYear) => this.schedule(activeYear, false)));
       }
