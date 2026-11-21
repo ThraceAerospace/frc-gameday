@@ -7,7 +7,7 @@ import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
 import type { FRCColorsTeam } from "../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
-import { normalizeTbaWebhookMatch } from "./reconciliation.ts";
+import { mergeTbaWebhookMatch, normalizeTbaWebhookMatch } from "./reconciliation.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
@@ -254,6 +254,7 @@ export class TeamRuntime {
       const match = data.match;
       if ((envelope.message_type === "match_score" || envelope.message_type === "match_video") &&
           match && typeof match === "object" && !Array.isArray(match)) {
+        if (typeof data.team_key === "string") targetKeys.add(data.team_key);
         const value = match as Record<string, unknown>;
         const alliances = value.alliances;
         if (alliances && typeof alliances === "object" && !Array.isArray(alliances)) {
@@ -307,8 +308,7 @@ export class TeamRuntime {
         if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
         const current = currentMatches[index];
         const merged = {
-          ...current,
-          ...updatedMatch,
+          ...mergeTbaWebhookMatch(current, updatedMatch),
           // Preserve FieldView enrichments and invalidate only score-derived
           // analysis when the source score changes.
           predictions: current.predictions,
