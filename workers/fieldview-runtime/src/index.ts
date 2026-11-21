@@ -107,6 +107,7 @@ export default {
       };
       if (messageType === "match_score" || messageType === "match_video") {
         addMatchTeams(matchData);
+        addTeamKey(messageData.team_key);
       } else if (messageType === "upcoming_match") {
         if (Array.isArray(messageData.team_keys)) {
           for (const key of messageData.team_keys) addTeamKey(key);
