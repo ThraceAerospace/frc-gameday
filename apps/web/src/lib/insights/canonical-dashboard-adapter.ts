@@ -374,7 +374,6 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
       })),
     } : undefined,
     teamInsights: mapTeamAnalytics(snapshot, publication),
-    seasonCohort: cohort ? {
       state: cohort.state,
       teamCount: cohort.team_count,
       totalTeamEventRecords: cohort.total_team_event_records,
