@@ -16,6 +16,7 @@ EVENT_UPCOMING_INTERVAL_MS = "1800000"
 EVENT_ACTIVE_INTERVAL_MS = "300000"
 EVENT_COMPLETED_RETENTION_MS = "86400000"
 TEAM_REFRESH_INTERVAL_MS = "86400000"
+TEAM_ACTIVE_REFRESH_INTERVAL_MS = "60000"
 PROVIDER_REQUEST_INTERVAL_MS = "1000"
 
 [[durable_objects.bindings]]
@@ -31,8 +32,8 @@ name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
 [[durable_objects.bindings]]
-name = "EVENT_SCHEDULER"
-class_name = "EventScheduler"
+name = "TASK_SCHEDULER"
+class_name = "TaskScheduler"
 
 [[migrations]]
 tag = "prototype-v1"
@@ -44,11 +45,15 @@ new_sqlite_classes = ["Multiplexer"]
 
 [[migrations]]
 tag = "prototype-v3"
-new_sqlite_classes = ["EventScheduler"]
+new_sqlite_classes = ["TaskScheduler"]
 
 [[migrations]]
 tag = "prototype-v4"
 new_sqlite_classes = ["TeamRuntime"]
+
+[[migrations]]
+tag = "prototype-v5"
+renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
 [triggers]
 crons = ["0 16 * * *"]
