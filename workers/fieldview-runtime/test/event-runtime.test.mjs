@@ -908,12 +908,15 @@ test("EventRuntime tracks analytics multiplexer registration independently", asy
 test("EventRuntime applies lifecycle schedules and stops recurring polling after completed retention", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
+  let providerCalls = 0;
+  let teamRuntimeCalls = 0;
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => new Response("unused"),
+    TEAM_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => { teamRuntimeCalls += 1; return new Response(); } }) },
+    fetcher: async () => { providerCalls += 1; return new Response("unused"); },
   }, eventKey);
   const lifecycleRequest = (lifecycle, extra = {}) => new Request("https://event-runtime/lifecycle", {
     method: "POST",
@@ -931,7 +934,7 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
   });
 
   const upcoming = await runtime.fetch(lifecycleRequest("upcoming"));
-  assert.equal(upcoming.status, 200);
+  assert.equal(upcoming.status, 202, "lifecycle commands queue local runtime work and return immediately");
   for (const endpoint of eventResourceEndpoints(eventKey)) {
     assert.equal(storage.values.get("task:" + endpoint).intervalMs, 30 * 60_000);
   }
@@ -944,13 +947,13 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
   assert.equal(upcomingDiagnostics.lifecycle.completed_until, null);
 
   const active = await runtime.fetch(lifecycleRequest("active"));
-  assert.equal(active.status, 200);
+  assert.equal(active.status, 202);
   assert.equal(storage.values.get("task:" + TBA_ENDPOINTS.eventMatches(eventKey)).intervalMs, 5 * 60_000);
   assert.equal(storage.values.get("task:" + TBA_ENDPOINTS.event(eventKey)).intervalMs, 30 * 60_000);
 
   const completedUntil = Date.now() + 60_000;
   const completed = await runtime.fetch(lifecycleRequest("completed", { completedUntil }));
-  assert.equal(completed.status, 200);
+  assert.equal(completed.status, 202);
   assert.equal(await storage.get("lifecycle:completed-until"), completedUntil);
 
   // Make recurring polls later than the retention deadline. The Durable Object
@@ -971,6 +974,8 @@ test("EventRuntime applies lifecycle schedules and stops recurring polling after
     assert.equal(storage.values.has("task:" + endpoint), false);
   }
   assert.equal(await storage.get("lifecycle:completed-until"), undefined);
+  assert.equal(providerCalls, 0, "lifecycle commands must not run provider work inline");
+  assert.equal(teamRuntimeCalls, 0, "EventRuntime must not synchronously fan out to TeamRuntime");
 });
 
 test("webhook refresh retains the 65-second one-shot authoritative TBA refetch", async () => {
