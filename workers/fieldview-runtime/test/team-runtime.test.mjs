@@ -585,3 +585,40 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(updated.flags, undefined);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
 });
+
+test("TeamRuntime applies upcoming-match timing only to its existing team match projection", async () => {
+  const storage = new MemoryStorage();
+  const teamKey = "frc3461", eventKey = "2026test", matchKey = "2026test_qm1";
+  const match = {
+    key: matchKey, event_key: eventKey, time: 100, predicted_time: null,
+    alliances: { red: { team_keys: [teamKey, "frc1", "frc2"] }, blue: { team_keys: ["frc3", "frc4", "frc5"] } },
+    predictions: {}, teams: { red: [], blue: [] }, sources: {},
+  };
+  storage.values.set("team-event-state:" + eventKey, {
+    event_key: eventKey, team_key: teamKey, sources: { team: {}, event_team: {}, matches: {} }, matches: [match],
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("upcoming-match handling must not perform provider fetches");
+  }), teamKey);
+  const response = await runtime.fetch(new Request("https://team/webhook", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey,
+      "X-FieldView-Event-Key": eventKey, "X-FieldView-Webhook-Id": "b".repeat(64),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message_type: "upcoming_match",
+      message_data: { event_key: eventKey, match_key: matchKey, team_keys: [teamKey], scheduled_time: 200, predicted_time: 250 },
+    }),
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.changed, true);
+  const updated = storage.values.get("team-event-state:" + eventKey).matches[0];
+  assert.equal(updated.time, 200);
+  assert.equal(updated.predicted_time, 250);
+  assert.deepEqual(updated.alliances, match.alliances);
+  assert.deepEqual(updated.predictions, match.predictions);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+});
