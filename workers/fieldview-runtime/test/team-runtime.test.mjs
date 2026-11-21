@@ -40,18 +40,19 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
     return Response.json([]);
   }), teamKey);
   const first = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
-  assert.equal(first.status, 200); assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
-  assert.equal((await first.json()).team_key, teamKey);
+  assert.equal(first.status, 503, "a missing publication is explicitly unavailable rather than generated during GET");
+  assert.equal((await first.json()).publication.status, "missing");
+  assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
   const firstEtag = first.headers.get("ETag");
-  assert.ok(firstEtag);
-  assert.equal(storage.values.get("team-state:2026")?.team_key, teamKey, "the partial canonical TeamState is persisted before provider acquisition");
+  assert.equal(firstEtag, null);
+  assert.equal(storage.values.has("team-state:2026"), false, "public GET does not materialize or persist a TeamState");
   assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 5, "only TBA and FRC Colors resources receive recurring tasks");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "initial public reads do not schedule recurring Statbotics acquisition");
   assert.ok(storage.alarmAt !== null);
   const repeated = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": teamKey, "If-None-Match": firstEtag },
   }));
-  assert.equal(repeated.status, 304, "an unchanged canonical TeamState is validated without retransmitting its body");
+  assert.equal(repeated.status, 503, "a missing publication remains explicitly unavailable until background work publishes it");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "validated reads do not duplicate queued work");
 
   const refresh = await runtime.fetch(new Request("https://team/refresh?year=2026", {
