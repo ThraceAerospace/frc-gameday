@@ -951,7 +951,10 @@ export class TaskScheduler {
         };
         await this.storage.put(storageKey, audit);
       }
-      if (!audit || audit.status !== "running") return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
+      if (!audit || !["running", "paused"].includes(audit.status)) return Response.json(audit ?? { error: "Coverage audit has not been started" }, { status: 409 });
+      audit.status = "running";
+      audit.updated_at = Date.now();
+      await this.storage.put(storageKey, audit);
       await this.storage.setAlarm(Date.now());
       const { event_keys: _eventKeys, team_keys: _teamKeys, ...summary } = audit;
       return Response.json({ ...summary, processed: audit.cursor, total: audit.event_keys.length + audit.team_keys.length,
