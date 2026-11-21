@@ -151,20 +151,29 @@ test("match_score webhook fans out once to the event and each unique participati
   }
 });
 
-test("event-wide schedule_updated webhook does not guess team recipients", async () => {
-  const raw = new TextEncoder().encode(JSON.stringify({
-    message_type: "schedule_updated",
-    message_data: { event_key: "2026test" },
-  })).buffer;
-  const signature = await sign("webhook-secret", raw);
-  const eventTargets = [];
-  const env = environment((id) => async () => {
-    eventTargets.push(id);
-    return new Response("accepted", { status: 200 });
-  });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
-    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
-  }), env);
-  assert.equal(response.status, 200);
-  assert.deepEqual(eventTargets, ["2026test"]);
+test("event-scoped TBA notifications do not guess TeamRuntime recipients", async () => {
+  const payloads = [
+    { message_type: "schedule_updated", message_data: { event_key: "2026test" } },
+    { message_type: "starting_comp_level", message_data: { event_key: "2026test", comp_level: "qf" } },
+    { message_type: "alliance_selection", message_data: { event_key: "2026test", event: { key: "2026test" } } },
+    { message_type: "awards_posted", message_data: { event_key: "2026test", awards: [{ recipient_list: [{ team_number: 3461 }] }] } },
+  ];
+  for (const payload of payloads) {
+    const raw = new TextEncoder().encode(JSON.stringify(payload)).buffer;
+    const signature = await sign("webhook-secret", raw);
+    const eventTargets = [], teamTargets = [];
+    const env = environment((id) => async () => {
+      eventTargets.push(id);
+      return new Response("accepted", { status: 200 });
+    }, (id) => async () => {
+      teamTargets.push(id);
+      return new Response("accepted", { status: 200 });
+    });
+    const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+      method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+    }), env);
+    assert.equal(response.status, 200, payload.message_type);
+    assert.deepEqual(eventTargets, ["2026test"], payload.message_type);
+    assert.deepEqual(teamTargets, [], payload.message_type);
+  }
 });
