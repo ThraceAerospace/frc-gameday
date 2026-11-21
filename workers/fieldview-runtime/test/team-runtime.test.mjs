@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TeamRuntime } from "../src/team-runtime.ts";
+import { TeamRuntime, teamResourceEndpoints } from "../src/team-runtime.ts";
 
 class MemoryStorage {
   values = new Map(); alarmAt = null;
@@ -354,4 +354,35 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     }),
   }));
   assert.equal(stale.status, 409);
+});
+
+
+test("TeamRuntime owns and serves its season analytics aggregate", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", year = 2026;
+  const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
+    resource.provider === "tba" && resource.endpoint.includes("/events/"));
+  assert.ok(eventResource);
+  storage.values.set("endpoint:" + eventResource.endpoint, {
+    endpoint: eventResource.endpoint,
+    status: "available",
+    data: [],
+    providerData: [],
+    etag: null,
+    lastFetchedAt: Date.now(),
+    expiresAt: null,
+    revision: 1,
+    validatorRevision: 1,
+    lastAttemptAt: Date.now(),
+    lastWebhookAt: null,
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
+  const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.team, 3461);
+  assert.equal(result.year, year);
+  assert.equal(result.eventCount, 0);
+  assert.equal(storage.values.has("team-season-analytics:2026"), true);
 });
