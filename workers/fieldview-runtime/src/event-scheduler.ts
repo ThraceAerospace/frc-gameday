@@ -3,6 +3,7 @@ export {
   TaskScheduler,
   TaskScheduler as EventScheduler,
   classifyEventLifecycle,
+  classifyEventThisWeek,
   eventPollingPolicy,
   DEFAULT_EVENT_POLLING_POLICY,
 } from "./task-scheduler.ts";
