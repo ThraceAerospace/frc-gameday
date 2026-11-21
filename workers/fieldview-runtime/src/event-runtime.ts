@@ -711,15 +711,16 @@ export class EventRuntime {
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const rosterAvailable = Array.isArray(eventStatePublication?.state.teams);
       const expectedTeamCount = eventStatePublication?.state.teams?.length ?? 0;
+      const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
+        total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
       const currentTeamStates = eventStatePublication
         ? await this.readTeamEventStates(eventStatePublication.state, currentSourceRevision)
         : [];
       const materializedTeamCount = currentTeamStates.length;
-      const teamStateCoverageStatus = materializedTeamCount === expectedTeamCount ? "complete" : "partial";
-      const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
-      const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
-        total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
+      const teamStateCoverageStatus = rosterAvailable && materializedTeamCount === expectedTeamCount ? "complete" : "partial";
       const eventStateStatus = !eventStatePublication ? "missing"
         : eventStatePublication.sourceRevision === currentSourceRevision ? eventStatePublication.status : "stale";
       const storedAnalyticsStatus = await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending");
