@@ -1328,6 +1328,7 @@ export class TaskScheduler {
         audit.cursor += batch.length;
         audit.updated_at = Date.now();
         if (audit.cursor >= all.length) audit.status = "completed";
+        else audit.status = "paused";
         await this.storage.put(storageKey, audit);
   }
 
