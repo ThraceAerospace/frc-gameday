@@ -169,31 +169,6 @@ export type TeamInsight = {
 };
 
 
-export type SeasonCohortRecord = {
-  teamNumber: number;
-  event: { key: string; name: string; short_name: string | null; startDate: string };
-  epaTotal: number | null;
-  epaUnitless: number | null;
-  breakdown: Record<string, number>;
-  wins: number | null;
-  losses: number | null;
-  ties: number | null;
-  matches: number | null;
-  fetchedAt: number;
-  status: "ready" | "unavailable";
-};
-
-export type SeasonCohortSnapshot = {
-  state: "queued" | "discovering" | "collecting" | "complete" | "partial";
-  teamCount: number;
-  totalTeamEventRecords: number;
-  processedTeamEventRecords: number;
-  unavailableTeamEventRecords: number;
-  discoveryPendingTeams: number;
-  updatedAt: number;
-  records: SeasonCohortRecord[];
-};
-
 export type TeamSeasonComponentComparison = {
   prior: number;
   current: number;
