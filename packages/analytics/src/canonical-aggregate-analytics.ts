@@ -307,11 +307,7 @@ import type {
 } from "../../domain/src/analytics.ts";
 import type { AnalyticsMatch, AllianceResult, TeamAnalyticsRow, TeamInsight } from "./types.ts";
 import {
-  buildReviewFindings,
   buildTeamInsights,
-  buildQualificationAnalysis,
-  buildQualificationAnomalies,
-  buildPlayoffAnalysis,
   mean,
   standardDeviation,
 } from "./calculations.ts";
@@ -438,18 +434,44 @@ function teamFinding(
  * Calculate event-wide analytics only. TeamRuntime independently calls
  * calculateCanonicalTeamEventStates for its own TeamEventState.
  */
-export function calculateCanonicalAggregateAnalytics(
+export async function calculateCanonicalAggregateAnalytics(
   eventState: FieldViewEventState,
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
-): FieldViewEventState {
-  const findings = buildReviewFindings(records, allianceResults);
-  const qualificationAnalysis = buildQualificationAnalysis(
-    records, records.map((record) => record.match), allianceResults, eventState.event?.playoff_type,
-  );
-  const qualificationAnomalies = buildQualificationAnomalies(records, allianceResults, eventState.event?.playoff_type);
-  const playoffAnalysis = buildPlayoffAnalysis(allianceResults, eventState.playoff_alliances ?? null);
+): Promise<FieldViewEventState> {
+  const engine = createFieldViewAnalyticsEngine();
+  const findings = (await engine.execute({
+    definition_key: "score-residual-review-flag",
+    context: { records, allianceResults },
+    resolved_inputs: { "alliance-residuals": allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]) },
+  })).value as ReturnType<typeof buildReviewFindings>;
+  const qualificationAnalysis = (await engine.execute({
+    definition_key: "qualification-prediction-calibration",
+    context: { records, allEventMatches: records.map((record) => record.match), allianceResults, playoffType: eventState.event?.playoff_type },
+    resolved_inputs: {
+      "red-win-probability": records.flatMap((record) => typeof record.statbotics?.pred?.red_win_prob === "number" ? [record.statbotics.pred.red_win_prob] : []),
+      winner: records.flatMap((record) => record.match.winning_alliance === "red" || record.match.winning_alliance === "blue" ? [record.match.winning_alliance] : []),
+      "score-residuals": allianceResults.flatMap((item) => item.compLevel.toLowerCase() === "qm" && item.residual !== null ? [item.residual] : []),
+    },
+  })).value as ReturnType<typeof buildQualificationAnalysis>;
+  const qualificationAnomalies = (await engine.execute({
+    definition_key: "qualification-residual-anomaly",
+    context: { records, allianceResults, playoffType: eventState.event?.playoff_type },
+    resolved_inputs: {
+      "qualification-residuals": allianceResults.flatMap((item) => item.compLevel.toLowerCase() === "qm" && item.residual !== null ? [item.residual] : []),
+      "red-win-probability": records.flatMap((record) => typeof record.statbotics?.pred?.red_win_prob === "number" ? [record.statbotics.pred.red_win_prob] : []),
+      winner: records.flatMap((record) => record.match.winning_alliance === "red" || record.match.winning_alliance === "blue" ? [record.match.winning_alliance] : []),
+    },
+  })).value as ReturnType<typeof buildQualificationAnomalies>;
+  const playoffAnalysis = (await engine.execute({
+    definition_key: "playoff-alliance-performance",
+    context: { allianceResults, officialAlliances: eventState.playoff_alliances ?? null },
+    resolved_inputs: {
+      "playoff-alliance-results": allianceResults.filter((item) => ["ef", "qf", "sf", "f"].includes(item.compLevel.toLowerCase())),
+      ...(eventState.playoff_alliances ? { "official-rosters": eventState.playoff_alliances } : {}),
+    },
+  })).value as ReturnType<typeof buildPlayoffAnalysis>;
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const residualPopulation = population("event-alliance-sides", allianceResults.length, residuals.length);
   const winChecks = records.flatMap((record) => {
