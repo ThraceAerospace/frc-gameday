@@ -305,7 +305,7 @@ import type {
   FieldViewEventTeamSeasonComparisonInput,
   FieldViewTeamSeasonComparison,
 } from "../../domain/src/analytics.ts";
-import type { AnalyticsMatch, AllianceResult, TeamAnalyticsRow, TeamInsight } from "./types.ts";
+import type { AnalyticsMatch, AllianceResult, TeamAnalyticsRow, TeamInsight, ReviewFinding, QualificationAnalysis, QualificationAnomaly, PlayoffAnalysis } from "./types.ts";
 import {
   buildTeamInsights,
   mean,
@@ -445,7 +445,7 @@ export async function calculateCanonicalAggregateAnalytics(
     definition_key: "score-residual-review-flag",
     context: { records, allianceResults },
     resolved_inputs: { "alliance-residuals": allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]) },
-  })).value as ReturnType<typeof buildReviewFindings>;
+  })).value as ReviewFinding[];
   const qualificationAnalysis = (await engine.execute({
     definition_key: "qualification-prediction-calibration",
     context: { records, allEventMatches: records.map((record) => record.match), allianceResults, playoffType: eventState.event?.playoff_type },
@@ -454,7 +454,7 @@ export async function calculateCanonicalAggregateAnalytics(
       winner: records.flatMap((record) => record.match.winning_alliance === "red" || record.match.winning_alliance === "blue" ? [record.match.winning_alliance] : []),
       "score-residuals": allianceResults.flatMap((item) => item.compLevel.toLowerCase() === "qm" && item.residual !== null ? [item.residual] : []),
     },
-  })).value as ReturnType<typeof buildQualificationAnalysis>;
+  })).value as QualificationAnalysis;
   const qualificationAnomalies = (await engine.execute({
     definition_key: "qualification-residual-anomaly",
     context: { records, allianceResults, playoffType: eventState.event?.playoff_type },
@@ -463,7 +463,7 @@ export async function calculateCanonicalAggregateAnalytics(
       "red-win-probability": records.flatMap((record) => typeof record.statbotics?.pred?.red_win_prob === "number" ? [record.statbotics.pred.red_win_prob] : []),
       winner: records.flatMap((record) => record.match.winning_alliance === "red" || record.match.winning_alliance === "blue" ? [record.match.winning_alliance] : []),
     },
-  })).value as ReturnType<typeof buildQualificationAnomalies>;
+  })).value as QualificationAnomaly[];
   const playoffAnalysis = (await engine.execute({
     definition_key: "playoff-alliance-performance",
     context: { allianceResults, officialAlliances: eventState.playoff_alliances ?? null },
@@ -471,7 +471,7 @@ export async function calculateCanonicalAggregateAnalytics(
       "playoff-alliance-results": allianceResults.filter((item) => ["ef", "qf", "sf", "f"].includes(item.compLevel.toLowerCase())),
       ...(eventState.playoff_alliances ? { "official-rosters": eventState.playoff_alliances } : {}),
     },
-  })).value as ReturnType<typeof buildPlayoffAnalysis>;
+  })).value as PlayoffAnalysis;
   const residuals = allianceResults.flatMap((item) => item.residual === null ? [] : [item.residual]);
   const residualPopulation = population("event-alliance-sides", allianceResults.length, residuals.length);
   const winChecks = records.flatMap((record) => {
