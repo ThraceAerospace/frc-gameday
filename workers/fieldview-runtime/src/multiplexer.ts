@@ -75,7 +75,9 @@ export class Multiplexer {
       if (!isRecord(body) ||
           (body.topic !== "event-state" && body.topic !== "analytics") ||
           typeof body.event_key !== "string" || !EVENT_KEY_PATTERN.test(body.event_key) ||
-          !Number.isSafeInteger(body.version) || (body.version as number) < 0) {
+          !Number.isSafeInteger(body.version) || (body.version as number) < 0 ||
+          (body.data !== undefined && !isRecord(body.data)) ||
+          (body.etag !== undefined && typeof body.etag !== "string")) {
         return Response.json({ error: "Invalid notification" }, { status: 400 });
       }
       const subscription: Subscription = { topic: body.topic, event_key: body.event_key };
@@ -85,6 +87,8 @@ export class Multiplexer {
         topic: body.topic,
         event_key: body.event_key,
         version: body.version,
+        ...(isRecord(body.data) ? { data: body.data } : {}),
+        ...(typeof body.etag === "string" ? { etag: body.etag } : {}),
       });
       const wanted = new Set(clients);
       let delivered = 0;

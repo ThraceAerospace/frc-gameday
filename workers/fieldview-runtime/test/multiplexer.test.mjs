@@ -79,11 +79,15 @@ test("one multiplexer deduplicates upstream event registration and filters per c
   const notify = await mux.fetch(new Request("https://mux/internal/notify", {
     method: "POST",
     headers: { Authorization: "Bearer service-secret", "Content-Type": "application/json" },
-    body: JSON.stringify({ topic: "event-state", event_key: "2026test", version: 7 }),
+    body: JSON.stringify({ topic: "event-state", event_key: "2026test", version: 7,
+      data: { state: { event_key: "2026test", marker: "committed" } },
+      etag: 'W/"event-7"' }),
   }));
   assert.deepEqual(await notify.json(), { delivered: 2 });
   const expected = {
     type: "snapshot.changed", topic: "event-state", event_key: "2026test", version: 7,
+    data: { state: { event_key: "2026test", marker: "committed" } },
+    etag: 'W/"event-7"',
   };
   assert.deepEqual(JSON.parse(first.sent.at(-1)), expected);
   assert.deepEqual(JSON.parse(second.sent.at(-1)), expected);
