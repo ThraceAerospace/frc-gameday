@@ -11,7 +11,8 @@ import type {
 export function calculateFieldViewEventTeamComparisonAnalytics(
   teamStates: FieldViewTeamEventState[],
   expectedTeamCount: number,
-  sourceRevisions: Array<{ team_key: string; revision: number | null }>,
+  teamStateRevisions: Array<{ team_key: string; revision: number | null }>,
+  teamEventStateRevisions: Array<{ team_key: string; revision: number | null }>,
   inputUpdatedAt: number | null,
 ): FieldViewEventTeamComparisonAnalytics {
   const ranked = teamStates.flatMap((teamState) => {
@@ -53,9 +54,7 @@ export function calculateFieldViewEventTeamComparisonAnalytics(
     largest_change: ranked[0] ?? null,
     smallest_change: ranked.at(-1) ?? null,
     mean_change: meanChange,
-    source_revisions: sourceRevisions.map((item) => ({
-      team_key: item.team_key as TeamKey,
-      revision: item.revision,
-    })),
+    team_state_revisions: teamStateRevisions.map((item) => ({ team_key: item.team_key as TeamKey, revision: item.revision })),
+    team_event_state_revisions: teamEventStateRevisions.map((item) => ({ team_key: item.team_key as TeamKey, revision: item.revision })),
   };
 }
