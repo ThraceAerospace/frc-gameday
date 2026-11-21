@@ -41,7 +41,7 @@ The Multiplexer forwards payloads only to clients subscribed to the matching top
 
 ### HTTP validators and recovery
 
-- Canonical event snapshot and analytics reads expose stable ETags derived from their public resource revisions and relevant composition/status revisions.
+- Canonical event snapshots, TeamRuntime team/season snapshots, and analytics reads expose stable ETags derived from their public resource revisions and relevant composition/status revisions.
 - Clients send `If-None-Match` using the validator stored with their cached representation.
 - A matching validator returns `304 Not Modified` without serializing the body or fanning out to TeamRuntime for the composed snapshot.
 - A changed validator returns the current DTO and ETag.
