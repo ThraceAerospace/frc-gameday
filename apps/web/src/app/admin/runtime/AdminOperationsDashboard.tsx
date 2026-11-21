@@ -23,6 +23,17 @@ type EntityState = {
   diagnostics?: Array<{ endpoint: string; http_status: number | null; last_error: string | null }>;
 };
 type Entity = { key: string; status: number; error?: string; state?: EntityState | null };
+type TeamSeedJob = {
+  teamKey: string; year: number; status: "running" | "completed" | "completed_with_errors" | "not_started";
+  stage?: "seed" | "wait" | "events"; eventKeys?: string[]; eventCursor?: number; scheduledEvents?: number;
+  attempts?: number; errors?: Array<{ event_key: string; detail: string; at?: number }>;
+  startedAt?: number; updatedAt?: number;
+};
+type DiscoveryJob = {
+  year: number; mode: "current" | "year"; status: "running" | "completed" | "failed" | "not_started";
+  stage?: string; events?: number; teams?: number; providerRequests?: number; error?: string | null;
+  startedAt?: number; updatedAt?: number;
+};
 type EventTeamSeed = {
   eventKey: string; year: number; status: "running" | "completed" | "completed_with_errors" | "not_started";
   teamKeys?: string[]; cursor?: number; activeTeamKey?: string | null; seededTeams?: number;
@@ -114,6 +125,8 @@ export default function AdminOperationsDashboard() {
   const [cursor, setCursor] = useState(0);
   const [entity, setEntity] = useState<Entity | null>(null);
   const [eventTeamSeed, setEventTeamSeed] = useState<EventTeamSeed | null>(null);
+  const [teamSeedJob, setTeamSeedJob] = useState<TeamSeedJob | null>(null);
+  const [discoveryJob, setDiscoveryJob] = useState<DiscoveryJob | null>(null);
   const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
   const [tab, setTab] = useState<"home" | "events" | "teams" | "system">("home");
   const [loading, setLoading] = useState(false);
@@ -241,6 +254,26 @@ export default function AdminOperationsDashboard() {
     } catch { /* The next dashboard refresh will retry the status read. */ }
   }, [token, requestHeaders]);
 
+  const loadTeamSeedJob = useCallback(async (teamKey: string, teamYear: number) => {
+    if (!token) return;
+    try {
+      const params = new URLSearchParams({ teamSeed: teamKey, year: String(teamYear) });
+      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const body = await response.json();
+      if (response.ok) setTeamSeedJob(body as TeamSeedJob);
+    } catch { /* Keep the most recent durable job state visible. */ }
+  }, [token, requestHeaders]);
+
+  const loadDiscoveryJob = useCallback(async () => {
+    if (!token) return;
+    try {
+      const params = new URLSearchParams({ discoveryJob: String(year), discoveryMode: "current" });
+      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const body = await response.json();
+      if (response.ok) setDiscoveryJob(body as DiscoveryJob);
+    } catch { /* Keep the most recent durable job state visible. */ }
+  }, [token, year, requestHeaders]);
+
   const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string, operationYear?: number) => {
     setBusy(true); setMessage(""); setError("");
     try {
@@ -251,11 +284,13 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
       if (entityKind === "event" && action === "seed-event-teams") setEventTeamSeed(body as EventTeamSeed);
-      await refresh(true);
-      if (entityKind !== "system" && key) await openEntity(entityKind, key, selected?.year ?? year);
+      if (entityKind === "team" && action === "seed" && key) setTeamSeedJob(body as TeamSeedJob);
+      if (entityKind === "system" && action === "scheduler-run") setDiscoveryJob(body as DiscoveryJob);
+      void refresh(true);
+      if (entityKind !== "system" && key) void openEntity(entityKind, key, operationYear ?? selected?.year ?? year);
       const label = action.replaceAll("-", " ");
-      setMessage(["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams"].includes(action)
-        ? label + " queued. The runtime will process this in the background; this view refreshes automatically."
+      setMessage(["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "scheduler-run"].includes(action)
+        ? label + " queued. The scheduler will advance it in the background; you can keep using the dashboard."
         : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
@@ -284,6 +319,20 @@ export default function AdminOperationsDashboard() {
     const timer = window.setInterval(() => void poll(), 5_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [authenticated, selected?.kind, selected?.key, selected?.year, requestHeaders]);
+
+  useEffect(() => {
+    if (!authenticated || selected?.kind !== "team") { setTeamSeedJob(null); return; }
+    void loadTeamSeedJob(selected.key, selected.year);
+    const timer = window.setInterval(() => void loadTeamSeedJob(selected.key, selected.year), 3_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, loadTeamSeedJob]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    void loadDiscoveryJob();
+    const timer = window.setInterval(() => void loadDiscoveryJob(), 3_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, loadDiscoveryJob]);
 
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
@@ -461,6 +510,11 @@ export default function AdminOperationsDashboard() {
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--fv-brand)]">{selected.kind} command center</p><h2 className="mt-1 text-2xl font-bold">{selected.key}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">{resources.length} provider resources · {tasks.length} scheduled tasks · live state refreshes every 5 seconds</p></div><div className="flex flex-wrap gap-2">{isEvent ? <><button disabled={busy} onClick={() => void dispatch("event", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{busy ? "Queueing refresh…" : "Refresh event"}</button><button disabled={busy || eventTeamSeed?.status === "running"} onClick={() => void dispatch("event", "seed-event-teams", selected.key, undefined, selected.year)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{eventTeamSeed?.status === "running" ? "Seeding event teams…" : "Seed all event teams"}</button><button disabled={busy} onClick={() => void dispatch("event", "statbotics-refresh", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{busy ? "Queueing…" : "Refresh Statbotics"}</button><button disabled={busy} onClick={() => void dispatch("event", "recalculate", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{busy ? "Queueing…" : "Recalculate analytics"}</button></> : <><button disabled={busy} onClick={() => void dispatch("team", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{busy ? "Queueing refresh…" : "Refresh team"}</button><button disabled={busy} onClick={() => void dispatch("team", "seed", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{busy ? "Seeding team + events…" : "Seed team + events"}</button></>}</div></div>
       {!entity && <Panel><p className="text-sm text-[var(--fv-muted)]">Loading entity state…</p></Panel>}
       {entity && <><div className="grid gap-3 sm:grid-cols-3"><Panel><p className="text-xs text-[var(--fv-muted)]">Provider resources</p><p className="mt-1 text-2xl font-bold">{resources.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">Scheduled tasks</p><p className="mt-1 text-2xl font-bold">{tasks.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">{isEvent ? "Analytics status" : "Team runtime"}</p><p className={"mt-1 text-lg font-bold " + statusTone(isEvent ? entity.state?.analytics?.status : entity.status === 200 ? "available" : "failed")}>{isEvent ? entity.state?.analytics?.status ?? "not calculated" : entity.status === 200 ? "reachable" : "unavailable"}</p></Panel></div>
+      {!isEvent && teamSeedJob && teamSeedJob.status !== "not_started" && <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Team seed job · {teamSeedJob.year}</h3><span className={"text-sm font-semibold " + statusTone(teamSeedJob.status === "completed" ? "succeeded" : teamSeedJob.status === "completed_with_errors" ? "partial" : "running")}>{teamSeedJob.status.replaceAll("_", " ")}</span></div>
+        <p className="mt-2 text-xs text-[var(--fv-muted)]">Stage: {teamSeedJob.stage ?? "queued"} · Historical events scheduled: {teamSeedJob.scheduledEvents ?? 0} / {teamSeedJob.eventKeys?.length ?? "pending"}</p>
+        {teamSeedJob.errors?.length ? <div className="mt-2 space-y-1 text-xs text-rose-600">{teamSeedJob.errors.slice(-5).map((item, index) => <p key={item.event_key + index}>{item.event_key}: {item.detail}</p>)}</div> : null}
+      </Panel>}
       {isEvent && eventTeamSeed && eventTeamSeed.status !== "not_started" && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Event team seeding</h3><span className={"text-sm font-semibold " + statusTone(eventTeamSeed.status === "completed" ? "succeeded" : eventTeamSeed.status === "completed_with_errors" ? "partial" : "running")}>{eventTeamSeed.status.replaceAll("_", " ")}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-4"><div>Participants: {eventTeamSeed.teamKeys?.length ?? 0}</div><div>Teams seeded: {eventTeamSeed.seededTeams ?? 0}</div><div>Teams failed: {eventTeamSeed.failedTeams ?? 0}</div><div>Historical events scheduled: {eventTeamSeed.historicalEventsScheduled ?? 0}</div></div>{eventTeamSeed.status === "running" && <p className="mt-2 text-xs text-[var(--fv-muted)]">Current team: {eventTeamSeed.activeTeamKey ?? "Preparing"} · {eventTeamSeed.cursor ?? 0} / {eventTeamSeed.teamKeys?.length ?? 0}</p>}{eventTeamSeed.errors?.length ? <div className="mt-2 space-y-1 text-xs text-rose-600">{eventTeamSeed.errors.slice(-5).map((item, index) => <p key={item.team_key + index}>{item.team_key}: {item.detail}</p>)}</div> : null}</Panel>}
       {isEvent && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Canonical EventState</h3><span className={"text-sm font-semibold " + statusTone(entity.state?.event_state?.status)}>{entity.state?.event_state?.status ?? "missing"}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><div>Generated: {time(entity.state?.event_state?.generated_at)}</div><div>Source revision: {entity.state?.event_state?.source_revision ?? "—"}</div></div></Panel>}
       {isEvent && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Canonical EventAnalytics</h3><span className={"text-sm font-semibold " + statusTone(entity.state?.analytics?.status)}>{entity.state?.analytics?.status ?? "not calculated"}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-3"><div>Last calculated: {time(entity.state?.analytics?.last_calculated_at)}</div><div>Source revision: {entity.state?.analytics?.source_revision ?? "—"}</div><div>Season TeamRuntime revision: {entity.state?.analytics?.season_team_revision ?? "—"}</div><div>Next calculation: {time(entity.state?.analytics?.due_at)}</div></div>{entity.state?.analytics?.last_error && <p className="mt-2 text-xs text-rose-600">{entity.state.analytics.last_error}</p>}</Panel>}
@@ -469,7 +523,12 @@ export default function AdminOperationsDashboard() {
       </>}
     </section>}
 
-    {tab === "system" && !selected && <section className="mt-6 grid gap-4 lg:grid-cols-2"><Panel><h2 className="font-bold">Global scheduler</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">Controls routine discovery and event lifecycle polling.</p><p className="mt-3 text-sm">Status: <strong className={overview?.scheduler?.enabled ? "text-emerald-600" : "text-amber-600"}>{overview?.scheduler ? (overview.scheduler.enabled ? "Running" : "Stopped") : "Unavailable"}</strong></p><p className="mt-1 text-xs text-[var(--fv-muted)]">Last run {time(overview?.scheduler?.last_run_at)} · Next alarm {time(overview?.scheduler?.next_alarm_at)}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy || !overview?.scheduler || overview.scheduler.enabled} onClick={() => void dispatch("system", "scheduler-start")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Start</button><button disabled={busy || !overview?.scheduler || !overview.scheduler.enabled} onClick={() => void dispatch("system", "scheduler-stop")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Stop</button><button disabled={busy} onClick={() => void dispatch("system", "scheduler-run")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{busy ? "Running discovery…" : "Run discovery now"}</button></div>{overview?.scheduler?.last_error && <p className="mt-3 text-xs text-rose-600">Events: {overview.scheduler?.last_error}</p>}{overview?.scheduler?.team_discovery_error && <p className="mt-1 text-xs text-rose-600">Teams: {overview.scheduler?.team_discovery_error}</p>}</Panel><Panel><h2 className="font-bold">Realtime multiplexer</h2><p className="mt-2 text-sm">{overview?.multiplexer?.connected_sockets ?? "Unavailable"} sockets · {overview?.multiplexer?.clients ?? 0} clients</p><div className="mt-3 space-y-1 text-xs text-[var(--fv-muted)]">{overview?.multiplexer?.subscriptions?.map((item) => <p key={item.topic}>{item.topic}: {item.clients} clients</p>)}</div></Panel><Panel><h2 className="font-bold">Full-season ingestion</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">A durable, resumable job prepares every season TeamRuntime, then acquires every event resource and publishes EventState and EventAnalytics. Each provider request uses the shared single-flight gate, including normal runtime polling.</p><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Discovered events</p><p className="text-xl font-bold">{coverageAudit?.counts?.events_total ?? "—"}</p></div><div><p className="text-xs text-[var(--fv-muted)]">Discovered teams</p><p className="text-xl font-bold">{coverageAudit?.counts?.teams_total ?? "—"}</p></div><div><p className="text-xs text-[var(--fv-muted)]">Planned resource requests</p><p className="text-xl font-bold">{coverageAudit?.counts ? (coverageAudit.counts.events_total * 13 + coverageAudit.counts.teams_total * 7).toLocaleString() : "—"}</p></div></div><p className="mt-3 text-xs text-[var(--fv-muted)]">Estimate: 13 configured resources per event and 7 per team, before retries. This is a planning estimate only; no provider requests are queued from this page.</p></Panel></section>}
+    {tab === "system" && !selected && <section className="mt-6 grid gap-4 lg:grid-cols-2"><Panel><h2 className="font-bold">Global scheduler</h2>
+      {discoveryJob && discoveryJob.status !== "not_started" && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-xs">
+        <div className="flex items-center justify-between gap-2"><strong>Manual discovery job</strong><span className={statusTone(discoveryJob.status === "completed" ? "succeeded" : discoveryJob.status === "failed" ? "failed" : "running")}>{discoveryJob.status.replaceAll("_", " ")}</span></div>
+        <p className="mt-1 text-[var(--fv-muted)]">Stage: {discoveryJob.stage} · {discoveryJob.events ?? 0} events · {discoveryJob.teams ?? 0} teams · {discoveryJob.providerRequests ?? 0} provider requests</p>
+        {discoveryJob.error && <p className="mt-1 text-rose-600">{discoveryJob.error}</p>}
+      </div>}<p className="mt-1 text-sm text-[var(--fv-muted)]">Controls routine discovery and event lifecycle polling.</p><p className="mt-3 text-sm">Status: <strong className={overview?.scheduler?.enabled ? "text-emerald-600" : "text-amber-600"}>{overview?.scheduler ? (overview.scheduler.enabled ? "Running" : "Stopped") : "Unavailable"}</strong></p><p className="mt-1 text-xs text-[var(--fv-muted)]">Last run {time(overview?.scheduler?.last_run_at)} · Next alarm {time(overview?.scheduler?.next_alarm_at)}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy || !overview?.scheduler || overview.scheduler.enabled} onClick={() => void dispatch("system", "scheduler-start")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Start</button><button disabled={busy || !overview?.scheduler || !overview.scheduler.enabled} onClick={() => void dispatch("system", "scheduler-stop")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Stop</button><button disabled={busy} onClick={() => void dispatch("system", "scheduler-run")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{busy ? "Running discovery…" : "Run discovery now"}</button></div>{overview?.scheduler?.last_error && <p className="mt-3 text-xs text-rose-600">Events: {overview.scheduler?.last_error}</p>}{overview?.scheduler?.team_discovery_error && <p className="mt-1 text-xs text-rose-600">Teams: {overview.scheduler?.team_discovery_error}</p>}</Panel><Panel><h2 className="font-bold">Realtime multiplexer</h2><p className="mt-2 text-sm">{overview?.multiplexer?.connected_sockets ?? "Unavailable"} sockets · {overview?.multiplexer?.clients ?? 0} clients</p><div className="mt-3 space-y-1 text-xs text-[var(--fv-muted)]">{overview?.multiplexer?.subscriptions?.map((item) => <p key={item.topic}>{item.topic}: {item.clients} clients</p>)}</div></Panel><Panel><h2 className="font-bold">Full-season ingestion</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">A durable, resumable job prepares every season TeamRuntime, then acquires every event resource and publishes EventState and EventAnalytics. Each provider request uses the shared single-flight gate, including normal runtime polling.</p><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Discovered events</p><p className="text-xl font-bold">{coverageAudit?.counts?.events_total ?? "—"}</p></div><div><p className="text-xs text-[var(--fv-muted)]">Discovered teams</p><p className="text-xl font-bold">{coverageAudit?.counts?.teams_total ?? "—"}</p></div><div><p className="text-xs text-[var(--fv-muted)]">Planned resource requests</p><p className="text-xl font-bold">{coverageAudit?.counts ? (coverageAudit.counts.events_total * 13 + coverageAudit.counts.teams_total * 7).toLocaleString() : "—"}</p></div></div><p className="mt-3 text-xs text-[var(--fv-muted)]">Estimate: 13 configured resources per event and 7 per team, before retries. This is a planning estimate only; no provider requests are queued from this page.</p></Panel></section>}
 
     <footer className="mt-8 text-xs text-[var(--fv-muted)]">Inventory covers the selected year's discovered event/team snapshot, plus registered runtime objects in the searchable directories. Full-season ingestion is an explicit, previewed operation with durable progress; it does not merge, deploy, or change production routing.</footer>
   </main>;
