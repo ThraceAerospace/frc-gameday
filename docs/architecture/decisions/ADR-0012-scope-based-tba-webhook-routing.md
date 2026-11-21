@@ -85,7 +85,7 @@ Pass the original TBA `message_data` unchanged to runtimes. Do not manufacture E
 The migration branch now implements:
 - Raw-body HMAC validation and SHA-256 webhook identity at Worker ingress.
 - Direct concurrent dispatch to EventRuntime and the deduplicated set of TeamRuntime targets; TaskScheduler registration is not part of webhook ingestion.
-- Direct TeamRuntime handling for already-materialized team-event match projections. Match-score updates clear score-derived analysis/flags while retaining predictions, team associations, and source provenance. Match-video updates preserve those enrichments. A webhook arriving before a projection or match exists is acknowledged without forcing a snapshot/provider fetch; the subsequent canonical event/analytics composition supplies the missing projection.
+- Direct TeamRuntime handling for already-materialized team-event match projections. Match-score updates clear score-derived analysis/flags only when score inputs change, while retaining predictions, team associations, and source provenance. Match-video updates preserve those enrichments. Upcoming-match notifications patch scheduled/predicted timestamps on an existing team match projection. A webhook arriving before a projection or match exists is acknowledged without forcing a snapshot/provider fetch; the subsequent canonical event/analytics composition supplies the missing projection.
 - Normalization of the webhook Match alliance `teams` field to the canonical TBA API `team_keys` field, including merge behavior that preserves alliance fields omitted by partial webhook payloads.
 - Partial dispatch failures return 502 after all targets have been attempted; retries are idempotent for already-updated projections.
 
