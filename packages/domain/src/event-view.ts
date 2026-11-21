@@ -1,20 +1,35 @@
+import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewEventState } from "./event.js";
 import type { FieldViewEventAnalytics } from "./analytics.js";
-import type { TeamKey } from "./ids.js";
-import type { FieldViewTeamEventState } from "./team.js";
 
 /**
- * Composed event product model. The event runtime supplies event-owned state
- * and analytics; TeamRuntime remains authoritative for each team event state.
+ * Logical foreign key to a TeamRuntime-owned event state.
+ *
+ * The team key selects the TeamRuntime Durable Object; event_key selects the
+ * record within that runtime. The revision identifies the state observed by
+ * the event analytics operation. It is not a copy of the referenced record.
+ */
+export interface FieldViewTeamEventStateReference {
+  owner: "team-runtime";
+  owner_id: TeamKey;
+  record_type: "team-event-state";
+  record_id: EventKey;
+  revision: number | null;
+}
+
+/**
+ * Bounded event read projection. It may compose event-owned state and
+ * analytics for a consumer, but it never embeds TeamRuntime-owned canonical
+ * TeamEventState records.
  */
 export interface FieldViewEventView {
-  /** Event-owned canonical state, separate from event analytics and the TeamEventState array. */
+  /** EventRuntime-owned canonical state, separate from event analytics. */
   event: Omit<FieldViewEventState, "analytics">;
-  /** Event-wide analysis calculated by EventRuntime. */
+  /** EventRuntime-owned event-wide analytics. */
   analytics: FieldViewEventAnalytics | null;
-  /** Independently persisted team/event states, one per available roster member. */
-  team_states: FieldViewTeamEventState[];
-  /** Explicit roster coverage; missing teams are never silently treated as complete. */
+  /** Logical references to participant TeamRuntime records. */
+  team_state_refs: FieldViewTeamEventStateReference[];
+  /** Explicit roster coverage; missing teams are never silently complete. */
   team_state_coverage: {
     state: "complete" | "partial";
     expected_count: number;
