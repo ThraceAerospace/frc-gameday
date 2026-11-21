@@ -532,24 +532,6 @@ export class TaskScheduler {
       return Response.json({ year, district_key: key, results }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    if (request.method === "POST" && url.pathname === "/register") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid registration" }, { status: 400 });
-      const value = body as Record<string, unknown>;
-      const kind = value.kind, key = value.key;
-      if ((kind !== "event" && kind !== "team") || typeof key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(key)) {
-        return Response.json({ error: "Invalid registration" }, { status: 400 });
-      }
-      const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const current = await this.storage.get<string[]>(storageKey) ?? [];
-      if (!current.includes(key)) await this.storage.put(storageKey, [...current, key].sort());
-      if (kind === "event") {
-        const runtimeKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-        if (!runtimeKeys.includes(key)) await this.storage.put("registry:runtime-events", [...runtimeKeys, key].sort());
-      }
-      return Response.json({ registered: true });
-    }
-
     if (request.method === "POST" && url.pathname === "/admin/discover-year") {
       const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
       if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
