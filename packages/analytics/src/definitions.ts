@@ -279,6 +279,25 @@ export const FIELDVIEW_ANALYTICS_DEFINITIONS: readonly FieldViewAnalyticsDefinit
     interpretation_rules: ["Counts participation, not completed or scored matches."],
     limitations: ["A match is counted even if its score is not yet final."],
   },
+  {
+    definition_key: "team-event-investigation",
+    version: "1.0.0",
+    name: "Team event investigation",
+    description: "Builds a team-scoped evidence summary from event match, alliance, team, and ranking inputs.",
+    scope: "team",
+    operation_key: "buildTeamInsights",
+    inputs: [
+      { input_key: "match-records", source_path: "FieldViewEventState.matches[]", required: true, description: "Canonical event matches and available Statbotics enrichment.", unit: "matches" },
+      { input_key: "alliance-results", source_path: "FieldViewEventAnalytics.alliance_results[]", required: true, description: "Alliance-side score and prediction evidence.", unit: "alliance results" },
+      { input_key: "team-rows", source_path: "FieldViewEventAnalytics.team_summaries[]", required: true, description: "Event team metrics and coverage.", unit: "team rows" },
+      { input_key: "rankings", source_path: "FieldViewEventState.rankings", required: false, description: "Official event qualification rankings when available.", unit: "rankings" },
+    ],
+    population: { population_key: "event-teams-with-match-evidence", inclusion_rules: ["One investigation result per event team row."], exclusion_rules: ["Teams without a canonical event team row."] },
+    formula: { expression: "summarize team appearances, EPA movement, peer residuals, and review evidence", steps: ["Select matches containing the target team.", "Associate alliance-side prediction and score evidence.", "Compare the team's residual sample with comparable peer alliance samples.", "Produce descriptive summaries and review prompts."] },
+    output_unit: "team investigation",
+    interpretation_rules: ["Findings are evidence-led investigation prompts, not causal attribution."],
+    limitations: ["Peer comparison requires minimum team and peer samples.", "Model EPA changes may reflect shared alliance updates."],
+  },
 ] as const;
 
 export function getAnalyticsDefinition(definitionKey: string): FieldViewAnalyticsDefinition | undefined {
