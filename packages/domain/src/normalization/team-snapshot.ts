@@ -1,12 +1,12 @@
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "@fieldview/provider-statbotics/types";
 import type { FRCColorsTeam } from "@fieldview/provider-frc-colors/types";
-import type { FieldViewTeamSnapshot } from "../team.js";
+import type { FieldViewTeamState } from "../team.js";
 import type { TeamKey } from "../ids.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import { normalizeFieldViewTeam } from "./team.ts";
 
-export interface NormalizeFieldViewTeamSnapshotInput {
+export interface NormalizeFieldViewTeamStateInput {
   team_key: TeamKey;
   year: number;
   sources: FieldViewSourceMetadata;
@@ -20,7 +20,7 @@ export interface NormalizeFieldViewTeamSnapshotInput {
 }
 
 /** Compose team-scoped resources without renaming or rewriting provider fields. */
-export function normalizeFieldViewTeamSnapshot(input: NormalizeFieldViewTeamSnapshotInput): FieldViewTeamSnapshot {
+export function normalizeFieldViewTeamState(input: NormalizeFieldViewTeamStateInput): FieldViewTeamState {
   return {
     team_key: input.team_key,
     year: input.year,
