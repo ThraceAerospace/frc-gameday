@@ -253,7 +253,7 @@ function fmtValue(value: number | null): string { return value === null ? "—" 
 export function buildSeasonAwareTeamInsights(
   records: AnalyticsMatch[], allianceResults: AllianceResult[], teams: TeamAnalyticsRow[],
   rankings: { rankings?: { team_key: string; rank: number; record?: { wins: number; losses: number; ties: number } | null }[] } | null,
-  cohort: import("./types").FieldViewEventTeamSeasonComparisonSnapshot, targetEventKey: string, targetStartDate: string,
+  comparisonInput: import("./types").FieldViewEventTeamSeasonComparisonSnapshot, targetEventKey: string, targetStartDate: string,
   playoffType?: number | null,
 ): import("./types").TeamInsight[] {
   const insights = buildTeamInsights(records, allianceResults, teams, rankings, playoffType);
@@ -269,7 +269,7 @@ export function buildSeasonAwareTeamInsights(
     }
     return null;
   };
-  const valuesForEvent = (eventKey: string) => cohort.records.flatMap((record) =>
+  const valuesForEvent = (eventKey: string) => comparisonInput.records.flatMap((record) =>
     record.event.key === eventKey && record.status === "ready" && finite(record.epaTotal)
       ? [{ teamNumber: record.teamNumber, epa: record.epaTotal }] : [],
   );
@@ -289,10 +289,10 @@ export function buildSeasonAwareTeamInsights(
   // Statbotics record is usable. If that latest event has no usable record,
   // the team is excluded rather than silently falling back to an older event.
   const comparisons = teams.flatMap((team) => {
-    const current = cohort.records.find((record) =>
+    const current = comparisonInput.records.find((record) =>
       record.teamNumber === team.teamNumber && record.event.key === targetEventKey,
     );
-    const prior = cohort.records
+    const prior = comparisonInput.records
       .filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
       .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
     if (!current || current.status !== "ready" || !finite(current.epaTotal) ||
@@ -352,10 +352,10 @@ export function buildSeasonAwareTeamInsights(
   // even if its total-points field is unavailable.
   const rankComponent = (key: keyof typeof componentDefinitions) => {
     const eligible = teams.flatMap((team) => {
-      const current = cohort.records.find((record) =>
+      const current = comparisonInput.records.find((record) =>
         record.teamNumber === team.teamNumber && record.event.key === targetEventKey,
       );
-      const prior = cohort.records
+      const prior = comparisonInput.records
         .filter((record) => record.teamNumber === team.teamNumber && record.event.startDate < targetStartDate)
         .sort((a, b) => b.event.startDate.localeCompare(a.event.startDate))[0];
       if (!current || current.status !== "ready" || !prior || prior.status !== "ready") return [];
@@ -395,7 +395,7 @@ export function buildSeasonAwareTeamInsights(
   }));
 
   return insights.map((insight) => {
-    const history = cohort.records.filter((record) => record.teamNumber === insight.teamNumber)
+    const history = comparisonInput.records.filter((record) => record.teamNumber === insight.teamNumber)
       .sort((a, b) => a.event.startDate.localeCompare(b.event.startDate))
       .map((record) => ({
         event: { key: record.event.key, name: record.event.name, startDate: record.event.startDate },
