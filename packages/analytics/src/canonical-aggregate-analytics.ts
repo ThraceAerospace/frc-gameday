@@ -412,8 +412,6 @@ export function calculateCanonicalAggregateAnalytics(
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
-  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
-  options: { includeTeamAnalytics?: boolean } = {},
 ): FieldViewEventState {
   const teams = (eventState.teams ?? []).map((team) => ({
     key: team.key,
