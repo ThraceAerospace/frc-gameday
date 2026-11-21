@@ -30,8 +30,6 @@ function mergeEventSnapshots(
       ? initial.event_teams : live.event_teams,
     matches: live.matches === undefined ? initial.matches : live.matches,
     playoff_alliances: live.playoff_alliances === undefined ? initial.playoff_alliances : live.playoff_alliances,
-    team_states: live.team_states === undefined || (live.team_states?.length === 0 && (initial.team_states?.length ?? 0) > 0)
-      ? initial.team_states : live.team_states,
     analytics: live.analytics === undefined ? initial.analytics : live.analytics,
     rankings: live.rankings === undefined ? initial.rankings : live.rankings,
     awards: live.awards === undefined ? initial.awards : live.awards,
@@ -68,7 +66,8 @@ export default function EventAnalyticsSurface({
     <EventAnalyticsDashboard
       eventKey={eventKey}
       eventName={eventName}
-      eventState={mergeEventSnapshots(initialSnapshot, liveSnapshot?.snapshot)}
+      eventState={mergeEventSnapshots(initialSnapshot, liveSnapshot?.snapshot.state)}
+      teamStates={liveSnapshot?.snapshot.team_states ?? []}
       analyticsPublication={analyticsPublication}
       websocketStatus={websocketStatus}
       websocketStale={false}
