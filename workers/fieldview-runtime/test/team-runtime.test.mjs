@@ -506,3 +506,57 @@ test("TeamRuntime alarm removes legacy recurring Statbotics tasks before process
   await runtime.alarm();
   assert.equal(storage.values.has("task:" + legacyEndpoint), false);
 });
+
+test("TeamRuntime applies a match webhook to its existing team projection without fetching or replacing enrichments", async () => {
+  const storage = new MemoryStorage();
+  const teamKey = "frc3461", eventKey = "2026test", matchKey = "2026test_qm1";
+  const currentMatch = {
+    key: matchKey,
+    event_key: eventKey,
+    alliances: { red: { team_keys: [teamKey, "frc1", "frc2"], score: 10 }, blue: { team_keys: ["frc3", "frc4", "frc5"], score: 8 } },
+    predictions: { statbotics: { red_win_prob: 0.7 } },
+    teams: { red: [{ team_key: teamKey, opr: 12 }], blue: [] },
+    analysis: { score: { red: { actual: 10 }, blue: { actual: 8 } } },
+    flags: { winner: "red" },
+    sources: { tba_match: { status: "available", retrieved_at: "2026-11-21T00:00:00.000Z" } },
+  };
+  storage.values.set("team-event-state:" + eventKey, {
+    event_key: eventKey, team_key: teamKey,
+    sources: { team: {}, event_team: {}, matches: {} },
+    matches: [currentMatch],
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("webhook handling must not perform provider fetches");
+  }), teamKey);
+  const response = await runtime.fetch(new Request("https://team/webhook", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "X-FieldView-Event-Key": eventKey,
+      "X-FieldView-Webhook-Id": "a".repeat(64),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message_type: "match_score",
+      message_data: {
+        event_key: eventKey,
+        match: {
+          key: matchKey, event_key: eventKey,
+          alliances: { red: { team_keys: [teamKey, "frc1", "frc2"], score: 22 }, blue: { team_keys: ["frc3", "frc4", "frc5"], score: 18 } },
+        },
+      },
+    }),
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.changed, true);
+  const updated = storage.values.get("team-event-state:" + eventKey).matches[0];
+  assert.equal(updated.alliances.red.score, 22);
+  assert.deepEqual(updated.predictions, currentMatch.predictions);
+  assert.deepEqual(updated.teams, currentMatch.teams);
+  assert.deepEqual(updated.sources, currentMatch.sources);
+  assert.equal(updated.analysis, undefined);
+  assert.equal(updated.flags, undefined);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+});
