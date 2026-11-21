@@ -45,6 +45,31 @@ test("TBA webhook ingress verifies raw-body HMAC and routes to the event runtime
   assert.equal(await forwarded.text(), new TextDecoder().decode(raw));
 });
 
+test("TBA webhook ingress resolves event identity from nested event and match payloads", async () => {
+  for (const message_data of [
+    { event: { key: "2026test" } },
+    { match: { event_key: "2026test", key: "2026test_qm1" } },
+  ]) {
+    const raw = new TextEncoder().encode(JSON.stringify({
+      message_type: "match_score",
+      message_data,
+    })).buffer;
+    const signature = await sign("webhook-secret", raw);
+    let forwarded = null;
+    const env = environment(() => async (request) => {
+      forwarded = request;
+      return new Response("accepted", { status: 200 });
+    });
+    const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+      method: "POST",
+      headers: { "X-TBA-HMAC": signature, "Content-Type": "application/json" },
+      body: raw,
+    }), env);
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.headers.get("X-FieldView-Event-Key"), "2026test");
+  }
+});
+
 test("invalid TBA signatures are rejected before Durable Object routing", async () => {
   let called = false;
   const env = environment(() => async () => {
