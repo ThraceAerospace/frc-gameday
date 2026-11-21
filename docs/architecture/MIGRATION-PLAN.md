@@ -388,3 +388,8 @@ The district directory page, district detail page, directory API, district advan
 - Add focused tests for 200/304/404/failure handling, last-good retention, independent resource state, and read-only public routes; validate the full workspace in CI.
 - Audit remaining district consumers and confirm no district route bypasses the canonical snapshot boundary.
 - Continue with TeamRuntime Statbotics TBA-change-triggered refresh policy, then remaining legacy EventState acquisition and analytics publication/recovery.
+
+
+## Runtime ownership update (2026-11-20)
+
+The target architecture uses independent EventRuntime and TeamRuntime Durable Objects. EventRuntime owns event-scoped TBA and Statbotics resources and coordinates with participating TeamRuntimes; it must not persist team-scoped profiles, histories, or statistics. TeamRuntime owns team-scoped TBA and Statbotics resources plus FRC-Colors enrichment, and tracks active event memberships so polling responsiveness increases during competition. Both runtime types retain provider validators and cached representations durably and may issue requests concurrently within one runtime and across runtime instances. No global provider-request lease or mutex may serialize those requests. TaskScheduler replaces EventScheduler as the generic system-wide orchestrator for event discovery, runtime initialization, daily jobs, event-week classification, lifecycle transitions, and maintenance; it does not act as a provider-request proxy for EventRuntime or TeamRuntime.
