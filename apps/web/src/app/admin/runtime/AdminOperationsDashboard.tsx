@@ -288,11 +288,13 @@ export default function AdminOperationsDashboard() {
     return () => window.clearInterval(timer);
   }, [authenticated, seasonIngest?.status, loadSeasonIngest]);
 
+  // A running audit is durable, but advancing it is an explicit operator action.
+  // Poll only its read-only status; never start another batch automatically.
   useEffect(() => {
-    if (!authenticated || coverageAudit?.year !== year || coverageAudit.status !== "running" || busy) return;
-    const timer = window.setTimeout(() => void runCoverageAudit(), 300);
-    return () => window.clearTimeout(timer);
-  }, [authenticated, coverageAudit, year, busy, runCoverageAudit]);
+    if (!authenticated || coverageAudit?.status !== "running") return;
+    const timer = window.setInterval(() => void loadCoverageAudit(), 5_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, coverageAudit?.year, coverageAudit?.status, loadCoverageAudit]);
 
   useEffect(() => {
     if (!authenticated || (tab !== "events" && tab !== "teams")) return;
@@ -321,18 +323,6 @@ export default function AdminOperationsDashboard() {
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
   }, [openEntity, year]);
-
-  const sampled = useMemo(() => {
-    const events = overview?.events ?? [], teams = overview?.teams ?? [];
-    const eventAnalyticsMissing = events.filter((item) => !["succeeded", "partial"].includes(item.state?.analytics?.status ?? "")).length;
-    const eventWithoutSources = events.filter((item) => endpointRows(item.state).length === 0).length;
-    const teamWithoutSources = teams.filter((item) => endpointRows(item.state).length === 0).length;
-    return {
-      events: events.length, teams: teams.length,
-      eventAnalyticsMissing, eventWithoutSources, teamWithoutSources,
-      failed: [...events, ...teams].filter((item) => item.status !== 200).length,
-    };
-  }, [overview]);
 
   const resources = endpointRows(entity?.state);
   const tasks = entity?.state?.polling ?? [];
@@ -363,7 +353,7 @@ export default function AdminOperationsDashboard() {
 
     {tab === "home" && <div className="mt-6 space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[["Registered events", overview?.inventory?.events ?? "—"], ["Registered teams", overview?.inventory?.teams ?? "—"], ["Sampled events without analytics", sampled.eventAnalyticsMissing], ["Runtime errors in sample", sampled.failed]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
+        {[["Registered events", overview?.inventory?.events ?? "—"], ["Registered teams", overview?.inventory?.teams ?? "—"], ["Discovery scheduler", overview?.scheduler?.enabled ? "Running" : overview?.scheduler ? "Stopped" : "Unavailable"], ["Multiplexer clients", overview?.multiplexer?.clients ?? "—"]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
       </div>
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -431,11 +421,7 @@ export default function AdminOperationsDashboard() {
     {(tab === "events" || tab === "teams") && !selected && <section className="mt-6 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{tab === "events" ? "Event directory" : "Team directory"}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Search the full registered inventory and open an individual command center.</p></div><div className="flex flex-wrap gap-2"><label className="flex items-center gap-2 text-xs text-[var(--fv-muted)]">Season <input aria-label="Inventory season year" type="number" min="1992" max={new Date().getUTCFullYear() + 1} value={year} onChange={(event) => setYear(Number(event.target.value))} className="w-24 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><input aria-label="Search inventory" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "events" ? "Search event key…" : "Search team key…"} className="w-64 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-sm" /><button onClick={() => void loadInventory(0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Search</button></div></div>
       <Panel><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{page?.total ?? 0} matching registered {kind}s</p><p className="text-xs text-[var(--fv-muted)]">Season {year} · 50 per page</p></div>{page && !page.discovery_ready && <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 px-3 py-2"><p className="text-xs text-amber-700">No {year} discovery snapshot is cached yet. Results include only previously registered runtime objects.</p><button disabled={busy} onClick={async () => { await dispatch("system", "discover-year", undefined, undefined, year); await loadInventory(0); }} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Discover {year} season</button></div>}<div className="mt-3 divide-y divide-[var(--fv-border)]">{(page?.keys ?? []).map((key) => {
-        const summary = (kind === "event" ? overview?.events : overview?.teams)?.find((item) => item.key === key);
-        const state = summary?.state;
-        const endpointCount = endpointRows(state).length;
-        const analyticsStatus = state?.analytics?.status;
-        return <button key={key} onClick={() => void openEntity(kind, key, year)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-[var(--fv-brand-soft)]/30"><span><strong className="text-sm">{key}</strong><span className="ml-3 text-xs text-[var(--fv-muted)]">{endpointCount} resources{kind === "event" ? " · analytics " + (analyticsStatus ?? "not calculated") : ""}</span></span><span className="text-xs text-[var(--fv-brand)]">Open command center →</span></button>;
+        return <button key={key} onClick={() => void openEntity(kind, key, year)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-[var(--fv-brand-soft)]/30"><span><strong className="text-sm">{key}</strong><span className="ml-3 text-xs text-[var(--fv-muted)]">Open live {kind} state and provider health</span></span><span className="text-xs text-[var(--fv-brand)]">Inspect →</span></button>;
       })}{!page?.keys.length && <p className="py-8 text-center text-sm text-[var(--fv-muted)]">No registered objects match this search.</p>}</div><div className="mt-3 flex items-center justify-between"><button disabled={cursor === 0 || loading} onClick={() => void loadInventory(Math.max(0, cursor - 50))} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs disabled:opacity-40">Previous</button><span className="text-xs text-[var(--fv-muted)]">{page ? page.cursor + 1 : 0}–{Math.min((page?.cursor ?? 0) + 50, page?.total ?? 0)} of {page?.total ?? 0}</span><button disabled={page?.next_cursor == null || loading} onClick={() => void loadInventory(page?.next_cursor ?? 0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs disabled:opacity-40">Next</button></div></Panel>
     </section>}
 
