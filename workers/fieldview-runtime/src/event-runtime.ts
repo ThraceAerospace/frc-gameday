@@ -84,6 +84,8 @@ interface AnalyticsPublication {
   analyticsRevision?: number;
   matches: Array<{ key: string; analysis?: unknown; flags?: unknown }>;
   eventAnalytics?: unknown;
+  /** Revisions of TeamRuntime-owned TeamEventState records consumed by this calculation. */
+  teamStateRevisions: Array<{ team_key: string; revision: number | null }>;
 }
 
 function endpointStorageKey(endpoint: string): string {
@@ -328,6 +330,13 @@ export class EventRuntime {
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
           }
           this.hydratedPublication = publication;
+          // Retire the former duplicated EventView publication and its chunks.
+          // It is no longer a source of truth or a required read model.
+          await this.storage.transaction(async (transaction) => {
+            const legacyChunks = await transaction.list({ prefix: "event-view:publication:v" });
+            for (const key of legacyChunks.keys()) await transaction.delete(key);
+            await transaction.delete("event-view:publication");
+          });
         })
       : Promise.resolve();
   }
