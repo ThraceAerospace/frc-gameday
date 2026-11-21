@@ -334,10 +334,12 @@ export class TeamRuntime {
         excluded_count: comparisonInput.unavailable_team_event_records,
         status: comparisonInput.state === "complete" ? "available" : "partial",
       }];
-      const calculated = await calculateCanonicalTeamEventAnalytics({
-        ...eventState,
-        team_states: [teamEventState],
-      }, this.teamKey as FieldViewTeamEventState["team_key"], analyticsInputs, comparisonInput);
+      const calculated = await calculateCanonicalTeamEventAnalytics(
+        eventState,
+        teamEventState,
+        analyticsInputs,
+        comparisonInput,
+      );
       const result = calculated ?? teamEventState;
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
