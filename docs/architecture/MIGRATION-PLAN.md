@@ -450,3 +450,19 @@ The target architecture uses independent EventRuntime and TeamRuntime Durable Ob
 
 
 ETag retention is indefinite for EventRuntime and TeamRuntime resources. Cache-Control freshness metadata determines when a resource should be revalidated, not when its ETag or last-good representation may be deleted. A 304 response retains the cached representation and validator; a missing representation after a 304 requires an unconditional recovery fetch.
+
+
+## Runtime readiness and read-first publications (2026-11-21)
+
+The next runtime migration slice is governed by ADR-0015: persisted state must be sufficient for immediate readiness after Durable Object activation.
+
+- EventRuntime and TeamRuntime hydrate their own in-memory caches from durable storage on each activation, before handling requests. Hydration must not perform provider I/O or cross-runtime calls.
+- Public reads return the last usable persisted canonical publication immediately, including stale data. Staleness queues idempotent local revalidation and arms the owning runtime; the request never waits for refresh, analytics, or another Durable Object.
+- Failed refreshes preserve the last usable publication. If no publication exists, return an explicit partial/unavailable response promptly while background initialization proceeds.
+- Event/team detail refresh remains lazy. No eager polling of every historical event or team is required.
+- Event views and event analytics are prepared and published asynchronously. Ordinary event GETs must not fan out to all TeamRuntime objects to compose the response.
+- The current season and its durable event index are mandatory system state. TaskScheduler verifies and repairs this index through recurring/startup-recovery discovery; the public current-season event list reads the persisted index and never initiates discovery.
+- Readiness diagnostics must expose durable source coverage, publication version/completeness, activation hydration state, freshness, queued revalidation, and last error. Object existence or Cloudflare hasStoredData is insufficient.
+- Preserve the configured Statbotics testing mirror at `https://api-statbotics.iterativerefinement.com/` while the official service is unavailable.
+
+Implementation order: first make runtime hydration and stale-while-revalidate reads correct; then remove event GET cross-runtime composition; then make current-season discovery self-healing and its event index durable; finally add readiness/timing diagnostics and cold-activation/outage tests. Do not deploy or cut over as part of this branch work.
