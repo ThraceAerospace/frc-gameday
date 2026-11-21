@@ -307,6 +307,16 @@ export class TeamRuntime {
         excluded_count: Math.max(0, (teamState.events?.length ?? 0) - (teamState.statbotics_events?.length ?? 0)),
         status: teamState.events === undefined || teamState.statbotics_events === undefined ? "partial" : "available",
       }, {
+        input_key: "event:" + eventKey + ":event-state",
+        provider: "fieldview",
+        resource: "event-state",
+        source_revision: eventSourceRevision as number,
+        fetched_at: Date.now(),
+        record_count: eventState.matches?.length ?? 0,
+        included_count: teamMatches?.length ?? 0,
+        excluded_count: Math.max(0, (eventState.matches?.length ?? 0) - (teamMatches?.length ?? 0)),
+        status: eventState.matches === undefined ? "partial" : eventState.matches === null ? "unavailable" : "available",
+      }, {
         input_key: "event:" + eventKey + ":comparison-input",
         provider: "fieldview",
         resource: "event-team-season-comparison-input",
