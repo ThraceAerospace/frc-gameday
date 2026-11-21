@@ -506,8 +506,11 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
     lastAttemptAt: Date.now(),
     lastWebhookAt: null,
   });
-  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
   let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    return Response.json([]);
+  }), teamKey);
   const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
