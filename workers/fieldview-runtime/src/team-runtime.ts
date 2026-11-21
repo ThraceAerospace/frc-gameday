@@ -599,19 +599,16 @@ export class TeamRuntime {
         ...resources.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
       await this.enqueueManualPolls(prioritized, year);
-      // Refresh requests only enqueue durable work. The Durable Object alarm
-      // performs provider I/O after this request has returned. Seed remains a
-      // synchronous orchestration primitive for TaskScheduler's cross-runtime
-      // seed workflow.
-      if (url.pathname === "/seed") await this.alarm();
+      // Both refresh and seed only enqueue durable work. TeamRuntime's alarm
+      // owns provider I/O; cross-runtime orchestration must never wait for it.
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
       const taskRegistry = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const providerByEndpoint = new Map([...taskRegistry.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({
         scheduled: true,
-        queued: url.pathname === "/refresh",
-        attempted: url.pathname === "/seed",
+        queued: true,
+        attempted: false,
         team_key: this.teamKey,
         year,
         snapshot,
@@ -621,7 +618,7 @@ export class TeamRuntime {
           http_status: state.lastHttpStatus ?? null,
           last_error: state.lastError ?? null,
         })),
-      }, { status: url.pathname === "/refresh" ? 202 : 200 });
+      }, { status: 202 });
     }
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
       const body: unknown = await request.json().catch(() => null);
@@ -630,7 +627,6 @@ export class TeamRuntime {
       const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
       await this.enqueueManualPolls([resource], year);
-      await this.alarm();
       const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
       return Response.json({ endpoint: resource.endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
     }
