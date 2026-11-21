@@ -1072,7 +1072,7 @@ export class TaskScheduler {
 
   private async processEventTeamSeed(job: EventTeamSeedJob): Promise<void> {
     if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) throw new Error("TeamRuntime and EventRuntime must be bound");
-    if (job.cursor >= job.teamKeys.length) {
+    if (job.stage !== "discover" && job.cursor >= job.teamKeys.length) {
       job.status = job.failedTeams > 0 ? "completed_with_errors" : "completed";
       job.activeTeamKey = null; job.updatedAt = Date.now();
       await this.storage.put(eventTeamSeedKey(job.eventKey), job); return;
