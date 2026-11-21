@@ -814,9 +814,13 @@ export class EventRuntime {
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers });
       }
-      const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
-        ? publication.state.analytics
-        : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
+      const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      const storedAnalytics = analyticsPublication?.sourceRevision === publication.sourceRevision
+        ? analyticsPublication.eventAnalytics as FieldViewEventView["analytics"] | undefined
+        : undefined;
+      const analytics = storedAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+        ? storedAnalytics
+        : storedAnalytics ? { ...storedAnalytics, team_comparison: undefined } : storedAnalytics;
       return Response.json({ ...publication.state, analytics }, { headers });
     }
 
@@ -849,18 +853,19 @@ export class EventRuntime {
         : null;
       const expected = (publication.state.teams ?? []).map((team) => team.key);
       const teamStateRevisions = analyticsIsCurrent ? analyticsPublication?.teamStateRevisions ?? [] : [];
-      const teamStateRefs: FieldViewEventView["team_state_refs"] = teamStateRevisions.map((item) => ({
+      const teamRevisionsByKey = new Map(teamStateRevisions.map((item) => [item.team_key, item.revision]));
+      const teamStateRefs: FieldViewEventView["team_state_refs"] = expected.map((teamKey) => ({
         owner: "team-runtime",
-        owner_id: item.team_key as FieldViewEventView["team_state_refs"][number]["owner_id"],
+        owner_id: teamKey as FieldViewEventView["team_state_refs"][number]["owner_id"],
         record_type: "team-event-state",
         record_id: this.eventKey as FieldViewEventView["team_state_refs"][number]["record_id"],
-        revision: item.revision,
+        revision: teamRevisionsByKey.get(teamKey) ?? null,
       }));
-      const availableTeamKeys = new Set(teamStateRefs.map((item) => item.owner_id));
-      const pendingTeamKeys = expected.filter((teamKey) => !availableTeamKeys.has(teamKey));
+      const pendingTeamKeys = teamStateRefs.filter((item) => item.revision === null).map((item) => item.owner_id);
+      const materializedTeamCount = teamStateRefs.length - pendingTeamKeys.length;
       const analyticsStatus = await this.storage.get<string>("analytics:status");
       const teamStatesComplete = analyticsIsCurrent && analyticsStatus === "succeeded" &&
-        expected.length === teamStateRefs.length;
+        expected.length === materializedTeamCount;
       const view: FieldViewEventView = {
         event: Object.fromEntries(Object.entries(publication.state)
           .filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
@@ -870,7 +875,7 @@ export class EventRuntime {
           state: teamStatesComplete || (expected.length === 0 && Array.isArray(publication.state.teams))
             ? "complete" : "partial",
           expected_count: expected.length,
-          materialized_count: teamStateRefs.length,
+          materialized_count: materializedTeamCount,
           pending_team_keys: pendingTeamKeys,
         },
       };
