@@ -325,9 +325,9 @@ export function buildSeasonAwareTeamInsights(
       currentEPA: current.epaTotal,
       currentEpaPercentile: percentile(currentEventEPAValues, current.epaTotal),
       priorEpaRank: priorEpaStanding.rank,
-      priorEpaCohortSize: priorEpaStanding.size,
+      priorEpaComparisonSize: priorEpaStanding.size,
       currentEpaRank: currentEpaStanding.rank,
-      currentEpaCohortSize: currentEpaStanding.size,
+      currentEpaComparisonSize: currentEpaStanding.size,
       change: current.epaTotal - prior.epaTotal,
       components,
     }];
@@ -341,8 +341,8 @@ export function buildSeasonAwareTeamInsights(
     return new Map(eligible.map((item) => [
       item.teamNumber,
       {
-        cohortRank: 1 + eligible.filter((other) => other.change > item.change).length,
-        cohortSize: eligible.length,
+        comparisonRank: 1 + eligible.filter((other) => other.change > item.change).length,
+        comparisonSize: eligible.length,
       },
     ]));
   };
@@ -366,8 +366,8 @@ export function buildSeasonAwareTeamInsights(
     return new Map(eligible.map((item) => [
       item.teamNumber,
       {
-        cohortRank: 1 + eligible.filter((other) => other.change > item.change).length,
-        cohortSize: eligible.length,
+        comparisonRank: 1 + eligible.filter((other) => other.change > item.change).length,
+        comparisonSize: eligible.length,
       },
     ]));
   };
@@ -412,7 +412,7 @@ export function buildSeasonAwareTeamInsights(
       seasonComparison: comparison,
       seasonHistory: history,
       summary: [...insight.summary,
-        `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change >= 0 ? "increased" : "decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ranked ${comparison.cohortRank}${ordinal(comparison.cohortRank)} among ${comparison.cohortSize} event teams with usable current and most-recent-prior-event records.`],
+        `Compared with ${comparison.priorEvent.name}, event EPA ${comparison.change >= 0 ? "increased" : "decreased"} by ${Math.abs(comparison.change).toFixed(1)} points; ranked ${comparison.comparisonRank}${ordinal(comparison.comparisonRank)} among ${comparison.comparisonSize} event teams with usable current and most-recent-prior-event records.`],
     };
   });
 }
