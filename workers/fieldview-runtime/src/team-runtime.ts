@@ -16,6 +16,9 @@ import type { FieldViewEventState } from "../../../packages/domain/src/event.ts"
 import type { FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
 import type { FieldViewEventTeamSeasonComparisonInput, FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
 import { calculateCanonicalTeamEventAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
+import { buildSeasonDiagnostics } from "../../../packages/analytics/src/season-diagnostics.ts";
+import type { SeasonMatchEvidence } from "../../../packages/analytics/src/season-diagnostics.ts";
+import type { FieldViewTeamEventAnalytics } from "../../../packages/domain/src/analytics.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
@@ -200,7 +203,8 @@ export class TeamRuntime {
     const admin = Boolean(this.env.RUNTIME_ADMIN_TOKEN) && request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" && url.pathname === "/snapshot";
     const publicEventStateRead = request.method === "GET" && url.pathname === "/event-state";
-    if (!admin && !publicRead && !publicEventStateRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
+    if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
@@ -224,6 +228,9 @@ export class TeamRuntime {
         await this.enqueueManualPolls(needed, year);
       }
       return initializedState;
+    }
+    if (publicSeasonAnalyticsRead) {
+      return this.buildSeasonAnalyticsResponse(year);
     }
     if (publicEventStateRead) {
       const eventKey = url.searchParams.get("event_key") ?? "";
@@ -450,6 +457,83 @@ export class TeamRuntime {
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
+  private async buildSeasonAnalyticsResponse(year: number): Promise<Response> {
+    const teamState = await this.snapshot(year).then((response) => response.json()) as ReturnType<typeof normalizeFieldViewTeamState>;
+    if (teamState.events === undefined || teamState.events === null) {
+      return Response.json({ error: "Team season event list is still being acquired" }, { status: 503 });
+    }
+    const events = teamState.events
+      .filter((event) => event.event_type !== 99 && event.event_type !== 100)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const teamSourceRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+    const eventRevisions = Object.fromEntries(await Promise.all(events.map(async (event) => [
+      event.key,
+      await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + event.key) ?? 0,
+    ] as const)));
+    const cacheKey = "team-season-analytics:" + year;
+    const cached = await this.storage.get<{
+      team_source_revision: number;
+      event_revisions: Record<string, number>;
+      response: Record<string, unknown>;
+    }>(cacheKey);
+    if (cached && cached.team_source_revision === teamSourceRevision &&
+        JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions)) {
+      return Response.json(cached.response, {
+        headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
+      });
+    }
+
+    const eventResults = await Promise.all(events.map(async (event) => {
+      const eventState = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + event.key);
+      const inputs = await this.storage.get<{ team_source_revision: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
+      const current = Boolean(eventState?.analytics && inputs?.team_source_revision === teamSourceRevision);
+      const analytics = current ? eventState!.analytics as FieldViewTeamEventAnalytics : null;
+      return {
+        event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
+        status: current ? "ready" as const : "pending" as const,
+        analytics,
+      };
+    }));
+    const seasonEvidence: SeasonMatchEvidence[] = eventResults.flatMap((entry) =>
+      (entry.analytics?.match_evidence ?? []).map((match) => ({ ...match, event: entry.event })),
+    );
+    const diagnostics = buildSeasonDiagnostics(seasonEvidence);
+    const ready = eventResults.filter((entry) => entry.analytics !== null);
+    const completedMatches = ready.reduce((sum, entry) =>
+      sum + (entry.analytics?.performance?.completed_matches ?? 0), 0);
+    const matchesSeen = ready.reduce((sum, entry) =>
+      sum + (entry.analytics?.performance?.matches_seen ?? 0), 0);
+    const result = {
+      team: Number(this.teamKey.replace(/^frc/i, "")),
+      year,
+      eventCount: events.length,
+      analyzedEventCount: ready.length,
+      matchCount: completedMatches,
+      matchesSeen,
+      events: eventResults,
+      summary: diagnostics.overall,
+      phaseSummaries: diagnostics.phaseSummaries,
+      eliminationShift: diagnostics.eliminationShift,
+      residualPattern: diagnostics.residualPattern,
+      anomalySummary: diagnostics.anomalySummary,
+      anomalies: diagnostics.anomalies,
+      collection: {
+        state: ready.length === events.length ? "complete" : ready.length > 0 ? "partial" : "pending",
+        analyzedEvents: ready.length,
+        totalEvents: events.length,
+        updatedAt: Date.now(),
+      },
+    };
+    await this.storage.put(cacheKey, {
+      team_source_revision: teamSourceRevision,
+      event_revisions: eventRevisions,
+      response: result,
+    });
+    return Response.json(result, {
+      headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
+    });
+  }
+
   private async snapshot(year: number): Promise<Response> {
     const states = await Promise.all(this.endpoints(year).map(({ endpoint }) => this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
     const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = states, now = Date.now();
