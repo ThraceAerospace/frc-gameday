@@ -254,7 +254,6 @@ export class TeamRuntime {
       const year = Number(eventKey.slice(0, 4));
       const teamStateResponse = await this.snapshot(year);
       const teamState = await teamStateResponse.json() as ReturnType<typeof normalizeFieldViewTeamState>;
-      const teamNumber = Number(this.teamKey.replace(/^frc/i, ""));
       const eventTeam = eventState.event_teams?.find((item) => item.team_key === this.teamKey) ?? null;
       if (!eventState.teams?.some((item) => item.key === this.teamKey)) {
         return Response.json({ error: "Team is not in the supplied event roster" }, { status: 409 });
@@ -304,6 +303,13 @@ export class TeamRuntime {
       const result = calculated ?? teamEventState;
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
+      const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; cohort_updated_at: number }>(stateKey + ":inputs");
+      if (priorInputs && (eventSourceRevision as number) < priorInputs.event_source_revision) {
+        return Response.json({ error: "Stale event analytics input" }, { status: 409 });
+      }
+      if ((await this.storage.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) {
+        return Response.json({ error: "Team season state changed during calculation" }, { status: 409 });
+      }
       const prior = await this.storage.get<FieldViewTeamEventState>(stateKey);
       if (prior && JSON.stringify(prior) === JSON.stringify(result)) {
         return Response.json({ team_key: this.teamKey, event_key: eventKey, changed: false,
@@ -512,7 +518,7 @@ export class TeamRuntime {
     const persisted = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
     const active = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
     const eventKeys = new Set<string>([
-      ...[...persisted.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length)),
+      ...[...persisted.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length)).filter((key) => /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(key)),
       ...Object.entries(active).filter(([, membership]) => membership.year === year).map(([eventKey]) => eventKey),
     ]);
     const relevant = [...eventKeys].filter((eventKey) => Number(eventKey.slice(0, 4)) === year);
