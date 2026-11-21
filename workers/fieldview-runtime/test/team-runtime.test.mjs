@@ -67,6 +67,48 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(snapshot.media.length, 0);
 });
 
+test("TeamRuntime serves a cached canonical TeamState until provider inputs change", async () => {
+  const storage = new MemoryStorage();
+  let profileVersion = 1;
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    if (String(url).endsWith("/team/frc3461")) {
+      return Response.json({ key: "frc3461", team_number: 3461, nickname: "Version " + profileVersion });
+    }
+    return Response.json([]);
+  }), "frc3461");
+  const ingest = () => runtime.fetch(new Request("https://team/ingest-resource?year=2026", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": "frc3461",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoint: "/team/frc3461" }),
+  }));
+  const read = () => runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+
+  await ingest();
+  const first = await (await read()).json();
+  const publicationKey = "team-state:2026:publication";
+  const firstPublication = storage.values.get(publicationKey);
+  assert.equal(first.team.nickname, "Version 1");
+  assert.ok(firstPublication, "the generated TeamState is durably published");
+
+  const repeated = await (await read()).json();
+  assert.deepEqual(repeated, first);
+  assert.strictEqual(storage.values.get(publicationKey), firstPublication,
+    "an unchanged input set must reuse the exact persisted publication");
+
+  profileVersion = 2;
+  await ingest();
+  const updated = await (await read()).json();
+  assert.equal(updated.team.nickname, "Version 2");
+  assert.notStrictEqual(storage.values.get(publicationKey), firstPublication,
+    "a changed provider representation must atomically replace the published TeamState");
+});
+
 test("TeamRuntime retains last-good data and marks a failed refresh stale", async () => {
   const storage = new MemoryStorage(); let fail = false;
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
