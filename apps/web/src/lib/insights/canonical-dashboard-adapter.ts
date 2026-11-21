@@ -191,7 +191,6 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
   );
   const qualification = analytics.qualification;
   const prediction = analytics.prediction_summary ?? qualification?.score_prediction;
-  const cohort = analytics.season_cohort;
   // Older publications may not include collection counters. Reconcile them
   // against the match-level analysis that is actually being rendered.
   const publishedProcessedMatchCount = matches.filter(({ match }) =>
@@ -374,25 +373,6 @@ function mapEventAnalytics(analytics: FieldViewEventAnalytics, snapshot: FieldVi
       })),
     } : undefined,
     teamInsights: mapTeamAnalytics(snapshot, publication),
-      state: cohort.state,
-      teamCount: cohort.team_count,
-      totalTeamEventRecords: cohort.total_team_event_records,
-      processedTeamEventRecords: cohort.processed_team_event_records,
-      unavailableTeamEventRecords: cohort.unavailable_team_event_records,
-      discoveryPendingTeams: cohort.discovery_pending_teams,
-      updatedAt: cohort.updated_at,
-      records: cohort.records.map((item) => ({
-        teamNumber: item.team_number,
-        event: {
-          key: item.event.event_key, name: item.event.event_name,
-          short_name: item.event.short_name, startDate: item.event.start_date,
-        },
-        epaTotal: item.epa_total, epaUnitless: item.epa_unitless,
-        breakdown: item.breakdown, wins: item.wins, losses: item.losses,
-        ties: item.ties, matches: item.match_count, fetchedAt: item.fetched_at,
-        status: item.status,
-      })),
-    } : undefined,
     matchCount: snapshot.matches?.length ?? 0,
     loadedMatchCount: matches.length,
     offset: 0,
