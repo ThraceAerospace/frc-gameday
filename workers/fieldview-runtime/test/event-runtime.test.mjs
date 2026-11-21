@@ -240,7 +240,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   const initialPublication = storage.values.get("event-state:publication");
   assert.equal(initialPublication.snapshotVersion, 1);
   assert.equal(initialPublication.sourceRevision, 1);
-  assert.equal(initialPublication.state.tba_matches[0].alliances.red.score, 10);
+  assert.equal(initialPublication.state.matches[0].alliances.red.score, 10);
   assert.equal(publicationWrites, 1);
 
   const webhook = {
@@ -288,7 +288,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.notEqual(updatedPublication, initialPublication);
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
-  assert.equal(updatedPublication.state.tba_matches[0].alliances.red.score, 20);
+  assert.equal(updatedPublication.state.matches[0].alliances.red.score, 20);
   assert.equal(publicationWrites, 2);
 
   const repeatedResponse = await runtime.fetch(snapshotRequest());
