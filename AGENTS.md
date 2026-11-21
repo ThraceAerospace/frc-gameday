@@ -12,7 +12,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Frontend: retain Next.js.
 - Migration: incremental, with temporary compatibility adapters where necessary.
 - Backend: hybrid Cloudflare Workers and Durable Objects.
-- Initial authoritative runtime candidate: one EventRuntime per event. Do not create one Durable Object per domain interface.
+- Runtime ownership: one EventRuntime per event and one TeamRuntime per team. EventRuntime owns event-scoped provider data only; TeamRuntime owns team-scoped TBA, Statbotics, and FRC-Colors data. TaskScheduler owns system-wide scheduled jobs and runtime lifecycle orchestration.
 - Domain and analytics packages must be reusable independently of Next.js and Cloudflare. The domain may use provider packages as type-only dependencies for unchanged provider-sourced fields; it must not depend on provider clients or transport at runtime.
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
@@ -85,9 +85,9 @@ Canonical domain concepts include:
 
 A domain object is data; a runtime is machinery that acquires, reconciles, persists, and publishes data. Do not create a Durable Object for every interface or DTO.
 
-Start with an event-scoped EventRuntime only when its state ownership and lifecycle are explicitly defined. Keep its implementation modular internally. Add TeamRuntime, AnalyticsRuntime, or other runtimes only when independent lifecycle, coordination, or consistency requirements justify them. Classes inside one Durable Object are not independently concurrent runtimes.
+Use one event-scoped EventRuntime per event and one team-scoped TeamRuntime per team. EventRuntime must not persist team-scoped profiles, histories, or statistics; it coordinates with TeamRuntimes for participating-team data. TeamRuntime is authoritative for team-scoped provider data and tracks every event in which its team is actively competing. TaskScheduler is a generic system orchestrator for discovery, runtime initialization, daily jobs, lifecycle transitions, and maintenance; it does not proxy provider requests for runtimes.
 
-Maintain one authoritative writer for each state resource. Avoid permanent dual writes and two runtimes polling the same authoritative endpoint. Publish versioned snapshots or changes with explicit ordering/reconnect semantics; do not make clients reconstruct authoritative state from incidental provider events.
+Maintain one authoritative writer for each state resource. EventRuntime owns event-scoped TBA/Statbotics resources; TeamRuntime owns team-scoped TBA/Statbotics/FRC-Colors resources. Do not duplicate team-scoped provider data in EventRuntime or event-scoped provider data in TeamRuntime. Both runtime types issue provider requests directly and may execute requests concurrently within and across Durable Objects; do not add a global provider-request lease, mutex, or serialized queue. Publish versioned snapshots or changes with explicit ordering/reconnect semantics; do not make clients reconstruct authoritative state from incidental provider events.
 
 For event-team status, preserve the distinction between match freshness and team-status freshness. The TBA full-event status dataset is a coherent source for event team status; targeted refresh versus periodic full reconciliation remains a documented design decision until endpoint availability/cost and invalidation behavior are verified. Successful explicit null clears; failed fetches do not clear prior valid state. Derive user-facing summaries from structured normalized fields rather than provider HTML strings.
 
