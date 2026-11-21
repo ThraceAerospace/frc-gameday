@@ -354,7 +354,7 @@ export class EventRuntime {
     const requested = request.headers.get("X-FieldView-Event-Key");
     const stored = await this.storage.get<string>("event-key");
     const eventKey = stored ?? this.eventKey;
-    if (!eventKey || !/^[a-zA-Z0-9_-]+$/.test(eventKey) || (requested && requested !== eventKey)) return false;
+    if (!requested || !eventKey || !/^[a-zA-Z0-9_-]+$/.test(eventKey) || requested !== eventKey) return false;
     if (this.eventKey && this.eventKey !== eventKey) return false;
     this.eventKey = eventKey;
     this.allowedEndpoints = new Set(eventResourceEndpoints(eventKey));
