@@ -41,7 +41,85 @@ export type CanonicalAnalyticsPublication = {
   etag?: string;
 };
 type AnalyticsHandler = (value: CanonicalAnalyticsPublication) => void;
-type SnapshotHandler = (value: CanonicalSnapshot) => void;
+type SnapshotHandler = (value: CanonicalSnapshot) => void; 
+
+type PersistedRuntimeResource = {
+  key: string;
+  schemaVersion: 1;
+  value: unknown;
+  etag: string | null;
+};
+
+const RUNTIME_CACHE_DB = "fieldview-runtime-cache";
+const RUNTIME_CACHE_STORE = "resources";
+let runtimeCacheDatabase: Promise<IDBDatabase | null> | null = null;
+
+function openRuntimeCache(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  if (runtimeCacheDatabase) return runtimeCacheDatabase;
+  runtimeCacheDatabase = new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(RUNTIME_CACHE_DB, 1);
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains(RUNTIME_CACHE_STORE)) {
+          database.createObjectStore(RUNTIME_CACHE_STORE, { keyPath: "key" });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+      request.onblocked = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return runtimeCacheDatabase;
+}
+
+async function readPersistedResource(key: string): Promise<PersistedRuntimeResource | null> {
+  const database = await openRuntimeCache();
+  if (!database) return null;
+  return new Promise((resolve) => {
+    try {
+      const request = database.transaction(RUNTIME_CACHE_STORE, "readonly")
+        .objectStore(RUNTIME_CACHE_STORE).get(key);
+      request.onsuccess = () => {
+        const value = request.result as PersistedRuntimeResource | undefined;
+        resolve(value?.schemaVersion === 1 ? value : null);
+      };
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function persistRuntimeResource(
+  key: string,
+  value: unknown,
+  etag: string | undefined,
+): Promise<void> {
+  const database = await openRuntimeCache();
+  if (!database) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const transaction = database.transaction(RUNTIME_CACHE_STORE, "readwrite");
+      transaction.objectStore(RUNTIME_CACHE_STORE).put({
+        key, schemaVersion: 1, value, etag: etag ?? null,
+      } satisfies PersistedRuntimeResource);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+      transaction.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 
 class WorkerEventWebSocket implements EventRealtimeTransport {
   private socket: WebSocket | null = null;
