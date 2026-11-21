@@ -43,12 +43,12 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(first.status, 200); assert.equal(calls.length, 0, "snapshot reads must not run provider I/O inline");
   assert.equal((await first.json()).team_key, teamKey);
   assert.equal(storage.values.get("team-state:2026")?.team_key, teamKey, "the partial canonical TeamState is persisted before provider acquisition");
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 7);
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
+  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, 5, "only TBA and FRC Colors resources receive recurring tasks");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "initial public reads do not schedule recurring Statbotics acquisition");
   assert.ok(storage.alarmAt !== null);
   const repeated = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   assert.equal(repeated.status, 200);
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7, "repeated reads should coalesce queued work");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 5, "repeated reads should coalesce queued work");
 
   await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
@@ -191,8 +191,8 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
   assert.equal(providers.get("/team/frc2485/districts"), "tba");
   assert.equal(providers.get("/team/frc2485/events/2026"), "tba");
   assert.equal(providers.get("/team/frc2485/media/2026"), "tba");
-  assert.equal(providers.get("/team_year/2485/2026"), "statbotics");
-  assert.equal(providers.get("/team_events?team=2485&year=2026&limit=1000&offset=0"), "statbotics");
+  assert.equal(providers.has("/team_year/2485/2026"), false, "Statbotics team-year data is not periodically polled");
+  assert.equal(providers.has("/team_events?team=2485&year=2026&limit=1000&offset=0"), false, "Statbotics team-event data is not periodically polled");
   assert.equal(providers.get("/team/2485"), "frc-colors");
 
   assert.ok(calls.some((url) => url.includes("thebluealliance.com") && url.endsWith("/team/frc2485")));
@@ -397,4 +397,32 @@ test("TeamRuntime always creates the current-season TeamState when first reached
   assert.equal(response.status, 200);
   assert.equal(storage.values.get("team-state:" + currentYear)?.year, currentYear);
   assert.equal(storage.values.get("team-state:" + historicalYear)?.year, historicalYear);
+});
+
+
+test("TeamRuntime refreshes Statbotics team-year and team-event resources after changed TBA team history", async () => {
+  const storage = new MemoryStorage(), calls = [], teamKey = "frc3461";
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/team/frc3461")) {
+      return Response.json({ key: teamKey, team_number: 3461, nickname: "Updated Team" }, { headers: { ETag: '"team-v2"' } });
+    }
+    if (String(url).endsWith("/team/frc3461/events/2026")) {
+      return Response.json([{ key: "2026test" }], { headers: { ETag: '"events-v2"' } });
+    }
+    return Response.json([]);
+  }), teamKey);
+
+  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  const scheduled = [...storage.values.keys()].filter((key) => key.startsWith("task:"));
+  assert.equal(scheduled.some((key) => key.includes("/team_year/")), false);
+  assert.equal(scheduled.some((key) => key.includes("/team_events?")), false);
+
+  await drainManualQueue(runtime, storage);
+  assert.ok(calls.some((url) => url.includes("/team_year/3461/2026")), "a changed TBA team record triggers Statbotics team-year acquisition");
+  assert.ok(calls.some((url) => url.includes("/team_events?team=3461&year=2026")), "a changed TBA event history triggers Statbotics team-event acquisition");
+  const polling = [...storage.values.entries()].filter(([key]) => key.startsWith("task:"));
+  assert.ok(polling.every(([key]) => !key.includes("/team_year/") && !key.includes("/team_events?")), "Statbotics resources remain event-driven after acquisition");
 });
