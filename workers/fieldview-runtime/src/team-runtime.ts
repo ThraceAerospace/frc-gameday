@@ -40,6 +40,13 @@ const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
 
+function isStatboticsRefreshTrigger(resource: TeamResource): boolean {
+  return resource.provider === "tba" && (
+    /^\\/team\\/[^/]+$/.test(resource.endpoint) ||
+    /^\\/team\\/[^/]+\\/events\\/\\d{4}$/.test(resource.endpoint)
+  );
+}
+
 
 export function teamResourceEndpoints(teamKey: string, year: number): TeamResource[] {
   const providerTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
@@ -180,7 +187,7 @@ export class TeamRuntime {
           await tx.delete(key);
         }
       }
-      for (const resource of this.endpoints(year)) {
+      for (const resource of this.endpoints(year).filter((item) => item.provider !== "statbotics")) {
         const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         // Resource registration must never advance an existing recurring fetch.
@@ -226,6 +233,10 @@ export class TeamRuntime {
         this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
       const now = Date.now();
       const needed = resources.filter((resource, index) => {
+        // Statbotics team-year/team-event data is event-driven, not a recurring
+        // profile poll. A meaningful TBA team or season-event-list change below
+        // queues a bounded refresh while explicit seed/refresh remains available.
+        if (resource.provider === "statbotics") return false;
         const state = states[index];
         return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
           (state.expiresAt !== null && state.expiresAt <= now);
@@ -400,7 +411,7 @@ export class TeamRuntime {
       const expectedInterval = Object.keys(activeEvents).length > 0 ? this.activeRefreshIntervalMs() : this.refreshIntervalMs();
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const scheduleMissingOrOutdated = [...years].some((activeYear) =>
-        this.endpoints(activeYear).some((resource) => {
+        this.endpoints(activeYear).filter((resource) => resource.provider !== "statbotics").some((resource) => {
           const task = tasks.get(taskKey(resource.endpoint));
           return !task || task.intervalMs !== expectedInterval;
         }),
@@ -741,7 +752,12 @@ export class TeamRuntime {
     await Promise.all(due.manualDue.map(async (item) => {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) return;
+      const previous = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
       const result = await this.pollResourceNow(resource);
+      const current = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
+      if (result.status !== "failed" && current?.revision !== previous?.revision && isStatboticsRefreshTrigger(resource)) {
+        await this.enqueueManualPolls(this.endpoints(item.year).filter((candidate) => candidate.provider === "statbotics"), item.year);
+      }
       const retryableFailure = result.status === "failed";
       const retryAt = Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
       await this.storage.transaction(async (tx) => {
@@ -778,7 +794,7 @@ export class TeamRuntime {
       } catch (error) {
         result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
       }
-      const changed = await this.storage.transaction(async (tx) => {
+      const outcome = await this.storage.transaction(async (tx) => {
         const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
         const next = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
         await tx.put(key, {
@@ -786,16 +802,21 @@ export class TeamRuntime {
           lastHttpStatus: "httpStatus" in result ? result.httpStatus : result.status === "modified" ? 200 : latest.lastHttpStatus ?? null,
           lastError: "error" in result ? result.error : null,
         });
-        if (next.revision !== latest.revision) {
+        const revisionChanged = next.revision !== latest.revision;
+        if (revisionChanged) {
           await tx.put("snapshot-revision", (await tx.get<number>("snapshot-revision") ?? 0) + 1);
         }
-        return result.status === "failed";
+        return { failed: result.status === "failed", revisionChanged };
       });
       const key = taskKey(task.endpoint), current = await this.storage.get<TeamPollTask>(key);
       if (current) {
-        await this.storage.put(key, changed
+        await this.storage.put(key, outcome.failed
           ? { ...current, dueAt: Date.now() + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))), attempts: task.attempts }
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
+      }
+      if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
+        const year = Number(task.endpoint.match(/\\/events\\/(\\d{4})$/)?.[1] ?? new Date().getUTCFullYear());
+        await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year);
       }
     }));
     const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
