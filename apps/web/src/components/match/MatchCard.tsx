@@ -85,6 +85,16 @@ export default function MatchCard({
   const matchFlagTitle = matchLevelFlags.join(", ");
   const redFlagTitle = redAllianceFlags.map((flag) => flag.type).join(", ");
   const blueFlagTitle = blueAllianceFlags.map((flag) => flag.type).join(", ");
+  const redTeamTextLength = red.map(formatTeamNumber).join(" ").length;
+  const blueTeamTextLength = blue.map(formatTeamNumber).join(" ").length;
+  const redTeamFontSize = Math.min(
+    12,
+    (116 - (redAllianceFlags.length > 0 ? 10 : 0)) / Math.max(1, redTeamTextLength * 0.62),
+  );
+  const blueTeamFontSize = Math.min(
+    12,
+    (116 - (blueAllianceFlags.length > 0 ? 10 : 0)) / Math.max(1, blueTeamTextLength * 0.62),
+  );
 
   const prediction = match.flags?.prediction ?? null;
   const redWinProbability = prediction?.red_win_probability;
@@ -126,7 +136,7 @@ export default function MatchCard({
       <article
         className={[
           "shrink-0",
-          "min-w-[232px]",
+          "w-fit",
           "rounded-md",
           "border",
           "px-2 py-1",
@@ -135,7 +145,14 @@ export default function MatchCard({
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
         ].join(" ")}
       >
-        <div className="grid w-fit grid-cols-[max-content_116px_max-content] items-center gap-x-3 leading-none">
+        <div
+          className={[
+            "grid w-fit items-center gap-x-3 leading-none",
+            showRightColumn
+              ? "grid-cols-[max-content_116px_max-content]"
+              : "grid-cols-[max-content_116px]",
+          ].join(" ")}
+        >
           {/* Match identity and restored clock */}
           <div className="relative top-px row-span-2 flex h-full min-w-max flex-col justify-center">
             <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -178,9 +195,10 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono text-[10px] leading-[14px] text-red-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[14px] text-red-400",
                   trackedRed ? "font-bold" : "font-medium",
                 ].join(" ")}
+                style={{ fontSize: `${redTeamFontSize}px` }}
                 title={`${formatAllianceShortName(redAlliance?.name)} ${red.map(formatTeamNumber).join(" ")}`.trim()}
               >
                 {red.map((key, index) => (
@@ -207,9 +225,10 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono text-[10px] leading-[14px] text-blue-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[14px] text-blue-400",
                   trackedBlue ? "font-bold" : "font-medium",
                 ].join(" ")}
+                style={{ fontSize: `${blueTeamFontSize}px` }}
                 title={`${formatAllianceShortName(blueAlliance?.name)} ${blue.map(formatTeamNumber).join(" ")}`.trim()}
               >
                 {blue.map((key, index) => (
