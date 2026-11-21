@@ -33,7 +33,7 @@ A live publication carries the committed FieldView DTO data for the changed reso
 - the canonical FieldView DTO payload;
 - optional validator/ETag metadata.
 
-EventRuntime publishes its current normalized event-owned state when the event-state revision changes. A TeamRuntime event-state change publishes that team's committed `FieldViewTeamEventState` patch, scoped to its event and team. Analytics publication sends the committed versioned analytics publication. No raw TBA/Statbotics payloads are exposed.
+EventRuntime publishes its current normalized event-owned state when the event-state revision changes. A TeamRuntime event-state change notifies EventRuntime with both the team-season source revision and the independent team-event projection revision. EventRuntime retrieves only that team's committed `FieldViewTeamEventState` and publishes the scoped patch alongside the new event snapshot revision. This preserves EventRuntime's composition/version boundary without relaying provider webhooks or reading every team. Analytics publication sends the committed versioned analytics publication. No raw TBA/Statbotics payloads are exposed.
 
 The SharedWorker applies only newer revisions. It merges a team-event patch by `team_key` without replacing other teams. If a revision gap, invalid payload, schema mismatch, or missing base snapshot prevents a safe merge, it retains the last good cache and performs conditional HTTP recovery for that resource.
 
