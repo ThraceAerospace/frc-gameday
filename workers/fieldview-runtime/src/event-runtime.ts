@@ -65,6 +65,7 @@ const ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY = "analytics:allow-partial-cohort"
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
 const EVENT_COMPARISON_INPUT_UPDATED_AT_KEY = "event-team-comparison-input:updated-at";
+const EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY = "event-team-comparison-input:last-updated-at";
 const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_TEAM_STATE_MAX_RETRIES = 12;
 
@@ -906,8 +907,14 @@ export class EventRuntime {
         status,
       };
     });
+    const comparisonInputUpdatedAt = await this.storage.transaction(async (transaction) => {
+      const previous = await transaction.get<number>(EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY) ?? 0;
+      const next = Math.max(Date.now(), previous + 1);
+      await transaction.put(EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY, next);
+      return next;
+    });
     const comparisonInput = buildFieldViewEventTeamSeasonComparisonInput(
-      event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
+      event, participants.map((team) => team.teamNumber), snapshots, comparisonInputUpdatedAt,
       results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
     );
     const comparisonInputAccepted = await this.storage.transaction(async (transaction) => {
