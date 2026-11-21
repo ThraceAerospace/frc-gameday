@@ -142,13 +142,15 @@ export default {
         "X-FieldView-Webhook-Id": webhookId,
         "Content-Type": "application/json",
       });
+      if (teamKeys.size > 0 && !env.TEAM_RUNTIME) {
+        return Response.json({ error: "TeamRuntime binding is required for this webhook scope" }, { status: 503 });
+      }
       const targets: Array<{ kind: "event" | "team"; key: string; promise: Promise<Response> }> = [];
       const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
       targets.push({ kind: "event", key: eventKey, promise: eventStub.fetch(new Request("https://event-runtime/webhook", {
         method: "POST", headers: new Headers(headers), body: rawBody,
       })) });
-      if (teamKeys.size > 0) {
-        if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime binding is required for this webhook scope" }, { status: 503 });
+      if (teamKeys.size > 0 && env.TEAM_RUNTIME) {
         for (const teamKey of teamKeys) {
           const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
           const teamHeaders = new Headers(headers);
