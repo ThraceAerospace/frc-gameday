@@ -264,10 +264,10 @@ export default function AdminOperationsDashboard() {
     } catch { /* Keep the most recent durable job state visible. */ }
   }, [token, requestHeaders]);
 
-  const loadDiscoveryJob = useCallback(async () => {
+  const loadDiscoveryJob = useCallback(async (mode: "current" | "year" = "current", targetYear = year) => {
     if (!token) return;
     try {
-      const params = new URLSearchParams({ discoveryJob: String(year), discoveryMode: "current" });
+      const params = new URLSearchParams({ discoveryJob: String(targetYear), discoveryMode: mode });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setDiscoveryJob(body as DiscoveryJob);
@@ -285,13 +285,13 @@ export default function AdminOperationsDashboard() {
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
       if (entityKind === "event" && action === "seed-event-teams") setEventTeamSeed(body as EventTeamSeed);
       if (entityKind === "team" && action === "seed" && key) setTeamSeedJob(body as TeamSeedJob);
-      if (entityKind === "system" && action === "scheduler-run") setDiscoveryJob(body as DiscoveryJob);
+      if (entityKind === "system" && (action === "scheduler-run" || action === "discover-year")) setDiscoveryJob(body as DiscoveryJob);
       void refresh(true);
       if (entityKind !== "system" && key) void openEntity(entityKind, key, operationYear ?? selected?.year ?? year);
       const label = action.replaceAll("-", " ");
       setMessage(action === "scheduler-stop" && body.admin_jobs_continuing
         ? "Routine polling stopped. Already queued admin jobs will continue in the background."
-        : ["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "scheduler-run"].includes(action)
+        : ["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "scheduler-run", "discover-year"].includes(action)
           ? label + " queued. The scheduler will advance it in the background; you can keep using the dashboard."
           : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
@@ -340,9 +340,9 @@ export default function AdminOperationsDashboard() {
 
   useEffect(() => {
     if (!authenticated || discoveryJob?.status !== "running") return;
-    const timer = window.setInterval(() => void loadDiscoveryJob(), 3_000);
+    const timer = window.setInterval(() => void loadDiscoveryJob(discoveryJob.mode, discoveryJob.year), 3_000);
     return () => window.clearInterval(timer);
-  }, [authenticated, discoveryJob?.status, loadDiscoveryJob]);
+  }, [authenticated, discoveryJob?.status, discoveryJob?.mode, discoveryJob?.year, loadDiscoveryJob]);
 
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
@@ -493,7 +493,7 @@ export default function AdminOperationsDashboard() {
         </div>
         <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every event and every team in the selected season's completed TBA discovery snapshots. Team discovery walks all 500-team pages; this audit makes no provider API requests and processes up to 20 runtime reads per batch.</p></div>
+            <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every event and every team in the selected season's completed TBA discovery snapshots. Team discovery walks all 500-team pages; this audit makes no provider API requests and processes up to 5 runtime reads per background batch.</p></div>
             <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => setYear(Number(event.target.value))} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label>{coverageAudit?.year === year && coverageAudit.discovery_ready === false ? <button disabled={busy} onClick={async () => { await dispatch("system", "discover-year", undefined, undefined, year); await loadCoverageAudit(); }} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Discover {year} season</button> : <button disabled={busy || !coverageAudit?.discovery_ready} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.year === year && coverageAudit.status === "running" ? "Run next batch" : coverageAudit?.year === year && coverageAudit.status === "completed" ? "Run audit again" : "Start full audit"}</button>}</div>
           </div>
           {coverageAudit && coverageAudit.year === year && <div className="mt-3 space-y-2">
