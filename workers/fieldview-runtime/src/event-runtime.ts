@@ -556,12 +556,12 @@ export class EventRuntime {
       await this.storage.transaction((transaction) => this.rearm(transaction));
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
-        scheduled: true, attempted: true, event_key: this.eventKey, endpoint,
+        scheduled: true, queued: true, event_key: this.eventKey, endpoint,
         status: state?.status ?? "unknown", revision: state?.revision ?? 0,
         record_count: Array.isArray(state?.providerData) ? state.providerData.length : 0,
         fetched_at: state?.lastFetchedAt ?? null,
         analytics_status: await this.storage.get<string>("analytics:status") ?? "pending",
-      });
+      }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/schedule") {
