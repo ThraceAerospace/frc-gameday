@@ -1452,12 +1452,10 @@ export class TaskScheduler {
           await this.discoverEvents(job.year);
           const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
           job.events = cache?.events.length ?? 0;
-          job.steps += 1;
           job.stage = "teams";
         } else if (job.stage === "teams") {
           const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
           job.teams = result.teamCount;
-          job.steps += 1;
           if (result.complete) job.stage = "complete";
         }
       } else {
@@ -1466,13 +1464,11 @@ export class TaskScheduler {
           await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
           const cache = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + job.year);
           job.events = cache?.events.length ?? 0;
-          job.steps += 1;
           if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) job.stage = "lifecycle";
           else job.stage = "teams";
         } else if (job.stage === "teams") {
           const result = await this.discoverTeams(job.year, TEAM_DISCOVERY_PREFIX, 4);
           job.teams = result.teamCount;
-          job.steps += 1;
           if (result.complete) job.stage = "this-week";
         } else if (job.stage === "this-week") {
           const pending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
