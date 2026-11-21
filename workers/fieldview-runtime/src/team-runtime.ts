@@ -35,6 +35,7 @@ interface TeamEndpointState<T> extends EndpointState<T> {
 }
 const TASK_PREFIX = "task:";
 const MANUAL_QUEUE_KEY = "manual:poll-queue";
+const SEASON_ANALYTICS_DUE_PREFIX = "season-analytics:due:";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
 function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
@@ -190,7 +191,11 @@ export class TeamRuntime {
   private async rearm(tx: DurableObjectTransactionLike): Promise<void> {
     const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
     const manual = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-    const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value, manual.reduce<number | null>((value, item) => value === null || item.dueAt < value ? item.dueAt : value, null));
+    const seasonAnalytics = await tx.list<number>({ prefix: SEASON_ANALYTICS_DUE_PREFIX });
+    const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value,
+      [...manual.map((item) => item.dueAt), ...seasonAnalytics.values()].reduce<number | null>(
+        (value, dueAt) => value === null || dueAt < value ? dueAt : value, null,
+      ));
     const current = await tx.getAlarm?.();
     if (next === null) {
       if (current !== null && current !== undefined) await tx.deleteAlarm();
@@ -265,7 +270,7 @@ export class TeamRuntime {
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
-    if (publicRead) {
+    if (publicRead || publicSeasonAnalyticsRead) {
       if (!(await this.restoreIdentity())) {
         return Response.json({ team_key: null, status: "unavailable", publication: "missing" }, {
           status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
@@ -417,6 +422,63 @@ export class TeamRuntime {
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
+
+    if (publicSeasonAnalyticsRead) {
+      const cacheKey = "team-season-analytics:" + year;
+      const cached = await this.storage.get<{
+        team_source_revision: number;
+        event_revisions: Record<string, number>;
+        event_source_revisions: Record<string, number | null>;
+        comparison_input_updated_ats: Record<string, number | null>;
+        checkedAt?: number;
+        response: Record<string, unknown>;
+      }>(cacheKey);
+      const currentTeamRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const currentEventRevisions = cached
+        ? Object.fromEntries(await Promise.all(Object.keys(cached.event_revisions).map(async (eventKey) => [
+            eventKey, await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0,
+          ] as const)))
+        : {};
+      const revisionStale = !cached || cached.team_source_revision !== currentTeamRevision ||
+        JSON.stringify(cached.event_revisions) !== JSON.stringify(currentEventRevisions);
+      const checkedAt = cached?.checkedAt ?? Number(
+        (cached?.response.collection as Record<string, unknown> | undefined)?.updatedAt ?? 0,
+      );
+      const freshnessStale = !checkedAt || Date.now() - checkedAt > 5 * 60_000;
+      const stale = revisionStale || freshnessStale;
+      if (stale) await this.queueSeasonAnalyticsRefresh(year);
+
+      const resources = this.endpoints(year);
+      const states = await Promise.all(resources.map(({ endpoint }) =>
+        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+      const now = Date.now();
+      const needed = resources.filter((resource, index) => {
+        if (resource.provider === "statbotics") return false;
+        const state = states[index];
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") ||
+          state.status === "failed" || state.status === "stale" ||
+          (state.expiresAt !== null && state.expiresAt <= now);
+      });
+      if (needed.length > 0) {
+        await this.schedule(year, true);
+        await this.enqueueManualPolls(needed, year);
+      }
+      if (!cached) {
+        return Response.json({
+          team_key: this.teamKey, year, status: "unavailable",
+          publication: { status: "missing" }, revalidation: "scheduled",
+        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+      }
+      return Response.json(cached.response, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-store",
+          "X-FieldView-Analytics-Status": stale ? "stale" : "available",
+          "X-FieldView-Analytics-Revalidation": stale ? "scheduled" : "idle",
+          "X-FieldView-Analytics-Checked-At": String(checkedAt),
+        },
+      });
+    }
 
     if (publicRead) {
       // Serve the last atomically published representation. A GET never
@@ -761,6 +823,18 @@ export class TeamRuntime {
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
+  private async queueSeasonAnalyticsRefresh(year: number): Promise<void> {
+    const key = SEASON_ANALYTICS_DUE_PREFIX + year;
+    const existing = await this.storage.get<number>(key);
+    if (existing === undefined || existing > Date.now()) {
+      await this.storage.put(key, Date.now());
+    }
+    const currentAlarm = await this.storage.getAlarm?.();
+    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
+      await this.storage.setAlarm(Date.now() + 100);
+    }
+  }
+
   private async buildSeasonAnalyticsResponse(year: number): Promise<Response> {
     const teamState = await this.snapshot(year).then((response) => response.json()) as ReturnType<typeof normalizeFieldViewTeamState>;
     if (teamState.events === undefined || teamState.events === null) {
@@ -818,6 +892,7 @@ export class TeamRuntime {
         JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions) &&
         JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions) &&
         JSON.stringify(cached.comparison_input_updated_ats) === JSON.stringify(comparisonInputUpdatedAts)) {
+      await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() });
       return Response.json(cached.response, {
         headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
       });
@@ -866,11 +941,19 @@ export class TeamRuntime {
         updatedAt: Date.now(),
       },
     };
+    // A partial failed refresh must not replace an existing last-good season
+    // analytics publication. Initial publication may be explicitly partial.
+    if (cached && ready.length < events.length) {
+      return Response.json(cached.response, {
+        headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store", "X-FieldView-Analytics-Status": "stale" },
+      });
+    }
     await this.storage.put(cacheKey, {
       team_source_revision: teamSourceRevision,
       event_revisions: eventRevisions,
       event_source_revisions: eventSourceRevisions,
       comparison_input_updated_ats: comparisonInputUpdatedAts,
+      checkedAt: Date.now(),
       response: result,
     });
     return Response.json(result, {
@@ -1192,6 +1275,22 @@ export class TeamRuntime {
         await this.notifyEventsOfSeasonStateChange(year);
       }
     }));
+
+    const analyticsJobs = await this.storage.list<number>({ prefix: SEASON_ANALYTICS_DUE_PREFIX });
+    const nextAnalyticsJob = [...analyticsJobs.entries()]
+      .filter(([, dueAt]) => dueAt <= Date.now())
+      .sort((a, b) => a[1] - b[1])[0];
+    if (nextAnalyticsJob) {
+      const [jobKey] = nextAnalyticsJob;
+      const year = Number(jobKey.slice(SEASON_ANALYTICS_DUE_PREFIX.length));
+      try {
+        const response = await this.buildSeasonAnalyticsResponse(year);
+        if (response.ok) await this.storage.delete(jobKey);
+        else await this.storage.put(jobKey, Date.now() + 60_000);
+      } catch {
+        await this.storage.put(jobKey, Date.now() + 60_000);
+      }
+    }
     await this.storage.transaction((tx) => this.rearm(tx));
   }
 }
