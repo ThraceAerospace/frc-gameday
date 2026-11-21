@@ -204,7 +204,7 @@ export class TeamRuntime {
       const now = Date.now();
       const needed = resources.filter((resource, index) => {
         const state = states[index];
-        return !state || state.lastFetchedAt === null || state.status === "failed" ||
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" ||
           (state.expiresAt !== null && state.expiresAt <= now);
       });
       if (needed.length > 0) {
