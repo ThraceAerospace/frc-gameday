@@ -488,11 +488,11 @@ export interface FieldViewTeamSeasonComponentComparison {
   prior: number;
   current: number;
   change: number;
-  cohort_rank: number;
-  cohort_size: number;
+  comparison_rank: number;
+  comparison_size: number;
 }
 
-/** Same-team, prior-event comparison and the corresponding event cohorts. */
+/** Same-team, prior-event comparison and its event comparison population. */
 export interface FieldViewTeamSeasonComparison {
   prior_event: {
     event_key: EventKey;
@@ -504,12 +504,12 @@ export interface FieldViewTeamSeasonComparison {
   current_epa: number;
   current_epa_percentile: number | null;
   prior_epa_rank: number;
-  prior_epa_cohort_size: number;
+  prior_epa_comparison_size: number;
   current_epa_rank: number;
-  current_epa_cohort_size: number;
+  current_epa_comparison_size: number;
   change: number;
-  cohort_rank: number;
-  cohort_size: number;
+  comparison_rank: number;
+  comparison_size: number;
   components: {
     auto: FieldViewTeamSeasonComponentComparison | null;
     teleop: FieldViewTeamSeasonComponentComparison | null;
