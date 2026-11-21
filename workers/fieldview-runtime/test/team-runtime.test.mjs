@@ -72,6 +72,26 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(snapshot.media.length, 0);
 });
 
+test("TeamRuntime seed only queues provider work and returns without fetching", async () => {
+  const storage = new MemoryStorage();
+  const calls = [];
+  const runtime = new TeamRuntime({ storage }, env(async (url) => {
+    calls.push(String(url));
+    return Response.json([]);
+  }), "frc3461");
+  const response = await runtime.fetch(new Request("https://team/seed?year=2026", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(response.status, 202);
+  const result = await response.json();
+  assert.equal(result.queued, true);
+  assert.equal(result.attempted, false);
+  assert.equal(calls.length, 0, "TeamRuntime seed must not run its alarm or provider I/O inline");
+  assert.ok(storage.alarmAt !== null, "the runtime alarm owns execution of the queued seed");
+  assert.ok((storage.values.get("manual:poll-queue") ?? []).length > 0);
+});
+
 test("TeamRuntime serves a cached canonical TeamState until provider inputs change", async () => {
   const storage = new MemoryStorage();
   let profileVersion = 1;
