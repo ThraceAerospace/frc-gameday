@@ -507,6 +507,36 @@ export class TeamRuntime {
     };
   }
 
+  private async notifyEventsOfSeasonStateChange(year: number): Promise<void> {
+    if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) return;
+    const persisted = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
+    const active = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+    const eventKeys = new Set<string>([
+      ...[...persisted.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length)),
+      ...Object.entries(active).filter(([, membership]) => membership.year === year).map(([eventKey]) => eventKey),
+    ]);
+    const relevant = [...eventKeys].filter((eventKey) => Number(eventKey.slice(0, 4)) === year);
+    await Promise.all(relevant.map(async (eventKey) => {
+      try {
+        const stub = this.env.EVENT_RUNTIME!.get(this.env.EVENT_RUNTIME!.idFromName(eventKey));
+        await stub.fetch(new Request("https://event-runtime/team-state-changed", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+            "X-FieldView-Event-Key": eventKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            team_key: this.teamKey,
+            team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+          }),
+        }));
+      } catch {
+        // EventRuntime reconciliation is recoverable through its next scheduled refresh.
+      }
+    }));
+  }
+
   async alarm(): Promise<void> {
     if (!(await this.restoreIdentity())) return;
     const now = Date.now();
@@ -618,7 +648,15 @@ export class TeamRuntime {
         }
       }
     }
-    await Promise.all([...refreshYears].map((year) => this.snapshot(year)));
+    await Promise.all([...refreshYears].map(async (year) => {
+      const key = "team-state:" + year;
+      const previous = await this.storage.get<unknown>(key);
+      await this.snapshot(year);
+      const current = await this.storage.get<unknown>(key);
+      if (JSON.stringify(previous) !== JSON.stringify(current)) {
+        await this.notifyEventsOfSeasonStateChange(year);
+      }
+    }));
     await this.storage.transaction((tx) => this.rearm(tx));
   }
 }
