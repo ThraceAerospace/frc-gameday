@@ -6,6 +6,7 @@ import {
   AnalyticsOperationRegistry,
 } from "../src/engine.ts";
 import { FIELDVIEW_ANALYTICS_DEFINITIONS } from "../src/definitions.ts";
+import { createFieldViewAnalyticsEngine, createFieldViewAnalyticsOperationRegistry } from "../src/operations.ts";
 
 const definition = {
   definition_key: "test-metric",
@@ -83,4 +84,14 @@ test("registry rejects duplicate keys and definitions cannot contain executable 
   );
   assert.equal(FIELDVIEW_ANALYTICS_DEFINITIONS.every((item) => typeof item.operation_key === "string"), true);
   assert.equal(FIELDVIEW_ANALYTICS_DEFINITIONS.some((item) => "execute" in item), false);
+});
+
+test("default FieldView registry covers every operation in the versioned definition catalog", () => {
+  const registry = createFieldViewAnalyticsOperationRegistry();
+  const engine = createFieldViewAnalyticsEngine();
+  assert.deepEqual(
+    registry.keys(),
+    [...new Set(FIELDVIEW_ANALYTICS_DEFINITIONS.map((item) => item.operation_key))].sort(),
+  );
+  assert.ok(engine);
 });
