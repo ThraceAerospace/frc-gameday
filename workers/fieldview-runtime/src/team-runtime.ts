@@ -494,8 +494,21 @@ export class TeamRuntime {
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
       }
     }));
-    await Promise.all([...new Set([...due.manualDue.map((item) => item.year), ...due.ready.map(() => new Date().getUTCFullYear())])]
-      .map((year) => this.snapshot(year)));
+    const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+    const candidateYears = new Set<number>([
+      new Date().getUTCFullYear(),
+      ...due.manualDue.map((item) => item.year),
+      ...Object.values(activeEvents).map((item) => item.year),
+    ]);
+    const refreshYears = new Set<number>(due.manualDue.map((item) => item.year));
+    for (const task of due.ready) {
+      for (const year of candidateYears) {
+        if (this.endpoints(year).some((resource) => resource.endpoint === task.endpoint)) {
+          refreshYears.add(year);
+        }
+      }
+    }
+    await Promise.all([...refreshYears].map((year) => this.snapshot(year)));
     await this.storage.transaction((tx) => this.rearm(tx));
   }
 }
