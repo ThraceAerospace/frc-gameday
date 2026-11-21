@@ -226,7 +226,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Coverage audit failed");
       setCoverageAudit(body as CoverageAudit);
-      setMessage(coverageAudit?.year === year && coverageAudit.status === "running" ? "Coverage audit batch completed." : "Coverage audit started. Run additional batches until complete.");
+      setMessage("Coverage audit batch queued. Progress will update automatically while you continue using the dashboard.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Coverage audit failed"); }
     finally { setBusy(false); }
   }, [token, requestHeaders, year, coverageAudit]);
