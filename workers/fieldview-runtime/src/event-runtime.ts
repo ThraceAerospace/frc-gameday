@@ -87,6 +87,43 @@ interface AnalyticsPublication {
   eventAnalytics?: unknown;
 }
 
+interface EventViewPublication {
+  schema_version: 1;
+  event_key: string;
+  version: number;
+  source_revision: number;
+  generated_at: number;
+  status: string;
+  team_state_revisions: Array<{ team_key: string; revision: number | null }>;
+  view: FieldViewEventView;
+}
+
+interface EventViewPublicationManifest extends Omit<EventViewPublication, "view"> {
+  storage_format: "chunked-json-v1";
+  chunk_count: number;
+}
+
+const EVENT_VIEW_CHUNK_SIZE_CODE_UNITS = 128 * 1024;
+
+function eventViewChunkKey(version: number, index: number): string {
+  return `event-view:publication:v${version}:chunk:${index}`;
+}
+
+/** Keep each SQLite value comfortably below the per-value/row size limit. */
+function chunkSerializedEventView(view: FieldViewEventView): string[] {
+  const serialized = JSON.stringify(view);
+  const chunks: string[] = [];
+  for (let start = 0; start < serialized.length;) {
+    let end = Math.min(start + EVENT_VIEW_CHUNK_SIZE_CODE_UNITS, serialized.length);
+    // Never split a UTF-16 surrogate pair between separately UTF-8-encoded chunks.
+    const last = serialized.charCodeAt(end - 1);
+    if (end < serialized.length && last >= 0xD800 && last <= 0xDBFF) end -= 1;
+    chunks.push(serialized.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
+
 function endpointStorageKey(endpoint: string): string {
   return `${ENDPOINT_PREFIX}${endpoint}`;
 }
@@ -300,10 +337,7 @@ export class EventRuntime {
   private readonly activation: Promise<void>;
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private hydratedPublication: EventStatePublication | undefined;
-  private hydratedEventViewPublication: {
-    version: number; source_revision: number; status: string; generated_at: number;
-    view: FieldViewEventView;
-  } | undefined;
+  private hydratedEventViewPublication: EventViewPublication | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     this.state = state;
@@ -324,14 +358,11 @@ export class EventRuntime {
     // acquisition, analytics work, or cross-runtime calls occur during activation.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
-          const [storedKey, publication, eventViewPublication] = await Promise.all([
+          const [storedKey, publication] = await Promise.all([
             this.storage.get<string>("event-key"),
             this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
-            this.storage.get<{
-              version: number; source_revision: number; status: string; generated_at: number;
-              view: FieldViewEventView;
-            }>(EVENT_VIEW_PUBLICATION_KEY),
           ]);
+          const eventViewPublication = await this.loadEventViewPublication();
           if (storedKey && !this.eventKey) {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
@@ -340,6 +371,42 @@ export class EventRuntime {
           this.hydratedEventViewPublication = eventViewPublication;
         })
       : Promise.resolve();
+  }
+
+  private async loadEventViewPublication(): Promise<EventViewPublication | undefined> {
+    const stored = await this.storage.get<EventViewPublicationManifest | EventViewPublication>(EVENT_VIEW_PUBLICATION_KEY);
+    if (!stored) return undefined;
+    // Read legacy inline publications during the rolling storage-format migration.
+    if ("view" in stored && stored.view) return stored as EventViewPublication;
+    if (!("storage_format" in stored) || stored.storage_format !== "chunked-json-v1" ||
+        !Number.isSafeInteger(stored.chunk_count) || stored.chunk_count < 1) return undefined;
+    const chunks = await Promise.all(Array.from({ length: stored.chunk_count }, (_, index) =>
+      this.storage.get<string>(eventViewChunkKey(stored.version, index))));
+    if (chunks.some((chunk) => typeof chunk !== "string")) {
+      console.error("[FV][EventRuntime] Event view publication has missing chunks", {
+        event_key: this.eventKey, version: stored.version, expected_chunks: stored.chunk_count,
+      });
+      return undefined;
+    }
+    try {
+      const view = JSON.parse((chunks as string[]).join("")) as FieldViewEventView;
+      return {
+        schema_version: stored.schema_version,
+        event_key: stored.event_key,
+        version: stored.version,
+        source_revision: stored.source_revision,
+        generated_at: stored.generated_at,
+        status: stored.status,
+        team_state_revisions: stored.team_state_revisions,
+        view,
+      };
+    } catch (error) {
+      console.error("[FV][EventRuntime] Event view publication chunks are invalid", {
+        event_key: this.eventKey, version: stored.version,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
   }
 
   private async bindEventKey(request: Request): Promise<boolean> {
@@ -818,10 +885,7 @@ export class EventRuntime {
       const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? publication.state.analytics
         : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
-      const eventViewPublication = this.hydratedEventViewPublication ?? await this.storage.get<{
-        version: number; source_revision: number; status: string;
-        view: FieldViewEventView;
-      }>(EVENT_VIEW_PUBLICATION_KEY);
+      const eventViewPublication = this.hydratedEventViewPublication ?? await this.loadEventViewPublication();
       // Team-scoped state comes only from the last background-composed view.
       return Response.json({
         ...publication.state, analytics,
@@ -859,10 +923,7 @@ export class EventRuntime {
       });
       const viewEventStateStatus = viewSourceStale || viewSourceRevision !== publication.sourceRevision
         ? "stale" : publication.status;
-      const eventViewPublication = this.hydratedEventViewPublication ?? await this.storage.get<{
-        version: number; source_revision: number; status: string; generated_at: number;
-        view: FieldViewEventView;
-      }>(EVENT_VIEW_PUBLICATION_KEY);
+      const eventViewPublication = this.hydratedEventViewPublication ?? await this.loadEventViewPublication();
       if (eventViewPublication) {
         return Response.json(eventViewPublication.view, {
           headers: {
@@ -1788,6 +1849,9 @@ export class EventRuntime {
       return;
     }
     const state = calculated.state;
+    const eventViewChunks = calculated.eventView
+      ? chunkSerializedEventView(calculated.eventView)
+      : null;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
       calculatedAt: Date.now(),
@@ -1811,11 +1875,17 @@ export class EventRuntime {
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
       await transaction.put(ANALYTICS_PUBLICATION_KEY, publication);
-      if (calculated.eventView) {
-        // Event view composition is published in the same transaction as the
-        // analytics revision, after event source revision validation. Partial
-        // coverage is explicit; failed refreshes leave the previous view intact.
-        await transaction.put(EVENT_VIEW_PUBLICATION_KEY, {
+      if (calculated.eventView && eventViewChunks) {
+        // Write bounded chunks first and switch the manifest in the same
+        // transaction. Readers can observe only the previous complete version
+        // or the new complete version, never a partially written publication.
+        const previous = await transaction.get<EventViewPublicationManifest | EventViewPublication>(
+          EVENT_VIEW_PUBLICATION_KEY,
+        );
+        for (let index = 0; index < eventViewChunks.length; index += 1) {
+          await transaction.put(eventViewChunkKey(analyticsRevision, index), eventViewChunks[index]);
+        }
+        const manifest: EventViewPublicationManifest = {
           schema_version: 1,
           event_key: this.eventKey,
           version: analyticsRevision,
@@ -1823,8 +1893,15 @@ export class EventRuntime {
           generated_at: publication.calculatedAt,
           status: calculated.analyticsInputsComplete ? "complete" : "partial",
           team_state_revisions: calculated.teamStateRevisions ?? [],
-          view: calculated.eventView,
-        });
+          storage_format: "chunked-json-v1",
+          chunk_count: eventViewChunks.length,
+        };
+        await transaction.put(EVENT_VIEW_PUBLICATION_KEY, manifest);
+        if (previous && "storage_format" in previous && previous.storage_format === "chunked-json-v1") {
+          for (let index = 0; index < previous.chunk_count; index += 1) {
+            await transaction.delete(eventViewChunkKey(previous.version, index));
+          }
+        }
       }
       await transaction.delete(ANALYTICS_INVALIDATION_KEY);
       const allowPartialTeamStates = await transaction.get<boolean>(ANALYTICS_ALLOW_PARTIAL_TEAM_EVENT_STATES_KEY) === true;
@@ -1852,10 +1929,7 @@ export class EventRuntime {
     });
     if (publishedVersion !== null) {
       if (calculated.eventView) {
-        this.hydratedEventViewPublication = await this.storage.get<{
-          version: number; source_revision: number; status: string; generated_at: number;
-          view: FieldViewEventView;
-        }>(EVENT_VIEW_PUBLICATION_KEY);
+        this.hydratedEventViewPublication = await this.loadEventViewPublication();
       }
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       await Promise.all([
