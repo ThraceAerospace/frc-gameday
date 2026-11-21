@@ -1195,12 +1195,14 @@ export class EventRuntime {
       };
     }
 
-    const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-    if (!publication) return { version: state.version, sourceRevision: state.sourceRevision, state: normalizedState };
+    const { team_states: _unownedTeamStates, ...eventOwnedState } = normalizedState;
+    const storedPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+    const publication = storedPublication?.sourceRevision === state.sourceRevision ? storedPublication : undefined;
+    if (!publication) return { version: state.version, sourceRevision: state.sourceRevision, state: eventOwnedState };
     const matchAnalytics = new Map(publication.matches.map((match) => [match.key, match]));
-    const matches = normalizedState.matches === undefined || normalizedState.matches === null
-      ? normalizedState.matches
-      : normalizedState.matches.map((match) => {
+    const matches = eventOwnedState.matches === undefined || eventOwnedState.matches === null
+      ? eventOwnedState.matches
+      : eventOwnedState.matches.map((match) => {
           const published = matchAnalytics.get(match.key);
           return published ? {
             ...match,
@@ -1208,7 +1210,6 @@ export class EventRuntime {
             ...(published.flags === undefined ? {} : { flags: published.flags as typeof match.flags }),
           } : match;
         });
-    const { team_states: _unownedTeamStates, ...eventOwnedState } = normalizedState;
     return {
       version: state.version,
       sourceRevision: state.sourceRevision,
