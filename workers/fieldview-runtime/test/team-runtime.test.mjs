@@ -524,9 +524,21 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
     sources: { team: {}, event_team: {}, matches: {} },
     matches: [currentMatch],
   });
-  const runtime = new TeamRuntime({ storage }, env(async () => {
-    throw new Error("webhook handling must not perform provider fetches");
-  }), teamKey);
+  const notifications = [];
+  const runtime = new TeamRuntime({ storage }, {
+    ...env(async () => {
+      throw new Error("webhook handling must not perform provider fetches");
+    }),
+    EVENT_RUNTIME: {
+      idFromName: (key) => key,
+      get: () => ({
+        fetch: async (request) => {
+          notifications.push(await request.json());
+          return Response.json({ accepted: true });
+        },
+      }),
+    },
+  }, teamKey);
   const response = await runtime.fetch(new Request("https://team/webhook", {
     method: "POST",
     headers: {
@@ -560,6 +572,11 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(updated.analysis, undefined);
   assert.equal(updated.flags, undefined);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+  assert.deepEqual(notifications, [{
+    team_key: teamKey,
+    team_state_revision: 0,
+    team_event_revision: 1,
+  }], "the changed team-event projection notifies EventRuntime with its own revision");
   const duplicateResponse = await runtime.fetch(new Request("https://team/webhook", {
     method: "POST",
     headers: {
@@ -583,6 +600,7 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(duplicateResponse.status, 200);
   assert.equal((await duplicateResponse.json()).changed, false);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1, "duplicate delivery must not write another revision");
+  assert.equal(notifications.length, 1, "duplicate delivery must not emit another live patch");
 });
 
 test("TeamRuntime applies upcoming-match timing only to its existing team match projection", async () => {
