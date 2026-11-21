@@ -62,6 +62,7 @@ const ANALYTICS_TEAM_STATE_RETRY_KEY = "analytics:cohort-retries";
 const ANALYTICS_ALLOW_PARTIAL_TEAM_STATES_KEY = "analytics:allow-partial-cohort";
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
+const EVENT_COMPARISON_INPUT_UPDATED_AT_KEY = "event-team-comparison-input:updated-at";
 const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_TEAM_STATE_MAX_RETRIES = 12;
 
@@ -625,6 +626,7 @@ export class EventRuntime {
         const previousRevision = await transaction.get<number>(revisionKey) ?? -1;
         if ((body.team_state_revision as number) <= previousRevision) return false;
         await transaction.put(revisionKey, body.team_state_revision);
+        await transaction.delete(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
         await transaction.put(ANALYTICS_DUE_KEY, Date.now());
         await transaction.put("analytics:status", "pending");
         await transaction.put("snapshot-revision", (await transaction.get<number>("snapshot-revision") ?? 0) + 1);
@@ -863,13 +865,19 @@ export class EventRuntime {
         status,
       };
     });
-    return {
-      comparisonInput: buildFieldViewEventTeamSeasonComparisonInput(
-        event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
-        results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
-      ),
-      inputs,
-    };
+    const comparisonInput = buildFieldViewEventTeamSeasonComparisonInput(
+      event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
+      results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
+    );
+    await this.storage.transaction(async (transaction) => {
+      for (const item of results) {
+        if (item.revision !== null) {
+          await transaction.put(TEAM_STATE_REVISION_PREFIX + item.teamKey, item.revision);
+        }
+      }
+      await transaction.put(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY, comparisonInput.updated_at);
+    });
+    return { comparisonInput, inputs };
   }
 
   private async calculateTeamEventStates(
@@ -904,7 +912,10 @@ export class EventRuntime {
           "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey } },
         ));
-        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision) return null;
+        const expectedTeamRevision = await this.storage.get<number>(TEAM_STATE_REVISION_PREFIX + teamKey);
+        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision ||
+            Number(response.headers.get("X-FieldView-Team-Source-Revision")) !== expectedTeamRevision ||
+            Number(response.headers.get("X-FieldView-Comparison-Input-Updated-At")) !== comparisonInput.updated_at) return null;
         return await response.json() as FieldViewTeamEventState;
       } catch {
         return null;
@@ -918,7 +929,8 @@ export class EventRuntime {
     eventSourceRevision: number,
   ): Promise<FieldViewTeamEventState[]> {
     const namespace = this.env.TEAM_RUNTIME;
-    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return [];
+    const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN || comparisonInputUpdatedAt === undefined) return [];
     return (await Promise.all((eventState.teams ?? []).map(async (team) => {
       try {
         const stub = namespace.get(namespace.idFromName(team.key));
@@ -926,7 +938,10 @@ export class EventRuntime {
           "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
           { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": team.key } },
         ));
-        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision) return null;
+        const expectedTeamRevision = await this.storage.get<number>(TEAM_STATE_REVISION_PREFIX + team.key);
+        if (!response.ok || Number(response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision ||
+            Number(response.headers.get("X-FieldView-Team-Source-Revision")) !== expectedTeamRevision ||
+            Number(response.headers.get("X-FieldView-Comparison-Input-Updated-At")) !== comparisonInputUpdatedAt) return null;
         return await response.json() as FieldViewTeamEventState;
       } catch {
         return null;
