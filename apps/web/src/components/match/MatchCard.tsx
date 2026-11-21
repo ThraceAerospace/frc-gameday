@@ -171,7 +171,7 @@ export default function MatchCard({
               ) : null}
               <span
                 className={[
-                  "whitespace-nowrap text-xs font-bold uppercase tracking-wide",
+                  "whitespace-nowrap text-sm font-bold uppercase tracking-wide",
                   isNext ? "text-white" : "text-zinc-300",
                 ].join(" ")}
               >
@@ -190,8 +190,8 @@ export default function MatchCard({
           </div>
 
           {/* Fixed-width alliance roster with playoff alliance labels */}
-          <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-1">
-            <div className="flex h-[18px] min-w-0 items-center gap-1 whitespace-nowrap">
+          <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-0.5">
+            <div className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap">
               {redAllianceFlags.length > 0 ? (
                 <span
                   aria-label="Red alliance has flags"
@@ -201,7 +201,7 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[18px] text-red-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-red-400",
                   trackedRed ? "font-bold" : "font-medium",
                 ].join(" ")}
                 style={{ fontSize: `${redTeamFontSize}px` }}
@@ -224,7 +224,7 @@ export default function MatchCard({
               </div>
             </div>
 
-            <div className="flex h-[18px] min-w-0 items-center gap-1 whitespace-nowrap">
+            <div className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap">
               {blueAllianceFlags.length > 0 ? (
                 <span
                   aria-label="Blue alliance has flags"
@@ -234,7 +234,7 @@ export default function MatchCard({
               ) : null}
               <div
                 className={[
-                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-[18px] text-blue-400",
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono leading-4 text-blue-400",
                   trackedBlue ? "font-bold" : "font-medium",
                 ].join(" ")}
                 style={{ fontSize: `${blueTeamFontSize}px` }}
@@ -260,23 +260,23 @@ export default function MatchCard({
 
           {/* Result or prediction column; the grid track is zero-width when empty */}
           {showRightColumn ? (
-            <div className="row-span-2 flex flex-col items-end justify-center gap-y-1 text-right font-mono text-[10px] tabular-nums">
+            <div className="row-span-2 flex flex-col items-end justify-center gap-y-0.5 text-right font-mono tabular-nums">
               {hasResult ? (
                 <>
-                  <span className="font-bold text-red-400">{redScore}</span>
-                  <span className="font-bold text-blue-400">{blueScore}</span>
+                  <span className="text-sm leading-4 font-bold text-red-400">{redScore}</span>
+                  <span className="text-sm leading-4 font-bold text-blue-400">{blueScore}</span>
                 </>
               ) : showWinProbability ? (
                 <>
                   <span
                     title={`Red win probability: ${Math.round(redWinProbability! * 100)}%`}
-                    className="inline-flex min-w-[38px] justify-center rounded-sm border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-red-300"
+                    className="inline-flex min-w-[38px] justify-center rounded-sm border border-zinc-600 bg-zinc-800 px-1 text-xs leading-4 font-bold text-red-300"
                   >
                     {Math.round(redWinProbability! * 100)}%
                   </span>
                   <span
                     title={`Blue win probability: ${Math.round((1 - redWinProbability!) * 100)}%`}
-                    className="inline-flex min-w-[38px] justify-center rounded-sm border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-blue-300"
+                    className="inline-flex min-w-[38px] justify-center rounded-sm border border-zinc-600 bg-zinc-800 px-1 text-xs leading-4 font-bold text-blue-300"
                   >
                     {Math.round((1 - redWinProbability!) * 100)}%
                   </span>
@@ -285,7 +285,7 @@ export default function MatchCard({
                 <>
                   <span
                     title={`Predicted red score: ${redPredictedScore}`}
-                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 py-0.5 font-bold text-zinc-200"
+                    className="inline-flex min-w-[28px] justify-center rounded border border-zinc-600 bg-zinc-800 px-1 text-xs leading-4 font-bold text-zinc-200"
                   >
                     {Math.round(redPredictedScore!)}
                   </span>
