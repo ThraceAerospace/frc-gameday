@@ -413,7 +413,9 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       const version = typeof message.version === "number" ? message.version : undefined;
       const data = isRecord(message.data) ? message.data : null;
       const revision = data && Number.isSafeInteger(data.revision) ? data.revision as number : null;
-      if (data && data.event_key === eventKey && revision !== null &&
+      if (message.protocol === 1 && message.schema_version === 1 &&
+          message.resource === "event-analytics" && message.change === "snapshot" &&
+          data && data.event_key === eventKey && revision !== null &&
           version !== undefined && revision === version &&
           (data.status === "pending" || data.status === "stale" ||
             data.status === "partial" || data.status === "succeeded" ||
@@ -457,6 +459,13 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       };
       for (const handler of this.handlers.get(eventKey) ?? []) handler(eventMessage);
       if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
+        const envelopeValid = message.protocol === 1 && message.schema_version === 1 &&
+          message.resource === "event-snapshot" &&
+          (message.change === "snapshot" || message.change === "patch");
+        if (!envelopeValid) {
+          void this.fetchCanonicalSnapshot(eventKey, version);
+          return;
+        }
         const data = isRecord(message.data) ? message.data : null;
         const state = isRecord(data?.state) && data.state.event_key === eventKey
           ? data.state as unknown as FieldViewEventState : null;
