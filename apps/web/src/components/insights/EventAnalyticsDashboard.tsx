@@ -1559,9 +1559,17 @@ function EventOverview({ data }: { data: EventAnalyticsResponse }) {
   const highestEpaTeam=epaTeams.find((team)=>team.epa!==null);
   const leadFinding=data.findings[0];
   const insights=data.teamInsights??[];
-  const comparisons=insights.flatMap((item)=>item.seasonComparison?[{teamNumber:item.teamNumber,comparison:item.seasonComparison}]:[]);
-  const improved=[...comparisons].sort((a,b)=>b.comparison.change-a.comparison.change).slice(0,5);
-  const declined=[...comparisons].sort((a,b)=>a.comparison.change-b.comparison.change).slice(0,5);
+  const comparisons=(data.teamComparison?.rankings??[]).map((item)=>({
+    teamNumber:item.team_number,
+    comparison:{
+      priorEvent:{short_name:item.prior_event.short_name,name:item.prior_event.event_name},
+      comparisonRank:item.rank,
+      comparisonSize:item.population_size,
+      change:item.change,
+    },
+  }));
+  const improved=comparisons.slice(0,5);
+  const declined=[...comparisons].reverse().slice(0,5);
   const predictionResidualValues=data.allianceResults.filter((item)=>item.actual!==null&&item.residual!==null).map((item)=>item.residual as number);
   const predictionResidualMean=predictionResidualValues.length?predictionResidualValues.reduce((sum,value)=>sum+value,0)/predictionResidualValues.length:null;
   const predictionResidualSampleSd=predictionResidualValues.length>1&&predictionResidualMean!==null?Math.sqrt(predictionResidualValues.reduce((sum,value)=>sum+(value-predictionResidualMean)**2,0)/(predictionResidualValues.length-1)):null;
