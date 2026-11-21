@@ -270,32 +270,42 @@ export class TeamRuntime {
       } else {
         if (Array.isArray(data.team_keys)) for (const key of data.team_keys) if (typeof key === "string") targetKeys.add(key);
         if (typeof data.team_key === "string") targetKeys.add(data.team_key);
-        if (envelope.message_type === "awards_posted") {
-          const addRecipients = (recipients: unknown) => {
-            if (!Array.isArray(recipients)) return;
-            for (const recipient of recipients) {
-              if (recipient && typeof recipient === "object" && !Array.isArray(recipient)) {
-                const value = recipient as Record<string, unknown>;
-                if (typeof value.team_key === "string") targetKeys.add(value.team_key);
-                else if (typeof value.team_number === "number" && Number.isSafeInteger(value.team_number)) targetKeys.add("frc" + value.team_number);
-              }
-            }
-          };
-          addRecipients(data.recipient_list);
-          if (Array.isArray(data.awards)) {
-            for (const award of data.awards) {
-              if (award && typeof award === "object" && !Array.isArray(award)) {
-                addRecipients((award as Record<string, unknown>).recipient_list);
-              }
-            }
-          }
-        }
       }
       if (!targetKeys.has(this.teamKey)) return Response.json({ accepted: true, affected: false });
       const storageKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
       const existing = await this.storage.get<FieldViewTeamEventState>(storageKey);
       if (!existing) return Response.json({ accepted: true, affected: true, projection: "not-yet-materialized" });
+      if (envelope.message_type === "upcoming_match") {
+        const matchKey = data.match_key;
+        if (typeof matchKey !== "string") return Response.json({ error: "Upcoming-match webhook has no match key" }, { status: 400 });
+        const currentMatches = existing.matches ?? [];
+        const index = currentMatches.findIndex((item) => item.key === matchKey);
+        if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
+        const current = currentMatches[index];
+        const patch = {
+          ...current,
+          ...(typeof data.scheduled_time === "number" && Number.isFinite(data.scheduled_time) ? { time: data.scheduled_time } : {}),
+          ...(typeof data.predicted_time === "number" && Number.isFinite(data.predicted_time) ? { predicted_time: data.predicted_time } : {}),
+        };
+        if (JSON.stringify(current) === JSON.stringify(patch)) {
+          return Response.json({ accepted: true, affected: true, changed: false,
+            revision: await this.storage.get<number>(revisionKey) ?? 0 });
+        }
+        const nextMatches = [...currentMatches];
+        nextMatches[index] = patch;
+        const nextState: FieldViewTeamEventState = { ...existing, matches: nextMatches };
+        const nextRevision = await this.storage.transaction(async (tx) => {
+          const latest = await tx.get<FieldViewTeamEventState>(storageKey);
+          if (!latest || JSON.stringify(latest) !== JSON.stringify(existing)) return null;
+          const revision = (await tx.get<number>(revisionKey) ?? 0) + 1;
+          await tx.put(storageKey, nextState);
+          await tx.put(revisionKey, revision);
+          return revision;
+        });
+        if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
+        return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
+      }
       const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
         ? normalizeTbaWebhookMatch(match as Record<string, unknown>) : null;
       if (updatedMatch && (envelope.message_type === "match_score" || envelope.message_type === "match_video")) {
