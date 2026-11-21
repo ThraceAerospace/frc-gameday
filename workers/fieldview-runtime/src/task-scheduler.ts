@@ -612,6 +612,114 @@ export class TaskScheduler {
       return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
 
+    if (url.pathname === "/admin/team-seed" && request.method === "POST") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.team_key !== "string" || !/^frc\\d+$/.test(body.team_key)) {
+        return Response.json({ error: "A valid team_key is required" }, { status: 400 });
+      }
+      const teamKey = body.team_key;
+      const year = Number(body.year);
+      if (!Number.isSafeInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
+        return Response.json({ error: "Invalid team seed year" }, { status: 400 });
+      }
+      if (!this.env.TEAM_RUNTIME || !this.env.EVENT_RUNTIME) {
+        return Response.json({ error: "TeamRuntime and EventRuntime must be bound" }, { status: 503 });
+      }
+
+      // The scheduler coordinates this cross-runtime operation. TeamRuntime
+      // acquires and persists team resources; EventRuntime owns and executes
+      // each event's resource/lifecycle work.
+      const registeredTeams = await this.storage.get<string[]>("registry:teams") ?? [];
+      if (!registeredTeams.includes(teamKey)) {
+        await this.storage.put("registry:teams", [...registeredTeams, teamKey].sort());
+      }
+      const teamStub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
+      const teamHeaders = {
+        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+        "X-FieldView-Team-Key": teamKey,
+      };
+      const teamResponse = await teamStub.fetch(new Request("https://team-runtime/seed?year=" + year, {
+        method: "POST",
+        headers: teamHeaders,
+      }));
+      if (!teamResponse.ok) return teamResponse;
+
+      const teamResult = await teamResponse.clone().json() as {
+        snapshot?: { events?: Array<Record<string, unknown>> | null };
+      };
+      let events = Array.isArray(teamResult.snapshot?.events) ? teamResult.snapshot.events : null;
+      if (events === null) {
+        // TeamRuntime may still be draining its durable resource queue. Wait
+        // once for its own alarm work, then read the canonical team snapshot.
+        const interval = Number(this.env.PROVIDER_REQUEST_INTERVAL_MS ?? 1_000);
+        await new Promise<void>((resolve) => setTimeout(resolve, Math.max(8_000, interval * 9)));
+        const refreshed = await teamStub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
+          headers: teamHeaders,
+        }));
+        if (refreshed.ok) {
+          const snapshot = await refreshed.json() as { events?: Array<Record<string, unknown>> | null };
+          events = Array.isArray(snapshot.events) ? snapshot.events : null;
+          if (events !== null) teamResult.snapshot = snapshot;
+        }
+      }
+      if (events === null) {
+        return Response.json({
+          error: "TeamRuntime seed is queued, but its event history is not ready yet. Retry the seed operation shortly.",
+        }, { status: 202 });
+      }
+
+      const policy = eventPollingPolicy(this.env);
+      const seededEvents: Array<{ event_key: string; status: number; body: unknown }> = [];
+      for (const event of events) {
+        const eventKey = event.key;
+        if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
+        const registeredEvents = await this.storage.get<string[]>("registry:events") ?? [];
+        if (!registeredEvents.includes(eventKey)) {
+          await this.storage.put("registry:events", [...registeredEvents, eventKey].sort());
+        }
+        const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+        const lifecycle = classifyEventLifecycle({
+          start_date: String(event.start_date ?? ""),
+          end_date: String(event.end_date ?? ""),
+          timezone: String(event.timezone ?? ""),
+        }, Date.now(), policy);
+        const eventHeaders = {
+          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        };
+        const eventResponse = !lifecycle || lifecycle.lifecycle === "expired"
+          ? await eventStub.fetch(new Request("https://event-runtime/schedule", {
+              method: "POST",
+              headers: eventHeaders,
+              body: JSON.stringify({
+                endpoints: eventResourceEndpoints(eventKey),
+                intervalMs: 86_400_000,
+                analyticsEnabled: false,
+              }),
+            }))
+          : await eventStub.fetch(new Request("https://event-runtime/lifecycle", {
+              method: "POST",
+              headers: eventHeaders,
+              body: JSON.stringify({
+                lifecycle: lifecycle.lifecycle,
+                upcomingIntervalMs: policy.upcomingIntervalMs,
+                activeIntervalMs: policy.activeIntervalMs,
+                ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
+              }),
+            }));
+        seededEvents.push({
+          event_key: eventKey,
+          status: eventResponse.status,
+          body: await eventResponse.json().catch(() => null),
+        });
+      }
+      return Response.json({
+        ...teamResult,
+        event_seed: { requested: events.length, attempted: seededEvents.length, results: seededEvents },
+      }, { status: teamResponse.status });
+    }
+
     if (url.pathname === "/admin/season-ingest" && request.method === "GET") {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
