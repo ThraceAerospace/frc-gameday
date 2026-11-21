@@ -77,14 +77,24 @@ export class Multiplexer {
           typeof body.event_key !== "string" || !EVENT_KEY_PATTERN.test(body.event_key) ||
           !Number.isSafeInteger(body.version) || (body.version as number) < 0 ||
           (body.data !== undefined && !isRecord(body.data)) ||
-          (body.etag !== undefined && typeof body.etag !== "string")) {
+          (body.etag !== undefined && typeof body.etag !== "string") ||
+          (body.protocol !== undefined && body.protocol !== 1) ||
+          (body.schema_version !== undefined && body.schema_version !== 1) ||
+          (body.change !== undefined && body.change !== "snapshot" && body.change !== "patch") ||
+          (body.resource !== undefined && typeof body.resource !== "string")) {
         return Response.json({ error: "Invalid notification" }, { status: 400 });
       }
       const subscription: Subscription = { topic: body.topic, event_key: body.event_key };
       const clients = await this.state.storage.get<string[]>(subscriptionKey(subscription)) ?? [];
       const message = JSON.stringify({
         type: body.topic === "event-state" ? "snapshot.changed" : "analytics.changed",
+        protocol: 1,
+        schema_version: 1,
         topic: body.topic,
+        resource: typeof body.resource === "string"
+          ? body.resource
+          : body.topic === "event-state" ? "event-snapshot" : "event-analytics",
+        change: body.change === "patch" ? "patch" : "snapshot",
         event_key: body.event_key,
         version: body.version,
         ...(isRecord(body.data) ? { data: body.data } : {}),
