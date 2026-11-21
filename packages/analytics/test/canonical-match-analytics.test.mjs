@@ -108,7 +108,7 @@ test("TeamRuntime calculates its own season comparison from the event cohort", a
     team_states: [{ event_key: "2026test", team_key: "frc1", sources: {}, matches: [match] }],
   };
   const changes = [10, 5, 4, 3, 2, 1];
-  const cohortRecords = Array.from({ length: 6 }, (_, index) => {
+  const comparisonRecords = Array.from({ length: 6 }, (_, index) => {
     const teamNumber = index + 1;
     const prior = 50 + index * 10;
     const current = prior + changes[index];
@@ -124,12 +124,12 @@ test("TeamRuntime calculates its own season comparison from the event cohort", a
       record("2026test", "Target", "2026-03-01", current),
     ];
   }).flat();
-  const cohort = {
+  const comparisonInput = {
     state: "complete", team_count: 6, total_team_event_records: 12,
     processed_team_event_records: 12, unavailable_team_event_records: 0,
-    discovery_pending_teams: 0, updated_at: 1_800_000_000_000, records: cohortRecords,
+    discovery_pending_teams: 0, updated_at: 1_800_000_000_000, records: comparisonRecords,
   };
-  const result = await calculateCanonicalTeamEventAnalytics(state, "frc1", [], cohort);
+  const result = await calculateCanonicalTeamEventAnalytics(state, "frc1", [], comparisonInput);
   const analytics = result.analytics;
   assert.ok(analytics);
   assert.equal(analytics.season_comparison.change, 10);
