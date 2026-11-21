@@ -1826,7 +1826,10 @@ export class EventRuntime {
     });
     if (publishedVersion !== null) {
       if (calculated.eventView) {
-        this.hydratedEventViewPublication = await this.storage.get(EVENT_VIEW_PUBLICATION_KEY);
+        this.hydratedEventViewPublication = await this.storage.get<{
+          version: number; source_revision: number; status: string; generated_at: number;
+          view: FieldViewEventView;
+        }>(EVENT_VIEW_PUBLICATION_KEY);
       }
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       await Promise.all([
