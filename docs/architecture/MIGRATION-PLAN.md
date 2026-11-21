@@ -220,7 +220,7 @@ Do not build a permanent dual-write system. If temporary mirroring is needed for
 
 ### M6 — Analytics engine migration
 
-<badge label="Complete" color="success" /> Functional engine migration and archive-backed parity validation are complete. The current invalidation executor deliberately retains whole-event recalculation for all sources; selective partial recalculation is not enabled while shared event-wide baselines remain coupled.
+**Status: Complete.** Functional engine migration and archive-backed parity validation are complete. The current invalidation executor deliberately retains whole-event recalculation for all sources; selective partial recalculation is not enabled while shared event-wide baselines remain coupled.
 
 **Work**
 - Define a small registered operation vocabulary.
