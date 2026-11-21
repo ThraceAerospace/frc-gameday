@@ -45,7 +45,7 @@ test("Canonical aggregate calculates event analytics without embedding TeamEvent
   assert.equal(calculated.analysis.alliance_epa.red.post_match_team_count, 3);
   assert.equal(calculated.flags.prediction.label, "Lean Red");
   assert.equal(calculated.analysis.audit.inputs[0].source_revision, 4);
-  assert.equal(calculated.analysis.audit.definition_versions.length, 15);
+  assert.equal(calculated.analysis.audit.definition_versions.length, 12);
   assert.equal(calculated.analysis.audit.input_digest.length, 64);
   assert.equal(result.analytics.event_key, "2026test");
   assert.equal(Object.hasOwn(result, "team_states"), false);
