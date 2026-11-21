@@ -731,6 +731,9 @@ export class TeamRuntime {
 
   async alarm(): Promise<void> {
     if (!(await this.restoreIdentity())) return;
+    // A Durable Object alarm may be the first invocation after a deployment.
+    // Apply the same legacy recurring-Statbotics cleanup as ordinary requests.
+    await this.clearRecurringStatboticsTasks();
     const now = Date.now();
     const due = await this.storage.transaction(async (tx) => {
       const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
