@@ -853,11 +853,10 @@ export class EventRuntime {
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
         total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
-      const currentTeamStates = eventStatePublication
-        ? await this.readTeamEventStates(eventStatePublication.state, currentSourceRevision)
-        : [];
-      const materializedTeamCount = currentTeamStates.length;
-      const teamStateCoverageStatus = rosterAvailable && materializedTeamCount === expectedTeamCount ? "complete" : "partial";
+      // Admin diagnostics must stay local to this EventRuntime. Checking every
+      // participant's TeamRuntime here turns one dashboard read into an N+1
+      // cross-object fan-out; full team-state coverage belongs to /view.
+      const teamStateCoverageStatus = rosterAvailable ? "not_inspected" : "unavailable";
       const eventStateStatus = !eventStatePublication ? "missing"
         : eventStatePublication.sourceRevision === currentSourceRevision ? eventStatePublication.status : "stale";
       const storedAnalyticsStatus = await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending");
@@ -878,7 +877,7 @@ export class EventRuntime {
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
           pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
-          team_state_coverage: { status: teamStateCoverageStatus, expected: expectedTeamCount, materialized: materializedTeamCount },
+          team_state_coverage: { status: teamStateCoverageStatus, expected: expectedTeamCount, materialized: null },
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         lifecycle: {
