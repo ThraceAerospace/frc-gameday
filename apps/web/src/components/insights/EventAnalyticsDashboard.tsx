@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/20/solid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EventAnalyticsResponse, ReviewFinding, TeamAnalyticsRow, TeamInsight } from "@/lib/insights/types";
-import type { FieldViewEventState, FieldViewTeamEventAnalytics } from "@fieldview/domain";
+import type { FieldViewEventState, FieldViewTeamEventAnalytics, FieldViewTeamEventState } from "@fieldview/domain";
 import type { CanonicalAnalyticsPublication } from "@/lib/events/workerRealtime";
 import { refreshCanonicalEventAnalytics, refreshCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
 import { toEventAnalyticsDashboardData } from "@/lib/insights/canonical-dashboard-adapter";
@@ -88,17 +88,18 @@ function teamNumberLink(teamNumber:number):ReactNode {
   return <Link href={`/team/${teamNumber}`} className="font-semibold text-slate-800 hover:text-[var(--fv-brand-strong)]">{teamNumber}</Link>;
 }
 
-export default function EventAnalyticsDashboard({ eventKey, eventName, eventState, analyticsPublication, websocketStatus, websocketStale }: {
+export default function EventAnalyticsDashboard({ eventKey, eventName, eventState, teamStates, analyticsPublication, websocketStatus, websocketStale }: {
   eventKey: string;
   eventName: string;
   eventState: FieldViewEventState;
+  teamStates: FieldViewTeamEventState[];
   analyticsPublication: CanonicalAnalyticsPublication | undefined;
   websocketStatus: "connected" | "disconnected" | "connecting";
   websocketStale: boolean;
 }) {
   const data = useMemo(
-    () => toEventAnalyticsDashboardData(eventState, analyticsPublication),
-    [eventState, analyticsPublication],
+    () => toEventAnalyticsDashboardData(eventState, teamStates, analyticsPublication),
+    [eventState, teamStates, analyticsPublication],
   );
   const [tab, setTab] = useState<Tab>("overview");
   const loading = !data && (!analyticsPublication || analyticsPublication.status === "pending" || analyticsPublication.status === "running" || (analyticsPublication.status === "succeeded" && !analyticsPublication.publication));
