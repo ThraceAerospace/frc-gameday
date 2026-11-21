@@ -11,9 +11,10 @@ import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvir
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
 import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
-import { acquireProviderRequestPermit, releaseProviderRequestPermit } from "./provider-request-gate.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
+interface ActiveEventMembership { year: number; updatedAt: number; }
+const ACTIVE_EVENTS_KEY = "activity:active-events";
 export interface TeamResource { provider: TeamProvider; endpoint: string; }
 interface ManualTeamPollRequest { endpoint: string; year: number; dueAt: number; attempts: number; }
 interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
@@ -29,14 +30,6 @@ const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
 
-function staggeredProviderDueAt(endpoint: string, base: number, interval: number): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < endpoint.length; index += 1) {
-    hash ^= endpoint.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return base + ((hash >>> 0) % Math.max(1, interval));
-}
 
 export function teamResourceEndpoints(teamKey: string, year: number): TeamResource[] {
   const providerTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
@@ -98,6 +91,14 @@ export class TeamRuntime {
     }
     return interval;
   }
+  private activeRefreshIntervalMs(): number {
+    const configured = this.env.TEAM_ACTIVE_REFRESH_INTERVAL_MS;
+    const interval = configured === undefined ? 60_000 : Number(configured);
+    if (!Number.isSafeInteger(interval) || interval < 10_000) {
+      throw new Error("TEAM_ACTIVE_REFRESH_INTERVAL_MS must be an integer of at least 10000");
+    }
+    return interval;
+  }
   private endpoints(year: number): TeamResource[] {
     return teamResourceEndpoints(this.teamKey, year);
   }
@@ -156,6 +157,8 @@ export class TeamRuntime {
     });
   }
   private async schedule(year: number, immediate: boolean): Promise<void> {
+    const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+    const intervalMs = Object.keys(activeEvents).length > 0 ? this.activeRefreshIntervalMs() : this.refreshIntervalMs();
     await this.storage.transaction(async (tx) => {
       const now = Date.now();
       // Discard malformed tasks from older/incorrect resource scheduling formats.
@@ -167,14 +170,13 @@ export class TeamRuntime {
           await tx.delete(key);
         }
       }
-      const intervalMs = this.refreshIntervalMs();
       for (const resource of this.endpoints(year)) {
         const { provider, endpoint } = resource;
         const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
         // Resource registration must never advance an existing recurring fetch.
         const task = {
           provider, endpoint,
-          dueAt: previous?.dueAt ?? (immediate ? now + intervalMs : now),
+          dueAt: previous ? Math.min(previous.dueAt, immediate ? now + intervalMs : now) : (immediate ? now + intervalMs : now),
           intervalMs, attempts: previous?.attempts ?? 0,
         } satisfies TeamPollTask;
         if (!previous || previous.provider !== task.provider || previous.endpoint !== task.endpoint ||
@@ -212,6 +214,24 @@ export class TeamRuntime {
         await this.enqueueManualPolls(needed, year);
       }
       return this.snapshot(year);
+    }
+    if (request.method === "POST" && url.pathname === "/activity") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Expected event activity payload" }, { status: 400 });
+      const value = body as Record<string, unknown>;
+      const eventKey = value.event_key, eventYear = value.year;
+      if (typeof eventKey !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) ||
+          !Number.isInteger(eventYear) || (eventYear as number) < 1992 || (eventYear as number) > 2200 ||
+          typeof value.active !== "boolean") {
+        return Response.json({ error: "Invalid event activity payload" }, { status: 400 });
+      }
+      const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+      if (value.active) activeEvents[eventKey] = { year: eventYear as number, updatedAt: Date.now() };
+      else delete activeEvents[eventKey];
+      await this.storage.put(ACTIVE_EVENTS_KEY, activeEvents);
+      const years = new Set<number>([eventYear as number, ...Object.values(activeEvents).map((item) => item.year)]);
+      await Promise.all([...years].map((activeYear) => this.schedule(activeYear, false)));
+      return Response.json({ team_key: this.teamKey, active_events: Object.keys(activeEvents).sort(), active: value.active });
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
       // Explicit admin ingestion queues durable work. Each alarm processes one
@@ -261,6 +281,7 @@ export class TeamRuntime {
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const providerByEndpoint = new Map([...tasks.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({ team_key: this.teamKey, snapshot_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+        active_events: Object.keys(await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {}).sort(),
         polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
         endpoints: [...states.values()].map((state) => {
           const value = state.providerData ?? state.data;
@@ -312,8 +333,6 @@ export class TeamRuntime {
     { deferredUntil: number } |
     { success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }
   > {
-    const permit = await acquireProviderRequestPermit(this.env, "team:" + this.teamKey, resource.endpoint);
-    if (!permit.granted) return { deferredUntil: permit.retryAt };
     const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
     const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(resource.endpoint);
     const requestState = createPollRequestSnapshot(initial), headers = new Headers();
@@ -333,8 +352,6 @@ export class TeamRuntime {
       else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
     } catch (error) {
       result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
-    } finally {
-      await releaseProviderRequestPermit(this.env, permit.leaseId);
     }
     const next = await this.storage.transaction(async (tx) => {
       const key = endpointKey(resource.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
@@ -378,34 +395,22 @@ export class TeamRuntime {
       dueTasks.sort((left, right) => left.dueAt - right.dueAt || left.endpoint.localeCompare(right.endpoint));
       const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const manualDue = queued.filter((item) => item.dueAt <= now);
-      const intervalValue = this.env.PROVIDER_REQUEST_INTERVAL_MS;
-      const providerInterval = intervalValue === undefined ? 1_000 : Math.max(100, Number(intervalValue) || 1_000);
-      const deferAt = (endpoint: string) => staggeredProviderDueAt(endpoint, now + providerInterval, providerInterval);
-      const selectedManual = manualDue[0];
-      const selectedTask = selectedManual ? undefined : dueTasks[0];
-
-      // Process at most one provider request per alarm. Keep all remaining
-      // durable work, but spread its next due time instead of fanning out
-      // gate RPCs for every resource in the same invocation.
-      for (const task of dueTasks) {
-        if (selectedTask?.endpoint === task.endpoint) {
-          const next = { ...task, attempts: task.attempts + 1 };
-          const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
-          await tx.put(taskKey(task.endpoint), { ...next, dueAt: retryAt });
-        } else {
-          await tx.put(taskKey(task.endpoint), { ...task, dueAt: deferAt(task.endpoint) });
-        }
+      const manualEndpoints = new Set(manualDue.map((item) => item.endpoint));
+      const ready = dueTasks.filter((task) => !manualEndpoints.has(task.endpoint));
+      for (const task of ready) {
+        const next = { ...task, attempts: task.attempts + 1 };
+        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
+        await tx.put(taskKey(task.endpoint), { ...next, dueAt: retryAt });
       }
       if (manualDue.length > 0) {
+        const dueEndpoints = new Set(manualDue.map((item) => item.endpoint));
         await tx.put(MANUAL_QUEUE_KEY, queued.map((item) =>
-          selectedManual?.endpoint === item.endpoint
-            ? { ...item, dueAt: now + 60_000 }
-            : item.dueAt <= now ? { ...item, dueAt: deferAt(item.endpoint) } : item));
+          dueEndpoints.has(item.endpoint) ? { ...item, dueAt: now + 60_000 } : item));
       }
       await this.rearm(tx);
-      return { ready: selectedTask ? [selectedTask] : [], manualDue: selectedManual ? [selectedManual] : [] };
+      return { ready, manualDue };
     });
-    for (const item of due.manualDue) {
+    await Promise.all(due.manualDue.map(async (item) => {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) continue;
       const result = await this.pollResourceNow(resource);
@@ -422,8 +427,8 @@ export class TeamRuntime {
         await tx.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(tx);
       });
-    }
-    for (const task of due.ready) {
+    }));
+    await Promise.all(due.ready.map(async (task) => {
       const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
       const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(task.endpoint);
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
@@ -431,12 +436,6 @@ export class TeamRuntime {
       let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
         { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
         { status: "failed"; httpStatus?: number; error?: string };
-      const permit = await acquireProviderRequestPermit(this.env, "team:" + this.teamKey, task.endpoint);
-      if (!permit.granted) {
-        const current = await this.storage.get<TeamPollTask>(taskKey(task.endpoint));
-        if (current) await this.storage.put(taskKey(task.endpoint), { ...current, dueAt: permit.retryAt, attempts: task.attempts });
-        continue;
-      }
       try {
         const client = task.provider === "tba" ? this.api
           : task.provider === "statbotics" ? this.statboticsApi
@@ -451,8 +450,6 @@ export class TeamRuntime {
         else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
       } catch (error) {
         result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
-      } finally {
-        await releaseProviderRequestPermit(this.env, permit.leaseId);
       }
       const changed = await this.storage.transaction(async (tx) => {
         const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
@@ -473,7 +470,7 @@ export class TeamRuntime {
           ? { ...current, dueAt: Date.now() + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))), attempts: task.attempts }
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
       }
-    }
+    }));
     await this.storage.transaction((tx) => this.rearm(tx));
   }
 }
