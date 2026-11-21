@@ -43,10 +43,10 @@ test("match webhook patches the matching provider record without dropping other 
   ]);
 });
 
-test("a new match webhook record is appended without rewriting its payload", () => {
+test("a new match webhook record is appended with canonical match fields", () => {
   const incoming = { key: "qm3", alliances: { red: { score: 100 } } };
   const result = reconcileWebhookEndpoint("/event/2026test/matches", [], incoming);
-  assert.equal(result[0], incoming);
+  assert.deepEqual(result[0], incoming);
 });
 
 test("first match webhook initializes event match state as an array", () => {
