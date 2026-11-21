@@ -21,7 +21,7 @@ type TileSurfaceSettingsViewProps = { state: TileSurfaceState; actions: TileSurf
 
 function EventSettingsRow({ eventKey, label, position, state, actions }: { eventKey: string; label: string; position: number; state: TileSurfaceState; actions: TileSurfaceActions; }) {
   const canonical = useCanonicalEventSnapshot(eventKey);
-  const snapshot = canonical?.snapshot;
+  const snapshot = canonical?.snapshot.state;
   const event = snapshot?.event ?? null;
   const teams = snapshot?.teams ?? [];
   const teamsStatuses = Object.fromEntries((snapshot?.event_teams ?? []).flatMap((entry) =>
