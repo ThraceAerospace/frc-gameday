@@ -347,9 +347,13 @@ export default function AdminOperationsDashboard() {
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
     void loadEventTeamSeed(selected.key, selected.year);
-    const timer = window.setInterval(() => void loadEventTeamSeed(selected.key, selected.year), 10_000);
-    return () => window.clearInterval(timer);
   }, [authenticated, selected?.kind, selected?.key, selected?.year, loadEventTeamSeed]);
+
+  useEffect(() => {
+    if (!authenticated || selected?.kind !== "event" || eventTeamSeed?.status !== "running") return;
+    const timer = window.setInterval(() => void loadEventTeamSeed(selected.key, selected.year), 3_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, eventTeamSeed?.status, loadEventTeamSeed]);
 
   useEffect(() => {
     if (!authenticated || !token || selected) return;
