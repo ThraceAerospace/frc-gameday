@@ -605,6 +605,14 @@ export class EventRuntime {
         total + (endpointStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
       const storedStatus = await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending");
       const analyticsStatus = publication && publication.sourceRevision !== currentSourceRevision ? "stale" : storedStatus;
+      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+      const storedEventAnalytics = publication?.eventAnalytics as ReturnType<typeof normalizeFieldViewEventState>["analytics"] | undefined;
+      const currentEventAnalytics = storedEventAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+        ? storedEventAnalytics
+        : storedEventAnalytics ? { ...storedEventAnalytics, team_comparison: undefined } : storedEventAnalytics;
+      const currentPublication = publication
+        ? { ...publication, ...(currentEventAnalytics === undefined ? {} : { eventAnalytics: currentEventAnalytics }) }
+        : null;
       return Response.json({
         event_key: this.eventKey,
         revision,
@@ -613,7 +621,7 @@ export class EventRuntime {
         calculated_at: publication?.calculatedAt ?? null,
         source_revision: publication?.sourceRevision ?? null,
         pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
-        publication: publication ?? null,
+        publication: currentPublication,
       }, {
         headers: { "X-FieldView-Analytics-Version": String(revision), "Cache-Control": "no-store" },
       });
