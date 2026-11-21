@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCanonicalSeasonCohort } from "../src/canonical-season-cohort.ts";
+import { buildFieldViewEventTeamSeasonComparisonInput } from "../src/event-team-season-comparison.ts";
 
 const event = (key, start_date, event_type = 0) => ({
   key, name: key, event_code: key.slice(4), start_date, event_type,
@@ -20,11 +20,11 @@ const snapshot = (teamNumber, events, statbotics_events) => ({
   statbotics_events,
 });
 
-test("canonical season cohort retains prior/current events and unavailable records without zero filling", () => {
+test("event team season comparison input retains prior/current events and unavailable records without zero filling", () => {
   const target = {
     key: "2026target", name: "Target Event", event_code: "target", start_date: "2026-03-10",
   };
-  const result = buildCanonicalSeasonCohort(target, [1, 2, 3], [
+  const result = buildFieldViewEventTeamSeasonComparisonInput(target, [1, 2, 3], [
     snapshot(1, [
       event("2026prior", "2026-03-01"),
       event("2026target", "2026-03-10"),
@@ -58,11 +58,11 @@ test("canonical season cohort retains prior/current events and unavailable recor
   assert.equal(result.records[4].status, "unavailable");
 });
 
-test("canonical season cohort marks complete only when every team history is acquired", () => {
+test("event team season comparison input marks complete only when every team history is acquired", () => {
   const target = {
     key: "2026target", name: "Target Event", event_code: "target", start_date: "2026-03-10",
   };
-  const result = buildCanonicalSeasonCohort(target, [1], [
+  const result = buildFieldViewEventTeamSeasonComparisonInput(target, [1], [
     snapshot(1, [event("2026target", "2026-03-10")], [statboticsEvent("2026target", 50, 10)]),
   ], 1_800_000_000_000);
   assert.equal(result.state, "complete");
