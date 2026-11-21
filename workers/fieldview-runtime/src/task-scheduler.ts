@@ -1539,6 +1539,25 @@ export class TaskScheduler {
   }
 
   private async handleAlarm(): Promise<void> {
+    // Recover the mandatory current-season event index before advancing other
+    // scheduler work. A failed discovery preserves the previous index and
+    // schedules a retry; no visitor request is needed to start recovery.
+    const currentYear = new Date().getUTCFullYear();
+    const currentIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentYear);
+    const currentCheckedAt = currentIndex?.checkedAt ?? currentIndex?.updatedAt ?? 0;
+    if (!currentIndex || Date.now() - currentCheckedAt >= eventPollingPolicy(this.env).discoveryIntervalMs) {
+      try {
+        await this.measureStage("current-season-index-recovery", () =>
+          this.refreshCurrentYearEventDirectory(eventPollingPolicy(this.env)));
+        await this.storage.delete("scheduler:current-season-index-error");
+      } catch (error) {
+        await this.storage.put("scheduler:current-season-index-error",
+          error instanceof Error ? error.message : String(error));
+        await this.storage.setAlarm(Date.now() + 60_000);
+        return;
+      }
+    }
+
     const eventSeedJobs = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
     const activeEventSeed = [...eventSeedJobs.values()].find((job) => job.status === "running");
     if (activeEventSeed) {
