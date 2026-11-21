@@ -89,22 +89,85 @@ export default {
         return Response.json({ error: "Webhook has no valid event key" }, { status: 400 });
       }
 
+      const messageType = payload.message_type;
+      const messageData = payload.message_data;
+      const teamKeys = new Set<string>();
+      const addTeamKey = (value: unknown) => {
+        if (typeof value === "string" && /^frc[0-9]+$/.test(value)) teamKeys.add(value);
+      };
+      const addMatchTeams = (value: unknown) => {
+        if (!isRecord(value) || !isRecord(value.alliances)) return;
+        for (const color of ["red", "blue"]) {
+          const alliance = value.alliances[color];
+          if (isRecord(alliance) && Array.isArray(alliance.team_keys)) {
+            for (const key of alliance.team_keys) addTeamKey(key);
+          }
+        }
+      };
+      if (messageType === "match_score" || messageType === "match_video") {
+        addMatchTeams(matchData);
+      } else if (messageType === "upcoming_match") {
+        if (Array.isArray(messageData.team_keys)) {
+          for (const key of messageData.team_keys) addTeamKey(key);
+        }
+        addTeamKey(messageData.team_key);
+      } else if (messageType === "awards_posted") {
+        if (Array.isArray(messageData.recipient_list)) {
+          for (const recipient of messageData.recipient_list) {
+            if (isRecord(recipient)) {
+              if (typeof recipient.team_key === "string") addTeamKey(recipient.team_key);
+              else if (typeof recipient.team_number === "number" && Number.isSafeInteger(recipient.team_number)) {
+                addTeamKey("frc" + recipient.team_number);
+              }
+            }
+          }
+        }
+        addTeamKey(messageData.team_key);
+      } else if (messageType === "alliance_selection") {
+        // TBA payload variants may include explicit selected team keys. Never
+        // infer recipients from array positions or an event metadata object.
+        const candidates = messageData.team_keys;
+        if (Array.isArray(candidates)) for (const key of candidates) addTeamKey(key);
+        addTeamKey(messageData.team_key);
+      } else if (!["schedule_updated", "starting_comp_level"].includes(messageType)) {
+        return Response.json({ error: "Unsupported TBA webhook message type" }, { status: 400 });
+      }
+
       const digest = await crypto.subtle.digest("SHA-256", rawBody);
       const webhookId = [...new Uint8Array(digest)]
         .map((byte) => byte.toString(16).padStart(2, "0")).join("");
-      await registerRuntimeObject(env, "event", eventKey);
-      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
       const headers = new Headers({
         Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
         "X-FieldView-Event-Key": eventKey,
         "X-FieldView-Webhook-Id": webhookId,
         "Content-Type": "application/json",
       });
-      return stub.fetch(new Request("https://event-runtime/webhook", {
-        method: "POST",
-        headers,
-        body: rawBody,
-      }));
+      const targets: Array<{ kind: "event" | "team"; key: string; promise: Promise<Response> }> = [];
+      const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
+      targets.push({ kind: "event", key: eventKey, promise: eventStub.fetch(new Request("https://event-runtime/webhook", {
+        method: "POST", headers: new Headers(headers), body: rawBody,
+      })) });
+      if (teamKeys.size > 0) {
+        if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime binding is required for this webhook scope" }, { status: 503 });
+        for (const teamKey of teamKeys) {
+          const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+          const teamHeaders = new Headers(headers);
+          teamHeaders.set("X-FieldView-Team-Key", teamKey);
+          targets.push({ kind: "team", key: teamKey, promise: teamStub.fetch(new Request("https://team-runtime/webhook", {
+            method: "POST", headers: teamHeaders, body: rawBody,
+          })) });
+        }
+      }
+      const outcomes = await Promise.allSettled(targets.map((target) => target.promise));
+      const failures = outcomes.flatMap((outcome, index) => {
+        if (outcome.status === "rejected") return [{ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) }];
+        return outcome.value.ok ? [] : [{ kind: targets[index].kind, key: targets[index].key, status: outcome.value.status }];
+      });
+      if (failures.length > 0) {
+        console.error("[WEBHOOK][TBA] Partial dispatch failure", JSON.stringify({ event_key: eventKey, webhook_id: webhookId, failures }));
+        return Response.json({ accepted: false, event_key: eventKey, targets: targets.length, failures }, { status: 502 });
+      }
+      return Response.json({ accepted: true, event_key: eventKey, webhook_id: webhookId, targets: targets.map(({ kind, key }) => ({ kind, key })) });
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
