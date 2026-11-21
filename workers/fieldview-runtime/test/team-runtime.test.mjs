@@ -115,6 +115,7 @@ test("TeamRuntime serves a cached canonical TeamState until provider inputs chan
   }));
 
   await ingest();
+  await drainManualQueue(runtime, storage);
   const first = await (await read()).json();
   const publicationKey = "team-state:2026:publication";
   const firstPublication = storage.values.get(publicationKey);
@@ -128,6 +129,7 @@ test("TeamRuntime serves a cached canonical TeamState until provider inputs chan
 
   profileVersion = 2;
   await ingest();
+  await drainManualQueue(runtime, storage);
   const updated = await (await read()).json();
   assert.equal(updated.team.nickname, "Version 2");
   assert.notStrictEqual(storage.values.get(publicationKey), firstPublication,
@@ -147,9 +149,11 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
     body: JSON.stringify({ endpoint: "/team/frc3461" }),
   });
   await runtime.fetch(ingestProfile());
+  await drainManualQueue(runtime, storage);
   fail = true;
   const refresh = await runtime.fetch(ingestProfile());
   assert.equal(refresh.status, 202);
+  await drainManualQueue(runtime, storage);
   const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": "frc3461" } }))).json();
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "stale");
@@ -167,11 +171,13 @@ test("TeamRuntime admin seed fans out independent resources concurrently", async
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 202);
   const result = await response.json();
-  assert.equal(result.attempted, true);
-  assert.equal(calls.length, 7);
+  assert.equal(result.queued, true);
+  assert.equal(result.attempted, false);
+  assert.equal(calls.length, 0, "seed requests must not fetch providers inline");
   await drainManualQueue(runtime, storage);
+  assert.equal(calls.length, 7);
   const snapshot = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": "frc3461" },
   }));
