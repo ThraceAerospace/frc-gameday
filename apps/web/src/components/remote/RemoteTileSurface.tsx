@@ -85,7 +85,7 @@ export default function RemoteSurface({
                   position={position}
                   state={state}
                   actions={controller.actions}
-                  eventSnapshot={eventSnapshot}
+                  eventSnapshot={eventSnapshot?.state}
                 />
               );
             })}
