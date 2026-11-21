@@ -230,61 +230,6 @@ export class TeamRuntime {
     // from the previous scheduler policy. Remove them on first touch; explicit
     // seed/refresh requests continue to enqueue one-shot Statbotics work.
     await this.clearRecurringStatboticsTasks();
-    const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
-    const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
-    if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
-    // Every TeamRuntime starts with the current season state, even when first
-    // reached through an older event. The requested season is also materialized.
-    const currentYear = new Date().getUTCFullYear();
-    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear)
-      ? null
-      : await this.snapshot(currentYear);
-    const initializedState = year === currentYear && initializedCurrentState
-      ? initializedCurrentState
-      : await this.snapshot(year);
-    if (publicRead || publicSeasonAnalyticsRead) {
-      // Queue only missing/stale resources. Do not execute an alarm inline:
-      // the caller receives the best current snapshot while durable work runs.
-      const resources = this.endpoints(year);
-      const states = await Promise.all(resources.map(({ endpoint }) =>
-        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-      const now = Date.now();
-      const needed = resources.filter((resource, index) => {
-        // Statbotics team-year/team-event data is event-driven, not a recurring
-        // profile poll. A meaningful TBA team or season-event-list change below
-        // queues a bounded refresh while explicit seed/refresh remains available.
-        if (resource.provider === "statbotics") return false;
-        const state = states[index];
-        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt <= now);
-      });
-      if (needed.length > 0) {
-        await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year);
-      }
-      if (publicRead) return initializedState;
-    }
-    if (publicSeasonAnalyticsRead) {
-      return this.buildSeasonAnalyticsResponse(year);
-    }
-    if (publicEventStateRead) {
-      const eventKey = url.searchParams.get("event_key") ?? "";
-      if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
-      const state = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + eventKey);
-      if (!state) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
-      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + eventKey + ":inputs");
-      return Response.json(state, {
-        headers: {
-          "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
-          ...(inputs ? {
-            "X-FieldView-Event-Source-Revision": String(inputs.event_source_revision),
-            "X-FieldView-Team-Source-Revision": String(inputs.team_source_revision),
-            "X-FieldView-Comparison-Input-Updated-At": String(inputs.comparison_input_updated_at),
-          } : {}),
-          "Cache-Control": "no-store",
-        },
-      });
-    }
     if (request.method === "POST" && url.pathname === "/webhook") {
       const eventKey = request.headers.get("X-FieldView-Event-Key") ?? "";
       const webhookId = request.headers.get("X-FieldView-Webhook-Id") ?? "";
@@ -380,6 +325,61 @@ export class TeamRuntime {
         revision: await this.storage.get<number>(revisionKey) ?? 0 });
     }
 
+    const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
+    const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
+    if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
+    // Every TeamRuntime starts with the current season state, even when first
+    // reached through an older event. The requested season is also materialized.
+    const currentYear = new Date().getUTCFullYear();
+    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear)
+      ? null
+      : await this.snapshot(currentYear);
+    const initializedState = year === currentYear && initializedCurrentState
+      ? initializedCurrentState
+      : await this.snapshot(year);
+    if (publicRead || publicSeasonAnalyticsRead) {
+      // Queue only missing/stale resources. Do not execute an alarm inline:
+      // the caller receives the best current snapshot while durable work runs.
+      const resources = this.endpoints(year);
+      const states = await Promise.all(resources.map(({ endpoint }) =>
+        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
+      const now = Date.now();
+      const needed = resources.filter((resource, index) => {
+        // Statbotics team-year/team-event data is event-driven, not a recurring
+        // profile poll. A meaningful TBA team or season-event-list change below
+        // queues a bounded refresh while explicit seed/refresh remains available.
+        if (resource.provider === "statbotics") return false;
+        const state = states[index];
+        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
+          (state.expiresAt !== null && state.expiresAt <= now);
+      });
+      if (needed.length > 0) {
+        await this.schedule(year, true);
+        await this.enqueueManualPolls(needed, year);
+      }
+      if (publicRead) return initializedState;
+    }
+    if (publicSeasonAnalyticsRead) {
+      return this.buildSeasonAnalyticsResponse(year);
+    }
+    if (publicEventStateRead) {
+      const eventKey = url.searchParams.get("event_key") ?? "";
+      if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
+      const state = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + eventKey);
+      if (!state) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
+      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + eventKey + ":inputs");
+      return Response.json(state, {
+        headers: {
+          "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
+          ...(inputs ? {
+            "X-FieldView-Event-Source-Revision": String(inputs.event_source_revision),
+            "X-FieldView-Team-Source-Revision": String(inputs.team_source_revision),
+            "X-FieldView-Comparison-Input-Updated-At": String(inputs.comparison_input_updated_at),
+          } : {}),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
     if (request.method === "POST" && url.pathname === "/event-analytics") {
       const body: unknown = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Expected event analytics input" }, { status: 400 });
