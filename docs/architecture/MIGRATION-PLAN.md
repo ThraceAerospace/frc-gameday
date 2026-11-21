@@ -142,6 +142,19 @@ Do not break a feature merely to make Redis unused. In particular, remote-sessio
 
 The Redis client module, ioredis dependency, and old implementation files remain in the repository until a repository-wide runtime/deployment audit confirms that no valid execution path, test, script, or operational workflow requires Redis. Only then may the Redis code and dependency be deleted. Production configuration is not changed as part of branch-only migration work.
 
+### Initial provider-cache migration progress
+
+The first provider slice is being moved into the existing Durable Object owners:
+
+- **EventRuntime** owns TBA event endpoint representations and the event-scoped Statbotics match collection.
+- **TeamRuntime** owns TBA team resources, Statbotics team-year/team-event resources, and FRC Colors team identity data.
+- TeamRuntime now persists a canonical TeamState publication keyed by the contributing endpoint revisions and freshness metadata. Unchanged reads reuse that exact publication. Rebuilds use a consistent endpoint read set and publish the new State and compatibility key together in one storage transaction, only if the inputs still match the read set.
+- The Vercel Statbotics match API now reads the event-scoped collection from EventRuntime instead of invoking the Redis-backed Statbotics client.
+- The Vercel TBA webhook endpoint now relays the signed raw request to the Worker. EventRuntime applies the webhook reconciliation. The Vercel relay still emits the legacy WSS notification through the existing Redis pub/sub bridge; that Redis use remains valid until all WSS consumers have moved.
+- The Worker webhook ingress requires the Cloudflare secret `TBA_WEBHOOK_SECRET` to match the HMAC secret configured with TBA. The Vercel compatibility relay requires `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL`. This branch does not modify external secrets, TBA webhook settings, or production routing.
+
+This is not yet the final Redis-removal audit. Legacy provider client modules and their implementations remain in place as requested, and their complete import/runtime reachability still needs to be verified before they can be considered safe to delete.
+
 ## 6. Migration phases and exit criteria
 
 ### M1 — Audit and migration mapping
