@@ -291,7 +291,7 @@ interface TeamDiscoveryCache {
 
 interface EventTeamSeedJob {
   eventKey: string; year: number; status: "running" | "completed" | "completed_with_errors";
-  stage: "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
+  stage: "discover" | "seed" | "wait"; teamKeys: string[]; cursor: number; activeTeamKey: string | null;
   teamAttempts: number; teamWaitStartedAt?: number; seededTeams: number; failedTeams: number; historicalEventsScheduled: number;
   errors: Array<{ team_key: string; detail: string; at: number }>;
   eventKeys?: string[]; eventCursor?: number;
@@ -619,16 +619,9 @@ export class TaskScheduler {
       if ([...seasonJobs.values()].some((job) => job.status === "running" || job.status === "paused")) return Response.json({ error: "Pause or complete full-season ingestion before starting event team seeding." }, { status: 409 });
       const current = await this.storage.get<EventTeamSeedJob>(eventTeamSeedKey(eventKey));
       if (current?.status === "running") return Response.json(current, { status: 202 });
-      const endpoint = TBA_ENDPOINTS.eventTeams(eventKey);
-      const response = await this.api.request(endpoint);
-      if (!response.ok) return Response.json({ error: "Unable to retrieve event participants (HTTP " + response.status + ")" }, { status: 502 });
-      const participants = await response.json() as TBATeam[];
-      if (!Array.isArray(participants)) return Response.json({ error: "TBA event participants response was not an array" }, { status: 502 });
-      const teamKeys = [...new Set(participants.map((team) => team.key).filter((key): key is string => typeof key === "string" && /^frc\d+$/.test(key)))].sort();
-      if (teamKeys.length === 0) return Response.json({ error: "No valid participant teams were returned for this event" }, { status: 404 });
       const now = Date.now();
       const job: EventTeamSeedJob = {
-        eventKey, year, status: "running", stage: "seed", teamKeys, cursor: 0, activeTeamKey: null,
+        eventKey, year, status: "running", stage: "discover", teamKeys: [], cursor: 0, activeTeamKey: null,
         teamAttempts: 0, seededTeams: 0, failedTeams: 0, historicalEventsScheduled: 0,
         errors: [], startedAt: now, updatedAt: now, nextDueAt: now,
         resumeAlarmAt: await this.storage.getAlarm?.() ?? null,
@@ -1083,6 +1076,27 @@ export class TaskScheduler {
       job.status = job.failedTeams > 0 ? "completed_with_errors" : "completed";
       job.activeTeamKey = null; job.updatedAt = Date.now();
       await this.storage.put(eventTeamSeedKey(job.eventKey), job); return;
+    }
+    if (job.stage === "discover") {
+      try {
+        const response = await this.api.request(TBA_ENDPOINTS.eventTeams(job.eventKey));
+        if (!response.ok) throw new Error("Unable to retrieve event participants (HTTP " + response.status + ")");
+        const participants = await response.json() as TBATeam[];
+        if (!Array.isArray(participants)) throw new Error("TBA event participants response was not an array");
+        job.teamKeys = [...new Set(participants.map((team) => team.key).filter((key): key is string =>
+          typeof key === "string" && /^frc\\d+$/.test(key)))].sort();
+        if (job.teamKeys.length === 0) throw new Error("No valid participant teams were returned for this event");
+        job.stage = "seed";
+        job.nextDueAt = Date.now() + 100;
+      } catch (error) {
+        job.teamAttempts += 1;
+        job.errors.push({ team_key: job.eventKey, detail: error instanceof Error ? error.message : String(error), at: Date.now() });
+        if (job.teamAttempts >= 5) job.status = "completed_with_errors";
+        else job.nextDueAt = Date.now() + Math.min(30_000, 1_000 * (2 ** job.teamAttempts));
+      }
+      job.updatedAt = Date.now();
+      await this.storage.put(eventTeamSeedKey(job.eventKey), job);
+      return;
     }
     const teamKey = job.teamKeys[job.cursor];
     job.activeTeamKey = teamKey;
