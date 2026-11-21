@@ -251,12 +251,39 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Operation failed");
       if (entityKind === "event" && action === "seed-event-teams") setEventTeamSeed(body as EventTeamSeed);
-      setMessage(action.replaceAll("-", " ") + " accepted.");
       await refresh(true);
       if (entityKind !== "system" && key) await openEntity(entityKind, key, selected?.year ?? year);
+      const label = action.replaceAll("-", " ");
+      setMessage(["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams"].includes(action)
+        ? label + " queued. The runtime will process this in the background; this view refreshes automatically."
+        : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
   }, [requestHeaders, refresh, openEntity, selected, year]);
+
+  // Keep the selected runtime view current while its own alarm drains queued work.
+  // This is a single-object read, not a fan-out across the runtime inventory.
+  useEffect(() => {
+    if (!authenticated || !selected) return;
+    let active = true;
+    let inFlight = false;
+    const poll = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const params = new URLSearchParams({ kind: selected.kind, key: selected.key, year: String(selected.year) });
+        const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+        const body = await response.json();
+        if (active && response.ok) setEntity({ key: selected.key, status: response.status, state: body as EntityState });
+      } catch {
+        // Keep the last good runtime state visible during a transient read failure.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 5_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [authenticated, selected?.kind, selected?.key, selected?.year, requestHeaders]);
 
   useEffect(() => {
     if (!authenticated || selected?.kind !== "event") { setEventTeamSeed(null); return; }
@@ -428,7 +455,7 @@ export default function AdminOperationsDashboard() {
 
     {selected && <section className="mt-6 space-y-4">
       <button onClick={() => { setSelected(null); setEntity(null); window.history.pushState(null, "", "/admin/runtime"); }} className="text-sm font-semibold text-[var(--fv-brand)]">← Back to {selected.kind} directory</button>
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--fv-brand)]">{selected.kind} command center</p><h2 className="mt-1 text-2xl font-bold">{selected.key}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">{resources.length} provider resources · {tasks.length} scheduled tasks</p></div><div className="flex flex-wrap gap-2">{isEvent ? <><button disabled={busy} onClick={() => void dispatch("event", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh event</button><button disabled={busy || eventTeamSeed?.status === "running"} onClick={() => void dispatch("event", "seed-event-teams", selected.key, undefined, selected.year)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{eventTeamSeed?.status === "running" ? "Seeding event teams…" : "Seed all event teams"}</button><button disabled={busy} onClick={() => void dispatch("event", "statbotics-refresh", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Refresh Statbotics</button><button disabled={busy} onClick={() => void dispatch("event", "recalculate", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Recalculate analytics</button></> : <><button disabled={busy} onClick={() => void dispatch("team", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh team</button><button disabled={busy} onClick={() => void dispatch("team", "seed", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Seed team + events</button></>}</div></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--fv-brand)]">{selected.kind} command center</p><h2 className="mt-1 text-2xl font-bold">{selected.key}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">{resources.length} provider resources · {tasks.length} scheduled tasks · live state refreshes every 5 seconds</p></div><div className="flex flex-wrap gap-2">{isEvent ? <><button disabled={busy} onClick={() => void dispatch("event", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh event</button><button disabled={busy || eventTeamSeed?.status === "running"} onClick={() => void dispatch("event", "seed-event-teams", selected.key, undefined, selected.year)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">{eventTeamSeed?.status === "running" ? "Seeding event teams…" : "Seed all event teams"}</button><button disabled={busy} onClick={() => void dispatch("event", "statbotics-refresh", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Refresh Statbotics</button><button disabled={busy} onClick={() => void dispatch("event", "recalculate", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Recalculate analytics</button></> : <><button disabled={busy} onClick={() => void dispatch("team", "refresh", selected.key)} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Refresh team</button><button disabled={busy} onClick={() => void dispatch("team", "seed", selected.key)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-40">Seed team + events</button></>}</div></div>
       {!entity && <Panel><p className="text-sm text-[var(--fv-muted)]">Loading entity state…</p></Panel>}
       {entity && <><div className="grid gap-3 sm:grid-cols-3"><Panel><p className="text-xs text-[var(--fv-muted)]">Provider resources</p><p className="mt-1 text-2xl font-bold">{resources.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">Scheduled tasks</p><p className="mt-1 text-2xl font-bold">{tasks.length}</p></Panel><Panel><p className="text-xs text-[var(--fv-muted)]">{isEvent ? "Analytics status" : "Team runtime"}</p><p className={"mt-1 text-lg font-bold " + statusTone(isEvent ? entity.state?.analytics?.status : entity.status === 200 ? "available" : "failed")}>{isEvent ? entity.state?.analytics?.status ?? "not calculated" : entity.status === 200 ? "reachable" : "unavailable"}</p></Panel></div>
       {isEvent && eventTeamSeed && eventTeamSeed.status !== "not_started" && <Panel><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Event team seeding</h3><span className={"text-sm font-semibold " + statusTone(eventTeamSeed.status === "completed" ? "succeeded" : eventTeamSeed.status === "completed_with_errors" ? "partial" : "running")}>{eventTeamSeed.status.replaceAll("_", " ")}</span></div><div className="mt-2 grid gap-2 text-xs sm:grid-cols-4"><div>Participants: {eventTeamSeed.teamKeys?.length ?? 0}</div><div>Teams seeded: {eventTeamSeed.seededTeams ?? 0}</div><div>Teams failed: {eventTeamSeed.failedTeams ?? 0}</div><div>Historical events scheduled: {eventTeamSeed.historicalEventsScheduled ?? 0}</div></div>{eventTeamSeed.status === "running" && <p className="mt-2 text-xs text-[var(--fv-muted)]">Current team: {eventTeamSeed.activeTeamKey ?? "Preparing"} · {eventTeamSeed.cursor ?? 0} / {eventTeamSeed.teamKeys?.length ?? 0}</p>}{eventTeamSeed.errors?.length ? <div className="mt-2 space-y-1 text-xs text-rose-600">{eventTeamSeed.errors.slice(-5).map((item, index) => <p key={item.team_key + index}>{item.team_key}: {item.detail}</p>)}</div> : null}</Panel>}
