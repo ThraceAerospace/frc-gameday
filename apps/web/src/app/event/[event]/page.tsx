@@ -15,6 +15,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { formatEventDateRange } from "@/lib/time";
+import PendingSnapshotRefresh from "@/components/runtime/PendingSnapshotRefresh";
 import {
   formatAllianceLongName,
   formatPlayoffMatchGroup,
@@ -60,8 +61,9 @@ export default async function EventPage({
           <div className="w-full">
             <h1 className="text-2xl font-semibold">Event data unavailable</h1>
             <p className="mt-2 text-[var(--fv-muted)]">
-              The canonical runtime has not supplied a snapshot for <code>{eventKey}</code> yet.
+              Event data is being acquired. This page will update automatically when the first snapshot is ready.
             </p>
+            <PendingSnapshotRefresh />
           </div>
         </div>
       </SiteShell>
@@ -78,7 +80,8 @@ export default async function EventPage({
       <SiteShell>
         <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <h1 className="text-2xl font-semibold">Event unavailable</h1>
-          <p className="mt-2 text-[var(--fv-muted)]">No event record is available for <code>{eventKey}</code>.</p>
+          <p className="mt-2 text-[var(--fv-muted)]">Event details are being acquired. This page will update automatically.</p>
+          <PendingSnapshotRefresh />
         </div>
       </SiteShell>
     );
