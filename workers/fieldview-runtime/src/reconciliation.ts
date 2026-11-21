@@ -59,6 +59,23 @@ export function reconcilePolledEndpoint(
   return merged;
 }
 
+/** Convert the webhook Match alliance `teams` field to the canonical API `team_keys` field. */
+export function normalizeTbaWebhookMatch(incoming: Record<string, unknown>): Record<string, unknown> {
+  const alliances = incoming.alliances;
+  if (!isRecord(alliances)) return incoming;
+  const normalized: Record<string, unknown> = { ...alliances };
+  for (const color of ["red", "blue"]) {
+    const alliance = normalized[color];
+    if (!isRecord(alliance)) continue;
+    const { teams, ...fields } = alliance;
+    normalized[color] = {
+      ...fields,
+      ...(Array.isArray(teams) ? { team_keys: teams } : {}),
+    };
+  }
+  return { ...incoming, alliances: normalized };
+}
+
 /** Apply a full-match or upcoming-match webhook patch to the event match list. */
 export function reconcileWebhookEndpoint(
   endpoint: string,
@@ -68,16 +85,17 @@ export function reconcileWebhookEndpoint(
   if (!endpoint.endsWith("/matches") || !isRecord(incoming)) {
     return incoming;
   }
-  const key = matchKey(incoming);
-  if (!key) return incoming;
-  if (!Array.isArray(latest)) return [incoming];
+  const normalizedIncoming = normalizeTbaWebhookMatch(incoming);
+  const key = matchKey(normalizedIncoming);
+  if (!key) return normalizedIncoming;
+  if (!Array.isArray(latest)) return [normalizedIncoming];
 
   let found = false;
   const merged = latest.map((match) => {
     if (matchKey(match) !== key) return match;
     found = true;
-    return isRecord(match) ? { ...match, ...incoming } : incoming;
+    return isRecord(match) ? { ...match, ...normalizedIncoming } : normalizedIncoming;
   });
-  if (!found) merged.push(incoming);
+  if (!found) merged.push(normalizedIncoming);
   return merged;
 }
