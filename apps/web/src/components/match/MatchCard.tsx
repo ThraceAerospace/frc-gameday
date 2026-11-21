@@ -80,11 +80,7 @@ export default function MatchCard({
 
   const matchName = matchShortName(match, playoffType);
   const matchLevelFlags = match.flags?.review_flags ?? [];
-  const redAllianceFlags = match.flags?.alliances.red ?? [];
-  const blueAllianceFlags = match.flags?.alliances.blue ?? [];
   const matchFlagTitle = matchLevelFlags.join(", ");
-  const redFlagTitle = redAllianceFlags.map((flag) => flag.type).join(", ");
-  const blueFlagTitle = blueAllianceFlags.map((flag) => flag.type).join(", ");
   const redAllianceLabel = formatAllianceShortName(redAlliance?.name);
   const blueAllianceLabel = formatAllianceShortName(blueAlliance?.name);
   const redTeamText = [redAllianceLabel, red.map(formatTeamNumber).join(" ")]
@@ -190,7 +186,7 @@ export default function MatchCard({
           </div>
 
           {/* Fixed-width alliance roster with playoff alliance labels */}
-          <div className="row-span-2 flex h-9 w-[144px] flex-col justify-center gap-y-0.5">
+          <div className="row-span-2 flex w-[144px] flex-col justify-center gap-y-0.5">
             <div className="flex h-4 min-w-0 items-center whitespace-nowrap">
               <div
                 className={[
