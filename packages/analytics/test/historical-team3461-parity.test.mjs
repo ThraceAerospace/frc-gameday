@@ -128,14 +128,26 @@ for (const [eventKey, expectedEventMatches, expectedAppearances] of [["2026cthar
         },
       ],
     };
+    const comparisonInputForCalculations = {
+      state: comparisonInput.state,
+      teamCount: comparisonInput.team_count,
+      totalTeamEventRecords: comparisonInput.total_team_event_records,
+      processedTeamEventRecords: comparisonInput.processed_team_event_records,
+      unavailableTeamEventRecords: comparisonInput.unavailable_team_event_records,
+      discoveryPendingTeams: comparisonInput.discovery_pending_teams,
+      updatedAt: comparisonInput.updated_at,
+      records: comparisonInput.records.map((item) => ({
+        teamNumber: item.team_number,
+        event: { key: item.event.event_key, name: item.event.event_name, short_name: item.event.short_name, startDate: item.event.start_date },
+        epaTotal: item.epa_total, epaUnitless: item.epa_unitless, breakdown: item.breakdown,
+        wins: item.wins, losses: item.losses, ties: item.ties, matches: item.match_count,
+        fetchedAt: item.fetched_at, status: item.status,
+      })),
+    };
     const directSeasonInsights = eventKey === "2026cthar"
       ? buildSeasonAwareTeamInsights(
-          records, directAllianceResults, directRows, state.rankings ?? null, {
-            state: "complete", team_count: 1, total_team_event_records: 2,
-            processed_team_event_records: 2, unavailable_team_event_records: 0,
-            discovery_pending_teams: 0, updated_at: 1_780_000_000_000,
-            records: comparisonInput.records,
-          }, eventKey, state.event.start_date, state.event.playoff_type,
+          records, directAllianceResults, directRows, state.rankings ?? null,
+          comparisonInputForCalculations, eventKey, state.event.start_date, state.event.playoff_type,
         )
       : null;
     const directSeasonInsight = directSeasonInsights?.find((item) => item.teamNumber === 3461);
