@@ -574,7 +574,11 @@ export class EventRuntime {
           !isRecord(payload.message_data)) {
         return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
       }
-      const messageEventKey = payload.message_data.event_key;
+      const eventData = payload.message_data.event;
+      const matchData = payload.message_data.match;
+      const messageEventKey = payload.message_data.event_key ??
+        (isRecord(eventData) ? eventData.key : undefined) ??
+        (isRecord(matchData) ? matchData.event_key : undefined);
       if (messageEventKey !== this.eventKey) {
         return Response.json({ error: "Webhook event key mismatch" }, { status: 400 });
       }
