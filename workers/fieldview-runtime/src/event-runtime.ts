@@ -679,7 +679,11 @@ export class EventRuntime {
       const publication = await this.publishEventState();
       const team_states = publication.state.teams === null ? null
         : await this.readTeamEventStates(publication.state, publication.sourceRevision);
-      return Response.json({ ...publication.state, team_states }, {
+      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+      const analytics = publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+        ? publication.state.analytics
+        : publication.state.analytics ? { ...publication.state.analytics, team_comparison: undefined } : publication.state.analytics;
+      return Response.json({ ...publication.state, analytics, team_states }, {
         headers: {
           "X-FieldView-Snapshot-Version": String(publication.snapshotVersion),
           "X-FieldView-Event-State-Status": publication.status,
@@ -690,13 +694,17 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.publishEventState();
       const state = { ...publication.state, team_states: publication.state.teams === null ? null : await this.readTeamEventStates(publication.state, publication.sourceRevision) };
+      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+      const analytics = state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
+        ? state.analytics
+        : state.analytics ? { ...state.analytics, team_comparison: undefined } : state.analytics;
       const rosterAvailable = Array.isArray(state.teams);
       const expected = (state.teams ?? []).map((team) => team.key);
       const present = new Set((state.team_states ?? []).map((team) => team.team_key));
       const pending = expected.filter((teamKey) => !present.has(teamKey));
       const view: FieldViewEventView = {
         event: Object.fromEntries(Object.entries(state).filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
-        analytics: state.analytics ?? null,
+        analytics: analytics ?? null,
         team_states: state.team_states ?? [],
         team_state_coverage: {
           state: rosterAvailable && pending.length === 0 ? "complete" : "partial",
