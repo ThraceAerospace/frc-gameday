@@ -22,7 +22,7 @@ A team's event performance is interpreted against that team's own season history
 
 ### Event FieldView composition
 
-A complete event FieldView is composed from:
+A complete event FieldView is represented by FieldViewEventView and is composed from:
 
 1. FieldViewEventState;
 2. FieldViewEventAnalytics; and
