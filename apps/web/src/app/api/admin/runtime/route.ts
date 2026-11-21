@@ -31,7 +31,15 @@ export async function GET(request: Request) {
   const coverageAuditYear = query.get("coverageAudit");
   const seasonIngestYear = query.get("seasonIngest");
   const eventSeedKey = query.get("eventSeed");
-  const target = eventSeedKey ? "/internal/admin/event-team-seed?" + new URLSearchParams({
+  const teamSeedKey = query.get("teamSeed");
+  const discoveryJobYear = query.get("discoveryJob");
+  const discoveryJobMode = query.get("discoveryMode") === "year" ? "year" : "current";
+  const target = teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
+    team_key: teamSeedKey,
+    year: query.get("year") ?? String(new Date().getUTCFullYear()),
+  }).toString()
+    : discoveryJobYear ? "/internal/admin/discovery-job?" + new URLSearchParams({ year: discoveryJobYear, mode: discoveryJobMode }).toString()
+    : eventSeedKey ? "/internal/admin/event-team-seed?" + new URLSearchParams({
     event_key: eventSeedKey,
     ...(query.get("year") ? { year: query.get("year")! } : {}),
   }).toString()
@@ -80,7 +88,7 @@ export async function POST(request: Request) {
       headers: { Authorization: "Bearer " + runtimeToken, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(15_000),
     });
     const result = await response.json().catch(() => ({ error: "Runtime returned invalid JSON" }));
     return NextResponse.json(result, { status: response.status, headers: { "Cache-Control": "no-store" } });
