@@ -433,8 +433,15 @@ export class TaskScheduler {
           ...(cached.etag === null ? {} : { validator: cached.etag }),
         },
       }));
+      const indexError = year === currentYear
+        ? await this.storage.get<string>("scheduler:current-season-index-error") ?? null
+        : null;
       return Response.json(
-        { year, events, updatedAt: cached.updatedAt, checkedAt },
+        {
+          year, events, updatedAt: cached.updatedAt, checkedAt,
+          index: { status: sourceStatus, persisted: true, last_error: indexError },
+          revalidation: isStale ? "scheduled" : "idle",
+        },
         {
           headers: {
             "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
