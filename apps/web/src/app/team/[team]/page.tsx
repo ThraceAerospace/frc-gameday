@@ -164,7 +164,7 @@ export default async function TeamPage({
 
   return (
     <SiteShell>
-      {!team || !canonicalTeam || eventSections.length < teamEvents.length ? <PendingSnapshotRefresh /> : null}
+      {!team || !canonicalTeam || eventSections.length < teamEvents.length || !matchDataComplete ? <PendingSnapshotRefresh /> : null}
       <PageContainer className="max-w-7xl">
         <PageHeader
           eyebrow="Team profile"
