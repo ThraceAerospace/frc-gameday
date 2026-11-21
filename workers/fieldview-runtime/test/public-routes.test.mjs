@@ -101,30 +101,30 @@ test("internal administrative routes still require the service bearer token", as
 
 
 
-test("admin team seed ingests team resources and initializes every event runtime", async () => {
+test("team seed delegates cross-runtime orchestration to TaskScheduler", async () => {
   const calls = [];
-  const events = [
-    { key: "2026past", start_date: "2026-03-01", end_date: "2026-03-02", timezone: "America/New_York" },
-    { key: "2026future", start_date: "2026-12-06", end_date: "2026-12-08", timezone: "America/New_York" },
-  ];
   const env = {
     RUNTIME_ADMIN_TOKEN: "server-only-token",
     TEAM_RUNTIME: {
       idFromName(name) { calls.push({ operation: "team-id", name }); return name; },
-      get(id) {
-        return { async fetch(request) {
-          calls.push({ operation: "team-fetch", id, path: new URL(request.url).pathname + new URL(request.url).search });
-          return Response.json({ attempted: true, snapshot: { events } });
-        } };
-      },
+      get() { throw new Error("Worker must not invoke TeamRuntime for a cross-runtime seed"); },
     },
     EVENT_RUNTIME: {
       idFromName(name) { calls.push({ operation: "event-id", name }); return name; },
+      get() { throw new Error("Worker must not invoke EventRuntime for a cross-runtime seed"); },
+    },
+    TASK_SCHEDULER: {
+      idFromName(name) { calls.push({ operation: "scheduler-id", name }); return name; },
       get(id) {
         return { async fetch(request) {
-          const body = request.method === "POST" ? await request.json() : null;
-          calls.push({ operation: "event-fetch", id, path: new URL(request.url).pathname, body });
-          return Response.json({ attempted: true });
+          calls.push({
+            operation: "scheduler-fetch",
+            id,
+            path: new URL(request.url).pathname,
+            body: await request.json(),
+            authorization: request.headers.get("Authorization"),
+          });
+          return Response.json({ coordinated: true, event_seed: { requested: 2, attempted: 2, results: [] } });
         } };
       },
     },
@@ -137,18 +137,17 @@ test("admin team seed ingests team resources and initializes every event runtime
     env,
   );
   assert.equal(response.status, 200);
-  const result = await response.json();
-  assert.equal(result.event_seed.requested, 2);
-  assert.ok(calls.some((call) => call.operation === "team-id" && call.name === "frc3461"));
-  assert.ok(calls.some((call) => call.operation === "team-fetch" && call.id === "frc3461"));
-  assert.equal(result.event_seed.attempted, 2);
-  const past = calls.find((call) => call.operation === "event-fetch" && call.id === "2026past");
-  const future = calls.find((call) => call.operation === "event-fetch" && call.id === "2026future");
-  assert.equal(past.path, "/schedule");
-  assert.equal(past.body.intervalMs, 86_400_000);
-  assert.equal(past.body.endpoints.length, 12);
-  assert.equal(future.path, "/lifecycle");
-  assert.equal(future.body.lifecycle, "upcoming");
+  assert.equal((await response.json()).coordinated, true);
+  assert.deepEqual(calls, [
+    { operation: "scheduler-id", name: "global" },
+    {
+      operation: "scheduler-fetch",
+      id: "global",
+      path: "/admin/team-seed",
+      body: { team_key: "frc3461", year: 2026 },
+      authorization: "Bearer server-only-token",
+    },
+  ]);
 });
 
 test("shared public stream route forwards to the single multiplexer without credentials", async () => {
