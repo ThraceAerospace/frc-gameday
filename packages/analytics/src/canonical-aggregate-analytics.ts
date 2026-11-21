@@ -12,7 +12,7 @@ import type {
   FieldViewQualificationAnalytics,
   FieldViewQualificationAnomaly,
   FieldViewPlayoffAnalytics,
-  FieldViewSeasonCohortSnapshot,
+  FieldViewEventTeamSeasonComparisonInput,
   FieldViewTeamSeasonComparison,
 } from "../../domain/src/analytics.ts";
 import type { AnalyticsMatch, AllianceResult } from "./types.ts";
@@ -154,7 +154,7 @@ export function calculateCanonicalAggregateAnalytics(
   records: AnalyticsMatch[],
   allianceResults: AllianceResult[],
   audit: FieldViewAnalyticsAudit,
-  seasonCohort?: FieldViewSeasonCohortSnapshot,
+  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
   options: { includeTeamAnalytics?: boolean; includeEventAnalytics?: boolean } = {},
 ): FieldViewEventState {
   const teams = (eventState.teams ?? []).map((team) => ({
@@ -174,15 +174,15 @@ export function calculateCanonicalAggregateAnalytics(
   }
   const oprs = { oprs: oprValues, dprs: dprValues, ccwms: ccwmValues };
   const teamRows = buildTeamRows(teams, oprs, records);
-  const legacyCohort = seasonCohort ? {
-    state: seasonCohort.state,
-    teamCount: seasonCohort.team_count,
-    totalTeamEventRecords: seasonCohort.total_team_event_records,
-    processedTeamEventRecords: seasonCohort.processed_team_event_records,
-    unavailableTeamEventRecords: seasonCohort.unavailable_team_event_records,
-    discoveryPendingTeams: seasonCohort.discovery_pending_teams,
-    updatedAt: seasonCohort.updated_at,
-    records: seasonCohort.records.map((item) => ({
+  const comparisonInputForInsights = comparisonInput ? {
+    state: comparisonInput.state,
+    teamCount: comparisonInput.team_count,
+    totalTeamEventRecords: comparisonInput.total_team_event_records,
+    processedTeamEventRecords: comparisonInput.processed_team_event_records,
+    unavailableTeamEventRecords: comparisonInput.unavailable_team_event_records,
+    discoveryPendingTeams: comparisonInput.discovery_pending_teams,
+    updatedAt: comparisonInput.updated_at,
+    records: comparisonInput.records.map((item) => ({
       teamNumber: item.team_number,
       event: {
         key: item.event.event_key, name: item.event.event_name,
@@ -194,10 +194,10 @@ export function calculateCanonicalAggregateAnalytics(
       status: item.status,
     })),
   } : null;
-  const insights = legacyCohort && eventState.event
+  const insights = comparisonInputForInsights && eventState.event
     ? buildSeasonAwareTeamInsights(
         records, allianceResults, teamRows, eventState.rankings ?? null,
-        legacyCohort, eventState.event.key, eventState.event.start_date,
+        comparisonInputForInsights, eventState.event.key, eventState.event.start_date,
         eventState.event.playoff_type,
       )
     : buildTeamInsights(records, allianceResults, teamRows, eventState.rankings ?? null, eventState.event?.playoff_type);
