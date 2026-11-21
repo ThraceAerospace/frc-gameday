@@ -9,7 +9,7 @@ import { buildQualificationAnalysis } from "./calculations.ts";
 import { buildMatchFlagContext, buildMatchFlags } from "./match-flags.ts";
 import { createAnalyticsAudit } from "./audit.ts";
 import { calculateCanonicalAggregateAnalytics } from "./canonical-aggregate-analytics.ts";
-import type { FieldViewAnalyticsInputRecord, FieldViewSeasonCohortSnapshot } from "../../domain/src/analytics.ts";
+import type { FieldViewAnalyticsInputRecord, FieldViewEventTeamSeasonComparisonInput } from "../../domain/src/analytics.ts";
 
 function epaValues(
   teams: FieldViewMatch["teams"]["red"],
@@ -68,7 +68,7 @@ function toAnalyticsRecord(match: FieldViewMatch): AnalyticsMatch {
 export async function calculateCanonicalMatchAnalytics(
   eventState: FieldViewEventState,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
-  seasonCohort?: FieldViewSeasonCohortSnapshot,
+  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
   options: { includeTeamAnalytics?: boolean } = {},
 ): Promise<FieldViewEventState> {
   if (eventState.matches === undefined || eventState.matches === null) return eventState;
@@ -100,7 +100,7 @@ export async function calculateCanonicalMatchAnalytics(
       "qualification-residual-anomaly",
       "qualification-penalty-outliers",
       "playoff-alliance-performance",
-      ...(seasonCohort ? ["team-season-event-comparison"] : []),
+      ...(comparisonInput ? ["team-season-event-comparison"] : []),
       "team-event-epa",
       "team-epa-contribution-share",
       "team-event-match-appearances",
@@ -166,7 +166,7 @@ export async function calculateCanonicalMatchAnalytics(
     ...eventState,
     matches,
     ...(team_states === undefined ? {} : { team_states }),
-  }, records, allianceResults, audit, seasonCohort, { includeTeamAnalytics: options.includeTeamAnalytics });
+  }, records, allianceResults, audit, comparisonInput, { includeTeamAnalytics: options.includeTeamAnalytics });
 }
 
 
@@ -179,7 +179,7 @@ export async function calculateCanonicalTeamEventAnalytics(
   eventState: FieldViewEventState,
   teamKey: TeamKey,
   inputRecords: FieldViewAnalyticsInputRecord[] = [],
-  seasonCohort?: FieldViewSeasonCohortSnapshot,
+  comparisonInput?: FieldViewEventTeamSeasonComparisonInput,
 ): Promise<FieldViewTeamEventState | null> {
   const target = eventState.team_states?.find((item) => item.team_key === teamKey);
   if (!target || !eventState.matches) return target ?? null;
@@ -204,7 +204,7 @@ export async function calculateCanonicalTeamEventAnalytics(
     records,
     allianceResults,
     audit,
-    seasonCohort,
+    comparisonInput,
     { includeTeamAnalytics: true, includeEventAnalytics: false },
   );
   return calculated.team_states?.[0] ?? target;
