@@ -312,7 +312,7 @@ export class EventRuntime {
     if (!namespace) return;
     const roster = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(TBA_ENDPOINTS.eventTeams(this.eventKey)));
     const teamKeys = Array.isArray(roster?.data)
-      ? [...new Set(roster.data.map((team) => team?.key).filter((key): key is string => typeof key === "string" && /^frc\\d+$/.test(key)))]
+      ? [...new Set(roster.data.map((team) => team?.key).filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))]
       : [];
     const year = Number(this.eventKey.slice(0, 4));
     await Promise.all(teamKeys.map(async (teamKey) => {
