@@ -10,7 +10,7 @@ import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
-import { normalizeFieldViewTeamSnapshot } from "../../../packages/domain/src/normalization/team-snapshot.ts";
+import { normalizeFieldViewTeamState } from "../../../packages/domain/src/normalization/team-state.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
@@ -346,6 +346,7 @@ export class TeamRuntime {
       ...(acquired(statboticsEvents) ? { statbotics_events: statboticsEvents!.data as StatboticsTeamEvent[] | null } : {}),
       ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeam | null } : {}),
     });
+    await this.storage.put(`team-state:${year}`, snapshot);
     return Response.json(snapshot, { headers: {
       "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
       "Cache-Control": "no-store",
