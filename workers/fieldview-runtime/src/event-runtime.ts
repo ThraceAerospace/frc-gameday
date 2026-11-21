@@ -2103,6 +2103,15 @@ export class EventRuntime {
         ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
       }),
     })).catch(() => undefined);
+
+    // Surface pending/stale analytics metadata immediately, even before the
+    // next calculation publishes a higher analytics revision.
+    const analyticsStatus = await this.storage.get<string>("analytics:status");
+    if (analyticsStatus === "pending" || analyticsStatus === "stale") {
+      await this.publishAnalyticsRevision(
+        await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
+      );
+    }
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
