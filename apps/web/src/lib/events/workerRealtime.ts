@@ -475,6 +475,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
         const current = this.snapshots.get(eventKey);
         const teamState = isRecord(data?.team_state) &&
           typeof data.team_key === "string" &&
+          (data.team_state as Record<string, unknown>).event_key === eventKey &&
           (data.team_state as Record<string, unknown>).team_key === data.team_key
           ? data.team_state as unknown as FieldViewTeamEventState : null;
         const canApplyTeamDelta = Boolean(
