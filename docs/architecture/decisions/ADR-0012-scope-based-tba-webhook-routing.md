@@ -37,12 +37,12 @@ The route does not normalize provider payloads or own canonical state. It uses a
 
 | Message type | EventRuntime | TeamRuntime targets |
 | --- | --- | --- |
-| `match_score` | Event match collection and event analytics invalidation | Unique teams in `match.alliances.red.teams` and `match.alliances.blue.teams` |
-| `match_video` | Event match collection | Unique teams in both match alliances |
-| `upcoming_match` | Event upcoming-match/schedule state | Unique `team_keys`; if absent, optional `team_key` only |
+| `match_score` | Event match collection and event analytics invalidation | Unique teams in `match.alliances.red.teams` and `match.alliances.blue.teams`; optional `team_key` is also included |
+| `match_video` | Event match collection | Optional `team_key` and any team identities present in the match alliance payload; the documented example omits alliances, so do not infer participants |
+| `upcoming_match` | Event upcoming-match/schedule state | Unique `team_keys`; optional `team_key` is also included |
 | `starting_comp_level` | Event competition-level state | None unless a team-specific projection explicitly consumes it |
-| `alliance_selection` | Event metadata and alliance/status resources | Teams explicitly present in the event's alliance-selection data, if supplied; do not infer a roster from the event metadata object |
-| `awards_posted` | Event awards collection | Teams identified by award `recipient_list[].team_number`; a team-targeted webhook's optional `team_key` takes precedence when present |
+| `alliance_selection` | Event metadata and alliance/status resources | Optional team-targeted `team_key`; event-wide payload does not include the selected team list |
+| `awards_posted` | Event awards collection | Teams identified by each award's `recipient_list[].team_number`; optional `team_key` is also included |
 | `schedule_updated` | Event schedule/match collection | Event roster only when supplied by an already-available routing index; do not perform a hidden provider fetch or ask EventRuntime to proxy the dispatch |
 | `ping`, `broadcast`, `verification` | No runtime state mutation | None |
 
@@ -79,6 +79,17 @@ Pass the original TBA `message_data` unchanged to runtimes. Do not manufacture E
 - Event-wide messages without team identities remain event-scoped until a separately maintained roster index exists.
 - Delivery must be idempotent and partial failures must be visible; a plain `Promise.all` that rejects early is insufficient.
 - Tests must cover every documented TBA message type, optional fields, malformed identities, duplicate team keys, partial target failure, duplicate delivery, and unchanged-state write suppression.
+
+## Initial implementation
+
+The migration branch now implements:
+- Raw-body HMAC validation and SHA-256 webhook identity at Worker ingress.
+- Direct concurrent dispatch to EventRuntime and the deduplicated set of TeamRuntime targets; TaskScheduler registration is not part of webhook ingestion.
+- Direct TeamRuntime handling for existing team-event match projections. Match-score updates clear score-derived analysis/flags while retaining predictions, team associations, and source provenance. Match-video updates preserve those enrichments.
+- Normalization of the webhook Match alliance `teams` field to the canonical TBA API `team_keys` field, including merge behavior that preserves alliance fields omitted by partial webhook payloads.
+- Partial dispatch failures return 502 after all targets have been attempted; retries are idempotent for already-updated projections.
+
+Event-wide `schedule_updated` and `starting_comp_level` notifications currently target EventRuntime only. `match_video` targets TeamRuntimes only when participant identities are present in the payload or a team-specific `team_key` is supplied. Event-wide fan-out for messages without recipients remains intentionally unimplemented until a durable event-to-team routing index exists.
 
 ## References
 
