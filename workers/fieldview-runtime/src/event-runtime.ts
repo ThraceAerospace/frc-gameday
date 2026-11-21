@@ -1288,7 +1288,15 @@ export class EventRuntime {
       }
       return previous;
     });
-    if (cached) return cached;
+    if (cached) {
+      const { team_states: _legacyTeamStates, ...eventOwnedState } = cached.state;
+      if (_legacyTeamStates !== undefined) {
+        const sanitized = { ...cached, state: eventOwnedState };
+        await this.storage.put(EVENT_STATE_PUBLICATION_KEY, sanitized);
+        return sanitized;
+      }
+      return cached;
+    }
 
     const result = await this.buildEventState();
     const resourceStates = await Promise.all(allResources.map((endpoint) =>
