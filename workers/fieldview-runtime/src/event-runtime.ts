@@ -678,6 +678,7 @@ export class EventRuntime {
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.publishEventState();
       const state = publication.state;
+      const rosterAvailable = Array.isArray(state.teams);
       const expected = (state.teams ?? []).map((team) => team.key);
       const present = new Set((state.team_states ?? []).map((team) => team.team_key));
       const pending = expected.filter((teamKey) => !present.has(teamKey));
@@ -686,7 +687,7 @@ export class EventRuntime {
         analytics: state.analytics ?? null,
         team_states: state.team_states ?? [],
         team_state_coverage: {
-          state: pending.length === 0 ? "complete" : "partial",
+          state: rosterAvailable && pending.length === 0 ? "complete" : "partial",
           expected_count: expected.length,
           materialized_count: present.size,
           pending_team_keys: pending,
@@ -859,6 +860,7 @@ export class EventRuntime {
     return {
       comparisonInput: buildFieldViewEventTeamSeasonComparisonInput(
         event, participants.map((team) => team.teamNumber), snapshots, Date.now(),
+        results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
       ),
       inputs,
     };
@@ -1074,7 +1076,7 @@ export class EventRuntime {
         version: state.version,
         sourceRevision: state.sourceRevision,
         analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
-        state: { ...eventAnalyticsState, team_states: teamStates },
+        state: { ...eventAnalyticsState, team_states: normalizedState.teams === null ? null : teamStates },
       };
     }
 
@@ -1098,7 +1100,7 @@ export class EventRuntime {
       state: {
         ...normalizedState,
         ...(matches === undefined ? {} : { matches }),
-        team_states,
+        team_states: normalizedState.teams === null ? null : team_states,
         ...(publication.eventAnalytics === undefined ? {} : { analytics: publication.eventAnalytics as typeof normalizedState.analytics }),
       },
     };
