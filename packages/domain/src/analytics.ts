@@ -174,6 +174,7 @@ export interface FieldViewEventTeamComparisonAnalytics {
   rankings: FieldViewEventTeamComparisonEntry[];
   largest_change: FieldViewEventTeamComparisonEntry | null;
   smallest_change: FieldViewEventTeamComparisonEntry | null;
+  mean_change: number | null;
   source_revisions: Array<{ team_key: TeamKey; revision: number | null }>;
 }
 
