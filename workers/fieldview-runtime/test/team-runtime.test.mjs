@@ -358,7 +358,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
 
 
 test("TeamRuntime owns and serves its season analytics aggregate", async () => {
-  const storage = new MemoryStorage(), teamKey = "frc3461", year = 2026;
+  const storage = new MemoryStorage(), teamKey = "frc3461", year = new Date().getUTCFullYear();
   const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
     resource.provider === "tba" && resource.endpoint.includes("/events/"));
   assert.ok(eventResource);
@@ -390,11 +390,12 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
 
 test("TeamRuntime always creates the current-season TeamState when first reached through a historical season", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
+  const currentYear = new Date().getUTCFullYear(), historicalYear = currentYear - 1;
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
-  const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=2025", {
+  const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + historicalYear, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
   assert.equal(response.status, 200);
-  assert.equal(storage.values.get("team-state:2026")?.year, 2026);
-  assert.equal(storage.values.get("team-state:2025")?.year, 2025);
+  assert.equal(storage.values.get("team-state:" + currentYear)?.year, currentYear);
+  assert.equal(storage.values.get("team-state:" + historicalYear)?.year, historicalYear);
 });
