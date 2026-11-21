@@ -168,9 +168,13 @@ export default {
         }
       }
       const outcomes = await Promise.allSettled(targets.map((target) => target.promise));
-      const failures = outcomes.flatMap((outcome, index) => {
-        if (outcome.status === "rejected") return [{ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) }];
-        return outcome.value.ok ? [] : [{ kind: targets[index].kind, key: targets[index].key, status: outcome.value.status }];
+      const failures: Array<{ kind: "event" | "team"; key: string; error?: string; status?: number }> = [];
+      outcomes.forEach((outcome, index) => {
+        if (outcome.status === "rejected") {
+          failures.push({ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) });
+        } else if (!outcome.value.ok) {
+          failures.push({ kind: targets[index].kind, key: targets[index].key, status: outcome.value.status });
+        }
       });
       if (failures.length > 0) {
         console.error("[WEBHOOK][TBA] Partial dispatch failure", JSON.stringify({ event_key: eventKey, webhook_id: webhookId, failures }));
