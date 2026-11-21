@@ -403,9 +403,8 @@ function teamFinding(
 }
 
 /**
- * Calculate event-wide analytics. The optional compatibility path can attach
- * team analytics, while TeamRuntime calls calculateCanonicalTeamEventStates
- * directly and never executes this event-wide aggregate.
+ * Calculate event-wide analytics only. TeamRuntime independently calls
+ * calculateCanonicalTeamEventStates for its own TeamEventState.
  */
 export function calculateCanonicalAggregateAnalytics(
   eventState: FieldViewEventState,
