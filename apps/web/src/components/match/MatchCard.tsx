@@ -141,7 +141,7 @@ export default function MatchCard({
           "w-fit",
           "rounded-md",
           "border",
-          "px-2 py-1",
+          "h-[44px] box-border px-2 py-1",
           "transition-colors",
           borderClass,
           resultBackground ?? (isNext ? "bg-zinc-900" : "bg-zinc-950"),
@@ -149,7 +149,7 @@ export default function MatchCard({
       >
         <div
           className={[
-            "grid w-fit items-center gap-x-3 leading-none",
+            "grid h-[34px] w-fit items-center gap-x-3 leading-none",
             showRightColumn
               ? "grid-cols-[max-content_144px_max-content]"
               : "grid-cols-[max-content_144px]",
