@@ -1003,3 +1003,27 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
   const composed = await response.json();
   assert.deepEqual(composed.team_states, []);
 });
+
+
+test("EventRuntime persists a partial EventState on its first non-snapshot request", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026firstrequest";
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => Response.json([]),
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/subscriptions", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "subscribe" }),
+  }));
+  assert.equal(response.status, 200);
+  const publication = storage.values.get("event-state:publication");
+  assert.equal(publication.state.event_key, eventKey);
+  assert.equal(Object.hasOwn(publication.state, "team_states"), false);
+});
