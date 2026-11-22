@@ -4,7 +4,7 @@ import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts"
 const PREFIX = "discovery-object:";
 const MAX_LIST_LIMIT = 1000;
 
-/** Shared low-volume catalog; event/team canonical state remains entity-owned. */
+/** System-wide TBA discovery and catalog owner; entity-scoped canonical state remains runtime-owned. */
 export class DiscoveryStore {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient | null;
