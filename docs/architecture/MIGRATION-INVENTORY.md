@@ -205,5 +205,5 @@ These must be resolved through focused decision records before implementing thei
 
 - EventRuntime: event-scoped TBA and Statbotics data only; coordinates with TeamRuntime instances for participating-team data; no team-scoped data persistence.
 - TeamRuntime: team-scoped TBA and Statbotics data plus FRC-Colors; durable ETags and cached representations; active-event membership awareness and activity-sensitive polling.
-- TaskScheduler: generic daily/background job and lifecycle orchestrator, including event discovery, EventRuntime creation, and event-week classification. It must not proxy normal runtime provider traffic.
+- Jobs Worker Workflows: generic daily/background job and lifecycle orchestration, including event discovery, EventRuntime initialization, event-week classification, season ingestion, and manual cross-runtime seeding. There is no global TaskScheduler Durable Object. EventRuntime and TeamRuntime retain all provider acquisition and entity-local queues.
 - EventRuntime and TeamRuntime provider requests are concurrent within and across Durable Objects. A global request lease or mutex is prohibited.
