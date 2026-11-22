@@ -264,7 +264,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     for (const item of eventRefs) {
       try {
         let teamKeys: string[] | null = null;
-        for (let attempt = 0; attempt < 180; attempt += 1) {
+        for (let attempt = 0; attempt < 30; attempt += 1) {
           const result = await step.do(`discover-participants-${item.key}-${attempt}`, async () => {
             const response = await dispatchRuntime(
               this.env, "event", item.key, "participants", {}, currentSeason.year,
@@ -284,7 +284,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             teamKeys = result.team_keys;
             break;
           }
-          await step.sleep(`wait-event-participants-${item.key}-${attempt}`, "5 seconds");
+          await step.sleep(`wait-event-participants-${item.key}-${attempt}`, "30 seconds");
         }
         if (teamKeys === null) throw new Error(`Timed out waiting for EventRuntime participants for ${item.key}`);
         teamKeys.forEach((teamKey) => participantKeys.add(teamKey));
