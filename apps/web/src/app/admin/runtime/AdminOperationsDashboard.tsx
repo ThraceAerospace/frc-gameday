@@ -145,7 +145,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load operations overview");
       setOverview(body as Overview);
-      if (!yearInitialized && Number.isInteger(body.current_season?.year)) {
+      if (!yearInitialized && typeof body.current_season?.year === "number" && Number.isInteger(body.current_season.year)) {
         setYear(body.current_season.year);
         setYearInitialized(true);
       }
