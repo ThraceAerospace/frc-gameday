@@ -171,6 +171,70 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       processed += batch.length;
       await update({ processed });
     }
+
+    // Seeding is not complete merely because the requests were queued. Wait for
+    // each participant's authoritative event-history resource before scheduling
+    // the historical events associated with that team.
+    const historyReady = new Set<string>();
+    for (let offset = 0; offset < teamKeys.length; offset += 10) {
+      const batch = teamKeys.slice(offset, offset + 10);
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        const result = await step.do("verify-participant-history-" + offset + "-" + attempt, async () => {
+          const statuses = await Promise.all(batch.map(async (teamKey) => {
+            const response = await dispatch(this.env, "team", teamKey, "state", {}, p.year);
+            if (!response.ok) return { teamKey, ready: false };
+            const state = await response.json() as { endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }> };
+            const endpoint = TBA_ENDPOINTS.teamEvents(teamKey, p.year);
+            const source = state.endpoints?.find((item) => item.endpoint === endpoint);
+            return { teamKey, ready: source?.status === "unavailable" ||
+              (source?.last_fetched_at ?? source?.lastFetchedAt) != null };
+          }));
+          return statuses;
+        });
+        for (const item of result) if (item.ready) historyReady.add(item.teamKey);
+        if (result.every((item) => item.ready)) break;
+        if (attempt === 179) throw new Error("Timed out waiting for participant team event histories");
+        await step.sleep("wait-participant-history-" + offset + "-" + attempt, "5 seconds");
+      }
+    }
+    const eventDirectoryCache = new Map<number, EventDirectory | null>();
+    const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
+    for (let offset = 0; offset < teamKeys.length; offset += 10) {
+      const batch = teamKeys.slice(offset, offset + 10);
+      await step.do("read-participant-histories-" + offset, async () => {
+        await Promise.all(batch.map(async (teamKey) => {
+          const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
+          if (!response.ok) throw new Error("TeamRuntime snapshot failed for " + teamKey);
+          const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
+          for (const item of snapshot.events ?? []) {
+            if (!validEvent(item.key) || typeof item.start_date !== "string" ||
+                typeof item.end_date !== "string" || typeof item.timezone !== "string") continue;
+            historicalEvents.set(item.key, {
+              start_date: item.start_date, end_date: item.end_date, timezone: item.timezone,
+            });
+          }
+        }));
+        return { teams: batch.length };
+      });
+    }
+    const historical = [...historicalEvents.entries()];
+    for (let offset = 0; offset < historical.length; offset += 10) {
+      const batch = historical.slice(offset, offset + 10);
+      await step.do("schedule-participant-history-" + offset, async () => {
+        for (const [key, event] of batch) {
+          const lifecycle = lifecycleFor({ key, ...event }, Date.now());
+          if (lifecycle.lifecycle === "expired") continue;
+          const eventYear = Number(key.slice(0, 4));
+          if (!Number.isInteger(eventYear) || eventYear < 1992 || eventYear > 2200) continue;
+          const response = await dispatch(this.env, "event", key, "lifecycle", {
+            lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
+            ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
+          }, eventYear);
+          if (!response.ok) throw new Error("Unable to schedule historical event " + key);
+        }
+        return { scheduled: batch.length };
+      });
+    }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
