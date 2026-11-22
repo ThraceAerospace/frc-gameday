@@ -176,7 +176,7 @@ export default async function TeamPage({
         <SurfaceCard className="mt-5" padding>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <div><span className="font-black text-[var(--fv-text)]">{year}</span><span className="ml-1.5 text-[var(--fv-muted)]">season</span></div>
-            <Stat label="District" value={districts === null ? "Unavailable" : district?.display_name || "None"} />
+            <Stat label="District" value={districts === null ? "Unavailable" : districts[0]?.display_name || "None"} />
             <Stat label="Events" value={teamEventsResponse === null ? "Unavailable" : teamEvents.length} />
             <Stat label="Matches" value={matchDataComplete ? completedMatches.length : "—"} />
             <Stat label="Record" value={matchDataComplete ? `${wins}-${losses}-${ties}` : "Unavailable"} />
