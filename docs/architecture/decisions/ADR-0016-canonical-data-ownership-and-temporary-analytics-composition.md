@@ -12,6 +12,12 @@ The previous event-view design persisted a complete array of TeamRuntime-owned `
 
 Analytics is a legitimate consumer of a combined event/team dataset. That requirement does not imply that the combined input should become a durable model or publication.
 
+## Normalization standard
+
+For relational SQLite tables, require First Normal Form before Second Normal Form. Every non-key attribute must depend on the whole candidate key; partial dependencies on part of a composite key belong in a separate relation. Apply Third Normal Form where transitive dependencies would otherwise duplicate facts.
+
+Durable Object storage is currently accessed through per-object key/value records rather than a shared relational schema. The same ownership discipline still applies at the domain/persistence boundary: nested arrays of foreign canonical entities are not substitutes for relations, and cross-runtime associations are represented by logical foreign keys. Small value objects and calculation-only collections may remain embedded when they are genuinely owned by the containing record.
+
 ## Decision
 
 ### 1. One canonical owner
