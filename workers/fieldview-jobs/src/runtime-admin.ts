@@ -33,11 +33,11 @@ async function read<T>(bucket: R2Bucket, key: string): Promise<T | null> {
 async function write(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
   await bucket.put(key, json(value), { httpMetadata: { contentType: "application/json" } });
 }
-async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}): Promise<Response> {
+async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}, year?: number): Promise<Response> {
   return env.FIELDVIEW_RUNTIME.fetch(new Request("https://fieldview-runtime/internal/workflows/dispatch", {
     method: "POST",
     headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-    body: json({ kind, key, action, ...body }),
+    body: json({ kind, key, action, ...(year === undefined ? {} : { year }), ...body }),
   }));
 }
 function validTeam(key: unknown): key is string { return typeof key === "string" && /^frc\\d+$/.test(key); }
@@ -120,7 +120,10 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
           if (!event) continue;
           const lifecycle = lifecycleFor(event, Date.now());
           if (lifecycle.lifecycle === "expired") continue;
-          const response = await dispatch(this.env, "event", String(item.key), "lifecycle", { lifecycle: lifecycle.lifecycle });
+          const response = await dispatch(this.env, "event", String(item.key), "lifecycle", {
+            lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
+            ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
+          }, p.year);
           if (!response.ok) throw new Error("EventRuntime lifecycle returned HTTP " + response.status);
         }
         return { scheduled: batch.length };
@@ -143,7 +146,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     let teamKeys: string[] = [];
     for (let attempt = 0; attempt < 180; attempt += 1) {
       const result = await step.do("event-participants-" + attempt, async () => {
-        const response = await dispatch(this.env, "event", eventKey, "participants");
+        const response = await dispatch(this.env, "event", eventKey, "participants", {}, p.year);
         if (response.status === 202) return { ready: false, team_keys: [] as string[] };
         if (!response.ok) throw new Error("EventRuntime participants returned HTTP " + response.status);
         return response.json() as Promise<{ ready: boolean; team_keys: string[] }>;
