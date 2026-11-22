@@ -630,7 +630,7 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   storage.values.set("team-event-state:" + eventKey, {
     event_key: eventKey, team_key: teamKey,
     sources: { team: {}, event_team: {}, matches: {} },
-    matches: [currentMatch],
+    match_refs: [{ owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0 }],
   });
   const notifications = [];
   const runtime = new TeamRuntime({ storage }, {
@@ -669,22 +669,15 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   }));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.changed, true);
-  const updated = storage.values.get("team-event-state:" + eventKey).matches[0];
-  assert.equal(updated.alliances.red.score, 22);
-  assert.deepEqual(updated.alliances.red.team_keys, [teamKey, "frc1", "frc2"]);
-  assert.equal("teams" in updated.alliances.red, false);
-  assert.deepEqual(updated.predictions, currentMatch.predictions);
-  assert.deepEqual(updated.teams, currentMatch.teams);
-  assert.deepEqual(updated.sources, currentMatch.sources);
-  assert.equal(updated.analysis, undefined);
-  assert.equal(updated.flags, undefined);
-  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
-  assert.deepEqual(notifications, [{
-    team_key: teamKey,
-    team_state_revision: 0,
-    team_event_revision: 1,
-  }], "the changed team-event projection notifies EventRuntime with its own revision");
+  assert.equal(result.changed, false);
+  assert.equal(result.canonical_owner, "event-runtime");
+  assert.deepEqual(storage.values.get("team-event-state:" + eventKey).match_refs, [{
+    owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0,
+  }]);
+  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), false);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), undefined,
+    "a match webhook does not mutate a TeamRuntime-owned record when the changed match belongs to EventRuntime");
+  assert.deepEqual(notifications, [], "EventRuntime already receives and owns the original match webhook");
   const duplicateResponse = await runtime.fetch(new Request("https://team/webhook", {
     method: "POST",
     headers: {
@@ -707,8 +700,8 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   }));
   assert.equal(duplicateResponse.status, 200);
   assert.equal((await duplicateResponse.json()).changed, false);
-  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1, "duplicate delivery must not write another revision");
-  assert.equal(notifications.length, 1, "duplicate delivery must not emit another live patch");
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), undefined, "duplicate delivery must not write a team-owned match copy");
+  assert.equal(notifications.length, 0, "team runtime does not relay event-owned match changes");
 });
 
 test("TeamRuntime applies upcoming-match timing only to its existing team match projection", async () => {
@@ -720,7 +713,8 @@ test("TeamRuntime applies upcoming-match timing only to its existing team match 
     predictions: {}, teams: { red: [], blue: [] }, sources: {},
   };
   storage.values.set("team-event-state:" + eventKey, {
-    event_key: eventKey, team_key: teamKey, sources: { team: {}, event_team: {}, matches: {} }, matches: [match],
+    event_key: eventKey, team_key: teamKey, sources: { team: {}, event_team: {}, matches: {} },
+    match_refs: [{ owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0 }],
   });
   const runtime = new TeamRuntime({ storage }, env(async () => {
     throw new Error("upcoming-match handling must not perform provider fetches");
@@ -739,11 +733,11 @@ test("TeamRuntime applies upcoming-match timing only to its existing team match 
   }));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.changed, true);
-  const updated = storage.values.get("team-event-state:" + eventKey).matches[0];
-  assert.equal(updated.time, 200);
-  assert.equal(updated.predicted_time, 250);
-  assert.deepEqual(updated.alliances, match.alliances);
-  assert.deepEqual(updated.predictions, match.predictions);
-  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+  assert.equal(result.changed, false);
+  assert.equal(result.canonical_owner, "event-runtime");
+  assert.deepEqual(storage.values.get("team-event-state:" + eventKey).match_refs, [{
+    owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0,
+  }]);
+  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), false);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), undefined);
 });
