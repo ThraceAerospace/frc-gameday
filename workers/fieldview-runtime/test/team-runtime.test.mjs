@@ -465,7 +465,14 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     }),
   }));
   assert.equal(response.status, 200);
+  const published = await response.json();
   const saved = storage.values.get("team-event-state:" + eventKey);
+  assert.deepEqual(published, saved, "the calculation command returns the persisted canonical TeamEventState");
+  assert.equal(response.headers.get("X-FieldView-Team-Event-Revision"), "1");
+  assert.equal(response.headers.get("X-FieldView-Event-Source-Revision"), "4");
+  assert.equal(response.headers.get("X-FieldView-Team-Source-Revision"), "0");
+  assert.equal(response.headers.get("X-FieldView-Comparison-Input-Updated-At"), String(comparisonInput.updated_at));
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.equal(saved.team_key, teamKey);
   assert.equal(saved.event_key, eventKey);
   assert.equal(saved.analytics.team_key, teamKey);
@@ -482,6 +489,16 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   }));
   assert.equal(read.status, 200);
   assert.equal((await read.json()).analytics.team_key, teamKey);
+
+  const unchanged = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ event_key: eventKey, event_source_revision: 4, event_state: eventState, comparison_input: comparisonInput }),
+  }));
+  assert.equal(unchanged.status, 200);
+  assert.deepEqual(await unchanged.json(), saved, "an unchanged calculation also returns the canonical TeamEventState");
+  assert.equal(unchanged.headers.get("X-FieldView-Team-Event-Changed"), "false");
+  assert.equal(unchanged.headers.get("X-FieldView-Team-Event-Revision"), "1");
 
   await storage.put("snapshot-revision", 1);
   const stale = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {

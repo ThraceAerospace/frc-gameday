@@ -654,8 +654,17 @@ export class TeamRuntime {
       }
       const prior = await this.storage.get<FieldViewTeamEventState>(stateKey);
       if (prior && JSON.stringify(prior) === JSON.stringify(result)) {
-        return Response.json({ team_key: this.teamKey, event_key: eventKey, changed: false,
-          revision: await this.storage.get<number>(revisionKey) ?? 0 });
+        const revision = await this.storage.get<number>(revisionKey) ?? 0;
+        return Response.json(result, { headers: {
+          "X-FieldView-Team-Key": this.teamKey,
+          "X-FieldView-Event-Key": eventKey,
+          "X-FieldView-Team-Event-Changed": "false",
+          "X-FieldView-Team-Event-Revision": String(revision),
+          "X-FieldView-Event-Source-Revision": String(eventSourceRevision),
+          "X-FieldView-Team-Source-Revision": String(teamSourceRevision),
+          "X-FieldView-Comparison-Input-Updated-At": String(comparisonInput.updated_at),
+          "Cache-Control": "no-store",
+        } });
       }
       const revision = await this.storage.transaction(async (tx) => {
         const next = (await tx.get<number>(revisionKey) ?? 0) + 1;
@@ -669,7 +678,16 @@ export class TeamRuntime {
         });
         return next;
       });
-      return Response.json({ team_key: this.teamKey, event_key: eventKey, changed: true, revision });
+      return Response.json(result, { headers: {
+        "X-FieldView-Team-Key": this.teamKey,
+        "X-FieldView-Event-Key": eventKey,
+        "X-FieldView-Team-Event-Changed": "true",
+        "X-FieldView-Team-Event-Revision": String(revision),
+        "X-FieldView-Event-Source-Revision": String(eventSourceRevision),
+        "X-FieldView-Team-Source-Revision": String(teamSourceRevision),
+        "X-FieldView-Comparison-Input-Updated-At": String(comparisonInput.updated_at),
+        "Cache-Control": "no-store",
+      } });
     }
     if (request.method === "POST" && url.pathname === "/activity") {
       const body: unknown = await request.json().catch(() => null);

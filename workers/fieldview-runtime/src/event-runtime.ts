@@ -1192,12 +1192,9 @@ export class EventRuntime {
           }),
         }));
         if (!calculated.ok) return null;
-        const response = await stub.fetch(new Request(
-          "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) + "&year=" + this.eventKey.slice(0, 4),
-          { headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey } },
-        ));
-        if (!response.ok) return null;
-        return { team_key: teamKey, response };
+        // The calculation command returns the persisted TeamEventState and its
+        // source-revision headers. Avoid a second cross-runtime read per team.
+        return { team_key: teamKey, response: calculated };
       } catch {
         return null;
       }
