@@ -81,6 +81,29 @@ test("public routes reject writes and malformed event keys", async () => {
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
 });
 
+test("internal Workflow runtime-state route authenticates and reads the canonical EventRuntime state", async () => {
+  const { env, calls } = makeEnvironment();
+  const denied = await worker.fetch(
+    new Request("https://runtime.example/internal/workflows/runtime-state?kind=event&key=2026test"),
+    env,
+  );
+  assert.equal(denied.status, 401);
+  assert.equal(calls.some((call) => call.operation === "fetch"), false);
+
+  const allowed = await worker.fetch(
+    new Request("https://runtime.example/internal/workflows/runtime-state?kind=event&key=2026test", {
+      headers: { Authorization: "Bearer server-only-token" },
+    }),
+    env,
+  );
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), { ok: true });
+  const forwarded = calls.find((call) => call.operation === "fetch");
+  assert.equal(forwarded.url, "/state");
+  assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
+  assert.equal(forwarded.headers.get("X-FieldView-Event-Key"), "2026test");
+});
+
 test("internal administrative routes still require the service bearer token", async () => {
   const { env, calls } = makeEnvironment();
   const denied = await worker.fetch(
