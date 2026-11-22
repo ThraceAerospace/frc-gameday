@@ -134,7 +134,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       });
     }
 
-    const prepared = await step.do("publish-this-week-generation", async () => {
+    const prepared = await step.do("write-this-week-manifest", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
       const eventRefs = classified.flatMap(({ year, eventRefs: items }) =>
         items.map(({ key, lifecycle }) => ({ year, key, ...lifecycle })));
@@ -206,11 +206,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       failed: failures.length,
       failures: failures.slice(0, 100),
     };
-    await this.env.DISCOVERY_BUCKET.put(
-      `workflows/daily-event-readiness/${runAt}/summary.json`,
-      JSON.stringify(summary),
-      { httpMetadata: { contentType: "application/json" } },
-    );
+    await step.do("write-run-summary", async () => {
+      await this.env.DISCOVERY_BUCKET.put(
+        `workflows/daily-event-readiness/${runAt}/summary.json`,
+        JSON.stringify(summary),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      return summary;
+    });
     return summary;
   }
 }
