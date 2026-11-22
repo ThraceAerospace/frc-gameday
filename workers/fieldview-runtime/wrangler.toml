@@ -16,6 +16,10 @@ head_sampling_rate = 0.1
 [vars]
 PROVIDER_REQUEST_INTERVAL_MS = "1000"
 
+[[r2_buckets]]
+binding = "DISCOVERY_BUCKET"
+bucket_name = "fieldview-discovery"
+
 [[durable_objects.bindings]]
 name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
@@ -52,5 +56,3 @@ new_sqlite_classes = ["TeamRuntime"]
 tag = "v5"
 renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
-[triggers]
-crons = ["0 16 * * *"]
