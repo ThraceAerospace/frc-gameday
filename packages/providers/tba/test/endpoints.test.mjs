@@ -25,6 +25,7 @@ test("builds event resource paths with unchanged TBA resource names", () => {
 test("encodes segments and rejects invalid keys", () => {
   assert.equal(TBA_ENDPOINTS.event("2026/a"), "/event/2026%2Fa");
   assert.equal(TBA_ENDPOINTS.teamEventStatus("frc/3461", "2026test/a"), "/team/frc%2F3461/event/2026test%2Fa/status");
+  assert.equal(TBA_ENDPOINTS.districtAdvancement("2026fim"), "/district/2026fim/advancement");
   assert.throws(() => TBA_ENDPOINTS.event(""), /non-empty/);
   assert.throws(() => TBA_ENDPOINTS.event(" 2026test"), /whitespace/);
 });
