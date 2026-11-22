@@ -779,6 +779,13 @@ export class TeamRuntime {
         },
         active_events: Object.keys(await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {}).sort(),
         polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
+        resources: this.endpoints(year).map((resource) => {
+          const state = [...states.values()].find((item) => item.endpoint === resource.endpoint);
+          return {
+            provider: resource.provider, endpoint: resource.endpoint, status: state?.status ?? "pending",
+            last_fetched_at: state?.lastFetchedAt ?? null, expires_at: state?.expiresAt ?? null,
+          };
+        }),
         endpoints: [...states.values()].map((state) => {
           const value = state.providerData ?? state.data;
           const recordCount = Array.isArray(value) ? value.length : value == null ? 0 : 1;
