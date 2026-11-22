@@ -8,6 +8,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tea
   const canonical = await getCanonicalTeamSnapshot(teamKey, year);
   if (!canonical) return Response.json({ error: "Team snapshot unavailable" }, { status: 503 });
   if (canonical.snapshot.districts === undefined) return Response.json({ error: "Team districts have not been acquired" }, { status: 503 });
-  const current = canonical.snapshot.districts?.find((district) => district.year === year) ?? null;
+  const current = canonical.snapshot.districts?.filter((district) => district.year === year) ?? [];
   return Response.json(current);
 }
