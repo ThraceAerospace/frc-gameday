@@ -7,10 +7,12 @@ const MAX_LIST_LIMIT = 1000;
 /** Shared low-volume catalog; event/team canonical state remains entity-owned. */
 export class DiscoveryStore {
   private readonly storage: DurableObjectStateLike["storage"];
-  private readonly api: TBAApiClient;
-  constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
+  private readonly api: TBAApiClient | null;
+  constructor(state: DurableObjectStateLike, env?: RuntimeEnvironment) {
     this.storage = state.storage;
-    this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
+    this.api = env?.TBA_API_KEY
+      ? new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) })
+      : null;
   }
 
   private async deleteKey(key: string): Promise<void> {
@@ -66,6 +68,7 @@ export class DiscoveryStore {
     // DiscoveryStore is the sole owner of system-wide TBA discovery I/O.
     // Workflows request these operations but never construct provider clients.
     if (request.method === "GET" && url.pathname.startsWith("/provider/")) {
+      if (!this.api) return Response.json({ error: "TBA provider is not configured" }, { status: 503 });
       if (url.pathname === "/provider/status") {
         return this.api.request(TBA_ENDPOINTS.status());
       }
