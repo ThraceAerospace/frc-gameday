@@ -411,8 +411,17 @@ export default {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
         const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
+        if (action === "seed") {
+          if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
+          const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
+          return scheduler.fetch(new Request("https://task-scheduler/admin/team-seed", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ team_key: teamKey, year }),
+          }));
+        }
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-        return stub.fetch(new Request(`https://team-runtime/${action === "seed" ? "seed" : "refresh"}?year=${year}`, {
+        return stub.fetch(new Request("https://team-runtime/refresh?year=" + year, {
           method: "POST",
           headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
         }));
