@@ -2,7 +2,7 @@ import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts"
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import { eventResourceEndpoints } from "./event-runtime.ts";
 import { teamResourceEndpoints } from "./team-runtime.ts";
-import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
+import type { TBAEvent } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 export interface EventPollingPolicy {
@@ -226,11 +226,7 @@ export class TaskScheduler {
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
     this.storage = state.storage;
     this.env = env;
-    this.api = new TBAApiClient({
-      apiKey: env.TBA_API_KEY,
-      ...(env.fetcher ? { fetch: env.fetcher } : {}),
-    });
-  }
+   }
 
   private async measureStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
     const startedAt = performance.now();
@@ -666,16 +662,31 @@ export class TaskScheduler {
     }
     if (job.stage === "discover") {
       try {
-        const response = await this.api.request(TBA_ENDPOINTS.eventTeams(job.eventKey));
-        if (!response.ok) throw new Error("Unable to retrieve event participants (HTTP " + response.status + ")");
-        const participants = await response.json() as TBATeam[];
-        if (!Array.isArray(participants)) throw new Error("TBA event participants response was not an array");
-        job.teamKeys = [...new Set(participants.map((team) => team.key).filter((key): key is string =>
-          typeof key === "string" && /^frc\d+$/.test(key)))].sort();
-        if (job.teamKeys.length === 0) throw new Error("No valid participant teams were returned for this event");
-        job.stage = "seed";
-        job.teamAttempts = 0;
-        job.nextDueAt = Date.now() + 100;
+        const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(job.eventKey));
+        const response = await eventStub.fetch(new Request("https://event-runtime/participants", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+            "X-FieldView-Event-Key": job.eventKey,
+          },
+        }));
+        if (response.status === 202) {
+          // EventRuntime is still acquiring its authoritative participant
+          // resource. Keep the seed job durable without duplicating provider I/O.
+          job.nextDueAt = Date.now() + 2_000;
+        } else {
+          if (!response.ok) throw new Error("EventRuntime participant lookup returned HTTP " + response.status);
+          const result = await response.json() as { ready?: boolean; team_keys?: unknown };
+          if (result.ready !== true || !Array.isArray(result.team_keys)) {
+            throw new Error("EventRuntime returned an invalid participant roster");
+          }
+          job.teamKeys = [...new Set(result.team_keys.filter((key): key is string =>
+            typeof key === "string" && /^frc\d+$/.test(key)))].sort();
+          if (job.teamKeys.length === 0) throw new Error("No valid participant teams were returned for this event");
+          job.stage = "seed";
+          job.teamAttempts = 0;
+          job.nextDueAt = Date.now() + 100;
+        }
       } catch (error) {
         job.teamAttempts += 1;
         job.errors.push({ team_key: job.eventKey, detail: error instanceof Error ? error.message : String(error), at: Date.now() });
