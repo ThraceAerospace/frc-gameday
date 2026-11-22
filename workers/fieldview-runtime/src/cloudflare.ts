@@ -27,6 +27,16 @@ export interface DurableObjectNamespaceLike {
   get(id: unknown): { fetch(request: Request): Promise<Response> };
 }
 
+export interface R2ObjectLike {
+  json<T = unknown>(): Promise<T>;
+  text(): Promise<string>;
+}
+
+export interface R2BucketLike {
+  get(key: string): Promise<R2ObjectLike | null>;
+  put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+}
+
 export interface RuntimeEnvironment {
   TBA_API_KEY: string;
   /** Official Statbotics API when available; currently the configured testing mirror is retained while official service is unavailable. */
@@ -43,6 +53,8 @@ export interface RuntimeEnvironment {
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
   TASK_SCHEDULER?: DurableObjectNamespaceLike;
+  /** Immutable discovery/read projections written by the jobs Workflow. */
+  DISCOVERY_BUCKET?: R2BucketLike;
   EVENT_DISCOVERY_INTERVAL_MS?: string | number;
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
