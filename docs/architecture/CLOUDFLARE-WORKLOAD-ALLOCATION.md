@@ -46,6 +46,10 @@ This extraction initializes weekly EventRuntime instances, publishes current-sea
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
 
+### Durable Object migration history
+
+The historical Wrangler migration tags that created and renamed `EventScheduler` to `TaskScheduler` remain in `wrangler.toml`. These are append-only Cloudflare Durable Object namespace migration records, not a runtime class alias or compatibility path. Keep the historical tags even though the deprecated `event-scheduler.ts` source re-export and all runtime fallbacks have been removed.
+
 ### TBA webhook routing contract
 
 The Worker entry point is the routing boundary for authenticated TBA webhooks. It validates the signature and payload, derives the event key, and determines the affected team keys from the message type and payload. It then dispatches the same authenticated webhook payload directly to:
