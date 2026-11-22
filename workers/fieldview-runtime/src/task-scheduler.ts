@@ -1460,9 +1460,9 @@ export class TaskScheduler {
   }
 
   private async handleAlarm(): Promise<void> {
-    // Current-season discovery and this-week projection are owned by the
-    // fieldview-jobs Workflow; this DO alarm only advances legacy admin jobs
-    // while those responsibilities are being migrated.
+    // Daily discovery and this-week projection are owned by fieldview-jobs.
+    // This alarm remains only for bounded admin jobs and the explicitly
+    // operator-enabled legacy event-lifecycle/team-directory scheduler.
     const eventSeedJobs = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
     const activeEventSeed = [...eventSeedJobs.values()].find((job) => job.status === "running");
     if (activeEventSeed) {
