@@ -1,13 +1,12 @@
 import { EventRuntime } from "./event-runtime.ts";
 import { Multiplexer } from "./multiplexer.ts";
-import { TaskScheduler } from "./task-scheduler.ts";
 import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
 import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
 
-export { EventRuntime, TaskScheduler, Multiplexer, TeamRuntime };
+export { EventRuntime, Multiplexer, TeamRuntime };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -651,27 +650,7 @@ export default {
       });
     }
 
-    // District data is owned by TaskScheduler; these public routes are strictly read-only.
-    if (url.pathname === "/districts/discovery" && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const response = await scheduler.fetch(new Request("https://task-scheduler/districts" + url.search));
-      const headers = new Headers(response.headers);
-      headers.set("Access-Control-Allow-Origin", "*");
-      return new Response(response.body, { status: response.status, headers });
-    }
-    const districtRoute = /^\/districts\/([a-zA-Z0-9_-]+)\/snapshot$/.exec(url.pathname);
-    if (districtRoute && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const query = new URLSearchParams(url.search);
-      query.set("key", districtRoute[1]);
-      const response = await scheduler.fetch(new Request("https://task-scheduler/district?" + query.toString()));
-      const headers = new Headers(response.headers);
-      headers.set("Access-Control-Allow-Origin", "*");
-      return new Response(response.body, { status: response.status, headers });
-    }
-
+    // District discovery is not implemented by the migrated runtime; do not route it through a retired global coordinator.
     // Team profiles are served by one lazy TeamRuntime per TBA team key.
     const teamParts = url.pathname.split("/");
     const teamKey = teamParts[2];
