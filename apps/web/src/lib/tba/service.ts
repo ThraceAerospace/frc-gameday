@@ -14,6 +14,10 @@ import type {
   TBAAward,
   TBAMedia,
   TBATeamAvatar,
+  TBADistrict,
+  TBADistrictAdvancementMap,
+  TBADistrictAdvancementResponse,
+  TBADistrictRanking,
   TBAMatch,
   TBAMatchSimple,
   TBATeam,
@@ -267,6 +271,70 @@ export const TBA = {
 
   getEventOPRs: (eventKey: string): Promise<TBAEventOPRs | null> =>
     tba.get<TBAEventOPRs | null>(TBA_ENDPOINTS.eventOPRs(eventKey)),
+
+  getDistricts: (year: number): Promise<TBADistrict[]> =>
+    tba.get<TBADistrict[]>(TBA_ENDPOINTS.districts(year)),
+
+  getDistrictTeams: (districtKey: string): Promise<TBATeam[]> =>
+    tba.get<TBATeam[]>(TBA_ENDPOINTS.districtTeams(districtKey)),
+
+  getDistrictTeamKeys: (districtKey: string): Promise<string[]> =>
+    tba.get<string[]>(TBA_ENDPOINTS.districtTeamKeys(districtKey)),
+
+  getDistrictEvents: (districtKey: string): Promise<TBAEventSimple[]> =>
+    tba.get<TBAEventSimple[]>(TBA_ENDPOINTS.districtEvents(districtKey)),
+
+  getDistrictRankings: (
+    districtKey: string
+  ): Promise<TBADistrictRanking[]> =>
+    tba.get<TBADistrictRanking[]>(TBA_ENDPOINTS.districtRankings(districtKey)),
+
+  getDistrictAdvancement: (
+    districtKey: string
+  ): Promise<TBADistrictAdvancementResponse> =>
+    tba.get<TBADistrictAdvancementResponse>(
+      TBA_ENDPOINTS.districtAdvancement(districtKey)
+    ),
+
+  getDistrictTeamsAdvancedToCMP: async (
+    districtKey: string
+  ) => {
+    const advancement = await TBA.getDistrictAdvancement(districtKey);
+    const teams = advancement.teams ?? {};
+
+    return Object.entries(teams)
+      .filter(([, status]) => status.cmp === true)
+      .map(([key, status]) => ({
+        key,
+        ...status,
+        district_key: districtKey,
+        district_abbreviation: districtKey.replace(/[0-9]/g, "").toUpperCase(),
+      }));
+  },
+
+  getAllDistrictTeamsAdvancedToCMP: async (year: number) => {
+    const districts = await TBA.getDistricts(year);
+
+    const allCMPTeams = await Promise.all(
+      districts.map(async (district) => {
+        const advancement = await TBA.getDistrictAdvancement(district.key);
+        const teams = advancement.teams ?? {};
+
+        return Object.entries(teams)
+          .filter(([, status]) => status.cmp === true)
+          .map(([key, status]) => ({
+            key,
+            ...status,
+            district_key: district.key,
+            district_abbreviation: district.key
+              .replace(/[0-9]/g, "")
+              .toUpperCase(),
+          }));
+      })
+    );
+
+    return allCMPTeams.flat();
+  },
 
   getEventWebcasts: async (eventKey: string) => {
     const event = await TBA.getEvent(eventKey);
