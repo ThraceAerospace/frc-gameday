@@ -207,3 +207,73 @@ These must be resolved through focused decision records before implementing thei
 - TeamRuntime: team-scoped TBA and Statbotics data plus FRC-Colors; durable ETags and cached representations; active-event membership awareness and activity-sensitive polling.
 - Jobs Worker Workflows: generic daily/background job and lifecycle orchestration, including event discovery, EventRuntime initialization, event-week classification, season ingestion, and manual cross-runtime seeding. There is no global TaskScheduler Durable Object. EventRuntime and TeamRuntime retain all provider acquisition and entity-local queues.
 - EventRuntime and TeamRuntime provider requests are concurrent within and across Durable Objects. A global request lease or mutex is prohibited.
+
+
+## 11. Current branch caller inventory (verified 2026-11-22)
+
+**Verification ref:** `fieldview-architecture-migration` at `83f21c70fd47504922ae947477b1dc072b8ad033`. This section supersedes stale baseline statements above where they describe the pre-workspace or pre-Cloudflare repository as the current implementation. The earlier sections remain useful as historical migration mapping.
+
+### 11.1 Direct Redis / ioredis dependency roots
+
+The current web workspace still declares `ioredis` in `apps/web/package.json`. The only Redis constructor is `apps/web/src/lib/cache/redis.ts`, which creates a process-global `ioredis` client from `REDIS_URL`. The following direct Redis consumers were verified on this branch:
+
+| File | Redis responsibility | Target owner / treatment | Status |
+|---|---|---|---|
+| `apps/web/src/lib/tba/client.ts` | TBA response cache, ETags/expiry, tag sets, webhook cache mutation, stale-match reconciliation | Retire this web-owned acquisition/cache path; EventRuntime and TeamRuntime own provider acquisition and canonical state | Legacy |
+| `apps/web/src/lib/statbotics/client.ts` | Statbotics response cache, request-floor enforcement, distributed request locks, stale fallback | Retire; EventRuntime/TeamRuntime acquire and persist Statbotics resources | Legacy |
+| `apps/web/src/lib/frc-colors/client.ts` | FRC Colors response cache, request lock, legacy payload conversion | Retire; TeamRuntime owns FRC Colors acquisition and canonical team enrichment | Legacy |
+| `apps/web/src/lib/realtime/websocket.ts` | Redis Pub/Sub channel `gameday:tba`, Vercel WebSocket fan-out | Replace with Worker/Multiplexer subscription/publication; retain browser behavior until cutover | Legacy transport |
+| `apps/web/src/lib/remote/signalingServer.ts` | Remote-session signaling Pub/Sub, presence keys, TTL refresh, role exclusivity | Separate remote-session transport migration; do not couple this state to EventRuntime/TeamRuntime | Legacy transport |
+
+No direct `ioredis` import was found outside the shared Redis constructor in the inspected source. This is an import-root inventory, not yet proof that every transitive Redis operation or all runtime callers have been eliminated. Do not remove `ioredis`, `REDIS_URL`, or the shared client until both realtime and remote-session consumers have been migrated and their behavior validated.
+
+### 11.2 Provider acquisition wrappers remaining in the web workspace
+
+| File | Current responsibility | Migration disposition |
+|---|---|---|
+| `apps/web/src/lib/tba/{client,service,index}.ts` | Legacy TBA acquisition facade backed by Redis; provider transport itself has already moved to `packages/providers/tba` | Remove after a branch-wide import/call-site check proves no live web consumer remains; retain only presentation-safe formatters/utilities that have real consumers |
+| `apps/web/src/lib/statbotics/{client,service,index}.ts` | Legacy Statbotics acquisition/cache facade; stateless HTTP transport exists in `packages/providers/statbotics` | Remove after caller check; no frontend code should acquire Statbotics directly |
+| `apps/web/src/lib/frc-colors/{client,service,index}.ts` | Legacy FRC Colors acquisition/cache and legacy compatibility conversion | Remove after caller check; TeamRuntime is the owner and provider package owns transport/types |
+
+Provider packages now contain stateless HTTP clients and endpoint/type definitions. Runtime acquisition is implemented in the Cloudflare runtime using those provider clients. Provider packages must remain free of Redis, Next.js, and Cloudflare runtime dependencies.
+
+### 11.3 Routes already using canonical runtime reads
+
+The following route handlers were inspected and already delegate to `serverSnapshot.ts` or the Worker rather than importing the old provider/Redis services:
+
+| Route | Current path |
+|---|---|
+| `GET /api/event/[event]` | EventRuntime canonical event snapshot |
+| `GET /api/event/[event]/teams` | EventRuntime canonical roster |
+| `GET /api/event/[event]/matches` | EventRuntime canonical matches |
+| `GET /api/event/[event]/oprs` | EventRuntime event-team metrics |
+| `GET /api/event/[event]/teams/statuses` | EventRuntime event-team status/provenance |
+| `GET /api/event/[event]/analytics` | EventRuntime analytics publication |
+| `GET /api/team/[team]` | TeamRuntime canonical team snapshot |
+| `GET /api/team/[team]/history` | TeamRuntime canonical team snapshot |
+| `GET /api/team/[team]/matches` | TeamRuntime canonical team analytics |
+| `GET /api/statbotics/match/[match]` | Worker EventRuntime Statbotics-match proxy |
+| `GET /api/events/active` | Jobs Worker discovery projection via canonical event discovery |
+
+These handlers are thin adapters and should stay that way. The legacy provider-shaped routes listed in the original baseline table must not be reintroduced.
+
+### 11.4 Remaining realtime and webhook callers
+
+- `apps/web/src/app/api/ws/route.ts` still upgrades through `@vercel/functions` and calls `registerWebSocket`, which depends on the Redis Pub/Sub subscriber.
+- `apps/web/src/app/api/tba/webhook/route.ts` is a compatibility relay to Worker `POST /webhooks/tba`, but after Worker success it still calls `broadcastTBAEvent` for legacy WSS consumers. This dual delivery is intentional temporary compatibility, not canonical state ownership.
+- `apps/web/src/app/api/remote/ws/route.ts` still upgrades through Vercel and calls `registerRemoteWebSocket`, which depends on Redis Pub/Sub and presence keys.
+- The remote-session migration is independent of event/team canonical state. It needs its own runtime/transport decision and must preserve controller authority, role exclusivity, presence/expiry, signaling delivery, and reconnect behavior.
+
+### 11.5 Analytics migration status
+
+The former web-owned `progressive-service.ts`, `season-cohort.ts`, and `insights/service.ts` paths are absent from the current branch tree. The active event analytics route reads the durable EventRuntime analytics publication. The dashboard compatibility adapter in `apps/web/src/lib/insights/canonical-dashboard-adapter.ts` maps canonical domain analytics/publications to the existing dashboard response shape; it is presentation adaptation, not provider acquisition or calculation ownership.
+
+The reusable calculation engine and definitions live in `packages/analytics`. EventRuntime owns event analytics; TeamRuntime owns team-scoped analytics. The remaining analytics work is therefore parity/coverage and consumer-boundary verification, not porting the removed Redis job services back into the web app.
+
+### 11.6 Next inventory actions
+
+1. Complete a branch-wide import/call-site scan for the three legacy provider service facades and all direct provider package imports under `apps/web`. Classify each reference as live presentation utility, type-only use, or forbidden acquisition.
+2. If no live callers remain, delete the obsolete web provider client/service/index modules and remove only their now-unused imports/types. Keep the shared Redis client until the two transport consumers below are migrated.
+3. Migrate event WSS delivery from the Redis/Vercel bridge to the Worker Multiplexer and its existing client subscription protocol; then remove the webhook's best-effort legacy broadcast.
+4. Migrate remote signaling/presence to its separately owned session runtime/transport; only then remove the final Redis client and `ioredis` dependency.
+5. Run the complete root typecheck, test suite, and build after each removal slice. No production deployment, Vercel project setting change, or `main` merge is part of this work.
