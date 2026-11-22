@@ -203,9 +203,8 @@ test("TaskScheduler queues coverage audit without reading entity runtimes in the
 
 test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
   const storage = new MemoryStorage();
-  await storage.put("registry:events", ["2026test"]);
+  await storage.put("registry:runtime-events", ["2026test"]);
   await storage.put("registry:teams", ["frc3461"]);
-  await storage.put("scheduler:enabled", true);
   const forbiddenNamespace = {
     idFromName(name) { return name; },
     get() {
