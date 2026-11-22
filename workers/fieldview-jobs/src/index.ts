@@ -6,6 +6,7 @@ import type { TbaEvent } from "./calendar.ts";
 interface DiscoveryDocument {
   year: number;
   events: TbaEvent[];
+  chunkCount: number;
   etag: string | null;
   updatedAt: number;
   checkedAt: number;
@@ -39,7 +40,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const utcYear = Number(runDate.slice(0, 4));
     const years = [utcYear - 1, utcYear, utcYear + 1];
 
-    const discovery: Array<{ year: number; count: number; checkedAt: number }> = [];
+    const discovery: Array<{ year: number; count: number; checkedAt: number; chunkCount: number }> = [];
+    const eventChunkSize = 50;
     for (const year of years) {
       const result = await step.do(`discover-event-directory-${year}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
@@ -51,52 +53,69 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const response = await fetch(`https://www.thebluealliance.com/api/v3/events/${year}`, { headers });
         const checkedAt = Date.now();
         if (response.status === 304 && previous) {
-          const refreshed = { ...previous, checkedAt };
+          const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
+          const refreshed = { ...previous, chunkCount, checkedAt };
           await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
-          return { year, count: previous.events.length, checkedAt };
+          return { year, count: previous.events.length, checkedAt, chunkCount };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
         const events = await response.json() as TbaEvent[];
         if (!Array.isArray(events) || events.some((item) => !item || typeof item.key !== "string")) {
           throw new Error(`TBA event discovery for ${year} returned an invalid event directory`);
         }
+        const chunkCount = Math.ceil(events.length / eventChunkSize);
         const document: DiscoveryDocument = {
-          year, events, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
+          year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
         };
         await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
           httpMetadata: { contentType: "application/json" },
         });
-        return { year, count: events.length, checkedAt };
+        for (let index = 0; index < chunkCount; index += 1) {
+          await this.env.DISCOVERY_BUCKET.put(
+            `discovery/event-chunks/${year}/${checkedAt}/${index}.json`,
+            JSON.stringify(events.slice(index * eventChunkSize, (index + 1) * eventChunkSize)),
+            { httpMetadata: { contentType: "application/json" } },
+          );
+        }
+        return { year, count: events.length, checkedAt, chunkCount };
       });
       discovery.push(result);
     }
 
     const classified: Array<{ year: number; eventRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> }> = [];
-    for (const year of years) {
-      const result = await step.do(`classify-this-week-${year}`, async () => {
-        const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
-        const matches = (document?.events ?? [])
-          .filter((item) => classifyEventThisWeek(item, runAt)?.isThisWeek === true)
-          .sort((a, b) => a.key.localeCompare(b.key));
+    for (const directory of discovery) {
+      const yearMatches: TbaEvent[] = [];
+      for (let chunkIndex = 0; chunkIndex < directory.chunkCount; chunkIndex += 1) {
+        const matches = await step.do(`classify-this-week-${directory.year}-${chunkIndex}`, async () => {
+          const object = await this.env.DISCOVERY_BUCKET.get(
+            `discovery/event-chunks/${directory.year}/${directory.checkedAt}/${chunkIndex}.json`,
+          );
+          if (!object) throw new Error(`Missing event discovery chunk ${directory.year}/${chunkIndex}`);
+          const chunk = await object.json<TbaEvent[]>();
+          return chunk.filter((item) => classifyEventThisWeek(item, runAt)?.isThisWeek === true);
+        });
+        yearMatches.push(...matches);
+      }
+      await step.do(`publish-this-week-year-${directory.year}`, async () => {
         const projection = {
           evaluatedAt: runAt,
           runDate,
-          checkedAt: document?.checkedAt ?? runAt,
-          events: matches,
+          checkedAt: directory.checkedAt,
+          events: yearMatches,
         };
         await this.env.DISCOVERY_BUCKET.put(
-          `projections/events/this-week/${runAt}/${year}.json`,
+          `projections/events/this-week/${runAt}/${directory.year}.json`,
           JSON.stringify(projection),
           { httpMetadata: { contentType: "application/json" } },
         );
-        return {
-          year,
-          eventRefs: matches.map((item) => ({ key: item.key, lifecycle: lifecycleFor(item, runAt) })),
-        };
+        return { year: directory.year, eventCount: yearMatches.length };
       });
-      classified.push(result);
+      classified.push({
+        year: directory.year,
+        eventRefs: yearMatches.map((item) => ({ key: item.key, lifecycle: lifecycleFor(item, runAt) })),
+      });
     }
 
     const prepared = await step.do("publish-this-week-generation", async () => {
