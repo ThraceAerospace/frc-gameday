@@ -224,7 +224,7 @@ test("TBA acknowledges an authenticated webhook and registers runtime fan-out wi
   const env = environment(() => async () => {
     dispatched = true;
     return new Response("accepted", { status: 200 });
-  });
+  }, () => async () => new Response("accepted", { status: 200 }));
   const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env, { waitUntil: (promise) => { background = promise; } });
