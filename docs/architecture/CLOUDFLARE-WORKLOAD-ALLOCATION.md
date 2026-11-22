@@ -179,7 +179,7 @@ Compare the published season event/team directories with the registered EventRun
 6. Mark the audit complete only if the published discovery versions are unchanged; otherwise mark it stale. Workflow errors are persisted and surfaced as failed.
 7. Pause and resume use the native Workflow instance controls; there is no TaskScheduler alarm or "run next batch" loop.
 
-The audit is bounded to 13,000 entities so its five-entity batch steps, 100-item staging chunks, and fixed setup/finalization steps remain below the Free-plan 3,000-steps-per-day limit. Larger inventories must be split into smaller scopes rather than silently exceeding the account budget.
+The audit is bounded to 8,000 entities so its five-entity batch steps, 100-item staging chunks, and fixed setup/finalization steps remain below the Free-plan 3,000-steps-per-day limit. Larger inventories must be split into smaller scopes rather than silently exceeding the account budget.
 
 ### Runtime registration contract
 
