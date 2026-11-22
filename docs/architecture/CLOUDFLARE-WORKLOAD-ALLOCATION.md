@@ -38,10 +38,11 @@ This is the first extraction, not the completed event-readiness program. It curr
 ### Deployment prerequisites
 
 1. Create the R2 bucket named `fieldview-discovery` once in the target Cloudflare account.
-2. Deploy `fieldview-runtime` with its R2 binding and internal Workflow initialization route.
-3. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
-4. Deploy `fieldview-jobs` with the service binding to the deployed `fieldview-runtime` Worker and the Workflow binding.
-5. Confirm the Workflow runs successfully and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
+2. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
+3. Deploy `fieldview-jobs` first. Its service binding targets the already-deployed `fieldview-runtime` Worker.
+4. Deploy `fieldview-runtime` second. Its service binding now targets the deployed `fieldview-jobs` Worker, and its R2-backed public reads/internal initialization route become active.
+5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next daily Cron occurrence. Manual and scheduled triggers share one deterministic instance ID per UTC date; a duplicate returns HTTP 409.
+6. Confirm the Workflow summary reports successful discovery/classification and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
 
