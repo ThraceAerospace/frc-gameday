@@ -40,7 +40,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const utcYear = Number(runDate.slice(0, 4));
     const years = [utcYear - 1, utcYear, utcYear + 1];
 
-    const discovery: Array<{ year: number; count: number; checkedAt: number; chunkCount: number }> = [];
+    const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number }> = [];
     const eventChunkSize = 50;
     for (const year of years) {
       const result = await step.do(`discover-event-directory-${year}`, {
@@ -58,7 +58,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
-          return { year, count: previous.events.length, checkedAt, chunkCount };
+          return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
         const events = await response.json() as TbaEvent[];
@@ -79,7 +79,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             { httpMetadata: { contentType: "application/json" } },
           );
         }
-        return { year, count: events.length, checkedAt, chunkCount };
+        return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount };
       });
       discovery.push(result);
     }
@@ -90,7 +90,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       for (let chunkIndex = 0; chunkIndex < directory.chunkCount; chunkIndex += 1) {
         const matches = await step.do(`classify-this-week-${directory.year}-${chunkIndex}`, async () => {
           const object = await this.env.DISCOVERY_BUCKET.get(
-            `discovery/event-chunks/${directory.year}/${directory.checkedAt}/${chunkIndex}.json`,
+            `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
           );
           if (!object) throw new Error(`Missing event discovery chunk ${directory.year}/${chunkIndex}`);
           const chunk = await object.json<TbaEvent[]>();
