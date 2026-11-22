@@ -550,9 +550,13 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
       }
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const r2DiscoveredKeys = await this.readR2Keys(
-        kind === "event" ? `registry/events/${year}.json` : `registry/teams/${year}.json`,
-      );
+      const r2EventDirectory = kind === "event"
+        ? await this.readR2Json<{ year: number }>(`discovery/events/${year}.json`) : undefined;
+      const r2TeamDirectory = kind === "team"
+        ? await this.readR2Json<{ year: number }>(`discovery/teams/${year}.json`) : undefined;
+      const r2DiscoveredKeys = kind === "event"
+        ? r2EventDirectory?.year === year ? await this.readR2Keys(`registry/events/${year}.json`) : []
+        : r2TeamDirectory?.year === year ? await this.readR2Keys(`registry/teams/${year}.json`) : [];
       const registered = [...new Set([
         ...(await this.storage.get<string[]>(storageKey) ?? []),
         ...r2DiscoveredKeys,
@@ -722,13 +726,17 @@ export class TaskScheduler {
       const currentSeasonIndex = currentSeasonYear === null
         ? undefined
         : await this.readR2Json<DiscoveryCache>(`discovery/events/${currentSeasonYear}.json`);
+      const currentTeamDirectory = currentSeasonYear === null
+        ? undefined
+        : await this.readR2Json<{ year: number }>(`discovery/teams/${currentSeasonYear}.json`);
       const eventKeys = [...new Set([
-        ...(currentSeasonYear === null ? [] : await this.readR2Keys(`registry/events/${currentSeasonYear}.json`)),
+        ...(currentSeasonIndex ? await this.readR2Keys(`registry/events/${currentSeasonYear}.json`) : []),
         ...(await this.readR2Keys("registry/runtime-events.json")),
       ])].sort();
       const teamKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:teams") ?? []),
-        ...(currentSeasonYear === null ? [] : await this.readR2Keys(`registry/teams/${currentSeasonYear}.json`)),
+        ...(currentTeamDirectory?.year === currentSeasonYear
+          ? await this.readR2Keys(`registry/teams/${currentSeasonYear}.json`) : []),
       ])].sort();
       // The overview is deliberately metadata-only. Never fan out to dozens of
       // EventRuntime/TeamRuntime objects during a dashboard refresh; inspect a
