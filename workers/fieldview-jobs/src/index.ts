@@ -963,8 +963,13 @@ export default {
           headers: { "Cache-Control": "no-store" },
         });
       }
-      const action = String(value.action ?? "start");
+      let action = String(value.action ?? "start");
       if (!["start", "pause", "resume", "cancel", "preview"].includes(action)) return Response.json({ error: "Invalid runtime job action" }, { status: 400 });
+      if (action === "resume" && pointer) {
+        const prior = await readJson<Record<string, unknown>>(env.DISCOVERY_BUCKET, `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        const priorStatus = await env.RUNTIME_ADMIN.get(pointer.workflow_id).then((instance) => instance.status()).catch(() => null);
+        if (prior?.status === "completed_with_errors" && priorStatus?.status === "complete") action = "start";
+      }
       if (action === "preview") {
         const events = await readJson<DiscoveryDocument>(env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
         const teams = await readJson<string[]>(env.DISCOVERY_BUCKET, `registry/teams/${year}.json`);
