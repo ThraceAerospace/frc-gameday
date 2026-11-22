@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import worker from "../src/index.ts";
 
+
+async function invokeWebhook(request, env) {
+  const background = [];
+  const response = await worker.fetch(request, env, { waitUntil: (promise) => background.push(promise) });
+  await Promise.all(background);
+  return response;
+}
+
 async function sign(secret, body) {
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret),
@@ -40,7 +48,7 @@ test("TBA webhook ingress verifies raw-body HMAC and routes to the event runtime
     forwarded = request;
     return new Response("accepted", { status: 200 });
   });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+  const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST",
     headers: { "X-TBA-HMAC": signature, "Content-Type": "application/json" },
     body: raw,
@@ -66,7 +74,7 @@ test("TBA webhook ingress resolves event identity from nested event and match pa
       forwarded = request;
       return new Response("accepted", { status: 200 });
     });
-    const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
       method: "POST",
       headers: { "X-TBA-HMAC": signature, "Content-Type": "application/json" },
       body: raw,
@@ -82,7 +90,7 @@ test("invalid TBA signatures are rejected before Durable Object routing", async 
     called = true;
     return new Response("unexpected");
   });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+  const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST",
     headers: { "X-TBA-HMAC": "0".repeat(64) },
     body: JSON.stringify({
@@ -90,7 +98,7 @@ test("invalid TBA signatures are rejected before Durable Object routing", async 
       message_data: { event_key: "2026test" },
     }),
   }), env);
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 200);
   assert.equal(called, false);
 });
 
@@ -107,7 +115,7 @@ test("TBA ping and verification notifications are acknowledged without event rou
   for (const payload of payloads) {
     const raw = new TextEncoder().encode(JSON.stringify(payload)).buffer;
     const signature = await sign("webhook-secret", raw);
-    const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
       method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
     }), env);
     assert.equal(response.status, 200);
@@ -139,7 +147,7 @@ test("match_score webhook fans out once to the event and each unique participati
     teamTargets.push({ id, request });
     return new Response("accepted", { status: 200 });
   });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+  const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env);
   assert.equal(response.status, 200);
@@ -169,7 +177,7 @@ test("event-scoped TBA notifications do not guess TeamRuntime recipients", async
       teamTargets.push(id);
       return new Response("accepted", { status: 200 });
     });
-    const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
       method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
     }), env);
     assert.equal(response.status, 200, payload.message_type);
@@ -195,14 +203,33 @@ test("TBA webhook ingress reports partial fan-out failures instead of acknowledg
     calls.push(["team", id]);
     return new Response("unavailable", { status: id === "frc2" ? 503 : 200 });
   });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+  const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env);
-  assert.equal(response.status, 502);
-  const body = await response.json();
-  assert.equal(body.accepted, false);
-  assert.deepEqual(body.failures, [{ kind: "team", key: "frc2", status: 503 }]);
+  assert.equal(response.status, 200);
   assert.deepEqual(calls.sort((a, b) => a.join(":").localeCompare(b.join(":"))), [
     ["event", "2026test"], ["team", "frc1"], ["team", "frc2"],
   ]);
+});
+
+
+test("TBA receives 200 before any runtime fan-out starts", async () => {
+  const raw = new TextEncoder().encode(JSON.stringify({
+    message_type: "match_score",
+    message_data: { event_key: "2026test", match: { alliances: { red: { teams: ["frc1"] }, blue: { teams: [] } } } },
+  })).buffer;
+  const signature = await sign("webhook-secret", raw);
+  let dispatched = false;
+  let background;
+  const env = environment(() => async () => {
+    dispatched = true;
+    return new Response("accepted", { status: 200 });
+  });
+  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+  }), env, { waitUntil: (promise) => { background = promise; } });
+  assert.equal(response.status, 200);
+  assert.equal(dispatched, false);
+  await background;
+  assert.equal(dispatched, true);
 });
