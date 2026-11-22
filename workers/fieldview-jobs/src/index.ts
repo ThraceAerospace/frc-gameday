@@ -212,19 +212,31 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       });
     }
 
-    const classified: Array<{ year: number; eventRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> }> = [];
+    const classified: Array<{
+      year: number;
+      eventRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }>;
+      lifecycleRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }>;
+    }> = [];
     for (const directory of discovery) {
       const yearMatches: TbaEvent[] = [];
+      const yearLifecycleRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> = [];
       for (let chunkIndex = 0; chunkIndex < directory.chunkCount; chunkIndex += 1) {
-        const matches = await step.do(`classify-this-week-${directory.year}-${chunkIndex}`, async () => {
+        const classification = await step.do(`classify-this-week-and-lifecycle-${directory.year}-${chunkIndex}`, async () => {
           const object = await this.env.DISCOVERY_BUCKET.get(
             `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
           );
           if (!object) throw new Error(`Missing event discovery chunk ${directory.year}/${chunkIndex}`);
           const chunk = await object.json<TbaEvent[]>();
-          return chunk.filter((item) => classifyEventThisWeek(item, runAt)?.isThisWeek === true);
+          return {
+            thisWeek: chunk.filter((item) => classifyEventThisWeek(item, runAt)?.isThisWeek === true),
+            lifecycle: chunk.flatMap((item) => {
+              const lifecycle = lifecycleFor(item, runAt);
+              return lifecycle.lifecycle === "expired" ? [] : [{ key: item.key, lifecycle }];
+            }),
+          };
         });
-        yearMatches.push(...matches);
+        yearMatches.push(...classification.thisWeek);
+        yearLifecycleRefs.push(...classification.lifecycle);
       }
       await step.do(`publish-this-week-year-${directory.year}`, async () => {
         const projection = {
@@ -243,6 +255,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       classified.push({
         year: directory.year,
         eventRefs: yearMatches.map((item) => ({ key: item.key, lifecycle: lifecycleFor(item, runAt) })),
+        lifecycleRefs: yearLifecycleRefs,
       });
     }
 
@@ -322,8 +335,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       return { manifestKey, eventCount: eventRefs.length, runDate };
     });
 
-    const keys = classified.flatMap(({ year, eventRefs }) =>
-      eventRefs.map(({ key, lifecycle }) => ({ year, key, lifecycle })));
+    const keys = classified.flatMap(({ year, lifecycleRefs }) =>
+      lifecycleRefs.map(({ key, lifecycle }) => ({ year, key, lifecycle })));
     const initialized: string[] = [];
     const failures: Array<{ event_key: string; error: string }> = [];
     for (let offset = 0; offset < keys.length; offset += 10) {
