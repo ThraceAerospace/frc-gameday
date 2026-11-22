@@ -462,6 +462,13 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   assert.equal(saved.team_key, teamKey);
   assert.equal(saved.event_key, eventKey);
   assert.equal(saved.analytics.team_key, teamKey);
+  assert.deepEqual(saved.event_team_ref, {
+    owner: "event-runtime", owner_id: eventKey, record_type: "event-team", record_id: teamKey, revision: 4,
+  });
+  assert.deepEqual(saved.match_refs, []);
+  assert.equal("team" in saved, false);
+  assert.equal("event_team" in saved, false);
+  assert.equal("matches" in saved, false);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
   const read = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
     headers: { "X-FieldView-Team-Key": teamKey },
@@ -612,6 +619,50 @@ test("TeamRuntime alarm removes legacy recurring Statbotics tasks before process
   }));
   await runtime.alarm();
   assert.equal(storage.values.has("task:" + legacyEndpoint), false);
+});
+
+test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime references", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", eventKey = "2026legacy";
+  const legacyMatch = {
+    key: eventKey + "_qm1",
+    event_key: eventKey,
+    alliances: {
+      red: { team_keys: [teamKey, "frc1", "frc2"], score: 0 },
+      blue: { team_keys: ["frc3", "frc4", "frc5"], score: 0 },
+    },
+  };
+  storage.values.set("team-event-state:" + eventKey, {
+    event_key: eventKey,
+    team_key: teamKey,
+    sources: { team: {}, event_team: {}, matches: {} },
+    team: { key: teamKey, team_number: 3461 },
+    event_team: { event_key: eventKey, team_key: teamKey, sources: {} },
+    matches: [legacyMatch],
+    analytics: { event_key: eventKey, team_key: teamKey, metrics: [], findings: [] },
+  });
+  storage.values.set("team-event-state:" + eventKey + ":inputs", {
+    event_source_revision: 9, team_source_revision: 2, comparison_input_updated_at: 10,
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("reading an existing TeamEventState must not fetch providers");
+  }), teamKey);
+  const response = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(response.status, 200);
+  const migrated = await response.json();
+  assert.equal("team" in migrated, false);
+  assert.equal("event_team" in migrated, false);
+  assert.equal("matches" in migrated, false);
+  assert.deepEqual(migrated.event_team_ref, {
+    owner: "event-runtime", owner_id: eventKey, record_type: "event-team", record_id: teamKey, revision: 9,
+  });
+  assert.deepEqual(migrated.match_refs, [{
+    owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: legacyMatch.key, revision: 9,
+  }]);
+  assert.equal(migrated.analytics.team_key, teamKey);
+  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), false,
+    "the owning TeamRuntime replaces the old duplicated record in its own storage");
 });
 
 test("TeamRuntime applies a match webhook to its existing team projection without fetching or replacing enrichments", async () => {
