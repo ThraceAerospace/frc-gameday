@@ -6,9 +6,6 @@ import { teamResourceEndpoints } from "./team-runtime.ts";
 import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
-const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
-const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
-
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
   upcomingIntervalMs: number;
@@ -133,6 +130,7 @@ export function classifyEventLifecycle(
 }
 
 interface DiscoveryCache {
+  year?: number;
   etag: string | null;
   complete?: boolean;
   events: TBAEvent[];
@@ -268,6 +266,28 @@ export class TaskScheduler {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   }
 
+  private async readEventDiscovery(year: number): Promise<DiscoveryCache | undefined> {
+    const directory = await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
+    if (!directory || directory.year !== year || !Array.isArray(directory.events) ||
+        directory.events.some((event) => typeof event?.key !== "string")) return undefined;
+    return { ...directory, complete: true };
+  }
+
+  private async readTeamDiscovery(year: number): Promise<TeamDiscoveryCache | undefined> {
+    const manifest = await this.readR2Json<{
+      year: number; generation: number; pageCount: number; teamCount: number;
+      updatedAt: number; checkedAt: number;
+    }>(`discovery/teams/${year}.json`);
+    if (!manifest || manifest.year !== year || !Number.isInteger(manifest.pageCount) ||
+        manifest.pageCount < 1 || !Number.isInteger(manifest.teamCount) || manifest.teamCount < 1) return undefined;
+    const teamKeys = await this.readR2Keys(`registry/teams/${year}.json`);
+    if (teamKeys.length !== manifest.teamCount || teamKeys.some((key) => !/^frc[0-9]+$/.test(key))) return undefined;
+    return {
+      etag: null, pageCount: manifest.pageCount, teamCount: manifest.teamCount,
+      teamKeys, complete: true, updatedAt: manifest.updatedAt, checkedAt: manifest.checkedAt,
+    };
+  }
+
   async fetch(request: Request): Promise<Response> {
     const startedAt = performance.now();
     const url = new URL(request.url);
@@ -377,8 +397,8 @@ export class TaskScheduler {
       const key = seasonIngestKey(year);
       let job = await this.storage.get<SeasonIngestJob>(key);
       if (action === "preview") {
-        const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
-        const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        const events = await this.readEventDiscovery(year);
+        const teams = await this.readTeamDiscovery(year);
         const eventKeys = events?.events.map((item) => item.key).filter((item): item is string =>
           typeof item === "string" && /^[a-zA-Z0-9_-]+$/.test(item)) ?? [];
         const teamKeys = (teams?.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey));
@@ -411,8 +431,8 @@ export class TaskScheduler {
         }
         if (value.confirm !== true) return Response.json({ error: "Explicit confirmation is required to start season ingestion" }, { status: 400 });
         if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
-        const events = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
-        const teams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        const events = await this.readEventDiscovery(year);
+        const teams = await this.readTeamDiscovery(year);
         if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
           return Response.json({ error: "Complete event discovery and paginated team discovery before starting ingestion" }, { status: 409 });
         }
@@ -449,8 +469,8 @@ export class TaskScheduler {
         if (job.status === "running") job.status = "paused";
       } else if (action === "resume") {
         if (job.status !== "paused" && job.status !== "completed_with_errors") return Response.json({ error: "Only a paused or completed-with-errors job can resume" }, { status: 409 });
-        const currentEvents = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year);
-        const currentTeams = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
+        const currentEvents = await this.readEventDiscovery(year);
+        const currentTeams = await this.readTeamDiscovery(year);
         if (currentEvents?.updatedAt !== job.eventDiscoveryUpdatedAt ||
             currentTeams?.updatedAt !== job.teamDiscoveryUpdatedAt ||
             teamResourceEndpoints(job.teamKeys[0] ?? "", year).length !== job.teamResourceCount ||
@@ -506,24 +526,15 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
       }
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const r2EventDirectory = kind === "event"
-        ? await this.readR2Json<{ year: number }>(`discovery/events/${year}.json`) : undefined;
-      const r2TeamDirectory = kind === "team"
-        ? await this.readR2Json<{ year: number }>(`discovery/teams/${year}.json`) : undefined;
+      const discovery = kind === "event" ? await this.readEventDiscovery(year) : await this.readTeamDiscovery(year);
       const r2DiscoveredKeys = kind === "event"
-        ? r2EventDirectory?.year === year ? await this.readR2Keys(`registry/events/${year}.json`) : []
-        : r2TeamDirectory?.year === year ? await this.readR2Keys(`registry/teams/${year}.json`) : [];
+        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
+        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
       const registered = [...new Set([
         ...(await this.storage.get<string[]>(storageKey) ?? []),
         ...r2DiscoveredKeys,
       ])];
-      const discovery = kind === "event"
-        ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`))
-        : await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
-      const discoveredKeys = kind === "event"
-        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
-        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
+
       const keys = [...new Set([...registered, ...discoveredKeys])]
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
@@ -548,15 +559,14 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid entity season year" }, { status: 400 });
       }
       const registryKey = kind === "event" ? "registry:events" : "registry:teams";
-      const r2DiscoveredKeys = kind === "event" ? await this.readR2Keys(`registry/events/${year}.json`) : [];
+      const discovery = kind === "event" ? await this.readEventDiscovery(year) : await this.readTeamDiscovery(year);
+      const r2DiscoveredKeys = kind === "event"
+        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
+        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
       const registered = [...new Set([
         ...(await this.storage.get<string[]>(registryKey) ?? []),
         ...r2DiscoveredKeys,
       ])];
-      const discovery = kind === "event"
-        ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`))
-        : await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
       const discovered = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
         : (discovery as TeamDiscoveryCache | undefined)?.teamKeys?.includes(key) ?? false;
@@ -583,17 +593,8 @@ export class TaskScheduler {
     if (url.pathname === "/admin/coverage-audit" && request.method === "GET") {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid audit year" }, { status: 400 });
-      const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-        await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
-      const r2TeamManifest = await this.readR2Json<{
-        year: number; pageCount: number; teamCount: number; updatedAt: number;
-      }>(`discovery/teams/${year}.json`);
-      const r2TeamKeys = await this.readR2Keys(`registry/teams/${year}.json`);
-      const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-        (r2TeamManifest?.year === year ? {
-          etag: null, pageCount: r2TeamManifest.pageCount, teamCount: r2TeamManifest.teamCount,
-          teamKeys: r2TeamKeys, complete: true, updatedAt: r2TeamManifest.updatedAt,
-        } satisfies TeamDiscoveryCache : undefined);
+      const eventDiscovery = await this.readEventDiscovery(year);
+      const teamDiscovery = await this.readTeamDiscovery(year);
       const eventDiscoveryReady = eventDiscovery !== undefined;
       const teamDiscoveryReady = teamDiscovery?.complete === true;
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) > 0;
@@ -632,17 +633,12 @@ export class TaskScheduler {
         counts: { events_total: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_stale: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_stale: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
       }>(storageKey);
       if (action === "start") {
-        const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
+        const eventDiscovery = await this.readEventDiscovery(year);
         const r2TeamManifest = await this.readR2Json<{
           year: number; pageCount: number; teamCount: number; updatedAt: number;
         }>(`discovery/teams/${year}.json`);
         const r2TeamKeys = await this.readR2Keys(`registry/teams/${year}.json`);
-        const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-          (r2TeamManifest?.year === year ? {
-            etag: null, pageCount: r2TeamManifest.pageCount, teamCount: r2TeamManifest.teamCount,
-            teamKeys: r2TeamKeys, complete: true, updatedAt: r2TeamManifest.updatedAt,
-          } satisfies TeamDiscoveryCache : undefined);
+        const teamDiscovery = await this.readTeamDiscovery(year);
         if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
         const teamKeys = [...new Set(teamDiscovery.teamKeys ?? [])].sort();
@@ -1188,8 +1184,8 @@ export class TaskScheduler {
       job.recentErrors.push({ kind, key: entityKey, detail: detail.slice(0, 240), at: Date.now() });
       if (job.recentErrors.length > 100) job.recentErrors.splice(0, job.recentErrors.length - 100);
     };
-    const currentEventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
-    const currentTeamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + job.year);
+    const currentEventDiscovery = await this.readEventDiscovery(job.year);
+    const currentTeamDiscovery = await this.readTeamDiscovery(job.year);
     if (currentEventDiscovery?.updatedAt !== job.eventDiscoveryUpdatedAt ||
         currentTeamDiscovery?.updatedAt !== job.teamDiscoveryUpdatedAt) {
       job.status = "paused";
@@ -1323,7 +1319,7 @@ export class TaskScheduler {
         }
         const eventIndex = job.eventCursor;
         const eventKey = job.eventKeys[job.eventCursor];
-        const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
+        const eventDiscovery = await this.readEventDiscovery(job.year);
         const event = eventDiscovery?.events.find((item) => item.key === eventKey);
         const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
         const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
