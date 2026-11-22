@@ -574,6 +574,22 @@ export default {
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
           !Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
+      const directoryObject = await env.DISCOVERY_BUCKET?.get(
+        kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`,
+      );
+      let discovered = false;
+      if (directoryObject) {
+        try {
+          const directory = await directoryObject.json<unknown>();
+          discovered = kind === "event"
+            ? isRecord(directory) && Array.isArray(directory.events) && directory.events.some((item) => isRecord(item) && item.key === key)
+            : Array.isArray(directory) && directory.includes(key);
+        } catch { discovered = false; }
+      }
+      const marker = await env.DISCOVERY_BUCKET?.get(
+        (kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/") + key + ".json",
+      );
+      if (!discovered && !marker) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
       const namespace = kind === "event" ? env.EVENT_RUNTIME : env.TEAM_RUNTIME;
       if (!namespace) return Response.json({ error: kind + " runtime is unavailable" }, { status: 503 });
       const stub = namespace.get(namespace.idFromName(key));
@@ -626,16 +642,27 @@ export default {
           multiplexer = response.ok ? await response.json() : { status: response.status };
         } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
       }
-      const runtimeCount = async (kind: "event" | "team") => {
-        if (!env.DISCOVERY_BUCKET) return 0;
+      const runtimeKeys = async (kind: "event" | "team") => {
+        if (!env.DISCOVERY_BUCKET) return [] as string[];
         const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-        let count = 0, cursor: string | undefined;
+        const keys: string[] = [];
+        let cursor: string | undefined;
         do {
           const page = await env.DISCOVERY_BUCKET.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
-          count += page.objects.length; cursor = page.truncated ? page.cursor : undefined;
+          for (const item of page.objects) {
+            const key = item.key.slice(prefix.length).replace(/\.json$/, "");
+            if (key && (kind === "team" || key.startsWith(String(year)))) keys.push(key);
+          }
+          cursor = page.truncated ? page.cursor : undefined;
         } while (cursor);
-        return count;
+        return keys;
       };
+      const eventRegistryObject = year === null ? null : await env.DISCOVERY_BUCKET?.get(`registry/events/${year}.json`);
+      const teamRegistryObject = year === null ? null : await env.DISCOVERY_BUCKET?.get(`registry/teams/${year}.json`);
+      const eventRegistry = eventRegistryObject ? await eventRegistryObject.json<string[]>().catch(() => []) : [];
+      const teamRegistry = teamRegistryObject ? await teamRegistryObject.json<string[]>().catch(() => []) : [];
+      const eventRuntimeKeys = await runtimeKeys("event");
+      const teamRuntimeKeys = await runtimeKeys("team");
       return Response.json({
         generated_at: new Date().toISOString(),
         current_season: { year, status: !events ? "missing" :
@@ -643,8 +670,11 @@ export default {
           event_count: events?.events?.length ?? 0, team_count: teams?.teamCount ?? 0,
           updated_at: events?.updatedAt ?? null, checked_at: events?.checkedAt ?? null },
         events: [], teams: [], multiplexer, truncated: false,
-        inventory: { events: await runtimeCount("event") + (events?.events?.length ?? 0),
-          teams: await runtimeCount("team") + (teams?.teamCount ?? 0) },
+        inventory: {
+          events: new Set([...(eventRegistry ?? []), ...(events?.events ?? []).flatMap((item) =>
+            isRecord(item) && typeof item.key === "string" ? [item.key] : []), ...eventRuntimeKeys]).size,
+          teams: new Set([...(teamRegistry ?? []), ...teamRuntimeKeys]).size,
+        },
       });
     }
 
