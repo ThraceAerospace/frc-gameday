@@ -122,14 +122,17 @@ test("event team seeding explicitly curates team history and waits for acquisiti
       idFromName: (key) => key,
       get: (id) => ({
         fetch: async (request) => {
-          eventCalls.push({ id, path: new URL(request.url).pathname, body: await request.json() });
+          const path = new URL(request.url).pathname;
+          const body = request.method === "POST" && request.headers.get("Content-Type")?.includes("application/json")
+            ? await request.json() : null;
+          eventCalls.push({ id, path, body });
+          if (path === "/participants") return Response.json({ ready: true, team_keys: ["frc3461"] });
           return Response.json({ scheduled: true });
         },
       }),
     },
-    fetcher: async (url) => {
-      assert.match(String(url), /\/event\/2026rikin\/teams$/);
-      return Response.json([{ key: "frc3461", team_number: 3461 }]);
+    fetcher: async () => {
+      throw new Error("TaskScheduler must not call TBA directly for event participants");
     },
   };
   const scheduler = new TaskScheduler({ storage }, env);
