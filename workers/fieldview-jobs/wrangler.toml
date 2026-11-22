@@ -1,0 +1,28 @@
+name = "fieldview-jobs"
+main = "src/index.ts"
+compatibility_date = "2026-11-22"
+workers_dev = false
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[[r2_buckets]]
+binding = "DISCOVERY_BUCKET"
+bucket_name = "fieldview-discovery"
+
+[[services]]
+binding = "FIELDVIEW_RUNTIME"
+service = "fieldview-runtime"
+
+[[workflows]]
+name = "daily-event-readiness"
+binding = "DAILY_EVENT_READINESS"
+class_name = "DailyEventReadinessWorkflow"
+
+[triggers]
+crons = ["0 16 * * *"]
+
+# Configure TBA_API_KEY and RUNTIME_ADMIN_TOKEN as Worker secrets:
+# wrangler secret put TBA_API_KEY
+# wrangler secret put RUNTIME_ADMIN_TOKEN
