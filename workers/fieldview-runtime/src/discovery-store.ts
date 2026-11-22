@@ -7,6 +7,10 @@ export class DiscoveryStore {
   private readonly storage: DurableObjectStateLike["storage"];
   constructor(state: DurableObjectStateLike, _env?: RuntimeEnvironment) { this.storage = state.storage; }
 
+  private async deleteKey(key: string): Promise<void> {
+    await this.storage.delete(PREFIX + key);
+  }
+
   private async deletePrefix(prefix: string): Promise<void> {
     let cursor: string | undefined;
     for (;;) {
@@ -35,7 +39,8 @@ export class DiscoveryStore {
       const eventDirectory = key.match(/^discovery\/events\/(\d{4})\.json$/);
       if (eventDirectory && typeof oldValue.updatedAt === "number" && oldValue.updatedAt !== newValue.updatedAt) {
         await this.deletePrefix(`discovery/event-chunks/${eventDirectory[1]}/${oldValue.updatedAt}/`);
-        await this.deletePrefix(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}`);
+        await this.deleteKey(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}.json`);
+        await this.deleteKey(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}-keys.json`);
       }
       if (key === "projections/events/this-week/current.json" &&
           typeof oldValue.runAt === "number" && oldValue.runAt !== newValue.runAt) {
