@@ -384,22 +384,17 @@ export default {
             body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : action === "coverage-audit-pause" ? "pause" : "continue", year }),
           }));
         }
-        if (!env.TASK_SCHEDULER || !["season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
+        if (!["season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
-        const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-        if (action.startsWith("season-ingest-")) {
-          const year = Number(body.year);
-          if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
-          const operation = action.slice("season-ingest-".length);
-          const payload = { action: operation, year, ...(operation === "start" ? { confirm: body.confirm === true } : {}) };
-          return scheduler.fetch(new Request("https://task-scheduler/admin/season-ingest", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          }));
-        }
-        return Response.json({ error: "Unsupported system operation" }, { status: 400 });
+        const year = Number(body.year);
+        if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
+        if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+        const operation = action === "season-ingest-preview" ? "preview" : action.slice("season-ingest-".length);
+        return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+          method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: "season-ingest", action: operation, year, confirm: body.confirm === true }),
+        }));
       }
       if (typeof body.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(body.key)) {
         return Response.json({ error: "A valid event or team key is required" }, { status: 400 });
@@ -410,13 +405,12 @@ export default {
           return Response.json({ error: "Unsupported event operation" }, { status: 400 });
         }
         if (action === "seed-event-teams") {
-          if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
           const year = body.year === undefined ? Number(key.slice(0, 4)) : Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid event season year" }, { status: 400 });
-          const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-          return scheduler.fetch(new Request("https://task-scheduler/admin/event-team-seed", {
+          if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+          return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/runtime-job", {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({ event_key: key, year }),
+            body: JSON.stringify({ operation: "event-team-seed", action: "start", event_key: key, year }),
           }));
         }
         const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
@@ -446,12 +440,10 @@ export default {
         }
         const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
         if (action === "seed") {
-          if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-          const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-          return scheduler.fetch(new Request("https://task-scheduler/admin/team-seed", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({ team_key: teamKey, year }),
+          if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+          return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+            method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ operation: "team-seed", action: "start", team_key: teamKey, year }),
           }));
         }
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
