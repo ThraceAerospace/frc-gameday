@@ -229,7 +229,7 @@ const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + team
 
 
 
-/** Administrative ingestion and cross-runtime seed/audit coordinator; entity runtimes execute dispatched work. */
+/** Season ingestion and cross-runtime team/event seed coordinator; entity runtimes execute dispatched work. */
 export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
