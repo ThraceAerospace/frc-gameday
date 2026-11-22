@@ -5,7 +5,6 @@ export interface DiscoveryStoreClient {
   get(key: string): Promise<DiscoveryRecord | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
-  provider(path: string, init?: RequestInit): Promise<Response>;
   catalog(action: string, input?: Record<string, unknown>): Promise<Response>;
 }
 
@@ -42,9 +41,6 @@ export function createDiscoveryStoreClient(
       return await (await send("list?" + query)).json() as {
         objects: Array<{ key: string }>; truncated: boolean; cursor?: string;
       };
-    },
-    async provider(path, init = {}) {
-      return stub.fetch(new Request("https://discovery-store/" + path, init));
     },
     async catalog(action, input = {}) {
       return stub.fetch(new Request("https://discovery-store/catalog/" + action, {
