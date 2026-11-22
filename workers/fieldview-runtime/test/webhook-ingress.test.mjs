@@ -177,3 +177,32 @@ test("event-scoped TBA notifications do not guess TeamRuntime recipients", async
     assert.deepEqual(teamTargets, [], payload.message_type);
   }
 });
+
+test("TBA webhook ingress reports partial fan-out failures instead of acknowledging success", async () => {
+  const raw = new TextEncoder().encode(JSON.stringify({
+    message_type: "match_score",
+    message_data: {
+      event_key: "2026test",
+      match: { alliances: { red: { teams: ["frc1"] }, blue: { teams: ["frc2"] } } },
+    },
+  })).buffer;
+  const signature = await sign("webhook-secret", raw);
+  const calls = [];
+  const env = environment((id) => async () => {
+    calls.push(["event", id]);
+    return new Response("accepted", { status: 200 });
+  }, (id) => async () => {
+    calls.push(["team", id]);
+    return new Response("unavailable", { status: id === "frc2" ? 503 : 200 });
+  });
+  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
+    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+  }), env);
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.equal(body.accepted, false);
+  assert.deepEqual(body.failures, [{ kind: "team", key: "frc2", status: 503 }]);
+  assert.deepEqual(calls.sort((a, b) => a.join(":").localeCompare(b.join(":"))), [
+    ["event", "2026test"], ["team", "frc1"], ["team", "frc2"],
+  ]);
+});
