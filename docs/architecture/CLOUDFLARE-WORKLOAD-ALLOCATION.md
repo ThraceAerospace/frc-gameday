@@ -174,7 +174,7 @@ Compare the published season event/team directories with the registered EventRun
 1. Validate that both published R2 directories are complete and pin their `updatedAt` versions.
 2. Read the per-entity runtime marker registries from R2. Missing markers are counted as missing runtimes; the audit does not instantiate empty Durable Objects just to inspect them.
 3. Stage the event/team audit item list in R2 and write bounded 100-item chunks.
-4. Inspect five runtime states per Workflow step through the authenticated runtime-state Worker route. Each step records resource freshness, event state, event analytics, cohort status, team snapshots, and read errors.
+4. Inspect five runtime states per Workflow step through the authenticated runtime-state Worker route. Each step records resource freshness, event state, event analytics, cohort status, team snapshots, and read errors. Expired events and events with invalid dates/timezones are counted separately and are not treated as missing live runtimes.
 5. Persist cursor and counters to the R2 audit record after every batch. The dashboard reads that record and the native Workflow instance status.
 6. Mark the audit complete only if the published discovery versions are unchanged; otherwise mark it stale. Workflow errors are persisted and surfaced as failed.
 7. Pause and resume use the native Workflow instance controls; there is no TaskScheduler alarm or "run next batch" loop.
