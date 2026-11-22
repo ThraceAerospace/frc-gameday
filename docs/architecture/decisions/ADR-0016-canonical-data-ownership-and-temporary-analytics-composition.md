@@ -28,6 +28,25 @@ Each canonical record has one authoritative owner and one authoritative persiste
 - TeamRuntime owns team-scoped provider resources, `FieldViewTeamState`, `FieldViewTeamEventState`, and team-scoped analytics. A `FieldViewTeamEventState` stores the team/event identity, provenance, analytics, and logical references to the EventRuntime-owned `FieldViewEventTeam` and `FieldViewMatch` records; it does not embed the team profile, event-team record, or match objects.
 - A runtime does not persist complete canonical records owned by another runtime.
 
+### 1a. Canonical ownership inventory
+
+| Canonical record / fact | Sole owner | Other runtimes and consumers retain |
+| --- | --- | --- |
+| Team identity/profile (\`FieldViewTeam\`) | TeamRuntime | \`team_key\` reference |
+| Team/season provider state and Statbotics team-year/team-event history | TeamRuntime | References to EventRuntime event identities where needed |
+| Team/event participation and team-scoped analytics (\`FieldViewTeamEventState\`, \`FieldViewTeamEventAnalytics\`) | TeamRuntime | EventRuntime retains the team-event-state reference and source revision |
+| Event identity and event-scoped provider resources | EventRuntime | \`event_key\` reference |
+| Event/team participation (\`FieldViewEventTeam\`) | EventRuntime | TeamRuntime retains event-team reference and source revision |
+| Match and match-local alliance roster (\`FieldViewMatch\`) | EventRuntime | TeamRuntime retains match references; team identity is represented by \`team_key\` values |
+| Playoff alliance (\`FieldViewPlayoffAlliance\`) | EventRuntime | Matches retain alliance identity references, not full alliance objects |
+| District directory, district metadata, roster, events, rankings, and advancement | TaskScheduler | TeamRuntime retains district membership keys; district snapshots retain team/event keys |
+| Event-wide analytics (\`FieldViewEventAnalytics\`) | EventRuntime | TeamRuntime retains no event-wide analytics copy |
+| Team-scoped analytics | TeamRuntime | EventRuntime consumes revisioned results transiently or as minimal derived comparison output |
+
+A relationship row may contain attributes that belong to that relationship (for example, event/team OPR or match alliance color). It must not embed the complete profile or canonical record of either endpoint. Provider team keys, event keys, and match keys are valid relationship identities; copied team names, profile fields, district objects, event objects, or match objects are not.
+
+The current TypeScript contracts and persisted records are not yet fully aligned with this inventory. In particular, \`FieldViewEventState.teams\`, \`FieldViewTeamState.districts/events\`, \`FieldViewDistrictSnapshot.teams/events\`, and match-level team/alliance enrichment still contain foreign records or copied facts. Those are migration targets, not exceptions to the ownership rule. Until each consumer is migrated, compatibility adapters may read the legacy shape, but new writes must move toward references and the old representation must be retired through a bounded migration.
+
 ### 2. Logical foreign references
 
 Cross-runtime dependencies use references that identify:
