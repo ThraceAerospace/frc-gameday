@@ -191,7 +191,7 @@ const seasonIngestSummary = (job: SeasonIngestJob) => ({
 });
 
 interface TeamDiscoveryCache {
-  /** Page-zero ETag retained for existing public provenance fields. */
+  /** Page-zero validator retained for administrative discovery diagnostics. */
   etag: string | null;
   /** One ETag and payload per TBA page; TBA pages contain at most 500 teams. */
   pageEtags?: Record<string, string | null>;
