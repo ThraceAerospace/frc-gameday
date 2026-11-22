@@ -825,8 +825,17 @@ export class EventRuntime {
         ? "stale" : publication.status;
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const analyticsIsCurrent = analyticsPublication?.sourceRevision === publication.sourceRevision;
-      const analytics = analyticsIsCurrent
-        ? analyticsPublication?.eventAnalytics as FieldViewEventView["analytics"] ?? null
+      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
+      const storedAnalytics = analyticsIsCurrent
+        ? analyticsPublication?.eventAnalytics as FieldViewEventView["analytics"] | undefined
+        : undefined;
+      const teamComparisonIsCurrent = storedAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt;
+      const analytics = storedAnalytics
+        ? teamComparisonIsCurrent ? storedAnalytics : {
+            ...storedAnalytics,
+            team_comparison: undefined,
+            team_summaries: undefined,
+          }
         : null;
       const expected = (publication.state.teams ?? []).map((team) => team.key);
       const teamStateRevisions = analyticsIsCurrent ? analyticsPublication?.teamStateRevisions ?? [] : [];
@@ -841,7 +850,7 @@ export class EventRuntime {
       const pendingTeamKeys = teamStateRefs.filter((item) => item.revision === null).map((item) => item.owner_id);
       const materializedTeamCount = teamStateRefs.length - pendingTeamKeys.length;
       const analyticsStatus = await this.storage.get<string>("analytics:status");
-      const teamStatesComplete = analyticsIsCurrent && analyticsStatus === "succeeded" &&
+      const teamStatesComplete = analyticsIsCurrent && teamComparisonIsCurrent && analyticsStatus === "succeeded" &&
         expected.length === materializedTeamCount;
       const view: FieldViewEventView = {
         event: Object.fromEntries(Object.entries(publication.state)
