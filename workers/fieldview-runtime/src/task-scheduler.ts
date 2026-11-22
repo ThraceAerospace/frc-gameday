@@ -1097,6 +1097,7 @@ export class TaskScheduler {
         }
         await this.storage.put("registry:events", [...knownEvents].sort());
         await this.storage.put("registry:runtime-events", [...runtimeEvents].sort());
+        for (const eventKey of runtimeEvents) await this.registerRuntimeKey("event", eventKey);
         if (job.eventCursor >= job.eventKeys.length) job.status = job.errors.length ? "completed_with_errors" : "completed";
         else job.nextDueAt = Date.now() + 100;
       }
@@ -1234,6 +1235,7 @@ export class TaskScheduler {
         const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
         const teamRegistry = await this.storage.get<string[]>("registry:teams") ?? [];
         if (!teamRegistry.includes(teamKey)) await this.storage.put("registry:teams", [...teamRegistry, teamKey].sort());
+        await this.registerRuntimeKey("team", teamKey);
         const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
         if (job.teamResourceCursor < resources.length) {
           const resource = resources[job.teamResourceCursor];
