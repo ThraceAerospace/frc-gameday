@@ -49,7 +49,6 @@ export default async function InsightsPage() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <InsightLink href="/events" title="Event comparisons" detail="Compare event sizes, schedules, and competitive depth." />
             <InsightLink href="/teams" title="Team performance" detail="Connect season records, event results, and team-level metrics." />
-            <InsightLink href="/districts" title="District performance" detail="Explore district rankings and advancement." />
           </div>
         </section>
       </div>
