@@ -430,6 +430,22 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             await step.sleep("wait-season-analytics-" + offset + "-" + analyticsAttempt, "5 seconds");
           }
           if (!analyticsReady) throw new Error("EventAnalytics did not reach a terminal state");
+          const eventByKey = new Map(events.events.map((item) => [item.key, item]));
+          await step.do("apply-season-event-lifecycle-" + offset, async () => {
+            for (const eventKey of batch) {
+              const event = eventByKey.get(eventKey);
+              if (!event) continue;
+              const lifecycle = lifecycleFor(event, Date.now());
+              const response = await dispatch(this.env, "event", eventKey, "lifecycle", {
+                lifecycle: lifecycle.lifecycle,
+                upcomingIntervalMs: 30 * 60_000,
+                activeIntervalMs: 5 * 60_000,
+                ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
+              }, p.year);
+              if (!response.ok) throw new Error("Event lifecycle update failed for " + eventKey);
+            }
+            return { updated: batch.length };
+          });
           break;
         }
         if (attempt === 179) {
