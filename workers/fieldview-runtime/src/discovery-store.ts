@@ -132,6 +132,24 @@ export class DiscoveryStore {
       return Response.json({ error: "Invalid team directory publication" }, { status: 400 });
     }
     const unique = [...new Set(teamKeys as string[])].sort();
+    const observed = new Set<string>();
+    for (let page = 0; page < pageCount; page += 1) {
+      const raw = await this.storage.get<string>(PREFIX + `discovery/team-pages/${year}/${generation}/${page}.json`);
+      if (!raw) return Response.json({ error: `Team directory page ${page} is missing` }, { status: 409 });
+      let pageTeams: Array<{ key?: unknown }>;
+      try { pageTeams = JSON.parse(raw) as Array<{ key?: unknown }>; } catch {
+        return Response.json({ error: `Team directory page ${page} is invalid JSON` }, { status: 409 });
+      }
+      if (!Array.isArray(pageTeams) || pageTeams.some((team) =>
+        !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+        return Response.json({ error: `Team directory page ${page} is invalid` }, { status: 409 });
+      }
+      for (const team of pageTeams) observed.add(team.key as string);
+    }
+    const observedKeys = [...observed].sort();
+    if (observedKeys.length !== unique.length || observedKeys.some((key, index) => key !== unique[index])) {
+      return Response.json({ error: "Team directory page contents do not match the publication manifest" }, { status: 409 });
+    }
     await this.putValue(`registry/teams/${year}.json`, JSON.stringify(unique));
     await this.putValue(`discovery/teams/${year}.json`, JSON.stringify({
       year, generation, pageCount, teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
@@ -174,7 +192,7 @@ export class DiscoveryStore {
     }
     const generation = suppliedGeneration ?? checkedAt;
     const chunkCount = Math.ceil(events.length / chunkSize);
-    const document = { year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: generation, checkedAt };
+    const document = { year, events, chunkCount, chunkSize, etag: response.headers.get("ETag"), updatedAt: generation, checkedAt };
     await this.putValue(`discovery/staging/${year}/${generation}.json`, JSON.stringify(document));
     await this.putValue(`discovery/staging/${year}/${generation}-keys.json`, JSON.stringify(events.map((item) => item.key)));
     return Response.json({ year, count: events.length, checkedAt, generation, chunkCount, needsChunking: true });
@@ -213,6 +231,26 @@ export class DiscoveryStore {
     const stagedDocument = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
     const stagedKeys = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}-keys.json`);
     if (!stagedDocument || !stagedKeys) return Response.json({ error: "Event discovery staging is incomplete" }, { status: 409 });
+    let document: { events?: Array<{ key?: unknown }>; chunkCount?: number };
+    let keys: unknown;
+    try {
+      document = JSON.parse(stagedDocument);
+      keys = JSON.parse(stagedKeys);
+    } catch {
+      return Response.json({ error: "Event discovery staging is invalid JSON" }, { status: 409 });
+    }
+    if (!Array.isArray(document.events) || !Number.isSafeInteger(document.chunkCount) ||
+        !Array.isArray(keys) || keys.length !== document.events.length ||
+        document.events.some((item, index) => !item || typeof item.key !== "string" || keys[index] !== item.key)) {
+      return Response.json({ error: "Event discovery staging manifest is invalid" }, { status: 409 });
+    }
+    for (let index = 0; index < Number(document.chunkCount); index += 1) {
+      const chunk = await this.storage.get<string>(PREFIX + `discovery/event-chunks/${year}/${generation}/${index}.json`);
+      if (!chunk) return Response.json({ error: `Event discovery chunk ${index} is missing` }, { status: 409 });
+      try { if (!Array.isArray(JSON.parse(chunk))) throw new Error("not an array"); } catch {
+        return Response.json({ error: `Event discovery chunk ${index} is invalid` }, { status: 409 });
+      }
+    }
     await this.putValue(`registry/events/${year}.json`, stagedKeys);
     await this.putValue(`discovery/events/${year}.json`, stagedDocument);
     return Response.json({ year, published: true });
