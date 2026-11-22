@@ -52,6 +52,21 @@ async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
   return object ? object.json<T>() : null;
 }
 
+async function listRuntimeRegistry(bucket: R2Bucket, kind: "event" | "team"): Promise<string[]> {
+  const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+    for (const object of page.objects) {
+      const key = object.key.slice(prefix.length).replace(/\\.json$/, "");
+      if (key) keys.push(key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys.sort();
+}
+
 async function readPublishedSeason(bucket: R2Bucket, year: number): Promise<{
   events: TbaEvent[];
   eventUpdatedAt: number;
@@ -407,14 +422,17 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       }
     }
 
-    await step.do("publish-runtime-team-registry", async () => {
-      const existing = await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-teams.json") ?? [];
-      const registered = [...new Set([...existing, ...seededTeams])].sort();
-      await this.env.DISCOVERY_BUCKET.put("registry/runtime-teams.json", JSON.stringify(registered), {
-        httpMetadata: { contentType: "application/json" },
+    for (let offset = 0; offset < seededTeams.length; offset += 10) {
+      const batch = seededTeams.slice(offset, offset + 10);
+      await step.do(`publish-runtime-team-markers-${offset / 10}`, async () => {
+        for (const teamKey of batch) {
+          await this.env.DISCOVERY_BUCKET.put(`registry/runtime-teams/${teamKey}.json`, "{}", {
+            httpMetadata: { contentType: "application/json" },
+          });
+        }
+        return { registered: batch.length };
       });
-      return { registered: registered.length };
-    });
+    }
 
     const prepared = await step.do("write-this-week-manifest", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
@@ -721,8 +739,8 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
         const directory = await readPublishedSeason(this.env.DISCOVERY_BUCKET, year);
         if (!directory) throw new Error("Complete R2 event and paginated team discovery is required before starting the coverage audit");
         const now = Date.now();
-        const runtimeEvents = new Set(await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-events.json") ?? []);
-        const runtimeTeams = new Set(await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-teams.json") ?? []);
+        const runtimeEvents = new Set(await listRuntimeRegistry(this.env.DISCOVERY_BUCKET, "event"));
+        const runtimeTeams = new Set(await listRuntimeRegistry(this.env.DISCOVERY_BUCKET, "team"));
         const items: CoverageAuditItem[] = [
           ...directory.events
             .filter((item) => typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key))
