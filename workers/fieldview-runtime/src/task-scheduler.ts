@@ -365,18 +365,6 @@ export class TaskScheduler {
       : Promise.resolve();
   }
 
-  private async queueCurrentSeasonDiscovery(): Promise<void> {
-    if (await this.storage.get<boolean>("scheduler:daily-run-requested") !== true) {
-      await this.storage.put("scheduler:daily-run-requested", true);
-    }
-    const currentAlarm = await this.storage.getAlarm?.();
-    if (currentAlarm === null || currentAlarm === undefined) {
-      await this.storage.setAlarm(Date.now() + 100);
-    }
-  }
-
-
- 
   async fetch(request: Request): Promise<Response> {
     const startedAt = performance.now();
     const url = new URL(request.url);
@@ -402,17 +390,15 @@ export class TaskScheduler {
       const cached = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
       const currentYear = new Date().getUTCFullYear();
       if (!cached) {
-        if (year === currentYear) await this.queueCurrentSeasonDiscovery();
         return Response.json({
           year, events: [], status: "unavailable",
           index: { status: "missing", persisted: false },
-          revalidation: year === currentYear ? "scheduled" : "on_demand",
+          revalidation: "unavailable",
         }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
       }
       const retrievedAt = new Date(cached.updatedAt).toISOString();
       const checkedAt = cached.checkedAt ?? cached.updatedAt;
       const isStale = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs;
-      if (year === currentYear && isStale) await this.queueCurrentSeasonDiscovery();
       const sourceStatus = isStale ? "stale" as const : "available" as const;
       const events = cached.events.map((event) => normalizeFieldViewEvent(event, {
         tba_event: {
@@ -428,7 +414,7 @@ export class TaskScheduler {
         {
           year, events, updatedAt: cached.updatedAt, checkedAt,
           index: { status: sourceStatus, persisted: true, last_error: indexError },
-          revalidation: isStale ? "scheduled" : "idle",
+          revalidation: isStale ? "workflow_managed" : "idle",
         },
         {
           headers: {
@@ -442,16 +428,9 @@ export class TaskScheduler {
     if (request.method === "GET" && url.pathname === "/events/this-week") {
       const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; checkedAt?: number; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
       if (!projection) {
-        // A public read is also a demand signal. Kick the existing durable
-        // daily discovery/classification workflow, but never run it inline.
-        await this.storage.put("scheduler:daily-run-requested", true);
-        const currentAlarm = await this.storage.getAlarm?.();
-        if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
-          await this.storage.setAlarm(Date.now() + 100);
-        }
         return Response.json(
-          { runDate: "", evaluatedAt: Date.now(), events: [], pending: true },
-          { headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+          { runDate: "", evaluatedAt: Date.now(), events: [], pending: false, status: "unavailable" },
+          { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "30" } },
         );
       }
       const retrievedAt = new Date(projection.checkedAt ?? projection.evaluatedAt).toISOString();
@@ -1507,55 +1486,6 @@ export class TaskScheduler {
     // All recurring discovery and classification now run in fieldview-jobs.
     // Keep the legacy DO alarm only for bounded administrative job cursors.
     await this.storage.deleteAlarm();
-  }
-
-  private async refreshCurrentYearEventDirectory(policy: EventPollingPolicy): Promise<void> {
-    const year = new Date().getUTCFullYear();
-    const cacheKey = DISCOVERY_PREFIX + year;
-    const cached = await this.storage.get<DiscoveryCache>(cacheKey);
-    const checkedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
-    if (cached && Date.now() - checkedAt < policy.discoveryIntervalMs) return;
-
-    const endpoint = TBA_ENDPOINTS.events(year);
-    const headers = new Headers();
-    if (cached?.etag) headers.set("If-None-Match", cached.etag);
-    const response = await this.api.request(endpoint, { headers });
-    if (response.status === 304 && cached) {
-      const refreshed = { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache;
-      await this.storage.put(cacheKey, refreshed);
-      return;
-    }
-    if (!response.ok) throw new Error("TBA event discovery failed for " + year + " with HTTP " + response.status);
-    const events = await response.json() as TBAEvent[];
-    if (!Array.isArray(events)) throw new Error("TBA event discovery returned a non-array payload");
-    const retrievedAt = Date.now();
-    await this.storage.put(cacheKey, {
-      etag: response.headers.get("ETag"),
-      events,
-      updatedAt: retrievedAt,
-      checkedAt: retrievedAt,
-    } satisfies DiscoveryCache);
-  }
-
-  private async runDailyClassification(policy: EventPollingPolicy): Promise<boolean> {
-    await this.measureStage("event-directory-refresh", () => this.refreshCurrentYearEventDirectory(policy));
-    // If the regular scheduler had an interrupted lifecycle cursor before it
-    // was stopped, finish that existing work; do not start lifecycle polling
-    // for every event merely because the daily home-page projection ran.
-    if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) {
-      await this.measureStage("resume-event-lifecycle", () => this.discoverAndSchedule(policy));
-    }
-    const weeklyPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
-    const lifecyclePending = (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) !== undefined;
-    const pending = weeklyPending || lifecyclePending;
-    if (pending) {
-      await this.storage.put("scheduler:daily-run-requested", true);
-      await this.storage.setAlarm(Date.now() + 1_000);
-    } else {
-      await this.storage.delete("scheduler:daily-run-requested");
-      await this.storage.delete("scheduler:this-week-error");
-    }
-    return pending;
   }
 
   private async refreshThisWeekProjection(policy: EventPollingPolicy): Promise<boolean> {
