@@ -295,9 +295,11 @@ export default function AdminOperationsDashboard() {
       void refresh(true);
       if (entityKind !== "system" && key) void openEntity(entityKind, key, operationYear ?? selected?.year ?? year);
       const label = action.replaceAll("-", " ");
-      setMessage(["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed", "discover-year"].includes(action)
-        ? label + " queued. The runtime will advance it in the background; you can keep using the dashboard."
-        : label + " accepted.");
+      setMessage(action === "discover-year"
+        ? label + " queued. The jobs Workflow will publish the selected season's directories; you can keep using the dashboard."
+        : ["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed"].includes(action)
+          ? label + " queued. The runtime will advance it in the background; you can keep using the dashboard."
+          : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
   }, [requestHeaders, refresh, openEntity, selected, year]);
