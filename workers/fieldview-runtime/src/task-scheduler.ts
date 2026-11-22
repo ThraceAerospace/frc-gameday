@@ -8,7 +8,7 @@ import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts
 
 const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
 const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
-   
+
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
   upcomingIntervalMs: number;
