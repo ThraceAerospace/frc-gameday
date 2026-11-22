@@ -62,6 +62,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
+          await this.env.DISCOVERY_BUCKET.put(
+            `registry/events/${year}.json`,
+            JSON.stringify(previous.events.map((item) => item.key)),
+            { httpMetadata: { contentType: "application/json" } },
+          );
           return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
@@ -85,6 +90,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
           httpMetadata: { contentType: "application/json" },
         });
+        await this.env.DISCOVERY_BUCKET.put(
+          `registry/events/${year}.json`,
+          JSON.stringify(events.map((item) => item.key)),
+          { httpMetadata: { contentType: "application/json" } },
+        );
         return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount };
       });
       discovery.push(result);
@@ -168,6 +178,15 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       initialized.push(...result.initialized);
       failures.push(...result.failures);
     }
+
+    await step.do("publish-runtime-event-registry", async () => {
+      const existing = await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-events.json") ?? [];
+      const next = [...new Set([...existing, ...initialized])].sort();
+      await this.env.DISCOVERY_BUCKET.put("registry/runtime-events.json", JSON.stringify(next), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      return { registered: initialized.length, total: next.length };
+    });
 
     await step.do("publish-this-week-generation", async () => {
       const pointer = { runAt, runDate: prepared.runDate, years };
