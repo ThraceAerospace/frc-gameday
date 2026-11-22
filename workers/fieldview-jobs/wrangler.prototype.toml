@@ -34,7 +34,7 @@ concurrency = { limit = 1 }
 name = "runtime-admin-prototype"
 binding = "RUNTIME_ADMIN"
 class_name = "RuntimeAdminWorkflow"
-concurrency = { limit = 1 }
+concurrency = { limit = 3 }
 
 # Configure TBA_API_KEY and RUNTIME_ADMIN_TOKEN as Worker secrets:
 # wrangler secret put TBA_API_KEY --config wrangler.prototype.toml
