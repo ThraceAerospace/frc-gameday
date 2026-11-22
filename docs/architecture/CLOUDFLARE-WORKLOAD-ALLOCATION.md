@@ -1,6 +1,6 @@
 # Cloudflare Workload Allocation and Background Jobs
 
-**Status:** First discovery/weekly-event initialization extraction implemented; deployment and operational verification pending  
+**Status:** Current-season event/team discovery and participant seeding extracted into Workflows; deployment and operational verification pending  
 **Branch:** `fieldview-architecture-migration`  
 **Date:** 2026-11-22
 
@@ -28,12 +28,12 @@ The first migration slice is implemented in this branch. It moves TBA-status-dri
 - The Workflow stores complete per-year discovery documents in the shared `fieldview-discovery` R2 bucket. A TBA 304 updates `checkedAt` while retaining the last good event payload and its original `updatedAt`. It also publishes per-year event-key registries and a union of successfully initialized runtime event keys to R2 so the existing command-center inventory and coverage-audit views can read the new generation without writing back into TaskScheduler.
 - Discovery runs as one step per year and stages the complete directory. Separate bounded steps write at most ten 25-event R2 chunks per invocation before publishing the directory document, keeping subrequests below the Free-plan per-invocation limit. Classification then runs one step per 25-event chunk, keeping repeated date/timezone calculations and JSON parsing bounded. The Workflow classifies the Monday-Sunday window using each event's timezone and inclusive date-only start/end values, writes versioned per-year projections and a per-run manifest to R2, and publishes a single current-generation pointer only after every projection is written and all EventRuntime initialization batches have completed.
 - It then initializes matching EventRuntime instances in batches of ten through a narrow service-binding endpoint on `fieldview-runtime`. The runtime Worker reads the pointer and all versioned per-year projections before returning a complete this-week result; it does not expose a partially published generation.
-- `fieldview-runtime` reads `/events/discovery` and `/events/this-week` from R2 when those projections exist. The this-week projection uses a versioned per-year snapshot set plus one generation pointer, so a failed run cannot expose a mixed partial generation. The existing TaskScheduler read path remains as a compatibility fallback during rollout.
-- Neither Worker uses a classic Cron Trigger for this job. The native Workflow schedule starts the run. TaskScheduler no longer starts discovery merely because it activates, and its disabled-scheduler alarm path no longer runs daily classification. Its explicitly operator-enabled legacy loop still performs event lifecycle discovery and team-directory refresh; that is a separate follow-on extraction, not the new daily Workflow.
+- `fieldview-runtime` reads `/events/discovery`, `/events/this-week`, and `/teams/discovery` exclusively from the published R2 generation. Missing or incomplete R2 data returns an explicit 503; there is no TaskScheduler fallback. The this-week projection uses a versioned per-year snapshot set plus one generation pointer, so a failed run cannot expose a mixed partial generation. Team directory pages are immutable and the team manifest is published only after every page is validated.
+- Neither Worker uses a classic Cron Trigger for this job. The native Workflow schedule starts the run. The daily Workflow now discovers only the season reported by TBA `/status`, publishes that season's paginated team directory, discovers participants for this-week events, and queues idempotent TeamRuntime seeds in bounded batches. TaskScheduler remains only for the still-unmigrated administrative ingestion, coverage-audit, district, and operator job surfaces; it is not a fallback for public discovery reads.
 
 ### Explicitly not included in this first slice
 
-This is the first extraction, not the completed event-readiness program. It currently initializes the weekly EventRuntime and publishes discovery projections. It does **not** yet seed participating TeamRuntime instances, verify team-season resource readiness, generate/verify base analytics, or replace the existing TaskScheduler admin APIs, team discovery, season ingestion, or coverage audit. Those are subsequent migrations. The existing TaskScheduler class, namespace binding, migrations, and admin routes are intentionally retained.
+This extraction initializes weekly EventRuntime instances, publishes current-season event/team discovery, and queues TeamRuntime seeds for the deduplicated participants of this-week events. A successful seed response means the TeamRuntime accepted durable resource work; it does **not** mean every team-season resource is ready. Team-season readiness verification, base analytics generation/verification, and replacement of TaskScheduler's remaining administrative ingestion, coverage-audit, district, and operator job surfaces remain subsequent migrations. The TaskScheduler class and namespace binding are retained only while those active responsibilities are being extracted; public discovery reads do not fall back to it.
 
 ### Deployment prerequisites
 
@@ -42,7 +42,7 @@ This is the first extraction, not the completed event-readiness program. It curr
 3. Deploy `fieldview-jobs` first. Its service binding targets the already-deployed `fieldview-runtime` Worker.
 4. Deploy `fieldview-runtime` second. Its service binding now targets the deployed `fieldview-jobs` Worker, and its R2-backed public reads/internal initialization route become active.
 5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next native Workflow schedule occurrence. Manual triggers use a deterministic ID per UTC date; a duplicate manual trigger returns HTTP 409. The Workflow concurrency limit serializes manual and schedule-created instances.
-6. Confirm the Workflow summary reports successful discovery/classification and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
+6. Confirm the Workflow summary reports event/team discovery and participant seeding outcomes, and that the runtime Worker serves all three R2-backed discovery/read routes. Missing R2 publications must return 503 rather than falling back to TaskScheduler.
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
 
@@ -85,11 +85,11 @@ Find every TBA event overlapping the current Monday–Sunday week, mark it as a 
 ### Steps
 
 1. **Capture run context** — persist the scheduled timestamp, run ID, and discovery year/window. Do not recompute a different date window during replay.
-2. **Discover events** — query TBA event discovery for the relevant season(s), including boundary-year cases where needed. Reuse the existing event-timezone-aware Monday–Sunday classifier. Event start/end values are date-only and inclusive; evaluate the week using each event's IANA timezone.
+2. **Discover events** — query TBA event discovery for exactly the season reported by TBA `/status`. Do not infer the season from the Worker clock or scan adjacent, past, or future seasons. Reuse the event-timezone-aware Monday–Sunday classifier. Event start/end values are date-only and inclusive; evaluate the week using each event's IANA timezone.
 3. **Publish this-week classification** — update the canonical discovery projection for each matching event. A rerun must repair the projection without resetting event state.
 4. **Ensure EventRuntime** — address the DO by its stable event key and invoke the supported lifecycle/initialization contract. Creating a stub alone is not sufficient evidence that the event has been initialized; verify its canonical state. This workflow seeds/initializes the entity; it does not take over active polling.
 5. **Discover participants** — fetch the event's TBA team list, validate it, normalize team keys, and persist the participant list or a reference to it as a Workflow step result / durable external artifact.
-6. **Seed teams** — for each participant, address TeamRuntime by stable team key and invoke the idempotent seed operation for the event's season year. Ensure the canonical TeamState publication exists and that the event-season team history resource has been acquired sufficiently to support the base analytics cohort.
+6. **Seed teams** — deduplicate participant team keys across this-week events, then address TeamRuntime by stable team key and invoke its idempotent seed operation for the current season in bounded batches. A 202 response means work was queued, not that TeamState or team-event history is complete.
 7. **Verify readiness** — read the EventRuntime canonical state and the required TeamRuntime state revisions. Distinguish complete, partial, unavailable, and failed data; do not label an event fully ready merely because seed requests returned HTTP 2xx. Once an event becomes active, EventRuntime owns its ongoing TBA polling and reconciles webhooks directly.
 8. **Generate/verify base analytics** — request the base event analytics calculation after the minimum required team states are available. Preserve partial status and record missing teams rather than failing the entire week's event set.
 9. **Publish run summary** — counts for discovered, this-week, initialized, teams seeded, analytics ready/partial/failed, and per-event errors.
@@ -225,13 +225,13 @@ The 10 ms CPU limit is the primary Free-plan risk, not wall-clock waiting on pro
 ## Acceptance criteria
 
 - Current-season event discovery and the this-week EventRuntime initialization job run in the `fieldview-jobs` Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
-- The current discovery and this-week read projections are served from the shared R2 bucket after the first successful Workflow run.
+- The current-season event directory, current-season team directory, and this-week projection are served exclusively from the shared R2 bucket after the first successful Workflow run; missing publications return 503 and never invoke TaskScheduler.
 - TeamRuntime participant seeding, team-season readiness verification, and base analytics readiness are explicitly tracked as follow-on work; they are not claimed as complete by this first extraction.
 - Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
 - TBA webhook authentication remains synchronous with its established 413/418/500/401 responses. Only authenticated requests receive HTTP 200 immediately; payload parsing, recipient selection, and fan-out run under `ctx.waitUntil()`. Internal failures after authentication are logged and never reflected to TBA. Tests cover auth responses, immediate authenticated acknowledgement, recipient selection, multi-team fan-out, and partial dispatch failure.
 - TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
 - Every matching event has a canonical EventRuntime state and an explicit this-week classification.
-- Every discovered participant has a TeamRuntime TeamState for the event's season, or a recorded reason why it could not be seeded.
+- Every discovered participant is submitted to TeamRuntime for idempotent seeding, or a recorded reason why participant discovery or seed dispatch failed. A separate readiness check is required before claiming TeamState completeness.
 - Base analytics is generated when the minimum inputs are present and is explicitly marked partial when inputs are missing.
 - The weekly job uses the validated TBA `/status.current_season` value.
 - The manual ingestion job has no recurring schedule, supports arbitrary *approved resource scopes*, exposes status/control operations, and can resume after partial failure.
