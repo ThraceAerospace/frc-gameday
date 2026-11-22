@@ -189,18 +189,13 @@ const seasonIngestSummary = (job: SeasonIngestJob) => ({
 });
 
 interface TeamDiscoveryCache {
-  /** Page-zero validator retained for administrative discovery diagnostics. */
   etag: string | null;
-  /** One ETag and payload per TBA page; TBA pages contain at most 500 teams. */
-  pageEtags?: Record<string, string | null>;
-  pageCount?: number;
-  /** Immutable page generation selected by the published metadata record. */
-  pagePrefix?: string;
-  teamCount?: number;
-  teamKeys?: string[];
-  complete?: boolean;
+  pageCount: number;
+  teamCount: number;
+  teamKeys: string[];
+  complete: true;
   updatedAt: number;
-  checkedAt?: number;
+  checkedAt: number;
 }
 
 interface EventTeamSeedJob {
@@ -239,7 +234,7 @@ const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + team
 
 
 
-/** System-wide discovery and cross-runtime job orchestrator; entity runtimes execute dispatched work. */
+/** Administrative ingestion and cross-runtime seed/audit coordinator; entity runtimes execute dispatched work. */
 export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
