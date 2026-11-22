@@ -37,6 +37,13 @@ export const TBA_ENDPOINTS = {
     `/team/${segment(teamKey)}/event/${segment(eventKey)}/matches`,
   teamEventMatchesSimple: (teamKey: string, eventKey: string) =>
     `/team/${segment(teamKey)}/event/${segment(eventKey)}/matches/simple`,
+  districts: (year: number) => `/districts/${year}`,
+  district: (key: string) => `/district/${segment(key)}`,
+  districtTeams: (key: string) => `/district/${segment(key)}/teams`,
+  districtTeamKeys: (key: string) => `/district/${segment(key)}/teams/keys`,
+  districtEvents: (key: string) => `/district/${segment(key)}/events`,
+  districtRankings: (key: string) => `/district/${segment(key)}/rankings`,
+  districtAdvancement: (key: string) => `/district/${segment(key)}/advancement`,
 } as const;
 
 function segment(value: string): string {
