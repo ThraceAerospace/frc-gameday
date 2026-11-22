@@ -75,46 +75,86 @@ test("publishing a new weekly projection pointer removes the previous generation
   assert.equal(state.values.has("discovery-object:projections/events/this-week/200/2026.json"), true);
 });
 
-test("DiscoveryStore owns TBA status, event-directory, and team-page provider requests", async () => {
-  const requests = [];
-  const store = new DiscoveryStore(createState(), {
+test("DiscoveryStore acquires and publishes current-season, team, and event catalogs", async () => {
+  const calls = [];
+  const state = createState();
+  const store = new DiscoveryStore(state, {
     TBA_API_KEY: "test-key",
     fetcher: async (input, init) => {
-      requests.push({ input: String(input), headers: new Headers(init?.headers) });
-      return Response.json({ ok: true });
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      calls.push(url.pathname);
+      if (url.pathname.endsWith("/status")) return Response.json({ current_season: 2026 });
+      if (url.pathname.includes("/teams/2026")) return Response.json([{ key: "frc3461" }]);
+      if (url.pathname.includes("/events/2026")) {
+        return Response.json([{ key: "2026test", start_date: "2026-03-01", end_date: "2026-03-03", timezone: "America/New_York" }], {
+          headers: { ETag: '"events-v1"' },
+        });
+      }
+      return new Response("not found", { status: 404 });
     },
   });
 
-  const status = await store.fetch(new Request("https://store/provider/status"));
-  assert.equal(status.status, 200);
-  assert.deepEqual(await status.json(), { ok: true });
+  const current = await store.fetch(new Request("https://store/catalog/resolve-current-season", { method: "POST", body: "{}" }));
+  assert.equal(current.status, 200);
+  assert.equal((await current.json()).year, 2026);
 
-  const events = await store.fetch(new Request("https://store/provider/events?year=2026", {
-    headers: { "If-None-Match": '"events-v1"' },
+  const teamPage = await store.fetch(new Request("https://store/catalog/discover-team-page", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 100, page: 0 }),
   }));
-  assert.equal(events.status, 200);
-  assert.deepEqual(await events.json(), { ok: true });
+  assert.equal(teamPage.status, 200);
+  const teams = await teamPage.json();
+  assert.deepEqual(teams.teamKeys, ["frc3461"]);
 
-  const teams = await store.fetch(new Request("https://store/provider/teams?year=2026&page=2"));
-  assert.equal(teams.status, 200);
-  assert.deepEqual(await teams.json(), { ok: true });
-  assert.equal(requests.length, 3);
-  assert.equal(requests[1].headers.get("If-None-Match"), '"events-v1"');
+  const teamPublish = await store.fetch(new Request("https://store/catalog/publish-team-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 100, pageCount: 1, teamKeys: teams.teamKeys }),
+  }));
+  assert.equal(teamPublish.status, 200);
+
+  const eventDiscovery = await store.fetch(new Request("https://store/catalog/discover-event-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 200, chunkSize: 25 }),
+  }));
+  assert.equal(eventDiscovery.status, 200);
+  const event = await eventDiscovery.json();
+  assert.equal(event.needsChunking, true);
+
+  const chunks = await store.fetch(new Request("https://store/catalog/write-event-chunks", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 200, firstChunk: 0, endChunk: 1, chunkSize: 25 }),
+  }));
+  assert.equal(chunks.status, 200);
+
+  const published = await store.fetch(new Request("https://store/catalog/publish-event-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 200 }),
+  }));
+  assert.equal(published.status, 200);
+  assert.deepEqual(JSON.parse(state.values.get("discovery-object:registry/teams/2026.json")), ["frc3461"]);
+  assert.equal(JSON.parse(state.values.get("discovery-object:discovery/events/2026.json")).events[0].key, "2026test");
+  assert.ok(calls.some((path) => path.endsWith("/status")));
+  assert.ok(calls.some((path) => path.includes("/teams/2026")));
+  assert.ok(calls.some((path) => path.includes("/events/2026")));
 });
 
-test("DiscoveryStore rejects invalid provider discovery queries without calling TBA", async () => {
+test("DiscoveryStore validates catalog requests and fails closed without a TBA key", async () => {
   let called = false;
-  const store = new DiscoveryStore(createState(), {
+  const configured = new DiscoveryStore(createState(), {
     TBA_API_KEY: "test-key",
-    fetcher: async () => { called = true; return Response.json({}); },
+    fetcher: async () => { called = true; return Response.json([]); },
   });
-  const response = await store.fetch(new Request("https://store/provider/teams?year=2026&page=-1"));
-  assert.equal(response.status, 400);
+  const invalidPage = await configured.fetch(new Request("https://store/catalog/discover-team-page", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 1, page: -1 }),
+  }));
+  assert.equal(invalidPage.status, 400);
   assert.equal(called, false);
-});
 
-test("DiscoveryStore provider operations fail closed when no TBA key is configured", async () => {
-  const store = new DiscoveryStore(createState());
-  const response = await store.fetch(new Request("https://store/provider/status"));
-  assert.equal(response.status, 503);
+  const unconfigured = new DiscoveryStore(createState());
+  const unavailable = await unconfigured.fetch(new Request("https://store/catalog/resolve-current-season", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  }));
+  assert.equal(unavailable.status, 502);
 });
