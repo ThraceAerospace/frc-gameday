@@ -222,7 +222,7 @@ export default {
             events.push(...projection.events);
           }
           if (complete) {
-            const stale = Date.now() - checkedAt > 36 * 36 * 60 * 60_000;
+            const stale = Date.now() - checkedAt > 36 * 60 * 60_000;
             events.sort((a, b) => String(a.key).localeCompare(String(b.key)));
             return Response.json({
               evaluatedAt: pointer.runAt,
