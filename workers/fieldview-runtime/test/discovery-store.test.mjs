@@ -5,6 +5,7 @@ import { DiscoveryStore } from "../src/discovery-store.ts";
 function createState() {
   const values = new Map();
   return {
+    values,
     storage: {
       async get(key) { return values.get(key); },
       async put(key, value) { values.set(key, value); },
