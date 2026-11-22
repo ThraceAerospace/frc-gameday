@@ -16,6 +16,19 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
+class MemoryBucket {
+  values = new Map();
+  async put(key, value) { this.values.set(key, String(value)); }
+  async get(key) {
+    const value = this.values.get(key);
+    if (value === undefined) return null;
+    return {
+      async json() { return JSON.parse(value); },
+      async text() { return value; },
+    };
+  }
+}
+
 test("TaskScheduler queues team seed and advances cross-runtime work in alarms", async () => {
   const storage = new MemoryStorage();
   const calls = [];
@@ -137,16 +150,19 @@ test("TaskScheduler protects cross-runtime seed orchestration with the admin aut
 
 test("TaskScheduler queues coverage audit without reading entity runtimes in the request", async () => {
   const storage = new MemoryStorage();
-  await storage.put("admin-discovery:2026", {
-    etag: null, complete: true, events: [
+  const discoveryBucket = new MemoryBucket();
+  const eventDirectory = {
+    year: 2026, etag: null, complete: true, events: [
       { key: "2026testa", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
       { key: "2026testb", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
       { key: "2026testc", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
-    ], updatedAt: Date.now(),
-  });
-  await storage.put("admin-team-discovery:2026", {
-    etag: null, complete: true, teamKeys: ["frc3461", "frc254", "frc1678"], teamCount: 3, pageCount: 1, updatedAt: Date.now(),
-  });
+    ], updatedAt: Date.now(), checkedAt: Date.now(),
+  };
+  await discoveryBucket.put("discovery/events/2026.json", JSON.stringify(eventDirectory));
+  await discoveryBucket.put("discovery/teams/2026.json", JSON.stringify({
+    year: 2026, generation: 1, pageCount: 1, teamCount: 3, updatedAt: Date.now(), checkedAt: Date.now(),
+  }));
+  await discoveryBucket.put("registry/teams/2026.json", JSON.stringify(["frc1678", "frc254", "frc3461"]));
   let runtimeCalls = 0;
   const forbiddenNamespace = {
     idFromName(name) { return name; },
@@ -154,6 +170,7 @@ test("TaskScheduler queues coverage audit without reading entity runtimes in the
   };
   const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin",
+    DISCOVERY_BUCKET: discoveryBucket,
     EVENT_RUNTIME: forbiddenNamespace, TEAM_RUNTIME: forbiddenNamespace,
   });
   const response = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
