@@ -1,18 +1,20 @@
 # Cloudflare Workload Allocation and Background Jobs
 
-**Status:** Proposed implementation sequence  
+**Status:** Proposed implementation sequence (corrected active-event boundary)  
 **Branch:** `fieldview-architecture-migration`  
 **Date:** 2026-11-21
 
 ## Objective
 
-Move periodic orchestration, broad discovery, and bulk ingestion out of the global `TaskScheduler` Durable Object. Use Workers and Cloudflare Workflows for execution; keep Durable Objects as canonical, entity-scoped state owners.
+Move scheduled orchestration, broad discovery, bulk ingestion, and cross-entity coordination out of Durable Objects—ideally eliminating `TaskScheduler` entirely. Preserve active event runtime behavior inside `EventRuntime`.
 
-The governing rule is:
+The governing rules are:
 
-> A Durable Object owns the state and coordination of one durable entity. It is not the platform-wide cron daemon, bulk-ingestion queue, or workflow engine.
+> Workers and Workflows own scheduled/background work. Durable Objects own active, entity-scoped runtime state.
 
-This is an incremental migration. Existing EventRuntime and TeamRuntime state and APIs remain authoritative while orchestration is moved out.
+> An active event's TBA polling, webhook reconciliation, canonical state mutation, and live publication stay inside that event's `EventRuntime`.
+
+`EventRuntime` is not a general-purpose job runner. Its alarms and internal scheduling are appropriate for active event lifecycle polling because polling and webhook reconciliation must serialize against the same canonical event state. Do not move that active-event loop into a Workflow or Queue.
 
 ## Target responsibility boundaries
 
@@ -20,11 +22,11 @@ This is an incremental migration. Existing EventRuntime and TeamRuntime state an
 |---|---|---|
 | Worker | Stateless HTTP entry points, provider adapters, authorization, bounded task execution | Long-lived global mutable scheduler state |
 | Workflows | Durable multi-step jobs, checkpoints, retries, pause/resume, manual and scheduled runs | Canonical event/team state |
-| Cron schedules on Workflow bindings | Start recurring Workflow instances | Entity lifecycle polling |
+| Cron Triggers / scheduled Workflow bindings | Start recurring scheduled jobs and Workflow instances | Active event lifecycle polling |
 | Queues | Buffer independent resource tasks and notification fan-out; absorb bursts | Multi-step business process state |
-| EventRuntime DO | Canonical state and reconciliation for one event; event analytics publication | Global discovery or season scans |
-| TeamRuntime DO | Canonical state and reconciliation for one team | Global team discovery or bulk season ingestion |
-| Multiplexer DO | Shared live subscription coordination | Provider polling or data ingestion |
+| EventRuntime DO | Active event lifecycle: TBA polling while active, direct webhook reconciliation, canonical event state, analytics invalidation/publication, live updates | Global discovery, season scans, cross-event orchestration, bulk ingestion |
+| TeamRuntime DO | Canonical team and team-event state; entity-scoped reconciliation when required | Global team discovery, season scans, bulk ingestion, scheduled orchestration |
+| Multiplexer DO | Shared live subscription coordination | Provider polling, data ingestion, or job scheduling |
 | R2 | Immutable raw provider payloads, webhook archives, large ingestion artifacts and exports | Frequently mutated canonical records |
 | D1 (conditional) | Queryable job catalog, audit history, operator search and relational reporting if Workflow metadata is insufficient | Replacing entity-scoped DO consistency without a demonstrated need |
 | KV / Workers Cache | Read-heavy discovery projections and cacheable public responses | Strongly consistent canonical writes |
@@ -44,10 +46,10 @@ Find every TBA event overlapping the current Monday–Sunday week, mark it as a 
 1. **Capture run context** — persist the scheduled timestamp, run ID, and discovery year/window. Do not recompute a different date window during replay.
 2. **Discover events** — query TBA event discovery for the relevant season(s), including boundary-year cases where needed. Reuse the existing event-timezone-aware Monday–Sunday classifier. Event start/end values are date-only and inclusive; evaluate the week using each event's IANA timezone.
 3. **Publish this-week classification** — update the canonical discovery projection for each matching event. A rerun must repair the projection without resetting event state.
-4. **Ensure EventRuntime** — address the DO by its stable event key and invoke the supported lifecycle/initialization contract. Creating a stub alone is not sufficient evidence that the event has been initialized; verify its canonical state.
+4. **Ensure EventRuntime** — address the DO by its stable event key and invoke the supported lifecycle/initialization contract. Creating a stub alone is not sufficient evidence that the event has been initialized; verify its canonical state. This workflow seeds/initializes the entity; it does not take over active polling.
 5. **Discover participants** — fetch the event's TBA team list, validate it, normalize team keys, and persist the participant list or a reference to it as a Workflow step result / durable external artifact.
 6. **Seed teams** — for each participant, address TeamRuntime by stable team key and invoke the idempotent seed operation for the event's season year. Ensure the canonical TeamState publication exists and that the event-season team history resource has been acquired sufficiently to support the base analytics cohort.
-7. **Verify readiness** — read the EventRuntime canonical state and the required TeamRuntime state revisions. Distinguish complete, partial, unavailable, and failed data; do not label an event fully ready merely because seed requests returned HTTP 2xx.
+7. **Verify readiness** — read the EventRuntime canonical state and the required TeamRuntime state revisions. Distinguish complete, partial, unavailable, and failed data; do not label an event fully ready merely because seed requests returned HTTP 2xx. Once an event becomes active, EventRuntime owns its ongoing TBA polling and reconciles webhooks directly.
 8. **Generate/verify base analytics** — request the base event analytics calculation after the minimum required team states are available. Preserve partial status and record missing teams rather than failing the entire week's event set.
 9. **Publish run summary** — counts for discovered, this-week, initialized, teams seeded, analytics ready/partial/failed, and per-event errors.
 
@@ -132,12 +134,12 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 ## Migration sequence
 
 1. Add Workflow bindings/classes and the daily event-readiness workflow.
-2. Move the current daily Cron Trigger off the global TaskScheduler alarm path. Initially reuse existing DO mutation contracts, then remove any orchestration-only scheduler endpoints once all callers have migrated.
+2. Move the current daily Cron Trigger off the global TaskScheduler alarm path. Initially reuse existing DO mutation contracts, then remove any orchestration-only scheduler endpoints once all callers have migrated. Do not change EventRuntime's active-event polling alarms or direct webhook reconciliation.
 3. Add the weekly TBA current-season workflow and source its year from `/status`.
 4. Add the unscheduled TBA resource-ingestion workflow and its authenticated create/status/control endpoints.
 5. Add Queues for fan-out and durable retry of independent resource work; do not introduce them before message contracts and idempotency are defined.
 6. Move large raw payload retention to R2 and replace unbounded DO source-history records with compact references/metadata plus retention.
-7. Replace global TaskScheduler discovery/ingestion responsibilities with Workers/Workflows/Queues. Retain only narrowly scoped DO responsibilities that genuinely require shared coordination, then retire TaskScheduler if no such responsibility remains.
+7. Replace every global TaskScheduler responsibility—discovery, indexing, seeding orchestration, admin bulk ingestion, coverage audits, progress tracking, and recurring scheduling—with Workers/Workflows/Queues plus a suitable read model. Move the remaining read-only discovery endpoints to a Worker-backed projection. Remove the `TASK_SCHEDULER` binding, class export, routes, storage, and migration-era code once all consumers have moved. Retire TaskScheduler entirely if no genuine entity-scoped consistency requirement remains. Preserve EventRuntime's active polling and webhook path.
 
 ## Additional Cloudflare resources recommended
 
@@ -166,6 +168,8 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 ## Acceptance criteria
 
 - The daily event readiness job is a Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
+- Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
+- TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
 - Every matching event has a canonical EventRuntime state and an explicit this-week classification.
 - Every discovered participant has a TeamRuntime TeamState for the event's season, or a recorded reason why it could not be seeded.
 - Base analytics is generated when the minimum inputs are present and is explicitly marked partial when inputs are missing.
