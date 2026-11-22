@@ -816,8 +816,13 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
                 `https://fieldview-runtime/internal/workflows/runtime-state?kind=${item.kind}&key=${encodeURIComponent(item.key)}`,
                 { headers: { Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}` } },
               ));
-              if (response.status === 401 || response.status === 403) {
+              if (response.status === 401 || response.status === 403 || response.status === 503) {
                 throw new Error(`Runtime state boundary returned HTTP ${response.status}`);
+              }
+              if (response.status === 429 || response.status >= 500) {
+                nextCounts.read_errors += 1;
+                missing();
+                continue;
               }
               if (!response.ok) { missing(); continue; }
               const state = await response.json() as {
