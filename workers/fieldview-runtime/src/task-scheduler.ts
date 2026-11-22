@@ -278,12 +278,27 @@ export class TaskScheduler {
     };
   }
 
+  private async readRuntimeRegistry(kind: "event" | "team"): Promise<string[]> {
+    const bucket = this.env.DISCOVERY_BUCKET;
+    if (!bucket) return [];
+    const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+      for (const object of page.objects) {
+        const name = object.key.slice(prefix.length).replace(/\\.json$/, "");
+        if (name) keys.push(name);
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    return keys.sort();
+  }
+
   private async registerRuntimeKey(kind: "event" | "team", key: string): Promise<void> {
     if (!this.env.DISCOVERY_BUCKET) return;
-    const registryKey = kind === "event" ? "registry/runtime-events.json" : "registry/runtime-teams.json";
-    const keys = await this.readR2Keys(registryKey);
-    if (keys.includes(key)) return;
-    await this.env.DISCOVERY_BUCKET.put(registryKey, JSON.stringify([...keys, key].sort()), {
+    const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+    await this.env.DISCOVERY_BUCKET.put(prefix + key + ".json", "{}", {
       httpMetadata: { contentType: "application/json" },
     });
   }
@@ -599,7 +614,7 @@ export class TaskScheduler {
         : await this.readR2Json<{ year: number }>(`discovery/teams/${currentSeasonYear}.json`);
       const eventKeys = [...new Set([
         ...(currentSeasonIndex ? await this.readR2Keys(`registry/events/${currentSeasonYear}.json`) : []),
-        ...(await this.readR2Keys("registry/runtime-events.json")),
+        ...(await this.readRuntimeRegistry("event")),
       ])].sort();
       const teamKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:teams") ?? []),
