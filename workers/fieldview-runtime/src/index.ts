@@ -16,31 +16,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
     request.headers.get("Authorization") === `Bearer ${env.RUNTIME_ADMIN_TOKEN}`;
 }
 
-async function processTbaWebhook(request: Request, env: RuntimeEnvironment): Promise<void> {
-  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (declaredLength > 1_000_000) {
-    console.warn("[WEBHOOK][TBA] Dropped oversized webhook", JSON.stringify({ declared_length: declaredLength }));
-    return;
-  }
-  const rawBody = await request.arrayBuffer();
-  if (rawBody.byteLength > 1_000_000) {
-    console.warn("[WEBHOOK][TBA] Dropped oversized webhook", JSON.stringify({ byte_length: rawBody.byteLength }));
-    return;
-  }
-
-  const signature = request.headers.get("X-TBA-HMAC");
-  if (!signature) {
-    console.warn("[WEBHOOK][TBA] Dropped webhook without HMAC signature");
-    return;
-  }
-  if (!env.TBA_WEBHOOK_SECRET) {
-    console.error("[WEBHOOK][TBA] TBA_WEBHOOK_SECRET is not configured");
-    return;
-  }
-  if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
-    console.warn("[WEBHOOK][TBA] Dropped webhook with invalid HMAC signature");
-    return;
-  }
+async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment): Promise<void> {
 
   let payload: unknown;
   try { payload = JSON.parse(new TextDecoder().decode(rawBody)); }
@@ -161,10 +137,28 @@ export default {
   async fetch(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/tba" && request.method === "POST") {
-      // TBA must always receive an immediate 200 to avoid webhook pruning.
-      // All validation and runtime fan-out happen after the response via waitUntil.
-      const backgroundRequest = request.clone();
-      context.waitUntil(processTbaWebhook(backgroundRequest, env).catch((error) => {
+      // Preserve the established ingress/authentication responses. Only an
+      // authenticated webhook is acknowledged immediately and dispatched later.
+      const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+      if (declaredLength > 1_000_000) {
+        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
+      }
+      const rawBody = await request.arrayBuffer();
+      if (rawBody.byteLength > 1_000_000) {
+        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
+      }
+
+      const signature = request.headers.get("X-TBA-HMAC");
+      if (!signature) return new Response("I'm a teapot", { status: 418 });
+      if (!env.TBA_WEBHOOK_SECRET) {
+        console.error("[WEBHOOK][TBA] TBA_WEBHOOK_SECRET is not configured");
+        return new Response("Internal Server Error", { status: 500 });
+      }
+      if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      context.waitUntil(processTbaWebhook(rawBody, env).catch((error) => {
         console.error("[WEBHOOK][TBA] Unhandled background processing failure", String(error));
       }));
       return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
