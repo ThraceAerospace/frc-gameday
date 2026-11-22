@@ -44,7 +44,9 @@ export interface RuntimeEnvironment {
   MULTIPLEXER?: DurableObjectNamespaceLike;
   /** Shared discovery catalog persisted by a SQLite-backed Durable Object. */
   DISCOVERY_STORE?: DurableObjectNamespaceLike;
-  /** Service binding used only to create manually requested background Workflows. */
+  /** In-process module interface used by the consolidated Worker entrypoint. */
+  JOBS_REQUEST?: (request: Request) => Promise<Response>;
+  /** Legacy service binding retained only by the experimental split-Worker prototype. */
   FIELDVIEW_JOBS?: { fetch(request: Request): Promise<Response> };
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
