@@ -285,6 +285,11 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
     },
   });
 
+  const initialPublicationResponse = await runtime.fetch(new Request("https://event-runtime/publish-state", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(initialPublicationResponse.status, 200);
   const initialResponse = await runtime.fetch(snapshotRequest());
   assert.equal(initialResponse.status, 200);
   assert.equal(initialResponse.headers.get("X-FieldView-Snapshot-Version"), "1");
@@ -524,6 +529,11 @@ test("GET snapshot composes canonical event-team domain objects with source meta
   advancementState.lastAttemptAt = now;
   storage.values.set("endpoint:" + endpoints[11], advancementState);
 
+  const republish = await runtime.fetch(new Request("https://event-runtime/publish-state", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(republish.status, 200);
   const refreshed = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -785,7 +795,9 @@ test("versioned WebSocket subscriptions announce gaps and publish snapshot revis
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     webSocketPairFactory: () => [clientSocket, serverSocket],
     webSocketResponseFactory: () => new Response(null, { status: 200 }),
-    fetcher: async () => Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: { red: { score: 10 }, blue: { score: 9 } } }], { headers: { ETag: '"matches-v1"' } }),
+    fetcher: async () => Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: {
+      red: { score: 10, team_keys: [] }, blue: { score: 9, team_keys: [] },
+    } }], { headers: { ETag: '"matches-v1"' } }),
   }, eventKey);
   const response = await runtime.fetch(new Request("https://event-runtime/stream?since=0", { headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, Upgrade: "websocket" } }));
   assert.equal(response.status, 200);
@@ -849,6 +861,11 @@ test("public snapshot and stream reads need no user credential while state inspe
     fetcher: async () => new Response("unused"),
   }, eventKey);
 
+  const initialPublication = await runtime.fetch(new Request("https://event-runtime/publish-state", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(initialPublication.status, 200);
   const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -920,7 +937,15 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].id, "shared");
   assert.equal(deliveries[0].authorization, "Bearer runtime-token");
-  assert.deepEqual(deliveries[0].body, { topic: "event-state", event_key: eventKey, version: 4 });
+  assert.deepEqual(deliveries[0].body, {
+    protocol: 1,
+    schema_version: 1,
+    topic: "event-state",
+    resource: "event-snapshot",
+    change: "snapshot",
+    event_key: eventKey,
+    version: 4,
+  });
 
   const unsubscribed = await runtime.fetch(subscriptionRequest("unsubscribe"));
   assert.deepEqual(await unsubscribed.json(), { registered: false, event_key: eventKey, topic: "event-state" });
