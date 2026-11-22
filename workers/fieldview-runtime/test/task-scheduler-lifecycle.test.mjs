@@ -125,8 +125,8 @@ test("event team seeding explicitly curates team history and waits for acquisiti
           const path = new URL(request.url).pathname;
           const body = request.method === "POST" && request.headers.get("Content-Type")?.includes("application/json")
             ? await request.json() : null;
-          eventCalls.push({ id, path, body });
           if (path === "/participants") return Response.json({ ready: true, team_keys: ["frc3461"] });
+          eventCalls.push({ id, path, body });
           return Response.json({ scheduled: true });
         },
       }),
