@@ -559,6 +559,24 @@ export class EventRuntime {
       }, { status: 202 });
     }
 
+    if (request.method === "POST" && url.pathname === "/participants") {
+      // EventRuntime owns the event-participant provider resource. Coordinators
+      // may request readiness, but never call TBA directly for the roster.
+      const endpoint = TBA_ENDPOINTS.eventTeams(this.eventKey);
+      const state = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
+      if (!state || state.lastFetchedAt === null || !Array.isArray(state.data)) {
+        await this.enqueueManualPolls([endpoint]);
+        return Response.json({ ready: false, status: state?.status ?? "pending" }, {
+          status: 202, headers: { "Cache-Control": "no-store", "Retry-After": "2" },
+        });
+      }
+      const teamKeys = [...new Set(state.data.map((team) => team?.key).filter((key): key is string =>
+        typeof key === "string" && /^frc\\d+$/.test(key)))].sort();
+      return Response.json({ ready: true, team_keys: teamKeys }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
       const body: unknown = await request.json().catch(() => null);
       const endpoint = isRecord(body) && typeof body.endpoint === "string" ? body.endpoint : null;
