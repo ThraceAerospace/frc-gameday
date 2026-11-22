@@ -10,11 +10,11 @@ District data is shared across teams and events for a season. The canonical doma
 
 Creating one Durable Object per district would add another fleet of independently scheduled objects and another source of write amplification. Duplicating district records into TeamRuntime would also violate ownership boundaries: a district's roster, events, rankings, and advancement are not team-owned resources.
 
-The existing EventScheduler is already the global owner of season discovery and low-frequency scheduling. It is therefore the smallest existing durable owner capable of coordinating district discovery and refresh without introducing another Durable Object class.
+The existing TaskScheduler is the global owner of season discovery and low-frequency scheduling. It is therefore the smallest existing durable owner capable of coordinating district discovery and refresh without introducing another Durable Object class.
 
 ## Decision
 
-1. **EventScheduler owns district acquisition and retained district resource representations.** It owns the year-scoped directory and district-key-scoped resources; it does not own or rewrite domain semantics.
+1. **TaskScheduler owns district acquisition and retained district resource representations.** It owns the year-scoped directory and district-key-scoped resources; it does not own or rewrite domain semantics.
 2. **No DistrictRuntime Durable Object is introduced.** District resources are shared, season-scoped reference data, not an independently live aggregate.
 3. **The Worker is the only provider-acquisition boundary.** It calls the provider-owned TBA endpoint builders/client, retains raw TBA representations and validators, and passes those records through the district domain normalizers. Next.js pages and API routes read canonical Worker snapshots only.
 4. **Each resource has independent state and provenance.** Directory, district metadata, teams, events, rankings, and advancement must not share freshness. A successful fetch of one resource must not imply another is available.
@@ -33,7 +33,7 @@ The existing EventScheduler is already the global owner of season discovery and 
 
 ## Implementation sequence
 
-1. Add district directory/resource acquisition to EventScheduler using TBA endpoint builders and the shared provider-request gate.
+1. Add district directory/resource acquisition to TaskScheduler using TBA endpoint builders and bounded scheduler-owned work.
 2. Persist independent resource payloads, validators, freshness, retry state, and a bounded refresh cursor; avoid writes when representations and scheduling state are unchanged.
 3. Expose read-only Worker routes for the canonical district directory and per-district snapshot.
 4. Add Worker-backed server snapshot helpers and migrate `/districts`, `/district/[district]`, district advancement, district CMP, and all-district CMP routes.
