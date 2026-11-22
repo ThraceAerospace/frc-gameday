@@ -1,3 +1,4 @@
+import type { TeamKey } from "./ids.js";
 import type { FieldViewEventState } from "./event.js";
 import type { FieldViewEventAnalytics } from "./analytics.js";
 import type { FieldViewTeamEventStateReference } from "./team.js";
