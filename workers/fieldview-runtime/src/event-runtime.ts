@@ -579,7 +579,7 @@ export class EventRuntime {
         });
       }
       const teamKeys = [...new Set(state.data.map((team) => team?.key).filter((key): key is string =>
-        typeof key === "string" && /^frc\\d+$/.test(key)))].sort();
+        typeof key === "string" && /^frc\d+$/.test(key)))].sort();
       return Response.json({ ready: true, team_keys: teamKeys }, {
         headers: { "Cache-Control": "no-store" },
       });
@@ -833,14 +833,14 @@ export class EventRuntime {
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers });
       }
-      const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-      const storedAnalytics = analyticsPublication?.sourceRevision === publication.sourceRevision
-        ? analyticsPublication.eventAnalytics as FieldViewEventView["analytics"] | undefined
-        : undefined;
-      const analytics = storedAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
-        ? storedAnalytics
-        : storedAnalytics ? { ...storedAnalytics, team_comparison: undefined, team_summaries: undefined } : storedAnalytics;
-      return Response.json({ ...publication.state, analytics }, { headers });
+      const {
+        analytics: _unownedAnalytics,
+        team_states: _legacyTeamStates,
+        ...eventOwnedState
+      } = publication.state as typeof publication.state & {
+        team_states?: unknown;
+      };
+      return Response.json(eventOwnedState, { headers });
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
