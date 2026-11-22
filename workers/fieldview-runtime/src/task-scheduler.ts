@@ -277,8 +277,6 @@ interface TeamDiscoveryCache {
   pagePrefix?: string;
   teamCount?: number;
   teamKeys?: string[];
-  /** Legacy single-value cache shape, read only during migration. */
-  teams?: TBATeam[];
   complete?: boolean;
   updatedAt: number;
   checkedAt?: number;
@@ -339,7 +337,6 @@ export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly env: RuntimeEnvironment;
-  private readonly activation: Promise<void>;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
     this.storage = state.storage;
@@ -348,21 +345,6 @@ export class TaskScheduler {
       apiKey: env.TBA_API_KEY,
       ...(env.fetcher ? { fetch: env.fetcher } : {}),
     });
-    // Durable Objects activate on demand. On each TaskScheduler activation,
-    // restore the current-season index invariant from its own storage and arm
-    // background discovery if the index is absent or stale. No provider or
-    // entity-runtime calls occur during activation.
-    this.activation = state.blockConcurrencyWhile
-      ? state.blockConcurrencyWhile(async () => {
-          // Districts are retained only as team/event membership references.
-          // Retire legacy scheduler-owned district directory/resource payloads.
-          for (const prefix of ["district-directory:", "district-resource:"]) {
-            const legacyRecords = await this.storage.list({ prefix });
-            for (const key of legacyRecords.keys()) await this.storage.delete(key);
-          }
-          // Scheduled discovery is owned by the fieldview-jobs Workflow.
-        })
-      : Promise.resolve();
   }
 
   private async readR2Json<T>(key: string): Promise<T | undefined> {
@@ -381,7 +363,6 @@ export class TaskScheduler {
     const startedAt = performance.now();
     const url = new URL(request.url);
     try {
-      await this.activation;
       return await this.handleFetch(request);
     } finally {
       console.log("[FV][TaskScheduler] request", JSON.stringify({
@@ -824,7 +805,7 @@ export class TaskScheduler {
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.complete === true;
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-      const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) > 0;
+      const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) > 0;
       const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
         await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
         await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
@@ -868,9 +849,9 @@ export class TaskScheduler {
           await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
         const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-        if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
+        if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
-        const teamKeys = [...new Set(teamDiscovery.teamKeys ?? teamDiscovery.teams?.map((team) => team.key).filter((key) => typeof key === "string") ?? [])].sort();
+        const teamKeys = [...new Set(teamDiscovery.teamKeys ?? [])].sort();
         const eventCounts = { events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0 };
         for (const event of eventDiscovery.events) {
           const lifecycle = classifyEventLifecycle(event, Date.now(), DEFAULT_EVENT_POLLING_POLICY)?.lifecycle;
@@ -2029,7 +2010,6 @@ export class TaskScheduler {
     const key = prefix + year;
     const cache = await this.storage.get<TeamDiscoveryCache>(key);
     if (!cache?.complete || !Number.isSafeInteger(cache.pageCount)) return null;
-    if (cache.teams) return cache.teams;
     const teams: TBATeam[] = [];
     const pagePrefix = cache.pagePrefix ?? key + ":page:";
     for (let page = 0; page < (cache.pageCount ?? 0); page += 1) {
