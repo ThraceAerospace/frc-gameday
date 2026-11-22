@@ -175,6 +175,28 @@ export default {
       }));
     }
 
+    if (url.pathname === "/internal/workflows/runtime-state" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const kind = url.searchParams.get("kind");
+      const key = url.searchParams.get("key") ?? "";
+      if (!/^[a-zA-Z0-9_-]+$/.test(key) || (kind !== "event" && kind !== "team")) {
+        return Response.json({ error: "Expected a valid runtime kind and entity key" }, { status: 400 });
+      }
+      if (kind === "event") {
+        if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime binding is unavailable" }, { status: 503 });
+        const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
+        return stub.fetch(new Request("https://event-runtime/state", {
+          headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Event-Key": key },
+        }));
+      }
+      if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime binding is unavailable" }, { status: 503 });
+      const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
+      const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+      return stub.fetch(new Request("https://team-runtime/state", {
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
+      }));
+    }
+
     if (url.pathname === "/internal/workflows/initialize-event" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
