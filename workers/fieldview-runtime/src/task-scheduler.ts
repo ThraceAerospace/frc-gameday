@@ -530,10 +530,7 @@ export class TaskScheduler {
         ...r2DiscoveredKeys,
       ])];
 
-      const discoveredKeys = kind === "event"
-        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
-        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
-      const keys = [...new Set([...registered, ...discoveredKeys])]
+      const keys = registered
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
         kind, year, query, total: keys.length, cursor,
