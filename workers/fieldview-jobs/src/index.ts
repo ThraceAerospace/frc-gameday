@@ -153,6 +153,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
               body: JSON.stringify({ event_key: item.key, ...item.lifecycle }),
             },
           ));
+          if (response.status === 429 || response.status >= 500) {
+            throw new Error(`Transient runtime response HTTP ${response.status} for ${item.key}`);
+          }
           if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
           else batchInitialized.push(item.key);
         }
