@@ -24,7 +24,25 @@ interface JobsEnvironment {
 }
 
 interface WorkflowParameters {
-  scheduledAt: number;
+  scheduledAt?: number;
+  operation?: "discover-season";
+  year?: number;
+  requestedAt?: number;
+  jobId?: string;
+}
+
+interface AdminDiscoveryJobRecord {
+  year: number;
+  workflow_id: string;
+  status: "running" | "completed" | "failed";
+  stage: string;
+  events: number;
+  teams: number;
+  team_pages: number;
+  steps: number;
+  error: string | null;
+  started_at: number;
+  updated_at: number;
 }
 
 async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
@@ -38,6 +56,9 @@ async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
  */
 export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
+    if (event.payload?.operation === "discover-season") {
+      return this.discoverSeason(event.payload, step);
+    }
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
 
@@ -437,6 +458,196 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       return summary;
     });
     return summary;
+  }
+
+  private async discoverSeason(
+    payload: WorkflowParameters,
+    step: WorkflowStep,
+  ): Promise<Record<string, unknown>> {
+    const year = payload.year;
+    const jobId = payload.jobId;
+    const requestedAt = payload.requestedAt;
+    if (!Number.isInteger(year) || year! < 1992 || year! > 2200 || !jobId || !requestedAt) {
+      throw new Error("Manual season discovery requires a valid year, job ID, and request timestamp");
+    }
+    const season = year!;
+    const jobKey = `admin/discovery-jobs/${season}.json`;
+    const updateJob = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) =>
+      step.do(name, async () => {
+        const current = await readJson<AdminDiscoveryJobRecord>(this.env.DISCOVERY_BUCKET, jobKey);
+        const next: AdminDiscoveryJobRecord = {
+          year: season, workflow_id: jobId, status: "running", stage: "starting",
+          events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
+          started_at: requestedAt, updated_at: Date.now(), ...current, ...patch,
+          workflow_id: jobId, year: season, updated_at: Date.now(),
+        };
+        await this.env.DISCOVERY_BUCKET.put(jobKey, JSON.stringify(next), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return next;
+      });
+
+    try {
+      await updateJob("record-discovery-started", { stage: "discovering_events" });
+      const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
+      const eventChunkSize = 25;
+      const eventDirectory = await step.do("discover-manual-season-events", {
+        retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+      }, async () => {
+        const key = `discovery/events/${season}.json`;
+        const previous = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, key);
+        const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
+        if (previous?.etag) headers.set("If-None-Match", previous.etag);
+        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+        const response = await api.request(TBA_ENDPOINTS.events(season), { headers });
+        const checkedAt = Date.now();
+        if (response.status === 304 && previous) {
+          const refreshed = { ...previous, checkedAt };
+          await this.env.DISCOVERY_BUCKET.put(`registry/events/${season}.json`,
+            JSON.stringify(previous.events.map((item) => item.key)),
+            { httpMetadata: { contentType: "application/json" } });
+          await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          return {
+            count: previous.events.length, chunkCount: previous.chunkCount,
+            generation: previous.updatedAt, needsChunking: false, checkedAt,
+          };
+        }
+        if (!response.ok) throw new Error(`TBA event discovery for ${season} returned HTTP ${response.status}`);
+        const events = await response.json() as TbaEvent[];
+        if (!Array.isArray(events) || events.some((item) => !item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key))) {
+          throw new Error(`TBA event discovery for ${season} returned an invalid event directory`);
+        }
+        const document: DiscoveryDocument = {
+          year: season, events, chunkCount: Math.ceil(events.length / eventChunkSize),
+          etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
+        };
+        await this.env.DISCOVERY_BUCKET.put(`discovery/staging/${season}/${generation}.json`, JSON.stringify(document), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        await this.env.DISCOVERY_BUCKET.put(`discovery/staging/${season}/${generation}-keys.json`,
+          JSON.stringify(events.map((item) => item.key)),
+          { httpMetadata: { contentType: "application/json" } });
+        return {
+          count: events.length, chunkCount: document.chunkCount,
+          generation: checkedAt, needsChunking: true, checkedAt,
+        };
+      });
+      await updateJob("record-event-discovery-progress", {
+        stage: "publishing_events", events: eventDirectory.count, steps: 2,
+      });
+
+      if (eventDirectory.needsChunking) {
+        for (let firstChunk = 0; firstChunk < eventDirectory.chunkCount; firstChunk += 10) {
+          const endChunk = Math.min(eventDirectory.chunkCount, firstChunk + 10);
+          await step.do(`write-manual-event-chunks-${firstChunk}`, async () => {
+            const object = await this.env.DISCOVERY_BUCKET.get(
+              `discovery/staging/${season}/${eventDirectory.generation}.json`,
+            );
+            if (!object) throw new Error(`Missing staged event directory for ${season}`);
+            const document = await object.json<DiscoveryDocument>();
+            for (let index = firstChunk; index < endChunk; index += 1) {
+              await this.env.DISCOVERY_BUCKET.put(
+                `discovery/event-chunks/${season}/${eventDirectory.generation}/${index}.json`,
+                JSON.stringify(document.events.slice(index * eventChunkSize, (index + 1) * eventChunkSize)),
+                { httpMetadata: { contentType: "application/json" } },
+              );
+            }
+            return { chunks_written: endChunk - firstChunk };
+          });
+        }
+        await step.do("publish-manual-event-directory", async () => {
+          const stagedDocument = await this.env.DISCOVERY_BUCKET.get(
+            `discovery/staging/${season}/${eventDirectory.generation}.json`,
+          );
+          const stagedKeys = await this.env.DISCOVERY_BUCKET.get(
+            `discovery/staging/${season}/${eventDirectory.generation}-keys.json`,
+          );
+          if (!stagedDocument || !stagedKeys) throw new Error("Manual event discovery staging is incomplete");
+          await this.env.DISCOVERY_BUCKET.put(`registry/events/${season}.json`, await stagedKeys.text(), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          await this.env.DISCOVERY_BUCKET.put(`discovery/events/${season}.json`, await stagedDocument.text(), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          return { published: true };
+        });
+      }
+
+      const teamGeneration = await step.do("allocate-manual-team-directory-generation", async () => Date.now());
+      const pageSize = 500;
+      const teamKeys: string[] = [];
+      let teamPages = 0;
+      for (let page = 0; page < 100; page += 1) {
+        const result = await step.do(`discover-manual-team-page-${page}`, {
+          retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+        }, async () => {
+          const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+          const response = await api.request(TBA_ENDPOINTS.teamsByYearPage(season, page));
+          if (!response.ok) throw new Error(`TBA team discovery page ${page} returned HTTP ${response.status}`);
+          const teams = await response.json() as Array<{ key?: unknown }>;
+          if (!Array.isArray(teams) || teams.length > pageSize || teams.some((team) =>
+            !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+            throw new Error(`TBA team discovery page ${page} returned an invalid team directory`);
+          }
+          await this.env.DISCOVERY_BUCKET.put(
+            `discovery/team-pages/${season}/${teamGeneration}/${page}.json`,
+            JSON.stringify(teams),
+            { httpMetadata: { contentType: "application/json" } },
+          );
+          return { keys: teams.map((team) => team.key as string), count: teams.length, hasMore: teams.length === pageSize };
+        });
+        teamKeys.push(...result.keys);
+        teamPages += 1;
+        if (!result.hasMore) break;
+        if (page === 99) throw new Error("TBA team discovery exceeded the 100-page season limit");
+      }
+      if (teamKeys.length === 0) throw new Error("TBA returned an empty team directory for the selected season");
+      await updateJob("record-team-discovery-progress", {
+        stage: "publishing_teams", teams: teamKeys.length, team_pages: teamPages,
+        steps: 3 + teamPages,
+      });
+      await step.do("publish-manual-team-directory", async () => {
+        await this.env.DISCOVERY_BUCKET.put(`registry/teams/${season}.json`, JSON.stringify([...new Set(teamKeys)].sort()), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        await this.env.DISCOVERY_BUCKET.put(`discovery/teams/${season}.json`, JSON.stringify({
+          year: season, generation: teamGeneration, pageCount: teamPages,
+          teamCount: teamKeys.length, updatedAt: teamGeneration, checkedAt: Date.now(),
+        }), { httpMetadata: { contentType: "application/json" } });
+        return { published: true };
+      });
+      const summary = {
+        year: season, workflow_id: jobId, status: "completed", stage: "complete",
+        events: eventDirectory.count, teams: teamKeys.length, team_pages: teamPages,
+        steps: 4 + teamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
+        error: null, started_at: requestedAt, updated_at: Date.now(),
+      };
+      await step.do("publish-manual-discovery-summary", async () => {
+        await this.env.DISCOVERY_BUCKET.put(jobKey, JSON.stringify(summary), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return summary;
+      });
+      return summary;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await step.do("record-manual-discovery-failure", async () => {
+        const current = await readJson<AdminDiscoveryJobRecord>(this.env.DISCOVERY_BUCKET, jobKey);
+        const failed: AdminDiscoveryJobRecord = {
+          year: season, workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
+          events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
+          steps: current?.steps ?? 0, error: detail.slice(0, 500),
+          started_at: requestedAt, updated_at: Date.now(),
+        };
+        await this.env.DISCOVERY_BUCKET.put(jobKey, JSON.stringify(failed), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return failed;
+      });
+      throw error;
+    }
   }
 }
 
