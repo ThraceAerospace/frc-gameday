@@ -111,6 +111,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       if (!pageResult.hasMore) break;
     }
     await step.do("publish-current-season-team-directory", async () => {
+      // Publish the registry first; the manifest is the final commit point.
+      await this.env.DISCOVERY_BUCKET.put(
+        `registry/teams/${currentSeason.year}.json`,
+        JSON.stringify([...new Set(discoveredTeamKeys)].sort()),
+        { httpMetadata: { contentType: "application/json" } },
+      );
       await this.env.DISCOVERY_BUCKET.put(
         `discovery/teams/${currentSeason.year}.json`,
         JSON.stringify({
@@ -121,11 +127,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           updatedAt: teamDirectoryGeneration,
           checkedAt: Date.now(),
         }),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      await this.env.DISCOVERY_BUCKET.put(
-        `registry/teams/${currentSeason.year}.json`,
-        JSON.stringify([...new Set(discoveredTeamKeys)].sort()),
         { httpMetadata: { contentType: "application/json" } },
       );
       return { year: currentSeason.year, pages: teamPageCount, teams: teamCount };
@@ -147,14 +148,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         if (response.status === 304 && previous) {
           const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
           const refreshed = { ...previous, chunkCount, checkedAt };
-          await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
-            httpMetadata: { contentType: "application/json" },
-          });
           await this.env.DISCOVERY_BUCKET.put(
             `registry/events/${year}.json`,
             JSON.stringify(previous.events.map((item) => item.key)),
             { httpMetadata: { contentType: "application/json" } },
           );
+          await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
+            httpMetadata: { contentType: "application/json" },
+          });
           return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount, needsChunking: false };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
@@ -213,11 +214,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         );
         if (!stagedDocument || !stagedKeys) throw new Error(`Incomplete staged event directory for ${directory.year}`);
         await this.env.DISCOVERY_BUCKET.put(
-          `discovery/events/${directory.year}.json`, await stagedDocument.text(),
+          `registry/events/${directory.year}.json`, await stagedKeys.text(),
           { httpMetadata: { contentType: "application/json" } },
         );
+        // The directory document is the publication point; write it last.
         await this.env.DISCOVERY_BUCKET.put(
-          `registry/events/${directory.year}.json`, await stagedKeys.text(),
+          `discovery/events/${directory.year}.json`, await stagedDocument.text(),
           { httpMetadata: { contentType: "application/json" } },
         );
         return { year: directory.year, published: true };
