@@ -954,7 +954,14 @@ export default {
         if (!record) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
         let workflowStatus: string | null = null;
         try { workflowStatus = (await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status()).status; } catch { workflowStatus = null; }
-        return Response.json({ ...record, workflow_status: workflowStatus }, { headers: { "Cache-Control": "no-store" } });
+        const mappedStatus = workflowStatus === "paused" ? "paused"
+          : workflowStatus === "terminated" ? "cancelled"
+          : workflowStatus === "errored" ? "failed"
+          : workflowStatus === "complete" ? record.status : record.status;
+        const history = await env.DISCOVERY_BUCKET.list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
+        return Response.json({ ...record, status: mappedStatus, workflow_status: workflowStatus, history_count: history.objects.length }, {
+          headers: { "Cache-Control": "no-store" },
+        });
       }
       const action = String(value.action ?? "start");
       if (!["start", "pause", "resume", "cancel", "preview"].includes(action)) return Response.json({ error: "Invalid runtime job action" }, { status: 400 });
@@ -988,6 +995,13 @@ export default {
           const status = await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status();
           if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) return Response.json({ error: "A runtime job is already active", workflow_id: pointer.workflow_id }, { status: 409 });
         } catch { /* Previous Workflow instance is no longer available. */ }
+      }
+      if (pointer) {
+        const previous = await readJson<Record<string, unknown>>(env.DISCOVERY_BUCKET, `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        if (previous) await env.DISCOVERY_BUCKET.put(
+          `admin/runtime-job-history/${operation}/${subject}/${pointer.workflow_id}.json`,
+          JSON.stringify(previous), { httpMetadata: { contentType: "application/json" } },
+        );
       }
       const requestedAt = Date.now();
       const workflowId = `runtime-admin-${operation}-${subject}-${requestedAt}`;
