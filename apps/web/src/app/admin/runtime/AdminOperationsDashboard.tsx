@@ -267,7 +267,7 @@ export default function AdminOperationsDashboard() {
   const loadDiscoveryJob = useCallback(async (targetYear = year) => {
     if (!token) return;
     try {
-      const params = new URLSearchParams({ discoveryJob: String(targetYear), discoveryMode: "year" });
+      const params = new URLSearchParams({ discoveryJob: String(targetYear) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setDiscoveryJob(body as DiscoveryJob);
