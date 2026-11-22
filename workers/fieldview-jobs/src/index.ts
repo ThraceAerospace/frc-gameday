@@ -5,6 +5,8 @@ import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts"
 
 import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
+import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
+import type { RuntimeAdminParameters } from "./runtime-admin.ts";
 
 interface DiscoveryDocument {
   year: number;
@@ -22,6 +24,7 @@ interface JobsEnvironment {
   FIELDVIEW_RUNTIME: Fetcher;
   DAILY_EVENT_READINESS: Workflow;
   COVERAGE_AUDIT: Workflow;
+  RUNTIME_ADMIN: Workflow;
 }
 
 interface WorkflowParameters {
@@ -926,6 +929,82 @@ export default {
   async fetch(request: Request, env: JobsEnvironment): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ service: "fieldview-jobs", status: "ok" });
+    if (url.pathname === "/internal/admin/runtime-job" && (request.method === "GET" || request.method === "POST")) {
+      if (!env.RUNTIME_ADMIN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const operationValues = ["team-seed", "event-team-seed", "season-ingest"] as const;
+      const body: unknown = request.method === "POST" ? await request.json().catch(() => null) : null;
+      const value = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const operation = String(request.method === "GET" ? url.searchParams.get("operation") : value.operation) as RuntimeAdminParameters["operation"];
+      if (!operationValues.includes(operation as typeof operationValues[number])) return Response.json({ error: "Invalid runtime job operation" }, { status: 400 });
+      const year = Number(request.method === "GET" ? url.searchParams.get("year") : value.year);
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
+      const teamKey = String(request.method === "GET" ? url.searchParams.get("team_key") ?? "" : value.team_key ?? "");
+      const eventKey = String(request.method === "GET" ? url.searchParams.get("event_key") ?? "" : value.event_key ?? "");
+      if (operation === "team-seed" && !/^frc\\d+$/.test(teamKey)) return Response.json({ error: "A valid team_key is required" }, { status: 400 });
+      if (operation === "event-team-seed" && (!/^[a-zA-Z0-9_-]+$/.test(eventKey) || !eventKey.startsWith(String(year)))) return Response.json({ error: "A valid event_key and matching year are required" }, { status: 400 });
+      const subject = operation === "team-seed" ? teamKey : operation === "event-team-seed" ? eventKey : String(year);
+      const indexKey = `admin/runtime-job-index/${operation}/${subject}.json`;
+      let pointer = await readJson<{ workflow_id: string }>(env.DISCOVERY_BUCKET, indexKey);
+      if (request.method === "GET") {
+        if (!pointer) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+        const record = await readJson<Record<string, unknown>>(env.DISCOVERY_BUCKET, `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        if (!record) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+        let workflowStatus: string | null = null;
+        try { workflowStatus = (await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status()).status; } catch { workflowStatus = null; }
+        return Response.json({ ...record, workflow_status: workflowStatus }, { headers: { "Cache-Control": "no-store" } });
+      }
+      const action = String(value.action ?? "start");
+      if (!["start", "pause", "resume", "cancel", "preview"].includes(action)) return Response.json({ error: "Invalid runtime job action" }, { status: 400 });
+      if (action === "preview") {
+        const events = await readJson<DiscoveryDocument>(env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
+        const teams = await readJson<string[]>(env.DISCOVERY_BUCKET, `registry/teams/${year}.json`);
+        return Response.json({ year, ready: Boolean(events?.events?.length && teams?.length),
+          events: events?.events?.length ?? 0, teams: teams?.length ?? 0,
+          planned_runtime_initializations: (events?.events?.length ?? 0) + (teams?.length ?? 0),
+          requires_explicit_confirmation: true });
+      }
+      if (action !== "start") {
+        if (!pointer) return Response.json({ error: "No runtime job exists" }, { status: 404 });
+        const instance = await env.RUNTIME_ADMIN.get(pointer.workflow_id);
+        const status = await instance.status();
+        if (action === "pause") {
+          if (!["queued", "running", "waiting", "waitingForPause"].includes(status.status)) return Response.json({ error: "Workflow is not active" }, { status: 409 });
+          await instance.pause();
+        } else if (action === "resume") {
+          if (status.status !== "paused") return Response.json({ error: "Workflow is not paused" }, { status: 409 });
+          await instance.resume();
+        } else {
+          if (["complete", "errored", "terminated"].includes(status.status)) return Response.json({ error: "Workflow is already terminal" }, { status: 409 });
+          await instance.terminate();
+        }
+        return Response.json({ workflow_id: pointer.workflow_id, status: action === "pause" ? "paused" : action === "resume" ? "running" : "cancelled" }, { status: 202 });
+      }
+      if (operation === "season-ingest" && value.confirm !== true) return Response.json({ error: "Explicit confirmation is required" }, { status: 400 });
+      if (pointer) {
+        try {
+          const status = await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status();
+          if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) return Response.json({ error: "A runtime job is already active", workflow_id: pointer.workflow_id }, { status: 409 });
+        } catch { /* Previous Workflow instance is no longer available. */ }
+      }
+      const requestedAt = Date.now();
+      const workflowId = `runtime-admin-${operation}-${subject}-${requestedAt}`;
+      const params: RuntimeAdminParameters = { operation, workflowId, year, requestedAt,
+        ...(operation === "team-seed" ? { teamKey } : {}),
+        ...(operation === "event-team-seed" ? { eventKey } : {}) };
+      const initial = { workflow_id: workflowId, operation, year, status: "running", phase: "queued",
+        processed: 0, total: 0, started_at: requestedAt, updated_at: requestedAt, counts: {}, errors: [] };
+      await env.DISCOVERY_BUCKET.put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
+      await env.DISCOVERY_BUCKET.put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
+      try { await env.RUNTIME_ADMIN.create({ id: workflowId, params }); }
+      catch (error) {
+        const failed = { ...initial, status: "failed", phase: "failed", errors: [{ key: subject, detail: error instanceof Error ? error.message : String(error), at: Date.now() }] };
+        await env.DISCOVERY_BUCKET.put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
+        return Response.json(failed, { status: 409 });
+      }
+      return Response.json(initial, { status: 202, headers: { "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/internal/admin/coverage-audit" && request.method === "GET") {
       if (!env.RUNTIME_ADMIN_TOKEN ||
           request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
