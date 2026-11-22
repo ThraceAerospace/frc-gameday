@@ -335,6 +335,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         seededTeams.push(...result.seeded);
         failedTeams.push(...result.failed);
       } catch (error) {
+        if (String(error).includes("TeamRuntime seed boundary returned HTTP")) throw error;
         failedTeams.push(...batch.map((team_key) => ({ team_key, error: String(error) })));
       }
     }
@@ -355,36 +356,41 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const failures: Array<{ event_key: string; error: string }> = [];
     for (let offset = 0; offset < keys.length; offset += 10) {
       const batch = keys.slice(offset, offset + 10);
-      const result = await step.do(`initialize-events-${offset / 10}`, {
-        retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
-      }, async () => {
-        const batchInitialized: string[] = [];
-        const batchFailures: Array<{ event_key: string; error: string }> = [];
-        for (const item of batch) {
-          const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
-            "https://fieldview-runtime/internal/workflows/initialize-event",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
-                "Content-Type": "application/json",
+      try {
+        const result = await step.do(`initialize-events-${offset / 10}`, {
+          retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
+        }, async () => {
+          const batchInitialized: string[] = [];
+          const batchFailures: Array<{ event_key: string; error: string }> = [];
+          for (const item of batch) {
+            const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
+              "https://fieldview-runtime/internal/workflows/initialize-event",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ event_key: item.key, ...item.lifecycle }),
               },
-              body: JSON.stringify({ event_key: item.key, ...item.lifecycle }),
-            },
-          ));
-          if (response.status === 401 || response.status === 403 || response.status === 404) {
-            throw new Error(`Runtime initialization boundary returned HTTP ${response.status} for ${item.key}; check deployment and shared admin authorization`);
+            ));
+            if (response.status === 401 || response.status === 403 || response.status === 404) {
+              throw new Error(`Runtime initialization boundary returned HTTP ${response.status} for ${item.key}; check deployment and shared admin authorization`);
+            }
+            if (response.status === 429 || response.status >= 500) {
+              throw new Error(`Transient runtime response HTTP ${response.status} for ${item.key}`);
+            }
+            if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
+            else batchInitialized.push(item.key);
           }
-          if (response.status === 429 || response.status >= 500) {
-            throw new Error(`Transient runtime response HTTP ${response.status} for ${item.key}`);
-          }
-          if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
-          else batchInitialized.push(item.key);
-        }
-        return { initialized: batchInitialized, failures: batchFailures };
-      });
-      initialized.push(...result.initialized);
-      failures.push(...result.failures);
+          return { initialized: batchInitialized, failures: batchFailures };
+        });
+        initialized.push(...result.initialized);
+        failures.push(...result.failures);
+      } catch (error) {
+        if (String(error).includes("Runtime initialization boundary returned HTTP")) throw error;
+        failures.push(...batch.map((item) => ({ event_key: item.key, error: String(error) })));
+      }
     }
 
     await step.do("publish-runtime-event-registry", async () => {
