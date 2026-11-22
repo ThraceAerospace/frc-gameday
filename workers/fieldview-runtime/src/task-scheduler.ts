@@ -1,4 +1,3 @@
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import { eventResourceEndpoints } from "./event-runtime.ts";
@@ -222,7 +221,6 @@ const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + team
 /** Season ingestion and cross-runtime team/event seed coordinator; entity runtimes execute dispatched work. */
 export class TaskScheduler {
   private readonly storage: DurableObjectStateLike["storage"];
-  private readonly api: TBAApiClient;
   private readonly env: RuntimeEnvironment;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
