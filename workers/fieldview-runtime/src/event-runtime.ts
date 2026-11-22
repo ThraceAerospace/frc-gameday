@@ -1000,6 +1000,15 @@ export class EventRuntime {
         lifecycle: {
           completed_until: await this.storage.get<number>("lifecycle:completed-until") ?? null,
         },
+        resources: expectedEndpoints.map((endpoint) => {
+          const source = entries.get(endpointStorageKey(endpoint));
+          return {
+            endpoint, status: source?.status ?? "pending",
+            last_fetched_at: source?.lastFetchedAt ?? null,
+            last_webhook_at: source?.lastWebhookAt ?? null,
+            expires_at: source?.expiresAt ?? null,
+          };
+        }),
         polling: [...tasks.values()].map((task) => ({
           endpoint: task.endpoint,
           due_at: task.dueAt,
