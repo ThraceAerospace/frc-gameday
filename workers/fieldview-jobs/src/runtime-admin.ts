@@ -54,7 +54,13 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     const update = async (patch: Partial<RuntimeAdminRecord>) => {
       const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, key);
       if (!current || current.status !== "running") return current;
-      const next = { ...current, ...patch, updated_at: Date.now() };
+      const next = {
+        ...current, ...patch,
+        ...(patch.phase === undefined ? {} : { stage: patch.phase }),
+        ...(current.operation === "event-team-seed" && patch.processed !== undefined
+          ? { seeded_teams: patch.processed } : {}),
+        updated_at: Date.now(),
+      };
       await write(this.env.DISCOVERY_BUCKET, key, next);
       return next;
     };
