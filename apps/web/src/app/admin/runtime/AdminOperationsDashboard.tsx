@@ -30,7 +30,7 @@ type TeamSeedJob = {
   startedAt?: number; updatedAt?: number;
 };
 type DiscoveryJob = {
-  year: number; mode: "year"; status: "running" | "completed" | "failed" | "not_started";
+  year: number; mode: "year"; status: "running" | "paused" | "completed" | "failed" | "cancelled" | "not_started";
   stage?: string; events?: number; teams?: number; steps?: number; error?: string | null;
   startedAt?: number; updatedAt?: number;
 };
