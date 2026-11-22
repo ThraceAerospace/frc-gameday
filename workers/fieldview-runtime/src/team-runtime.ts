@@ -509,7 +509,7 @@ export class TeamRuntime {
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const storedState = await this.storage.get<FieldViewTeamEventState & {
-        team?: import("../../../packages/domain/src/team.ts").FieldViewTeam;
+        team?: import("../../../packages/domain/src/team.ts").FieldViewTeam | null;
         event_team?: import("../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
         matches?: import("../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
       }>(stateKey);
