@@ -1008,8 +1008,15 @@ export default {
       const params: RuntimeAdminParameters = { operation, workflowId, year, requestedAt,
         ...(operation === "team-seed" ? { teamKey } : {}),
         ...(operation === "event-team-seed" ? { eventKey } : {}) };
-      const initial = { workflow_id: workflowId, operation, year, status: "running", phase: "queued",
-        processed: 0, total: 0, started_at: requestedAt, updated_at: requestedAt, counts: {}, errors: [] };
+      const initial = {
+        workflow_id: workflowId, operation, year, status: "running", phase: "queued", stage: "queued",
+        processed: 0, total: 0, started_at: requestedAt, updated_at: requestedAt, counts: {}, errors: [],
+        ...(operation === "team-seed" ? { team_key: teamKey, scheduled_events: 0 } : {}),
+        ...(operation === "event-team-seed" ? {
+          event_key: eventKey, team_keys: [], cursor: 0, active_team_key: null,
+          seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0,
+        } : {}),
+      };
       await env.DISCOVERY_BUCKET.put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
       await env.DISCOVERY_BUCKET.put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
       try { await env.RUNTIME_ADMIN.create({ id: workflowId, params }); }
