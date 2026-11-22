@@ -403,7 +403,7 @@ test("public event snapshot reads queue missing resources without running provid
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
 });
 
-test("GET snapshot composes canonical event-team domain objects with source metadata", async () => {
+test("explicit EventState publication composes canonical event-team domain objects with source metadata", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
   const endpoints = eventResourceEndpoints(eventKey);
