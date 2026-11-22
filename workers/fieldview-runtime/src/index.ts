@@ -266,7 +266,7 @@ export default {
             updatedAt: discovery.updatedAt,
             checkedAt: discovery.checkedAt,
             index: { status: stale ? "stale" : "available", persisted: true, last_error: null },
-            revalidation: stale ? "workflow_scheduled" : "idle",
+            revalidation: stale ? "workflow_managed" : "idle",
           }, {
             headers: {
               "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
