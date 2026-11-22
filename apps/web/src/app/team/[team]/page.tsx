@@ -160,7 +160,6 @@ export default async function TeamPage({
   const wins = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Win").length;
   const losses = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Loss").length;
   const ties = completedMatches.filter(({ match }) => getTeamResult(match, teamKey) === "Tie").length;
-  const district = districts?.find((entry) => entry.year === year) ?? null;
 
   return (
     <SiteShell>
@@ -185,7 +184,7 @@ export default async function TeamPage({
         </SurfaceCard>
         <TeamProfileTabs teamNumber={team?.team_number ?? Number(teamKey.replace(/^frc/i, ""))} year={year} results={
           <div>
-          <SectionHeading title={`${year} Results`} description="Event information and match results for this season." action={district ? <Link href={`/district/${district.key}`} className="text-sm font-semibold text-[var(--fv-brand)] hover:text-[var(--fv-brand-strong)]">View district</Link> : null} className="mb-5" />
+          <SectionHeading title={`${year} Results`} description="Event information and match results for this season." className="mb-5" />
 
           {eventSections.length === 0 ? (
             <SurfaceCard className="p-5 text-sm text-[var(--fv-muted)]">{teamEventsResponse === null ? `Season event data is unavailable for ${year}.` : teamEvents.length > 0 ? `Event details are still being acquired for ${year}.` : `No events found for ${year}.`}</SurfaceCard>
