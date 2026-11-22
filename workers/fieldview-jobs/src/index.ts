@@ -3,7 +3,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 
-import { classifyEventThisWeek, lifecycleFor } from "./calendar.ts";
+import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 
 interface DiscoveryDocument {
@@ -734,7 +734,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           ...directory.events
             .filter((item) => {
               const lifecycle = lifecycleFor(item, now).lifecycle;
-              return lifecycle !== "expired" && lifecycle !== "invalid" &&
+              return isValidEventLifecycleInput(item) && lifecycle !== "expired" &&
                 typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key);
             })
             .map((item) => ({ kind: "event" as const, key: item.key, registered: runtimeEvents.has(item.key) })),
@@ -754,11 +754,14 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0,
         };
         for (const item of directory.events) {
+          if (!isValidEventLifecycleInput(item)) {
+            counts.events_invalid_dates += 1;
+            continue;
+          }
           const lifecycle = lifecycleFor(item, now).lifecycle;
           if (lifecycle === "completed" || lifecycle === "expired") counts.events_happened += 1;
           else if (lifecycle === "active") counts.events_active += 1;
           else if (lifecycle === "upcoming") counts.events_upcoming += 1;
-          else counts.events_invalid_dates += 1;
         }
         const allItemsKey = itemsPrefix + "all.json";
         await this.env.DISCOVERY_BUCKET.put(allItemsKey, JSON.stringify(items), {
