@@ -130,6 +130,7 @@ interface DiscoveryCache {
   year: number;
   events: TBAEvent[];
   updatedAt: number;
+  checkedAt?: number;
 }
 
 interface SeasonIngestJob {
