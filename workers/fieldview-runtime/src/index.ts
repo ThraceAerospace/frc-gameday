@@ -626,19 +626,22 @@ export default {
     env: RuntimeEnvironment,
     context: { waitUntil(promise: Promise<unknown>): void },
   ): Promise<void> {
-    if (!env.TASK_SCHEDULER) {
-      console.error("[FV][TaskScheduler] Daily event classification skipped: TaskScheduler is not bound");
+    // Compatibility path only; the production Cron Trigger now lives on
+    // fieldview-jobs. If this handler is invoked, delegate rather than
+    // reintroducing discovery work inside TaskScheduler.
+    if (!env.FIELDVIEW_JOBS) {
+      console.error("[FV][Jobs] Scheduled compatibility invocation skipped: jobs binding is unavailable");
       return;
     }
-    const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-    context.waitUntil((async () => {
-      const response = await scheduler.fetch(new Request("https://task-scheduler/daily", {
+    context.waitUntil(env.FIELDVIEW_JOBS.fetch(new Request(
+      "https://fieldview-jobs/internal/admin/daily-event-readiness",
+      {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
-      }));
-      if (!response.ok) throw new Error("Daily TaskScheduler run failed with HTTP " + response.status);
-      const result = await response.json();
-      console.log("[FV][TaskScheduler] Daily run completed", JSON.stringify(result));
-    })());
+      },
+    )).then(async (response) => {
+      if (!response.ok) throw new Error("Daily readiness Workflow trigger returned HTTP " + response.status);
+      console.log("[FV][Jobs] Scheduled readiness Workflow accepted", JSON.stringify(await response.json()));
+    }));
   },
 };
