@@ -132,11 +132,13 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       discoveredTeamKeys.push(...pageResult.teamKeys);
       if (!pageResult.hasMore) break;
     }
+    const uniqueCurrentSeasonTeamKeys = [...new Set(discoveredTeamKeys)].sort();
+    teamCount = uniqueCurrentSeasonTeamKeys.length;
     await step.do("publish-current-season-team-directory", async () => {
       // Publish the registry first; the manifest is the final commit point.
       await this.env.DISCOVERY_BUCKET.put(
         `registry/teams/${currentSeason.year}.json`,
-        JSON.stringify([...new Set(discoveredTeamKeys)].sort()),
+        JSON.stringify(uniqueCurrentSeasonTeamKeys),
         { httpMetadata: { contentType: "application/json" } },
       );
       await this.env.DISCOVERY_BUCKET.put(
@@ -145,7 +147,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           year: currentSeason.year,
           generation: teamDirectoryGeneration,
           pageCount: teamPageCount,
-          teamCount,
+          teamCount: uniqueCurrentSeasonTeamKeys.length,
           updatedAt: teamDirectoryGeneration,
           checkedAt: Date.now(),
         }),
@@ -479,7 +481,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const next: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
           events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
-          started_at: requestedAt, updated_at: Date.now(), ...current, ...patch,
+          started_at: requestedAt, updated_at: Date.now(), ...(current ?? {}), ...patch,
           workflow_id: jobId, year: season, updated_at: Date.now(),
         };
         await this.env.DISCOVERY_BUCKET.put(jobKey, JSON.stringify(next), {
@@ -511,7 +513,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             httpMetadata: { contentType: "application/json" },
           });
           return {
-            count: previous.events.length, chunkCount: previous.chunkCount,
+            count: previous.events.length,
+            chunkCount: previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize),
             generation: previous.updatedAt, needsChunking: false, checkedAt,
           };
         }
@@ -604,24 +607,25 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         if (!result.hasMore) break;
         if (page === 99) throw new Error("TBA team discovery exceeded the 100-page season limit");
       }
-      if (teamKeys.length === 0) throw new Error("TBA returned an empty team directory for the selected season");
+      const uniqueTeamKeys = [...new Set(teamKeys)].sort();
+      if (uniqueTeamKeys.length === 0) throw new Error("TBA returned an empty team directory for the selected season");
       await updateJob("record-team-discovery-progress", {
-        stage: "publishing_teams", teams: teamKeys.length, team_pages: teamPages,
+        stage: "publishing_teams", teams: uniqueTeamKeys.length, team_pages: teamPages,
         steps: 3 + teamPages,
       });
       await step.do("publish-manual-team-directory", async () => {
-        await this.env.DISCOVERY_BUCKET.put(`registry/teams/${season}.json`, JSON.stringify([...new Set(teamKeys)].sort()), {
+        await this.env.DISCOVERY_BUCKET.put(`registry/teams/${season}.json`, JSON.stringify(uniqueTeamKeys), {
           httpMetadata: { contentType: "application/json" },
         });
         await this.env.DISCOVERY_BUCKET.put(`discovery/teams/${season}.json`, JSON.stringify({
           year: season, generation: teamGeneration, pageCount: teamPages,
-          teamCount: teamKeys.length, updatedAt: teamGeneration, checkedAt: Date.now(),
+          teamCount: uniqueTeamKeys.length, updatedAt: teamGeneration, checkedAt: Date.now(),
         }), { httpMetadata: { contentType: "application/json" } });
         return { published: true };
       });
       const summary = {
         year: season, mode: "year", workflow_id: jobId, status: "completed", stage: "complete",
-        events: eventDirectory.count, teams: teamKeys.length, team_pages: teamPages,
+        events: eventDirectory.count, teams: uniqueTeamKeys.length, team_pages: teamPages,
         steps: 4 + teamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
         error: null, started_at: requestedAt, updated_at: Date.now(),
       };
