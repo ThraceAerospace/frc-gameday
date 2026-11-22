@@ -158,7 +158,7 @@ export default {
         return new Response("Unauthorized", { status: 401 });
       }
 
-      context.waitUntil(processTbaWebhook(rawBody, env).catch((error) => {
+      context.waitUntil(Promise.resolve().then(() => processTbaWebhook(rawBody, env)).catch((error) => {
         console.error("[WEBHOOK][TBA] Unhandled background processing failure", String(error));
       }));
       return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
