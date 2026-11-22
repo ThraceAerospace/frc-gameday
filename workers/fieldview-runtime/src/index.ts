@@ -16,137 +16,158 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
     request.headers.get("Authorization") === `Bearer ${env.RUNTIME_ADMIN_TOKEN}`;
 }
 
+async function processTbaWebhook(request: Request, env: RuntimeEnvironment): Promise<void> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (declaredLength > 1_000_000) {
+    console.warn("[WEBHOOK][TBA] Dropped oversized webhook", JSON.stringify({ declared_length: declaredLength }));
+    return;
+  }
+  const rawBody = await request.arrayBuffer();
+  if (rawBody.byteLength > 1_000_000) {
+    console.warn("[WEBHOOK][TBA] Dropped oversized webhook", JSON.stringify({ byte_length: rawBody.byteLength }));
+    return;
+  }
+
+  const signature = request.headers.get("X-TBA-HMAC");
+  if (!signature) {
+    console.warn("[WEBHOOK][TBA] Dropped webhook without HMAC signature");
+    return;
+  }
+  if (!env.TBA_WEBHOOK_SECRET) {
+    console.error("[WEBHOOK][TBA] TBA_WEBHOOK_SECRET is not configured");
+    return;
+  }
+  if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
+    console.warn("[WEBHOOK][TBA] Dropped webhook with invalid HMAC signature");
+    return;
+  }
+
+  let payload: unknown;
+  try { payload = JSON.parse(new TextDecoder().decode(rawBody)); }
+  catch {
+    console.warn("[WEBHOOK][TBA] Dropped webhook with invalid JSON");
+    return;
+  }
+  if (!isRecord(payload) || typeof payload.message_type !== "string" || !isRecord(payload.message_data)) {
+    console.warn("[WEBHOOK][TBA] Dropped webhook with invalid payload shape");
+    return;
+  }
+
+  const messageData = payload.message_data;
+  const webhookLog: Record<string, unknown> = { message_type: payload.message_type };
+  if (typeof messageData.event_key === "string") webhookLog.event_key = messageData.event_key;
+  if (payload.message_type === "verification") webhookLog.verification_key = messageData.verification_key ?? null;
+  console.log("[WEBHOOK][TBA] Received", JSON.stringify(webhookLog));
+
+  if (["ping", "verification", "broadcast"].includes(payload.message_type)) return;
+
+  const eventData = messageData.event;
+  const matchData = messageData.match;
+  const eventKey = messageData.event_key ??
+    (isRecord(eventData) ? eventData.key : undefined) ??
+    (isRecord(matchData) ? matchData.event_key : undefined);
+  if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) {
+    console.warn("[WEBHOOK][TBA] Dropped webhook without a valid event key", JSON.stringify({ message_type: payload.message_type }));
+    return;
+  }
+
+  const messageType = payload.message_type;
+  const teamKeys = new Set<string>();
+  const addTeamKey = (value: unknown) => {
+    if (typeof value === "string" && /^frc[0-9]+$/.test(value)) teamKeys.add(value);
+  };
+  const addMatchTeams = (value: unknown) => {
+    if (!isRecord(value) || !isRecord(value.alliances)) return;
+    for (const color of ["red", "blue"]) {
+      const alliance = value.alliances[color];
+      if (isRecord(alliance)) {
+        const teams = Array.isArray(alliance.teams) ? alliance.teams : alliance.team_keys;
+        if (Array.isArray(teams)) for (const key of teams) addTeamKey(key);
+      }
+    }
+  };
+  if (messageType === "match_score" || messageType === "match_video") {
+    addMatchTeams(matchData);
+    addTeamKey(messageData.team_key);
+  } else if (messageType === "upcoming_match") {
+    if (Array.isArray(messageData.team_keys)) for (const key of messageData.team_keys) addTeamKey(key);
+    addTeamKey(messageData.team_key);
+  } else if (!["awards_posted", "alliance_selection", "schedule_updated", "starting_comp_level"].includes(messageType)) {
+    console.warn("[WEBHOOK][TBA] Ignoring unsupported webhook message type", JSON.stringify({ message_type: messageType, event_key: eventKey }));
+    return;
+  }
+
+  if (!env.EVENT_RUNTIME) {
+    console.error("[WEBHOOK][TBA] EventRuntime binding is unavailable", JSON.stringify({ event_key: eventKey }));
+    return;
+  }
+  if (teamKeys.size > 0 && !env.TEAM_RUNTIME) {
+    console.error("[WEBHOOK][TBA] TeamRuntime binding is unavailable", JSON.stringify({ event_key: eventKey, team_count: teamKeys.size }));
+    return;
+  }
+
+  const digest = await crypto.subtle.digest("SHA-256", rawBody);
+  const webhookId = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const headers = new Headers({
+    Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+    "X-FieldView-Event-Key": eventKey,
+    "X-FieldView-Webhook-Id": webhookId,
+    "Content-Type": "application/json",
+  });
+  const targets: Array<{ kind: "event" | "team"; key: string; promise: Promise<Response> }> = [];
+  try {
+    const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
+    targets.push({ kind: "event", key: eventKey, promise: eventStub.fetch(new Request("https://event-runtime/webhook", {
+      method: "POST", headers: new Headers(headers), body: rawBody,
+    })) });
+    if (teamKeys.size > 0 && env.TEAM_RUNTIME) {
+      for (const teamKey of teamKeys) {
+        const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+        const teamHeaders = new Headers(headers);
+        teamHeaders.set("X-FieldView-Team-Key", teamKey);
+        targets.push({ kind: "team", key: teamKey, promise: teamStub.fetch(new Request("https://team-runtime/webhook", {
+          method: "POST", headers: teamHeaders, body: rawBody,
+        })) });
+      }
+    }
+  } catch (error) {
+    console.error("[WEBHOOK][TBA] Failed to enqueue runtime fan-out", JSON.stringify({
+      event_key: eventKey, webhook_id: webhookId, error: String(error),
+    }));
+    return;
+  }
+
+  const outcomes = await Promise.allSettled(targets.map((target) => target.promise));
+  const failures: Array<{ kind: "event" | "team"; key: string; error?: string; status?: number }> = [];
+  outcomes.forEach((outcome, index) => {
+    if (outcome.status === "rejected") {
+      failures.push({ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) });
+    } else if (!outcome.value.ok) {
+      failures.push({ kind: targets[index].kind, key: targets[index].key, status: outcome.value.status });
+    }
+  });
+  if (failures.length > 0) {
+    console.error("[WEBHOOK][TBA] Runtime fan-out failed", JSON.stringify({
+      event_key: eventKey, webhook_id: webhookId, target_count: targets.length, failures,
+    }));
+    return;
+  }
+  console.log("[WEBHOOK][TBA] Runtime fan-out completed", JSON.stringify({
+    event_key: eventKey, webhook_id: webhookId, target_count: targets.length,
+  }));
+}
+
 export default {
-  async fetch(request: Request, env: RuntimeEnvironment): Promise<Response> {
+  async fetch(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/tba" && request.method === "POST") {
-      const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-      if (declaredLength > 1_000_000) {
-        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
-      }
-      const rawBody = await request.arrayBuffer();
-      if (rawBody.byteLength > 1_000_000) {
-        return Response.json({ error: "Webhook payload too large" }, { status: 413 });
-      }
-
-      // Match the established Vercel webhook authentication contract:
-      // a missing signature is a malformed request (418), while a supplied
-      // but incorrect signature is unauthorized (401).
-      const signature = request.headers.get("X-TBA-HMAC");
-      if (!signature) {
-        return new Response("I'm a teapot", { status: 418 });
-      }
-      if (!env.TBA_WEBHOOK_SECRET) {
-        console.error("[WEBHOOK][TBA] TBA_WEBHOOK_SECRET is not configured");
-        return new Response("Internal Server Error", { status: 500 });
-      }
-      if (!(await verifyTbaWebhookHmac(env.TBA_WEBHOOK_SECRET, signature, rawBody))) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-
-      let payload: unknown;
-      try { payload = JSON.parse(new TextDecoder().decode(rawBody)); }
-      catch { return Response.json({ error: "Invalid webhook JSON" }, { status: 400 }); }
-      if (!isRecord(payload) || typeof payload.message_type !== "string" ||
-          !isRecord(payload.message_data)) {
-        return Response.json({ error: "Invalid TBA webhook payload" }, { status: 400 });
-      }
-
-      // Log only useful, authenticated webhook metadata. The verification key
-      // is intentionally included so it can be copied into the TBA dashboard;
-      // never log the HMAC secret, signature, or complete payload.
-      const webhookLog: Record<string, unknown> = {
-        message_type: payload.message_type,
-      };
-      if (typeof payload.message_data.event_key === "string") {
-        webhookLog.event_key = payload.message_data.event_key;
-      }
-      if (payload.message_type === "verification") {
-        webhookLog.verification_key = payload.message_data.verification_key ?? null;
-      }
-      console.log("[WEBHOOK][TBA] Received", JSON.stringify(webhookLog));
-
-      if (["ping", "verification", "broadcast"].includes(payload.message_type)) {
-        return Response.json({ accepted: true });
-      }
-      const eventData = payload.message_data.event;
-      const matchData = payload.message_data.match;
-      const eventKey = payload.message_data.event_key ??
-        (isRecord(eventData) ? eventData.key : undefined) ??
-        (isRecord(matchData) ? matchData.event_key : undefined);
-      if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) {
-        return Response.json({ error: "Webhook has no valid event key" }, { status: 400 });
-      }
-
-      const messageType = payload.message_type;
-      const messageData = payload.message_data;
-      const teamKeys = new Set<string>();
-      const addTeamKey = (value: unknown) => {
-        if (typeof value === "string" && /^frc[0-9]+$/.test(value)) teamKeys.add(value);
-      };
-      const addMatchTeams = (value: unknown) => {
-        if (!isRecord(value) || !isRecord(value.alliances)) return;
-        for (const color of ["red", "blue"]) {
-          const alliance = value.alliances[color];
-          if (isRecord(alliance)) {
-            const teams = Array.isArray(alliance.teams) ? alliance.teams : alliance.team_keys;
-            if (Array.isArray(teams)) for (const key of teams) addTeamKey(key);
-          }
-        }
-      };
-      if (messageType === "match_score" || messageType === "match_video") {
-        addMatchTeams(matchData);
-        addTeamKey(messageData.team_key);
-      } else if (messageType === "upcoming_match") {
-        if (Array.isArray(messageData.team_keys)) {
-          for (const key of messageData.team_keys) addTeamKey(key);
-        }
-        addTeamKey(messageData.team_key);
-      } else if (!["awards_posted", "alliance_selection", "schedule_updated", "starting_comp_level"].includes(messageType)) {
-        return Response.json({ error: "Unsupported TBA webhook message type" }, { status: 400 });
-      }
-
-      const digest = await crypto.subtle.digest("SHA-256", rawBody);
-      const webhookId = [...new Uint8Array(digest)]
-        .map((byte) => byte.toString(16).padStart(2, "0")).join("");
-      const headers = new Headers({
-        Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
-        "X-FieldView-Event-Key": eventKey,
-        "X-FieldView-Webhook-Id": webhookId,
-        "Content-Type": "application/json",
-      });
-      if (teamKeys.size > 0 && !env.TEAM_RUNTIME) {
-        return Response.json({ error: "TeamRuntime binding is required for this webhook scope" }, { status: 503 });
-      }
-      const targets: Array<{ kind: "event" | "team"; key: string; promise: Promise<Response> }> = [];
-      const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
-      targets.push({ kind: "event", key: eventKey, promise: eventStub.fetch(new Request("https://event-runtime/webhook", {
-        method: "POST", headers: new Headers(headers), body: rawBody,
-      })) });
-      if (teamKeys.size > 0 && env.TEAM_RUNTIME) {
-        for (const teamKey of teamKeys) {
-          const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-          const teamHeaders = new Headers(headers);
-          teamHeaders.set("X-FieldView-Team-Key", teamKey);
-          targets.push({ kind: "team", key: teamKey, promise: teamStub.fetch(new Request("https://team-runtime/webhook", {
-            method: "POST", headers: teamHeaders, body: rawBody,
-          })) });
-        }
-      }
-      const outcomes = await Promise.allSettled(targets.map((target) => target.promise));
-      const failures: Array<{ kind: "event" | "team"; key: string; error?: string; status?: number }> = [];
-      outcomes.forEach((outcome, index) => {
-        if (outcome.status === "rejected") {
-          failures.push({ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) });
-        } else if (!outcome.value.ok) {
-          failures.push({ kind: targets[index].kind, key: targets[index].key, status: outcome.value.status });
-        }
-      });
-      if (failures.length > 0) {
-        console.error("[WEBHOOK][TBA] Partial dispatch failure", JSON.stringify({ event_key: eventKey, webhook_id: webhookId, failures }));
-        return Response.json({ accepted: false, event_key: eventKey, targets: targets.length, failures }, { status: 502 });
-      }
-      return Response.json({ accepted: true, event_key: eventKey, webhook_id: webhookId, targets: targets.map(({ kind, key }) => ({ kind, key })) });
+      // TBA must always receive an immediate 200 to avoid webhook pruning.
+      // All validation and runtime fan-out happen after the response via waitUntil.
+      const backgroundRequest = request.clone();
+      context.waitUntil(processTbaWebhook(backgroundRequest, env).catch((error) => {
+        console.error("[WEBHOOK][TBA] Unhandled background processing failure", String(error));
+      }));
+      return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
