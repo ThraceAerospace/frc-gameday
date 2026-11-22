@@ -120,8 +120,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     if (!snapshot || !Array.isArray(snapshot.events)) throw new Error("Timed out waiting for TeamRuntime event history");
     const events = snapshot.events.filter((item) => validEvent(item.key));
     await update({ phase: "scheduling-team-events", total: events.length });
-    const directory = await read<EventDirectory>(this.env.DISCOVERY_BUCKET, "discovery/events/" + p.year + ".json");
-    const byKey = new Map((directory?.events ?? []).map((item) => [item.key, item]));
+    const byKey = new Map(events.filter((item) =>
+      typeof item.start_date === "string" && typeof item.end_date === "string" &&
+      typeof item.timezone === "string").map((item) => [String(item.key), item]));
     let scheduled = 0;
     for (let offset = 0; offset < events.length; offset += 10) {
       const batch = events.slice(offset, offset + 10);
@@ -129,7 +130,10 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         for (const item of batch) {
           const event = byKey.get(String(item.key));
           if (!event) continue;
-          const lifecycle = lifecycleFor(event, Date.now());
+          const lifecycle = lifecycleFor({
+            key: String(item.key), start_date: String(event.start_date),
+            end_date: String(event.end_date), timezone: String(event.timezone),
+          }, Date.now());
           if (lifecycle.lifecycle === "expired") continue;
           const response = await dispatch(this.env, "event", String(item.key), "lifecycle", {
             lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
