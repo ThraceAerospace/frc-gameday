@@ -75,6 +75,8 @@ Provider packages do not normalize, correlate, aggregate, or calculate FieldView
 Statbotics runtime data should use the official API (`https://api.statbotics.io`) when it is operational. The official service is currently unavailable; retain the configured testing mirror `https://api-statbotics.iterativerefinement.com/` until the official API is restored or a FieldView-operated compatible service is available. Do not silently replace this working testing endpoint. Keep the endpoint configurable and identify the active source in runtime provenance.
 
 ## Data ownership, normalization, and cross-runtime references
+Relational SQLite tables must satisfy 1NF and 2NF at minimum: non-key attributes depend on the whole candidate key, not only part of a composite key. Use 3NF where transitive dependencies would duplicate facts. Durable Object storage currently uses per-object key/value records, so enforce the equivalent domain rule through single ownership and logical foreign references rather than inventing cross-object SQLite foreign keys.
+
 
 Canonical data has exactly one owning runtime and one authoritative persisted representation. This is a storage and contract invariant, not merely a preference for reducing payload size.
 
