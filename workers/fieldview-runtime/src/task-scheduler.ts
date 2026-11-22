@@ -876,7 +876,6 @@ export class TaskScheduler {
         const eventByKey = new Map(job.events.filter((event) => typeof event.key === "string").map((event) => [String(event.key), event]));
         const batch = job.eventKeys.slice(job.eventCursor, job.eventCursor + 10);
         const knownEvents = new Set(await this.storage.get<string[]>("registry:events") ?? []);
-        const runtimeEvents = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
         for (const eventKey of batch) {
           const event = eventByKey.get(eventKey);
           if (!event) { job.eventCursor += 1; continue; }
@@ -907,8 +906,6 @@ export class TaskScheduler {
           job.eventCursor += 1;
         }
         await this.storage.put("registry:events", [...knownEvents].sort());
-        await this.storage.put("registry:runtime-events", [...runtimeEvents].sort());
-        for (const eventKey of runtimeEvents) await this.registerRuntimeKey("event", eventKey);
         if (job.eventCursor >= job.eventKeys.length) job.status = job.errors.length ? "completed_with_errors" : "completed";
         else job.nextDueAt = Date.now() + 100;
       }
@@ -1128,8 +1125,6 @@ export class TaskScheduler {
         const eventDiscovery = await this.readEventDiscovery(job.year);
         const event = eventDiscovery?.events.find((item) => item.key === eventKey);
         const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-        const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-        if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
         const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
         if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
         await this.registerRuntimeKey("event", eventKey);
@@ -1273,8 +1268,6 @@ export class TaskScheduler {
               }));
             }
           }
-          const runtimeEvents = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-          if (!runtimeEvents.includes(eventKey)) await this.storage.put("registry:runtime-events", [...runtimeEvents, eventKey].sort());
           const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
           if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
         await this.registerRuntimeKey("event", eventKey);
