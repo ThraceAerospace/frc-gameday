@@ -191,6 +191,16 @@ test("public event discovery does not fall back to TaskScheduler when R2 publica
 });
 
 
+test("this-week reads do not fall back to TaskScheduler when the R2 projection is missing", async () => {
+  const { env } = makeEnvironment();
+  const response = await worker.fetch(
+    new Request("https://runtime.example/events/this-week"),
+    env,
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "This-week projection is not published" });
+});
+
 test("public team discovery reads the published current-season R2 pages", async () => {
   const env = {
     DISCOVERY_BUCKET: {
