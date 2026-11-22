@@ -479,9 +479,7 @@ export default {
         const path = action === "seed" ? "seed?year=" + year
           : action === "state" ? "state?year=" + year
           : action === "snapshot" ? "snapshot?year=" + year + "&noSchedule=1" : null;
-        if (!path || (action === "state" || action === "snapshot" ? request.method !== "POST" : request.method !== "POST")) {
-          return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
-        }
+        if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
         const response = await stub.fetch(new Request("https://team-runtime/" + path, {
           method: action === "state" || action === "snapshot" ? "GET" : "POST", headers,
         }));
