@@ -234,6 +234,22 @@ export class TaskScheduler {
     });
   }
 
+  private async measureStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
+    const startedAt = performance.now();
+    let status: "ok" | "error" = "ok";
+    try {
+      return await operation();
+    } catch (error) {
+      status = "error";
+      throw error;
+    } finally {
+      console.log("[FV][TaskScheduler] stage", JSON.stringify({
+        stage, status,
+        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      }));
+    }
+  }
+
   private async readR2Json<T>(key: string): Promise<T | undefined> {
     const object = await this.env.DISCOVERY_BUCKET?.get(key);
     if (!object) return undefined;
@@ -528,14 +544,14 @@ export class TaskScheduler {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
       }
-      const storageKey = kind === "event" ? "registry:events" : "registry:teams";
       const discovery = kind === "event" ? await this.readEventDiscovery(year) : await this.readTeamDiscovery(year);
-      const r2DiscoveredKeys = kind === "event"
+      const discoveredKeys = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
         : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
+      const runtimeKeys = await this.readRuntimeRegistry(kind);
       const registered = [...new Set([
-        ...(await this.storage.get<string[]>(storageKey) ?? []),
-        ...r2DiscoveredKeys,
+        ...discoveredKeys,
+        ...runtimeKeys.filter((key) => kind === "team" || key.startsWith(String(year))),
       ])];
 
       const keys = registered
@@ -559,14 +575,14 @@ export class TaskScheduler {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid entity season year" }, { status: 400 });
       }
-      const registryKey = kind === "event" ? "registry:events" : "registry:teams";
       const discovery = kind === "event" ? await this.readEventDiscovery(year) : await this.readTeamDiscovery(year);
-      const r2DiscoveredKeys = kind === "event"
+      const discoveredKeys = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
         : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
+      const runtimeKeys = await this.readRuntimeRegistry(kind);
       const registered = [...new Set([
-        ...(await this.storage.get<string[]>(registryKey) ?? []),
-        ...r2DiscoveredKeys,
+        ...discoveredKeys,
+        ...runtimeKeys.filter((item) => kind === "team" || item.startsWith(String(year))),
       ])];
       const discovered = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
@@ -605,9 +621,9 @@ export class TaskScheduler {
         ...(await this.readRuntimeRegistry("event")),
       ])].sort();
       const teamKeys = [...new Set([
-        ...(await this.storage.get<string[]>("registry:teams") ?? []),
         ...(currentTeamDirectory?.year === currentSeasonYear
           ? await this.readR2Keys(`registry/teams/${currentSeasonYear}.json`) : []),
+        ...(await this.readRuntimeRegistry("team")),
       ])].sort();
       // The overview is deliberately metadata-only. Never fan out to dozens of
       // EventRuntime/TeamRuntime objects during a dashboard refresh; inspect a
@@ -679,8 +695,6 @@ export class TaskScheduler {
     try {
       const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
       if (job.stage === "seed") {
-        const registry = await this.storage.get<string[]>("registry:teams") ?? [];
-        if (!registry.includes(teamKey)) await this.storage.put("registry:teams", [...registry, teamKey].sort());
         await this.registerRuntimeKey("team", teamKey);
         const response = await stub.fetch(new Request("https://team-runtime/seed?year=" + job.year, { method: "POST", headers }));
         if (!response.ok) throw new Error("TeamRuntime seed returned HTTP " + response.status);
@@ -752,8 +766,6 @@ export class TaskScheduler {
           if (!event) { job.eventCursor = eventIndex + 1; continue; }
           const eventKey = event.key;
           if (typeof eventKey !== "string" || !/^[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
-          const eventRegistry = await this.storage.get<string[]>("registry:events") ?? [];
-          if (!eventRegistry.includes(eventKey)) await this.storage.put("registry:events", [...eventRegistry, eventKey].sort());
           await this.registerRuntimeKey("event", eventKey);
           const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
           const lifecycle = classifyEventLifecycle({
@@ -821,8 +833,6 @@ export class TaskScheduler {
       const teamStub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(job.teamKey));
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(job.teamKey, job.year);
       if (job.stage === "seed") {
-        const registry = await this.storage.get<string[]>("registry:teams") ?? [];
-        if (!registry.includes(job.teamKey)) await this.storage.put("registry:teams", [...registry, job.teamKey].sort());
         await this.registerRuntimeKey("team", job.teamKey);
         const response = await teamStub.fetch(new Request("https://team-runtime/seed?year=" + job.year, { method: "POST", headers: teamHeaders }));
         if (!response.ok) throw new Error("TeamRuntime seed returned HTTP " + response.status);
@@ -875,7 +885,7 @@ export class TaskScheduler {
         const policy = eventPollingPolicy(this.env);
         const eventByKey = new Map(job.events.filter((event) => typeof event.key === "string").map((event) => [String(event.key), event]));
         const batch = job.eventKeys.slice(job.eventCursor, job.eventCursor + 10);
-        const knownEvents = new Set(await this.storage.get<string[]>("registry:events") ?? []);
+        
         for (const eventKey of batch) {
           const event = eventByKey.get(eventKey);
           if (!event) { job.eventCursor += 1; continue; }
@@ -903,14 +913,12 @@ export class TaskScheduler {
               }));
           if (!response.ok) job.errors.push({ event_key: eventKey, detail: "EventRuntime returned HTTP " + response.status, at: Date.now() });
           else {
-            knownEvents.add(eventKey);
             await this.registerRuntimeKey("event", eventKey);
             job.scheduledEvents += 1;
           }
           job.eventCursor += 1;
         }
-        await this.storage.put("registry:events", [...knownEvents].sort());
-        if (job.eventCursor >= job.eventKeys.length) job.status = job.errors.length ? "completed_with_errors" : "completed";
+         if (job.eventCursor >= job.eventKeys.length) job.status = job.errors.length ? "completed_with_errors" : "completed";
         else job.nextDueAt = Date.now() + 100;
       }
     } catch (error) {
@@ -1036,8 +1044,6 @@ export class TaskScheduler {
         if (!this.env.TEAM_RUNTIME) throw new Error("TeamRuntime namespace is not bound");
         const resources = teamResourceEndpoints(teamKey, job.year);
         const stub = this.env.TEAM_RUNTIME.get(this.env.TEAM_RUNTIME.idFromName(teamKey));
-        const teamRegistry = await this.storage.get<string[]>("registry:teams") ?? [];
-        if (!teamRegistry.includes(teamKey)) await this.storage.put("registry:teams", [...teamRegistry, teamKey].sort());
         await this.registerRuntimeKey("team", teamKey);
         const headers = { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey };
         if (job.teamResourceCursor < resources.length) {
@@ -1129,8 +1135,6 @@ export class TaskScheduler {
         const eventDiscovery = await this.readEventDiscovery(job.year);
         const event = eventDiscovery?.events.find((item) => item.key === eventKey);
         const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-        const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
-        if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
         await this.registerRuntimeKey("event", eventKey);
         const headers = {
           Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
@@ -1272,9 +1276,7 @@ export class TaskScheduler {
               }));
             }
           }
-          const registryEvents = await this.storage.get<string[]>("registry:events") ?? [];
-          if (!registryEvents.includes(eventKey)) await this.storage.put("registry:events", [...registryEvents, eventKey].sort());
-        await this.registerRuntimeKey("event", eventKey);
+          await this.registerRuntimeKey("event", eventKey);
           job.eventCursor += 1;
           job.eventResourceCursor = 0;
           job.resourceAttempts = 0;
