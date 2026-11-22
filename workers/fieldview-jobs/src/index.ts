@@ -43,7 +43,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const utcYear = Number(runDate.slice(0, 4));
     const years = [utcYear - 1, utcYear, utcYear + 1];
 
-    const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number }> = [];
+    const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number; needsChunking: boolean }> = [];
     const eventChunkSize = 25;
     for (const year of years) {
       const result = await step.do(`discover-event-directory-${year}`, {
@@ -67,7 +67,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             JSON.stringify(previous.events.map((item) => item.key)),
             { httpMetadata: { contentType: "application/json" } },
           );
-          return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount };
+          return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount, needsChunking: false };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
         const events = await response.json() as TbaEvent[];
@@ -75,29 +75,65 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           throw new Error(`TBA event discovery for ${year} returned an invalid event directory`);
         }
         const chunkCount = Math.ceil(events.length / eventChunkSize);
-        for (let index = 0; index < chunkCount; index += 1) {
-          await this.env.DISCOVERY_BUCKET.put(
-            `discovery/event-chunks/${year}/${checkedAt}/${index}.json`,
-            JSON.stringify(events.slice(index * eventChunkSize, (index + 1) * eventChunkSize)),
-            { httpMetadata: { contentType: "application/json" } },
-          );
-        }
-        // Publish the directory document last so it never points at an
-        // incomplete chunk generation after a retried/partially failed step.
         const document: DiscoveryDocument = {
           year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
         };
-        await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
-          httpMetadata: { contentType: "application/json" },
-        });
         await this.env.DISCOVERY_BUCKET.put(
-          `registry/events/${year}.json`,
+          `discovery/staging/${year}/${checkedAt}.json`,
+          JSON.stringify(document),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        await this.env.DISCOVERY_BUCKET.put(
+          `discovery/staging/${year}/${checkedAt}-keys.json`,
           JSON.stringify(events.map((item) => item.key)),
           { httpMetadata: { contentType: "application/json" } },
         );
-        return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount };
+        return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount, needsChunking: true };
       });
       discovery.push(result);
+    }
+
+    const chunkWriteBatchSize = 10;
+    for (const directory of discovery) {
+      if (directory.needsChunking) {
+        for (let firstChunk = 0; firstChunk < directory.chunkCount; firstChunk += chunkWriteBatchSize) {
+          const endChunk = Math.min(directory.chunkCount, firstChunk + chunkWriteBatchSize);
+          await step.do(`write-event-chunks-${directory.year}-${firstChunk}`, async () => {
+            const object = await this.env.DISCOVERY_BUCKET.get(
+              `discovery/staging/${directory.year}/${directory.generation}.json`,
+            );
+            if (!object) throw new Error(`Missing staged event directory for ${directory.year}`);
+            const document = await object.json<DiscoveryDocument>();
+            for (let chunkIndex = firstChunk; chunkIndex < endChunk; chunkIndex += 1) {
+              await this.env.DISCOVERY_BUCKET.put(
+                `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
+                JSON.stringify(document.events.slice(chunkIndex * eventChunkSize, (chunkIndex + 1) * eventChunkSize)),
+                { httpMetadata: { contentType: "application/json" } },
+              );
+            }
+            return { year: directory.year, chunksWritten: endChunk - firstChunk };
+          });
+        }
+      }
+      await step.do(`publish-event-directory-${directory.year}`, async () => {
+        if (!directory.needsChunking) return { year: directory.year, published: false };
+        const stagedDocument = await this.env.DISCOVERY_BUCKET.get(
+          `discovery/staging/${directory.year}/${directory.generation}.json`,
+        );
+        const stagedKeys = await this.env.DISCOVERY_BUCKET.get(
+          `discovery/staging/${directory.year}/${directory.generation}-keys.json`,
+        );
+        if (!stagedDocument || !stagedKeys) throw new Error(`Incomplete staged event directory for ${directory.year}`);
+        await this.env.DISCOVERY_BUCKET.put(
+          `discovery/events/${directory.year}.json`, await stagedDocument.text(),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        await this.env.DISCOVERY_BUCKET.put(
+          `registry/events/${directory.year}.json`, await stagedKeys.text(),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        return { year: directory.year, published: true };
+      });
     }
 
     const classified: Array<{ year: number; eventRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> }> = [];
