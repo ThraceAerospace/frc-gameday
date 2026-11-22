@@ -203,6 +203,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
               body: JSON.stringify({ event_key: item.key, ...item.lifecycle }),
             },
           ));
+          if (response.status === 401 || response.status === 403 || response.status === 404) {
+            throw new Error(`Runtime initialization boundary returned HTTP ${response.status} for ${item.key}; check deployment and shared admin authorization`);
+          }
           if (response.status === 429 || response.status >= 500) {
             throw new Error(`Transient runtime response HTTP ${response.status} for ${item.key}`);
           }
