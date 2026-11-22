@@ -62,8 +62,180 @@ export class DiscoveryStore {
       // A malformed prior record must not prevent publishing its replacement.
     }
   }
+  private async putValue(key: string, value: string): Promise<void> {
+    const storageKey = PREFIX + key;
+    const previous = await this.storage.get<string>(storageKey);
+    await this.storage.put(storageKey, value);
+    await this.pruneSupersededRecord(key, previous, value);
+  }
+
+  private requireApi(): TBAApiClient {
+    if (!this.api) throw new Error("TBA provider is not configured");
+    return this.api;
+  }
+
+  private async resolveCurrentSeason(): Promise<Response> {
+    const key = "discovery/current-season.json";
+    const knownRaw = await this.storage.get<string>(PREFIX + key);
+    let known: { year?: unknown; checkedAt?: unknown } | null = null;
+    try { known = knownRaw ? JSON.parse(knownRaw) as { year?: unknown; checkedAt?: unknown } : null; } catch { known = null; }
+    try {
+      const response = await this.requireApi().request(TBA_ENDPOINTS.status());
+      if (!response.ok) throw new Error("TBA status returned HTTP " + response.status);
+      const status = await response.json() as { current_season?: unknown };
+      const raw = status?.current_season;
+      const year = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) throw new Error("TBA status returned an invalid current_season");
+      const resolved = { year, checkedAt: Date.now() };
+      await this.putValue(key, JSON.stringify(resolved));
+      return Response.json(resolved);
+    } catch (error) {
+      if (known && Number.isInteger(known.year) && Number(known.year) >= 1992 && Number(known.year) <= 2200) {
+        return Response.json({ ...known, fallback: true });
+      }
+      return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 });
+    }
+  }
+
+  private async discoverTeamPage(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year), generation = Number(input.generation), page = Number(input.page);
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+        !Number.isSafeInteger(generation) || generation < 0 ||
+        !Number.isSafeInteger(page) || page < 0 || page > 99) {
+      return Response.json({ error: "Invalid team directory page request" }, { status: 400 });
+    }
+    const response = await this.requireApi().request(TBA_ENDPOINTS.teamsByYearPage(year, page));
+    if (!response.ok) return Response.json({ error: "TBA team discovery page returned HTTP " + response.status }, { status: response.status });
+    const teams = await response.json() as Array<{ key?: unknown }>;
+    if (!Array.isArray(teams) || teams.length > 500 || teams.some((team) =>
+      !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+      return Response.json({ error: "TBA returned an invalid team directory page" }, { status: 502 });
+    }
+    await this.putValue(
+      `discovery/team-pages/${year}/${generation}/${page}.json`,
+      JSON.stringify(teams),
+    );
+    return Response.json({
+      page, count: teams.length, hasMore: teams.length === 500,
+      teamKeys: teams.map((team) => team.key as string),
+    });
+  }
+
+  private async publishTeamDirectory(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year), generation = Number(input.generation), pageCount = Number(input.pageCount);
+    const teamKeys = input.teamKeys;
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+        !Number.isSafeInteger(generation) || generation < 0 ||
+        !Number.isSafeInteger(pageCount) || pageCount < 1 ||
+        !Array.isArray(teamKeys) || teamKeys.length === 0 ||
+        teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
+      return Response.json({ error: "Invalid team directory publication" }, { status: 400 });
+    }
+    const unique = [...new Set(teamKeys as string[])].sort();
+    await this.putValue(`registry/teams/${year}.json`, JSON.stringify(unique));
+    await this.putValue(`discovery/teams/${year}.json`, JSON.stringify({
+      year, generation, pageCount, teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
+    }));
+    return Response.json({ year, pages: pageCount, teams: unique.length });
+  }
+
+  private async discoverEventDirectory(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year);
+    const suppliedGeneration = input.generation === undefined ? undefined : Number(input.generation);
+    const chunkSize = Number(input.chunkSize ?? 25);
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+        (suppliedGeneration !== undefined && (!Number.isSafeInteger(suppliedGeneration) || suppliedGeneration < 0)) ||
+        !Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 100) {
+      return Response.json({ error: "Invalid event directory discovery request" }, { status: 400 });
+    }
+    const key = `discovery/events/${year}.json`;
+    const previousRaw = await this.storage.get<string>(PREFIX + key);
+    let previous: { events?: Array<{ key: string }>; chunkCount?: number; etag?: string | null; updatedAt?: number } | null = null;
+    try { previous = previousRaw ? JSON.parse(previousRaw) : null; } catch { previous = null; }
+    const headers = new Headers();
+    if (previous?.etag) headers.set("If-None-Match", previous.etag);
+    const response = await this.requireApi().request(TBA_ENDPOINTS.events(year), { headers });
+    const checkedAt = Date.now();
+    if (response.status === 304 && previous && Array.isArray(previous.events)) {
+      const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / chunkSize);
+      const refreshed = { ...previous, chunkCount, checkedAt };
+      await this.putValue(`registry/events/${year}.json`, JSON.stringify(previous.events.map((item) => item.key)));
+      await this.putValue(key, JSON.stringify(refreshed));
+      return Response.json({
+        year, count: previous.events.length, checkedAt,
+        generation: previous.updatedAt, chunkCount, needsChunking: false,
+      });
+    }
+    if (!response.ok) return Response.json({ error: "TBA event discovery returned HTTP " + response.status }, { status: response.status });
+    const events = await response.json() as Array<{ key?: unknown }>;
+    if (!Array.isArray(events) || events.some((item) =>
+      !item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key))) {
+      return Response.json({ error: "TBA returned an invalid event directory" }, { status: 502 });
+    }
+    const generation = suppliedGeneration ?? checkedAt;
+    const chunkCount = Math.ceil(events.length / chunkSize);
+    const document = { year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: generation, checkedAt };
+    await this.putValue(`discovery/staging/${year}/${generation}.json`, JSON.stringify(document));
+    await this.putValue(`discovery/staging/${year}/${generation}-keys.json`, JSON.stringify(events.map((item) => item.key)));
+    return Response.json({ year, count: events.length, checkedAt, generation, chunkCount, needsChunking: true });
+  }
+
+  private async writeEventChunks(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year), generation = Number(input.generation);
+    const firstChunk = Number(input.firstChunk), endChunk = Number(input.endChunk), chunkSize = Number(input.chunkSize ?? 25);
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+        !Number.isSafeInteger(generation) || generation < 0 ||
+        !Number.isSafeInteger(firstChunk) || firstChunk < 0 ||
+        !Number.isSafeInteger(endChunk) || endChunk < firstChunk ||
+        !Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 100) {
+      return Response.json({ error: "Invalid event chunk write request" }, { status: 400 });
+    }
+    const raw = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
+    if (!raw) return Response.json({ error: "Staged event directory is missing" }, { status: 404 });
+    const document = JSON.parse(raw) as { events?: unknown[]; chunkCount?: number };
+    if (!Array.isArray(document.events) || !Number.isInteger(document.chunkCount) || endChunk > Number(document.chunkCount)) {
+      return Response.json({ error: "Staged event directory is invalid" }, { status: 409 });
+    }
+    for (let index = firstChunk; index < endChunk; index += 1) {
+      await this.putValue(
+        `discovery/event-chunks/${year}/${generation}/${index}.json`,
+        JSON.stringify(document.events.slice(index * chunkSize, (index + 1) * chunkSize)),
+      );
+    }
+    return Response.json({ year, chunksWritten: endChunk - firstChunk });
+  }
+
+  private async publishEventDirectory(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year), generation = Number(input.generation);
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 || !Number.isSafeInteger(generation) || generation < 0) {
+      return Response.json({ error: "Invalid event directory publication" }, { status: 400 });
+    }
+    const stagedDocument = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
+    const stagedKeys = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}-keys.json`);
+    if (!stagedDocument || !stagedKeys) return Response.json({ error: "Event discovery staging is incomplete" }, { status: 409 });
+    await this.putValue(`registry/events/${year}.json`, stagedKeys);
+    await this.putValue(`discovery/events/${year}.json`, stagedDocument);
+    return Response.json({ year, published: true });
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    if (request.method === "POST" && url.pathname.startsWith("/catalog/")) {
+      const input: unknown = await request.json().catch(() => null);
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return Response.json({ error: "Invalid catalog operation payload" }, { status: 400 });
+      }
+      const body = input as Record<string, unknown>;
+      const action = url.pathname.slice("/catalog/".length);
+      if (action === "resolve-current-season") return this.resolveCurrentSeason();
+      if (action === "discover-team-page") return this.discoverTeamPage(body);
+      if (action === "publish-team-directory") return this.publishTeamDirectory(body);
+      if (action === "discover-event-directory") return this.discoverEventDirectory(body);
+      if (action === "write-event-chunks") return this.writeEventChunks(body);
+      if (action === "publish-event-directory") return this.publishEventDirectory(body);
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
 
     // DiscoveryStore is the sole owner of system-wide TBA discovery I/O.
     // Workflows request these operations but never construct provider clients.
