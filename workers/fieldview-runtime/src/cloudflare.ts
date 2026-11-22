@@ -61,7 +61,7 @@ export interface RuntimeEnvironment {
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
   EVENT_COMPLETED_RETENTION_MS?: string | number;
-  /** Legacy pacing for bounded administrative ingestion only; never gates runtime requests. */
+  /** Pacing for bounded administrative ingestion only; never gates runtime requests. */
   PROVIDER_REQUEST_INTERVAL_MS?: string | number;
   /** Test seam; production uses the Workers global fetch implementation. */
   fetcher?: typeof fetch;
