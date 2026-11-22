@@ -3,9 +3,6 @@ import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts"
 import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
 import { eventResourceEndpoints } from "./event-runtime.ts";
 import { teamResourceEndpoints } from "./team-runtime.ts";
-import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
-import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
-import type { FieldViewTeam } from "../../../packages/domain/src/team.ts";
 import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
@@ -375,102 +372,6 @@ export class TaskScheduler {
 
   private async handleFetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname === "/events") {
-      const year = Number(url.searchParams.get("year"));
-      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
-        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
-      }
-      const cached = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
-      const currentYear = new Date().getUTCFullYear();
-      if (!cached) {
-        return Response.json({
-          year, events: [], status: "unavailable",
-          index: { status: "missing", persisted: false },
-          revalidation: "unavailable",
-        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
-      }
-      const retrievedAt = new Date(cached.updatedAt).toISOString();
-      const checkedAt = cached.checkedAt ?? cached.updatedAt;
-      const isStale = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs;
-      const sourceStatus = isStale ? "stale" as const : "available" as const;
-      const events = cached.events.map((event) => normalizeFieldViewEvent(event, {
-        tba_event: {
-          status: sourceStatus,
-          retrieved_at: retrievedAt,
-          ...(cached.etag === null ? {} : { validator: cached.etag }),
-        },
-      }));
-      const indexError = year === currentYear
-        ? await this.storage.get<string>("scheduler:current-season-index-error") ?? null
-        : null;
-      return Response.json(
-        {
-          year, events, updatedAt: cached.updatedAt, checkedAt,
-          index: { status: sourceStatus, persisted: true, last_error: indexError },
-          revalidation: isStale ? "workflow_managed" : "idle",
-        },
-        {
-          headers: {
-            "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
-            ...(cached.etag === null ? {} : { ETag: cached.etag }),
-          },
-        },
-      );
-    }
-
-    if (request.method === "GET" && url.pathname === "/events/this-week") {
-      const projection = await this.storage.get<{ evaluatedAt: number; runDate: string; checkedAt?: number; events: TBAEvent[] }>(THIS_WEEK_PROJECTION_KEY);
-      if (!projection) {
-        return Response.json(
-          { runDate: "", evaluatedAt: Date.now(), events: [], pending: false, status: "unavailable" },
-          { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "30" } },
-        );
-      }
-      const retrievedAt = new Date(projection.checkedAt ?? projection.evaluatedAt).toISOString();
-      const sourceStatus = Date.now() - (projection.checkedAt ?? projection.evaluatedAt) > eventPollingPolicy(this.env).discoveryIntervalMs * 2
-        ? "stale" as const
-        : "available" as const;
-      const events = projection.events.map((event) => normalizeFieldViewEvent(event, {
-        tba_event: { status: sourceStatus, retrieved_at: retrievedAt },
-      }));
-      return Response.json(
-        { runDate: projection.runDate, evaluatedAt: projection.evaluatedAt, events },
-        { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=300" } },
-      );
-    }
-
-    if (request.method === "GET" && url.pathname === "/teams") {
-      const year = Number(url.searchParams.get("year"));
-      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
-        return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
-      }
-      const cached = await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
-      const discoveredTeams = await this.readDiscoveredTeams(year, TEAM_DISCOVERY_PREFIX);
-      if (!cached?.complete || !discoveredTeams) return Response.json({ error: "Complete team discovery cache is not ready" }, { status: 503 });
-      const retrievedAt = new Date(cached.updatedAt).toISOString();
-      const checkedAt = cached.checkedAt ?? cached.updatedAt;
-      const sourceStatus = Date.now() - checkedAt > eventPollingPolicy(this.env).discoveryIntervalMs * 2
-        ? "stale" as const
-        : "available" as const;
-      const teams: FieldViewTeam[] = discoveredTeams.map((team) => normalizeFieldViewTeam(team, {
-        tba_teams: {
-          status: sourceStatus,
-          retrieved_at: retrievedAt,
-          ...(cached.etag === null ? {} : { validator: cached.etag }),
-        },
-      }));
-      return Response.json(
-        { year, teams, updatedAt: cached.updatedAt, checkedAt },
-        {
-          headers: {
-            "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
-            ...(cached.etag === null ? {} : { ETag: cached.etag }),
-          },
-        },
-      );
-    }
-
- 
     const authorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -2004,20 +1905,6 @@ export class TaskScheduler {
     await this.storage.put(cacheKey, {
       etag: response.headers.get("ETag"), events, complete: true, updatedAt: now, checkedAt: now,
     } satisfies DiscoveryCache);
-  }
-
-  private async readDiscoveredTeams(year: number, prefix = TEAM_DISCOVERY_PREFIX): Promise<TBATeam[] | null> {
-    const key = prefix + year;
-    const cache = await this.storage.get<TeamDiscoveryCache>(key);
-    if (!cache?.complete || !Number.isSafeInteger(cache.pageCount)) return null;
-    const teams: TBATeam[] = [];
-    const pagePrefix = cache.pagePrefix ?? key + ":page:";
-    for (let page = 0; page < (cache.pageCount ?? 0); page += 1) {
-      const values = await this.storage.get<TBATeam[]>(pagePrefix + page);
-      if (!values) return null;
-      teams.push(...values);
-    }
-    return teams;
   }
 
   private async discoverTeams(
