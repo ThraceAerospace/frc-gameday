@@ -329,7 +329,23 @@ export class EventRuntime {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
           }
-          this.hydratedPublication = publication;
+          // Older deployments embedded EventAnalytics and TeamEventState
+          // aggregates in the event publication. Their canonical owners are
+          // now separate publications, so strip those duplicate payloads once
+          // during activation before exposing the persisted snapshot.
+          if (publication?.state && typeof publication.state === "object") {
+            const legacyState = publication.state as Record<string, unknown>;
+            if ("analytics" in legacyState || "team_states" in legacyState) {
+              const { analytics: _analytics, team_states: _teamStates, ...eventState } = legacyState;
+              const migrated = { ...publication, state: eventState as EventStatePublication["state"] };
+              await this.storage.put(EVENT_STATE_PUBLICATION_KEY, migrated);
+              this.hydratedPublication = migrated;
+            } else {
+              this.hydratedPublication = publication;
+            }
+          } else {
+            this.hydratedPublication = publication;
+          }
           // Retire the former duplicated EventView publication and its chunks.
           // It is no longer a source of truth or a required read model.
           await this.storage.transaction(async (transaction) => {
