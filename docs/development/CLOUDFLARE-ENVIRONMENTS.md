@@ -20,7 +20,7 @@ The testing environment is a **shared, persistent test target**. Deploying a dif
 | Jobs service binding | `runtime` | `testing` |
 | Workflow names | Production names | `testing-` prefixed names |
 
-Discovery and administrative catalog records are persisted in the Runtime Worker's SQLite-backed `DiscoveryStore` Durable Object. Jobs accesses it only through the authenticated Runtime service binding; the Durable Object is not directly exposed to Jobs or the public internet. Production and testing use separate Runtime Workers and therefore separate Durable Object namespaces and migration histories. No R2 bucket or D1 database is required.
+Discovery and administrative catalog records are persisted in the Runtime Worker's SQLite-backed `DiscoveryStore` Durable Object. Jobs accesses it only through the authenticated Runtime service binding; the Durable Object is not directly exposed to Jobs or the public internet. Production and testing use separate Runtime Workers and therefore separate Durable Object namespaces and migration histories. No R2 bucket or D1 database is required. Publishing a new team/event directory or weekly projection also removes superseded page, chunk, staging, and projection generations so the free Durable Object storage allowance is not consumed by obsolete discovery artifacts.
 
 The Jobs Workers are internal service-binding targets and do not need public `workers.dev` URLs. Only the Runtime Workers expose the fixed runtime URLs.
 

@@ -6,6 +6,49 @@ const MAX_LIST_LIMIT = 1000;
 export class DiscoveryStore {
   private readonly storage: DurableObjectStateLike["storage"];
   constructor(state: DurableObjectStateLike, _env?: RuntimeEnvironment) { this.storage = state.storage; }
+
+  private async deletePrefix(prefix: string): Promise<void> {
+    let cursor: string | undefined;
+    for (;;) {
+      const entries = await this.storage.list<string>({
+        prefix: PREFIX + prefix,
+        ...(cursor ? { startAfter: cursor } : {}),
+        limit: 1000,
+      });
+      const keys = [...entries.keys()];
+      if (!keys.length) return;
+      await Promise.all(keys.map((key) => this.storage.delete(key)));
+      if (keys.length < 1000) return;
+      cursor = keys[keys.length - 1];
+    }
+  }
+
+  private async pruneSupersededRecord(key: string, previous: string | undefined, next: string): Promise<void> {
+    if (!previous) return;
+    try {
+      const oldValue = JSON.parse(previous) as Record<string, unknown>;
+      const newValue = JSON.parse(next) as Record<string, unknown>;
+      const teamManifest = key.match(/^discovery\/teams\/(\d{4})\.json$/);
+      if (teamManifest && typeof oldValue.generation === "number" && oldValue.generation !== newValue.generation) {
+        await this.deletePrefix(`discovery/team-pages/${teamManifest[1]}/${oldValue.generation}/`);
+      }
+      const eventDirectory = key.match(/^discovery\/events\/(\d{4})\.json$/);
+      if (eventDirectory && typeof oldValue.updatedAt === "number" && oldValue.updatedAt !== newValue.updatedAt) {
+        await this.deletePrefix(`discovery/event-chunks/${eventDirectory[1]}/${oldValue.updatedAt}/`);
+        await this.deletePrefix(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}`);
+      }
+      if (key === "projections/events/this-week/current.json" &&
+          typeof oldValue.runAt === "number" && oldValue.runAt !== newValue.runAt) {
+        await this.deletePrefix(`projections/events/this-week/${oldValue.runAt}/`);
+      }
+      const coverageAudit = key.match(/^admin\/coverage-audits\/(\d{4})\.json$/);
+      if (coverageAudit && typeof oldValue.items_prefix === "string" && oldValue.items_prefix !== newValue.items_prefix) {
+        await this.deletePrefix(oldValue.items_prefix);
+      }
+    } catch {
+      // A malformed prior record must not prevent publishing its replacement.
+    }
+  }
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/get") {
@@ -23,8 +66,13 @@ export class DiscoveryStore {
       if (typeof input.key !== "string" || !input.key.length || input.key.length > 1024 || typeof input.value !== "string") {
         return Response.json({ error: "Expected a key and string value" }, { status: 400 });
       }
-      if (input.value.length > 4_000_000) return Response.json({ error: "Catalog record exceeds 4 MB" }, { status: 413 });
-      await this.storage.put(PREFIX + input.key, input.value);
+      if (new TextEncoder().encode(input.value).byteLength > 7_000_000) {
+        return Response.json({ error: "Catalog record exceeds the 7 MB safety limit" }, { status: 413 });
+      }
+      const storageKey = PREFIX + input.key;
+      const previous = await this.storage.get<string>(storageKey);
+      await this.storage.put(storageKey, input.value);
+      await this.pruneSupersededRecord(input.key, previous, input.value);
       return Response.json({ ok: true });
     }
     if (request.method === "GET" && url.pathname === "/list") {
