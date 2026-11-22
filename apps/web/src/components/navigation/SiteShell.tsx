@@ -51,7 +51,6 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
           <nav aria-label="Main navigation" className="hidden shrink-0 items-center gap-1 md:flex">
             <NavLink href="/events" pathname={pathname}>Events</NavLink>
             <NavLink href="/teams" pathname={pathname}>Teams</NavLink>
-            <NavLink href="/districts" pathname={pathname}>Districts</NavLink>
             <NavLink href="/insights" pathname={pathname}>Insights</NavLink>
             <NavLink href="/gameday" pathname={pathname}>Gameday</NavLink>
           </nav>
@@ -69,7 +68,6 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
             <div className="grid w-full grid-cols-2 gap-1">
               <MobileNavLink href="/events" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Events</MobileNavLink>
               <MobileNavLink href="/teams" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Teams</MobileNavLink>
-              <MobileNavLink href="/districts" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Districts</MobileNavLink>
               <MobileNavLink href="/insights" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Insights</MobileNavLink>
               <MobileNavLink href="/gameday" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Gameday</MobileNavLink>
               <MobileNavLink href="/remote/display" pathname={pathname} onNavigate={() => setMobileMenuOpen(false)}>Remote Display</MobileNavLink>
