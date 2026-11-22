@@ -672,8 +672,10 @@ export default {
       const job = await readJson<AdminDiscoveryJobRecord>(env.DISCOVERY_BUCKET, `admin/discovery-jobs/${year}.json`);
       if (!job) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
       let workflowStatus: string | null = null;
-      try { workflowStatus = (await env.DAILY_EVENT_READINESS.get(job.workflow_id).status()).status; }
-      catch { workflowStatus = null; }
+      try {
+        const instance = await env.DAILY_EVENT_READINESS.get(job.workflow_id);
+        workflowStatus = (await instance.status()).status;
+      } catch { workflowStatus = null; }
       const status = workflowStatus === "paused" ? "paused"
         : workflowStatus === "errored" ? "failed"
         : workflowStatus === "terminated" ? "cancelled"
@@ -698,7 +700,8 @@ export default {
       const current = await readJson<AdminDiscoveryJobRecord>(env.DISCOVERY_BUCKET, key);
       if (current?.status === "running") {
         try {
-          const status = await env.DAILY_EVENT_READINESS.get(current.workflow_id).status();
+          const instance = await env.DAILY_EVENT_READINESS.get(current.workflow_id);
+          const status = await instance.status();
           if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
             return Response.json({ ...current, workflow_status: status.status }, {
               status: 202, headers: { "Cache-Control": "no-store" },
