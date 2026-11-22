@@ -137,7 +137,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     // Each page is an immutable catalog record; the manifest is the publication
     // boundary and is written only after every page has been validated.
     const teamDirectoryGeneration = await step.do("create-team-directory-generation", async () => Date.now());
-    const teamPageSize = 500;
     let teamPageCount = 0;
     let teamCount = 0;
     const discoveredTeamKeys: string[] = [];
@@ -187,7 +186,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       discovery.push(result);
     }
 
-    const chunkWriteBatchSize = 10;
     for (const directory of discovery) {
       if (directory.needsChunking) {
         for (let firstChunk = 0; firstChunk < directory.chunkCount; firstChunk += 10) {
@@ -493,8 +491,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       }
 
       const teamGeneration = await step.do("allocate-manual-team-directory-generation", async () => Date.now());
-      const pageSize = 500;
-      const teamKeys: string[] = [];
+            const teamKeys: string[] = [];
       let teamPages = 0;
       for (let page = 0; page < 100; page += 1) {
         const result = await step.do(`discover-manual-team-page-${page}`, {
@@ -506,7 +503,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
           return response.json() as Promise<{ teamKeys: string[]; count: number; hasMore: boolean }>;
         });
-        teamKeys.push(...result.keys);
+        teamKeys.push(...result.teamKeys);
         teamPages += 1;
         if (!result.hasMore) break;
         if (page === 99) throw new Error("TBA team discovery exceeded the 100-page season limit");
