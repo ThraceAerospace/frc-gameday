@@ -66,12 +66,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           throw new Error(`TBA event discovery for ${year} returned an invalid event directory`);
         }
         const chunkCount = Math.ceil(events.length / eventChunkSize);
-        const document: DiscoveryDocument = {
-          year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
-        };
-        await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
-          httpMetadata: { contentType: "application/json" },
-        });
         for (let index = 0; index < chunkCount; index += 1) {
           await this.env.DISCOVERY_BUCKET.put(
             `discovery/event-chunks/${year}/${checkedAt}/${index}.json`,
@@ -79,6 +73,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             { httpMetadata: { contentType: "application/json" } },
           );
         }
+        // Publish the directory document last so it never points at an
+        // incomplete chunk generation after a retried/partially failed step.
+        const document: DiscoveryDocument = {
+          year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
+        };
+        await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
+          httpMetadata: { contentType: "application/json" },
+        });
         return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount };
       });
       discovery.push(result);
