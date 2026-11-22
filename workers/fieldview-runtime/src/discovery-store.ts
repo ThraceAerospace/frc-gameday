@@ -1,11 +1,17 @@
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
+import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 const PREFIX = "discovery-object:";
 const MAX_LIST_LIMIT = 1000;
 
 /** Shared low-volume catalog; event/team canonical state remains entity-owned. */
 export class DiscoveryStore {
   private readonly storage: DurableObjectStateLike["storage"];
-  constructor(state: DurableObjectStateLike, _env?: RuntimeEnvironment) { this.storage = state.storage; }
+  private readonly api: TBAApiClient;
+  constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
+    this.storage = state.storage;
+    this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
+  }
 
   private async deleteKey(key: string): Promise<void> {
     await this.storage.delete(PREFIX + key);
@@ -56,6 +62,32 @@ export class DiscoveryStore {
   }
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // DiscoveryStore is the sole owner of system-wide TBA discovery I/O.
+    // Workflows request these operations but never construct provider clients.
+    if (request.method === "GET" && url.pathname.startsWith("/provider/")) {
+      if (url.pathname === "/provider/status") {
+        return this.api.request(TBA_ENDPOINTS.status());
+      }
+      if (url.pathname === "/provider/events" || url.pathname === "/provider/teams") {
+        const year = Number(url.searchParams.get("year"));
+        if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+          return Response.json({ error: "Invalid discovery season" }, { status: 400 });
+        }
+        if (url.pathname === "/provider/events") {
+          const headers = new Headers();
+          const validator = request.headers.get("If-None-Match");
+          if (validator) headers.set("If-None-Match", validator);
+          return this.api.request(TBA_ENDPOINTS.events(year), { headers });
+        }
+        const page = Number(url.searchParams.get("page"));
+        if (!Number.isSafeInteger(page) || page < 0 || page > 99) {
+          return Response.json({ error: "Invalid team discovery page" }, { status: 400 });
+        }
+        return this.api.request(TBA_ENDPOINTS.teamsByYearPage(year, page));
+      }
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
     if (request.method === "GET" && url.pathname === "/get") {
       const key = url.searchParams.get("key");
       if (!key || key.length > 1024) return Response.json({ error: "Invalid key" }, { status: 400 });
