@@ -943,7 +943,7 @@ export default {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
       const teamKey = String(request.method === "GET" ? url.searchParams.get("team_key") ?? "" : value.team_key ?? "");
       const eventKey = String(request.method === "GET" ? url.searchParams.get("event_key") ?? "" : value.event_key ?? "");
-      if (operation === "team-seed" && !/^frc\\d+$/.test(teamKey)) return Response.json({ error: "A valid team_key is required" }, { status: 400 });
+      if (operation === "team-seed" && !/^frc\d+$/.test(teamKey)) return Response.json({ error: "A valid team_key is required" }, { status: 400 });
       if (operation === "event-team-seed" && (!/^[a-zA-Z0-9_-]+$/.test(eventKey) || !eventKey.startsWith(String(year)))) return Response.json({ error: "A valid event_key and matching year are required" }, { status: 400 });
       const subject = operation === "team-seed" ? teamKey : operation === "event-team-seed" ? eventKey : String(year);
       const indexKey = `admin/runtime-job-index/${operation}/${subject}.json`;
