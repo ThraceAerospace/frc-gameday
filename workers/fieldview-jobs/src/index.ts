@@ -202,8 +202,12 @@ export default {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const scheduledAt = Date.now();
-      const id = `manual-event-readiness-${scheduledAt}`;
-      await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
+      const id = `daily-event-readiness-${new Date(scheduledAt).toISOString().slice(0, 10)}`;
+      try {
+        await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
+      } catch {
+        return Response.json({ error: "A daily event-readiness Workflow already exists for this UTC date", workflow_id: id }, { status: 409 });
+      }
       return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
