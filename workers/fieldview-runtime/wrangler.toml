@@ -16,10 +16,6 @@ head_sampling_rate = 0.1
 
 [vars]
 
-[[r2_buckets]]
-binding = "DISCOVERY_BUCKET"
-bucket_name = "fieldview-discovery"
-
 [[services]]
 binding = "FIELDVIEW_JOBS"
 service = "fieldview-jobs"
@@ -61,3 +57,11 @@ renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 [[migrations]]
 tag = "v6"
 deleted_classes = ["TaskScheduler"]
+
+[[durable_objects.bindings]]
+name = "DISCOVERY_STORE"
+class_name = "DiscoveryStore"
+
+[[migrations]]
+tag = "v7"
+new_sqlite_classes = ["DiscoveryStore"]

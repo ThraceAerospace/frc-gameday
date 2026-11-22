@@ -2,7 +2,7 @@
 export interface DurableObjectTransactionLike {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
-  list<T = unknown>(options?: { prefix?: string }): Promise<Map<string, T>>;
+  list<T = unknown>(options?: { prefix?: string; startAfter?: string; limit?: number }): Promise<Map<string, T>>;
   delete(key: string): Promise<boolean>;
   setAlarm(scheduledTime: number | Date): Promise<void>;
   deleteAlarm(): Promise<void>;
@@ -25,21 +25,6 @@ export interface DurableObjectStateLike {
 export interface DurableObjectNamespaceLike {
   idFromName(name: string): unknown;
   get(id: unknown): { fetch(request: Request): Promise<Response> };
-}
-
-export interface R2ObjectLike {
-  json<T = unknown>(): Promise<T>;
-  text(): Promise<string>;
-}
-
-export interface R2BucketLike {
-  get(key: string): Promise<R2ObjectLike | null>;
-  put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
-  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
-    objects: Array<{ key: string }>;
-    truncated: boolean;
-    cursor?: string;
-  }>;
 }
 
 export interface RuntimeEnvironment {

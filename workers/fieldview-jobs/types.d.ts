@@ -30,20 +30,6 @@ declare module "cloudflare:workers" {
 
 interface ExecutionContext {}
 
-interface R2ObjectBody {
-  json<Result = unknown>(): Promise<Result>;
-  text(): Promise<string>;
-}
-
-interface R2Bucket {
-  get(key: string): Promise<R2ObjectBody | null>;
-  put(
-    key: string,
-    value: string,
-    options?: { httpMetadata?: { contentType?: string } },
-  ): Promise<unknown>;
-}
-
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }

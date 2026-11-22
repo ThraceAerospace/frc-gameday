@@ -24,10 +24,6 @@ EVENT_COMPLETED_RETENTION_MS = "86400000"
 TEAM_REFRESH_INTERVAL_MS = "86400000"
 TEAM_ACTIVE_REFRESH_INTERVAL_MS = "60000"
 
-[[r2_buckets]]
-binding = "DISCOVERY_BUCKET"
-bucket_name = "fieldview-discovery-testing"
-
 [[services]]
 binding = "FIELDVIEW_JOBS"
 service = "fieldview-jobs-testing"
@@ -67,3 +63,11 @@ renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 [[migrations]]
 tag = "v6"
 deleted_classes = ["TaskScheduler"]
+
+[[durable_objects.bindings]]
+name = "DISCOVERY_STORE"
+class_name = "DiscoveryStore"
+
+[[migrations]]
+tag = "v7"
+new_sqlite_classes = ["DiscoveryStore"]

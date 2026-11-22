@@ -15,12 +15,12 @@ The testing environment is a **shared, persistent test target**. Deploying a dif
 | --- | --- | --- |
 | Runtime Worker | `runtime` | `testing` |
 | Jobs Worker | `fieldview-jobs` | `fieldview-jobs-testing` |
-| R2 discovery bucket | `fieldview-discovery` | `fieldview-discovery-testing` |
+| Discovery catalog | Runtime `DiscoveryStore` Durable Object | Separate testing Runtime `DiscoveryStore` namespace |
 | Runtime Durable Objects | Production namespace | Separate testing namespace |
 | Jobs service binding | `runtime` | `testing` |
 | Workflow names | Production names | `testing-` prefixed names |
 
-The `fieldview-discovery-testing` R2 bucket must be created in the intended Cloudflare account before the testing Workers can be deployed. Do not point testing at the production bucket. Durable Object namespaces are scoped to their Worker service; the `runtime` and `testing` Workers therefore keep independent state and migration histories.
+Discovery and administrative catalog records are persisted in the Runtime Worker's SQLite-backed `DiscoveryStore` Durable Object. Jobs accesses it only through the authenticated Runtime service binding; the Durable Object is not directly exposed to Jobs or the public internet. Production and testing use separate Runtime Workers and therefore separate Durable Object namespaces and migration histories. No R2 bucket or D1 database is required.
 
 The Jobs Workers are internal service-binding targets and do not need public `workers.dev` URLs. Only the Runtime Workers expose the fixed runtime URLs.
 

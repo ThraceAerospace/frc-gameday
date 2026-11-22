@@ -10,10 +10,6 @@ preview_urls = false
 enabled = true
 head_sampling_rate = 1
 
-[[r2_buckets]]
-binding = "DISCOVERY_BUCKET"
-bucket_name = "fieldview-discovery-testing"
-
 [[services]]
 binding = "FIELDVIEW_RUNTIME"
 service = "testing"

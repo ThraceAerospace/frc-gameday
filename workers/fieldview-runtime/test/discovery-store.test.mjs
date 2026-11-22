@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DiscoveryStore } from "../src/discovery-store.ts";
+
+function createState() {
+  const values = new Map();
+  return {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async list(options = {}) {
+        const keys = [...values.keys()].filter((key) => key.startsWith(options.prefix ?? "") &&
+          (!options.startAfter || key > options.startAfter)).sort().slice(0, options.limit ?? 1000);
+        return new Map(keys.map((key) => [key, values.get(key)]));
+      },
+    },
+  };
+}
+
+test("DiscoveryStore persists records and returns parsed JSON", async () => {
+  const store = new DiscoveryStore(createState());
+  const put = await store.fetch(new Request("https://store/put", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: "discovery/events/2026.json", value: JSON.stringify({ year: 2026 }) }) }));
+  assert.equal(put.status, 200);
+  const get = await store.fetch(new Request("https://store/get?key=discovery%2Fevents%2F2026.json"));
+  assert.deepEqual(await get.json(), { year: 2026 });
+});
+
+test("DiscoveryStore returns 404 for missing records and rejects invalid writes", async () => {
+  const store = new DiscoveryStore(createState());
+  assert.equal((await store.fetch(new Request("https://store/get?key=missing"))).status, 404);
+  const response = await store.fetch(new Request("https://store/put", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "x", value: 1 }) }));
+  assert.equal(response.status, 400);
+});
+
+test("DiscoveryStore paginates prefix listings with an exclusive cursor", async () => {
+  const state = createState();
+  for (const key of ["registry/events/2026.json", "registry/events/2027.json", "registry/teams/2026.json"]) {
+    await state.storage.put("discovery-object:" + key, "{}");
+  }
+  const store = new DiscoveryStore(state);
+  const first = await (await store.fetch(new Request("https://store/list?prefix=registry%2Fevents%2F&limit=1"))).json();
+  assert.deepEqual(first.objects, [{ key: "registry/events/2026.json" }]);
+  assert.equal(first.truncated, true);
+  const second = await (await store.fetch(new Request("https://store/list?prefix=registry%2Fevents%2F&limit=1&cursor=" + encodeURIComponent(first.cursor)))).json();
+  assert.deepEqual(second.objects, [{ key: "registry/events/2027.json" }]);
+  assert.equal(second.truncated, false);
+});
