@@ -55,3 +55,9 @@ new_sqlite_classes = ["TeamRuntime"]
 tag = "v5"
 renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
+# Retire the former global coordinator after all runtime and admin routes have
+# moved to entity-owned queues and Jobs Worker Workflows. This deletes its
+# obsolete Durable Object storage; canonical state and inventory live elsewhere.
+[[migrations]]
+tag = "v6"
+deleted_classes = ["TaskScheduler"]
