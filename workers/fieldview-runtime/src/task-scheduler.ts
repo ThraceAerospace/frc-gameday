@@ -818,14 +818,16 @@ export class TaskScheduler {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid audit year" }, { status: 400 });
       const eventDiscoveryReady = (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year)) !== undefined;
+        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
+        await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`)) !== undefined;
       const teamDiscoveryReady = (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.complete === true;
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
         await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) > 0;
       const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
+        await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
       const audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
         event_discovery_updated_at?: number; team_discovery_updated_at?: number;
@@ -862,7 +864,8 @@ export class TaskScheduler {
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
+          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
+          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
         const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
         if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? teamDiscovery.teams?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
