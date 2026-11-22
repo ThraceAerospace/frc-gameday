@@ -128,7 +128,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     let scheduled = 0;
     for (let offset = 0; offset < events.length; offset += 10) {
       const batch = events.slice(offset, offset + 10);
-      await step.do("schedule-team-events-" + offset, async () => {
+      const scheduledInBatch = await step.do("schedule-team-events-" + offset, async () => {
+        let count = 0;
         for (const item of batch) {
           const event = byKey.get(String(item.key));
           if (!event) continue;
@@ -142,10 +143,11 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
           }, p.year);
           if (!response.ok) throw new Error("EventRuntime lifecycle returned HTTP " + response.status);
+          count += 1;
         }
-        return { scheduled: batch.length };
+        return count;
       });
-      scheduled += batch.length;
+      scheduled += scheduledInBatch;
       await update({ processed: scheduled });
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
@@ -238,9 +240,11 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       });
     }
     const historical = [...historicalEvents.entries()];
+    let historicalScheduled = 0;
     for (let offset = 0; offset < historical.length; offset += 10) {
       const batch = historical.slice(offset, offset + 10);
-      await step.do("schedule-participant-history-" + offset, async () => {
+      const scheduledInBatch = await step.do("schedule-participant-history-" + offset, async () => {
+        let count = 0;
         for (const [key, event] of batch) {
           const lifecycle = lifecycleFor({ key, ...event }, Date.now());
           if (lifecycle.lifecycle === "expired") continue;
@@ -251,14 +255,16 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
           }, eventYear);
           if (!response.ok) throw new Error("Unable to schedule historical event " + key);
+          count += 1;
         }
-        return { scheduled: batch.length };
+        return count;
       });
+      historicalScheduled += scheduledInBatch;
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
       stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
-      seeded_teams: processed, failed_teams: 0, historical_events_scheduled: historical.length,
+      seeded_teams: processed, failed_teams: 0, historical_events_scheduled: historicalScheduled,
       processed, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
