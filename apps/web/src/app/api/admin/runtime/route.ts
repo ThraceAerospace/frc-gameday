@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   const eventSeedKey = query.get("eventSeed");
   const teamSeedKey = query.get("teamSeed");
   const discoveryJobYear = query.get("discoveryJob");
-  const discoveryJobMode = query.get("discoveryMode") === "year" ? "year" : "current";
+  const discoveryJobMode = "year";
   const target = teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
     team_key: teamSeedKey,
     year: query.get("year") ?? String(new Date().getUTCFullYear()),
