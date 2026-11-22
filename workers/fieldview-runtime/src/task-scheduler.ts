@@ -750,7 +750,7 @@ export class TaskScheduler {
         current_season: {
           year: currentSeasonYear,
           status: !currentSeasonIndex ? "missing" :
-            Date.now() - (currentSeasonIndex.checkedAt ?? currentSeasonIndex.updatedAt) > 2 * 60 * 60_000 ? "stale" : "available",
+            Date.now() - (currentSeasonIndex.checkedAt ?? currentSeasonIndex.updatedAt) > 36 * 60 * 60_000 ? "stale" : "available",
           event_count: currentSeasonIndex?.events.length ?? 0,
           updated_at: currentSeasonIndex?.updatedAt ?? null,
           checked_at: currentSeasonIndex?.checkedAt ?? null,
