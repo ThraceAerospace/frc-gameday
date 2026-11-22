@@ -285,14 +285,15 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             if (!response.ok) return { key: teamKey, ready: false, partial: true };
             const state = await response.json() as {
               polling?: Array<{ endpoint?: string }>;
-              endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }>;
+              endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null; expires_at?: number | null; expiresAt?: number | null }>;
             };
             const tasks = state.polling ?? [];
             const sources = state.endpoints ?? [];
             const complete = tasks.length > 0 && tasks.every((task) => {
               const source = sources.find((item) => item.endpoint === task.endpoint);
               return source?.status === "unavailable" ||
-                (source?.status === "available" && (source.last_fetched_at ?? source.lastFetchedAt) != null);
+                (source?.status === "available" && (source.last_fetched_at ?? source.lastFetchedAt) != null &&
+                  ((source.expires_at ?? source.expiresAt) == null || (source.expires_at ?? source.expiresAt)! > Date.now()));
             });
             const partial = sources.some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
             return { key: teamKey, ready: complete, partial };
@@ -351,14 +352,15 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             if (!response.ok) return { key: eventKey, ready: false, partial: true };
             const state = await response.json() as {
               polling?: Array<{ endpoint?: string }>;
-              endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }>;
+              endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null; expiresAt?: number | null }>;
             };
             const tasks = state.polling ?? [];
             const sources = state.endpoints ?? {};
             const complete = tasks.length > 0 && tasks.every((task) => {
               const source = sources["endpoint:" + task.endpoint];
               return source?.status === "unavailable" ||
-                (source?.status === "available" && (source.lastFetchedAt != null || source.lastWebhookAt != null));
+                (source?.status === "available" && (source.lastFetchedAt != null || source.lastWebhookAt != null) &&
+                  (source.expiresAt == null || source.expiresAt > Date.now()));
             });
             const partial = Object.values(sources).some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
             return { key: eventKey, ready: complete, partial };
