@@ -158,6 +158,18 @@ The team profile derives its event match subset by exact membership of the uncha
 
 Represents a team's participation in an event. It is the reusable home for event-specific team status and event-level metrics such as OPR/DPR/CCWM. `normalizeFieldViewEventTeam` composes this object from the unchanged event/team identifiers, optional TBA team-event status, and event-level OPR resource. It associates OPR/DPR/CCWM by the original TBA team key; it does not transform the source values. Explicit null status is retained, while absent status and absent metric entries remain absent. Match objects may associate those values with the teams participating in a particular match.
 
+### FieldViewTeamEventState
+
+Represents one team's event participation and team-scoped analytics. It is owned and persisted by that team's TeamRuntime. It does **not** embed the canonical team profile, event-team participation record, or match objects:
+
+- Team identity and profile data remain in the TeamRuntime-owned `FieldViewTeamState`.
+- Event-team participation is represented by an `event_team_ref` logical foreign key to the EventRuntime-owned `FieldViewEventTeam`.
+- Participated matches are represented by `match_refs`, logical foreign keys to EventRuntime-owned `FieldViewMatch` records.
+- The reference identifies the owner runtime, owner identity, record type, record identity, and observed event source revision.
+- TeamRuntime may receive EventState and the relevant match records as temporary calculation inputs. It calculates its own analytics, persists only its TeamEventState references and analytics, and discards the foreign input objects.
+
+A Durable Object reference is a logical foreign key rather than a SQLite-enforced foreign key because EventRuntime and TeamRuntime have separate SQLite databases. Consumers resolve a reference by asking its owner; they never read another runtime's storage directly.
+
 ### FieldViewPlayoffAlliance
 
 Represents the official alliance, including the original TBA elimination-alliance fields and separately named FieldView associations/progression information where needed.
