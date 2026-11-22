@@ -5,6 +5,8 @@ declare module "cloudflare:workers" {
   }
 }
 
+interface ExecutionContext {}
+
 interface WorkflowEvent<Params> {
   payload: Params;
   instanceId: string;
