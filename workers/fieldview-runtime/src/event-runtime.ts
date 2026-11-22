@@ -928,7 +928,7 @@ export class EventRuntime {
         source_revision: currentSourceRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
-          hydrated_scope: ["event_identity", "event_state_publication", "analytics_publication"],
+          hydrated_scope: ["event_identity", "event_state_publication"],
           event_state_publication: {
             exists: Boolean(eventStatePublication),
             status: eventStateStatus,
