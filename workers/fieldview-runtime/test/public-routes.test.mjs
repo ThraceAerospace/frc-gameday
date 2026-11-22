@@ -266,20 +266,25 @@ test("this-week reads do not fall back to TaskScheduler when the R2 projection i
   assert.deepEqual(await response.json(), { error: "This-week projection is not published" });
 });
 
-test("public team discovery reads the published current-season R2 pages", async () => {
+test("public team discovery reads the published current-season Durable Object pages", async () => {
+  const documents = new Map([
+    ["discovery/teams/2026.json", {
+      year: 2026, generation: 1234, pageCount: 1, teamCount: 1, updatedAt: 1234, checkedAt: Date.now(),
+    }],
+    ["discovery/team-pages/2026/1234/0.json", [
+      { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE", city: "Southington" },
+    ]],
+  ]);
   const env = {
-    DISCOVERY_BUCKET: {
-      async get(key) {
-        const documents = {
-          "discovery/teams/2026.json": {
-            year: 2026, generation: 1234, pageCount: 1, teamCount: 1, updatedAt: 1234, checkedAt: Date.now(),
-          },
-          "discovery/team-pages/2026/1234/0.json": [
-            { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE", city: "Southington" },
-          ],
-        };
-        const value = documents[key];
-        return value ? { async json() { return value; } } : null;
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() {
+        return { async fetch(request) {
+          const url = new URL(request.url);
+          assert.equal(url.pathname, "/get");
+          const value = documents.get(url.searchParams.get("key"));
+          return value === undefined ? new Response(null, { status: 404 }) : new Response(JSON.stringify(value));
+        } };
       },
     },
   };
