@@ -136,21 +136,24 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
         if (document) allEvents.push(...document.events);
       }
-      const unique = new Map<string, TbaEvent>();
-      for (const item of allEvents) if (typeof item.key === "string") unique.set(item.key, item);
+      const unique = new Map<string, { year: number; event: TbaEvent }>();
+      for (const year of years) {
+        const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
+        for (const item of document?.events ?? []) if (typeof item.key === "string") unique.set(item.key, { year, event: item });
+      }
       const now = Date.now();
       const matches = [...unique.values()]
-        .filter((item) => classifyEventThisWeek(item, now)?.isThisWeek === true)
-        .sort((a, b) => a.key.localeCompare(b.key));
+        .filter(({ event: item }) => classifyEventThisWeek(item, now)?.isThisWeek === true)
+        .sort((a, b) => a.event.key.localeCompare(b.event.key));
       const runDay = new Date(runAt).toISOString().slice(0, 10);
       const projection = {
         evaluatedAt: now,
         runDate: runDay,
         checkedAt: Math.min(...discovery.map((item) => item.checkedAt)),
-        events: matches,
+        events: matches.map(({ event }) => event),
       };
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
-      await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(matches.map((item) => item.key)), {
+      await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(matches.map(({ year, event: item }) => ({ year, key: item.key }))), {
         httpMetadata: { contentType: "application/json" },
       });
       await this.env.DISCOVERY_BUCKET.put("projections/events/this-week.json", JSON.stringify(projection), {
@@ -159,7 +162,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       return { manifestKey, eventCount: matches.length, evaluatedAt: now, runDate: runDay };
     });
 
-    const keys = await readJson<string[]>(this.env.DISCOVERY_BUCKET, prepared.manifestKey);
+    const keys = await readJson<Array<{ year: number; key: string }>>(this.env.DISCOVERY_BUCKET, prepared.manifestKey);
     if (!keys) throw new Error("Daily readiness manifest disappeared before initialization");
     const initialized: string[] = [];
     const failures: Array<{ event_key: string; error: string }> = [];
@@ -168,14 +171,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       await step.do(`initialize-events-${offset / 10}`, {
         retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
       }, async () => {
-        for (const key of batch) {
+        for (const item of batch) {
           const document = await readJson<DiscoveryDocument>(
             this.env.DISCOVERY_BUCKET,
-            `discovery/events/${utcYear}.json`,
+            `discovery/events/${item.year}.json`,
           );
-          const eventData = document?.events.find((item) => item.key === key);
+          const eventData = document?.events.find((candidate) => candidate.key === item.key);
           if (!eventData) {
-            failures.push({ event_key: key, error: "Event was not present in the retained discovery snapshot" });
+            failures.push({ event_key: item.key, error: "Event was not present in the retained discovery snapshot" });
             continue;
           }
           const classification = lifecycleFor(eventData, Date.now());
@@ -187,11 +190,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
                 Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ event_key: key, lifecycle: classification }),
+              body: JSON.stringify({ event_key: item.key, lifecycle: classification }),
             },
           ));
-          if (!response.ok) failures.push({ event_key: key, error: `Runtime returned HTTP ${response.status}` });
-          else initialized.push(key);
+          if (!response.ok) failures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
+          else initialized.push(item.key);
         }
         return { processed: batch.length };
       });
