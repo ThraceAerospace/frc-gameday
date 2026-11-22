@@ -464,7 +464,7 @@ export default {
         return Response.json({ error: "Invalid runtime dispatch request" }, { status: 400 });
       }
       const { kind, key, action } = body;
-      if (kind === "team" && !/^frc\\d+$/.test(key)) return Response.json({ error: "Invalid team key" }, { status: 400 });
+      if (kind === "team" && !/^frc\d+$/.test(key)) return Response.json({ error: "Invalid team key" }, { status: 400 });
       if (kind === "event" && !/^[a-zA-Z0-9_-]+$/.test(key)) return Response.json({ error: "Invalid event key" }, { status: 400 });
       const year = Number(body.year);
       if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
