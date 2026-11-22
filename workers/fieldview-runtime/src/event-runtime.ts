@@ -570,7 +570,9 @@ export class EventRuntime {
       // may request readiness, but never call TBA directly for the roster.
       const endpoint = TBA_ENDPOINTS.eventTeams(this.eventKey);
       const state = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
-      if (!state || (state.lastFetchedAt == null && state.lastWebhookAt == null) || !Array.isArray(state.data)) {
+      if (!state || state.status !== "available" ||
+          (state.lastFetchedAt == null && state.lastWebhookAt == null) ||
+          (state.expiresAt !== null && state.expiresAt <= Date.now()) || !Array.isArray(state.data)) {
         await this.enqueueManualPolls([endpoint]);
         return Response.json({ ready: false, status: state?.status ?? "pending" }, {
           status: 202, headers: { "Cache-Control": "no-store", "Retry-After": "2" },
