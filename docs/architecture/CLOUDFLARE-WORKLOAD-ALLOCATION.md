@@ -29,7 +29,7 @@ The current migration slice moves TBA-status-driven current-season event/team di
 - Team discovery uses one Workflow step per TBA page and writes immutable generation-scoped R2 pages; the manifest and team-key registry publish only after all pages validate. Event discovery uses one step for the TBA-reported season and stages the complete directory. Separate bounded steps write at most ten 25-event R2 chunks per invocation before publishing the directory document, keeping subrequests below the Free-plan per-invocation limit. Classification then runs one step per 25-event chunk, keeping repeated date/timezone calculations and JSON parsing bounded. The Workflow classifies the Monday-Sunday window using each event's timezone and inclusive date-only start/end values, writes versioned per-year projections and a per-run manifest to R2, and publishes a single current-generation pointer only after all TeamRuntime seed-dispatch and EventRuntime initialization batches have completed.
 - It initializes every non-expired current-season EventRuntime (upcoming, active, or still within completed-event retention) in batches of ten through a narrow service-binding endpoint on `fieldview-runtime`. Separately, it discovers participants for this-week events, deduplicates team keys, and queues TeamRuntime seeds in batches of ten. The runtime Worker reads the pointer and all versioned per-year projections before returning a complete this-week result; it does not expose a partially published generation.
 - `fieldview-runtime` reads `/events/discovery`, `/events/this-week`, and `/teams/discovery` exclusively from the published R2 generation. Missing or incomplete R2 data returns an explicit 503; there is no TaskScheduler fallback. The this-week projection uses a versioned per-year snapshot set plus one generation pointer, so a failed run cannot expose a mixed partial generation. Team directory pages are immutable and the team manifest is published only after every page is validated.
-- Neither Worker uses a classic Cron Trigger for this job. The native Workflow schedule starts the run. The daily Workflow now discovers only the season reported by TBA `/status`, publishes that season's paginated team directory, discovers participants for this-week events, and queues idempotent TeamRuntime seeds in bounded batches. TaskScheduler remains only for the still-unmigrated season ingestion, coverage-audit, district, and manual team/event seeding jobs. Its recurring event lifecycle loop, manual season discovery, public discovery endpoints, global start/stop/run controls, runtime-owned discovery caches, and compatibility export have been removed. Manual season discovery now runs as an on-demand mode of `DailyEventReadinessWorkflow`; the job status and published directories live in R2. Season ingestion and coverage audits read those R2 directories directly. TaskScheduler's Durable Object alarm now advances only the remaining explicit administrative jobs; it is not a discovery scheduler or a fallback for public reads.
+- Neither Worker uses a classic Cron Trigger for this job. The native Workflow schedule starts the run. The daily Workflow now discovers only the season reported by TBA `/status`, publishes that season's paginated team directory, discovers participants for this-week events, and queues idempotent TeamRuntime seeds in bounded batches. TaskScheduler remains only for the still-unmigrated season ingestion, district, and manual team/event seeding jobs. Its recurring event lifecycle loop, manual season discovery, public discovery endpoints, global start/stop/run controls, runtime-owned discovery caches, and compatibility export have been removed. Manual season discovery now runs as an on-demand mode of `DailyEventReadinessWorkflow`; the job status and published directories live in R2. Season ingestion and coverage audits read those R2 directories directly. TaskScheduler's Durable Object alarm now advances only the remaining explicit administrative jobs; it is not a discovery scheduler or a fallback for public reads.
 
 ### Explicitly not included in this first slice
 
@@ -160,11 +160,40 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 - Use an authorization design suitable for production. The current `RUNTIME_ADMIN_TOKEN` is a prototype-only mechanism and must not become the production administrator identity system.
 - Retain detailed per-resource failures without storing secrets or unbounded response bodies in logs.
 
+## Workflow 3: On-demand coverage audit
+
+**Name:** `CoverageAuditWorkflow`  
+**Schedule:** none. An authenticated admin request creates an instance; the same instance can be paused and resumed.
+
+### Goal
+
+Compare the published season event/team directories with the registered EventRuntime and TeamRuntime instances, then inspect their canonical state and resource/analytics coverage without making the dashboard or TaskScheduler perform a fan-out.
+
+### Execution
+
+1. Validate that both published R2 directories are complete and pin their `updatedAt` versions.
+2. Read the per-entity runtime marker registries from R2. Missing markers are counted as missing runtimes; the audit does not instantiate empty Durable Objects just to inspect them.
+3. Stage the event/team audit item list in R2 and write bounded 100-item chunks.
+4. Inspect five runtime states per Workflow step through the authenticated runtime-state Worker route. Each step records resource freshness, event state, event analytics, cohort status, team snapshots, and read errors.
+5. Persist cursor and counters to the R2 audit record after every batch. The dashboard reads that record and the native Workflow instance status.
+6. Mark the audit complete only if the published discovery versions are unchanged; otherwise mark it stale. Workflow errors are persisted and surfaced as failed.
+7. Pause and resume use the native Workflow instance controls; there is no TaskScheduler alarm or "run next batch" loop.
+
+The audit is bounded to 14,000 entities so its five-entity batch steps, 100-item staging chunks, and fixed setup/finalization steps remain below the Free-plan 3,000-steps-per-day limit. Larger inventories must be split into smaller scopes rather than silently exceeding the account budget.
+
+### Runtime registration contract
+
+Runtime existence is represented by immutable per-entity R2 marker objects:
+- `registry/runtime-events/{eventKey}.json`
+- `registry/runtime-teams/{teamKey}.json`
+
+Workers and Workflows add markers idempotently when a runtime is successfully initialized or seeded. Per-entity keys avoid lost updates from concurrent R2 read-modify-write operations. The audit lists these prefixes; it does not use a shared mutable JSON array.
+
 ## Migration sequence
 
 1. **Completed in this branch:** add the `fieldview-jobs` Worker and daily `DailyEventReadinessWorkflow`; discover only the TBA-reported current season; publish event and paginated team directories to R2; publish the event-timezone-aware this-week projection; initialize matching EventRuntime instances; discover event participants and queue deduplicated TeamRuntime seeds; serve public discovery exclusively from R2.
 2. **Next:** verify TeamRuntime team-season state and event-team history readiness after seed dispatch, then generate/verify base event analytics. Preserve per-team failure isolation and do not move active event polling out of EventRuntime.
-3. **Completed in this branch:** extract manual season discovery into the jobs Worker Workflow, publish the same R2 directory contracts used by daily discovery, remove its TaskScheduler routes/alarms/helpers, and make ingestion/coverage reads consume R2 directly. Next, extract season ingestion and coverage-audit jobs into durable Workflows with explicit manifests, checkpoints, status, and controls.
+3. **Completed in this branch:** extract manual season discovery and full coverage audits into jobs Worker Workflows; publish the same R2 directory contracts used by daily discovery; remove their TaskScheduler routes, alarm loops, and processors; and make season ingestion read R2 directly. Next, extract season ingestion and manual team/event seeding into durable Workflows with explicit manifests, checkpoints, status, and controls.
 4. Move district discovery/snapshots and remaining operator job APIs to Worker/Workflow-backed projections and endpoints.
 5. Add Queues only where independent resource fan-out or retry volume justifies them; do not introduce them before message contracts and idempotency are defined.
 6. Move large raw payload retention to R2 and replace unbounded DO source-history records with compact references/metadata plus retention.
@@ -222,6 +251,8 @@ The 10 ms CPU limit is the primary Free-plan risk, not wall-clock waiting on pro
 - Every discovered participant is submitted to TeamRuntime for idempotent seeding, or a recorded reason why participant discovery or seed dispatch failed. A separate readiness check is required before claiming TeamState completeness.
 - Base analytics is generated when the minimum inputs are present and is explicitly marked partial when inputs are missing.
 - The daily Workflow uses the validated TBA `/status.current_season` value and discovers only that season.
+- Manual season discovery and full coverage audits run as on-demand jobs in the jobs Worker Workflows, persist status/progress in R2, and have no TaskScheduler route or alarm dependency.
+- Runtime existence is tracked by per-entity R2 markers; concurrent runtime initialization cannot lose registry entries through shared JSON-array overwrites.
 - The manual ingestion job has no recurring schedule, supports arbitrary *approved resource scopes*, exposes status/control operations, and can resume after partial failure.
 - Repeated runs do not duplicate state, erase valid data, or publish partial discovery as complete.
 - Tests cover replay, duplicate execution, provider 304/429/5xx, malformed TBA status, partial team failures, and large paginated scopes.
