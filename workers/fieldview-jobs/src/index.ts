@@ -76,7 +76,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     // Publish the current-season team directory from TBA's paginated endpoint.
     // Each page is an immutable R2 object; the manifest is the publication
     // boundary and is written only after every page has been validated.
-    const teamDirectoryGeneration = Date.now();
+    const teamDirectoryGeneration = runAt;
     const teamPageSize = 500;
     let teamPageCount = 0;
     let teamCount = 0;
@@ -277,35 +277,39 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const failedTeams: Array<{ team_key: string; error: string }> = [];
     for (let offset = 0; offset < teamKeys.length; offset += 10) {
       const batch = teamKeys.slice(offset, offset + 10);
-      const result = await step.do(`seed-team-runtimes-${offset / 10}`, {
-        retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
-      }, async () => {
-        const seeded: string[] = [];
-        const failed: Array<{ team_key: string; error: string }> = [];
-        for (const teamKey of batch) {
-          const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
-            `https://fieldview-runtime/internal/teams/${teamKey}/seed?year=${currentSeason.year}`,
-            {
-              method: "POST",
-              headers: { Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}` },
-            },
-          ));
-          if (response.status === 401 || response.status === 403 || response.status === 404) {
-            throw new Error(`TeamRuntime seed boundary returned HTTP ${response.status} for ${teamKey}`);
+      try {
+        const result = await step.do(`seed-team-runtimes-${offset / 10}`, {
+          retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
+        }, async () => {
+          const seeded: string[] = [];
+          const failed: Array<{ team_key: string; error: string }> = [];
+          for (const teamKey of batch) {
+            const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
+              `https://fieldview-runtime/internal/teams/${teamKey}/seed?year=${currentSeason.year}`,
+              {
+                method: "POST",
+                headers: { Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}` },
+              },
+            ));
+            if (response.status === 401 || response.status === 403 || response.status === 404) {
+              throw new Error(`TeamRuntime seed boundary returned HTTP ${response.status} for ${teamKey}`);
+            }
+            if (response.status === 429 || response.status >= 500) {
+              throw new Error(`Transient TeamRuntime response HTTP ${response.status} for ${teamKey}`);
+            }
+            if (!response.ok && response.status !== 202) {
+              failed.push({ team_key: teamKey, error: `Runtime returned HTTP ${response.status}` });
+            } else {
+              seeded.push(teamKey);
+            }
           }
-          if (response.status === 429 || response.status >= 500) {
-            throw new Error(`Transient TeamRuntime response HTTP ${response.status} for ${teamKey}`);
-          }
-          if (!response.ok && response.status !== 202) {
-            failed.push({ team_key: teamKey, error: `Runtime returned HTTP ${response.status}` });
-          } else {
-            seeded.push(teamKey);
-          }
-        }
-        return { seeded, failed };
-      });
-      seededTeams.push(...result.seeded);
-      failedTeams.push(...result.failed);
+          return { seeded, failed };
+        });
+        seededTeams.push(...result.seeded);
+        failedTeams.push(...result.failed);
+      } catch (error) {
+        failedTeams.push(...batch.map((team_key) => ({ team_key, error: String(error) })));
+      }
     }
 
     const prepared = await step.do("write-this-week-manifest", async () => {
