@@ -3,6 +3,26 @@ import { WorkflowEntrypoint } from "cloudflare:workers";
 import { classifyEventThisWeek, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 
+interface DiscoveryDocument {
+  year: number;
+  events: TbaEvent[];
+  etag: string | null;
+  updatedAt: number;
+  checkedAt: number;
+}
+
+interface JobsEnvironment {
+  TBA_API_KEY: string;
+  RUNTIME_ADMIN_TOKEN: string;
+  DISCOVERY_BUCKET: R2Bucket;
+  FIELDVIEW_RUNTIME: Fetcher;
+  DAILY_EVENT_READINESS: Workflow;
+}
+
+interface WorkflowParameters {
+  scheduledAt: number;
+}
+
 async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
   const object = await bucket.get(key);
   return object ? object.json<T>() : null;
