@@ -165,6 +165,15 @@ export default {
       return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
 
+    if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+      return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/daily-event-readiness", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (url.pathname === "/internal/workflows/initialize-event" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
