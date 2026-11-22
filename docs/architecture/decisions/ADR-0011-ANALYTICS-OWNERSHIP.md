@@ -25,11 +25,13 @@ A team's event performance is interpreted against its own season history and the
 
 A complete event FieldView is represented by FieldViewEventView and is composed from:
 
-1. FieldViewEventState;
-2. FieldViewEventAnalytics; and
-3. the array of FieldViewTeamEventState records for the event roster.
+1. EventRuntime-owned FieldViewEventState;
+2. EventRuntime-owned FieldViewEventAnalytics; and
+3. logical references to each roster participant's TeamRuntime-owned FieldViewTeamEventState, with explicit coverage.
 
-EventRuntime coordinates event composition but does not persist duplicate authoritative copies of TeamRuntime-owned team event states. Partial composition is permitted and must expose missing/pending team states rather than silently treating the event as complete.
+The view does not embed TeamEventState records. EventRuntime's background analytics operation retrieves each participant's state from its owner, uses the combined input only in memory, and persists only FieldViewEventAnalytics with source revisions and coverage. A consumer that needs a detailed TeamEventState resolves its reference through the owning TeamRuntime. Partial composition is permitted and must expose missing/pending team states rather than silently treating the event as complete.
+
+A TeamRuntime-owned FieldViewTeamEventState stores team/event identity, provenance, team analytics, and logical references to EventRuntime-owned FieldViewEventTeam and FieldViewMatch records. It does not copy the full team profile, event-team participation object, or match objects into the team runtime's database.
 
 ### Analytics lifecycle and provenance
 
