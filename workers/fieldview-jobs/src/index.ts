@@ -40,8 +40,38 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
-    const utcYear = Number(runDate.slice(0, 4));
-    const years = [utcYear - 1, utcYear, utcYear + 1];
+
+    // TBA is the authority for the current FRC season. Never derive this from
+    // the Worker clock: the season boundary follows the official kickoff.
+    const currentSeason = await step.do("resolve-current-tba-season", {
+      retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
+    }, async () => {
+      const known = await readJson<{ year: number; checkedAt: number }>(
+        this.env.DISCOVERY_BUCKET, "discovery/current-season.json",
+      );
+      try {
+        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+        const response = await api.request("/status");
+        if (!response.ok) throw new Error(`TBA status returned HTTP ${response.status}`);
+        const status = await response.json() as { current_season?: unknown };
+        const raw = status?.current_season;
+        const year = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+        if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+          throw new Error("TBA status returned an invalid current_season");
+        }
+        const resolved = { year, checkedAt: Date.now() };
+        await this.env.DISCOVERY_BUCKET.put("discovery/current-season.json", JSON.stringify(resolved), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return resolved;
+      } catch (error) {
+        if (known && Number.isInteger(known.year) && known.year >= 1992 && known.year <= 2200) {
+          return { ...known, fallback: true };
+        }
+        throw error;
+      }
+    });
+    const years = [currentSeason.year];
 
     const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number; needsChunking: boolean }> = [];
     const eventChunkSize = 25;
@@ -239,6 +269,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
 
     const summary = {
       run_date: prepared.runDate,
+      current_season: currentSeason.year,
+      season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
       discovery: discovery.map(({ year, count }) => ({ year, count })),
       this_week_events: prepared.eventCount,
       initialized: initialized.length,
