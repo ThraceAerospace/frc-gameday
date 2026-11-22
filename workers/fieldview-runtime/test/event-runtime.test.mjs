@@ -795,9 +795,13 @@ test("versioned WebSocket subscriptions announce gaps and publish snapshot revis
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
     webSocketPairFactory: () => [clientSocket, serverSocket],
     webSocketResponseFactory: () => new Response(null, { status: 200 }),
-    fetcher: async () => Response.json([{ key: "2026test_qm1", event_key: eventKey, alliances: {
-      red: { score: 10, team_keys: [] }, blue: { score: 9, team_keys: [] },
-    } }], { headers: { ETag: '"matches-v1"' } }),
+    fetcher: async () => Response.json([{
+      key: "2026test_qm1", event_key: eventKey,
+      comp_level: "qm", set_number: 1, match_number: 1,
+      alliances: {
+        red: { score: 10, team_keys: [] }, blue: { score: 9, team_keys: [] },
+      },
+    }], { headers: { ETag: '"matches-v1"' } }),
   }, eventKey);
   const response = await runtime.fetch(new Request("https://event-runtime/stream?since=0", { headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, Upgrade: "websocket" } }));
   assert.equal(response.status, 200);
