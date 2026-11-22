@@ -44,7 +44,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const years = [utcYear - 1, utcYear, utcYear + 1];
 
     const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number }> = [];
-    const eventChunkSize = 50;
+    const eventChunkSize = 25;
     for (const year of years) {
       const result = await step.do(`discover-event-directory-${year}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
