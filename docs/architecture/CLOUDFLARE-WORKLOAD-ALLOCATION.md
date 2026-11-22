@@ -45,6 +45,8 @@ This extraction initializes every non-expired current-season EventRuntime, publi
 6. Confirm the Workflow summary reports event/team discovery and participant seeding outcomes, and that the runtime Worker serves all three R2-backed discovery/read routes. Missing R2 publications must return 503 rather than falling back to TaskScheduler.
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
+The isolated prototype has matching `wrangler.prototype.toml` configurations for both Workers. Create `fieldview-discovery-prototype`, deploy `fieldview-jobs-prototype` first, then `fieldview-runtime-prototype`. The prototype service bindings and R2 bucket are isolated from production; the runtime prototype has no Cron Trigger. Configure the same prototype `RUNTIME_ADMIN_TOKEN` on both prototype Workers and the TBA API key on each Worker that calls TBA.
+
 
 ### Durable Object migration history
 
