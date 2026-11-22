@@ -1519,7 +1519,7 @@ test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-
     event_key: eventKey,
     team_key: teamKey,
     sources: { team: {}, event_team: {}, matches: {} },
-    matches: [],
+    match_refs: [],
     analytics: { event_key: eventKey, team_key: teamKey, metrics: [], findings: [] },
   };
   const teamNamespace = {
