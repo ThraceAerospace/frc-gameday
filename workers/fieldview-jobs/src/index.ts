@@ -73,7 +73,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       discovery.push(result);
     }
 
-    const classified: Array<{ year: number; eventKeys: string[] }> = [];
+    const classified: Array<{ year: number; eventRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> }> = [];
     for (const year of years) {
       const result = await step.do(`classify-this-week-${year}`, async () => {
         const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
@@ -91,14 +91,18 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           JSON.stringify(projection),
           { httpMetadata: { contentType: "application/json" } },
         );
-        return { year, eventKeys: matches.map((item) => item.key) };
+        return {
+          year,
+          eventRefs: matches.map((item) => ({ key: item.key, lifecycle: lifecycleFor(item, runAt) })),
+        };
       });
       classified.push(result);
     }
 
     const prepared = await step.do("publish-this-week-generation", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
-      const eventRefs = classified.flatMap(({ year, eventKeys }) => eventKeys.map((key) => ({ year, key })));
+      const eventRefs = classified.flatMap(({ year, eventRefs: items }) =>
+        items.map(({ key, lifecycle }) => ({ year, key, ...lifecycle })));
       await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(eventRefs), {
         httpMetadata: { contentType: "application/json" },
       });
@@ -111,8 +115,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       return { manifestKey, eventCount: eventRefs.length, runDate };
     });
 
-    const keys = await readJson<Array<{ year: number; key: string }>>(this.env.DISCOVERY_BUCKET, prepared.manifestKey);
-    if (!keys) throw new Error("Daily readiness manifest disappeared before initialization");
+    const keys = classified.flatMap(({ year, eventRefs }) =>
+      eventRefs.map(({ key, lifecycle }) => ({ year, key, lifecycle })));
     const initialized: string[] = [];
     const failures: Array<{ event_key: string; error: string }> = [];
     for (let offset = 0; offset < keys.length; offset += 10) {
@@ -122,20 +126,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       }, async () => {
         const batchInitialized: string[] = [];
         const batchFailures: Array<{ event_key: string; error: string }> = [];
-        const documents = new Map<number, DiscoveryDocument | null>();
         for (const item of batch) {
-          if (!documents.has(item.year)) {
-            documents.set(item.year, await readJson<DiscoveryDocument>(
-              this.env.DISCOVERY_BUCKET,
-              `discovery/events/${item.year}.json`,
-            ));
-          }
-          const eventData = documents.get(item.year)?.events.find((candidate) => candidate.key === item.key);
-          if (!eventData) {
-            batchFailures.push({ event_key: item.key, error: "Event was not present in the retained discovery snapshot" });
-            continue;
-          }
-          const classification = lifecycleFor(eventData, runAt);
           const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
             "https://fieldview-runtime/internal/workflows/initialize-event",
             {
@@ -144,7 +135,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
                 Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ event_key: item.key, ...classification }),
+              body: JSON.stringify({ event_key: item.key, ...item.lifecycle }),
             },
           ));
           if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
