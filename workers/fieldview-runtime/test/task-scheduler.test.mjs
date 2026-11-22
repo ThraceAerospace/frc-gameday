@@ -103,45 +103,22 @@ test("TaskScheduler queues event participant discovery without provider I/O in t
   assert.ok(storage.alarmAt !== null);
 });
 
-test("TaskScheduler queues manual discovery without running providers in the request", async () => {
-  const storage = new MemoryStorage();
+test("TaskScheduler no longer exposes manual discovery routes", async () => {
   let providerCalls = 0;
-  const scheduler = new TaskScheduler({ storage }, {
+  const scheduler = new TaskScheduler({ storage: new MemoryStorage() }, {
     TBA_API_KEY: "test-key",
     RUNTIME_ADMIN_TOKEN: "admin",
-    fetcher: async () => { providerCalls += 1; throw new Error("provider must run in alarm"); },
+    fetcher: async () => { providerCalls += 1; throw new Error("discovery belongs to fieldview-jobs"); },
   });
-  const response = await scheduler.fetch(new Request("https://scheduler/run", {
+  const startResponse = await scheduler.fetch(new Request("https://scheduler/admin/discover-year?year=2026", {
     method: "POST",
     headers: { Authorization: "Bearer admin" },
   }));
-  assert.equal(response.status, 202);
-  const job = await response.json();
-  assert.equal(job.status, "running");
-  assert.equal(job.stage, "events");
-  assert.equal(providerCalls, 0);
-  assert.ok(storage.alarmAt !== null);
-  const status = await scheduler.fetch(new Request("https://scheduler/admin/discovery-job?mode=current&year=" + job.year, {
+  const statusResponse = await scheduler.fetch(new Request("https://scheduler/admin/discovery-job?year=2026", {
     headers: { Authorization: "Bearer admin" },
   }));
-  assert.equal(status.status, 200);
-  assert.equal((await status.json()).status, "running");
-});
-
-test("TaskScheduler queues historical discovery without fetching TBA in the request", async () => {
-  const storage = new MemoryStorage();
-  let providerCalls = 0;
-  const scheduler = new TaskScheduler({ storage }, {
-    TBA_API_KEY: "test-key",
-    RUNTIME_ADMIN_TOKEN: "admin",
-    fetcher: async () => { providerCalls += 1; throw new Error("provider must run in alarm"); },
-  });
-  const response = await scheduler.fetch(new Request("https://scheduler/admin/discover-year?year=2026", {
-    method: "POST",
-    headers: { Authorization: "Bearer admin" },
-  }));
-  assert.equal(response.status, 202);
-  assert.equal((await response.json()).stage, "events");
+  assert.equal(startResponse.status, 404);
+  assert.equal(statusResponse.status, 404);
   assert.equal(providerCalls, 0);
 });
 
@@ -226,5 +203,4 @@ test("TaskScheduler admin overview does not fan out to entity runtimes", async (
   assert.deepEqual(overview.inventory, { events: 1, teams: 1 });
   assert.deepEqual(overview.events, []);
   assert.deepEqual(overview.teams, []);
-  assert.equal(overview.scheduler.enabled, true);
 });
