@@ -550,7 +550,9 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
       }
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const r2DiscoveredKeys = kind === "event" ? await this.readR2Keys(`registry/events/${year}.json`) : [];
+      const r2DiscoveredKeys = await this.readR2Keys(
+        kind === "event" ? `registry/events/${year}.json` : `registry/teams/${year}.json`,
+      );
       const registered = [...new Set([
         ...(await this.storage.get<string[]>(storageKey) ?? []),
         ...r2DiscoveredKeys,
@@ -568,7 +570,7 @@ export class TaskScheduler {
         kind, year, query, total: keys.length, cursor,
         discovery_ready: kind === "event"
           ? discovery !== undefined || r2DiscoveredKeys.length > 0
-          : (discovery as TeamDiscoveryCache | undefined)?.complete === true,
+          : (discovery as TeamDiscoveryCache | undefined)?.complete === true || r2DiscoveredKeys.length > 0,
         next_cursor: cursor + limit < keys.length ? cursor + limit : null,
         keys: keys.slice(cursor, cursor + limit),
       }, { headers: { "Cache-Control": "no-store" } });
