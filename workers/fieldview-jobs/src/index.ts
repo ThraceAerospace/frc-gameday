@@ -364,6 +364,15 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       }
     }
 
+    await step.do("publish-runtime-team-registry", async () => {
+      const existing = await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-teams.json") ?? [];
+      const registered = [...new Set([...existing, ...seededTeams])].sort();
+      await this.env.DISCOVERY_BUCKET.put("registry/runtime-teams.json", JSON.stringify(registered), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      return { registered: registered.length };
+    });
+
     const prepared = await step.do("write-this-week-manifest", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
       const eventRefs = classified.flatMap(({ year, eventRefs: items }) =>
