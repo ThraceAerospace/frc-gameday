@@ -412,6 +412,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
               seeded.push(teamKey);
             }
           }
+          for (const teamKey of seeded) {
+            await this.env.DISCOVERY_BUCKET.put(`registry/runtime-teams/${teamKey}.json`, "{}", {
+              httpMetadata: { contentType: "application/json" },
+            });
+          }
           return { seeded, failed };
         });
         seededTeams.push(...result.seeded);
@@ -420,18 +425,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         if (String(error).includes("TeamRuntime seed boundary returned HTTP")) throw error;
         failedTeams.push(...batch.map((team_key) => ({ team_key, error: String(error) })));
       }
-    }
-
-    for (let offset = 0; offset < seededTeams.length; offset += 10) {
-      const batch = seededTeams.slice(offset, offset + 10);
-      await step.do(`publish-runtime-team-markers-${offset / 10}`, async () => {
-        for (const teamKey of batch) {
-          await this.env.DISCOVERY_BUCKET.put(`registry/runtime-teams/${teamKey}.json`, "{}", {
-            httpMetadata: { contentType: "application/json" },
-          });
-        }
-        return { registered: batch.length };
-      });
     }
 
     const prepared = await step.do("write-this-week-manifest", async () => {
@@ -477,6 +470,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
             else batchInitialized.push(item.key);
           }
+          for (const eventKey of batchInitialized) {
+            await this.env.DISCOVERY_BUCKET.put(`registry/runtime-events/${eventKey}.json`, "{}", {
+              httpMetadata: { contentType: "application/json" },
+            });
+          }
           return { initialized: batchInitialized, failures: batchFailures };
         });
         initialized.push(...result.initialized);
@@ -486,15 +484,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         failures.push(...batch.map((item) => ({ event_key: item.key, error: String(error) })));
       }
     }
-
-    await step.do("publish-runtime-event-registry", async () => {
-      const existing = await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-events.json") ?? [];
-      const next = [...new Set([...existing, ...initialized])].sort();
-      await this.env.DISCOVERY_BUCKET.put("registry/runtime-events.json", JSON.stringify(next), {
-        httpMetadata: { contentType: "application/json" },
-      });
-      return { registered: initialized.length, total: next.length };
-    });
 
     await step.do("publish-this-week-generation", async () => {
       const pointer = { runAt, runDate: prepared.runDate, years };
