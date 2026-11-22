@@ -707,7 +707,10 @@ export class TaskScheduler {
         ...(currentSeasonYear === null ? [] : await this.readR2Keys(`registry/events/${currentSeasonYear}.json`)),
         ...(await this.readR2Keys("registry/runtime-events.json")),
       ])].sort();
-      const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
+      const teamKeys = [...new Set([
+        ...(await this.storage.get<string[]>("registry:teams") ?? []),
+        ...(currentSeasonYear === null ? [] : await this.readR2Keys(`registry/teams/${currentSeasonYear}.json`)),
+      ])].sort();
       // The overview is deliberately metadata-only. Never fan out to dozens of
       // EventRuntime/TeamRuntime objects during a dashboard refresh; inspect a
       // single runtime only when an operator opens its command center.
