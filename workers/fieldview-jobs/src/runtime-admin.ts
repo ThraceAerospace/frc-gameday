@@ -6,7 +6,7 @@ import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts
 import { lifecycleFor } from "./calendar.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
-interface RuntimeAdminEnvironment extends RuntimeEnvironment {}
+type RuntimeAdminEnvironment = RuntimeEnvironment;
 export interface RuntimeAdminParameters {
   operation: "team-seed" | "event-team-seed" | "season-ingest";
   workflowId: string;
