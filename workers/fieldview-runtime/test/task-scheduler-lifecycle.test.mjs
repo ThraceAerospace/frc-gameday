@@ -143,8 +143,14 @@ test("event team seeding explicitly curates team history and waits for acquisiti
   }));
   assert.equal(started.status, 202);
 
+  // The first alarm asks EventRuntime for its authoritative participant
+  // roster; the next alarm dispatches the team seed and history request.
   await scheduler.alarm();
   let job = await storage.get("admin:event-team-seed:2026rikin");
+  assert.equal(job.status, "running");
+  assert.equal(job.stage, "seed");
+  await scheduler.alarm();
+  job = await storage.get("admin:event-team-seed:2026rikin");
   assert.equal(job.status, "running");
   assert.equal(job.stage, "wait");
   assert.equal(job.failedTeams, 0);
