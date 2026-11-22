@@ -82,6 +82,10 @@ Canonical data has exactly one owning runtime and one authoritative persisted re
 
 - EventRuntime owns event-scoped provider resources, FieldViewEventState, and FieldViewEventAnalytics.
 - TeamRuntime owns team-scoped provider resources, FieldViewTeamState, FieldViewTeamEventState, and team-scoped analytics.
+- TaskScheduler owns the canonical district directory and district records (metadata, roster, events, rankings, and advancement). TeamRuntime may own the team-to-district membership relationship, but stores district keys/references rather than complete district records.
+- EventRuntime owns event identity, event/team participation, matches, playoff alliances, and event-wide analytics. EventState may contain event-owned participation facts, but it must reference TeamRuntime-owned team profiles by team key rather than embed them.
+- A match may retain its match-local alliance roster as team keys and relationship-scoped facts. It must not copy team profiles, OPR/EPA metrics owned by another aggregate, or complete playoff-alliance records; use references for canonical records and retain only match-owned or explicitly derived values.
+- TeamRuntime's season history references EventRuntime-owned events by event key; it must not embed complete event records.
 - A runtime must not persist a complete canonical record owned by another runtime. Cross-runtime dependencies are represented by stable references that identify the owner, owner identity, record type/identity, and the source revision where relevant.
 - Because EventRuntime and TeamRuntime are separate Durable Objects with separate SQLite databases, cross-runtime references are logical foreign keys. The owner runtime validates and resolves them; no caller directly reads another runtime's SQLite storage.
 - Do not duplicate provider payloads, canonical entities, match records, or complete nested aggregates across runtime boundaries. Preserve the authoritative copy at its owner.
