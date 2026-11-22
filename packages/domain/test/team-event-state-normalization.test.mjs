@@ -24,18 +24,26 @@ test("TeamRuntime-owned TeamEventState normalizes only the requested team's even
   });
   assert.equal(state.team_key, "frc1");
   assert.equal(state.event_key, "2026test");
-  assert.deepEqual(state.matches, [match]);
+  assert.equal("team" in state, false, "team identity remains owned by TeamRuntime team state");
+  assert.equal("event_team" in state, false, "event participation remains owned by EventRuntime");
+  assert.equal("matches" in state, false, "canonical matches are not copied into TeamEventState");
+  assert.deepEqual(state.event_team_ref, {
+    owner: "event-runtime", owner_id: "2026test", record_type: "event-team", record_id: "frc1", revision: null,
+  });
+  assert.deepEqual(state.match_refs, [{
+    owner: "event-runtime", owner_id: "2026test", record_type: "match", record_id: "2026test_qm1", revision: null,
+  }]);
   assert.equal(state.analytics, undefined);
 });
 
-test("TeamEventState preserves absent, explicit-null, and empty match resources", () => {
+test("TeamEventState preserves absent, explicit-null, and empty match-reference resources", () => {
   const base = { event_key: "2026test", team_key: "frc1", sources };
   const absent = normalizeFieldViewTeamEventState(base);
-  assert.equal("matches" in absent, false);
+  assert.equal("match_refs" in absent, false);
   const explicitNull = normalizeFieldViewTeamEventState({ ...base, matches: null });
-  assert.equal(explicitNull.matches, null);
+  assert.equal(explicitNull.match_refs, null);
   const empty = normalizeFieldViewTeamEventState({ ...base, matches: [] });
-  assert.deepEqual(empty.matches, []);
+  assert.deepEqual(empty.match_refs, []);
 });
 
 test("TeamEventState rejects matches in which the team did not appear", () => {
