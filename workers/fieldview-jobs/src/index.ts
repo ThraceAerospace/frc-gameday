@@ -1,4 +1,5 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 
 import { classifyEventThisWeek, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
@@ -35,7 +36,7 @@ async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
  */
 export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
-    const runAt = event.payload.scheduledAt;
+    const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
     const utcYear = Number(runDate.slice(0, 4));
     const years = [utcYear - 1, utcYear, utcYear + 1];
@@ -213,16 +214,4 @@ export default {
     return Response.json({ error: "Not found" }, { status: 404 });
   },
 
-  async scheduled(controller: ScheduledController, env: JobsEnvironment): Promise<void> {
-    const id = `daily-event-readiness-${new Date(controller.scheduledTime).toISOString().slice(0, 10)}`;
-    try {
-      await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt: controller.scheduledTime } });
-      console.log("[FV][Jobs] Daily event-readiness Workflow created", JSON.stringify({ id }));
-    } catch (error) {
-      // A duplicate scheduled occurrence must not create overlapping runs.
-      console.warn("[FV][Jobs] Daily event-readiness Workflow was not created", JSON.stringify({
-        id, error: error instanceof Error ? error.message : String(error),
-      }));
-    }
-  },
-};
+};};
