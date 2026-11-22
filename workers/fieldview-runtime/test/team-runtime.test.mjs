@@ -71,6 +71,7 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
   const state = { team_key: "frc3461", year: 2026, events: [], sources: {} };
   storage.values.set("team-key", "frc3461");
   storage.values.set("team-state:2026:publication", { input_signature: "persisted-signature", state });
+  storage.values.set("team-state:2026", state); // legacy duplicate from the pre-normalized writer
   let providerCalls = 0, activationCalls = 0;
   const runtime = new TeamRuntime({
     storage,
@@ -83,6 +84,8 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
   assert.equal((await response.json()).team_key, "frc3461");
   assert.equal(activationCalls, 1);
   assert.equal(providerCalls, 0);
+  assert.equal(storage.values.has("team-state:2026"), false,
+    "activation removes a legacy duplicate when its canonical publication is present");
   const diagnostics = await runtime.fetch(new Request("https://team/state", {
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
