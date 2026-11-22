@@ -51,7 +51,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       );
       try {
         const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request("/status");
+        const response = await api.request(TBA_ENDPOINTS.status());
         if (!response.ok) throw new Error(`TBA status returned HTTP ${response.status}`);
         const status = await response.json() as { current_season?: unknown };
         const raw = status?.current_season;
