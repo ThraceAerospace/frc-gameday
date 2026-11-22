@@ -1,7 +1,5 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
 import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
 
@@ -133,8 +131,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         createDiscoveryStoreClient(this.env.DISCOVERY_STORE), "discovery/current-season.json",
       );
       try {
-        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request(TBA_ENDPOINTS.status());
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider("provider/status");
         if (!response.ok) throw new Error(`TBA status returned HTTP ${response.status}`);
         const status = await response.json() as { current_season?: unknown };
         const raw = status?.current_season;
@@ -168,8 +165,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       const pageResult = await step.do(`discover-team-directory-${currentSeason.year}-${page}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
-        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request(TBA_ENDPOINTS.teamsByYearPage(currentSeason.year, page));
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
+          "provider/teams?year=" + currentSeason.year + "&page=" + page,
+        );
         if (!response.ok) throw new Error(`TBA team discovery page ${page} returned HTTP ${response.status}`);
         const teams = await response.json() as Array<{ key?: unknown }>;
         if (!Array.isArray(teams) || teams.some((team) =>
@@ -227,8 +225,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const previous = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
-        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request(TBA_ENDPOINTS.events(year), { headers });
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
+          "provider/events?year=" + year, { headers },
+        );
         const checkedAt = Date.now();
         if (response.status === 304 && previous) {
           const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
@@ -562,8 +561,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const previous = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
-        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request(TBA_ENDPOINTS.events(season), { headers });
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
+          "provider/events?year=" + season, { headers },
+        );
         const checkedAt = Date.now();
         if (response.status === 304 && previous) {
           const refreshed = { ...previous, checkedAt };
@@ -648,8 +648,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const result = await step.do(`discover-manual-team-page-${page}`, {
           retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
         }, async () => {
-          const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-          const response = await api.request(TBA_ENDPOINTS.teamsByYearPage(season, page));
+          const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
+            "provider/teams?year=" + season + "&page=" + page,
+          );
           if (!response.ok) throw new Error(`TBA team discovery page ${page} returned HTTP ${response.status}`);
           const teams = await response.json() as Array<{ key?: unknown }>;
           if (!Array.isArray(teams) || teams.length > pageSize || teams.some((team) =>
