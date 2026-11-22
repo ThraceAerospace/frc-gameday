@@ -24,7 +24,9 @@ The Worker entry point is the routing boundary for authenticated TBA webhooks. I
 - the matching `EventRuntime` for event-scoped reconciliation; and
 - each affected `TeamRuntime` for team-scoped reconciliation, when the webhook identifies teams.
 
-The entry point waits for all targeted runtimes and reports partial dispatch failures rather than acknowledging a fully successful fan-out. Each Durable Object independently validates and reconciles the webhook against its own canonical state. Do not route this through TaskScheduler, a Workflow, or a Queue: the entry point performs recipient selection and synchronous fan-out, while EventRuntime and TeamRuntime own their respective state mutations. Keep this path intact while removing TaskScheduler and extracting scheduled orchestration.
+The external TBA contract is strict: **every POST to the webhook endpoint receives HTTP 200 immediately**, before signature validation, payload parsing, or runtime dispatch. This prevents TBA from treating transient FieldView failures as webhook-delivery failures and pruning the webhook. The Worker clones the request and uses `ctx.waitUntil()` to process it after the acknowledgement. Background processing validates the HMAC and payload, selects recipients, and fans out to the runtimes. Invalid requests are dropped with internal warnings; missing bindings, rejected requests, and non-2xx runtime responses are logged internally with error logs. None of these outcomes changes the already-sent TBA response.
+
+Each Durable Object independently validates and reconciles the webhook against its own canonical state. Do not route this through TaskScheduler, a Workflow, or a Queue: the entry point performs recipient selection and background fan-out, while EventRuntime and TeamRuntime own their respective state mutations. Keep this path intact while removing TaskScheduler and extracting scheduled orchestration. Use bounded internal retries or a durable retry mechanism only if needed later; never surface dispatch failures to TBA.
 
 ## Target responsibility boundaries
 
@@ -179,7 +181,7 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 
 - The daily event readiness job is a Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
 - Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
-- The Worker entry point fans each authenticated event-scoped TBA webhook out to EventRuntime and, when team keys are present, each affected TeamRuntime; tests cover recipient selection, multi-team fan-out, and partial dispatch failure.
+- Every TBA webhook POST receives HTTP 200 immediately; validation and fan-out run under `ctx.waitUntil()`, with all failures logged internally and never reflected to TBA. Tests cover immediate acknowledgement, recipient selection, multi-team fan-out, invalid signatures, and partial dispatch failure.
 - TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
 - Every matching event has a canonical EventRuntime state and an explicit this-week classification.
 - Every discovered participant has a TeamRuntime TeamState for the event's season, or a recorded reason why it could not be seeded.
