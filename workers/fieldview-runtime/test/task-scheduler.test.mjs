@@ -16,19 +16,6 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
-class MemoryBucket {
-  values = new Map();
-  async put(key, value) { this.values.set(key, String(value)); }
-  async get(key) {
-    const value = this.values.get(key);
-    if (value === undefined) return null;
-    return {
-      async json() { return JSON.parse(value); },
-      async text() { return value; },
-    };
-  }
-}
-
 test("TaskScheduler queues team seed and advances cross-runtime work in alarms", async () => {
   const storage = new MemoryStorage();
   const calls = [];
@@ -148,51 +135,20 @@ test("TaskScheduler protects cross-runtime seed orchestration with the admin aut
   assert.equal(response.status, 401);
 });
 
-test("TaskScheduler queues coverage audit without reading entity runtimes in the request", async () => {
-  const storage = new MemoryStorage();
-  const discoveryBucket = new MemoryBucket();
-  const eventDirectory = {
-    year: 2026, etag: null, complete: true, events: [
-      { key: "2026testa", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
-      { key: "2026testb", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
-      { key: "2026testc", start_date: "2026-01-01", end_date: "2026-01-02", timezone: "America/New_York" },
-    ], updatedAt: Date.now(), checkedAt: Date.now(),
-  };
-  await discoveryBucket.put("discovery/events/2026.json", JSON.stringify(eventDirectory));
-  await discoveryBucket.put("discovery/teams/2026.json", JSON.stringify({
-    year: 2026, generation: 1, pageCount: 1, teamCount: 3, updatedAt: Date.now(), checkedAt: Date.now(),
-  }));
-  await discoveryBucket.put("registry/teams/2026.json", JSON.stringify(["frc1678", "frc254", "frc3461"]));
-  let runtimeCalls = 0;
-  const forbiddenNamespace = {
-    idFromName(name) { return name; },
-    get() { return { async fetch() { runtimeCalls += 1; throw new Error("audit reads belong in alarms"); } }; },
-  };
-  const scheduler = new TaskScheduler({ storage }, {
+test("TaskScheduler no longer exposes coverage audit routes", async () => {
+  const scheduler = new TaskScheduler({ storage: new MemoryStorage() }, {
     TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin",
-    DISCOVERY_BUCKET: discoveryBucket,
-    EVENT_RUNTIME: forbiddenNamespace, TEAM_RUNTIME: forbiddenNamespace,
   });
-  const response = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
+  const startResponse = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
     method: "POST",
     headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
     body: JSON.stringify({ action: "start", year: 2026 }),
   }));
-  assert.equal(response.status, 202);
-  assert.equal((await response.json()).queued, true);
-  assert.equal(runtimeCalls, 0, "coverage audit submission must not wait on EventRuntime or TeamRuntime");
-  assert.ok(storage.alarmAt !== null);
-  await scheduler.alarm();
-  assert.equal((await storage.get("admin:coverage-audit:2026")).status, "paused",
-    "one alarm processes only one bounded audit batch and pauses for operator continuation");
-  const continueResponse = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit", {
-    method: "POST",
-    headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "continue", year: 2026 }),
+  const statusResponse = await scheduler.fetch(new Request("https://scheduler/admin/coverage-audit?year=2026", {
+    headers: { Authorization: "Bearer admin" },
   }));
-  assert.equal(continueResponse.status, 202);
-  await scheduler.alarm();
-  assert.equal((await storage.get("admin:coverage-audit:2026")).status, "completed");
+  assert.equal(startResponse.status, 404);
+  assert.equal(statusResponse.status, 404);
 });
 
 test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
