@@ -68,3 +68,9 @@ new_sqlite_classes = ["TeamRuntime"]
 tag = "prototype-v5"
 renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
+# Retire the obsolete global coordinator after its responsibilities have moved
+# to entity runtimes and Jobs Worker Workflows. Its Durable Object data is deleted.
+[[migrations]]
+tag = "prototype-v6"
+deleted_classes = ["TaskScheduler"]
+
