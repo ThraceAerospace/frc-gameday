@@ -315,9 +315,9 @@ const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + team
 
 interface AdminDiscoveryJob {
   year: number;
-  mode: "current" | "year";
+  mode: "year";
   status: "running" | "completed" | "failed";
-  stage: "events" | "teams" | "lifecycle" | "this-week" | "complete";
+  stage: "events" | "teams" | "complete";
   events: number;
   teams: number;
   steps: number;
@@ -326,7 +326,7 @@ interface AdminDiscoveryJob {
   updatedAt: number;
   nextDueAt: number;
 }
-const adminDiscoveryKey = (mode: "current" | "year", year: number) => "admin:discovery-job:" + mode + ":" + year;
+const adminDiscoveryKey = (year: number) => "admin:discovery-job:year:" + year;
 
 
 /** System-wide discovery and cross-runtime job orchestrator; entity runtimes execute dispatched work. */
@@ -379,10 +379,9 @@ export class TaskScheduler {
  
     if (request.method === "GET" && url.pathname === "/admin/discovery-job") {
       const year = Number(url.searchParams.get("year"));
-      const mode = url.searchParams.get("mode") === "year" ? "year" : "current";
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid discovery year" }, { status: 400 });
-      return Response.json(await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(mode, year)) ??
-        { year, mode, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json(await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(year)) ??
+        { year, mode: "year", status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/admin/discover-year") {
@@ -394,7 +393,7 @@ export class TaskScheduler {
       if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
         return Response.json({ error: "Resume, cancel, or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
       }
-      const key = adminDiscoveryKey("year", year);
+      const key = adminDiscoveryKey(year);
       const current = await this.storage.get<AdminDiscoveryJob>(key);
       if (current?.status === "running") return Response.json(current, { status: 202 });
       const now = Date.now();
@@ -843,56 +842,6 @@ export class TaskScheduler {
       return Response.json({ queued: true, pending: true }, { status: 202 });
     }
 
-    if (request.method === "POST" && url.pathname === "/run") {
-      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
-      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
-        return Response.json({ error: "Pause/resume or cancel the season-ingest job before running discovery manually." }, { status: 409 });
-      }
-      const year = new Date().getUTCFullYear();
-      const key = adminDiscoveryKey("current", year);
-      const current = await this.storage.get<AdminDiscoveryJob>(key);
-      if (current?.status === "running") return Response.json(current, { status: 202 });
-      const now = Date.now();
-      const job: AdminDiscoveryJob = {
-        year, mode: "current", status: "running", stage: "events",
-        events: 0, teams: 0, steps: 0, error: null,
-        startedAt: now, updatedAt: now, nextDueAt: now,
-      };
-      await this.storage.put(key, job);
-      await this.storage.setAlarm(now);
-      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
-    }
-
-    if (request.method === "POST" && url.pathname === "/start") {
-      await this.storage.put("scheduler:enabled", true);
-      await this.storage.setAlarm(Date.now());
-      return Response.json({ started: true });
-    }
-    if (request.method === "POST" && url.pathname === "/stop") {
-      await this.storage.put("scheduler:enabled", false);
-      const [eventSeeds, teamSeeds, seasonJobs, discoveryJobs, audits] = await Promise.all([
-        this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" }),
-        this.storage.list<TeamSeedJob>({ prefix: "admin:team-seed:" }),
-        this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" }),
-        this.storage.list<AdminDiscoveryJob>({ prefix: "admin:discovery-job:" }),
-        this.storage.list<CoverageAuditRecord>({ prefix: "admin:coverage-audit:" }),
-      ]);
-      const pending = [...eventSeeds.values()].some((job) => job.status === "running") ||
-        [...teamSeeds.values()].some((job) => job.status === "running") ||
-        [...seasonJobs.values()].some((job) => job.status === "running") ||
-        [...discoveryJobs.values()].some((job) => job.status === "running") ||
-        [...audits.values()].some((job) => job.status === "running");
-      if (pending) await this.storage.setAlarm(Date.now() + 100);
-      else await this.storage.deleteAlarm();
-      return Response.json({ started: false, admin_jobs_continuing: pending });
-    }
-    if (request.method === "GET" && url.pathname === "/state") {
-      return Response.json({
-        enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
-        lastRunAt: await this.storage.get<number>("scheduler:last-run-at") ?? null,
-        lastError: await this.storage.get<string>("scheduler:last-error") ?? null,
-      });
-    }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -1286,41 +1235,21 @@ export class TaskScheduler {
   }
 
   private async processAdminDiscovery(job: AdminDiscoveryJob): Promise<void> {
-    const key = adminDiscoveryKey(job.mode, job.year);
+    const key = adminDiscoveryKey(job.year);
     job.steps += 1;
     try {
-      if (job.mode === "year") {
-        if (job.stage === "events") {
-          await this.discoverEvents(job.year);
-          const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
-          job.events = cache?.events.length ?? 0;
-          job.stage = "teams";
-        } else if (job.stage === "teams") {
-          const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
-          job.teams = result.teamCount;
-          if (result.complete) job.stage = "complete";
-        }
-      } else {
-        const policy = eventPollingPolicy(this.env);
-        if (job.stage === "events" || job.stage === "lifecycle") {
-          await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
-          const cache = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + job.year);
-          job.events = cache?.events.length ?? 0;
-          if (await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress")) job.stage = "lifecycle";
-          else job.stage = "teams";
-        } else if (job.stage === "teams") {
-          const result = await this.discoverTeams(job.year, TEAM_DISCOVERY_PREFIX, 4);
-          job.teams = result.teamCount;
-          if (result.complete) job.stage = "this-week";
-        } else if (job.stage === "this-week") {
-          const pending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
-          if (!pending) job.stage = "complete";
-        }
+      if (job.stage === "events") {
+        await this.discoverEvents(job.year);
+        const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
+        job.events = cache?.events.length ?? 0;
+        job.stage = "teams";
+      } else if (job.stage === "teams") {
+        const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
+        job.teams = result.teamCount;
+        if (result.complete) job.stage = "complete";
       }
-      if (job.stage === "complete") {
-        job.status = "completed";
-        if (job.mode === "current") await this.storage.put("scheduler:last-run-at", Date.now());
-      } else job.nextDueAt = Date.now() + 1_000;
+      if (job.stage === "complete") job.status = "completed";
+      else job.nextDueAt = Date.now() + 1_000;
       job.error = null;
     } catch (error) {
       job.error = error instanceof Error ? error.message : String(error);
@@ -1387,160 +1316,12 @@ export class TaskScheduler {
       .sort((a, b) => a.updatedAt - b.updatedAt)[0];
     if (activeDiscovery) {
       await this.measureStage("admin-discovery", () => this.processAdminDiscovery(activeDiscovery));
-      const refreshed = await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(activeDiscovery.mode, activeDiscovery.year));
+      const refreshed = await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(activeDiscovery.year));
       if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
       else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
-    if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
-      // The daily discovery/classification run is now owned by fieldview-jobs.
-      await this.storage.deleteAlarm();
-      return;
-    }
-
-    // Preserve the explicitly opt-in legacy continuous scheduler while its
-    // remaining event-lifecycle and team-directory responsibilities migrate.
-    const policy = eventPollingPolicy(this.env);
-    try {
-      await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
-      await this.storage.delete("scheduler:last-error");
-    } catch (error) {
-      await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
-    }
-    try {
-      const teamDiscovery = await this.measureStage("team-discovery", () =>
-        this.discoverTeams(new Date().getUTCFullYear(), TEAM_DISCOVERY_PREFIX, 4));
-      if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
-      else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
-    } catch (error) {
-      await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
-    }
-    await this.storage.put("scheduler:last-run-at", Date.now());
-    const teamRefresh = await this.storage.get<{ cursor: number }>(
-      TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
-    const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
-    const nextDelay = teamRefresh || lifecycleRefresh ? 1_000 : policy.discoveryIntervalMs;
-    await this.storage.setAlarm(Date.now() + nextDelay);
-  }
-
-  private async refreshThisWeekProjection(policy: EventPollingPolicy): Promise<boolean> {
-    const now = Date.now();
-    const runDate = new Date(now).toISOString().slice(0, 10);
-    const year = Number(runDate.slice(0, 4));
-    const discovery = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
-    if (!discovery || !Array.isArray(discovery.events)) return false;
-
-    let progress = await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY);
-    if (progress?.runDate !== runDate) {
-      if (await this.storage.get<string>(THIS_WEEK_LAST_RUN_KEY) === runDate) return false;
-      progress = {
-        runDate,
-        eventKeys: discovery.events.map((event) => event.key).filter((key): key is string =>
-          typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key),
-        ).sort(),
-        cursor: 0,
-        includedKeys: [],
-      };
-      await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
-    }
-
-    const eventsByKey = new Map(discovery.events
-      .filter((event) => typeof event.key === "string")
-      .map((event) => [event.key, event] as const));
-    const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
-    const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
-    const batch = progress.eventKeys.slice(progress.cursor, progress.cursor + 10);
-    for (const eventKey of batch) {
-      const event = eventsByKey.get(eventKey);
-      if (!event) continue;
-      const classification = classifyEventThisWeek(event, now);
-      if (!classification?.isThisWeek) continue;
-      progress.includedKeys.push(eventKey);
-
-      // A weekly event always gets an EventRuntime, even if its last date has
-      // passed earlier in the same Monday-Sunday window. Expired lifecycle
-      // state prevents unnecessary polling while retaining the runtime owner.
-      const lifecycle = classifyEventLifecycle(event, now, policy);
-      const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-      const eventHeaders = {
-        Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-        "X-FieldView-Event-Key": eventKey,
-        "Content-Type": "application/json",
-      };
-      const response = lifecycle
-        ? await stub.fetch(new Request("https://event-runtime/lifecycle", {
-            method: "POST",
-            headers: eventHeaders,
-            body: JSON.stringify({
-              lifecycle: lifecycle.lifecycle,
-              upcomingIntervalMs: policy.upcomingIntervalMs,
-              activeIntervalMs: policy.activeIntervalMs,
-              ...(lifecycle.completedUntil === null ? {} : { completedUntil: lifecycle.completedUntil }),
-            }),
-          }))
-        : await stub.fetch(new Request("https://event-runtime/schedule", {
-            method: "POST",
-            headers: eventHeaders,
-            body: JSON.stringify({
-              endpoints: eventResourceEndpoints(eventKey),
-              intervalMs: 86_400_000,
-              analyticsEnabled: false,
-            }),
-          }));
-      if (!response.ok) throw new Error("Failed to initialize this-week EventRuntime " + eventKey + ": HTTP " + response.status);
-      runtimeEventKeys.add(eventKey);
-      if (lifecycle?.lifecycle === "expired") scheduledKeys.delete(eventKey);
-      else if (lifecycle) scheduledKeys.add(eventKey);
-    }
-    progress.cursor += batch.length;
-    await this.storage.put(THIS_WEEK_PROGRESS_KEY, progress);
-    const nextScheduledKeys = [...scheduledKeys].sort();
-    const previousScheduledKeys = await this.storage.get<string[]>("scheduler:event-keys") ?? [];
-    if (JSON.stringify(previousScheduledKeys) !== JSON.stringify(nextScheduledKeys)) {
-      await this.storage.put("scheduler:event-keys", nextScheduledKeys);
-    }
-    const nextRuntimeEventKeys = [...runtimeEventKeys].sort();
-    const previousRuntimeEventKeys = await this.storage.get<string[]>("registry:runtime-events") ?? [];
-    if (JSON.stringify(previousRuntimeEventKeys) !== JSON.stringify(nextRuntimeEventKeys)) {
-      await this.storage.put("registry:runtime-events", nextRuntimeEventKeys);
-    }
-
-    if (progress.cursor < progress.eventKeys.length) return true;
-
-    const included = new Set(progress.includedKeys);
-    const events = discovery.events.filter((event) => typeof event.key === "string" && included.has(event.key));
-    const projection = {
-      evaluatedAt: now,
-      runDate,
-      checkedAt: discovery.checkedAt ?? discovery.updatedAt,
-      events,
-    };
-    const previous = await this.storage.get<typeof projection>(THIS_WEEK_PROJECTION_KEY);
-    if (!previous || JSON.stringify(previous) !== JSON.stringify(projection)) {
-      await this.storage.put(THIS_WEEK_PROJECTION_KEY, projection);
-    }
-    await this.storage.put(THIS_WEEK_LAST_RUN_KEY, runDate);
-    await this.storage.delete(THIS_WEEK_PROGRESS_KEY);
-    return false;
-  }
-
-  private async measureStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
-    const startedAt = performance.now();
-    try {
-      const result = await operation();
-      console.log("[FV][TaskScheduler] alarm-stage", JSON.stringify({
-        stage, outcome: "success",
-        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
-      }));
-      return result;
-    } catch (error) {
-      console.error("[FV][TaskScheduler] alarm-stage", JSON.stringify({
-        stage, outcome: "error",
-        duration_ms: Math.round((performance.now() - startedAt) * 10) / 10,
-        error: error instanceof Error ? error.message : String(error),
-      }));
-      throw error;
-    }
+    await this.storage.deleteAlarm();
   }
 
   private async isSeasonIngestCurrent(job: SeasonIngestJob): Promise<boolean> {
@@ -2005,118 +1786,5 @@ export class TaskScheduler {
     return { requestCount, pageCount: pages.length, teamCount: teams.length, complete: true };
   }
 
-  private async discoverAndSchedule(policy: EventPollingPolicy): Promise<void> {
-    const year = new Date().getUTCFullYear();
-    const events = new Map<string, TBAEvent>();
-    // Routine discovery keeps only the active calendar year's cache. Admin-prepared
-    // historical snapshots live under separate prefixes and are not pruned here.
-    const discoveryEntries = await this.storage.list<DiscoveryCache>({ prefix: DISCOVERY_PREFIX });
-    for (const key of discoveryEntries.keys()) {
-      if (key !== DISCOVERY_PREFIX + year) await this.storage.delete(key);
-    }
-    // FieldView only needs the current calendar year's discovery cache.
-    for (const discoveryYear of [year]) {
-      const endpoint = TBA_ENDPOINTS.events(discoveryYear);
-      const cacheKey = DISCOVERY_PREFIX + discoveryYear;
-      const cached = await this.storage.get<DiscoveryCache>(cacheKey);
-      const checkedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
-      let discovered: TBAEvent[];
-      if (cached && Date.now() - checkedAt < policy.discoveryIntervalMs) {
-        // Avoid unnecessary provider requests while the retained event
-        // directory is still within its configured freshness interval.
-        discovered = cached.events;
-      } else {
-        const headers = new Headers();
-        if (cached?.etag) headers.set("If-None-Match", cached.etag);
-        const response = await this.api.request(endpoint, { headers });
-        if (response.status === 304 && cached) {
-          discovered = cached.events;
-          await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() } satisfies DiscoveryCache);
-        } else if (response.ok) {
-          discovered = await response.json() as TBAEvent[];
-          if (!Array.isArray(discovered)) throw new Error("TBA event discovery returned a non-array payload");
-          const retrievedAt = Date.now();
-          await this.storage.put(cacheKey, {
-            etag: response.headers.get("ETag"),
-            events: discovered,
-            updatedAt: retrievedAt,
-            checkedAt: retrievedAt,
-          } satisfies DiscoveryCache);
-        } else {
-          throw new Error("TBA event discovery failed for " + discoveryYear + " with HTTP " + response.status);
-        }
-      }
-      for (const event of discovered) if (event.key) events.set(event.key, event);
-    }
 
-    const scheduledKeys = new Set(await this.storage.get<string[]>("scheduler:event-keys") ?? []);
-    const runtimeEventKeys = new Set(await this.storage.get<string[]>("registry:runtime-events") ?? []);
-    const lifecycleProgressKey = "scheduler:event-lifecycle-progress";
-    const lifecycleProgress = await this.storage.get<{ year: number; eventKeys: string[]; cursor: number }>(lifecycleProgressKey);
-    const lifecycleEventKeys = lifecycleProgress?.year === year ? lifecycleProgress.eventKeys : [...events.keys()].sort();
-    let lifecycleCursor = lifecycleProgress?.year === year ? lifecycleProgress.cursor : 0;
-    // A previous multi-year scheduler may have left future-year EventRuntime
-    // polls active. Stop those runtimes now that discovery is current-year-only.
-    for (const eventKey of [...scheduledKeys]) {
-      const eventYear = /^([0-9]{4})/.exec(eventKey)?.[1];
-      if (!eventYear || Number(eventYear) === year) continue;
-      const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
-      const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": eventKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lifecycle: "expired",
-          upcomingIntervalMs: policy.upcomingIntervalMs,
-          activeIntervalMs: policy.activeIntervalMs,
-        }),
-      }));
-      if (!response.ok) throw new Error("Failed to stop out-of-year event " + eventKey + ": HTTP " + response.status);
-      scheduledKeys.delete(eventKey);
-    }
-
-    const knownEvents = [...new Set([...(await this.storage.get<string[]>("registry:events") ?? []), ...events.keys()])].sort();
-    await this.storage.put("registry:events", knownEvents);
-
-    const lifecycleBatch = lifecycleEventKeys.slice(lifecycleCursor, lifecycleCursor + 10);
-    for (const eventKey of lifecycleBatch) {
-      const event = events.get(eventKey);
-      if (!event) continue;
-      const decision = classifyEventLifecycle(event, Date.now(), policy);
-      if (!decision) continue;
-      // Historical event lists contain years of completed events. Only send an
-      // expiry instruction for events this scheduler previously activated.
-      if (decision.lifecycle === "expired" && !scheduledKeys.has(event.key)) continue;
-      if (decision.lifecycle === "expired") scheduledKeys.delete(event.key);
-      else scheduledKeys.add(event.key);
-      const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(event.key));
-      const response = await stub.fetch(new Request("https://event-runtime/lifecycle", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": event.key,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lifecycle: decision.lifecycle,
-          upcomingIntervalMs: policy.upcomingIntervalMs,
-          activeIntervalMs: policy.activeIntervalMs,
-          ...(decision.completedUntil === null ? {} : { completedUntil: decision.completedUntil }),
-        }),
-      }));
-      if (!response.ok) throw new Error("Failed to schedule " + event.key + ": HTTP " + response.status);
-      runtimeEventKeys.add(event.key);
-    }
-    lifecycleCursor += lifecycleBatch.length;
-    await this.storage.put("scheduler:event-keys", [...scheduledKeys]);
-    await this.storage.put("registry:runtime-events", [...runtimeEventKeys].sort());
-    if (lifecycleCursor < lifecycleEventKeys.length) {
-      await this.storage.put(lifecycleProgressKey, { year, eventKeys: lifecycleEventKeys, cursor: lifecycleCursor });
-    } else {
-      await this.storage.delete(lifecycleProgressKey);
-    }
-  }
 }
