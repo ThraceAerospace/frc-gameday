@@ -34,7 +34,10 @@ test("EventRuntime hydrates its persisted event publication before serving reads
   storage.values.set("snapshot-revision", 4);
   storage.values.set("event-state:publication", {
     sourceRevision: 7, snapshotVersion: 4, generatedAt: Date.now(), status: "partial",
-    state: { event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {} },
+    state: {
+      event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {},
+      analytics: { obsolete: true }, team_states: [{ team_key: "frc3461", obsolete: true }],
+    },
   });
   storage.values.set("event-view:publication", {
     schema_version: 1, event_key: eventKey, version: 1, source_revision: 7,
@@ -56,6 +59,9 @@ test("EventRuntime hydrates its persisted event publication before serving reads
   }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).event.key, eventKey);
+  const migratedPublication = storage.values.get("event-state:publication");
+  assert.equal("analytics" in migratedPublication.state, false);
+  assert.equal("team_states" in migratedPublication.state, false);
   assert.equal(activationCalls, 1);
   assert.equal(storage.values.has("event-view:publication"), false,
     "activation retires the old duplicated EventView manifest");
@@ -1225,37 +1231,34 @@ test("EventRuntime runs independent provider requests concurrently", async () =>
   assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one EventRuntime");
 });
 
-test("EventRuntime coordinates active competition with every participating TeamRuntime", async () => {
-  const storage = new MemoryStorage(), eventKey = "2026coordination", notifications = [];
-  const namespace = {
-    idFromName: (teamKey) => teamKey,
-    get: (teamKey) => ({
-      fetch: async (request) => {
-        notifications.push({ teamKey, url: request.url, body: await request.json() });
-        return Response.json({ ok: true });
-      },
-    }),
-  };
-  const rosterEndpoint = TBA_ENDPOINTS.eventTeams(eventKey);
-  storage.values.set("endpoint:" + rosterEndpoint, {
-    endpoint: rosterEndpoint,
-    data: [{ key: "frc3461" }, { key: "frc254" }, { key: "frc3461" }],
-  });
+test("EventRuntime serves participant discovery from its owned TBA resource", async () => {
+  const storage = new MemoryStorage(), eventKey = "2026participants";
+  const endpoint = TBA_ENDPOINTS.eventTeams(eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    TEAM_RUNTIME: namespace,
-    fetcher: async () => Response.json([]),
+    fetcher: async () => { throw new Error("participant reads must not fetch providers inline"); },
   }, eventKey);
-  await runtime.syncTeamActivity(true);
-  assert.deepEqual(notifications.map((item) => item.teamKey).sort(), ["frc254", "frc3461"]);
-  assert.ok(notifications.every((item) => item.body.active === true));
-  assert.ok(notifications.every((item) => item.body.event_key === eventKey));
-  assert.ok(notifications.every((item) => item.url.includes("year=2026")));
-});
 
+  const pending = await runtime.fetch(new Request("https://event-runtime/participants", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(pending.status, 202);
+  assert.equal((await pending.json()).ready, false);
+
+  storage.values.set("endpoint:" + endpoint, {
+    endpoint, data: [{ key: "frc3461" }, { key: "frc254" }, { key: "frc3461" }],
+    lastFetchedAt: Date.now(), status: "available",
+  });
+  const ready = await runtime.fetch(new Request("https://event-runtime/participants", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(ready.status, 200);
+  assert.deepEqual((await ready.json()).team_keys, ["frc254", "frc3461"]);
+});
 
 test("EventRuntime invalidates event analytics when a TeamRuntime season state changes", async () => {
   const storage = new MemoryStorage(), eventKey = "2026teamchange";
