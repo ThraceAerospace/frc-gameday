@@ -797,7 +797,7 @@ export class EventRuntime {
         : undefined;
       const analytics = storedAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
         ? storedAnalytics
-        : storedAnalytics ? { ...storedAnalytics, team_comparison: undefined } : storedAnalytics;
+        : storedAnalytics ? { ...storedAnalytics, team_comparison: undefined, team_summaries: undefined } : storedAnalytics;
       return Response.json({ ...publication.state, analytics }, { headers });
     }
 
