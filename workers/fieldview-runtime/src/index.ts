@@ -170,7 +170,7 @@ export default {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || typeof body.event_key !== "string" ||
           !/^[a-zA-Z0-9_-]+$/.test(body.event_key) ||
-          !["upcoming", "active", "completed"].includes(String(body.lifecycle))) {
+          !["upcoming", "active", "completed", "expired"].includes(String(body.lifecycle))) {
         return Response.json({ error: "Expected a valid event_key and lifecycle" }, { status: 400 });
       }
       const eventKey = body.event_key;
@@ -186,6 +186,7 @@ export default {
           lifecycle: body.lifecycle,
           upcomingIntervalMs: Number(env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000),
           activeIntervalMs: Number(env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000),
+          ...(typeof body.completedUntil === "number" ? { completedUntil: body.completedUntil } : {}),
         }),
       }));
     }
