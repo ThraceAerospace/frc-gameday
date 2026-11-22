@@ -359,27 +359,48 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       });
     }
 
-    // Resolve event participants independently so one unavailable event does
-    // not prevent unrelated events from seeding their TeamRuntime instances.
+    // EventRuntime owns the event-participant resource and its provider I/O.
+    // The Workflow only asks for readiness and coordinates the resulting teams.
     const participantKeys = new Set<string>();
     const eventRefs = classified.flatMap(({ eventRefs: items }) => items);
     const participantFailures: Array<{ event_key: string; error: string }> = [];
     for (const item of eventRefs) {
       try {
-        const result = await step.do(`discover-participants-${item.key}`, {
-          retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
-        }, async () => {
-          const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-          const response = await api.request(TBA_ENDPOINTS.eventTeamsSimple(item.key));
-          if (!response.ok) throw new Error(`TBA event team discovery for ${item.key} returned HTTP ${response.status}`);
-          const teams = await response.json() as Array<{ key?: unknown }>;
-          if (!Array.isArray(teams) || teams.some((team) =>
-            !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
-            throw new Error(`TBA event team discovery for ${item.key} returned an invalid team list`);
+        let teamKeys: string[] | null = null;
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          const result = await step.do(`discover-participants-${item.key}-${attempt}`, async () => {
+            const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
+              "https://fieldview-runtime/internal/workflows/dispatch",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  kind: "event", key: item.key, action: "participants", year: currentSeason.year,
+                }),
+              },
+            ));
+            if (response.status === 202) return { ready: false, team_keys: [] as string[] };
+            if (!response.ok) {
+              throw new Error(`EventRuntime participant lookup for ${item.key} returned HTTP ${response.status}`);
+            }
+            const value = await response.json() as { ready?: unknown; team_keys?: unknown };
+            if (value.ready !== true || !Array.isArray(value.team_keys) ||
+                value.team_keys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
+              throw new Error(`EventRuntime returned an invalid participant roster for ${item.key}`);
+            }
+            return { ready: true, team_keys: [...new Set(value.team_keys as string[])].sort() };
+          });
+          if (result.ready) {
+            teamKeys = result.team_keys;
+            break;
           }
-          return [...new Set(teams.map((team) => team.key as string))].sort();
-        });
-        result.forEach((teamKey) => participantKeys.add(teamKey));
+          await step.sleep(`wait-event-participants-${item.key}-${attempt}`, "5 seconds");
+        }
+        if (teamKeys === null) throw new Error(`Timed out waiting for EventRuntime participants for ${item.key}`);
+        teamKeys.forEach((teamKey) => participantKeys.add(teamKey));
       } catch (error) {
         participantFailures.push({ event_key: item.key, error: String(error) });
       }
