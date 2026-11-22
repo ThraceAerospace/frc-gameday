@@ -30,6 +30,12 @@ binding = "COVERAGE_AUDIT"
 class_name = "CoverageAuditWorkflow"
 concurrency = { limit = 1 }
 
+[[workflows]]
+name = "runtime-admin-prototype"
+binding = "RUNTIME_ADMIN"
+class_name = "RuntimeAdminWorkflow"
+concurrency = { limit = 1 }
+
 # Configure TBA_API_KEY and RUNTIME_ADMIN_TOKEN as Worker secrets:
 # wrangler secret put TBA_API_KEY --config wrangler.prototype.toml
 # wrangler secret put RUNTIME_ADMIN_TOKEN --config wrangler.prototype.toml
