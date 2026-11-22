@@ -7,6 +7,7 @@ import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from 
 import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
+export { RuntimeAdminWorkflow };
 
 interface DiscoveryDocument {
   year: number;
