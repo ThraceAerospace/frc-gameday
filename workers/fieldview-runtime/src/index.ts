@@ -366,14 +366,14 @@ export default {
             body: JSON.stringify({ year }),
           }));
         }
-        if (action === "coverage-audit-start" || action === "coverage-audit-continue") {
+        if (action === "coverage-audit-start" || action === "coverage-audit-continue" || action === "coverage-audit-pause") {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid audit year is required" }, { status: 400 });
           if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
           return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/coverage-audit", {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : "continue", year }),
+            body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : action === "coverage-audit-pause" ? "pause" : "continue", year }),
           }));
         }
         if (!env.TASK_SCHEDULER || !["season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
