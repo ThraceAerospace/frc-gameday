@@ -193,26 +193,40 @@ export default {
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
       if (env.DISCOVERY_BUCKET) {
-        const object = await env.DISCOVERY_BUCKET.get("projections/events/this-week.json");
-        if (object) {
-          const projection = await object.json<{
-            evaluatedAt: number; runDate: string; checkedAt?: number;
-            events: Array<Record<string, unknown>>;
-          }>();
-          const checkedAt = projection.checkedAt ?? projection.evaluatedAt;
-          const stale = Date.now() - checkedAt > 60 * 60_000;
-          return Response.json({
-            evaluatedAt: projection.evaluatedAt,
-            runDate: projection.runDate,
-            checkedAt,
-            events: projection.events.map((event) => normalizeFieldViewEvent(event as never, {
-              tba_event: {
-                status: stale ? "stale" : "available",
-                retrieved_at: new Date(checkedAt).toISOString(),
-              },
-            })),
-            index: { status: stale ? "stale" : "available", persisted: true },
-          }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
+        const pointerObject = await env.DISCOVERY_BUCKET.get("projections/events/this-week/current.json");
+        if (pointerObject) {
+          const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
+          const events: Array<Record<string, unknown>> = [];
+          let checkedAt = Number.MAX_SAFE_INTEGER;
+          let complete = true;
+          for (const year of pointer.years) {
+            const object = await env.DISCOVERY_BUCKET.get(
+              `projections/events/this-week/${pointer.runAt}/${year}.json`,
+            );
+            if (!object) { complete = false; break; }
+            const projection = await object.json<{
+              checkedAt: number;
+              events: Array<Record<string, unknown>>;
+            }>();
+            checkedAt = Math.min(checkedAt, projection.checkedAt);
+            events.push(...projection.events);
+          }
+          if (complete) {
+            const stale = Date.now() - checkedAt > 60 * 60_000;
+            events.sort((a, b) => String(a.key).localeCompare(String(b.key)));
+            return Response.json({
+              evaluatedAt: pointer.runAt,
+              runDate: pointer.runDate,
+              checkedAt,
+              events: events.map((event) => normalizeFieldViewEvent(event as never, {
+                tba_event: {
+                  status: stale ? "stale" : "available",
+                  retrieved_at: new Date(checkedAt).toISOString(),
+                },
+              })),
+              index: { status: stale ? "stale" : "available", persisted: true },
+            }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
+          }
         }
       }
       if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
