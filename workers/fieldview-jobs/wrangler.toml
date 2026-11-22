@@ -20,6 +20,7 @@ name = "daily-event-readiness"
 binding = "DAILY_EVENT_READINESS"
 class_name = "DailyEventReadinessWorkflow"
 schedules = ["0 16 * * *"]
+concurrency = { limit = 1 }
 
 # Configure TBA_API_KEY and RUNTIME_ADMIN_TOKEN as Worker secrets:
 # wrangler secret put TBA_API_KEY
