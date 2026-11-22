@@ -96,7 +96,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     await update({ phase: "waiting-for-team-history" });
     const historyEndpoint = TBA_ENDPOINTS.teamEvents(teamKey, p.year);
     let snapshot: { events?: Array<Record<string, unknown>> | null } | null = null;
-    for (let attempt = 0; attempt < 180; attempt += 1) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
       const state = await step.do("team-state-" + attempt, async () => {
         const response = await dispatch(this.env, "team", teamKey, "state", { year: p.year });
         if (!response.ok) throw new Error("TeamRuntime state returned HTTP " + response.status);
@@ -168,7 +168,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         return response.json() as Promise<{ ready: boolean; team_keys: string[] }>;
       });
       if (result.ready) { teamKeys = [...new Set(result.team_keys.filter(validTeam))]; break; }
-      await step.sleep("wait-event-participants-" + attempt, "5 seconds");
+      await step.sleep("wait-event-participants-" + attempt, "30 seconds");
     }
     if (!teamKeys.length) throw new Error("Timed out waiting for event participant roster");
     await update({ phase: "seeding-event-teams", total: teamKeys.length, team_keys: teamKeys });
