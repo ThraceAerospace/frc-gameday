@@ -55,9 +55,7 @@ export async function dispatchRuntime(
   if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
   const method = action === "state" || action === "analytics" ? "GET" : "POST";
   const payload = { ...body };
-  if (method === "GET") {
-    delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
-  }
+  delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
   const response = await stub.fetch(new Request("https://event-runtime/" + path, {
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
