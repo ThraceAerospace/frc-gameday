@@ -82,7 +82,7 @@ Canonical data has exactly one owning runtime and one authoritative persisted re
 
 - EventRuntime owns event-scoped provider resources, FieldViewEventState, and FieldViewEventAnalytics.
 - TeamRuntime owns team-scoped provider resources, FieldViewTeamState, FieldViewTeamEventState, and team-scoped analytics.
-- TaskScheduler owns the canonical district directory and district records (metadata, roster, events, rankings, and advancement). TeamRuntime may own the team-to-district membership relationship, but stores district keys/references rather than complete district records.
+- There is no district-owned runtime, directory, snapshot, cache, acquisition, or query surface. TeamRuntime and EventRuntime retain the district membership data reported by their own team/event provider records; consumers use that local reference and never fetch a separate district record.
 - EventRuntime owns event identity, event/team participation, matches, playoff alliances, and event-wide analytics. EventState may contain event-owned participation facts, but it must reference TeamRuntime-owned team profiles by team key rather than embed them.
 - A match may retain its match-local alliance roster as team keys and relationship-scoped facts. It must not copy team profiles, OPR/EPA metrics owned by another aggregate, or complete playoff-alliance records; use references for canonical records and retain only match-owned or explicitly derived values.
 - TeamRuntime's season history references EventRuntime-owned events by event key; it must not embed complete event records.
@@ -100,7 +100,6 @@ Canonical domain concepts include:
 - `FieldViewTeam` and `FieldViewTeamSeason`;
 - `FieldViewEvent` and `FieldViewEventTeam`;
 - `FieldViewMatch` and `FieldViewPlayoffAlliance`;
-- `FieldViewDistrict`;
 - `FieldViewEventAnalytics`, `FieldViewTeamEventAnalytics`, and the canonical team/event state aggregates.
 
 A domain object is data; a runtime is machinery that acquires, reconciles, persists, and publishes data. Do not create a Durable Object for every interface or DTO.
