@@ -631,6 +631,7 @@ export class TeamRuntime {
         ...(teamState.team === undefined ? {} : { team: teamState.team }),
         ...(eventTeam === undefined ? {} : { event_team: eventTeam }),
         ...(teamMatches === undefined ? {} : { matches: teamMatches }),
+        event_source_revision: eventSourceRevision as number,
       });
       const teamSourceRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const suppliedTeamRevision = comparisonInput.team_state_revisions?.find((item) => item.team_key === this.teamKey)?.revision;
