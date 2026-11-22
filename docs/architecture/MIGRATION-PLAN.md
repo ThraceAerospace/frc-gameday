@@ -42,7 +42,7 @@ The intended structure is:
 apps/
   web/                         # Next.js UI and presentation
 workers/
-  fieldview-runtime/           # Cloudflare Worker entrypoint and event/team Durable Objects
+  fieldview/                   # Single Cloudflare Worker entrypoint, event/team Durable Objects, and Workflows
 packages/
   domain/                      # FieldView normalization and derived-data domain models
     src/
@@ -102,7 +102,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | TBA / Statbotics / FRC Colors API access | Provider adapters invoked by Workers |
 | TBA and Statbotics normalization/correlation | FieldView domain layer, after unchanged provider payload receipt |
 | Other provider payloads | Passed through unchanged |
-| Scheduled refresh triggers | EventRuntime and TeamRuntime alarms execute entity-local work; Jobs Worker Workflows coordinate cross-runtime/system-wide jobs and dispatch commands |
+| Scheduled refresh triggers | EventRuntime and TeamRuntime alarms execute entity-local work; FieldView Worker Workflows coordinate cross-runtime/system-wide jobs and dispatch commands |
 | Authoritative event state and reconciliation | EventRuntime Durable Object |
 | Event-scoped persistent coordination | EventRuntime Durable Object |
 | Live event subscriptions and publication | Durable Object / Worker boundary |
@@ -111,7 +111,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | Team-level persistent runtime | One lazy TeamRuntime Durable Object per TBA team key; owns team identity, season data, team-event states, team-scoped analytics, and the district membership fields reported by its own team provider record |
 | Event-wide analytics | EventRuntime Durable Object; calculates event-level metrics from event inputs and TeamRuntime-owned team-event results |
 | Team analytics | TeamRuntime Durable Object; independently calculates and persists team/season and team/event metrics |
-| Roster reconciliation | Scheduled Jobs Worker Workflow; ordinary event reads do not reconcile rosters |
+| Roster reconciliation | Scheduled FieldView Worker Workflow; ordinary event reads do not reconcile rosters |
 
 The runtime uses one `EventRuntime` per event and one lazy `TeamRuntime` per TBA team key. EventRuntime owns event-scoped resources, FieldViewEventState, FieldViewEventAnalytics, and the district membership fields reported by its own event provider record. TeamRuntime owns team identity, season participation, FieldViewTeamState (including the district membership fields reported by its own team provider record), FieldViewTeamEventState, and FieldViewTeamEventAnalytics. There is no district aggregate or district-owned acquisition; TeamRuntime and EventRuntime retain membership data reported by their own provider records. EventRuntime builds one versioned comparison input from the roster's TeamStates and supplies it to each TeamRuntime; each TeamRuntime calculates its own event comparison against the shared event population and its own season history. EventRuntime consumes those persisted results to calculate event-wide rankings, extremes, and other field-level metrics. FieldViewEventView is a bounded read projection containing EventRuntime-owned event state and analytics, logical references to participant TeamRuntime event states, and explicit coverage metadata. It does not embed foreign TeamEventState records. Event analytics retrieves EventState from EventRuntime and participant TeamEventStates from their owning TeamRuntimes, combines them only in memory for the calculation, persists only EventAnalytics with source-revision/coverage provenance, and discards the combined input. See ADR-0016. Jobs Worker Workflows perform roster reconciliation as scheduled work. The two runtimes remain separate consistency and refresh boundaries. Domain objects are not automatically Durable Objects: only aggregates with independently owned acquisition, persistence, and refresh lifecycles receive one. Analytics calculations are owned by the runtime responsible for their subject and scope.
 
@@ -121,12 +121,12 @@ The scheduling boundary is now explicit:
 
 - **EventRuntime owns event-local execution.** Its durable task records and alarm drive event resource polling, webhook-triggered follow-up work, event reconciliation, analytics invalidation/publication, retries, and backoff.
 - **TeamRuntime owns team-local execution.** Its durable task records and alarm drive team resource acquisition, team/event projection work, analytics refreshes, retries, and backoff.
-- **Jobs Worker Workflows own cross-runtime orchestration.** They discover or read published system inventory, select the runtimes participating in a system-wide job, persist orchestration progress in the Runtime Worker's SQLite-backed DiscoveryStore Durable Object, apply bounded batches and ordering, and dispatch commands to the relevant EventRuntime/TeamRuntime instances. The target runtimes execute those commands and retain ownership of provider I/O and entity state.
+- **FieldView Worker Workflows own cross-runtime orchestration.** They discover or read published system inventory, select the runtimes participating in a system-wide job, persist orchestration progress in the Runtime Worker's SQLite-backed DiscoveryStore Durable Object, apply bounded batches and ordering, and dispatch commands to the relevant EventRuntime/TeamRuntime instances. The target runtimes execute those commands and retain ownership of provider I/O and entity state.
 - A runtime command is a trigger, not a transfer of ownership. A Workflow may tell a runtime to initialize, change lifecycle policy, refresh, or enqueue a local operation; the runtime performs that work under its own alarm/queue and persistence rules.
 - There is no global TaskScheduler Durable Object or global coordinator. Workflows must not become provider proxies, duplicate entity polling queues, or be called from ordinary runtime reads to register an entity. Inventory is stored in DiscoveryStore discovery directories and per-entity runtime markers.
 - Global jobs remain Workflows when they genuinely span multiple entities: event discovery/classification, roster reconciliation, season ingestion, event-team seeding, and team-seed-to-event initialization. A job's progress belongs to its Workflow/DiscoveryStore record; each entity's data and execution remain with its runtime.
 
-The current implementation routes manual team seeding, event-team seeding, and season ingestion through RuntimeAdminWorkflow in the Jobs Worker. The Workflow dispatches commands to TeamRuntime and EventRuntime; those runtimes own their queues and provider I/O. Runtime inventory and Workflow progress are stored in DiscoveryStore. EventRuntime analytics input collection does not call a global coordinator to register participating teams during a read.
+The current implementation routes manual team seeding, event-team seeding, and season ingestion through RuntimeAdminWorkflow. The target deployment hosts this Workflow in the same FieldView Worker as the Runtime classes. The Workflow dispatches commands to TeamRuntime and EventRuntime; those runtimes own their queues and provider I/O. Runtime inventory and Workflow progress are stored in DiscoveryStore. EventRuntime analytics input collection does not call a global coordinator to register participating teams during a read.
 
 ### Asynchronous admin job execution (2026-11-21)
 
