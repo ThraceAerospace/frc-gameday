@@ -73,6 +73,52 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     });
     const years = [currentSeason.year];
 
+    // Publish the current-season team directory from TBA's paginated endpoint.
+    // Each page is an immutable R2 object; the manifest is the publication
+    // boundary and is written only after every page has been validated.
+    const teamDirectoryGeneration = Date.now();
+    const teamPageSize = 500;
+    let teamPageCount = 0;
+    let teamCount = 0;
+    for (let page = 0; ; page += 1) {
+      const pageResult = await step.do(`discover-team-directory-${currentSeason.year}-${page}`, {
+        retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+      }, async () => {
+        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+        const response = await api.request(TBA_ENDPOINTS.teamsByYearPage(currentSeason.year, page));
+        if (!response.ok) throw new Error(`TBA team discovery page ${page} returned HTTP ${response.status}`);
+        const teams = await response.json() as Array<{ key?: unknown }>;
+        if (!Array.isArray(teams) || teams.some((team) =>
+          !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+          throw new Error(`TBA team discovery page ${page} returned an invalid team directory`);
+        }
+        await this.env.DISCOVERY_BUCKET.put(
+          `discovery/team-pages/${currentSeason.year}/${teamDirectoryGeneration}/${page}.json`,
+          JSON.stringify(teams),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        return { page, count: teams.length, hasMore: teams.length === teamPageSize };
+      });
+      teamPageCount += 1;
+      teamCount += pageResult.count;
+      if (!pageResult.hasMore) break;
+    }
+    await step.do("publish-current-season-team-directory", async () => {
+      await this.env.DISCOVERY_BUCKET.put(
+        `discovery/teams/${currentSeason.year}.json`,
+        JSON.stringify({
+          year: currentSeason.year,
+          generation: teamDirectoryGeneration,
+          pageCount: teamPageCount,
+          teamCount,
+          updatedAt: teamDirectoryGeneration,
+          checkedAt: Date.now(),
+        }),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      return { year: currentSeason.year, pages: teamPageCount, teams: teamCount };
+    });
+
     const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number; needsChunking: boolean }> = [];
     const eventChunkSize = 25;
     for (const year of years) {
@@ -200,6 +246,64 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       });
     }
 
+    // Resolve event participants independently so one unavailable event does
+    // not prevent unrelated events from seeding their TeamRuntime instances.
+    const participantKeys = new Set<string>();
+    const eventRefs = classified.flatMap(({ eventRefs: items }) => items);
+    const participantFailures: Array<{ event_key: string; error: string }> = [];
+    for (const item of eventRefs) {
+      const result = await step.do(`discover-participants-${item.key}`, {
+        retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
+      }, async () => {
+        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+        const response = await api.request(TBA_ENDPOINTS.eventTeamsSimple(item.key));
+        if (!response.ok) throw new Error(`TBA event team discovery for ${item.key} returned HTTP ${response.status}`);
+        const teams = await response.json() as Array<{ key?: unknown }>;
+        if (!Array.isArray(teams) || teams.some((team) =>
+          !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+          throw new Error(`TBA event team discovery for ${item.key} returned an invalid team list`);
+        }
+        return [...new Set(teams.map((team) => team.key as string))].sort();
+      });
+      result.forEach((teamKey) => participantKeys.add(teamKey));
+    }
+
+    const teamKeys = [...participantKeys].sort();
+    const seededTeams: string[] = [];
+    const failedTeams: Array<{ team_key: string; error: string }> = [];
+    for (let offset = 0; offset < teamKeys.length; offset += 10) {
+      const batch = teamKeys.slice(offset, offset + 10);
+      const result = await step.do(`seed-team-runtimes-${offset / 10}`, {
+        retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
+      }, async () => {
+        const seeded: string[] = [];
+        const failed: Array<{ team_key: string; error: string }> = [];
+        for (const teamKey of batch) {
+          const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
+            `https://fieldview-runtime/internal/teams/${teamKey}/seed?year=${currentSeason.year}`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}` },
+            },
+          ));
+          if (response.status === 401 || response.status === 403 || response.status === 404) {
+            throw new Error(`TeamRuntime seed boundary returned HTTP ${response.status} for ${teamKey}`);
+          }
+          if (response.status === 429 || response.status >= 500) {
+            throw new Error(`Transient TeamRuntime response HTTP ${response.status} for ${teamKey}`);
+          }
+          if (!response.ok && response.status !== 202) {
+            failed.push({ team_key: teamKey, error: `Runtime returned HTTP ${response.status}` });
+          } else {
+            seeded.push(teamKey);
+          }
+        }
+        return { seeded, failed };
+      });
+      seededTeams.push(...result.seeded);
+      failedTeams.push(...result.failed);
+    }
+
     const prepared = await step.do("write-this-week-manifest", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
       const eventRefs = classified.flatMap(({ year, eventRefs: items }) =>
@@ -273,6 +377,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
       discovery: discovery.map(({ year, count }) => ({ year, count })),
       this_week_events: prepared.eventCount,
+      team_directory: { pages: teamPageCount, teams: teamCount },
+      participant_teams: teamKeys.length,
+      teams_seeded: seededTeams.length,
+      teams_failed: failedTeams.length,
+      team_seed_failures: failedTeams.slice(0, 100),
       initialized: initialized.length,
       failed: failures.length,
       failures: failures.slice(0, 100),
