@@ -127,14 +127,9 @@ export function classifyEventLifecycle(
 }
 
 interface DiscoveryCache {
-  year?: number;
-  etag: string | null;
-  complete?: boolean;
+  year: number;
   events: TBAEvent[];
-  /** Retrieval time of the retained payload version. */
   updatedAt: number;
-  /** Most recent successful 200/304 validation of that payload. */
-  checkedAt?: number;
 }
 
 interface SeasonIngestJob {
@@ -186,13 +181,10 @@ const seasonIngestSummary = (job: SeasonIngestJob) => ({
 });
 
 interface TeamDiscoveryCache {
-  etag: string | null;
   pageCount: number;
   teamCount: number;
   teamKeys: string[];
-  complete: true;
   updatedAt: number;
-  checkedAt: number;
 }
 
 interface EventTeamSeedJob {
@@ -257,21 +249,19 @@ export class TaskScheduler {
     const directory = await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
     if (!directory || directory.year !== year || !Array.isArray(directory.events) ||
         directory.events.some((event) => typeof event?.key !== "string")) return undefined;
-    return { ...directory, complete: true };
+    return directory;
   }
 
   private async readTeamDiscovery(year: number): Promise<TeamDiscoveryCache | undefined> {
     const manifest = await this.readR2Json<{
-      year: number; generation: number; pageCount: number; teamCount: number;
-      updatedAt: number; checkedAt: number;
+      year: number; pageCount: number; teamCount: number; updatedAt: number;
     }>(`discovery/teams/${year}.json`);
     if (!manifest || manifest.year !== year || !Number.isInteger(manifest.pageCount) ||
         manifest.pageCount < 1 || !Number.isInteger(manifest.teamCount) || manifest.teamCount < 1) return undefined;
     const teamKeys = await this.readR2Keys(`registry/teams/${year}.json`);
     if (teamKeys.length !== manifest.teamCount || teamKeys.some((key) => !/^frc[0-9]+$/.test(key))) return undefined;
     return {
-      etag: null, pageCount: manifest.pageCount, teamCount: manifest.teamCount,
-      teamKeys, complete: true, updatedAt: manifest.updatedAt, checkedAt: manifest.checkedAt,
+      pageCount: manifest.pageCount, teamCount: manifest.teamCount, teamKeys, updatedAt: manifest.updatedAt,
     };
   }
 
@@ -415,7 +405,7 @@ export class TaskScheduler {
           typeof item === "string" && /^[a-zA-Z0-9_-]+$/.test(item)) ?? [];
         const teamKeys = (teams?.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey));
         const runtimeReady = Boolean(this.env.TEAM_RUNTIME && this.env.EVENT_RUNTIME && this.env.RUNTIME_ADMIN_TOKEN && this.env.TBA_API_KEY);
-        const discoveryReady = events?.complete === true && teams?.complete === true && eventKeys.length > 0 && teamKeys.length > 0;
+        const discoveryReady = events !== undefined && teams !== undefined && eventKeys.length > 0 && teamKeys.length > 0;
         const ready = discoveryReady && runtimeReady;
         const eventResourceCount = eventKeys[0] ? eventResourceEndpoints(eventKeys[0]).length + 1 : 0;
         const teamResourceCount = teamKeys[0] ? teamResourceEndpoints(teamKeys[0], year).length : 0;
@@ -445,11 +435,11 @@ export class TaskScheduler {
         if (job?.status === "running" || job?.status === "paused") return Response.json({ error: "A season-ingest job already exists in an active or paused state. Resume or cancel it first.", job: seasonIngestSummary(job) }, { status: 409 });
         const events = await this.readEventDiscovery(year);
         const teams = await this.readTeamDiscovery(year);
-        if (events?.complete !== true || teams?.complete !== true || !teams.teamKeys?.length) {
+        if (!events || !teams || !teams.teamKeys.length) {
           return Response.json({ error: "Complete event discovery and paginated team discovery before starting ingestion" }, { status: 409 });
         }
         const eventKeys = [...new Set(events.events.map((event) => event.key).filter((eventKey): eventKey is string => typeof eventKey === "string" && /^[a-zA-Z0-9_-]+$/.test(eventKey)))].sort();
-        const teamKeys = [...new Set((teams.teamKeys ?? []).filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
+        const teamKeys = [...new Set(teams.teamKeys.filter((teamKey) => /^frc\d+$/.test(teamKey)))].sort();
         if (eventKeys.length === 0 || teamKeys.length === 0) return Response.json({ error: "Discovered season inventory is empty or invalid" }, { status: 409 });
         if (job && (job.status === "completed" || job.status === "cancelled")) {
           await this.storage.put(seasonIngestHistoryPrefix(year) + job.startedAt, job);
