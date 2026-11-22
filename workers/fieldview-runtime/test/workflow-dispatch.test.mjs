@@ -66,7 +66,6 @@ test("Workflow dispatch sends participant acquisition and lifecycle commands to 
     ["event", "2026rikin", "/lifecycle", "POST"],
   ]);
   assert.deepEqual(JSON.parse(calls[1].body), {
-    kind: "event", key: "2026rikin", action: "lifecycle", year: 2026,
     lifecycle: "active", upcomingIntervalMs: 1_800_000, activeIntervalMs: 300_000,
   });
   assert.deepEqual(markers, ["registry/runtime-events/2026rikin.json", "registry/runtime-events/2026rikin.json"]);
