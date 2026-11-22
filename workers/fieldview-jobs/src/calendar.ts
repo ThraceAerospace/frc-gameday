@@ -53,10 +53,49 @@ export function classifyEventThisWeek(
   return { localDate, weekStart, weekEnd, isThisWeek: event.start_date <= weekEnd && event.end_date >= weekStart };
 }
 
-export function lifecycleFor(event: TbaEvent, now: number): "upcoming" | "active" | "completed" {
-  const classification = classifyEventThisWeek(event, now);
-  if (!classification) return "completed";
-  if (classification.localDate < event.start_date) return "upcoming";
-  if (classification.localDate <= event.end_date) return "active";
-  return "completed";
+function zonedMidnight(value: string, timeZone: string): number | null {
+  if (!validDateOnly(value)) return null;
+  const date = new Date(value + "T00:00:00.000Z");
+  const target = date.getTime();
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone, calendar: "gregory", numberingSystem: "latn",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    });
+    let candidate = target;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const values = new Map(formatter.formatToParts(new Date(candidate)).map((part) => [part.type, part.value]));
+      const represented = Date.UTC(
+        Number(values.get("year")), Number(values.get("month")) - 1, Number(values.get("day")),
+        Number(values.get("hour")), Number(values.get("minute")), Number(values.get("second")),
+      );
+      const adjustment = target - represented;
+      if (adjustment === 0) return candidate;
+      candidate += adjustment;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export interface EventLifecycleDecision {
+  lifecycle: "upcoming" | "active" | "completed" | "expired";
+  completedUntil?: number;
+}
+
+/** Match EventRuntime's existing timezone-aware lifecycle and 24-hour retention policy. */
+export function lifecycleFor(event: TbaEvent, now: number): EventLifecycleDecision {
+  if (!validDateOnly(event.start_date) || !validDateOnly(event.end_date) || event.start_date > event.end_date) {
+    return { lifecycle: "expired" };
+  }
+  const start = zonedMidnight(event.start_date, event.timezone);
+  const endExclusive = zonedMidnight(addDays(event.end_date, 1), event.timezone);
+  if (start === null || endExclusive === null || endExclusive <= start) return { lifecycle: "expired" };
+  const end = endExclusive - 1;
+  if (now < start) return { lifecycle: "upcoming" };
+  if (now <= end) return { lifecycle: "active" };
+  const completedUntil = end + 24 * 60 * 60_000;
+  return now < completedUntil ? { lifecycle: "completed", completedUntil } : { lifecycle: "expired" };
 }
