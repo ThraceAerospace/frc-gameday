@@ -210,8 +210,9 @@ export class DiscoveryStore {
     }
     const raw = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
     if (!raw) return Response.json({ error: "Staged event directory is missing" }, { status: 404 });
-    const document = JSON.parse(raw) as { events?: unknown[]; chunkCount?: number };
-    if (!Array.isArray(document.events) || !Number.isInteger(document.chunkCount) || endChunk > Number(document.chunkCount)) {
+    const document = JSON.parse(raw) as { events?: unknown[]; chunkCount?: number; chunkSize?: number };
+    if (!Array.isArray(document.events) || !Number.isInteger(document.chunkCount) ||
+        document.chunkSize !== chunkSize || endChunk > Number(document.chunkCount)) {
       return Response.json({ error: "Staged event directory is invalid" }, { status: 409 });
     }
     for (let index = firstChunk; index < endChunk; index += 1) {
@@ -231,7 +232,7 @@ export class DiscoveryStore {
     const stagedDocument = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
     const stagedKeys = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}-keys.json`);
     if (!stagedDocument || !stagedKeys) return Response.json({ error: "Event discovery staging is incomplete" }, { status: 409 });
-    let document: { events?: Array<{ key?: unknown }>; chunkCount?: number };
+    let document: { events?: Array<{ key?: unknown }>; chunkCount?: number; chunkSize?: number };
     let keys: unknown;
     try {
       document = JSON.parse(stagedDocument);
@@ -240,6 +241,8 @@ export class DiscoveryStore {
       return Response.json({ error: "Event discovery staging is invalid JSON" }, { status: 409 });
     }
     if (!Array.isArray(document.events) || !Number.isSafeInteger(document.chunkCount) ||
+        !Number.isSafeInteger(document.chunkSize) || Number(document.chunkSize) < 1 ||
+        Number(document.chunkCount) !== Math.ceil(document.events.length / Number(document.chunkSize)) ||
         !Array.isArray(keys) || keys.length !== document.events.length ||
         document.events.some((item, index) => !item || typeof item.key !== "string" || keys[index] !== item.key)) {
       return Response.json({ error: "Event discovery staging manifest is invalid" }, { status: 409 });
@@ -247,7 +250,11 @@ export class DiscoveryStore {
     for (let index = 0; index < Number(document.chunkCount); index += 1) {
       const chunk = await this.storage.get<string>(PREFIX + `discovery/event-chunks/${year}/${generation}/${index}.json`);
       if (!chunk) return Response.json({ error: `Event discovery chunk ${index} is missing` }, { status: 409 });
-      try { if (!Array.isArray(JSON.parse(chunk))) throw new Error("not an array"); } catch {
+      try {
+        const parsed = JSON.parse(chunk);
+        const expected = document.events.slice(index * Number(document.chunkSize), (index + 1) * Number(document.chunkSize));
+        if (!Array.isArray(parsed) || JSON.stringify(parsed) !== JSON.stringify(expected)) throw new Error("chunk mismatch");
+      } catch {
         return Response.json({ error: `Event discovery chunk ${index} is invalid` }, { status: 409 });
       }
     }
