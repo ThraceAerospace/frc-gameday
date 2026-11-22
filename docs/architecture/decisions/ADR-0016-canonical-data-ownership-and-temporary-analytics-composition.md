@@ -19,7 +19,7 @@ Analytics is a legitimate consumer of a combined event/team dataset. That requir
 Each canonical record has one authoritative owner and one authoritative persisted representation.
 
 - EventRuntime owns event-scoped provider resources, `FieldViewEventState`, canonical event matches, and `FieldViewEventAnalytics`.
-- TeamRuntime owns team-scoped provider resources, `FieldViewTeamState`, `FieldViewTeamEventState`, and team-scoped analytics.
+- TeamRuntime owns team-scoped provider resources, `FieldViewTeamState`, `FieldViewTeamEventState`, and team-scoped analytics. A `FieldViewTeamEventState` stores the team/event identity, provenance, analytics, and logical references to the EventRuntime-owned `FieldViewEventTeam` and `FieldViewMatch` records; it does not embed the team profile, event-team record, or match objects.
 - A runtime does not persist complete canonical records owned by another runtime.
 
 ### 2. Logical foreign references
@@ -64,6 +64,6 @@ Chunking or splitting a duplicated aggregate is not an acceptable substitute for
 - EventRuntime analytics performs cross-runtime reads during its background operation, not during ordinary public reads.
 - EventRuntime persists the analytics result and provenance, not the team-state inputs.
 - TeamRuntime remains the sole writer for each team's event state.
-- The event view is a small composition of event-owned state, event analytics, participant references, and coverage.
+- The event view is a small composition of event-owned state, event analytics, participant references, and coverage. TeamEventState is likewise normalized: its event-team and match dependencies are logical foreign references, not copied canonical records.
 - Event and team match data are not copied into multiple canonical state records.
 - Tests must verify owner boundaries, source-revision consistency, last-good publication preservation, and the absence of foreign canonical records in persisted EventRuntime publications.
