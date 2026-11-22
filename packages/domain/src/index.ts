@@ -6,7 +6,6 @@
  */
 export * from "./ids.js";
 export * from "./team.js";
-export * from "./district.js";
 export * from "./event.js";
 export * from "./event-view.js";
 export * from "./match.js";
@@ -21,7 +20,6 @@ export * from "./normalization/team-season.js";
 
 export * from "./normalization/event.js";
 export * from "./normalization/team.js";
-export * from "./normalization/district.js";
 export * from "./normalization/team-snapshot.js";
 export * from "./normalization/team-state.js";
 export * from "./normalization/team-event-state.js";
