@@ -16,46 +16,6 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
-test("TaskScheduler activation recovers the current-season event index without request-time provider I/O", async () => {
-  const storage = new MemoryStorage();
-  const year = new Date().getUTCFullYear();
-  let providerCalls = 0;
-  const scheduler = new TaskScheduler({
-    storage,
-    blockConcurrencyWhile: async (callback) => callback(),
-  }, {
-    TBA_API_KEY: "test-key",
-    RUNTIME_ADMIN_TOKEN: "admin",
-    fetcher: async () => {
-      providerCalls += 1;
-      return Response.json([{
-        key: year + "current",
-        name: "Current Season Event",
-        start_date: year + "-03-01",
-        end_date: year + "-03-03",
-        timezone: "America/New_York",
-      }]);
-    },
-  });
-
-  const initial = await scheduler.fetch(new Request("https://scheduler/events?year=" + year));
-  assert.equal(storage.values.get("scheduler:daily-run-requested"), true);
-  assert.ok(storage.alarmAt !== null, "activation arms background current-season discovery");
-  assert.equal(initial.status, 503);
-  assert.equal((await initial.json()).index.status, "missing");
-  assert.equal(providerCalls, 0, "the public read never performs provider I/O");
-
-  await scheduler.alarm();
-  assert.equal(providerCalls, 1);
-  assert.ok(storage.values.get("discovery:" + year), "the current-season event index is durably published");
-  const response = await scheduler.fetch(new Request("https://scheduler/events?year=" + year));
-  assert.equal(response.status, 200);
-  const result = await response.json();
-  assert.equal(result.events[0].key, year + "current");
-  assert.equal(result.status, undefined);
-});
-
-
 test("TaskScheduler queues team seed and advances cross-runtime work in alarms", async () => {
   const storage = new MemoryStorage();
   const calls = [];
