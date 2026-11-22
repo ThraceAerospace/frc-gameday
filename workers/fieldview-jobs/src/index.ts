@@ -1,5 +1,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 
 import { classifyEventThisWeek, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
@@ -51,7 +53,8 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const previous = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
-        const response = await fetch(`https://www.thebluealliance.com/api/v3/events/${year}`, { headers });
+        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+        const response = await api.request(TBA_ENDPOINTS.events(year), { headers });
         const checkedAt = Date.now();
         if (response.status === 304 && previous) {
           const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
