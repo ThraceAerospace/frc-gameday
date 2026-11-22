@@ -1,0 +1,227 @@
+import { WorkflowEntrypoint } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { lifecycleFor } from "./calendar.ts";
+
+interface RuntimeAdminEnvironment {
+  RUNTIME_ADMIN_TOKEN: string;
+  DISCOVERY_BUCKET: R2Bucket;
+  FIELDVIEW_RUNTIME: Fetcher;
+}
+export interface RuntimeAdminParameters {
+  operation: "team-seed" | "event-team-seed" | "season-ingest";
+  workflowId: string;
+  year: number;
+  requestedAt: number;
+  teamKey?: string;
+  eventKey?: string;
+}
+interface RuntimeAdminRecord {
+  workflow_id: string; operation: RuntimeAdminParameters["operation"]; year: number;
+  status: "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
+  phase: string; processed: number; total: number; started_at: number; updated_at: number;
+  counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
+}
+interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
+const json = (value: unknown) => JSON.stringify(value);
+const recordKey = (id: string) => "admin/runtime-jobs/" + id + ".json";
+
+async function read<T>(bucket: R2Bucket, key: string): Promise<T | null> {
+  const object = await bucket.get(key);
+  return object ? object.json<T>() : null;
+}
+async function write(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
+  await bucket.put(key, json(value), { httpMetadata: { contentType: "application/json" } });
+}
+async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}): Promise<Response> {
+  return env.FIELDVIEW_RUNTIME.fetch(new Request("https://fieldview-runtime/internal/workflows/dispatch", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+    body: json({ kind, key, action, ...body }),
+  }));
+}
+function validTeam(key: unknown): key is string { return typeof key === "string" && /^frc\\d+$/.test(key); }
+function validEvent(key: unknown): key is string { return typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key); }
+
+export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnvironment, RuntimeAdminParameters> {
+  async run(event: WorkflowEvent<RuntimeAdminParameters>, step: WorkflowStep): Promise<RuntimeAdminRecord> {
+    const p = event.payload;
+    const key = recordKey(p.workflowId);
+    const initial = await step.do("load-runtime-admin-job", async () => read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, key));
+    if (!initial) throw new Error("Runtime admin job record is missing");
+    const update = async (patch: Partial<RuntimeAdminRecord>) => {
+      const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, key);
+      if (!current || current.status !== "running") return current;
+      const next = { ...current, ...patch, updated_at: Date.now() };
+      await write(this.env.DISCOVERY_BUCKET, key, next);
+      return next;
+    };
+    const fail = async (detail: string) => {
+      const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, key);
+      if (current?.status === "running") await write(this.env.DISCOVERY_BUCKET, key, {
+        ...current, status: "failed", phase: "failed", updated_at: Date.now(),
+        errors: [...current.errors, { key: p.workflowId, detail: detail.slice(0, 400), at: Date.now() }].slice(-100),
+      });
+    };
+    try {
+      if (p.operation === "team-seed") return await this.seedTeam(p, step, update);
+      if (p.operation === "event-team-seed") return await this.seedEventTeams(p, step, update);
+      return await this.ingestSeason(p, step, update);
+    } catch (error) {
+      await fail(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  private async seedTeam(
+    p: RuntimeAdminParameters, step: WorkflowStep,
+    update: (patch: Partial<RuntimeAdminRecord>) => Promise<RuntimeAdminRecord | null>,
+  ): Promise<RuntimeAdminRecord> {
+    const teamKey = p.teamKey!;
+    if (!validTeam(teamKey)) throw new Error("Invalid team key");
+    await step.do("enqueue-team-runtime-seed", async () => {
+      const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
+      if (!response.ok && response.status !== 202) throw new Error("TeamRuntime seed returned HTTP " + response.status);
+      return { queued: true };
+    });
+    await update({ phase: "waiting-for-team-history" });
+    const historyEndpoint = TBA_ENDPOINTS.teamEvents(teamKey, p.year);
+    let snapshot: { events?: Array<Record<string, unknown>> | null } | null = null;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const state = await step.do("team-state-" + attempt, async () => {
+        const response = await dispatch(this.env, "team", teamKey, "state", { year: p.year });
+        if (!response.ok) throw new Error("TeamRuntime state returned HTTP " + response.status);
+        return response.json() as Promise<{ endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }> }>;
+      });
+      const history = state.endpoints?.find((item) => item.endpoint === historyEndpoint);
+      if (history?.status === "unavailable") throw new Error("Team event history is unavailable from TBA");
+      if ((history?.last_fetched_at ?? history?.lastFetchedAt) != null) {
+        const result = await step.do("team-season-snapshot", async () => {
+          const response = await dispatch(this.env, "team", teamKey, "snapshot", { year: p.year });
+          if (!response.ok) throw new Error("TeamRuntime snapshot returned HTTP " + response.status);
+          return response.json() as Promise<{ events?: Array<Record<string, unknown>> | null }>;
+        });
+        snapshot = result;
+        break;
+      }
+      await step.sleep("wait-team-history-" + attempt, "5 seconds");
+    }
+    if (!snapshot || !Array.isArray(snapshot.events)) throw new Error("Timed out waiting for TeamRuntime event history");
+    const events = snapshot.events.filter((item) => validEvent(item.key));
+    await update({ phase: "scheduling-team-events", total: events.length });
+    const directory = await read<EventDirectory>(this.env.DISCOVERY_BUCKET, "discovery/events/" + p.year + ".json");
+    const byKey = new Map((directory?.events ?? []).map((item) => [item.key, item]));
+    let scheduled = 0;
+    for (let offset = 0; offset < events.length; offset += 10) {
+      const batch = events.slice(offset, offset + 10);
+      await step.do("schedule-team-events-" + offset, async () => {
+        for (const item of batch) {
+          const event = byKey.get(String(item.key));
+          if (!event) continue;
+          const lifecycle = lifecycleFor(event, Date.now());
+          if (lifecycle.lifecycle === "expired") continue;
+          const response = await dispatch(this.env, "event", String(item.key), "lifecycle", { lifecycle: lifecycle.lifecycle });
+          if (!response.ok) throw new Error("EventRuntime lifecycle returned HTTP " + response.status);
+        }
+        return { scheduled: batch.length };
+      });
+      scheduled += batch.length;
+      await update({ processed: scheduled });
+    }
+    const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
+    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed: scheduled, updated_at: Date.now() };
+    await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
+    return completed;
+  }
+
+  private async seedEventTeams(
+    p: RuntimeAdminParameters, step: WorkflowStep,
+    update: (patch: Partial<RuntimeAdminRecord>) => Promise<RuntimeAdminRecord | null>,
+  ): Promise<RuntimeAdminRecord> {
+    const eventKey = p.eventKey!;
+    if (!validEvent(eventKey)) throw new Error("Invalid event key");
+    let teamKeys: string[] = [];
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const result = await step.do("event-participants-" + attempt, async () => {
+        const response = await dispatch(this.env, "event", eventKey, "participants");
+        if (response.status === 202) return { ready: false, team_keys: [] as string[] };
+        if (!response.ok) throw new Error("EventRuntime participants returned HTTP " + response.status);
+        return response.json() as Promise<{ ready: boolean; team_keys: string[] }>;
+      });
+      if (result.ready) { teamKeys = [...new Set(result.team_keys.filter(validTeam))]; break; }
+      await step.sleep("wait-event-participants-" + attempt, "5 seconds");
+    }
+    if (!teamKeys.length) throw new Error("Timed out waiting for event participant roster");
+    await update({ phase: "seeding-event-teams", total: teamKeys.length });
+    let processed = 0;
+    for (let offset = 0; offset < teamKeys.length; offset += 10) {
+      const batch = teamKeys.slice(offset, offset + 10);
+      await step.do("enqueue-event-team-batch-" + offset, async () => {
+        const results = await Promise.all(batch.map(async (teamKey) => {
+          const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
+          return { teamKey, ok: response.ok || response.status === 202, status: response.status };
+        }));
+        const failed = results.filter((item) => !item.ok);
+        if (failed.length) throw new Error("TeamRuntime seed failed for " + failed.map((item) => item.teamKey + " (" + item.status + ")").join(", "));
+        return results.length;
+      });
+      processed += batch.length;
+      await update({ processed });
+    }
+    const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
+    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed, updated_at: Date.now() };
+    await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
+    return completed;
+  }
+
+  private async ingestSeason(
+    p: RuntimeAdminParameters, step: WorkflowStep,
+    update: (patch: Partial<RuntimeAdminRecord>) => Promise<RuntimeAdminRecord | null>,
+  ): Promise<RuntimeAdminRecord> {
+    const events = await read<EventDirectory>(this.env.DISCOVERY_BUCKET, "discovery/events/" + p.year + ".json");
+    const teams = await read<string[]>(this.env.DISCOVERY_BUCKET, "registry/teams/" + p.year + ".json");
+    if (!events || !Array.isArray(events.events) || !Array.isArray(teams) || !teams.length) {
+      throw new Error("Complete event and team discovery before season ingestion");
+    }
+    const teamKeys = [...new Set(teams.filter(validTeam))].sort();
+    const eventKeys = [...new Set(events.events.map((item) => item.key).filter(validEvent))].sort();
+    await update({ phase: "seeding-teams", total: teamKeys.length + eventKeys.length });
+    let processed = 0;
+    for (let offset = 0; offset < teamKeys.length; offset += 10) {
+      const batch = teamKeys.slice(offset, offset + 10);
+      await step.do("seed-season-teams-" + offset, async () => {
+        const results = await Promise.all(batch.map(async (teamKey) => {
+          const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
+          return { teamKey, ok: response.ok || response.status === 202, status: response.status };
+        }));
+        const failures = results.filter((item) => !item.ok);
+        return { succeeded: results.length - failures.length, failures };
+      });
+      processed += batch.length;
+      await update({ processed, counts: { teams_queued: processed } });
+    }
+    await update({ phase: "seeding-events" });
+    for (let offset = 0; offset < eventKeys.length; offset += 10) {
+      const batch = eventKeys.slice(offset, offset + 10);
+      await step.do("seed-season-events-" + offset, async () => {
+        const results = await Promise.all(batch.map(async (eventKey) => {
+          const response = await dispatch(this.env, "event", eventKey, "refresh");
+          return { eventKey, ok: response.ok || response.status === 202, status: response.status };
+        }));
+        const failures = results.filter((item) => !item.ok);
+        return { succeeded: results.length - failures.length, failures };
+      });
+      processed += batch.length;
+      await update({ processed, counts: { teams_queued: teamKeys.length, events_queued: processed - teamKeys.length } });
+    }
+    const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
+    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed, updated_at: Date.now() };
+    await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
+    return completed;
+  }
+}
+function initialRecord(p: RuntimeAdminParameters): RuntimeAdminRecord {
+  return { workflow_id: p.workflowId, operation: p.operation, year: p.year, status: "running",
+    phase: "queued", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
+    counts: {}, errors: [] };
+}
