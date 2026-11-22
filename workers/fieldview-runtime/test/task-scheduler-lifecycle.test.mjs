@@ -24,18 +24,15 @@ class MemoryStorage {
 
 test("event polling policy defaults and overrides remain explicit", () => {
   assert.deepEqual(DEFAULT_EVENT_POLLING_POLICY, {
-    discoveryIntervalMs: 60 * 60_000,
     upcomingIntervalMs: 30 * 60_000,
     activeIntervalMs: 5 * 60_000,
     completedRetentionMs: 24 * 60 * 60_000,
   });
   assert.deepEqual(eventPollingPolicy({
-    EVENT_DISCOVERY_INTERVAL_MS: "7200000",
     EVENT_UPCOMING_INTERVAL_MS: "900000",
     EVENT_ACTIVE_INTERVAL_MS: 120000,
     EVENT_COMPLETED_RETENTION_MS: "43200000",
   }), {
-    discoveryIntervalMs: 7_200_000,
     upcomingIntervalMs: 900_000,
     activeIntervalMs: 120_000,
     completedRetentionMs: 43_200_000,
