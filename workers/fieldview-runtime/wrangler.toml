@@ -20,6 +20,10 @@ PROVIDER_REQUEST_INTERVAL_MS = "1000"
 binding = "DISCOVERY_BUCKET"
 bucket_name = "fieldview-discovery"
 
+[[services]]
+binding = "FIELDVIEW_JOBS"
+service = "fieldview-jobs"
+
 [[durable_objects.bindings]]
 name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
