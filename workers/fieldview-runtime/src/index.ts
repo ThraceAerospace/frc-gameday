@@ -53,7 +53,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!discoveryStore(env)) return;
+  if (!env.DISCOVERY_STORE) return;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   await discoveryStore(env).put(prefix + key + ".json", "{}", {
     httpMetadata: { contentType: "application/json" },
@@ -276,7 +276,7 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (discoveryStore(env)) {
+      if (env.DISCOVERY_STORE) {
         const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
         if (pointerObject) {
           const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
@@ -360,7 +360,7 @@ export default {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
-      if (!discoveryStore(env)) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      if (!env.DISCOVERY_STORE) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const manifestObject = await discoveryStore(env).get(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
@@ -595,7 +595,7 @@ export default {
       }
       const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
       const runtimeKeys: string[] = [];
-      if (discoveryStore(env)) {
+      if (env.DISCOVERY_STORE) {
         let cursorToken: string | undefined;
         do {
           const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
@@ -688,7 +688,7 @@ export default {
         } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
       }
       const runtimeKeys = async (kind: "event" | "team") => {
-        if (!discoveryStore(env)) return [] as string[];
+        if (!env.DISCOVERY_STORE) return [] as string[];
         const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
         const keys: string[] = [];
         let cursor: string | undefined;
