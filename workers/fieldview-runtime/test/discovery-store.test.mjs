@@ -74,3 +74,47 @@ test("publishing a new weekly projection pointer removes the previous generation
   assert.equal(state.values.has("discovery-object:projections/events/this-week/100/2026.json"), false);
   assert.equal(state.values.has("discovery-object:projections/events/this-week/200/2026.json"), true);
 });
+
+test("DiscoveryStore owns TBA status, event-directory, and team-page provider requests", async () => {
+  const requests = [];
+  const store = new DiscoveryStore(createState(), {
+    TBA_API_KEY: "test-key",
+    fetcher: async (input, init) => {
+      requests.push({ input: String(input), headers: new Headers(init?.headers) });
+      return Response.json({ ok: true });
+    },
+  });
+
+  const status = await store.fetch(new Request("https://store/provider/status"));
+  assert.equal(status.status, 200);
+  assert.deepEqual(await status.json(), { ok: true });
+
+  const events = await store.fetch(new Request("https://store/provider/events?year=2026", {
+    headers: { "If-None-Match": '"events-v1"' },
+  }));
+  assert.equal(events.status, 200);
+  assert.deepEqual(await events.json(), { ok: true });
+
+  const teams = await store.fetch(new Request("https://store/provider/teams?year=2026&page=2"));
+  assert.equal(teams.status, 200);
+  assert.deepEqual(await teams.json(), { ok: true });
+  assert.equal(requests.length, 3);
+  assert.equal(requests[1].headers.get("If-None-Match"), '"events-v1"');
+});
+
+test("DiscoveryStore rejects invalid provider discovery queries without calling TBA", async () => {
+  let called = false;
+  const store = new DiscoveryStore(createState(), {
+    TBA_API_KEY: "test-key",
+    fetcher: async () => { called = true; return Response.json({}); },
+  });
+  const response = await store.fetch(new Request("https://store/provider/teams?year=2026&page=-1"));
+  assert.equal(response.status, 400);
+  assert.equal(called, false);
+});
+
+test("DiscoveryStore provider operations fail closed when no TBA key is configured", async () => {
+  const store = new DiscoveryStore(createState());
+  const response = await store.fetch(new Request("https://store/provider/status"));
+  assert.equal(response.status, 503);
+});
