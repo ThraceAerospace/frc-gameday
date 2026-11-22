@@ -11,7 +11,6 @@ export interface DiscoveryStoreClient {
 /** Direct namespace client; DiscoveryStore is bound to the same Worker as its callers. */
 export function createDiscoveryStoreClient(
   namespace: DurableObjectNamespaceLike | undefined,
-  _legacyToken?: string,
 ): DiscoveryStoreClient {
   if (!namespace) throw new Error("DiscoveryStore namespace is unavailable");
   const stub = namespace.get(namespace.idFromName("shared"));
