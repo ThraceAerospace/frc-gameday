@@ -33,7 +33,7 @@ The current migration slice moves TBA-status-driven current-season event/team di
 
 ### Explicitly not included in this first slice
 
-This extraction initializes every non-expired current-season EventRuntime, publishes current-season event/team discovery, and queues TeamRuntime seeds for the deduplicated participants of this-week events. A successful seed response means the TeamRuntime accepted durable resource work; it does **not** mean every team-season resource is ready. Team-season readiness verification, base analytics generation/verification, and replacement of TaskScheduler's remaining administrative ingestion, coverage-audit, district, and operator job surfaces remain subsequent migrations. The TaskScheduler class and namespace binding are retained only while those active administrative responsibilities are being extracted; public discovery reads do not fall back to it.
+This extraction initializes every non-expired current-season EventRuntime, publishes current-season event/team discovery, and queues TeamRuntime seeds for the deduplicated participants of this-week events. A successful seed response means the TeamRuntime accepted durable resource work; it does **not** mean every team-season resource is ready. Team-season readiness verification, base analytics generation/verification, and replacement of TaskScheduler's remaining season-ingestion, district, and manual team/event-seeding jobs remain subsequent migrations. The TaskScheduler class and namespace binding are retained only while those active administrative responsibilities are being extracted; public discovery reads do not fall back to it.
 
 ### Deployment prerequisites
 
