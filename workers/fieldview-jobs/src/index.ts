@@ -359,7 +359,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           const batchFailures: Array<{ event_key: string; error: string }> = [];
           for (const item of batch) {
             const response = await dispatchRuntime(
-              this.env, "event", item.key, "lifecycle", item.lifecycle, item.year,
+              this.env, "event", item.key, "lifecycle", item.lifecycle as unknown as Record<string, unknown>, item.year,
             );
             if (response.status === 401 || response.status === 403 || response.status === 404) {
               throw new Error(`Runtime initialization boundary returned HTTP ${response.status} for ${item.key}; check deployment and shared admin authorization`);
@@ -437,11 +437,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const updateJob = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) =>
       step.do(name, async () => {
         const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), jobKey);
-        const next: AdminDiscoveryJobRecord = {
+        const defaults: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
           events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
-          started_at: requestedAt, updated_at: Date.now(), ...(current ?? {}), ...patch,
-          workflow_id: jobId, year: season, updated_at: Date.now(),
+          started_at: requestedAt, updated_at: Date.now(),
+        };
+        const next: AdminDiscoveryJobRecord = {
+          ...defaults, ...(current ?? {}), ...patch,
+          ...{ workflow_id: jobId, year: season, updated_at: Date.now() },
         };
         await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(jobKey, JSON.stringify(next), {
           httpMetadata: { contentType: "application/json" },
@@ -745,7 +748,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
         });
         return record;
       });
-      return completed;
+      return { ...completed };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await step.do("record-coverage-audit-failure", async () => {
