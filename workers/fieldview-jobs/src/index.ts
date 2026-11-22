@@ -65,10 +65,11 @@ async function readPublishedSeason(bucket: R2Bucket, year: number): Promise<{
   }>(bucket, `discovery/teams/${year}.json`);
   const teamKeys = await readJson<string[]>(bucket, `registry/teams/${year}.json`);
   if (!events || events.year !== year || !Array.isArray(events.events) ||
+      events.events.some((item) => !item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) ||
       !teamManifest || teamManifest.year !== year || !Number.isInteger(teamManifest.pageCount) ||
       teamManifest.pageCount < 1 || !Number.isInteger(teamManifest.teamCount) ||
-      !teamKeys || teamKeys.length !== teamManifest.teamCount ||
-      teamKeys.some((key) => !/^frc[0-9]+$/.test(key))) return null;
+      !Array.isArray(teamKeys) || teamKeys.length !== teamManifest.teamCount ||
+      teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) return null;
   return {
     events: events.events, eventUpdatedAt: events.updatedAt,
     teamKeys, teamPageCount: teamManifest.pageCount, teamUpdatedAt: teamManifest.updatedAt,
@@ -757,7 +758,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
         await this.env.DISCOVERY_BUCKET.put(auditKey, JSON.stringify(record), {
           httpMetadata: { contentType: "application/json" },
         });
-        return { total: items.length, chunkCount: Math.ceil(items.length / 1000), counts, itemsPrefix, record };
+        return { total: items.length, chunkCount: Math.ceil(items.length / 100), counts, itemsPrefix, record };
       });
 
       for (let firstChunk = 0; firstChunk < prepared.chunkCount; firstChunk += 10) {
@@ -1009,9 +1010,8 @@ export default {
         return Response.json(current, { status: 202, headers: { "Cache-Control": "no-store" } });
       }
       if (!current) return Response.json({ error: "No coverage audit exists for this season" }, { status: 404 });
-      let instance;
-      try { instance = await env.COVERAGE_AUDIT.get(current.workflow_id); }
-      catch { return Response.json({ error: "Coverage audit Workflow instance is unavailable" }, { status: 404 }); }
+      const instance = await env.COVERAGE_AUDIT.get(current.workflow_id).catch(() => null);
+      if (!instance) return Response.json({ error: "Coverage audit Workflow instance is unavailable" }, { status: 404 });
       const status = await instance.status();
       if (action === "pause") {
         if (!["queued", "running", "waiting", "waitingForPause"].includes(status.status)) {
