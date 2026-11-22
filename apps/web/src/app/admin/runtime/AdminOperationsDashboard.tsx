@@ -118,6 +118,7 @@ export default function AdminOperationsDashboard() {
   const [kind, setKind] = useState<Kind>("event");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState(new Date().getUTCFullYear());
+  const [yearInitialized, setYearInitialized] = useState(false);
   const [page, setPage] = useState<InventoryPage | null>(null);
   const [coverageAudit, setCoverageAudit] = useState<CoverageAudit | null>(null);
   const [seasonIngest, setSeasonIngest] = useState<SeasonIngest | null>(null);
@@ -143,12 +144,17 @@ export default function AdminOperationsDashboard() {
       const response = await fetch("/api/admin/runtime", { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load operations overview");
-      setOverview(body as Overview); setAuthenticated(true); setError(""); setUpdatedAt(Date.now());
+      setOverview(body as Overview);
+      if (!yearInitialized && Number.isInteger(body.current_season?.year)) {
+        setYear(body.current_season.year);
+        setYearInitialized(true);
+      }
+      setAuthenticated(true); setError(""); setUpdatedAt(Date.now());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load runtime state");
       // Keep an authenticated operator in the panel when runtime health is degraded.
     } finally { if (!quiet) setLoading(false); }
-  }, [token, requestHeaders]);
+  }, [token, requestHeaders, yearInitialized]);
 
   const loadInventory = useCallback(async (nextCursor = 0) => {
     if (!token) return;
@@ -510,7 +516,7 @@ export default function AdminOperationsDashboard() {
         <div className="mt-4 border-t border-[var(--fv-border)] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="text-sm font-bold">Full-season coverage audit</h3><p className="mt-1 text-xs text-[var(--fv-muted)]">Reads every event and every team in the selected season's completed TBA discovery snapshots. Team discovery walks all 500-team pages; this audit makes no provider API requests and processes up to 5 runtime reads per background batch.</p></div>
-            <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => setYear(Number(event.target.value))} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label>{coverageAudit?.year === year && coverageAudit.discovery_ready === false ? <button disabled={busy} onClick={async () => { await dispatch("system", "discover-year", undefined, undefined, year); await loadCoverageAudit(); }} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Discover {year} season</button> : <button disabled={busy || !coverageAudit?.discovery_ready || coverageAudit?.status === "running"} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.year === year && coverageAudit.status === "running" ? "Batch running…" : coverageAudit?.year === year && coverageAudit.status === "paused" ? "Run next batch" : coverageAudit?.year === year && coverageAudit.status === "completed" ? "Run audit again" : "Start full audit"}</button>}</div>
+            <div className="flex flex-wrap items-center gap-2"><label className="text-xs text-[var(--fv-muted)]">Year <input aria-label="Coverage audit year" type="number" min="1992" max="2200" value={year} onChange={(event) => { setYear(Number(event.target.value)); setYearInitialized(true); }} className="ml-1 w-20 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label>{coverageAudit?.year === year && coverageAudit.discovery_ready === false ? <button disabled={busy} onClick={async () => { await dispatch("system", "discover-year", undefined, undefined, year); await loadCoverageAudit(); }} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Discover {year} season</button> : <button disabled={busy || !coverageAudit?.discovery_ready || coverageAudit?.status === "running"} onClick={() => void runCoverageAudit()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{coverageAudit?.year === year && coverageAudit.status === "running" ? "Batch running…" : coverageAudit?.year === year && coverageAudit.status === "paused" ? "Run next batch" : coverageAudit?.year === year && coverageAudit.status === "completed" ? "Run audit again" : "Start full audit"}</button>}</div>
           </div>
           {coverageAudit && coverageAudit.year === year && <div className="mt-3 space-y-2">
             <div className="flex flex-wrap justify-between gap-2 text-xs"><span className="font-semibold capitalize">{coverageAudit.status.replaceAll("_", " ")}</span><span>{coverageAudit.processed ?? coverageAudit.cursor ?? 0} / {coverageAudit.total ?? ((coverageAudit.counts?.events_total ?? 0) + (coverageAudit.counts?.teams_total ?? 0))} runtimes inspected</span></div>
