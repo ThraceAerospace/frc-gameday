@@ -23,7 +23,7 @@ interface RuntimeAdminRecord {
   counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
   team_key?: string; event_key?: string; stage?: string; scheduled_events?: number;
   seeded_teams?: number; failed_teams?: number; historical_events_scheduled?: number;
-  team_keys?: string[]; cursor?: number; active_team_key?: string | null;
+  team_keys?: string[]; cursor?: number; active_team_key?: string | null; queued_teams?: number;
 }
 interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
 const json = (value: unknown) => JSON.stringify(value);
@@ -59,7 +59,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         ...current, ...patch,
         ...(patch.phase === undefined ? {} : { stage: patch.phase }),
         ...(current.operation === "event-team-seed" && patch.processed !== undefined
-          ? { seeded_teams: patch.processed, cursor: patch.processed } : {}),
+          ? { cursor: patch.processed } : {}),
         ...(current.operation === "team-seed" && patch.processed !== undefined
           ? { scheduled_events: patch.processed } : {}),
         updated_at: Date.now(),
@@ -187,7 +187,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         return results.length;
       });
       processed += batch.length;
-      await update({ processed });
+      await update({ processed, queued_teams: processed });
     }
 
     // Seeding is not complete merely because the requests were queued. Wait for
@@ -208,7 +208,11 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
           }));
           return statuses;
         });
-        if (result.every((item) => item.ready)) break;
+        if (result.every((item) => item.ready)) {
+          processed = Math.min(teamKeys.length, offset + batch.length);
+          await update({ processed, seeded_teams: processed });
+          break;
+        }
         if (attempt === 179) throw new Error("Timed out waiting for participant team event histories");
         await step.sleep("wait-participant-history-" + offset + "-" + attempt, "5 seconds");
       }
