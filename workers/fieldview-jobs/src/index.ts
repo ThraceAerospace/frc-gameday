@@ -732,7 +732,11 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
         const runtimeTeams = new Set(await listRuntimeRegistry(this.env.DISCOVERY_BUCKET, "team"));
         const items: CoverageAuditItem[] = [
           ...directory.events
-            .filter((item) => typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key))
+            .filter((item) => {
+              const lifecycle = lifecycleFor(item, now).lifecycle;
+              return lifecycle !== "expired" && lifecycle !== "invalid" &&
+                typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key);
+            })
             .map((item) => ({ kind: "event" as const, key: item.key, registered: runtimeEvents.has(item.key) })),
           ...directory.teamKeys.map((key) => ({ kind: "team" as const, key, registered: runtimeTeams.has(key) })),
         ];
