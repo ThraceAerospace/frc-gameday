@@ -1504,38 +1504,9 @@ export class TaskScheduler {
       else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
-    if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
-      await this.storage.deleteAlarm();
-      return;
-    }
-    const policy = eventPollingPolicy(this.env);
-    try {
-      await this.measureStage("event-discovery-and-lifecycle", () => this.discoverAndSchedule(policy));
-      await this.storage.delete("scheduler:last-error");
-    } catch (error) {
-      await this.storage.put("scheduler:last-error", error instanceof Error ? error.message : String(error));
-    }
-    try {
-      const teamDiscovery = await this.measureStage("team-discovery", () => this.discoverTeams(new Date().getUTCFullYear(), TEAM_DISCOVERY_PREFIX, 4));
-      if (teamDiscovery.complete) await this.storage.delete("scheduler:team-discovery-error");
-      else await this.storage.put("scheduler:team-discovery-error", "Team discovery is continuing in bounded batches.");
-    } catch (error) {
-      await this.storage.put("scheduler:team-discovery-error", error instanceof Error ? error.message : String(error));
-    }
-    let thisWeekRefreshPending = false;
-    try {
-      thisWeekRefreshPending = await this.measureStage("this-week-event-classification", () => this.refreshThisWeekProjection(policy));
-      await this.storage.delete("scheduler:this-week-error");
-    } catch (error) {
-      await this.storage.put("scheduler:this-week-error", error instanceof Error ? error.message : String(error));
-      thisWeekRefreshPending = true;
-    }
-    await this.storage.put("scheduler:last-run-at", Date.now());
-    const teamRefresh = await this.storage.get<{ cursor: number }>(TEAM_DISCOVERY_PREFIX + new Date().getUTCFullYear() + ":refresh");
-    const lifecycleRefresh = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
-    const nextDelay = teamRefresh || lifecycleRefresh || thisWeekRefreshPending ? 1_000 : policy.discoveryIntervalMs;
-    await this.storage.setAlarm(Date.now() + nextDelay);
-    if (!thisWeekRefreshPending && !lifecycleRefresh) await this.storage.delete("scheduler:daily-run-requested");
+    // All recurring discovery and classification now run in fieldview-jobs.
+    // Keep the legacy DO alarm only for bounded administrative job cursors.
+    await this.storage.deleteAlarm();
   }
 
   private async refreshCurrentYearEventDirectory(policy: EventPollingPolicy): Promise<void> {
