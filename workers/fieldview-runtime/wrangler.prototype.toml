@@ -49,10 +49,6 @@ class_name = "TeamRuntime"
 name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
-[[durable_objects.bindings]]
-name = "TASK_SCHEDULER"
-class_name = "TaskScheduler"
-
 [[migrations]]
 tag = "prototype-v1"
 new_sqlite_classes = ["EventRuntime"]
