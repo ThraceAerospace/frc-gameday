@@ -195,24 +195,36 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     // Seeding is not complete merely because the requests were queued. Wait for
     // each participant's authoritative event-history resource before scheduling
     // the historical events associated with that team.
+    processed = 0;
+    const failedTeams = new Set<string>();
+    const jobErrors: Array<{ key: string; detail: string; at: number }> = [];
     for (let offset = 0; offset < teamKeys.length; offset += 100) {
       const batch = teamKeys.slice(offset, offset + 100);
       for (let attempt = 0; attempt < 180; attempt += 1) {
         const result = await step.do("verify-participant-history-" + offset + "-" + attempt, async () => {
           const statuses = await Promise.all(batch.map(async (teamKey) => {
             const response = await dispatch(this.env, "team", teamKey, "state", {}, p.year);
-            if (!response.ok) return { teamKey, ready: false };
+            if (!response.ok) return { teamKey, ready: false, failed: false };
             const state = await response.json() as { endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }> };
             const endpoint = TBA_ENDPOINTS.teamEvents(teamKey, p.year);
             const source = state.endpoints?.find((item) => item.endpoint === endpoint);
-            return { teamKey, ready: source?.status === "unavailable" ||
-              (source?.last_fetched_at ?? source?.lastFetchedAt) != null };
+            if (source?.status === "unavailable") return { teamKey, ready: true, failed: true };
+            return { teamKey, ready: (source?.last_fetched_at ?? source?.lastFetchedAt) != null, failed: false };
           }));
           return statuses;
         });
         if (result.every((item) => item.ready)) {
+          for (const item of result) {
+            if (item.failed) {
+              failedTeams.add(item.teamKey);
+              jobErrors.push({ key: item.teamKey, detail: "Team event history is unavailable from TBA", at: Date.now() });
+            }
+          }
           processed = Math.min(teamKeys.length, offset + batch.length);
-          await update({ processed, seeded_teams: processed });
+          await update({
+            processed, seeded_teams: processed - failedTeams.size, failed_teams: failedTeams.size,
+            errors: jobErrors.slice(-100),
+          });
           break;
         }
         if (attempt === 179) throw new Error("Timed out waiting for participant team event histories");
@@ -220,8 +232,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       }
     }
     const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
-    for (let offset = 0; offset < teamKeys.length; offset += 100) {
-      const batch = teamKeys.slice(offset, offset + 100);
+    const successfulTeamKeys = teamKeys.filter((teamKey) => !failedTeams.has(teamKey));
+    for (let offset = 0; offset < successfulTeamKeys.length; offset += 100) {
+      const batch = successfulTeamKeys.slice(offset, offset + 100);
       const history = await step.do("read-participant-histories-" + offset, async () => {
         const results = await Promise.all(batch.map(async (teamKey) => {
           const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
@@ -262,9 +275,11 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       historicalScheduled += scheduledInBatch;
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
-    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
-      stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
-      seeded_teams: processed, failed_teams: 0, historical_events_scheduled: historicalScheduled,
+    const completed = { ...(current ?? initialRecord(p)),
+      status: failedTeams.size > 0 ? "completed_with_errors" as const : "completed" as const,
+      phase: "complete", stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
+      seeded_teams: processed - failedTeams.size, failed_teams: failedTeams.size,
+      historical_events_scheduled: historicalScheduled, errors: jobErrors.slice(-100),
       processed, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
