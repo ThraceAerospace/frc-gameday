@@ -1,8 +1,6 @@
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "@fieldview/provider-tba/types";
 import type { TeamKey, EventKey } from "./ids.js";
 import type { FieldViewSourceMetadata } from "./source-metadata.js";
-import type { FieldViewEventTeam } from "./event.js";
-import type { FieldViewMatch } from "./match.js";
 import type { FieldViewTeamEventAnalytics } from "./analytics.js";
 
 /** Canonical FieldView team object; TBA fields retain their exact source shape. */
@@ -34,10 +32,36 @@ export interface FieldViewTeamState {
   statbotics_events?: import("@fieldview/provider-statbotics/types").StatboticsTeamEvent[] | null;
 }
 
+/** Logical foreign key to a canonical event-owned team participation record. */
+export interface FieldViewEventTeamReference {
+  owner: "event-runtime";
+  owner_id: EventKey;
+  record_type: "event-team";
+  record_id: TeamKey;
+  revision: number | null;
+}
+
+/** Logical foreign key to a canonical event-owned match record. */
+export interface FieldViewMatchReference {
+  owner: "event-runtime";
+  owner_id: EventKey;
+  record_type: "match";
+  record_id: string;
+  revision: number | null;
+}
+
+/** Logical foreign key to a TeamRuntime-owned team/event record. */
+export interface FieldViewTeamEventStateReference {
+  owner: "team-runtime";
+  owner_id: TeamKey;
+  record_type: "team-event-state";
+  record_id: EventKey;
+  revision: number | null;
+}
+
 /**
- * The assembled totality of what FieldView knows about one team at one event.
- * Match objects retain their complete canonical alliance context; the state
- * selects only matches in which this team appeared.
+ * Team-owned event participation and analytics. Event-owned team participation
+ * and match records are referenced, never copied into this record.
  */
 export interface FieldViewTeamEventState {
   event_key: EventKey;
@@ -47,9 +71,8 @@ export interface FieldViewTeamEventState {
     event_team: FieldViewSourceMetadata;
     matches: FieldViewSourceMetadata;
   };
-  team?: FieldViewTeam | null;
-  event_team?: FieldViewEventTeam | null;
-  matches?: FieldViewMatch[] | null;
+  event_team_ref?: FieldViewEventTeamReference | null;
+  match_refs?: FieldViewMatchReference[] | null;
   analytics?: FieldViewTeamEventAnalytics | null;
 }
 
