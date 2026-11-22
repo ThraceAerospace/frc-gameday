@@ -23,6 +23,7 @@ interface RuntimeAdminRecord {
   counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
   team_key?: string; event_key?: string; stage?: string; scheduled_events?: number;
   seeded_teams?: number; failed_teams?: number; historical_events_scheduled?: number;
+  team_keys?: string[]; cursor?: number; active_team_key?: string | null;
 }
 interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
 const json = (value: unknown) => JSON.stringify(value);
@@ -58,7 +59,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         ...current, ...patch,
         ...(patch.phase === undefined ? {} : { stage: patch.phase }),
         ...(current.operation === "event-team-seed" && patch.processed !== undefined
-          ? { seeded_teams: patch.processed } : {}),
+          ? { seeded_teams: patch.processed, cursor: patch.processed } : {}),
+        ...(current.operation === "team-seed" && patch.processed !== undefined
+          ? { scheduled_events: patch.processed } : {}),
         updated_at: Date.now(),
       };
       await write(this.env.DISCOVERY_BUCKET, key, next);
@@ -164,7 +167,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       await step.sleep("wait-event-participants-" + attempt, "5 seconds");
     }
     if (!teamKeys.length) throw new Error("Timed out waiting for event participant roster");
-    await update({ phase: "seeding-event-teams", total: teamKeys.length });
+    await update({ phase: "seeding-event-teams", total: teamKeys.length, team_keys: teamKeys });
     let processed = 0;
     for (let offset = 0; offset < teamKeys.length; offset += 10) {
       const batch = teamKeys.slice(offset, offset + 10);
@@ -243,8 +246,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
-      stage: "complete", event_key: eventKey, seeded_teams: processed, failed_teams: 0,
-      historical_events_scheduled: historical.length, processed, updated_at: Date.now() };
+      stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
+      seeded_teams: processed, failed_teams: 0, historical_events_scheduled: historical.length,
+      processed, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
   }
