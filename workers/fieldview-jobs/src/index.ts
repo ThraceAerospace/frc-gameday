@@ -21,6 +21,7 @@ interface JobsEnvironment {
   DISCOVERY_BUCKET: R2Bucket;
   FIELDVIEW_RUNTIME: Fetcher;
   DAILY_EVENT_READINESS: Workflow;
+  COVERAGE_AUDIT: Workflow;
 }
 
 interface WorkflowParameters {
@@ -50,6 +51,47 @@ async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
   const object = await bucket.get(key);
   return object ? object.json<T>() : null;
 }
+
+async function readPublishedSeason(bucket: R2Bucket, year: number): Promise<{
+  events: TbaEvent[];
+  eventUpdatedAt: number;
+  teamKeys: string[];
+  teamPageCount: number;
+  teamUpdatedAt: number;
+} | null> {
+  const events = await readJson<DiscoveryDocument>(bucket, `discovery/events/${year}.json`);
+  const teamManifest = await readJson<{
+    year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number;
+  }>(bucket, `discovery/teams/${year}.json`);
+  const teamKeys = await readJson<string[]>(bucket, `registry/teams/${year}.json`);
+  if (!events || events.year !== year || !Array.isArray(events.events) ||
+      !teamManifest || teamManifest.year !== year || !Number.isInteger(teamManifest.pageCount) ||
+      teamManifest.pageCount < 1 || !Number.isInteger(teamManifest.teamCount) ||
+      !teamKeys || teamKeys.length !== teamManifest.teamCount ||
+      teamKeys.some((key) => !/^frc[0-9]+$/.test(key))) return null;
+  return {
+    events: events.events, eventUpdatedAt: events.updatedAt,
+    teamKeys, teamPageCount: teamManifest.pageCount, teamUpdatedAt: teamManifest.updatedAt,
+  };
+}
+
+type CoverageAuditCounts = {
+  events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number;
+  teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number;
+  event_state_complete: number; event_state_partial: number; event_state_stale: number; event_state_missing: number; event_state_failed: number;
+  event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_stale: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number;
+  event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number;
+  team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number;
+  event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number;
+};
+type CoverageAuditItem = { kind: "event" | "team"; key: string; registered: boolean };
+interface CoverageAuditRecord {
+  year: number; workflow_id: string; status: "running" | "completed" | "stale" | "failed" | "cancelled";
+  started_at: number; updated_at: number; cursor: number; total: number;
+  event_discovery_updated_at: number; team_discovery_updated_at: number;
+  items_prefix: string; counts: CoverageAuditCounts; error: string | null;
+}
+interface CoverageAuditParameters { year: number; workflowId: string; startedAt: number; }
 
 /**
  * Daily discovery and this-week projection now run as a Workflow. EventRuntime
@@ -659,6 +701,198 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           httpMetadata: { contentType: "application/json" },
         });
         return failed;
+      });
+      throw error;
+    }
+  }
+}
+
+export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, CoverageAuditParameters> {
+  async run(event: WorkflowEvent<CoverageAuditParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
+    const { year, workflowId, startedAt } = event.payload;
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 || !workflowId || !startedAt) {
+      throw new Error("Coverage audit requires a valid season, Workflow ID, and start timestamp");
+    }
+    const auditKey = `admin/coverage-audits/${year}.json`;
+    const itemsPrefix = `admin/coverage-audit-items/${year}/${workflowId}/`;
+    try {
+      const prepared = await step.do("prepare-coverage-audit", async () => {
+        const directory = await readPublishedSeason(this.env.DISCOVERY_BUCKET, year);
+        if (!directory) throw new Error("Complete R2 event and paginated team discovery is required before starting the coverage audit");
+        const now = Date.now();
+        const runtimeEvents = new Set(await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-events.json") ?? []);
+        const runtimeTeams = new Set(await readJson<string[]>(this.env.DISCOVERY_BUCKET, "registry/runtime-teams.json") ?? []);
+        const items: CoverageAuditItem[] = [
+          ...directory.events
+            .filter((item) => typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key))
+            .map((item) => ({ kind: "event" as const, key: item.key, registered: runtimeEvents.has(item.key) })),
+          ...directory.teamKeys.map((key) => ({ kind: "team" as const, key, registered: runtimeTeams.has(key) })),
+        ];
+        const counts: CoverageAuditCounts = {
+          events_total: directory.events.length, events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0,
+          teams_total: directory.teamKeys.length, team_pages: directory.teamPageCount,
+          event_runtime_missing: 0, team_runtime_missing: 0,
+          event_state_complete: 0, event_state_partial: 0, event_state_stale: 0, event_state_missing: 0, event_state_failed: 0,
+          event_analytics_succeeded: 0, event_analytics_partial: 0, event_analytics_stale: 0, event_analytics_waiting: 0, event_analytics_missing: 0, event_analytics_failed: 0,
+          event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
+          team_snapshot_complete: 0, team_snapshot_partial: 0, team_snapshot_missing: 0, team_snapshot_failed: 0,
+          event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0,
+        };
+        for (const item of directory.events) {
+          const lifecycle = lifecycleFor(item, now).lifecycle;
+          if (lifecycle === "completed" || lifecycle === "expired") counts.events_happened += 1;
+          else if (lifecycle === "active") counts.events_active += 1;
+          else if (lifecycle === "upcoming") counts.events_upcoming += 1;
+          else counts.events_invalid_dates += 1;
+        }
+        const allItemsKey = itemsPrefix + "all.json";
+        await this.env.DISCOVERY_BUCKET.put(allItemsKey, JSON.stringify(items), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        const record: CoverageAuditRecord = {
+          year, workflow_id: workflowId, status: "running", started_at: startedAt, updated_at: now,
+          cursor: 0, total: items.length, event_discovery_updated_at: directory.eventUpdatedAt,
+          team_discovery_updated_at: directory.teamUpdatedAt, items_prefix: itemsPrefix, counts, error: null,
+        };
+        await this.env.DISCOVERY_BUCKET.put(auditKey, JSON.stringify(record), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return { total: items.length, chunkCount: Math.ceil(items.length / 1000), counts, itemsPrefix, record };
+      });
+
+      for (let firstChunk = 0; firstChunk < prepared.chunkCount; firstChunk += 10) {
+        const endChunk = Math.min(prepared.chunkCount, firstChunk + 10);
+        await step.do(`write-coverage-audit-items-${firstChunk}`, async () => {
+          const allItems = await readJson<CoverageAuditItem[]>(this.env.DISCOVERY_BUCKET, prepared.itemsPrefix + "all.json");
+          if (!allItems || allItems.length !== prepared.total) throw new Error("Coverage audit item manifest is missing or incomplete");
+          for (let chunk = firstChunk; chunk < endChunk; chunk += 1) {
+            await this.env.DISCOVERY_BUCKET.put(
+              prepared.itemsPrefix + `${chunk}.json`,
+              JSON.stringify(allItems.slice(chunk * 100, (chunk + 1) * 100)),
+              { httpMetadata: { contentType: "application/json" } },
+            );
+          }
+          return { chunks_written: endChunk - firstChunk };
+        });
+      }
+
+      let cursor = 0;
+      let counts = prepared.counts;
+      while (cursor < prepared.total) {
+        const batchResult = await step.do(`audit-runtime-batch-${cursor}`, {
+          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+        }, async () => {
+          const chunkIndex = Math.floor(cursor / 100);
+          const chunk = await readJson<CoverageAuditItem[]>(this.env.DISCOVERY_BUCKET, prepared.itemsPrefix + `${chunkIndex}.json`);
+          if (!chunk) throw new Error(`Coverage audit item chunk ${chunkIndex} is missing`);
+          const batch = chunk.slice(cursor % 100, cursor % 100 + 5);
+          const nextCounts = { ...counts };
+          for (const item of batch) {
+            const missing = () => {
+              if (item.kind === "event") {
+                nextCounts.event_runtime_missing += 1;
+                nextCounts.event_state_missing += 1;
+                nextCounts.event_analytics_missing += 1;
+                nextCounts.event_cohort_missing += 1;
+              } else {
+                nextCounts.team_runtime_missing += 1;
+                nextCounts.team_snapshot_missing += 1;
+              }
+            };
+            if (!item.registered) { missing(); continue; }
+            try {
+              const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
+                `https://fieldview-runtime/internal/workflows/runtime-state?kind=${item.kind}&key=${encodeURIComponent(item.key)}`,
+                { headers: { Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}` } },
+              ));
+              if (response.status === 401 || response.status === 403) {
+                throw new Error(`Runtime state boundary returned HTTP ${response.status}`);
+              }
+              if (!response.ok) { missing(); continue; }
+              const state = await response.json() as {
+                endpoints?: Record<string, { lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }> |
+                  Array<{ lastFetchedAt?: number | null; last_fetched_at?: number | null; lastWebhookAt?: number | null; last_webhook_at?: number | null; expiresAt?: number | null; expires_at?: number | null; status?: string }>;
+                analytics?: { status?: string; cohort_status?: string | null };
+                event_state?: { status?: string; generated_at?: number | null; source_revision?: number | null };
+              };
+              const endpointStates = Array.isArray(state.endpoints) ? state.endpoints : Object.values(state.endpoints ?? {});
+              const acquiredResources = endpointStates.filter((resource) =>
+                resource.lastFetchedAt != null || resource.last_fetched_at != null ||
+                resource.lastWebhookAt != null || resource.last_webhook_at != null).length;
+              const incompleteResources = endpointStates.filter((resource) =>
+                resource.status === "failed" || resource.status === "unavailable" || resource.status === "stale" ||
+                ((resource.expiresAt ?? resource.expires_at) != null &&
+                  (resource.expiresAt ?? resource.expires_at)! < Date.now())).length;
+              if (item.kind === "event") {
+                if (acquiredResources < 13 || incompleteResources > 0) nextCounts.event_resources_incomplete += 1;
+                const eventStateStatus = state.event_state?.status ?? "missing";
+                if (eventStateStatus === "complete") nextCounts.event_state_complete += 1;
+                else if (eventStateStatus === "partial") nextCounts.event_state_partial += 1;
+                else if (eventStateStatus === "stale") nextCounts.event_state_stale += 1;
+                else if (eventStateStatus === "failed") nextCounts.event_state_failed += 1;
+                else nextCounts.event_state_missing += 1;
+                const analyticsStatus = state.analytics?.status ?? "missing";
+                if (analyticsStatus === "succeeded") nextCounts.event_analytics_succeeded += 1;
+                else if (analyticsStatus === "partial") nextCounts.event_analytics_partial += 1;
+                else if (analyticsStatus === "stale") nextCounts.event_analytics_stale += 1;
+                else if (analyticsStatus === "waiting-for-cohort") nextCounts.event_analytics_waiting += 1;
+                else if (analyticsStatus === "failed") nextCounts.event_analytics_failed += 1;
+                else nextCounts.event_analytics_missing += 1;
+                const cohortStatus = state.analytics?.cohort_status ??
+                  (analyticsStatus === "waiting-for-cohort" ? "discovering" : "missing");
+                if (cohortStatus === "complete") nextCounts.event_cohort_complete += 1;
+                else if (cohortStatus === "partial") nextCounts.event_cohort_partial += 1;
+                else if (cohortStatus === "discovering") nextCounts.event_cohort_discovering += 1;
+                else nextCounts.event_cohort_missing += 1;
+              } else {
+                if (acquiredResources >= 7 && incompleteResources === 0) nextCounts.team_snapshot_complete += 1;
+                else if (acquiredResources > 0) nextCounts.team_snapshot_partial += 1;
+                else nextCounts.team_snapshot_failed += 1;
+                if (acquiredResources < 7 || incompleteResources > 0) nextCounts.team_resources_incomplete += 1;
+              }
+            } catch (error) {
+              if (String(error).includes("Runtime state boundary returned HTTP")) throw error;
+              nextCounts.read_errors += 1;
+              missing();
+            }
+          }
+          const nextCursor = cursor + batch.length;
+          const record: CoverageAuditRecord = {
+            ...prepared.record, cursor: nextCursor, counts: nextCounts,
+            status: "running", updated_at: Date.now(),
+          };
+          await this.env.DISCOVERY_BUCKET.put(auditKey, JSON.stringify(record), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          return { cursor: nextCursor, counts: nextCounts };
+        });
+        cursor = batchResult.cursor;
+        counts = batchResult.counts;
+      }
+
+      const completed = await step.do("complete-coverage-audit", async () => {
+        const current = await readPublishedSeason(this.env.DISCOVERY_BUCKET, year);
+        const stale = !current ||
+          current.eventUpdatedAt !== prepared.record.event_discovery_updated_at ||
+          current.teamUpdatedAt !== prepared.record.team_discovery_updated_at;
+        const record: CoverageAuditRecord = {
+          ...prepared.record, cursor, counts, status: stale ? "stale" : "completed",
+          updated_at: Date.now(), error: null,
+        };
+        await this.env.DISCOVERY_BUCKET.put(auditKey, JSON.stringify(record), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return record;
+      });
+      return completed;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await step.do("record-coverage-audit-failure", async () => {
+        const current = await readJson<CoverageAuditRecord>(this.env.DISCOVERY_BUCKET, auditKey);
+        if (current) await this.env.DISCOVERY_BUCKET.put(auditKey, JSON.stringify({
+          ...current, status: "failed", error: detail.slice(0, 500), updated_at: Date.now(),
+        }), { httpMetadata: { contentType: "application/json" } });
+        return { status: "failed", error: detail };
       });
       throw error;
     }
