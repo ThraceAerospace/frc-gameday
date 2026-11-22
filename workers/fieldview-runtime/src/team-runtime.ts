@@ -130,9 +130,22 @@ export class TeamRuntime {
             this.storage.list<{ input_signature: string; representation_signature?: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
           ]);
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
+          const publishedYears = new Set<number>();
           for (const [key, publication] of publications) {
             const match = /^team-state:(\d+):publication$/.exec(key);
-            if (match && publication?.state) this.publishedSnapshots.set(Number(match[1]), publication);
+            if (match && publication?.state) {
+              const year = Number(match[1]);
+              this.publishedSnapshots.set(year, publication);
+              publishedYears.add(year);
+            }
+          }
+          // Retire the former duplicate raw-snapshot key when its canonical
+          // publication exists. A legacy-only key is retained until rebuilt.
+          for (const [key] of publications) {
+            const match = /^team-state:(\d+)$/.exec(key);
+            if (match && publishedYears.has(Number(match[1]))) {
+              await this.storage.delete(key);
+            }
           }
         })
       : Promise.resolve();
@@ -472,7 +485,7 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = new Date().getUTCFullYear();
-    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear)
+    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
       ? null
       : await this.snapshot(currentYear, publicRead && year === currentYear ? request : undefined);
     const initializedState = year === currentYear && initializedCurrentState
@@ -942,8 +955,8 @@ export class TeamRuntime {
         state.expiresAt !== null && state.expiresAt < now,
       ] : null),
     );
-    const stateKey = `team-state:${year}`;
-    const publicationKey = stateKey + ":publication";
+    const publicationKey = `team-state:${year}:publication`;
+    const legacyStateKey = `team-state:${year}`;
     const inputs = await this.storage.transaction(async (tx) => ({
       states: await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
@@ -1016,7 +1029,9 @@ export class TeamRuntime {
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
       if (inputSignature(currentStates) !== signature) return false;
       await tx.put(publicationKey, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
-      await tx.put(stateKey, snapshot);
+      // The publication is the single canonical persisted TeamState record.
+      // Remove the legacy duplicate in the same transaction as replacement.
+      await tx.delete(legacyStateKey);
       return true;
     });
     if (!published) return this.snapshot(year, request);
@@ -1235,10 +1250,10 @@ export class TeamRuntime {
       }
     }
     await Promise.all([...refreshYears].map(async (year) => {
-      const key = "team-state:" + year;
-      const previous = await this.storage.get<unknown>(key);
+      const publicationKey = "team-state:" + year + ":publication";
+      const previous = (await this.storage.get<{ state: unknown }>(publicationKey))?.state;
       await this.snapshot(year);
-      const current = await this.storage.get<unknown>(key);
+      const current = (await this.storage.get<{ state: unknown }>(publicationKey))?.state;
       if (JSON.stringify(previous) !== JSON.stringify(current)) {
         await this.notifyEventsOfSeasonStateChange(year);
       }
