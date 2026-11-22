@@ -57,7 +57,6 @@ export interface RuntimeEnvironment {
   DISCOVERY_BUCKET?: R2BucketLike;
   /** Service binding used only to create manually requested background Workflows. */
   FIELDVIEW_JOBS?: { fetch(request: Request): Promise<Response> };
-  EVENT_DISCOVERY_INTERVAL_MS?: string | number;
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
   EVENT_COMPLETED_RETENTION_MS?: string | number;
