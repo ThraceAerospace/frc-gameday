@@ -22,10 +22,17 @@ function environment() {
       RUNTIME_ADMIN_TOKEN: "test-token",
       EVENT_RUNTIME: namespace("event"),
       TEAM_RUNTIME: namespace("team"),
-      DISCOVERY_BUCKET: {
-        put: async (key) => { markers.push(key); },
-        get: async () => null,
-        list: async () => ({ objects: [], truncated: false }),
+      DISCOVERY_STORE: {
+        idFromName: (name) => name,
+        get: () => ({
+          fetch: async (request) => {
+            const url = new URL(request.url);
+            assert.equal(url.pathname, "/put");
+            const body = await request.json();
+            markers.push(body.key);
+            return Response.json({ ok: true });
+          },
+        }),
       },
     },
   };
