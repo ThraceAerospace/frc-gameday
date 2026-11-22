@@ -1,68 +1,28 @@
-# FieldView Cloudflare Environments
+# Cloudflare environments
 
-FieldView has two persistent Cloudflare environments. The Git branch determines which Wrangler configuration is deployed; the application does not infer its environment from the branch.
+## Accepted target
 
-| Git branch | Runtime Worker | Runtime URL | Jobs Worker | Wrangler configuration |
-| --- | --- | --- | --- | --- |
-| `main` | `runtime` | `https://runtime.frc-fieldview.workers.dev` | `fieldview-jobs` | `wrangler.toml` |
-| Any non-main branch | `testing` | `https://testing.frc-fieldview.workers.dev` | `fieldview-jobs-testing` | `wrangler.testing.toml` |
+FieldView uses exactly one Cloudflare Worker per environment:
 
-The testing environment is a **shared, persistent test target**. Deploying a different non-main branch replaces the code at the same testing URL; it does not create a separate URL or isolated environment for every branch. Wrangler's automatic Preview URLs are disabled so the fixed testing hostname remains the intended endpoint.
+| Environment | Worker name | Purpose |
+|---|---|---|
+| Preproduction | `fieldview-preprod` | Full integration and release validation |
+| Production | `fieldview-production` | Live FieldView backend |
 
-## Resource separation
+Each Worker hosts the HTTP API, webhook ingress, EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore, and all three durable Workflows. Runtime and Jobs remain separate code modules, not separate deployed Workers. See [ADR-0017](../architecture/ADR-0017-single-worker-per-environment.md).
 
-| Resource | Production | Testing |
-| --- | --- | --- |
-| Runtime Worker | `runtime` | `testing` |
-| Jobs Worker | `fieldview-jobs` | `fieldview-jobs-testing` |
-| Discovery catalog | Runtime `DiscoveryStore` Durable Object | Separate testing Runtime `DiscoveryStore` namespace |
-| Runtime Durable Objects | Production namespace | Separate testing namespace |
-| Jobs service binding | `runtime` | `testing` |
-| Workflow names | Production names | `testing-` prefixed names |
+The environments must have independent Durable Object namespaces, Workflow bindings and instances, secrets, variables, and data. Preproduction must never share Production credentials or state.
 
-Discovery and administrative catalog records are persisted in the Runtime Worker's SQLite-backed `DiscoveryStore` Durable Object. Jobs accesses it only through the authenticated Runtime service binding; the Durable Object is not directly exposed to Jobs or the public internet. Production and testing use separate Runtime Workers and therefore separate Durable Object namespaces and migration histories. No R2 bucket or D1 database is required. Publishing a new team/event directory or weekly projection also removes superseded page, chunk, staging, and projection generations so the free Durable Object storage allowance is not consumed by obsolete discovery artifacts.
+## Current repository state
 
-The Jobs Workers are internal service-binding targets and do not need public `workers.dev` URLs. Only the Runtime Workers expose the fixed runtime URLs.
+The existing `workers/fieldview-runtime` and `workers/fieldview-jobs` directories and their production/testing Wrangler files are the experimental split-Worker prototype. They are not yet consolidated into the accepted target. Do not deploy those configurations as a final environment topology. The source and Wrangler refactor must be completed and validated before experimental Cloudflare resources are removed or replacement resources are created.
 
-## Deploy commands
+The existing test Worker deployments have no production data and are disposable. Nevertheless, leave them untouched until the consolidated implementation and configuration pass repository validation.
 
-Run from the repository root, after verifying the authenticated Cloudflare account and the target resources.
+## Deployment controls
 
-### From `main`
-
-```sh
-npx wrangler deploy --config workers/fieldview-runtime/wrangler.toml
-npx wrangler deploy --config workers/fieldview-jobs/wrangler.toml
-```
-
-### From any non-main branch
-
-```sh
-npx wrangler deploy --config workers/fieldview-runtime/wrangler.testing.toml
-npx wrangler deploy --config workers/fieldview-jobs/wrangler.testing.toml
-```
-
-Never deploy a non-main branch with the production configuration. Never deploy `main` with the testing configuration. These commands are documented for operators; this repository change does not add CI deployment automation or execute a Cloudflare deployment.
-
-## Secrets and production readiness
-
-Set secrets independently on each Worker in the selected environment. Never put secret values in Wrangler files, Git, or chat.
-
-- Runtime: `TBA_API_KEY` and `TBA_WEBHOOK_SECRET`.
-- Jobs: `TBA_API_KEY`.
-- The current code also requires `RUNTIME_ADMIN_TOKEN` for internal Worker-to-Worker and administrative operations. This bearer-token mechanism is temporary testing authorization and is **not approved for production**. Production deployment remains blocked until the system-administrator authorization design replaces it. Do not copy a testing token into production.
-
-The current production config intentionally contains no secret values. The testing environment may use its own testing credentials and temporary admin token, configured directly as Worker secrets.
-
-## Existing prototype resources
-
-The repository no longer contains prototype-named Wrangler files or a prototype setup runbook. This source change does not delete or modify the already-existing `fieldview-runtime-prototype` / `fieldview-jobs-prototype` Cloudflare services, their Durable Object data, or the old prototype R2 bucket. Those are remote resources and require a separate, explicit cleanup decision after the new testing environment is validated.
-
-## Vercel
-
-No Vercel project settings or environment variables are changed here. When the frontend is ready to consume the runtime, configure the server-only `FIELDVIEW_RUNTIME_URL` separately for Production and Preview in Vercel:
-
-- Production: `https://runtime.frc-fieldview.workers.dev`
-- Preview: `https://testing.frc-fieldview.workers.dev`
-
-Only set the browser-exposed `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL` if the relevant browser transport explicitly requires it, and only after its public-read/CORS behavior has been validated. Do not expose service credentials or admin tokens to browser code.
+- Do not deploy automatically from CI.
+- The user runs Wrangler commands manually and performs all Cloudflare deployments.
+- Do not modify Cloudflare resources, secrets, routes, or Vercel project settings from ChatGPT.
+- Do not cut over Production until Preproduction has passed smoke tests and the production administrator authorization design has replaced the prototype `RUNTIME_ADMIN_TOKEN` bearer token.
+- Keep secrets out of source control and chat output.
