@@ -435,6 +435,12 @@ export class EventRuntime {
       }
       const registered = body.action === "subscribe";
       await this.storage.put(registeredKey, registered);
+      // Establish a first partial publication when the first live subscriber
+      // arrives. This is a local, provider-free projection from owned state;
+      // public snapshot reads remain strictly read-only.
+      if (registered && !(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY))) {
+        await this.publishEventState();
+      }
       return Response.json({
         registered,
         event_key: this.eventKey,
