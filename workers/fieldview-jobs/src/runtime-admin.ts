@@ -216,20 +216,21 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
     for (let offset = 0; offset < teamKeys.length; offset += 100) {
       const batch = teamKeys.slice(offset, offset + 100);
-      await step.do("read-participant-histories-" + offset, async () => {
-        await Promise.all(batch.map(async (teamKey) => {
+      const history = await step.do("read-participant-histories-" + offset, async () => {
+        const results = await Promise.all(batch.map(async (teamKey) => {
           const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
           if (!response.ok) throw new Error("TeamRuntime snapshot failed for " + teamKey);
           const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
-          for (const item of snapshot.events ?? []) {
-            if (!validEvent(item.key) || typeof item.start_date !== "string" ||
-                typeof item.end_date !== "string" || typeof item.timezone !== "string") continue;
-            historicalEvents.set(item.key, {
-              start_date: item.start_date, end_date: item.end_date, timezone: item.timezone,
-            });
-          }
+          return (snapshot.events ?? []).flatMap((item) =>
+            validEvent(item.key) && typeof item.start_date === "string" &&
+            typeof item.end_date === "string" && typeof item.timezone === "string"
+              ? [{ key: item.key, start_date: item.start_date, end_date: item.end_date, timezone: item.timezone }]
+              : []);
         }));
-        return { teams: batch.length };
+        return results.flat();
+      });
+      for (const item of history) historicalEvents.set(item.key, {
+        start_date: item.start_date, end_date: item.end_date, timezone: item.timezone,
       });
     }
     const historical = [...historicalEvents.entries()];
