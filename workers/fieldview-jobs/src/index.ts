@@ -134,7 +134,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
                 Authorization: `Bearer ${this.env.RUNTIME_ADMIN_TOKEN}`,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ event_key: item.key, lifecycle: classification }),
+              body: JSON.stringify({ event_key: item.key, ...classification }),
             },
           ));
           if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
