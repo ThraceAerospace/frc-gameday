@@ -252,20 +252,24 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const eventRefs = classified.flatMap(({ eventRefs: items }) => items);
     const participantFailures: Array<{ event_key: string; error: string }> = [];
     for (const item of eventRefs) {
-      const result = await step.do(`discover-participants-${item.key}`, {
-        retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
-      }, async () => {
-        const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
-        const response = await api.request(TBA_ENDPOINTS.eventTeamsSimple(item.key));
-        if (!response.ok) throw new Error(`TBA event team discovery for ${item.key} returned HTTP ${response.status}`);
-        const teams = await response.json() as Array<{ key?: unknown }>;
-        if (!Array.isArray(teams) || teams.some((team) =>
-          !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
-          throw new Error(`TBA event team discovery for ${item.key} returned an invalid team list`);
-        }
-        return [...new Set(teams.map((team) => team.key as string))].sort();
-      });
-      result.forEach((teamKey) => participantKeys.add(teamKey));
+      try {
+        const result = await step.do(`discover-participants-${item.key}`, {
+          retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
+        }, async () => {
+          const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
+          const response = await api.request(TBA_ENDPOINTS.eventTeamsSimple(item.key));
+          if (!response.ok) throw new Error(`TBA event team discovery for ${item.key} returned HTTP ${response.status}`);
+          const teams = await response.json() as Array<{ key?: unknown }>;
+          if (!Array.isArray(teams) || teams.some((team) =>
+            !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+            throw new Error(`TBA event team discovery for ${item.key} returned an invalid team list`);
+          }
+          return [...new Set(teams.map((team) => team.key as string))].sort();
+        });
+        result.forEach((teamKey) => participantKeys.add(teamKey));
+      } catch (error) {
+        participantFailures.push({ event_key: item.key, error: String(error) });
+      }
     }
 
     const teamKeys = [...participantKeys].sort();
@@ -382,6 +386,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       teams_seeded: seededTeams.length,
       teams_failed: failedTeams.length,
       team_seed_failures: failedTeams.slice(0, 100),
+      participant_discovery_failures: participantFailures.slice(0, 100),
       initialized: initialized.length,
       failed: failures.length,
       failures: failures.slice(0, 100),
