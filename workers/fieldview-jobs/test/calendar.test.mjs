@@ -41,8 +41,8 @@ test("determines lifecycle using the event's local calendar date", () => {
   const event = { start_date: "2026-11-23", end_date: "2026-11-25", timezone: "America/Los_Angeles" };
   assert.equal(lifecycleFor(event, Date.parse("2026-11-23T07:30:00Z")).lifecycle, "upcoming");
   assert.equal(lifecycleFor(event, Date.parse("2026-11-24T12:00:00Z")).lifecycle, "active");
-  assert.equal(lifecycleFor(event, Date.parse("2026-11-26T12:00:00Z")).lifecycle, "expired");
-  const duringRetention = lifecycleFor(event, Date.parse("2026-11-25T12:00:00Z"));
+  assert.equal(lifecycleFor(event, Date.parse("2026-11-28T12:00:00Z")).lifecycle, "expired");
+  const duringRetention = lifecycleFor(event, Date.parse("2026-11-26T12:00:00Z"));
   assert.equal(duringRetention.lifecycle, "completed");
   assert.equal(typeof duringRetention.completedUntil, "number");
 });
