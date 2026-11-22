@@ -332,7 +332,7 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.TASK_SCHEDULER || !["scheduler-start", "scheduler-stop", "scheduler-run", "discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
+        if (!env.TASK_SCHEDULER || !["discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
@@ -365,9 +365,7 @@ export default {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
           }));
         }
-        return scheduler.fetch(new Request("https://task-scheduler/" + (action === "scheduler-start" ? "start" : action === "scheduler-stop" ? "stop" : "run"), {
-          method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
-        }));
+        return Response.json({ error: "Unsupported system operation" }, { status: 400 });
       }
       if (typeof body.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(body.key)) {
         return Response.json({ error: "A valid event or team key is required" }, { status: 400 });
@@ -551,17 +549,6 @@ export default {
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
       const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
       return stub.fetch(new Request("https://fieldview-multiplexer/stream", { method: "GET", headers: request.headers }));
-    }
-
-    if (url.pathname === "/internal/scheduler/start" || url.pathname === "/internal/scheduler/stop" || url.pathname === "/internal/scheduler/state") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const action = url.pathname.endsWith("/start") ? "start" : url.pathname.endsWith("/stop") ? "stop" : "state";
-      return scheduler.fetch(new Request("https://task-scheduler/" + action, {
-        method: action === "state" ? "GET" : "POST",
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
-      }));
     }
 
     if (url.pathname === "/health") {
