@@ -665,7 +665,7 @@ test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime r
     "the owning TeamRuntime replaces the old duplicated record in its own storage");
 });
 
-test("TeamRuntime applies a match webhook to its existing team projection without fetching or replacing enrichments", async () => {
+test("TeamRuntime keeps match webhook data foreign to its team event state", async () => {
   const storage = new MemoryStorage();
   const teamKey = "frc3461", eventKey = "2026test", matchKey = "2026test_qm1";
   const currentMatch = {
@@ -755,7 +755,7 @@ test("TeamRuntime applies a match webhook to its existing team projection withou
   assert.equal(notifications.length, 0, "team runtime does not relay event-owned match changes");
 });
 
-test("TeamRuntime applies upcoming-match timing only to its existing team match projection", async () => {
+test("TeamRuntime does not copy upcoming-match timing into team-owned state", async () => {
   const storage = new MemoryStorage();
   const teamKey = "frc3461", eventKey = "2026test", matchKey = "2026test_qm1";
   const match = {
