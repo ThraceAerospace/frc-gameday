@@ -36,6 +36,12 @@ test("EventRuntime hydrates its persisted event publication before serving reads
     sourceRevision: 7, snapshotVersion: 4, generatedAt: Date.now(), status: "partial",
     state: { event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {} },
   });
+  storage.values.set("event-view:publication", {
+    schema_version: 1, event_key: eventKey, version: 1, source_revision: 7,
+    generated_at: Date.now(), status: "partial", team_state_revisions: [],
+    storage_format: "chunked-json-v1", chunk_count: 1,
+  });
+  storage.values.set("event-view:publication:v1:chunk:0", "{legacy duplicate}");
   let providerCalls = 0, teamCalls = 0, activationCalls = 0;
   const runtime = new EventRuntime({
     storage,
@@ -51,6 +57,10 @@ test("EventRuntime hydrates its persisted event publication before serving reads
   assert.equal(response.status, 200);
   assert.equal((await response.json()).event.key, eventKey);
   assert.equal(activationCalls, 1);
+  assert.equal(storage.values.has("event-view:publication"), false,
+    "activation retires the old duplicated EventView manifest");
+  assert.equal(storage.values.has("event-view:publication:v1:chunk:0"), false,
+    "activation removes old EventView chunks instead of retaining a second copy");
   assert.equal(providerCalls, 0);
   assert.equal(teamCalls, 0, "event snapshot reads never fan out to TeamRuntime");
   const diagnostics = await runtime.fetch(new Request("https://event-runtime/state", {
