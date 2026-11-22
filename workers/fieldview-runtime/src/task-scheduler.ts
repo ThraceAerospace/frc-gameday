@@ -239,20 +239,6 @@ interface TeamSeedJob {
 }
 const teamSeedKey = (teamKey: string, year: number) => "admin:team-seed:" + teamKey + ":" + year;
 
-interface AdminDiscoveryJob {
-  year: number;
-  mode: "year";
-  status: "running" | "completed" | "failed";
-  stage: "events" | "teams" | "complete";
-  events: number;
-  teams: number;
-  steps: number;
-  error: string | null;
-  startedAt: number;
-  updatedAt: number;
-  nextDueAt: number;
-}
-const adminDiscoveryKey = (year: number) => "admin:discovery-job:year:" + year;
 
 
 /** System-wide discovery and cross-runtime job orchestrator; entity runtimes execute dispatched work. */
@@ -303,36 +289,6 @@ export class TaskScheduler {
     if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
  
-    if (request.method === "GET" && url.pathname === "/admin/discovery-job") {
-      const year = Number(url.searchParams.get("year"));
-      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid discovery year" }, { status: 400 });
-      return Response.json(await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(year)) ??
-        { year, mode: "year", status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
-    }
-
-    if (request.method === "POST" && url.pathname === "/admin/discover-year") {
-      const year = Number(url.searchParams.get("year"));
-      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
-        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
-      }
-      const activeJobs = await this.storage.list<SeasonIngestJob>({ prefix: "admin:season-ingest:" });
-      if ([...activeJobs.values()].some((job) => job.status === "running" || job.status === "paused")) {
-        return Response.json({ error: "Resume, cancel, or complete the active season-ingest job before refreshing discovery." }, { status: 409 });
-      }
-      const key = adminDiscoveryKey(year);
-      const current = await this.storage.get<AdminDiscoveryJob>(key);
-      if (current?.status === "running") return Response.json(current, { status: 202 });
-      const now = Date.now();
-      const job: AdminDiscoveryJob = {
-        year, mode: "year", status: "running", stage: "events",
-        events: 0, teams: 0, steps: 0, error: null,
-        startedAt: now, updatedAt: now, nextDueAt: now,
-      };
-      await this.storage.put(key, job);
-      await this.storage.setAlarm(now);
-      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
-    }
-
     if (url.pathname === "/admin/event-team-seed" && request.method === "GET") {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
@@ -1160,31 +1116,6 @@ export class TaskScheduler {
     await this.storage.put(key, job);
   }
 
-  private async processAdminDiscovery(job: AdminDiscoveryJob): Promise<void> {
-    const key = adminDiscoveryKey(job.year);
-    job.steps += 1;
-    try {
-      if (job.stage === "events") {
-        await this.discoverEvents(job.year);
-        const cache = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + job.year);
-        job.events = cache?.events.length ?? 0;
-        job.stage = "teams";
-      } else if (job.stage === "teams") {
-        const result = await this.discoverTeams(job.year, ADMIN_TEAM_DISCOVERY_PREFIX, 4);
-        job.teams = result.teamCount;
-        if (result.complete) job.stage = "complete";
-      }
-      if (job.stage === "complete") job.status = "completed";
-      else job.nextDueAt = Date.now() + 1_000;
-      job.error = null;
-    } catch (error) {
-      job.error = error instanceof Error ? error.message : String(error);
-      job.status = "failed";
-    }
-    job.updatedAt = Date.now();
-    await this.storage.put(key, job);
-  }
-
   async alarm(): Promise<void> {
     const startedAt = performance.now();
     try {
@@ -1232,17 +1163,6 @@ export class TaskScheduler {
       await this.measureStage("coverage-audit", () => this.processCoverageAuditBatch(activeCoverageAudit.year));
       const refreshed = await this.storage.get<CoverageAuditRecord>("admin:coverage-audit:" + activeCoverageAudit.year);
       if (refreshed?.status === "running") await this.storage.setAlarm(Date.now() + 250);
-      else await this.storage.setAlarm(Date.now() + 100);
-      return;
-    }
-    const discoveryJobs = await this.storage.list<AdminDiscoveryJob>({ prefix: "admin:discovery-job:" });
-    const activeDiscovery = [...discoveryJobs.values()]
-      .filter((job) => job.status === "running")
-      .sort((a, b) => a.updatedAt - b.updatedAt)[0];
-    if (activeDiscovery) {
-      await this.measureStage("admin-discovery", () => this.processAdminDiscovery(activeDiscovery));
-      const refreshed = await this.storage.get<AdminDiscoveryJob>(adminDiscoveryKey(activeDiscovery.year));
-      if (refreshed?.status === "running") await this.storage.setAlarm(Math.max(Date.now() + 100, refreshed.nextDueAt));
       else await this.storage.setAlarm(Date.now() + 100);
       return;
     }
@@ -1594,122 +1514,6 @@ export class TaskScheduler {
     await this.persistSeasonIngest(job);
   }
 
-  private async discoverEvents(year: number): Promise<void> {
-    const cacheKey = ADMIN_DISCOVERY_PREFIX + year;
-    const cached = await this.storage.get<DiscoveryCache>(cacheKey);
-    const headers = new Headers();
-    if (cached?.etag) headers.set("If-None-Match", cached.etag);
-    const response = await this.api.request(TBA_ENDPOINTS.events(year), { headers });
-    if (response.status === 304 && cached) {
-      await this.storage.put(cacheKey, { ...cached, complete: true, checkedAt: Date.now() } satisfies DiscoveryCache);
-      return;
-    }
-    if (!response.ok) throw new Error("TBA event discovery failed for " + year + " with HTTP " + response.status);
-    const events = await response.json() as TBAEvent[];
-    if (!Array.isArray(events)) throw new Error("TBA event discovery returned a non-array payload");
-    const now = Date.now();
-    await this.storage.put(cacheKey, {
-      etag: response.headers.get("ETag"), events, complete: true, updatedAt: now, checkedAt: now,
-    } satisfies DiscoveryCache);
-  }
-
-  private async discoverTeams(
-    year: number,
-    prefix = ADMIN_TEAM_DISCOVERY_PREFIX,
-    maxPages = 100,
-  ): Promise<{ requestCount: number; pageCount: number; teamCount: number; complete: boolean }> {
-    const key = prefix + year;
-    const cached = await this.storage.get<TeamDiscoveryCache>(key);
-    const refreshKey = key + ":refresh";
-    const storedRefresh = await this.storage.get<{ cursor: number; pageEtags: Record<string, string | null>; payloadChanged: boolean }>(refreshKey);
-    const lastCheckedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
-    if (cached?.complete === true && !storedRefresh &&
-        Date.now() - lastCheckedAt < DEFAULT_EVENT_POLLING_POLICY.discoveryIntervalMs) {
-      return {
-        requestCount: 0, pageCount: cached.pageCount ?? 0,
-        teamCount: cached.teamCount ?? cached.teamKeys?.length ?? 0, complete: true,
-      };
-    }
-    const refresh = storedRefresh ?? { cursor: 0, pageEtags: {}, payloadChanged: !cached?.complete };
-    let requestCount = 0;
-    let complete = false;
-    let cursor = refresh.cursor;
-    const pageLimit = Math.max(1, Math.min(100, maxPages));
-
-    // Routine scheduler runs process a bounded number of pages. Staging pages
-    // are separate from the published cache, so public reads keep seeing the
-    // last complete inventory until the replacement is complete.
-    while (cursor < 100 && requestCount < pageLimit) {
-      const pageKey = String(cursor);
-      const cachedPage = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + cursor) ??
-        await this.storage.get<TBATeam[]>((cached?.pagePrefix ?? key + ":page:") + cursor) ??
-        (cursor === 0 ? cached?.teams : undefined);
-      const etag = refresh.pageEtags[pageKey] ?? cached?.pageEtags?.[pageKey] ?? null;
-      const headers = new Headers();
-      if (etag) headers.set("If-None-Match", etag);
-      const endpoint = TBA_ENDPOINTS.teamsByYearPage(year, cursor);
-      const response = await this.api.request(endpoint, { headers });
-      requestCount += 1;
-      let pageTeams: TBATeam[];
-      if (response.status === 304) {
-        if (!cachedPage) throw new Error("TBA team page " + cursor + " returned 304 without a retained page payload");
-        pageTeams = cachedPage;
-        refresh.pageEtags[pageKey] = etag;
-      } else {
-        if (!response.ok) throw new Error("TBA team discovery page " + cursor + " failed for " + year + " with HTTP " + response.status);
-        pageTeams = await response.json() as TBATeam[];
-        if (!Array.isArray(pageTeams) || pageTeams.length > 500) throw new Error("TBA team discovery page " + cursor + " returned an invalid payload");
-        refresh.pageEtags[pageKey] = response.headers.get("ETag");
-        refresh.payloadChanged = true;
-      }
-      if (response.status !== 304) await this.storage.put(key + ":refresh:page:" + cursor, pageTeams);
-      cursor += 1;
-      // Persist the cursor and validator after each page so a later alarm can
-      // resume exactly where it stopped, including after provider deferral.
-      await this.storage.put(refreshKey, { ...refresh, cursor });
-      if (pageTeams.length < 500) {
-        complete = true;
-        break;
-      }
-    }
-
-    if (!complete && cursor >= 100) throw new Error("TBA team discovery exceeded the 100-page safety limit; season inventory is incomplete");
-    if (!complete) {
-      await this.storage.put(refreshKey, { ...refresh, cursor });
-      return { requestCount, pageCount: cursor, teamCount: cached?.teamCount ?? 0, complete: false };
-    }
-
-    const pages: TBATeam[][] = [];
-    for (let page = 0; page < cursor; page += 1) {
-      const values = await this.storage.get<TBATeam[]>(key + ":refresh:page:" + page) ??
-        await this.storage.get<TBATeam[]>((cached?.pagePrefix ?? key + ":page:") + page);
-      if (!values) throw new Error("TBA team discovery staging page " + page + " is missing");
-      pages.push(values);
-    }
-    const teams = [...new Map(pages.flat().filter((team) => typeof team?.key === "string" && /^frc[0-9]+$/.test(team.key)).map((team) => [team.key, team])).values()];
-    if (teams.length === 0) throw new Error("TBA returned zero teams for " + year + "; refusing to mark the season inventory complete");
-
-    // Publish a new immutable page generation, then atomically switch the
-    // metadata pointer. Concurrent public reads continue using the old
-    // generation until the complete replacement is visible.
-    const checkedAt = Date.now();
-    const reusePublishedGeneration = !refresh.payloadChanged && Boolean(cached?.pagePrefix);
-    const pagePrefix = reusePublishedGeneration
-      ? cached!.pagePrefix!
-      : key + ":snapshot:" + checkedAt + ":page:";
-    if (!reusePublishedGeneration) {
-      for (let page = 0; page < pages.length; page += 1) await this.storage.put(pagePrefix + page, pages[page]);
-    }
-    const updatedAt = refresh.payloadChanged ? checkedAt : cached?.updatedAt ?? checkedAt;
-    await this.storage.put(key, {
-      etag: refresh.pageEtags["0"] ?? null, pageEtags: refresh.pageEtags, pageCount: pages.length, pagePrefix,
-      teamCount: teams.length, teamKeys: teams.map((team) => team.key).sort(),
-      complete: true, updatedAt, checkedAt,
-    } satisfies TeamDiscoveryCache);
-    for (let page = 0; page < cursor; page += 1) await this.storage.delete(key + ":refresh:page:" + page);
-    await this.storage.delete(refreshKey);
-    return { requestCount, pageCount: pages.length, teamCount: teams.length, complete: true };
-  }
 
 
 }
