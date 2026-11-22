@@ -6,6 +6,7 @@ export interface DiscoveryStoreClient {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
   provider(path: string, init?: RequestInit): Promise<Response>;
+  catalog(action: string, input?: Record<string, unknown>): Promise<Response>;
 }
 
 /** Direct namespace client; DiscoveryStore is bound to the same Worker as its callers. */
@@ -44,6 +45,13 @@ export function createDiscoveryStoreClient(
     },
     async provider(path, init = {}) {
       return stub.fetch(new Request("https://discovery-store/" + path, init));
+    },
+    async catalog(action, input = {}) {
+      return stub.fetch(new Request("https://discovery-store/catalog/" + action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }));
     },
   };
 }
