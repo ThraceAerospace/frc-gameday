@@ -1,10 +1,11 @@
-# Production-oriented configuration. This file is not used by the isolated prototype deployment.
-name = "fieldview-runtime"
+# Production runtime Worker.
+# Deploy this configuration only from the main branch.
+name = "runtime"
 main = "src/index.ts"
 compatibility_date = "2026-11-17"
-workers_dev = false
+workers_dev = true
+preview_urls = false
 
-# Persist Worker and Durable Object logs; sample traces to limit observability volume.
 [observability]
 enabled = true
 head_sampling_rate = 1
@@ -55,9 +56,8 @@ new_sqlite_classes = ["TeamRuntime"]
 tag = "v5"
 renamed_classes = [{ from = "EventScheduler", to = "TaskScheduler" }]
 
-# Retire the former global coordinator after all runtime and admin routes have
-# moved to entity-owned queues and Jobs Worker Workflows. This deletes its
-# obsolete Durable Object storage; canonical state and inventory live elsewhere.
+# Retire the former global coordinator after its responsibilities moved to
+# entity runtimes and Jobs Worker Workflows.
 [[migrations]]
 tag = "v6"
 deleted_classes = ["TaskScheduler"]

@@ -192,6 +192,13 @@ Never copy legacy implementation rules into new packages merely for parity. Pres
 
 Never commit secrets or real environment values. Document variable names, purpose, scope, and migration destination; use placeholders in examples. Separate browser-exposed `NEXT_PUBLIC_*` configuration from server-only credentials. Do not copy Vercel-specific secrets into Cloudflare without defining their use, access policy, and rotation.
 
+Cloudflare environment selection is branch-determined and documented in `docs/development/CLOUDFLARE-ENVIRONMENTS.md`:
+- `main` uses `workers/fieldview-runtime/wrangler.toml` (Worker `runtime`) and `workers/fieldview-jobs/wrangler.toml`.
+- Every non-main branch uses the corresponding `wrangler.testing.toml` files (Runtime Worker `testing` and Jobs Worker `fieldview-jobs-testing`).
+- The shared testing runtime URL is `https://testing.frc-fieldview.workers.dev`; production is `https://runtime.frc-fieldview.workers.dev`.
+- Do not add branch-detection logic to application code, deploy automatically from CI, or change Vercel settings as part of this migration slice without explicit approval.
+- Production deployment is blocked until the temporary `RUNTIME_ADMIN_TOKEN` bearer authorization is replaced by the approved system-administrator authorization design. Never configure the testing token as a production secret.
+
 Current legacy environment variables identified during the initial source scan include:
 - `TBA_API_KEY`
 - `TBA_WEBHOOK_TOKEN`

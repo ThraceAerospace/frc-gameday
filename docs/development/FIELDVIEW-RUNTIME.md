@@ -1,6 +1,6 @@
 # FieldView Runtime Development
 
-The initial Cloudflare runtime is isolated under `workers/fieldview-runtime`. It is not connected to production traffic and has no configured Cloudflare credentials. Public event snapshots and read-only live subscriptions do not require user authentication; only internal administration and service-to-service operations use the runtime admin token. The isolated remote prototype has its own `workers/fieldview-runtime/wrangler.prototype.toml` configuration and setup procedure in [CLOUDFLARE-PROTOTYPE-SETUP.md](./CLOUDFLARE-PROTOTYPE-SETUP.md). It uses a distinct Worker name, `workers.dev` ingress, separate Durable Object namespaces, and independent migration tags; it does not create production routes or reuse production state. No remote deployment or secret configuration has been performed.
+The Cloudflare runtime source is under `workers/fieldview-runtime`. FieldView has two persistent Worker targets: `runtime` for `main` and `testing` for every non-main branch. Their Wrangler configurations are selected explicitly by branch; see [CLOUDFLARE-ENVIRONMENTS.md](./CLOUDFLARE-ENVIRONMENTS.md) for resource separation, operator commands, and deployment gates. The fixed runtime URLs are `https://runtime.frc-fieldview.workers.dev` and `https://testing.frc-fieldview.workers.dev`. No remote deployment, Vercel setting change, or production cutover is performed by this repository configuration.
 
 ## Runtime secrets and configuration
 
@@ -8,7 +8,7 @@ Configure secrets as Cloudflare Worker secrets; never commit their values:
 
 - `TBA_API_KEY` — TBA v3 read API key used by EventRuntime polling.
 - `TBA_WEBHOOK_SECRET` — the secret configured for the TBA webhook; used to verify `X-TBA-HMAC`.
-- `RUNTIME_ADMIN_TOKEN` — high-entropy internal bearer token for administrative scheduling/state routes and Worker-to-DO calls.
+- `RUNTIME_ADMIN_TOKEN` — current temporary bearer authorization for administrative scheduling/state routes and Worker-to-DO calls. Configure only in the isolated testing environment. It is not approved for production; production deployment is blocked until the system-administrator authorization design replaces this mechanism.
 
 Optional non-secret variables:
 
@@ -72,7 +72,7 @@ From the repository root:
 - `npm test` runs domain, TBA provider, endpoint-state, reconciliation, source-version, webhook-signature, TeamRuntime lifecycle/route, and frontend snapshot tests.
 - `npm run typecheck` also typechecks the Worker entrypoint and EventRuntime adapter.
 
-The canonical event snapshot includes TBA matches and playoff alliance associations, plus the unchanged Statbotics event-match collection associated by exact match key. EventRuntime Statbotics match data is refreshed only after a changed TBA event/team/status/match REST representation, with a five-minute default debounce and bounded retries. TeamRuntime Statbotics team-year/team-event data is refreshed after changed TBA team or season-event-list representations and is not a recurring poll. Analytics recalculation remains a separate persisted, coalesced downstream job. The isolated prototype Wrangler config declares SQLite-backed EventRuntime, TeamRuntime, Multiplexer, and TaskScheduler Durable Objects, a daily Cron Trigger for the TaskScheduler projection, and no production routes..
+The canonical event snapshot includes TBA matches and playoff alliance associations, plus the unchanged Statbotics event-match collection associated by exact match key. EventRuntime Statbotics match data is refreshed only after a changed TBA event/team/status/match REST representation, with a five-minute default debounce and bounded retries. TeamRuntime Statbotics team-year/team-event data is refreshed after changed TBA team or season-event-list representations and is not a recurring poll. Analytics recalculation remains a separate persisted, coalesced downstream job. The Runtime Worker configurations declare SQLite-backed EventRuntime, TeamRuntime, and Multiplexer Durable Objects. The production Jobs Worker owns the daily event-readiness Workflow schedule; the shared testing Jobs Worker intentionally has no recurring schedule. See [CLOUDFLARE-ENVIRONMENTS.md](./CLOUDFLARE-ENVIRONMENTS.md) for the branch-to-configuration mapping.
 
 ## Analytics execution and invalidation
 

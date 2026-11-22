@@ -1,0 +1,37 @@
+# Shared testing Jobs Worker.
+# Deploy this configuration only from non-main branches.
+name = "fieldview-jobs-testing"
+main = "src/index.ts"
+compatibility_date = "2026-11-22"
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[[r2_buckets]]
+binding = "DISCOVERY_BUCKET"
+bucket_name = "fieldview-discovery-testing"
+
+[[services]]
+binding = "FIELDVIEW_RUNTIME"
+service = "testing"
+
+[[workflows]]
+name = "testing-daily-event-readiness"
+binding = "DAILY_EVENT_READINESS"
+class_name = "DailyEventReadinessWorkflow"
+concurrency = { limit = 1 }
+
+[[workflows]]
+name = "testing-coverage-audit"
+binding = "COVERAGE_AUDIT"
+class_name = "CoverageAuditWorkflow"
+concurrency = { limit = 1 }
+
+[[workflows]]
+name = "testing-runtime-admin"
+binding = "RUNTIME_ADMIN"
+class_name = "RuntimeAdminWorkflow"
+concurrency = { limit = 3 }
