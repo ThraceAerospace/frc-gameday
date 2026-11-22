@@ -70,7 +70,7 @@ type SeasonPreview = {
   estimate_note?: string; existing_job?: SeasonIngest | null; history_count?: number;
 };
 type CoverageAudit = {
-  year: number; status: "not_started" | "running" | "paused" | "completed" | "stale"; discovery_ready?: boolean;
+  year: number; status: "not_started" | "running" | "paused" | "completed" | "stale" | "failed" | "cancelled"; discovery_ready?: boolean;
   started_at?: number; updated_at?: number; cursor?: number; processed?: number; total?: number; remaining?: number;
   counts?: { events_total: number; events_happened: number; events_active: number; events_upcoming: number; events_invalid_dates: number; teams_total: number; team_pages: number; event_runtime_missing: number; team_runtime_missing: number; event_state_complete: number; event_state_partial: number; event_state_stale: number; event_state_missing: number; event_state_failed: number; event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_stale: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number; event_cohort_complete: number; event_cohort_partial: number; event_cohort_discovering: number; event_cohort_missing: number; team_snapshot_complete: number; team_snapshot_partial: number; team_snapshot_missing: number; team_snapshot_failed: number; event_resources_incomplete: number; team_resources_incomplete: number; read_errors: number };
 };
@@ -232,7 +232,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Coverage audit failed");
       setCoverageAudit(body as CoverageAudit);
-      setMessage("Coverage audit batch queued. Progress will update automatically while you continue using the dashboard.");
+      setMessage("Coverage audit Workflow accepted. It will inspect the full season in durable batches while you continue using the dashboard.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Coverage audit failed"); }
     finally { setBusy(false); }
   }, [token, requestHeaders, year, coverageAudit]);
