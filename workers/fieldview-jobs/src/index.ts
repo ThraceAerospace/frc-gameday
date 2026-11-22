@@ -655,6 +655,77 @@ export default {
   async fetch(request: Request, env: JobsEnvironment): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ service: "fieldview-jobs", status: "ok" });
+    if (url.pathname === "/internal/admin/discovery-job" && request.method === "GET") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      }
+      const job = await readJson<AdminDiscoveryJobRecord>(env.DISCOVERY_BUCKET, `admin/discovery-jobs/${year}.json`);
+      if (!job) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
+      let workflowStatus: string | null = null;
+      try { workflowStatus = (await env.DAILY_EVENT_READINESS.get(job.workflow_id).status()).status; }
+      catch { workflowStatus = null; }
+      const status = workflowStatus === "paused" ? "paused"
+        : workflowStatus === "errored" ? "failed"
+        : workflowStatus === "terminated" ? "cancelled"
+        : workflowStatus === "complete" ? "completed"
+        : job.status;
+      return Response.json({ ...job, status, workflow_status: workflowStatus }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    if (url.pathname === "/internal/admin/discover-year" && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const body: unknown = await request.json().catch(() => null);
+      const year = body && typeof body === "object" && !Array.isArray(body)
+        ? Number((body as Record<string, unknown>).year) : NaN;
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      }
+      const key = `admin/discovery-jobs/${year}.json`;
+      const current = await readJson<AdminDiscoveryJobRecord>(env.DISCOVERY_BUCKET, key);
+      if (current?.status === "running") {
+        try {
+          const status = await env.DAILY_EVENT_READINESS.get(current.workflow_id).status();
+          if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
+            return Response.json({ ...current, workflow_status: status.status }, {
+              status: 202, headers: { "Cache-Control": "no-store" },
+            });
+          }
+        } catch { /* A terminal or missing instance can be replaced by a new run. */ }
+      }
+      const requestedAt = Date.now();
+      const workflowId = `admin-discovery-${year}-${requestedAt}`;
+      const job: AdminDiscoveryJobRecord = {
+        year, workflow_id: workflowId, status: "running", stage: "queued",
+        events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
+        started_at: requestedAt, updated_at: requestedAt,
+      };
+      await env.DISCOVERY_BUCKET.put(key, JSON.stringify(job), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      try {
+        await env.DAILY_EVENT_READINESS.create({
+          id: workflowId,
+          params: { operation: "discover-season", year, requestedAt, jobId: workflowId },
+        });
+      } catch (error) {
+        const failed = { ...job, status: "failed" as const, stage: "failed",
+          error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
+        await env.DISCOVERY_BUCKET.put(key, JSON.stringify(failed), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return Response.json(failed, { status: 409 });
+      }
+      return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!env.RUNTIME_ADMIN_TOKEN ||
           request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
