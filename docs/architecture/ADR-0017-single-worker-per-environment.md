@@ -16,9 +16,10 @@ Preproduction and Production have independent Worker configurations, Durable Obj
 - **EventRuntime:** event-scoped provider acquisition, durable local work, reconciliation, persistence, and event analytics.
 - **TeamRuntime:** team-scoped provider acquisition, durable local work, reconciliation, persistence, and team analytics.
 - **Multiplexer:** realtime subscription and publication only.
-- **DiscoveryStore:** discovery catalog, runtime inventory, and durable Workflow progress.
-- **Workflows:** durable cross-runtime/system-wide orchestration. They dispatch commands and inspect readiness; they do not become provider proxies or duplicate entity-local queues.
-- **Provider packages:** provider transport, schemas, retries, and provider-specific request policy.
+- **DiscoveryStore:** system-wide discovery catalog and inventory, current-season resolution, TBA event/team directory acquisition and publication, and durable Workflow progress. It is the sole owner of system-wide discovery provider I/O; it uses the shared TBA provider package and persists validated, versioned catalog records.
+- **Workflows:** durable cross-runtime/system-wide orchestration. They request discovery operations from DiscoveryStore, coordinate EventRuntime and TeamRuntime work, inspect readiness, and persist orchestration progress. They do not perform provider I/O or duplicate entity-local queues.
+- **EventRuntime and TeamRuntime:** remain the owners of entity-scoped provider acquisition. DiscoveryStore must not acquire event-match, event-resource, team-profile, or team-season data on their behalf.
+- **Provider packages:** provider transport, schemas, retries, and provider-specific request policy; they are called by the appropriate owning runtime/DiscoveryStore, never directly by Workflow code.
 - **Domain and analytics packages:** canonical FieldView models and provider/UI/infrastructure-independent calculations.
 
 ## Consequences
@@ -32,7 +33,7 @@ Benefits are one deployment and configuration per environment, no reciprocal ser
 3. Export all four Durable Object classes and all three Workflow classes from each environment's Worker configuration.
 4. Keep Durable Object class names and SQLite migration history explicit. Current experimental resources are disposable, so establish clean namespaces under the new Worker names rather than attempting cross-Worker class migration.
 5. Preserve asynchronous submit/observe/execute for long-running admin operations.
-6. Audit Workflow code for provider I/O that conflicts with the rule that EventRuntime and TeamRuntime own provider acquisition.
+6. Move system-wide TBA season/event/team directory acquisition out of DailyEventReadinessWorkflow and behind DiscoveryStore-owned operations. Workflows may invoke those operations and coordinate subsequent runtime initialization, but must not make provider requests. Keep entity-scoped provider acquisition in EventRuntime and TeamRuntime.
 7. Validate build, typecheck, tests, local Worker behavior, Wrangler configuration, and Preproduction smoke tests before creating or changing Production resources.
 8. Do not delete experimental Cloudflare resources until consolidated source and configuration pass repository validation. Do not deploy or modify Cloudflare resources as part of this repository change.
 
