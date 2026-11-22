@@ -7,7 +7,6 @@ import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
 import type { FRCColorsTeam } from "../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
-import { mergeTbaWebhookMatch, normalizeTbaWebhookMatch } from "./reconciliation.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
@@ -332,93 +331,25 @@ export class TeamRuntime {
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
       const existing = await this.storage.get<FieldViewTeamEventState>(storageKey);
       if (!existing) return Response.json({ accepted: true, affected: true, projection: "not-yet-materialized" });
-      if (envelope.message_type === "upcoming_match") {
-        const matchKey = data.match_key;
-        if (typeof matchKey !== "string") return Response.json({ error: "Upcoming-match webhook has no match key" }, { status: 400 });
-        const currentMatches = existing.matches ?? [];
-        const index = currentMatches.findIndex((item) => item.key === matchKey);
-        if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
-        const current = currentMatches[index];
-        const patch = {
-          ...current,
-          ...(typeof data.scheduled_time === "number" && Number.isFinite(data.scheduled_time) ? { time: data.scheduled_time } : {}),
-          ...(typeof data.predicted_time === "number" && Number.isFinite(data.predicted_time) ? { predicted_time: data.predicted_time } : {}),
-        };
-        if (JSON.stringify(current) === JSON.stringify(patch)) {
-          const revision = await this.storage.get<number>(revisionKey) ?? 0;
-          return Response.json({
-            accepted: true, affected: true, changed: false,
-            revision, team_event_revision: revision,
-            team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
-            team_state: existing,
-          });
-        }
-        const nextMatches = [...currentMatches];
-        nextMatches[index] = patch;
-        const nextState: FieldViewTeamEventState = { ...existing, matches: nextMatches };
-        const nextRevision = await this.storage.transaction(async (tx) => {
-          const latest = await tx.get<FieldViewTeamEventState>(storageKey);
-          if (!latest || JSON.stringify(latest) !== JSON.stringify(existing)) return null;
-          const revision = (await tx.get<number>(revisionKey) ?? 0) + 1;
-          await tx.put(storageKey, nextState);
-          await tx.put(revisionKey, revision);
-          return revision;
-        });
-        if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
-        return Response.json({
-          accepted: true, affected: true, changed: true,
-          revision: nextRevision, team_event_revision: nextRevision,
-          team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
-          team_state: nextState,
-        });
-      }
-      const updatedMatch = match && typeof match === "object" && !Array.isArray(match)
-        ? normalizeTbaWebhookMatch(match as Record<string, unknown>) : null;
-      if (updatedMatch && (envelope.message_type === "match_score" || envelope.message_type === "match_video")) {
-        const matchKey = updatedMatch.key;
-        if (typeof matchKey !== "string" || updatedMatch.event_key !== eventKey) {
-          return Response.json({ error: "Webhook match identity mismatch" }, { status: 400 });
-        }
-        const currentMatches = existing.matches ?? [];
-        const index = currentMatches.findIndex((item) => item.key === matchKey);
-        if (index < 0) return Response.json({ accepted: true, affected: true, projection: "match-not-yet-present" });
-        const current = currentMatches[index];
-        const mergedSource = mergeTbaWebhookMatch(
-          current as unknown as Record<string, unknown>, updatedMatch,
-        );
-        const scoreInputsChanged = envelope.message_type === "match_score" && [
-          "alliances", "score_breakdown", "actual_time", "post_result_time", "winning_alliance",
-        ].some((key) => JSON.stringify((current as unknown as Record<string, unknown>)[key]) !== JSON.stringify(mergedSource[key]));
-        const merged = {
-          ...mergedSource,
-          // Preserve FieldView enrichments. Only invalidate score-derived
-          // analysis when one of its actual source inputs changed.
-          predictions: current.predictions,
-          teams: current.teams,
-          sources: current.sources,
-          ...(scoreInputsChanged ? { analysis: undefined, flags: undefined } : {}),
-        } as typeof current;
-        if (JSON.stringify(current) === JSON.stringify(merged)) {
-          return Response.json({ accepted: true, affected: true, changed: false,
-            revision: await this.storage.get<number>(revisionKey) ?? 0 });
-        }
-        const nextMatches = [...currentMatches];
-        nextMatches[index] = merged;
-        const nextState: FieldViewTeamEventState = { ...existing, matches: nextMatches };
-        const nextRevision = await this.storage.transaction(async (tx) => {
-          const latest = await tx.get<FieldViewTeamEventState>(storageKey);
-          if (!latest || JSON.stringify(latest) !== JSON.stringify(existing)) return null;
-          const revision = (await tx.get<number>(revisionKey) ?? 0) + 1;
-          await tx.put(storageKey, nextState);
-          await tx.put(revisionKey, revision);
-          return revision;
-        });
-        if (nextRevision === null) return Response.json({ error: "Team event state changed concurrently; retry webhook" }, { status: 409 });
-        await this.notifyEventRuntimeStateChange(eventKey, nextRevision).catch(() => undefined);
-        return Response.json({ accepted: true, affected: true, changed: true, revision: nextRevision });
-      }
-      return Response.json({ accepted: true, affected: true, changed: false,
-        revision: await this.storage.get<number>(revisionKey) ?? 0 });
+      // EventRuntime owns canonical match records and match webhooks. TeamRuntime
+      // stores only references to those records, so event match notifications
+      // do not mutate a copied match projection here. EventRuntime's own webhook
+      // reconciliation invalidates event analytics and later requests fresh
+      // TeamEventState from each participant owner.
+      const matchKey = typeof data.match_key === "string" ? data.match_key
+        : match && typeof match === "object" && !Array.isArray(match) &&
+            typeof (match as Record<string, unknown>).key === "string"
+          ? (match as Record<string, unknown>).key as string : null;
+      const knownMatch = matchKey !== null &&
+        (existing.match_refs ?? []).some((reference) => reference.record_id === matchKey);
+      return Response.json({
+        accepted: true,
+        affected: true,
+        changed: false,
+        canonical_owner: "event-runtime",
+        projection: knownMatch ? "foreign-reference-unchanged" : "match-not-yet-referenced",
+        revision: await this.storage.get<number>(revisionKey) ?? 0,
+      });
     }
 
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
@@ -576,9 +507,30 @@ export class TeamRuntime {
     if (publicEventStateRead) {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
-      const state = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + eventKey);
-      if (!state) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
-      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + eventKey + ":inputs");
+      const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
+      const storedState = await this.storage.get<FieldViewTeamEventState & {
+        team?: import("../../../packages/domain/src/team.ts").FieldViewTeam;
+        event_team?: import("../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
+        matches?: import("../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
+      }>(stateKey);
+      if (!storedState) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
+      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+      // Lazy, owner-local migration of old records that embedded foreign
+      // EventRuntime data. This preserves the logical revision while replacing
+      // copied event/team/match records with stable references.
+      const state = normalizeFieldViewTeamEventState({
+        event_key: eventKey as FieldViewTeamEventState["event_key"],
+        team_key: this.teamKey as FieldViewTeamEventState["team_key"],
+        sources: storedState.sources,
+        ...(storedState.team === undefined ? {} : { team: storedState.team }),
+        ...(storedState.event_team === undefined ? {} : { event_team: storedState.event_team }),
+        ...(storedState.matches === undefined ? {} : { matches: storedState.matches }),
+        ...(storedState.analytics === undefined ? {} : { analytics: storedState.analytics }),
+        event_source_revision: inputs?.event_source_revision ?? null,
+      });
+      if (JSON.stringify(state) !== JSON.stringify(storedState)) {
+        await this.storage.put(stateKey, state);
+      }
       return Response.json(state, {
         headers: {
           "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
