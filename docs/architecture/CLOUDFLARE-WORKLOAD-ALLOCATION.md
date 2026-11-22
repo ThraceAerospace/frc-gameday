@@ -38,7 +38,7 @@ This is the first extraction, not the completed event-readiness program. It curr
 ### Deployment prerequisites
 
 1. Create the R2 bucket named `fieldview-discovery` once in the target Cloudflare account.
-2. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
+2. Configure `TBA_API_KEY` on `fieldview-jobs`. Set `RUNTIME_ADMIN_TOKEN` on both Workers to the exact same value; the runtime Worker already uses this prototype token, and the jobs Worker must share it. The token mechanism must be replaced before production.
 3. Deploy `fieldview-jobs` first. Its service binding targets the already-deployed `fieldview-runtime` Worker.
 4. Deploy `fieldview-runtime` second. Its service binding now targets the deployed `fieldview-jobs` Worker, and its R2-backed public reads/internal initialization route become active.
 5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next native Workflow schedule occurrence. Manual triggers use a deterministic ID per UTC date; a duplicate manual trigger returns HTTP 409. The Workflow concurrency limit serializes manual and schedule-created instances.
