@@ -25,6 +25,7 @@ declare module "cloudflare:workers" {
     },
     callback: () => Promise<Result>,
   ): Promise<Result>;
+  sleep(name: string, duration: string): Promise<void>;
   }
 }
 
