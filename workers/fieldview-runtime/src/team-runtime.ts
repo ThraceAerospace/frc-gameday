@@ -58,7 +58,7 @@ function isStatboticsRefreshTrigger(resource: TeamResource): boolean {
   const parts = resource.endpoint.split("/");
   return (parts.length === 3 && parts[1] === "team" && Boolean(parts[2])) ||
     (parts.length === 5 && parts[1] === "team" && Boolean(parts[2]) &&
-      parts[3] === "events" && /^\\d{4}$/.test(parts[4] ?? ""));
+      parts[3] === "events" && /^\d{4}$/.test(parts[4] ?? ""));
 }
 
 
