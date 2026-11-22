@@ -252,37 +252,160 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     }
     const teamKeys = [...new Set(teams.filter(validTeam))].sort();
     const eventKeys = [...new Set(events.events.map((item) => item.key).filter(validEvent))].sort();
-    await update({ phase: "seeding-teams", total: teamKeys.length + eventKeys.length });
-    let processed = 0;
-    for (let offset = 0; offset < teamKeys.length; offset += 10) {
-      const batch = teamKeys.slice(offset, offset + 10);
-      await step.do("seed-season-teams-" + offset, async () => {
-        const results = await Promise.all(batch.map(async (teamKey) => {
-          const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
-          return { teamKey, ok: response.ok || response.status === 202, status: response.status };
+    if (!teamKeys.length || !eventKeys.length) throw new Error("Discovered season inventory is empty");
+    const counts: Record<string, number> = {
+      teams_queued: 0, teams_complete: 0, teams_partial: 0, events_queued: 0,
+      events_complete: 0, events_partial: 0, analytics_succeeded: 0, analytics_partial: 0, analytics_failed: 0,
+    };
+    const errors: Array<{ key: string; detail: string; at: number }> = [];
+    await update({ phase: "queueing-team-resources", total: teamKeys.length + eventKeys.length, counts });
+
+    // Queue each team through TeamRuntime. Its own alarm owns provider I/O,
+    // pacing, retries and canonical snapshot generation.
+    for (let offset = 0; offset < teamKeys.length; offset += 25) {
+      const batch = teamKeys.slice(offset, offset + 25);
+      const result = await step.do("queue-season-team-batch-" + offset, async () => {
+        const responses = await Promise.all(batch.map(async (teamKey) => {
+          const response = await dispatch(this.env, "team", teamKey, "seed", {}, p.year);
+          return { key: teamKey, ok: response.ok || response.status === 202, status: response.status };
         }));
-        const failures = results.filter((item) => !item.ok);
-        return { succeeded: results.length - failures.length, failures };
+        return responses;
       });
-      processed += batch.length;
-      await update({ processed, counts: { teams_queued: processed } });
+      for (const item of result) if (item.ok) counts.teams_queued += 1;
+      else errors.push({ key: item.key, detail: "TeamRuntime seed returned HTTP " + item.status, at: Date.now() });
+      await update({ processed: counts.teams_queued, counts, errors: errors.slice(-100) });
     }
-    await update({ phase: "seeding-events" });
-    for (let offset = 0; offset < eventKeys.length; offset += 10) {
-      const batch = eventKeys.slice(offset, offset + 10);
-      await step.do("seed-season-events-" + offset, async () => {
-        const results = await Promise.all(batch.map(async (eventKey) => {
-          const response = await dispatch(this.env, "event", eventKey, "refresh");
-          return { eventKey, ok: response.ok || response.status === 202, status: response.status };
+
+    // Completion is based on every runtime-owned resource reaching a terminal
+    // available/unavailable state, not merely on successful enqueue.
+    for (let offset = 0; offset < teamKeys.length; offset += 25) {
+      const batch = teamKeys.slice(offset, offset + 25);
+      let ready = false;
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        const statuses = await step.do("check-season-team-batch-" + offset + "-" + attempt, async () => {
+          return Promise.all(batch.map(async (teamKey) => {
+            const response = await dispatch(this.env, "team", teamKey, "state", {}, p.year);
+            if (!response.ok) return { key: teamKey, ready: false, partial: true };
+            const state = await response.json() as {
+              polling?: Array<{ endpoint?: string }>;
+              endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null }>;
+            };
+            const tasks = state.polling ?? [];
+            const sources = state.endpoints ?? [];
+            const complete = tasks.length > 0 && tasks.every((task) => {
+              const source = sources.find((item) => item.endpoint === task.endpoint);
+              return source?.status === "unavailable" ||
+                (source?.status === "available" && (source.last_fetched_at ?? source.lastFetchedAt) != null);
+            });
+            const partial = sources.some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
+            return { key: teamKey, ready: complete, partial };
+          }));
+        });
+        ready = statuses.every((item) => item.ready);
+        if (ready) {
+          for (const item of statuses) {
+            if (item.partial) counts.teams_partial += 1;
+            else counts.teams_complete += 1;
+          }
+          await step.do("publish-season-team-snapshots-" + offset, async () => {
+            const results = await Promise.all(batch.map(async (teamKey) => {
+              const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
+              if (!response.ok) throw new Error("TeamRuntime snapshot failed for " + teamKey);
+              return teamKey;
+            }));
+            return { published: results.length };
+          });
+          break;
+        }
+        if (attempt === 179) {
+          for (const item of statuses) if (!item.ready) errors.push({
+            key: item.key, detail: "Timed out waiting for TeamRuntime resources", at: Date.now(),
+          });
+          throw new Error("Timed out waiting for season team resources in batch " + offset);
+        }
+        await step.sleep("wait-season-team-batch-" + offset + "-" + attempt, "5 seconds");
+      }
+      await update({ processed: counts.teams_queued, counts, errors: errors.slice(-100) });
+    }
+
+    await update({ phase: "queueing-event-resources" });
+    for (let offset = 0; offset < eventKeys.length; offset += 25) {
+      const batch = eventKeys.slice(offset, offset + 25);
+      const result = await step.do("queue-season-event-batch-" + offset, async () => {
+        return Promise.all(batch.map(async (eventKey) => {
+          const response = await dispatch(this.env, "event", eventKey, "refresh", {}, p.year);
+          return { key: eventKey, ok: response.ok || response.status === 202, status: response.status };
         }));
-        const failures = results.filter((item) => !item.ok);
-        return { succeeded: results.length - failures.length, failures };
       });
-      processed += batch.length;
-      await update({ processed, counts: { teams_queued: teamKeys.length, events_queued: processed - teamKeys.length } });
+      for (const item of result) if (item.ok) counts.events_queued += 1;
+      else errors.push({ key: item.key, detail: "EventRuntime refresh returned HTTP " + item.status, at: Date.now() });
+      await update({ processed: counts.teams_queued + counts.events_queued, counts, errors: errors.slice(-100) });
     }
+
+    // Wait for event-owned resources, then publish EventState and request
+    // analytics. EventRuntime continues to own the actual provider queue.
+    for (let offset = 0; offset < eventKeys.length; offset += 25) {
+      const batch = eventKeys.slice(offset, offset + 25);
+      let ready = false;
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        const statuses = await step.do("check-season-event-batch-" + offset + "-" + attempt, async () => {
+          return Promise.all(batch.map(async (eventKey) => {
+            const response = await dispatch(this.env, "event", eventKey, "state", {}, p.year);
+            if (!response.ok) return { key: eventKey, ready: false, partial: true };
+            const state = await response.json() as {
+              polling?: Array<{ endpoint?: string }>;
+              endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null }>;
+            };
+            const tasks = state.polling ?? [];
+            const sources = state.endpoints ?? {};
+            const complete = tasks.length > 0 && tasks.every((task) => {
+              const source = sources["endpoint:" + task.endpoint];
+              return source?.status === "unavailable" ||
+                (source?.status === "available" && (source.lastFetchedAt != null || source.lastWebhookAt != null));
+            });
+            const partial = Object.values(sources).some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
+            return { key: eventKey, ready: complete, partial };
+          }));
+        });
+        ready = statuses.every((item) => item.ready);
+        if (ready) {
+          for (const item of statuses) if (item.partial) counts.events_partial += 1; else counts.events_complete += 1;
+          await step.do("publish-season-event-states-" + offset, async () => {
+            const results = await Promise.all(batch.map(async (eventKey) => {
+              const response = await dispatch(this.env, "event", eventKey, "publish", {}, p.year);
+              if (!response.ok) throw new Error("EventState publication failed for " + eventKey);
+              return eventKey;
+            }));
+            return { published: results.length };
+          });
+          await step.do("request-season-analytics-" + offset, async () => {
+            const results = await Promise.all(batch.map(async (eventKey) => {
+              const response = await dispatch(this.env, "event", eventKey, "recalculate", { allowPartialTeamStates: true }, p.year);
+              if (!response.ok && response.status !== 202) throw new Error("EventAnalytics request failed for " + eventKey);
+              return eventKey;
+            }));
+            return { requested: results.length };
+          });
+          break;
+        }
+        if (attempt === 179) {
+          for (const item of statuses) if (!item.ready) errors.push({
+            key: item.key, detail: "Timed out waiting for EventRuntime resources", at: Date.now(),
+          });
+          throw new Error("Timed out waiting for season event resources in batch " + offset);
+        }
+        await step.sleep("wait-season-event-batch-" + offset + "-" + attempt, "5 seconds");
+      }
+      await update({ processed: counts.teams_queued + counts.events_queued, counts, errors: errors.slice(-100) });
+    }
+
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
-    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed, updated_at: Date.now() };
+    const hasErrors = errors.length > 0 || counts.teams_partial > 0 || counts.events_partial > 0;
+    const completed: RuntimeAdminRecord = {
+      ...(current ?? initialRecord(p)), status: hasErrors ? "completed_with_errors" : "completed",
+      phase: "complete", processed: counts.teams_queued + counts.events_queued,
+      counts, errors: errors.slice(-100), updated_at: Date.now(),
+    };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
   }
