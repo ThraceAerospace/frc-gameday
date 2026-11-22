@@ -332,7 +332,19 @@ export default {
       }
       const { kind, action } = body;
       if (kind === "system") {
-        if (!env.TASK_SCHEDULER || !["discover-year", "coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
+        if (action === "discover-year") {
+          const year = Number(body.year);
+          if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+            return Response.json({ error: "A valid discovery year is required" }, { status: 400 });
+          }
+          if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+          return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/discover-year", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ year }),
+          }));
+        }
+        if (!env.TASK_SCHEDULER || !["coverage-audit-start", "coverage-audit-continue", "season-ingest-preview", "season-ingest-start", "season-ingest-pause", "season-ingest-resume", "season-ingest-cancel"].includes(action)) {
           return Response.json({ error: "Unsupported system operation" }, { status: 400 });
         }
         const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
@@ -354,15 +366,6 @@ export default {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : "continue", year }),
-          }));
-        }
-        if (action === "discover-year") {
-          const year = Number(body.year);
-          if (!Number.isInteger(year) || year < 1992 || year > 2200) {
-            return Response.json({ error: "A valid discovery year is required" }, { status: 400 });
-          }
-          return scheduler.fetch(new Request("https://task-scheduler/admin/discover-year?year=" + year, {
-            method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
           }));
         }
         return Response.json({ error: "Unsupported system operation" }, { status: 400 });
@@ -427,9 +430,17 @@ export default {
       return Response.json({ error: "Unsupported operation kind" }, { status: 400 });
     }
 
+    if (url.pathname === "/internal/admin/discovery-job" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+      return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/discovery-job" + url.search, {
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/discovery-job" || url.pathname === "/internal/admin/discover-year" || url.pathname === "/internal/admin/district-refresh") &&
-      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/discover-year" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
+      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/district-refresh") &&
+      (request.method === "GET" || ((url.pathname === "/internal/admin/coverage-audit" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
     ) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
