@@ -21,6 +21,8 @@ interface RuntimeAdminRecord {
   status: "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
   phase: string; processed: number; total: number; started_at: number; updated_at: number;
   counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
+  team_key?: string; event_key?: string; stage?: string; scheduled_events?: number;
+  seeded_teams?: number; failed_teams?: number; historical_events_scheduled?: number;
 }
 interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
 const json = (value: unknown) => JSON.stringify(value);
@@ -132,7 +134,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       await update({ processed: scheduled });
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
-    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed: scheduled, updated_at: Date.now() };
+    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
+      stage: "complete", team_key: teamKey, scheduled_events: scheduled, processed: scheduled, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
   }
@@ -233,7 +236,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       });
     }
     const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId));
-    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete", processed, updated_at: Date.now() };
+    const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
+      stage: "complete", event_key: eventKey, seeded_teams: processed, failed_teams: 0,
+      historical_events_scheduled: historical.length, processed, updated_at: Date.now() };
     await write(this.env.DISCOVERY_BUCKET, recordKey(p.workflowId), completed);
     return completed;
   }
@@ -437,6 +442,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
 }
 function initialRecord(p: RuntimeAdminParameters): RuntimeAdminRecord {
   return { workflow_id: p.workflowId, operation: p.operation, year: p.year, status: "running",
-    phase: "queued", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
+    phase: "queued", stage: "queued", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
+    ...(p.teamKey ? { team_key: p.teamKey } : {}),
+    ...(p.eventKey ? { event_key: p.eventKey, seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0 } : {}),
     counts: {}, errors: [] };
 }
