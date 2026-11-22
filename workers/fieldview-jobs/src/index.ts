@@ -736,6 +736,9 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
             .map((item) => ({ kind: "event" as const, key: item.key, registered: runtimeEvents.has(item.key) })),
           ...directory.teamKeys.map((key) => ({ kind: "team" as const, key, registered: runtimeTeams.has(key) })),
         ];
+        if (items.length > 14_000) {
+          throw new Error("Coverage audit exceeds the 14,000-entity Free-plan step budget; split the audit into smaller scopes");
+        }
         const counts: CoverageAuditCounts = {
           events_total: directory.events.length, events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0,
           teams_total: directory.teamKeys.length, team_pages: directory.teamPageCount,
