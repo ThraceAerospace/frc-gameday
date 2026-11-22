@@ -146,46 +146,6 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 - Use an authorization design suitable for production. The current `RUNTIME_ADMIN_TOKEN` is a prototype-only mechanism and must not become the production administrator identity system.
 - Retain detailed per-resource failures without storing secrets or unbounded response bodies in logs.
 
-## Workflow 3: On-demand TBA resource ingestion
-
-**Name:** `TbaResourceIngestionWorkflow`  
-**Schedule:** none. It is triggered by an authenticated administrative request.
-
-### Trigger contract
-
-Provide an admin endpoint such as `POST /admin/ingestion/tba` that validates a typed request and creates a Workflow instance. The endpoint returns the instance ID and status URL immediately; it does not perform ingestion inline.
-
-Support explicit resource scopes, for example:
-
-- all events for a season;
-- all teams for a season or selected team keys;
-- selected event keys and their event resources;
-- selected team keys and their team resources;
-- selected provider resources/endpoints for a given entity;
-- a complete TBA season scan.
-
-The request must have explicit scope and limits. Do not accept arbitrary URLs or arbitrary endpoint strings from the caller. Resolve allowed resources through the provider endpoint registry.
-
-### Execution model
-
-1. Validate and normalize the request; compute a stable scope fingerprint.
-2. Discover the resource keys and total work count.
-3. Create a durable job manifest in R2 when the manifest is large; keep only manifest reference, cursors, counts, and status in Workflow state.
-4. Divide work into bounded batches and enqueue independent resource tasks where queue buffering is beneficial.
-5. Workers execute provider requests with rate limiting, conditional requests, deadlines, schema validation, and retry handling.
-6. Route accepted canonical mutations to the corresponding EventRuntime or TeamRuntime DO.
-7. Persist per-resource outcomes and checkpoints; support pause, resume, cancel, and retry-failed operations.
-8. Publish a final summary with complete/partial/failed counts and links to the detailed job record.
-
-### Safety and operability
-
-- Restrict to an allowlist of TBA provider resources. Do not expose an open proxy.
-- Enforce maximum batch size, concurrency, total resources, payload size, and run duration.
-- Make every write idempotent; assume at-least-once delivery if Queues are used.
-- Keep raw provider response bodies in R2 only where archival/audit needs justify the storage; canonical state remains in DOs.
-- Use an authorization design suitable for production. The current `RUNTIME_ADMIN_TOKEN` is a prototype-only mechanism and must not become the production administrator identity system.
-- Retain detailed per-resource failures without storing secrets or unbounded response bodies in logs.
-
 ## Migration sequence
 
 1. **Completed in this branch:** add the `fieldview-jobs` Worker and daily `DailyEventReadinessWorkflow`; discover only the TBA-reported current season; publish event and paginated team directories to R2; publish the event-timezone-aware this-week projection; initialize matching EventRuntime instances; discover event participants and queue deduplicated TeamRuntime seeds; serve public discovery exclusively from R2.
