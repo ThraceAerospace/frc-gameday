@@ -121,6 +121,12 @@ test("DiscoveryStore acquires and publishes current-season, team, and event cata
   const event = await eventDiscovery.json();
   assert.equal(event.needsChunking, true);
 
+  const prematurePublish = await store.fetch(new Request("https://store/catalog/publish-event-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 200 }),
+  }));
+  assert.equal(prematurePublish.status, 409);
+
   const chunks = await store.fetch(new Request("https://store/catalog/write-event-chunks", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ year: 2026, generation: 200, firstChunk: 0, endChunk: 1, chunkSize: 25 }),
