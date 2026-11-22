@@ -108,7 +108,7 @@ This is a destination, not a mandate to move every existing file immediately. Re
 | Live event subscriptions and publication | Durable Object / Worker boundary |
 | Pure analytics calculations | Analytics package executed by Worker |
 | Durable analytics job coordination | EventRuntime alarm work, persisted and coalesced with event source changes |
-| Team-level persistent runtime | One lazy TeamRuntime Durable Object per TBA team key; owns team identity, season data, team-event states, and team-scoped analytics; stores district membership references rather than canonical district records |
+| Team-level persistent runtime | One lazy TeamRuntime Durable Object per TBA team key; owns team identity, season data, team-event states, team-scoped analytics, and the district membership fields reported by its own team provider record |
 | Event-wide analytics | EventRuntime Durable Object; calculates event-level metrics from event inputs and TeamRuntime-owned team-event results |
 | Team analytics | TeamRuntime Durable Object; independently calculates and persists team/season and team/event metrics |
 | Roster reconciliation | Scheduled TaskScheduler job; ordinary event reads do not reconcile rosters |
@@ -313,12 +313,12 @@ This is not yet the final Redis-removal audit. Legacy provider client modules an
 - The Match Insights surface now subscribes directly to `FieldViewEventSnapshot` and renders `FieldViewMatch` records. Alliance OPR/DPR/CCWM and pre-match EPA values are read from the match's canonical team associations; Statbotics prediction and availability come from the match's prediction/provenance fields. The divisional-event selector also uses the canonical `FieldViewEvent` model.
 - Tile View's imminent-match notification source now derives the next match from canonical event snapshots; the banner, score breakdown, prediction bar, and prediction metrics use canonical match types. The Event Analytics dashboard now receives the canonical `FieldViewEventSnapshot` and the durable, independently versioned EventRuntime analytics publication through the SharedWorker analytics subscription. A presentation adapter maps `FieldViewEventAnalytics`, `FieldViewTeamEventAnalytics`, canonical match analysis/flags, and TeamRuntime season data into the dashboard's existing view model; the six panels, labels, styling, layout, and interactions are unchanged. The dashboard no longer fetches `/api/insights/event`; canonical event analytics are also exposed under `/api/event/:event/analytics`, and legacy event-insights API requests redirect there. Team history now reads canonical TeamRuntime snapshots under `/api/team/:team/history`; team match investigation now reads canonical TeamRuntime season analytics through `/api/team/:team/matches` and no longer uses Redis or direct provider acquisition.
 - Remote sessions now subscribe to versioned canonical EventRuntime snapshots, transmit `FieldViewEventSnapshot` values over the existing session channel, and render remote event cards from those snapshots. They no longer transmit or consume `EventStateSnapshot` provider-shaped payloads.
-- The canonical district domain boundary and frontend cutover are now implemented: `FieldViewDistrict`, `FieldViewDistrictDirectory`, and `FieldViewDistrictSnapshot` preserve unchanged TBA records and independent per-resource provenance for district metadata, teams, events, rankings, and advancement. Normalization distinguishes unacquired, explicit-null, and empty resources and rejects district identity/year mismatches. TaskScheduler owns bounded district acquisition and cached canonical read routes; `/districts`, `/district/[district]`, and district advancement endpoints now consume canonical runtime snapshots rather than the legacy TBA service.
+- District membership remains part of the owning TeamRuntime/EventRuntime provider records. No separate district domain aggregate or district-owned acquisition/query lifecycle is maintained.
 
 **Work**
 - Keep the aggregate Event Analytics dashboard on the canonical EventRuntime publication contract; preserve the current six-panel visual presentation and analytical semantics while replacing only its data adapter. Complete historical parity validation before removing legacy calculation implementations.
 - Finish migrating the team match-investigation endpoint to canonical TeamRuntime/EventRuntime data and remove its remaining Redis/provider calls.
-- District acquisition, canonical read paths, and `/districts`, `/district/[district]`, and district advancement frontend consumers are implemented. Remaining work is historical/live parity validation and operational coverage of missing or failed district resources.
+- District-owned records, routes, pages, and navigation have been retired; team/event district membership remains available from those entities' own snapshots.
 - TeamRuntime Statbotics team-year/team-event resources now use TBA-change-triggered one-shot refreshes instead of recurring polling. Changed TBA team identity or season event-list representations enqueue the relevant Statbotics resources; explicit seed/refresh remains supported, last-good data is preserved by endpoint-state reconciliation, and legacy recurring Statbotics tasks are removed on next TeamRuntime access. Worker tests cover trigger behavior and cleanup.
 - Migrate events, teams, gameday, insights, and remote surfaces incrementally.
 - Consume serialized FieldView domain objects directly.
@@ -348,7 +348,7 @@ This is not yet the final Redis-removal audit. Legacy provider client modules an
 
 ## 7. First vertical migration candidate
 
-The first backend vertical slice is **an event-scoped canonical snapshot**, now implemented through TBA event metadata, teams, event-team statuses, matches, predictions, OPR/DPR/CCWM, and playoff alliances. A second entity slice now establishes one TeamRuntime per team for identity, district memberships, season event discovery, and media.
+The first backend vertical slice is **an event-scoped canonical snapshot**, now implemented through TBA event metadata, teams, event-team statuses, matches, predictions, OPR/DPR/CCWM, and playoff alliances. A second entity slice now establishes one TeamRuntime per team for identity, provider-reported district membership, season event discovery, and media.
 
 It exercises:
 - provider-owned TBA transport and endpoint paths;
@@ -431,16 +431,11 @@ This is a backend foundation whose daily projection is now consumed by the Next.
 
 ### District runtime migration (2026-11-20)
 
-The district domain boundary and ownership decision are established (see ADR-0009). TaskScheduler now has canonical read endpoints for a year-scoped district directory and district snapshots, plus an authorized, explicitly invoked refresh operation. Directory and district resources retain independent payloads, ETags, retrieval/check timestamps, and resource status. Failed refreshes retain the last-good payload and expose stale provenance. A 404 records current source unavailability without deleting a previously successful payload; if there is no last-good payload, the resource is explicitly unavailable. Public reads do not trigger provider acquisition. Regression coverage now verifies that a directory 404 preserves the prior payload and returns it with stale provenance. The refresh operation is bounded to one directory resource or the five resources for one district and issues its own bounded TBA requests without a shared provider-request lease.
 
-The district directory page, district detail page, directory API, district advancement API, and district CMP projection APIs now read canonical Worker snapshots rather than the legacy TBA service. The existing team-district API currently reads TeamRuntime for team membership; its payload must be normalized to district references and resolved against TaskScheduler-owned district records.
 
-**Remaining:** district refresh is currently an explicit administrative operation. Low-frequency scheduled refresh, resumable multi-district refresh orchestration, and operational visibility for district resource coverage still need implementation. The isolated prototype Worker is deployed and district pages consume its canonical read routes; production routing and cutover remain untouched.
 
 **Next**
-- Add low-frequency, bounded, resumable district refresh scheduling to TaskScheduler without interfering with season-ingest, event-team-seed, or normal discovery alarms.
 - Add focused tests for 200/304/404/failure handling, last-good retention, independent resource state, and read-only public routes; validate the full workspace in CI.
-- Audit remaining district consumers and confirm no district route bypasses the canonical snapshot boundary.
 - Complete the remaining TeamRuntime/TaskScheduler operational checks, then continue historical analytics parity and retire legacy EventState acquisition only after all required consumers have moved.
 
 
