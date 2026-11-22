@@ -7,14 +7,12 @@ import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/type
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 export interface EventPollingPolicy {
-  discoveryIntervalMs: number;
   upcomingIntervalMs: number;
   activeIntervalMs: number;
   completedRetentionMs: number;
 }
 
 export const DEFAULT_EVENT_POLLING_POLICY: EventPollingPolicy = {
-  discoveryIntervalMs: 60 * 60_000,
   upcomingIntervalMs: 30 * 60_000,
   activeIntervalMs: 5 * 60_000,
   completedRetentionMs: 24 * 60 * 60_000,
@@ -34,7 +32,6 @@ function configured(value: string | number | undefined, fallback: number, name: 
 
 export function eventPollingPolicy(env: RuntimeEnvironment): EventPollingPolicy {
   return {
-    discoveryIntervalMs: configured(env.EVENT_DISCOVERY_INTERVAL_MS, DEFAULT_EVENT_POLLING_POLICY.discoveryIntervalMs, "EVENT_DISCOVERY_INTERVAL_MS"),
     upcomingIntervalMs: configured(env.EVENT_UPCOMING_INTERVAL_MS, DEFAULT_EVENT_POLLING_POLICY.upcomingIntervalMs, "EVENT_UPCOMING_INTERVAL_MS"),
     activeIntervalMs: configured(env.EVENT_ACTIVE_INTERVAL_MS, DEFAULT_EVENT_POLLING_POLICY.activeIntervalMs, "EVENT_ACTIVE_INTERVAL_MS"),
     completedRetentionMs: configured(env.EVENT_COMPLETED_RETENTION_MS, DEFAULT_EVENT_POLLING_POLICY.completedRetentionMs, "EVENT_COMPLETED_RETENTION_MS"),
