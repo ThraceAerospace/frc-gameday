@@ -28,6 +28,18 @@ function makeEnvironment() {
           };
         },
       },
+      FIELDVIEW_JOBS: {
+        async fetch(request) {
+          calls.push({
+            operation: "jobs",
+            url: new URL(request.url).pathname + new URL(request.url).search,
+            method: request.method,
+            headers: new Headers(request.headers),
+            body: request.method === "POST" ? await request.json() : null,
+          });
+          return Response.json({ accepted: true }, { status: 202 });
+        },
+      },
     },
   };
 }
@@ -79,6 +91,36 @@ test("public routes reject writes and malformed event keys", async () => {
   assert.equal(write.status, 404);
   assert.equal(malformed.status, 404);
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
+});
+
+test("manual discovery and coverage audits are dispatched to the jobs Worker", async () => {
+  const { env, calls } = makeEnvironment();
+  const discovery = await worker.fetch(
+    new Request("https://runtime.example/internal/admin/operations", {
+      method: "POST",
+      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "system", action: "discover-year", year: 2026 }),
+    }),
+    env,
+  );
+  assert.equal(discovery.status, 202);
+  const discoveryCall = calls.find((call) => call.operation === "jobs");
+  assert.equal(discoveryCall.url, "/internal/admin/discover-year");
+  assert.deepEqual(discoveryCall.body, { year: 2026 });
+  assert.equal(discoveryCall.headers.get("Authorization"), "Bearer server-only-token");
+
+  const audit = await worker.fetch(
+    new Request("https://runtime.example/internal/admin/operations", {
+      method: "POST",
+      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "system", action: "coverage-audit-start", year: 2026 }),
+    }),
+    env,
+  );
+  assert.equal(audit.status, 202);
+  const auditCall = calls.filter((call) => call.operation === "jobs")[1];
+  assert.equal(auditCall.url, "/internal/admin/coverage-audit");
+  assert.deepEqual(auditCall.body, { action: "start", year: 2026 });
 });
 
 test("internal Workflow runtime-state route authenticates and reads the canonical EventRuntime state", async () => {
