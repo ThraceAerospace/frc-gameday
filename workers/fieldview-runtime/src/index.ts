@@ -307,7 +307,7 @@ export default {
         if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
         const pageTeams = await pageObject.json<unknown>();
         if (!Array.isArray(pageTeams)) return Response.json({ error: `Team discovery page ${page} is invalid` }, { status: 503 });
-        teams.push(...pageTeams as Array<Record<string, unknown>>);
+        teams.push(...(pageTeams as Array<Record<string, unknown>>));
       }
       if (teams.length !== manifest.teamCount) {
         return Response.json({ error: "Published team discovery count does not match its pages" }, { status: 503 });
