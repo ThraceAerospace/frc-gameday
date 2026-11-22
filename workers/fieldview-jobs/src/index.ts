@@ -80,6 +80,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const teamPageSize = 500;
     let teamPageCount = 0;
     let teamCount = 0;
+    const discoveredTeamKeys: string[] = [];
     for (let page = 0; ; page += 1) {
       const pageResult = await step.do(`discover-team-directory-${currentSeason.year}-${page}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
@@ -97,10 +98,16 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           JSON.stringify(teams),
           { httpMetadata: { contentType: "application/json" } },
         );
-        return { page, count: teams.length, hasMore: teams.length === teamPageSize };
+        return {
+          page,
+          count: teams.length,
+          hasMore: teams.length === teamPageSize,
+          teamKeys: teams.map((team) => team.key as string),
+        };
       });
       teamPageCount += 1;
       teamCount += pageResult.count;
+      discoveredTeamKeys.push(...pageResult.teamKeys);
       if (!pageResult.hasMore) break;
     }
     await step.do("publish-current-season-team-directory", async () => {
@@ -114,6 +121,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           updatedAt: teamDirectoryGeneration,
           checkedAt: Date.now(),
         }),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      await this.env.DISCOVERY_BUCKET.put(
+        `registry/teams/${currentSeason.year}.json`,
+        JSON.stringify([...new Set(discoveredTeamKeys)].sort()),
         { httpMetadata: { contentType: "application/json" } },
       );
       return { year: currentSeason.year, pages: teamPageCount, teams: teamCount };
