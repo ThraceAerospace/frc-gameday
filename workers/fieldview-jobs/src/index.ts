@@ -39,11 +39,11 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const utcYear = Number(runDate.slice(0, 4));
     const years = [utcYear - 1, utcYear, utcYear + 1];
 
-    const discovery = await step.do("discover-event-directories", {
-      retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-    }, async () => {
-      const results: Array<{ year: number; count: number; checkedAt: number }> = [];
-      for (const year of years) {
+    const discovery: Array<{ year: number; count: number; checkedAt: number }> = [];
+    for (const year of years) {
+      const result = await step.do(`discover-event-directory-${year}`, {
+        retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+      }, async () => {
         const key = `discovery/events/${year}.json`;
         const previous = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
@@ -55,8 +55,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
-          results.push({ year, count: previous.events.length, checkedAt });
-          continue;
+          return { year, count: previous.events.length, checkedAt };
         }
         if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
         const events = await response.json() as TbaEvent[];
@@ -69,36 +68,47 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         await this.env.DISCOVERY_BUCKET.put(key, JSON.stringify(document), {
           httpMetadata: { contentType: "application/json" },
         });
-        results.push({ year, count: events.length, checkedAt });
-      }
-      return results;
-    });
+        return { year, count: events.length, checkedAt };
+      });
+      discovery.push(result);
+    }
 
-    const prepared = await step.do("classify-this-week-events", async () => {
-      const unique = new Map<string, { year: number; event: TbaEvent }>();
-      for (const year of years) {
+    const classified: Array<{ year: number; eventKeys: string[] }> = [];
+    for (const year of years) {
+      const result = await step.do(`classify-this-week-${year}`, async () => {
         const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
-        for (const item of document?.events ?? []) if (typeof item.key === "string") unique.set(item.key, { year, event: item });
-      }
-      const now = runAt;
-      const matches = [...unique.values()]
-        .filter(({ event: item }) => classifyEventThisWeek(item, now)?.isThisWeek === true)
-        .sort((a, b) => a.event.key.localeCompare(b.event.key));
-      const runDay = new Date(runAt).toISOString().slice(0, 10);
-      const projection = {
-        evaluatedAt: now,
-        runDate: runDay,
-        checkedAt: Math.min(...discovery.map((item) => item.checkedAt)),
-        events: matches.map(({ event }) => event),
-      };
+        const matches = (document?.events ?? [])
+          .filter((item) => classifyEventThisWeek(item, runAt)?.isThisWeek === true)
+          .sort((a, b) => a.key.localeCompare(b.key));
+        const projection = {
+          evaluatedAt: runAt,
+          runDate,
+          checkedAt: document?.checkedAt ?? runAt,
+          events: matches,
+        };
+        await this.env.DISCOVERY_BUCKET.put(
+          `projections/events/this-week/${runAt}/${year}.json`,
+          JSON.stringify(projection),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        return { year, eventKeys: matches.map((item) => item.key) };
+      });
+      classified.push(result);
+    }
+
+    const prepared = await step.do("publish-this-week-generation", async () => {
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
-      await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(matches.map(({ year, event: item }) => ({ year, key: item.key }))), {
+      const eventRefs = classified.flatMap(({ year, eventKeys }) => eventKeys.map((key) => ({ year, key })));
+      await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(eventRefs), {
         httpMetadata: { contentType: "application/json" },
       });
-      await this.env.DISCOVERY_BUCKET.put("projections/events/this-week.json", JSON.stringify(projection), {
-        httpMetadata: { contentType: "application/json" },
-      });
-      return { manifestKey, eventCount: matches.length, evaluatedAt: now, runDate: runDay };
+      const pointer = { runAt, runDate, years };
+      await this.env.DISCOVERY_BUCKET.put(
+        "projections/events/this-week/current.json",
+        JSON.stringify(pointer),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      return { manifestKey, eventCount: eventRefs.length, runDate };
     });
 
     const keys = await readJson<Array<{ year: number; key: string }>>(this.env.DISCOVERY_BUCKET, prepared.manifestKey);
