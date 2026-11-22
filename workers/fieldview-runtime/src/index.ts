@@ -18,6 +18,14 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
     request.headers.get("Authorization") === `Bearer ${env.RUNTIME_ADMIN_TOKEN}`;
 }
 
+async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
+  if (!env.DISCOVERY_BUCKET) return;
+  const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+  await env.DISCOVERY_BUCKET.put(prefix + key + ".json", "{}", {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
 async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment): Promise<void> {
 
   let payload: unknown;
@@ -423,9 +431,11 @@ export default {
         }
         const path = action === "statbotics-refresh" || (action === "resource-refresh" && typeof endpoint === "string" && endpoint.startsWith("/matches?event=")) ? "statbotics-refresh" : action === "recalculate" ? "recalculate" : "refresh";
         const payload = action === "resource-refresh" ? { endpoints: [endpoint], includeStatbotics: false } : {};
-        return stub.fetch(new Request("https://event-runtime/" + path, {
+        const response = await stub.fetch(new Request("https://event-runtime/" + path, {
           method: "POST", headers, body: JSON.stringify(payload),
         }));
+        if (response.ok) await registerRuntimeMarker(env, "event", key);
+        return response;
       }
       if (kind === "team") {
         if (!["refresh", "seed"].includes(action)) return Response.json({ error: "Unsupported team operation" }, { status: 400 });
@@ -445,10 +455,12 @@ export default {
           }));
         }
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-        return stub.fetch(new Request("https://team-runtime/refresh?year=" + year, {
+        const response = await stub.fetch(new Request("https://team-runtime/refresh?year=" + year, {
           method: "POST",
           headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
         }));
+        if (response.ok) await registerRuntimeMarker(env, "team", teamKey);
+        return response;
       }
       return Response.json({ error: "Unsupported operation kind" }, { status: 400 });
     }
