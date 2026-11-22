@@ -308,17 +308,13 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             const response = await dispatch(this.env, "team", teamKey, "state", {}, p.year);
             if (!response.ok) return { key: teamKey, ready: false, partial: true };
             const state = await response.json() as {
-              polling?: Array<{ endpoint?: string }>;
-              endpoints?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; lastFetchedAt?: number | null; expires_at?: number | null; expiresAt?: number | null }>;
+              resources?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; expires_at?: number | null }>;
             };
-            const tasks = state.polling ?? [];
-            const sources = state.endpoints ?? [];
-            const ready = tasks.length > 0 && tasks.every((task) => {
-              const source = sources.find((item) => item.endpoint === task.endpoint);
-              return source?.status === "unavailable" ||
-                (source?.status === "available" && (source.last_fetched_at ?? source.lastFetchedAt) != null &&
-                  ((source.expires_at ?? source.expiresAt) == null || (source.expires_at ?? source.expiresAt)! > Date.now()));
-            });
+            const sources = state.resources ?? [];
+            const ready = sources.length > 0 && sources.every((source) =>
+              source.status === "unavailable" ||
+              (source.status === "available" && source.last_fetched_at != null &&
+                (source.expires_at == null || source.expires_at > Date.now())));
             const partial = sources.some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
             return { key: teamKey, ready, partial };
           }));
@@ -384,19 +380,15 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             const response = await dispatch(this.env, "event", eventKey, "state", {}, p.year);
             if (!response.ok) return { key: eventKey, ready: false, requested: false, analytics: "failed", partial: true };
             const state = await response.json() as {
-              polling?: Array<{ endpoint?: string }>;
-              endpoints?: Record<string, { status?: string; lastFetchedAt?: number | null; lastWebhookAt?: number | null; expiresAt?: number | null }>;
+              resources?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; last_webhook_at?: number | null; expires_at?: number | null }>;
               analytics?: { status?: string };
             };
-            const tasks = state.polling ?? [];
-            const sources = state.endpoints ?? {};
-            const resourcesReady = tasks.length > 0 && tasks.every((task) => {
-              const source = sources["endpoint:" + task.endpoint];
-              return source?.status === "unavailable" ||
-                (source?.status === "available" && (source.lastFetchedAt != null || source.lastWebhookAt != null) &&
-                  (source.expiresAt == null || source.expiresAt > Date.now()));
-            });
-            const partial = Object.values(sources).some((item) =>
+            const sources = state.resources ?? [];
+            const resourcesReady = sources.length > 0 && sources.every((source) =>
+              source.status === "unavailable" ||
+              (source.status === "available" && (source.last_fetched_at != null || source.last_webhook_at != null) &&
+                (source.expires_at == null || source.expires_at > Date.now())));
+            const partial = sources.some((item) =>
               item.status === "unavailable" || item.status === "failed" || item.status === "stale");
             if (!resourcesReady) return { key: eventKey, ready: false, requested: false, analytics: "pending", partial };
             if (!analyticsRequested.has(eventKey)) {
