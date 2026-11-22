@@ -186,7 +186,7 @@ test("event-scoped TBA notifications do not guess TeamRuntime recipients", async
   }
 });
 
-test("TBA webhook ingress reports partial fan-out failures instead of acknowledging success", async () => {
+test("TBA webhook ingress logs partial fan-out failures while preserving the 200 acknowledgement", async () => {
   const raw = new TextEncoder().encode(JSON.stringify({
     message_type: "match_score",
     message_data: {
