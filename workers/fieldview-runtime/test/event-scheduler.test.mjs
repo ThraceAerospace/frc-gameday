@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyEventLifecycle,
-  classifyEventThisWeek,
   DEFAULT_EVENT_POLLING_POLICY,
   eventPollingPolicy,
   TaskScheduler,
 } from "../src/task-scheduler.ts";
+import { classifyEventThisWeek } from "../../fieldview-jobs/src/calendar.ts";
 
 class MemoryStorage {
   values = new Map();
@@ -21,113 +21,6 @@ class MemoryStorage {
   }
   async transaction(callback) { return callback(this); }
 }
-
-test("global scheduler discovers yearly events and applies the lifecycle plan", async () => {
-  const storage = new MemoryStorage();
-  const currentYear = new Date().getUTCFullYear();
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-  const dayAfter = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
-  const tbaRequests = [];
-  const lifecycleRequests = [];
-  const env = {
-    TBA_API_KEY: "test-key",
-    TBA_WEBHOOK_SECRET: "test-secret",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: {
-      idFromName: (name) => name,
-      get: (id) => ({
-        fetch: async (request) => {
-          lifecycleRequests.push({ id, body: await request.json() });
-          return Response.json({ lifecycle: "upcoming" });
-        },
-      }),
-    },
-    fetcher: async (url) => {
-      const requestUrl = String(url);
-      tbaRequests.push(requestUrl);
-      const year = Number(requestUrl.split("/").pop());
-      if (requestUrl.includes("/teams/")) {
-        return Response.json([{ key: "frc3461", team_number: 3461, nickname: "Operation PEACCE Robotics" }], {
-          headers: { ETag: '"teams-' + year + '"' },
-        });
-      }
-      const events = year === currentYear
-        ? [{ key: "2026future", start_date: tomorrow, end_date: dayAfter, timezone: "America/New_York" }]
-        : [];
-      return Response.json(events, { headers: { ETag: '"events-' + year + '"' } });
-    },
-  };
-  const scheduler = new TaskScheduler({ storage }, env);
-  const started = await scheduler.fetch(new Request("https://scheduler/start", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token" },
-  }));
-  assert.deepEqual(await started.json(), { started: true });
-  await scheduler.alarm();
-  // Event and team discovery no longer depend on a shared provider-request
-  // lease. Both discovery stages complete during the same scheduler alarm.
-
-  assert.equal(tbaRequests.length, 2);
-  assert.ok(tbaRequests.some((url) => url.includes("/events/" + currentYear)));
-  assert.ok(tbaRequests.some((url) => url.includes("/teams/" + currentYear)));
-  assert.match(tbaRequests[0], new RegExp("/events/" + currentYear + "$"));
-  assert.ok(lifecycleRequests.length >= 1);
-  assert.ok(lifecycleRequests.every((item) => item.id === "2026future"));
-  assert.ok(lifecycleRequests.every((item) => item.body.lifecycle === "upcoming"));
-  assert.equal(lifecycleRequests[0].body.upcomingIntervalMs, 30 * 60_000);
-  assert.equal(await storage.get("scheduler:enabled"), true);
-  assert.ok(await storage.get("scheduler:last-run-at"));
-  assert.equal(await storage.get("scheduler:last-error"), undefined);
-  assert.ok(storage.alarmAt > Date.now());
-});
- 
-test("current-year discovery prunes old caches and stops previously scheduled future-year events", async () => {
-  const storage = new MemoryStorage();
-  const year = new Date().getUTCFullYear();
-  for (const oldYear of [year - 1, year + 1]) {
-    await storage.put("discovery:" + oldYear, {
-      etag: '"old"',
-      events: [],
-      updatedAt: Date.now(),
-      checkedAt: Date.now(),
-    });
-  }
-  await storage.put("discovery:" + year, {
-    etag: '"current"',
-    events: [],
-    updatedAt: Date.now(),
-    checkedAt: Date.now(),
-  });
-  await storage.put("scheduler:event-keys", [String(year + 1) + "future"]);
-
-  const lifecycleRequests = [];
-  const env = {
-    TBA_API_KEY: "test-key",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: {
-      idFromName: (name) => name,
-      get: (id) => ({
-        fetch: async (request) => {
-          lifecycleRequests.push({ id, body: await request.json() });
-          return Response.json({ lifecycle: "expired" });
-        },
-      }),
-    },
-    fetcher: async () => Response.json([], { headers: { ETag: '"current-new"' } }),
-  };
-  const scheduler = new TaskScheduler({ storage }, env);
-  await scheduler.fetch(new Request("https://scheduler/start", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token" },
-  }));
-  await scheduler.alarm();
-
-  assert.deepEqual([...((await storage.list({ prefix: "discovery:" })).keys())], ["discovery:" + year]);
-  assert.deepEqual(await storage.get("scheduler:event-keys"), []);
-  assert.equal(lifecycleRequests.length, 1);
-  assert.equal(lifecycleRequests[0].id, String(year + 1) + "future");
-  assert.equal(lifecycleRequests[0].body.lifecycle, "expired");
-});
 
 test("event polling policy defaults and overrides remain explicit", () => {
   assert.deepEqual(DEFAULT_EVENT_POLLING_POLICY, {
@@ -178,35 +71,6 @@ test("invalid event dates and timezones are not scheduled", () => {
     start_date: "2026-11-17", end_date: "2026-11-19", timezone: "Not/A_Timezone",
   }, Date.now(), DEFAULT_EVENT_POLLING_POLICY), null);
 });
-
-test("a successful TBA 304 refreshes discovery validation time without replacing the payload version", async () => {
-  const storage = new MemoryStorage();
-  const year = new Date().getUTCFullYear();
-  const old = Date.now() - 60 * 60_000;
-  for (const discoveryYear of [year]) {
-    await storage.put("discovery:" + discoveryYear, {
-      etag: '"cached"',
-      events: [],
-      updatedAt: old,
-      checkedAt: old,
-    });
-  }
-  const scheduler = new TaskScheduler({ storage }, {
-    TBA_API_KEY: "test-key",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({}) }) },
-    fetcher: async () => new Response(null, { status: 304 }),
-  });
-  await scheduler.fetch(new Request("https://scheduler/start", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token" },
-  }));
-  await scheduler.alarm();
-  const refreshed = await storage.get("discovery:" + year);
-  assert.equal(refreshed.updatedAt, old);
-  assert.ok(refreshed.checkedAt > old);
-});
-
 
 test("event team seeding explicitly curates team history and waits for acquisition", async () => {
   const storage = new MemoryStorage();
@@ -304,26 +168,6 @@ test("event team seeding explicitly curates team history and waits for acquisiti
 });
 
 
-test("TaskScheduler retires legacy district records and no longer exposes district queries", async () => {
-  const storage = new MemoryStorage();
-  await storage.put("district-directory:2026", { payload: [{ key: "2026fim" }] });
-  await storage.put("district-resource:2026:2026fim:teams", { payload: [{ key: "frc3461" }] });
-  const scheduler = new TaskScheduler({
-    storage,
-    blockConcurrencyWhile: (callback) => callback(),
-  }, {
-    TBA_API_KEY: "test-key",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-  });
-
-  const response = await scheduler.fetch(new Request("https://scheduler/districts?year=2026", {
-    headers: { Authorization: "Bearer runtime-token" },
-  }));
-  assert.equal(response.status, 404);
-  assert.equal(await storage.get("district-directory:2026"), undefined);
-  assert.equal(await storage.get("district-resource:2026:2026fim:teams"), undefined);
-});
-
 test("weekly event classification uses inclusive date-only ranges and the event timezone", () => {
   const sundayEnd = Date.parse("2026-11-23T04:59:59.999Z"); // Sunday 23:59:59.999 in New York.
   const fridayThroughSunday = {
@@ -368,164 +212,3 @@ test("the same instant can belong to different calendar weeks in different event
   assert.equal(tokyo?.isThisWeek, false);
 });
 
-test("daily weekly projection initializes EventRuntime for matching events and publishes only completed matches", async () => {
-  const now = Date.now();
-  const parts = new Map(new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
-  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
-  const localParts = localDate.split("-").map(Number);
-  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
-  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
-  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-  const weeklyEvent = {
-    key: "2026weekly", start_date: date(4), end_date: date(6), timezone: "America/New_York",
-  };
-  const outsideEvent = {
-    key: "2026nextweek", start_date: date(7), end_date: date(8), timezone: "America/New_York",
-  };
-  const storage = new MemoryStorage();
-  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
-    etag: null, events: [weeklyEvent, outsideEvent], updatedAt: now, checkedAt: now,
-  });
-  const runtimeRequests = [];
-  const scheduler = new TaskScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: {
-      idFromName: (name) => name,
-      get: (id) => ({
-        fetch: async (request) => {
-          runtimeRequests.push({ id, body: await request.json() });
-          return Response.json({ updated: true });
-        },
-      }),
-    },
-  });
-
-  const pending = await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY);
-  assert.equal(pending, false);
-  assert.deepEqual(runtimeRequests.map((item) => item.id), ["2026weekly"]);
-  assert.deepEqual(await storage.get("registry:runtime-events"), ["2026weekly"]);
-  const projection = await storage.get("scheduler:this-week-projection");
-  assert.deepEqual(projection.events.map((event) => event.key), ["2026weekly"]);
-  const publicProjection = await scheduler.fetch(new Request("https://scheduler/events/this-week"));
-  assert.equal(publicProjection.status, 200);
-  assert.equal((await publicProjection.json()).events[0].key, "2026weekly");
-  assert.match(publicProjection.headers.get("Cache-Control"), /stale-while-revalidate/);
-
-  await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY);
-  assert.equal(runtimeRequests.length, 1, "the completed daily pass is not repeated on every alarm");
-});
-
-test("weekly classification processes at most ten events per alarm batch and resumes", async () => {
-  const now = Date.now();
-  const parts = new Map(new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
-  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
-  const localParts = localDate.split("-").map(Number);
-  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
-  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
-  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-  const events = Array.from({ length: 11 }, (_, index) => ({
-    key: "2026week" + String(index).padStart(2, "0"),
-    start_date: date(4),
-    end_date: date(6),
-    timezone: "America/New_York",
-  }));
-  const storage = new MemoryStorage();
-  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
-    etag: null, events, updatedAt: now, checkedAt: now,
-  });
-  const runtimeRequests = [];
-  const scheduler = new TaskScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: {
-      idFromName: (name) => name,
-      get: (id) => ({
-        fetch: async (request) => {
-          runtimeRequests.push(id);
-          await request.json();
-          return Response.json({ updated: true });
-        },
-      }),
-    },
-  });
-
-  assert.equal(await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY), true);
-  assert.equal(runtimeRequests.length, 10);
-  assert.equal((await storage.get("scheduler:this-week-progress")).cursor, 10);
-  assert.equal(await scheduler.refreshThisWeekProjection(DEFAULT_EVENT_POLLING_POLICY), false);
-  assert.equal(runtimeRequests.length, 11);
-  assert.equal((await storage.get("scheduler:this-week-projection")).events.length, 11);
-  assert.equal(await storage.get("scheduler:this-week-progress"), undefined);
-});
-
-test("daily scheduler endpoint runs classification without enabling continuous polling", async () => {
-  const now = Date.now();
-  const parts = new Map(new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", calendar: "gregory", numberingSystem: "latn",
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
-  const localDate = String(parts.get("year")) + "-" + String(parts.get("month")) + "-" + String(parts.get("day"));
-  const localParts = localDate.split("-").map(Number);
-  const weekday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2])).getUTCDay();
-  const monday = new Date(Date.UTC(localParts[0], localParts[1] - 1, localParts[2]) - ((weekday + 6) % 7) * 86_400_000);
-  const date = (offset) => new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-  const event = {
-    key: "2026daily", start_date: date(4), end_date: date(6), timezone: "America/New_York",
-  };
-  const storage = new MemoryStorage();
-  await storage.put("discovery:" + new Date(now).getUTCFullYear(), {
-    etag: null,
-    events: [
-      event,
-      { key: "2026later", start_date: date(7), end_date: date(8), timezone: "America/New_York" },
-    ],
-    updatedAt: now,
-    checkedAt: now,
-  });
-  const runtimeRequests = [];
-  const scheduler = new TaskScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: {
-      idFromName: (name) => name,
-      get: (id) => ({
-        fetch: async (request) => {
-          runtimeRequests.push(id);
-          await request.json();
-          return Response.json({ updated: true });
-        },
-      }),
-    },
-  });
-
-  const response = await scheduler.fetch(new Request("https://scheduler/daily", {
-    method: "POST", headers: { Authorization: "Bearer runtime-token" },
-  }));
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).pending, false);
-  assert.equal(await storage.get("scheduler:enabled"), undefined);
-  assert.equal(await storage.get("scheduler:daily-run-requested"), undefined);
-  assert.deepEqual(runtimeRequests, ["2026daily"]);
-  assert.deepEqual((await storage.get("scheduler:this-week-projection")).events.map((item) => item.key), ["2026daily"]);
-});
-
-
-test("missing weekly projection queues durable discovery instead of failing the public request", async () => {
-  const storage = new MemoryStorage();
-  const scheduler = new TaskScheduler({ storage }, {
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    PROVIDER_REQUEST_INTERVAL_MS: 1_000,
-  });
-  const response = await scheduler.fetch(new Request("https://scheduler/events/this-week"));
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json().then(({ pending, events }) => ({ pending, events })), {
-    pending: true,
-    events: [],
-  });
-  assert.equal(await storage.get("scheduler:daily-run-requested"), true);
-  assert.ok(storage.alarmAt !== null, "the scheduler alarm should own the queued generation");
-});
