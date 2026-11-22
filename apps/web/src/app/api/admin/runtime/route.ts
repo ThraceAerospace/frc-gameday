@@ -38,12 +38,11 @@ export async function GET(request: Request) {
   const eventSeedKey = query.get("eventSeed");
   const teamSeedKey = query.get("teamSeed");
   const discoveryJobYear = query.get("discoveryJob");
-  const discoveryJobMode = "year";
   const target = teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
     team_key: teamSeedKey,
     year: query.get("year") ?? String(new Date().getUTCFullYear()),
   }).toString()
-    : discoveryJobYear ? "/internal/admin/discovery-job?" + new URLSearchParams({ year: discoveryJobYear, mode: discoveryJobMode }).toString()
+    : discoveryJobYear ? "/internal/admin/discovery-job?" + new URLSearchParams({ year: discoveryJobYear }).toString()
     : eventSeedKey ? "/internal/admin/event-team-seed?" + new URLSearchParams({
     event_key: eventSeedKey,
     ...(query.get("year") ? { year: query.get("year")! } : {}),
