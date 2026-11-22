@@ -3,17 +3,16 @@ declare module "cloudflare:workers" {
     protected readonly env: Env;
     constructor(ctx: ExecutionContext, env: Env);
   }
-}
 
-interface ExecutionContext {}
+  export interface WorkflowEvent<Params> {
+    payload: Readonly<Params>;
+    instanceId: string;
+    workflowName: string;
+    timestamp: Date;
+    schedule?: { cron: string; scheduledTime: number };
+  }
 
-interface WorkflowEvent<Params> {
-  payload: Params;
-  instanceId: string;
-  timestamp: string;
-}
-
-interface WorkflowStep {
+  export interface WorkflowStep {
   do<Result>(name: string, callback: () => Promise<Result>): Promise<Result>;
   do<Result>(
     name: string,
@@ -26,7 +25,10 @@ interface WorkflowStep {
     },
     callback: () => Promise<Result>,
   ): Promise<Result>;
+  }
 }
+
+interface ExecutionContext {}
 
 interface R2ObjectBody {
   json<Result = unknown>(): Promise<Result>;
@@ -50,7 +52,3 @@ interface Workflow {
   create(options: { id: string; params: unknown }): Promise<unknown>;
 }
 
-interface ScheduledController {
-  scheduledTime: number;
-  cron: string;
-}
