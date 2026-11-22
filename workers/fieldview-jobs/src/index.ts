@@ -59,7 +59,7 @@ async function listRuntimeRegistry(bucket: R2Bucket, kind: "event" | "team"): Pr
   do {
     const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
     for (const object of page.objects) {
-      const key = object.key.slice(prefix.length).replace(/\\.json$/, "");
+      const key = object.key.slice(prefix.length).replace(/\.json$/, "");
       if (key) keys.push(key);
     }
     cursor = page.truncated ? page.cursor : undefined;
