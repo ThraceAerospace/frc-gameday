@@ -4,6 +4,7 @@ import { TaskScheduler } from "./task-scheduler.ts";
 import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
+import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
 
 export { EventRuntime, TaskScheduler, Multiplexer, TeamRuntime };
 
@@ -164,13 +165,92 @@ export default {
       return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
 
+    if (url.pathname === "/internal/workflows/initialize-event" && request.method === "POST") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.event_key !== "string" ||
+          !/^[a-zA-Z0-9_-]+$/.test(body.event_key) ||
+          !["upcoming", "active", "completed"].includes(String(body.lifecycle))) {
+        return Response.json({ error: "Expected a valid event_key and lifecycle" }, { status: 400 });
+      }
+      const eventKey = body.event_key;
+      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
+      return stub.fetch(new Request("https://event-runtime/lifecycle", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+          "X-FieldView-Event-Key": eventKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lifecycle: body.lifecycle,
+          upcomingIntervalMs: Number(env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000),
+          activeIntervalMs: Number(env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000),
+        }),
+      }));
+    }
+
     if (url.pathname === "/events/this-week" && request.method === "GET") {
+      if (env.DISCOVERY_BUCKET) {
+        const object = await env.DISCOVERY_BUCKET.get("projections/events/this-week.json");
+        if (object) {
+          const projection = await object.json<{
+            evaluatedAt: number; runDate: string; checkedAt?: number;
+            events: Array<Record<string, unknown>>;
+          }>();
+          const checkedAt = projection.checkedAt ?? projection.evaluatedAt;
+          const stale = Date.now() - checkedAt > 60 * 60_000;
+          return Response.json({
+            evaluatedAt: projection.evaluatedAt,
+            runDate: projection.runDate,
+            checkedAt,
+            events: projection.events.map((event) => normalizeFieldViewEvent(event as never, {
+              tba_event: {
+                status: stale ? "stale" : "available",
+                retrieved_at: new Date(checkedAt).toISOString(),
+              },
+            })),
+            index: { status: stale ? "stale" : "available", persisted: true },
+          }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
+        }
+      }
       if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       return scheduler.fetch(new Request("https://task-scheduler/events/this-week"));
     }
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
+      const requestedYear = Number(url.searchParams.get("year"));
+      if (env.DISCOVERY_BUCKET && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
+        const object = await env.DISCOVERY_BUCKET.get("discovery/events/" + requestedYear + ".json");
+        if (object) {
+          const discovery = await object.json<{
+            year: number; events: Array<Record<string, unknown>>;
+            updatedAt: number; checkedAt: number; etag: string | null;
+          }>();
+          const stale = Date.now() - discovery.checkedAt > 60 * 60_000;
+          const retrievedAt = new Date(discovery.updatedAt).toISOString();
+          return Response.json({
+            year: discovery.year,
+            events: discovery.events.map((event) => normalizeFieldViewEvent(event as never, {
+              tba_event: {
+                status: stale ? "stale" : "available",
+                retrieved_at: retrievedAt,
+                ...(discovery.etag === null ? {} : { validator: discovery.etag }),
+              },
+            })),
+            updatedAt: discovery.updatedAt,
+            checkedAt: discovery.checkedAt,
+            index: { status: stale ? "stale" : "available", persisted: true, last_error: null },
+            revalidation: stale ? "workflow_scheduled" : "idle",
+          }, {
+            headers: {
+              "Cache-Control": "public, max-age=300, stale-while-revalidate=300",
+              ...(discovery.etag === null ? {} : { ETag: discovery.etag }),
+            },
+          });
+        }
+      }
       if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
       const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
       const query = new URLSearchParams();
