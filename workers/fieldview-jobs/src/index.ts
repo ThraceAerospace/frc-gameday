@@ -165,9 +165,19 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: JobsEnvironment): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ service: "fieldview-jobs", status: "ok" });
+    if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const scheduledAt = Date.now();
+      const id = `manual-event-readiness-${scheduledAt}`;
+      await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
+    }
     return Response.json({ error: "Not found" }, { status: 404 });
   },
 
