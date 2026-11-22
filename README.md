@@ -6,7 +6,7 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 
 ## Product surfaces
 
-- **Events and teams** — browse current-season events, teams, and districts.
+- **Events and teams** — browse current-season events and teams; team/event pages show district membership from their own provider data.
 - **Event pages** — view event information and competition context.
 - **Gameday** — compose live event views in the Tile View / Multiview surface, including match schedules, rankings, team tracking, and webcast presentation.
 - **Insights** — inspect match predictions, event analytics, team comparisons, and evidence for human scouting review.
