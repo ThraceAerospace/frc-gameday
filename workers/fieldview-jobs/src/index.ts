@@ -127,29 +127,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const currentSeason = await step.do("resolve-current-tba-season", {
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
     }, async () => {
-      const known = await readJson<{ year: number; checkedAt: number }>(
-        createDiscoveryStoreClient(this.env.DISCOVERY_STORE), "discovery/current-season.json",
-      );
-      try {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider("provider/status");
-        if (!response.ok) throw new Error(`TBA status returned HTTP ${response.status}`);
-        const status = await response.json() as { current_season?: unknown };
-        const raw = status?.current_season;
-        const year = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
-        if (!Number.isInteger(year) || year < 1992 || year > 2200) {
-          throw new Error("TBA status returned an invalid current_season");
-        }
-        const resolved = { year, checkedAt: Date.now() };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put("discovery/current-season.json", JSON.stringify(resolved), {
-          httpMetadata: { contentType: "application/json" },
-        });
-        return resolved;
-      } catch (error) {
-        if (known && Number.isInteger(known.year) && known.year >= 1992 && known.year <= 2200) {
-          return { ...known, fallback: true };
-        }
-        throw error;
-      }
+      const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resolve-current-season");
+      if (!response.ok) throw new Error("DiscoveryStore current-season resolution returned HTTP " + response.status);
+      return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
     });
     const years = [currentSeason.year];
 
@@ -165,26 +145,13 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       const pageResult = await step.do(`discover-team-directory-${currentSeason.year}-${page}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
-          "provider/teams?year=" + currentSeason.year + "&page=" + page,
-        );
-        if (!response.ok) throw new Error(`TBA team discovery page ${page} returned HTTP ${response.status}`);
-        const teams = await response.json() as Array<{ key?: unknown }>;
-        if (!Array.isArray(teams) || teams.some((team) =>
-          !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
-          throw new Error(`TBA team discovery page ${page} returned an invalid team directory`);
-        }
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-          `discovery/team-pages/${currentSeason.year}/${teamDirectoryGeneration}/${page}.json`,
-          JSON.stringify(teams),
-          { httpMetadata: { contentType: "application/json" } },
-        );
-        return {
-          page,
-          count: teams.length,
-          hasMore: teams.length === teamPageSize,
-          teamKeys: teams.map((team) => team.key as string),
-        };
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-team-page", {
+          year: currentSeason.year, generation: teamDirectoryGeneration, page,
+        });
+        if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
+        return response.json() as Promise<{
+          page: number; count: number; hasMore: boolean; teamKeys: string[];
+        }>;
       });
       teamPageCount += 1;
       teamCount += pageResult.count;
@@ -194,25 +161,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const uniqueCurrentSeasonTeamKeys = [...new Set(discoveredTeamKeys)].sort();
     teamCount = uniqueCurrentSeasonTeamKeys.length;
     await step.do("publish-current-season-team-directory", async () => {
-      // Publish the registry first; the manifest is the final commit point.
-      await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-        `registry/teams/${currentSeason.year}.json`,
-        JSON.stringify(uniqueCurrentSeasonTeamKeys),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-        `discovery/teams/${currentSeason.year}.json`,
-        JSON.stringify({
-          year: currentSeason.year,
-          generation: teamDirectoryGeneration,
-          pageCount: teamPageCount,
-          teamCount: uniqueCurrentSeasonTeamKeys.length,
-          updatedAt: teamDirectoryGeneration,
-          checkedAt: Date.now(),
-        }),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      return { year: currentSeason.year, pages: teamPageCount, teams: teamCount };
+      const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("publish-team-directory", {
+        year: currentSeason.year, generation: teamDirectoryGeneration,
+        pageCount: teamPageCount, teamKeys: uniqueCurrentSeasonTeamKeys,
+      });
+      if (!response.ok) throw new Error("DiscoveryStore team directory publication returned HTTP " + response.status);
+      return response.json();
     });
 
     const discovery: Array<{ year: number; count: number; checkedAt: number; generation: number; chunkCount: number; needsChunking: boolean }> = [];
@@ -221,47 +175,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       const result = await step.do(`discover-event-directory-${year}`, {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
-        const key = `discovery/events/${year}.json`;
-        const previous = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), key);
-        const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
-        if (previous?.etag) headers.set("If-None-Match", previous.etag);
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).provider(
-          "provider/events?year=" + year, { headers },
-        );
-        const checkedAt = Date.now();
-        if (response.status === 304 && previous) {
-          const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
-          const refreshed = { ...previous, chunkCount, checkedAt };
-          await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-            `registry/events/${year}.json`,
-            JSON.stringify(previous.events.map((item) => item.key)),
-            { httpMetadata: { contentType: "application/json" } },
-          );
-          await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(key, JSON.stringify(refreshed), {
-            httpMetadata: { contentType: "application/json" },
-          });
-          return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount, needsChunking: false };
-        }
-        if (!response.ok) throw new Error(`TBA event discovery for ${year} returned HTTP ${response.status}`);
-        const events = await response.json() as TbaEvent[];
-        if (!Array.isArray(events) || events.some((item) => !item || typeof item.key !== "string")) {
-          throw new Error(`TBA event discovery for ${year} returned an invalid event directory`);
-        }
-        const chunkCount = Math.ceil(events.length / eventChunkSize);
-        const document: DiscoveryDocument = {
-          year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
-        };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-          `discovery/staging/${year}/${checkedAt}.json`,
-          JSON.stringify(document),
-          { httpMetadata: { contentType: "application/json" } },
-        );
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-          `discovery/staging/${year}/${checkedAt}-keys.json`,
-          JSON.stringify(events.map((item) => item.key)),
-          { httpMetadata: { contentType: "application/json" } },
-        );
-        return { year, count: events.length, checkedAt, generation: checkedAt, chunkCount, needsChunking: true };
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-event-directory", {
+          year, chunkSize: eventChunkSize,
+        });
+        if (!response.ok) throw new Error("DiscoveryStore event directory acquisition returned HTTP " + response.status);
+        return response.json() as Promise<{
+          year: number; count: number; checkedAt: number; generation: number;
+          chunkCount: number; needsChunking: boolean;
+        }>;
       });
       discovery.push(result);
     }
@@ -269,45 +190,25 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const chunkWriteBatchSize = 10;
     for (const directory of discovery) {
       if (directory.needsChunking) {
-        for (let firstChunk = 0; firstChunk < directory.chunkCount; firstChunk += chunkWriteBatchSize) {
-          const endChunk = Math.min(directory.chunkCount, firstChunk + chunkWriteBatchSize);
+        for (let firstChunk = 0; firstChunk < directory.chunkCount; firstChunk += 10) {
+          const endChunk = Math.min(directory.chunkCount, firstChunk + 10);
           await step.do(`write-event-chunks-${directory.year}-${firstChunk}`, async () => {
-            const object = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).get(
-              `discovery/staging/${directory.year}/${directory.generation}.json`,
-            );
-            if (!object) throw new Error(`Missing staged event directory for ${directory.year}`);
-            const document = await object.json<DiscoveryDocument>();
-            for (let chunkIndex = firstChunk; chunkIndex < endChunk; chunkIndex += 1) {
-              await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-                `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
-                JSON.stringify(document.events.slice(chunkIndex * eventChunkSize, (chunkIndex + 1) * eventChunkSize)),
-                { httpMetadata: { contentType: "application/json" } },
-              );
-            }
-            return { year: directory.year, chunksWritten: endChunk - firstChunk };
+            const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("write-event-chunks", {
+              year: directory.year, generation: directory.generation,
+              firstChunk, endChunk, chunkSize: eventChunkSize,
+            });
+            if (!response.ok) throw new Error("DiscoveryStore event chunk write returned HTTP " + response.status);
+            return response.json();
           });
         }
+        await step.do(`publish-event-directory-${directory.year}`, async () => {
+          const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("publish-event-directory", {
+            year: directory.year, generation: directory.generation,
+          });
+          if (!response.ok) throw new Error("DiscoveryStore event directory publication returned HTTP " + response.status);
+          return response.json();
+        });
       }
-      await step.do(`publish-event-directory-${directory.year}`, async () => {
-        if (!directory.needsChunking) return { year: directory.year, published: false };
-        const stagedDocument = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).get(
-          `discovery/staging/${directory.year}/${directory.generation}.json`,
-        );
-        const stagedKeys = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).get(
-          `discovery/staging/${directory.year}/${directory.generation}-keys.json`,
-        );
-        if (!stagedDocument || !stagedKeys) throw new Error(`Incomplete staged event directory for ${directory.year}`);
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-          `registry/events/${directory.year}.json`, await stagedKeys.text(),
-          { httpMetadata: { contentType: "application/json" } },
-        );
-        // The directory document is the publication point; write it last.
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
-          `discovery/events/${directory.year}.json`, await stagedDocument.text(),
-          { httpMetadata: { contentType: "application/json" } },
-        );
-        return { year: directory.year, published: true };
-      });
     }
 
     const classified: Array<{
