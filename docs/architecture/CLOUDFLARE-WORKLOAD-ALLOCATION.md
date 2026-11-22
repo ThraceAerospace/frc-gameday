@@ -1,8 +1,8 @@
 # Cloudflare Workload Allocation and Background Jobs
 
-**Status:** Proposed implementation sequence (corrected active-event boundary)  
+**Status:** First discovery/weekly-event initialization extraction implemented; deployment and operational verification pending  
 **Branch:** `fieldview-architecture-migration`  
-**Date:** 2026-11-21
+**Date:** 2026-11-22
 
 ## Objective
 
@@ -16,6 +16,33 @@ The governing rules are:
 
 `EventRuntime` is not a general-purpose job runner. Its alarms and internal scheduling are appropriate for active event lifecycle polling because polling and webhook reconciliation must serialize against the same canonical event state. Do not move that active-event loop into a Workflow or Queue.
 
+
+## Implemented first extraction: daily discovery and weekly event initialization
+
+The first migration slice is implemented in this branch. It moves current-season event discovery, the this-week projection, and weekly EventRuntime initialization out of the TaskScheduler alarm path.
+
+### Components
+
+- `workers/fieldview-jobs` is a separate regular Worker. Its one daily Cron Trigger creates a deterministic `DailyEventReadinessWorkflow` instance for that scheduled date.
+- `DailyEventReadinessWorkflow` fetches TBA event directories for the UTC year containing the run date plus the adjacent years. The adjacent-year reads are intentional: event inclusion is calculated in each event's IANA timezone, so a week around New Year can include events whose season year differs from the Worker UTC year.
+- The Workflow stores complete per-year discovery documents in the shared `fieldview-discovery` R2 bucket. A TBA 304 updates `checkedAt` while retaining the last good event payload and its original `updatedAt`.
+- The Workflow classifies the Monday-Sunday window using each event's timezone and inclusive date-only start/end values, writes the this-week read projection and a per-run manifest to R2, then initializes matching EventRuntime instances in batches of ten through a narrow service-binding endpoint on `fieldview-runtime`.
+- `fieldview-runtime` reads `/events/discovery` and `/events/this-week` from R2 when those projections exist. The existing TaskScheduler read path remains as a compatibility fallback during rollout.
+- The runtime Worker no longer has the daily Cron Trigger. TaskScheduler no longer starts discovery merely because it activates, and its disabled-scheduler alarm path no longer runs daily classification. Its other administrative jobs and legacy responsibilities remain in place.
+
+### Explicitly not included in this first slice
+
+This is the first extraction, not the completed event-readiness program. It currently initializes the weekly EventRuntime and publishes discovery projections. It does **not** yet seed participating TeamRuntime instances, verify team-season resource readiness, generate/verify base analytics, or replace the existing TaskScheduler admin APIs, team discovery, season ingestion, or coverage audit. Those are subsequent migrations. The existing TaskScheduler class, namespace binding, migrations, and admin routes are intentionally retained.
+
+### Deployment prerequisites
+
+1. Create the R2 bucket named `fieldview-discovery` once in the target Cloudflare account.
+2. Deploy `fieldview-runtime` with its R2 binding and internal Workflow initialization route.
+3. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
+4. Deploy `fieldview-jobs` with the service binding to the deployed `fieldview-runtime` Worker and the Workflow binding.
+5. Confirm the Workflow runs successfully and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
+
+The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
 
 ### TBA webhook routing contract
 
@@ -145,13 +172,29 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 
 ## Migration sequence
 
-1. Add Workflow bindings/classes and the daily event-readiness workflow.
-2. Move the current daily Cron Trigger off the global TaskScheduler alarm path. Initially reuse existing DO mutation contracts, then remove any orchestration-only scheduler endpoints once all callers have migrated. Do not change EventRuntime's active-event polling alarms or direct webhook reconciliation.
+1. **Completed in this branch:** add the `fieldview-jobs` Worker, daily `DailyEventReadinessWorkflow`, R2 discovery documents and this-week projection, runtime service-binding initialization endpoint, and R2-backed public read paths. The daily Cron Trigger is removed from `fieldview-runtime`.
+2. **Next:** extend readiness to discover and seed participating TeamRuntime instances, verify team-season state, and generate/verify base analytics. Preserve per-team failure isolation and do not move active event polling out of EventRuntime.
 3. Add the weekly TBA current-season workflow and source its year from `/status`.
 4. Add the unscheduled TBA resource-ingestion workflow and its authenticated create/status/control endpoints.
 5. Add Queues for fan-out and durable retry of independent resource work; do not introduce them before message contracts and idempotency are defined.
 6. Move large raw payload retention to R2 and replace unbounded DO source-history records with compact references/metadata plus retention.
 7. Replace every global TaskScheduler responsibility—discovery, indexing, seeding orchestration, admin bulk ingestion, coverage audits, progress tracking, and recurring scheduling—with Workers/Workflows/Queues plus a suitable read model. Move the remaining read-only discovery endpoints to a Worker-backed projection. Remove the `TASK_SCHEDULER` binding, class export, routes, storage, and migration-era code once all consumers have moved. Retire TaskScheduler entirely if no genuine entity-scoped consistency requirement remains. Preserve EventRuntime's active polling and webhook path.
+
+## Cloudflare Free-plan operating budget
+
+The first extraction is designed around the Free plan rather than assuming paid-plan headroom. Recheck the Cloudflare pricing pages before production rollout because plan limits can change.
+
+| Resource | Free-plan constraint relevant to FieldView | Design response |
+|---|---|---|
+| Workers | 100,000 requests/day shared with Workflow requests; 10 ms CPU per invocation; 128 MB memory; 50 subrequests per invocation; five Cron Triggers/account | One daily Cron on the jobs Worker; bounded batches; no per-event Cron or global scheduler DO |
+| Workflows | 100,000 requests/day shared with Workers; 10 ms CPU per step; 3,000 steps/day; 1 GB-month Workflow storage | One discovery step, one projection/manifest step, then one initialization step per ten events; step results are compact |
+| R2 | 10 GB-month storage, 1 million Class A operations/month, 10 million Class B operations/month, free egress | Store immutable year snapshots, small per-run manifests, and the current this-week projection; do not write one object per event |
+| KV | 100,000 reads/day and 1,000 writes/day | Not used for the daily discovery projection; R2 is a better fit for these complete snapshot writes |
+| Queues | 10,000 operations/day and 24-hour Free-plan message retention | Not required for this first slice; Workflows provide orchestration and retries |
+
+For a run with **N** this-week events, the current Workflow uses approximately three fixed steps plus `ceil(N / 10)` initialization steps. Each initialization step makes at most ten sequential service-binding requests. The three event-directory fetches cover the UTC run year and its adjacent years. This leaves substantial room under the 3,000-step ceiling for normal FRC event counts, but unusually large event sets must still be monitored. Workflow and Worker request usage is shared, so avoid multiplying this pattern into one Workflow per event.
+
+The 10 ms CPU limit is the primary Free-plan risk, not wall-clock waiting on provider or service-binding I/O. Keep parsing and transformation bounded, avoid expensive whole-season calculations inside one step, and split work further if real execution metrics show CPU overruns. The 100,000 daily request budget is shared across the runtime and jobs Workers and Workflow activity.
 
 ## Additional Cloudflare resources recommended
 
@@ -179,7 +222,9 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 
 ## Acceptance criteria
 
-- The daily event readiness job is a Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
+- Current-season event discovery and the this-week EventRuntime initialization job run in the `fieldview-jobs` Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
+- The current discovery and this-week read projections are served from the shared R2 bucket after the first successful Workflow run.
+- TeamRuntime participant seeding, team-season readiness verification, and base analytics readiness are explicitly tracked as follow-on work; they are not claimed as complete by this first extraction.
 - Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
 - TBA webhook authentication remains synchronous with its established 413/418/500/401 responses. Only authenticated requests receive HTTP 200 immediately; payload parsing, recipient selection, and fan-out run under `ctx.waitUntil()`. Internal failures after authentication are logged and never reflected to TBA. Tests cover auth responses, immediate authenticated acknowledgement, recipient selection, multi-team fan-out, and partial dispatch failure.
 - TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
