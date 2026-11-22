@@ -57,7 +57,6 @@ export interface RuntimeEnvironment {
   TEAM_ACTIVE_REFRESH_INTERVAL_MS?: string | number;
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
-  TASK_SCHEDULER?: DurableObjectNamespaceLike;
   /** Immutable discovery/read projections written by the jobs Workflow. */
   DISCOVERY_BUCKET?: R2BucketLike;
   /** Service binding used only to create manually requested background Workflows. */
