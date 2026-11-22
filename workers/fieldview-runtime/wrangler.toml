@@ -33,10 +33,6 @@ name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
 [[durable_objects.bindings]]
-name = "TASK_SCHEDULER"
-class_name = "TaskScheduler"
-
-[[durable_objects.bindings]]
 name = "TEAM_RUNTIME"
 class_name = "TeamRuntime"
 
