@@ -24,6 +24,13 @@ export interface NormalizeFieldViewTeamEventStateInput {
 export function normalizeFieldViewTeamEventState(
   input: NormalizeFieldViewTeamEventStateInput,
 ): FieldViewTeamEventState {
+  if (input.team && input.team.key !== input.team_key) {
+    throw new Error("Team identity does not match the requested team event state");
+  }
+  if (input.event_source_revision !== undefined && input.event_source_revision !== null &&
+      (!Number.isSafeInteger(input.event_source_revision) || input.event_source_revision < 0)) {
+    throw new Error("Event source revision must be a non-negative safe integer");
+  }
   if (input.event_team && (
     input.event_team.event_key !== input.event_key ||
     input.event_team.team_key !== input.team_key
