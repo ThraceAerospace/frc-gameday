@@ -174,13 +174,13 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 
 ## Migration sequence
 
-1. **Completed in this branch:** add the `fieldview-jobs` Worker, daily `DailyEventReadinessWorkflow`, R2 discovery documents and this-week projection, runtime service-binding initialization endpoint, and R2-backed public read paths. The daily Cron Trigger is removed from `fieldview-runtime`.
-2. **Next:** extend readiness to discover and seed participating TeamRuntime instances, verify team-season state, and generate/verify base analytics. Preserve per-team failure isolation and do not move active event polling out of EventRuntime.
-3. Add the weekly TBA current-season workflow and source its year from `/status`.
-4. Add the unscheduled TBA resource-ingestion workflow and its authenticated create/status/control endpoints.
-5. Add Queues for fan-out and durable retry of independent resource work; do not introduce them before message contracts and idempotency are defined.
+1. **Completed in this branch:** add the `fieldview-jobs` Worker and daily `DailyEventReadinessWorkflow`; discover only the TBA-reported current season; publish event and paginated team directories to R2; publish the event-timezone-aware this-week projection; initialize matching EventRuntime instances; discover event participants and queue deduplicated TeamRuntime seeds; serve public discovery exclusively from R2.
+2. **Next:** verify TeamRuntime team-season state and event-team history readiness after seed dispatch, then generate/verify base event analytics. Preserve per-team failure isolation and do not move active event polling out of EventRuntime.
+3. Extract the remaining TaskScheduler administrative ingestion and coverage-audit jobs into durable Workflows with explicit manifests, checkpoints, status, and controls.
+4. Move district discovery/snapshots and remaining operator job APIs to Worker/Workflow-backed projections and endpoints.
+5. Add Queues only where independent resource fan-out or retry volume justifies them; do not introduce them before message contracts and idempotency are defined.
 6. Move large raw payload retention to R2 and replace unbounded DO source-history records with compact references/metadata plus retention.
-7. Replace every global TaskScheduler responsibility—discovery, indexing, seeding orchestration, admin bulk ingestion, coverage audits, progress tracking, and recurring scheduling—with Workers/Workflows/Queues plus a suitable read model. Move the remaining read-only discovery endpoints to a Worker-backed projection. Remove the `TASK_SCHEDULER` binding, class export, routes, storage, and migration-era code once all consumers have moved. Retire TaskScheduler entirely if no genuine entity-scoped consistency requirement remains. Preserve EventRuntime's active polling and webhook path.
+7. Remove TaskScheduler after its active admin, audit, district, and operator responsibilities have replacements. Then remove its binding, class export, routes, storage, and obsolete migration-era source. Preserve EventRuntime's active polling and webhook path.
 
 ## Cloudflare Free-plan operating budget
 
@@ -194,7 +194,7 @@ The first extraction is designed around the Free plan rather than assuming paid-
 | KV | 100,000 reads/day and 1,000 writes/day | Not used for the daily discovery projection; R2 is a better fit for these complete snapshot writes |
 | Queues | 10,000 operations/day and 24-hour Free-plan message retention | Not required for this first slice; Workflows provide orchestration and retries |
 
-For a run with **N** this-week events and **E** events in the TBA-reported current season, the current Workflow uses approximately eight fixed steps (resolve current season, discover the one event directory, publish that directory, publish its this-week projection, write the manifest, publish the runtime registry, publish the final pointer, and write the run summary), plus `ceil(E / 25)` classification steps, `ceil(ceil(E / 25) / 10)` chunk-write steps when the directory changes, and `ceil(N / 10)` initialization steps. Each initialization step makes at most ten sequential service-binding requests. Exactly one event-directory request is made per run. This leaves substantial room under the 3,000-step ceiling for normal FRC event counts, but unusually large event sets must still be monitored. Workflow and Worker request usage is shared, so avoid multiplying this pattern into one Workflow per event.
+For a run with **E** events in the TBA-reported current season, **P** pages in its TBA team directory (500 teams per page), **N** this-week events, and **T** distinct teams participating in those events, the current Workflow uses eight fixed steps (resolve current season, discover/publish the event directory, publish the team-directory manifest, publish the this-week projection, write the event manifest, publish the runtime event registry, publish the final generation pointer, and write the run summary), plus **P** team-page discovery steps, `ceil(E / 25)` classification steps, `ceil(ceil(E / 25) / 10)` event chunk-write steps when the directory changes, **N** participant-discovery steps, `ceil(N / 10)` EventRuntime initialization steps, and `ceil(T / 10)` TeamRuntime seed-dispatch steps. Team and event provider calls are bounded by page/batch size; no Workflow step sends more than ten sequential runtime initialization/seed requests. Monitor the combined total against the 3,000-step Free-plan ceiling, especially if event counts or the number of this-week participants grow. Workflow and Worker request usage is shared, so avoid multiplying this pattern into one Workflow per event.
 
 The 10 ms CPU limit is the primary Free-plan risk, not wall-clock waiting on provider or service-binding I/O. Keep parsing and transformation bounded, avoid expensive whole-season calculations inside one step, and split work further if real execution metrics show CPU overruns. The 100,000 daily request budget is shared across the runtime and jobs Workers and Workflow activity.
 
@@ -226,14 +226,14 @@ The 10 ms CPU limit is the primary Free-plan risk, not wall-clock waiting on pro
 
 - Current-season event discovery and the this-week EventRuntime initialization job run in the `fieldview-jobs` Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
 - The current-season event directory, current-season team directory, and this-week projection are served exclusively from the shared R2 bucket after the first successful Workflow run; missing publications return 503 and never invoke TaskScheduler.
-- TeamRuntime participant seeding, team-season readiness verification, and base analytics readiness are explicitly tracked as follow-on work; they are not claimed as complete by this first extraction.
+- TeamRuntime participant seeding is dispatched by the Workflow and recorded in its summary; team-season readiness verification and base analytics readiness remain follow-on work and are not claimed as complete.
 - Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
 - TBA webhook authentication remains synchronous with its established 413/418/500/401 responses. Only authenticated requests receive HTTP 200 immediately; payload parsing, recipient selection, and fan-out run under `ctx.waitUntil()`. Internal failures after authentication are logged and never reflected to TBA. Tests cover auth responses, immediate authenticated acknowledgement, recipient selection, multi-team fan-out, and partial dispatch failure.
 - TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
 - Every matching event has a canonical EventRuntime state and an explicit this-week classification.
 - Every discovered participant is submitted to TeamRuntime for idempotent seeding, or a recorded reason why participant discovery or seed dispatch failed. A separate readiness check is required before claiming TeamState completeness.
 - Base analytics is generated when the minimum inputs are present and is explicitly marked partial when inputs are missing.
-- The weekly job uses the validated TBA `/status.current_season` value.
+- The daily Workflow uses the validated TBA `/status.current_season` value and discovers only that season.
 - The manual ingestion job has no recurring schedule, supports arbitrary *approved resource scopes*, exposes status/control operations, and can resume after partial failure.
 - Repeated runs do not duplicate state, erase valid data, or publish partial discovery as complete.
 - Tests cover replay, duplicate execution, provider 304/429/5xx, malformed TBA status, partial team failures, and large paginated scopes.
