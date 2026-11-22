@@ -535,13 +535,14 @@ export class TaskScheduler {
         ...r2DiscoveredKeys,
       ])];
 
+      const discoveredKeys = kind === "event"
+        ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
+        : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
       const keys = [...new Set([...registered, ...discoveredKeys])]
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
         kind, year, query, total: keys.length, cursor,
-        discovery_ready: kind === "event"
-          ? discovery !== undefined || r2DiscoveredKeys.length > 0
-          : (discovery as TeamDiscoveryCache | undefined)?.complete === true || r2DiscoveredKeys.length > 0,
+        discovery_ready: discovery !== undefined,
         next_cursor: cursor + limit < keys.length ? cursor + limit : null,
         keys: keys.slice(cursor, cursor + limit),
       }, { headers: { "Cache-Control": "no-store" } });
@@ -634,10 +635,6 @@ export class TaskScheduler {
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.readEventDiscovery(year);
-        const r2TeamManifest = await this.readR2Json<{
-          year: number; pageCount: number; teamCount: number; updatedAt: number;
-        }>(`discovery/teams/${year}.json`);
-        const r2TeamKeys = await this.readR2Keys(`registry/teams/${year}.json`);
         const teamDiscovery = await this.readTeamDiscovery(year);
         if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
