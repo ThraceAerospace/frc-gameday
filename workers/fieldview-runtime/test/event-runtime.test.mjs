@@ -1395,7 +1395,10 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
       team_states: [{ event_key: eventKey, team_key: "frc3461", sources: {} }],
     },
   });
-  const runtime = new EventRuntime({ storage }, {
+  const runtime = new EventRuntime({
+    storage,
+    blockConcurrencyWhile: async (callback) => callback(),
+  }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
