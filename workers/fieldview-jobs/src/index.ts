@@ -80,7 +80,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
         for (const item of document?.events ?? []) if (typeof item.key === "string") unique.set(item.key, { year, event: item });
       }
-      const now = Date.now();
+      const now = runAt;
       const matches = [...unique.values()]
         .filter(({ event: item }) => classifyEventThisWeek(item, now)?.isThisWeek === true)
         .sort((a, b) => a.event.key.localeCompare(b.event.key));
@@ -125,7 +125,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             batchFailures.push({ event_key: item.key, error: "Event was not present in the retained discovery snapshot" });
             continue;
           }
-          const classification = lifecycleFor(eventData, Date.now());
+          const classification = lifecycleFor(eventData, runAt);
           const response = await this.env.FIELDVIEW_RUNTIME.fetch(new Request(
             "https://fieldview-runtime/internal/workflows/initialize-event",
             {
