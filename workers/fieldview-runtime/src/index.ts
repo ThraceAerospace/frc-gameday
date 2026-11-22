@@ -5,6 +5,7 @@ import { TeamRuntime } from "./team-runtime.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
+import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
 
 export { EventRuntime, TaskScheduler, Multiplexer, TeamRuntime };
 
@@ -238,9 +239,9 @@ export default {
           }
         }
       }
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      return scheduler.fetch(new Request("https://task-scheduler/events/this-week"));
+      return Response.json({ error: "This-week projection is not published" }, {
+        status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+      });
     }
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
@@ -275,21 +276,52 @@ export default {
           });
         }
       }
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const query = new URLSearchParams();
-      const year = url.searchParams.get("year");
-      if (year !== null) query.set("year", year);
-      return scheduler.fetch(new Request("https://task-scheduler/events?" + query.toString()));
+      return Response.json({ error: "Event discovery is not published for the requested season" }, {
+        status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+      });
     }
 
     if (url.pathname === "/teams/discovery" && request.method === "GET") {
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "Team discovery is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const query = new URLSearchParams();
-      const year = url.searchParams.get("year");
-      if (year !== null) query.set("year", year);
-      return scheduler.fetch(new Request("https://task-scheduler/teams?" + query.toString()));
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
+      }
+      if (!env.DISCOVERY_BUCKET) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      const manifestObject = await env.DISCOVERY_BUCKET.get(`discovery/teams/${year}.json`);
+      if (!manifestObject) {
+        return Response.json({ error: "Team discovery is not published for the requested season" }, {
+          status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+        });
+      }
+      const manifest = await manifestObject.json<{
+        year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number; checkedAt: number;
+      }>();
+      if (manifest.year !== year || !Number.isSafeInteger(manifest.pageCount) || manifest.pageCount < 1) {
+        return Response.json({ error: "Published team discovery manifest is invalid" }, { status: 503 });
+      }
+      const teams: Array<Record<string, unknown>> = [];
+      for (let page = 0; page < manifest.pageCount; page += 1) {
+        const pageObject = await env.DISCOVERY_BUCKET.get(
+          `discovery/team-pages/${year}/${manifest.generation}/${page}.json`,
+        );
+        if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
+        const pageTeams = await pageObject.json<unknown>();
+        if (!Array.isArray(pageTeams)) return Response.json({ error: `Team discovery page ${page} is invalid` }, { status: 503 });
+        teams.push(...pageTeams as Array<Record<string, unknown>>);
+      }
+      if (teams.length !== manifest.teamCount) {
+        return Response.json({ error: "Published team discovery count does not match its pages" }, { status: 503 });
+      }
+      const stale = Date.now() - manifest.checkedAt > 60 * 60_000;
+      const retrievedAt = new Date(manifest.updatedAt).toISOString();
+      return Response.json({
+        year,
+        teams: teams.map((team) => normalizeFieldViewTeam(team as never, {
+          tba_teams: { status: stale ? "stale" : "available", retrieved_at: retrievedAt },
+        })),
+        updatedAt: manifest.updatedAt,
+        checkedAt: manifest.checkedAt,
+      }, { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=300" } });
     }
 
     if (url.pathname === "/internal/admin/operations" && request.method === "POST") {
@@ -379,17 +411,8 @@ export default {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
         const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
-        if (action === "seed") {
-          if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-          const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-          return scheduler.fetch(new Request("https://task-scheduler/admin/team-seed", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({ team_key: teamKey, year }),
-          }));
-        }
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-        return stub.fetch(new Request("https://team-runtime/refresh?year=" + year, {
+        return stub.fetch(new Request(`https://team-runtime/${action === "seed" ? "seed" : "refresh"}?year=${year}`, {
           method: "POST",
           headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "X-FieldView-Team-Key": teamKey },
         }));
@@ -503,18 +526,8 @@ export default {
       ["state", "refresh", "seed"].includes(internalTeamAction ?? "");
     if (validInternalTeamRoute) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (internalTeamAction === "seed" && request.method === "POST") {
-        if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-        const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
-        if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
-          return Response.json({ error: "Invalid season year" }, { status: 400 });
-        }
-        const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-        return scheduler.fetch(new Request("https://task-scheduler/admin/team-seed", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
-          body: JSON.stringify({ team_key: internalTeamKey, year }),
-        }));
+      if (internalTeamAction === "seed" && request.method !== "POST") {
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
       }
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(internalTeamKey));
@@ -621,27 +634,4 @@ export default {
     return stub.fetch(forwarded);
   },
 
-  async scheduled(
-    _controller: { scheduledTime: number; cron: string },
-    env: RuntimeEnvironment,
-    context: { waitUntil(promise: Promise<unknown>): void },
-  ): Promise<void> {
-    // Compatibility path only; the production Cron Trigger now lives on
-    // fieldview-jobs. If this handler is invoked, delegate rather than
-    // reintroducing discovery work inside TaskScheduler.
-    if (!env.FIELDVIEW_JOBS) {
-      console.error("[FV][Jobs] Scheduled compatibility invocation skipped: jobs binding is unavailable");
-      return;
-    }
-    context.waitUntil(env.FIELDVIEW_JOBS.fetch(new Request(
-      "https://fieldview-jobs/internal/admin/daily-event-readiness",
-      {
-        method: "POST",
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
-      },
-    )).then(async (response) => {
-      if (!response.ok) throw new Error("Daily readiness Workflow trigger returned HTTP " + response.status);
-      console.log("[FV][Jobs] Scheduled readiness Workflow accepted", JSON.stringify(await response.json()));
-    }));
-  },
 };
