@@ -17,7 +17,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, and ADR-0014 for the runtime execution/orchestration contract.
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0014 for the runtime execution/orchestration contract, and ADR-0017 for the one-Worker-per-environment deployment decision.
 
 ## Non-negotiable product and data principles
 
@@ -193,9 +193,9 @@ Never copy legacy implementation rules into new packages merely for parity. Pres
 Never commit secrets or real environment values. Document variable names, purpose, scope, and migration destination; use placeholders in examples. Separate browser-exposed `NEXT_PUBLIC_*` configuration from server-only credentials. Do not copy Vercel-specific secrets into Cloudflare without defining their use, access policy, and rotation.
 
 Cloudflare environment selection is branch-determined and documented in `docs/development/CLOUDFLARE-ENVIRONMENTS.md`:
-- `main` uses `workers/fieldview-runtime/wrangler.toml` (Worker `runtime`) and `workers/fieldview-jobs/wrangler.toml`.
-- Every non-main branch uses the corresponding `wrangler.testing.toml` files (Runtime Worker `testing` and Jobs Worker `fieldview-jobs-testing`).
-- The shared testing runtime URL is `https://testing.frc-fieldview.workers.dev`; production is `https://runtime.frc-fieldview.workers.dev`.
+- **Target:** exactly one Worker per environment: `fieldview-preprod` and `fieldview-production`.
+- The current `workers/fieldview-runtime` and `workers/fieldview-jobs` configurations are the experimental split-Worker prototype, not the accepted target topology. Do not deploy them as the final architecture.
+- Preproduction and Production must have separate Durable Object namespaces, Workflow bindings/instances, secrets, variables, and data.
 - Do not add branch-detection logic to application code, deploy automatically from CI, or change Vercel settings as part of this migration slice without explicit approval.
 - Production deployment is blocked until the temporary `RUNTIME_ADMIN_TOKEN` bearer authorization is replaced by the approved system-administrator authorization design. Never configure the testing token as a production secret.
 
