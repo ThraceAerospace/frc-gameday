@@ -6,7 +6,7 @@ import { teamResourceEndpoints } from "./team-runtime.ts";
 import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
-  const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
+const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
 const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
    
 export interface EventPollingPolicy {
@@ -67,67 +67,6 @@ function nextDateOnly(value: string): string | null {
   if (!parts) return null;
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + 86_400_000)
     .toISOString().slice(0, 10);
-}
-
-function addDateOnlyDays(value: string, days: number): string | null {
-  const parts = parseDateOnly(value);
-  if (!parts) return null;
-  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + days * 86_400_000)
-    .toISOString().slice(0, 10);
-}
-
-function dateOnlyInTimezone(now: number, timeZone: string): string | null {
-  try {
-    const values = new Map(new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      calendar: "gregory",
-      numberingSystem: "latn",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(new Date(now)).map((part) => [part.type, part.value]));
-    return String(values.get("year")).padStart(4, "0") + "-" +
-      String(values.get("month")).padStart(2, "0") + "-" +
-      String(values.get("day")).padStart(2, "0");
-  } catch {
-    return null;
-  }
-}
-
-export interface EventWeekClassification {
-  isThisWeek: boolean;
-  localDate: string;
-  weekStart: string;
-  weekEnd: string;
-}
-
-/**
- * Event start/end are inclusive date-only values, not timestamps. The event
- * timezone determines today's calendar date; overlap is tested against that
- * local Monday-Sunday week using date strings only.
- */
-export function classifyEventThisWeek(
-  event: Pick<TBAEvent, "start_date" | "end_date" | "timezone">,
-  now: number,
-): EventWeekClassification | null {
-  const start = event.start_date;
-  const end = event.end_date;
-  if (!parseDateOnly(start) || !parseDateOnly(end) || start > end ||
-      typeof event.timezone !== "string" || event.timezone.length === 0) return null;
-  const localDate = dateOnlyInTimezone(now, event.timezone);
-  if (!localDate) return null;
-  const localParts = parseDateOnly(localDate);
-  if (!localParts) return null;
-  const weekday = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day)).getUTCDay();
-  const weekStart = addDateOnlyDays(localDate, -((weekday + 6) % 7));
-  const weekEnd = weekStart === null ? null : addDateOnlyDays(weekStart, 6);
-  if (weekStart === null || weekEnd === null) return null;
-  return {
-    isThisWeek: start <= weekEnd && end >= weekStart,
-    localDate,
-    weekStart,
-    weekEnd,
-  };
 }
 
 /** Convert local midnight in an IANA timezone to its UTC instant. */
@@ -202,14 +141,6 @@ interface DiscoveryCache {
   /** Most recent successful 200/304 validation of that payload. */
   checkedAt?: number;
 }
-
-interface ThisWeekProgress {
-  runDate: string;
-  eventKeys: string[];
-  cursor: number;
-  includedKeys: string[];
-}
-
 
 interface SeasonIngestJob {
   year: number;
