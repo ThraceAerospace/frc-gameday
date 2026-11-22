@@ -76,7 +76,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     // Publish the current-season team directory from TBA's paginated endpoint.
     // Each page is an immutable R2 object; the manifest is the publication
     // boundary and is written only after every page has been validated.
-    const teamDirectoryGeneration = runAt;
+    const teamDirectoryGeneration = await step.do("create-team-directory-generation", async () => Date.now());
     const teamPageSize = 500;
     let teamPageCount = 0;
     let teamCount = 0;
