@@ -394,7 +394,9 @@ test("TeamRuntime runs independent provider requests concurrently", async () => 
   await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
-  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one TeamRuntime");
+  // Refresh queues durable work; the alarm owns provider I/O.
+  await runtime.alarm();
+  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one TeamRuntime alarm");
 });
 
 
@@ -603,8 +605,11 @@ test("TeamRuntime removes legacy recurring Statbotics tasks without discarding e
   }]);
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), "frc3461");
 
-  const response = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
+  const response = await runtime.fetch(new Request("https://team/state", {
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": "frc3461",
+    },
   }));
   assert.equal(response.status, 200);
   assert.equal(storage.values.has("task:" + legacyEndpoint), false, "legacy recurring Statbotics poll is removed");
