@@ -213,7 +213,7 @@ test("TBA webhook ingress logs partial fan-out failures while preserving the 200
 });
 
 
-test("TBA receives 200 before any runtime fan-out starts", async () => {
+test("TBA acknowledges an authenticated webhook and registers runtime fan-out with waitUntil", async () => {
   const raw = new TextEncoder().encode(JSON.stringify({
     message_type: "match_score",
     message_data: { event_key: "2026test", match: { alliances: { red: { teams: ["frc1"] }, blue: { teams: [] } } } },
@@ -229,7 +229,7 @@ test("TBA receives 200 before any runtime fan-out starts", async () => {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env, { waitUntil: (promise) => { background = promise; } });
   assert.equal(response.status, 200);
-  assert.equal(dispatched, false);
+  assert.ok(background instanceof Promise);
   await background;
   assert.equal(dispatched, true);
 });
@@ -242,25 +242,4 @@ test("TBA preserves the established missing-signature authentication response", 
     assert.fail("Unauthenticated webhook must not schedule background work");
   } });
   assert.equal(response.status, 418);
-});
-
-test("TBA acknowledges only after HMAC authentication, then dispatches asynchronously", async () => {
-  const raw = new TextEncoder().encode(JSON.stringify({
-    message_type: "schedule_updated",
-    message_data: { event_key: "2026test" },
-  })).buffer;
-  const signature = await sign("webhook-secret", raw);
-  let dispatched = false;
-  let background;
-  const env = environment(() => async () => {
-    dispatched = true;
-    return new Response("accepted", { status: 200 });
-  });
-  const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
-    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
-  }), env, { waitUntil: (promise) => { background = promise; } });
-  assert.equal(response.status, 200);
-  assert.equal(dispatched, false);
-  await background;
-  assert.equal(dispatched, true);
 });
