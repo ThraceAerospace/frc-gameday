@@ -16,6 +16,22 @@ class MemoryStorage {
   async transaction(callback) { return callback(this); }
 }
 
+class MemoryBucket {
+  values = new Map();
+  async put(key, value) { this.values.set(key, String(value)); }
+  async get(key) {
+    const value = this.values.get(key);
+    if (value === undefined) return null;
+    return { async json() { return JSON.parse(value); }, async text() { return value; } };
+  }
+  async list({ prefix = "" } = {}) {
+    return {
+      objects: [...this.values.keys()].filter((key) => key.startsWith(prefix)).map((key) => ({ key })),
+      truncated: false,
+    };
+  }
+}
+
 test("TaskScheduler queues team seed and advances cross-runtime work in alarms", async () => {
   const storage = new MemoryStorage();
   const calls = [];
@@ -153,7 +169,8 @@ test("TaskScheduler no longer exposes coverage audit routes", async () => {
 
 test("TaskScheduler admin overview does not fan out to entity runtimes", async () => {
   const storage = new MemoryStorage();
-  await storage.put("registry:runtime-events", ["2026test"]);
+  const discoveryBucket = new MemoryBucket();
+  await discoveryBucket.put("registry/runtime-events/2026test.json", "{}");
   await storage.put("registry:teams", ["frc3461"]);
   const forbiddenNamespace = {
     idFromName(name) { return name; },
@@ -164,6 +181,7 @@ test("TaskScheduler admin overview does not fan out to entity runtimes", async (
   const scheduler = new TaskScheduler({ storage }, {
     TBA_API_KEY: "test-key",
     RUNTIME_ADMIN_TOKEN: "admin",
+    DISCOVERY_BUCKET: discoveryBucket,
     EVENT_RUNTIME: forbiddenNamespace,
     TEAM_RUNTIME: forbiddenNamespace,
   });
