@@ -529,29 +529,126 @@ export default {
       }));
     }
 
-    if (
-      (url.pathname === "/internal/admin/inventory" || url.pathname === "/internal/admin/entity" || url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/district-refresh") &&
-      (request.method === "GET" || ((url.pathname === "/internal/admin/season-ingest" || url.pathname === "/internal/admin/event-team-seed" || url.pathname === "/internal/admin/team-seed" || url.pathname === "/internal/admin/district-refresh") && request.method === "POST"))
-    ) {
+    if (url.pathname === "/internal/admin/inventory" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      const headers = new Headers(request.headers);
-      headers.set("Authorization", "Bearer " + env.RUNTIME_ADMIN_TOKEN);
-      return scheduler.fetch(new Request("https://task-scheduler" + url.pathname.replace("/internal", "") + url.search, {
-        method: request.method,
-        headers,
-        ...(request.method === "GET" ? {} : { body: request.body }),
+      const kind = url.searchParams.get("kind");
+      const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
+      const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+      const cursor = Number(url.searchParams.get("cursor") ?? "0");
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      if ((kind !== "event" && kind !== "team") || !Number.isInteger(year) || year < 1992 || year > 2200 ||
+          !Number.isSafeInteger(cursor) || cursor < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+        return Response.json({ error: "Invalid inventory query" }, { status: 400 });
+      }
+      const discoveryKey = kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`;
+      const discoveryObject = await env.DISCOVERY_BUCKET?.get(discoveryKey);
+      let discovered: string[] = [];
+      if (discoveryObject) {
+        try {
+          const data = await discoveryObject.json<unknown>();
+          discovered = kind === "event" && isRecord(data) && Array.isArray(data.events)
+            ? data.events.map((item) => isRecord(item) ? item.key : null).filter((key): key is string => typeof key === "string")
+            : Array.isArray(data) ? data.filter((key): key is string => typeof key === "string") : [];
+        } catch { discovered = []; }
+      }
+      const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+      const runtimeKeys: string[] = [];
+      if (env.DISCOVERY_BUCKET) {
+        let cursorToken: string | undefined;
+        do {
+          const page = await env.DISCOVERY_BUCKET.list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
+          for (const object of page.objects) {
+            const key = object.key.slice(prefix.length).replace(/\.json$/, "");
+            if (key && (kind === "team" || key.startsWith(String(year)))) runtimeKeys.push(key);
+          }
+          cursorToken = page.truncated ? page.cursor : undefined;
+        } while (cursorToken);
+      }
+      const keys = [...new Set([...discovered, ...runtimeKeys])].filter((key) => key.toLowerCase().includes(query)).sort();
+      return Response.json({ kind, year, query, total: keys.length, cursor,
+        discovery_ready: discovered.length > 0, next_cursor: cursor + limit < keys.length ? cursor + limit : null,
+        keys: keys.slice(cursor, cursor + limit) }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (url.pathname === "/internal/admin/entity" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const kind = url.searchParams.get("kind"), requestedKey = url.searchParams.get("key") ?? "";
+      const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
+      if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
+          !Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
+      const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
+      const namespace = kind === "event" ? env.EVENT_RUNTIME : env.TEAM_RUNTIME;
+      if (!namespace) return Response.json({ error: kind + " runtime is unavailable" }, { status: 503 });
+      const stub = namespace.get(namespace.idFromName(key));
+      const headers = { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+        ...(kind === "event" ? { "X-FieldView-Event-Key": key } : { "X-FieldView-Team-Key": key }) };
+      const response = await stub.fetch(new Request("https://" + kind + "-runtime/state?year=" + year, { headers }));
+      return new Response(response.body, { status: response.status, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
+    }
+
+    if (["/internal/admin/season-ingest", "/internal/admin/event-team-seed", "/internal/admin/team-seed"].includes(url.pathname) &&
+        (request.method === "GET" || request.method === "POST")) {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs Worker service binding is unavailable" }, { status: 503 });
+      const operation = url.pathname.endsWith("season-ingest") ? "season-ingest"
+        : url.pathname.endsWith("event-team-seed") ? "event-team-seed" : "team-seed";
+      if (request.method === "GET") {
+        const query = new URLSearchParams({ operation });
+        for (const field of ["year", "team_key", "event_key"]) {
+          const value = url.searchParams.get(field);
+          if (value !== null) query.set(field, value);
+        }
+        return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/runtime-job?" + query, {
+          headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+        }));
+      }
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body)) return Response.json({ error: "Invalid runtime job request" }, { status: 400 });
+      return env.FIELDVIEW_JOBS.fetch(new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+        method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, operation }),
       }));
     }
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.TASK_SCHEDULER) return Response.json({ error: "TaskScheduler is not bound" }, { status: 503 });
-      const scheduler = env.TASK_SCHEDULER.get(env.TASK_SCHEDULER.idFromName("global"));
-      return scheduler.fetch(new Request("https://task-scheduler/admin/overview", {
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
-      }));
+      const object = await env.DISCOVERY_BUCKET?.get("discovery/current-season.json");
+      const current = object ? await object.json<{ year: number }>().catch(() => null) : null;
+      const year = current?.year ?? null;
+      const eventObject = year === null ? null : await env.DISCOVERY_BUCKET?.get(`discovery/events/${year}.json`);
+      const teamObject = year === null ? null : await env.DISCOVERY_BUCKET?.get(`discovery/teams/${year}.json`);
+      const events = eventObject ? await eventObject.json<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>().catch(() => null) : null;
+      const teams = teamObject ? await teamObject.json<{ teamCount?: number; updatedAt?: number }>().catch(() => null) : null;
+      let multiplexer: unknown = null;
+      if (env.MULTIPLEXER) {
+        try {
+          const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
+          const response = await stub.fetch(new Request("https://fieldview-multiplexer/state", {
+            headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+          }));
+          multiplexer = response.ok ? await response.json() : { status: response.status };
+        } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
+      }
+      const runtimeCount = async (kind: "event" | "team") => {
+        if (!env.DISCOVERY_BUCKET) return 0;
+        const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+        let count = 0, cursor: string | undefined;
+        do {
+          const page = await env.DISCOVERY_BUCKET.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+          count += page.objects.length; cursor = page.truncated ? page.cursor : undefined;
+        } while (cursor);
+        return count;
+      };
+      return Response.json({
+        generated_at: new Date().toISOString(),
+        current_season: { year, status: !events ? "missing" :
+          Date.now() - (events.checkedAt ?? events.updatedAt ?? 0) > 36 * 60 * 60_000 ? "stale" : "available",
+          event_count: events?.events?.length ?? 0, team_count: teams?.teamCount ?? 0,
+          updated_at: events?.updatedAt ?? null, checked_at: events?.checkedAt ?? null },
+        events: [], teams: [], multiplexer, truncated: false,
+        inventory: { events: await runtimeCount("event") + (events?.events?.length ?? 0),
+          teams: await runtimeCount("team") + (teams?.teamCount ?? 0) },
+      });
     }
 
     // District data is owned by TaskScheduler; these public routes are strictly read-only.
