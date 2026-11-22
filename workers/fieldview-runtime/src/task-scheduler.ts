@@ -902,7 +902,11 @@ export class TaskScheduler {
                 }),
               }));
           if (!response.ok) job.errors.push({ event_key: eventKey, detail: "EventRuntime returned HTTP " + response.status, at: Date.now() });
-          else { knownEvents.add(eventKey); runtimeEvents.add(eventKey); job.scheduledEvents += 1; }
+          else {
+            knownEvents.add(eventKey);
+            await this.registerRuntimeKey("event", eventKey);
+            job.scheduledEvents += 1;
+          }
           job.eventCursor += 1;
         }
         await this.storage.put("registry:events", [...knownEvents].sort());
