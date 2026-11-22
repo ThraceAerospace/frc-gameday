@@ -39,13 +39,13 @@ Each canonical record has one authoritative owner and one authoritative persiste
 | Event/team participation (\`FieldViewEventTeam\`) | EventRuntime | TeamRuntime retains event-team reference and source revision |
 | Match and match-local alliance roster (\`FieldViewMatch\`) | EventRuntime | TeamRuntime retains match references; team identity is represented by \`team_key\` values |
 | Playoff alliance (\`FieldViewPlayoffAlliance\`) | EventRuntime | Matches retain alliance identity references, not full alliance objects |
-| District directory, district metadata, roster, events, rankings, and advancement | TaskScheduler | TeamRuntime retains district membership keys; district snapshots retain team/event keys |
+| District membership | No district aggregate or runtime | TeamRuntime and EventRuntime retain the district membership fields from their own provider-owned team/event records; no separate district fetch or resolution |
 | Event-wide analytics (\`FieldViewEventAnalytics\`) | EventRuntime | TeamRuntime retains no event-wide analytics copy |
 | Team-scoped analytics | TeamRuntime | EventRuntime consumes revisioned results transiently or as minimal derived comparison output |
 
 A relationship row may contain attributes that belong to that relationship (for example, event/team OPR or match alliance color). It must not embed the complete profile or canonical record of either endpoint. Provider team keys, event keys, and match keys are valid relationship identities; copied team names, profile fields, district objects, event objects, or match objects are not.
 
-The current TypeScript contracts and persisted records are not yet fully aligned with this inventory. In particular, \`FieldViewEventState.teams\`, \`FieldViewTeamState.districts/events\`, \`FieldViewDistrictSnapshot.teams/events\`, and match-level team/alliance enrichment still contain foreign records or copied facts. Those are migration targets, not exceptions to the ownership rule. Until each consumer is migrated, compatibility adapters may read the legacy shape, but new writes must move toward references and the old representation must be retired through a bounded migration.
+The current TypeScript contracts and persisted records are not yet fully aligned with this inventory. In particular, `FieldViewEventState.teams`, `FieldViewTeamState.events`, and match-level team/alliance enrichment still contain foreign records or copied facts. Those are migration targets, not exceptions to the ownership rule. District membership is intentionally different: the team/event provider record itself reports its district, so the owner retains that membership reference as part of its own data. No standalone district entity, directory, snapshot, provider acquisition, or query surface exists. The previous TaskScheduler-owned district aggregate decision in ADR-0009 is superseded.
 
 ### 2. Logical foreign references
 
