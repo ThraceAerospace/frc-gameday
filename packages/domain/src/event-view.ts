@@ -1,21 +1,6 @@
-import type { EventKey, TeamKey } from "./ids.js";
 import type { FieldViewEventState } from "./event.js";
 import type { FieldViewEventAnalytics } from "./analytics.js";
-
-/**
- * Logical foreign key to a TeamRuntime-owned event state.
- *
- * The team key selects the TeamRuntime Durable Object; event_key selects the
- * record within that runtime. The revision identifies the state observed by
- * the event analytics operation. It is not a copy of the referenced record.
- */
-export interface FieldViewTeamEventStateReference {
-  owner: "team-runtime";
-  owner_id: TeamKey;
-  record_type: "team-event-state";
-  record_id: EventKey;
-  revision: number | null;
-}
+import type { FieldViewTeamEventStateReference } from "./team.js";
 
 /**
  * Bounded event read projection. It may compose event-owned state and
