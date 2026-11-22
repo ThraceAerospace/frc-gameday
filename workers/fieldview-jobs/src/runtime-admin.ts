@@ -36,7 +36,8 @@ async function write(bucket: DiscoveryStoreClient, key: string, value: unknown):
   await bucket.put(key, json(value), { httpMetadata: { contentType: "application/json" } });
 }
 async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}, year?: number): Promise<Response> {
-  return dispatchRuntime(env, kind, key, action, body, year);
+  const targetYear = year ?? (typeof body.year === "number" ? body.year : undefined);
+  return dispatchRuntime(env, kind, key, action, body, targetYear);
 }
 function validTeam(key: unknown): key is string { return typeof key === "string" && /^frc\d+$/.test(key); }
 function validEvent(key: unknown): key is string { return typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key); }
