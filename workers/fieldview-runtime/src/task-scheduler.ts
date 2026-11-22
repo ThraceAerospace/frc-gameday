@@ -287,7 +287,7 @@ export class TaskScheduler {
     do {
       const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
       for (const object of page.objects) {
-        const name = object.key.slice(prefix.length).replace(/\\.json$/, "");
+        const name = object.key.slice(prefix.length).replace(/\.json$/, "");
         if (name) keys.push(name);
       }
       cursor = page.truncated ? page.cursor : undefined;
