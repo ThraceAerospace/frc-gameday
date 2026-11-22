@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyEventThisWeek, lifecycleFor } from "../src/calendar.ts";
+import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "../src/calendar.ts";
 
 test("classifies the Monday-Sunday week using the event timezone", () => {
   const event = { start_date: "2026-11-22", end_date: "2026-11-23", timezone: "America/Los_Angeles" };
@@ -35,6 +35,18 @@ test("rejects malformed dates and invalid IANA timezones", () => {
   assert.equal(classifyEventThisWeek({
     start_date: "2026-11-22", end_date: "2026-11-23", timezone: "Not/A_Timezone",
   }, Date.now()), null);
+});
+
+test("validates lifecycle inputs before coverage audits expect a runtime", () => {
+  assert.equal(isValidEventLifecycleInput({
+    start_date: "2026-11-23", end_date: "2026-11-25", timezone: "America/New_York",
+  }), true);
+  assert.equal(isValidEventLifecycleInput({
+    start_date: "2026-02-30", end_date: "2026-03-01", timezone: "UTC",
+  }), false);
+  assert.equal(isValidEventLifecycleInput({
+    start_date: "2026-11-23", end_date: "2026-11-25", timezone: "Not/A_Timezone",
+  }), false);
 });
 
 test("determines lifecycle using the event's local calendar date", () => {
