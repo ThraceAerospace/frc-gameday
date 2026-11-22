@@ -41,7 +41,7 @@ This is the first extraction, not the completed event-readiness program. It curr
 2. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
 3. Deploy `fieldview-jobs` first. Its service binding targets the already-deployed `fieldview-runtime` Worker.
 4. Deploy `fieldview-runtime` second. Its service binding now targets the deployed `fieldview-jobs` Worker, and its R2-backed public reads/internal initialization route become active.
-5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next daily Cron occurrence. Manual triggers use a deterministic ID per UTC date; a duplicate manual trigger returns HTTP 409. The Workflow concurrency limit serializes manual and schedule-created instances.
+5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next native Workflow schedule occurrence. Manual triggers use a deterministic ID per UTC date; a duplicate manual trigger returns HTTP 409. The Workflow concurrency limit serializes manual and schedule-created instances.
 6. Confirm the Workflow summary reports successful discovery/classification and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
@@ -189,7 +189,7 @@ The first extraction is designed around the Free plan rather than assuming paid-
 | Resource | Free-plan constraint relevant to FieldView | Design response |
 |---|---|---|
 | Workers | 100,000 requests/day shared with Workflow requests; 10 ms CPU per invocation; 128 MB memory; 50 subrequests per invocation | No classic Worker Cron Trigger is used for this job; the native Workflow schedule starts it. Keep bounded batches and avoid per-event Workers. |
-| Workflows | 100,000 requests/day shared with Workers; 10 ms CPU per step; 3,000 steps/day; 1 GB-month Workflow storage | One discovery step, one projection/manifest step, then one initialization step per ten events; step results are compact |
+| Workflows | 100,000 requests/day shared with Workers; 10 ms CPU per step; 3,000 steps/day; 1 GB-month Workflow storage | Three per-year discovery steps, 25-event classification steps, per-year projection publication, a final pointer, and one initialization step per ten events; step results stay compact |
 | R2 | 10 GB-month storage, 1 million Class A operations/month, 10 million Class B operations/month, free egress | Store immutable year snapshots, small per-run manifests, and the current this-week projection; do not write one object per event |
 | KV | 100,000 reads/day and 1,000 writes/day | Not used for the daily discovery projection; R2 is a better fit for these complete snapshot writes |
 | Queues | 10,000 operations/day and 24-hour Free-plan message retention | Not required for this first slice; Workflows provide orchestration and retries |
