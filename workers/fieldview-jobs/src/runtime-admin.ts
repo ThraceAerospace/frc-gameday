@@ -175,7 +175,6 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     // Seeding is not complete merely because the requests were queued. Wait for
     // each participant's authoritative event-history resource before scheduling
     // the historical events associated with that team.
-    const historyReady = new Set<string>();
     for (let offset = 0; offset < teamKeys.length; offset += 10) {
       const batch = teamKeys.slice(offset, offset + 10);
       for (let attempt = 0; attempt < 180; attempt += 1) {
@@ -191,13 +190,11 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
           }));
           return statuses;
         });
-        for (const item of result) if (item.ready) historyReady.add(item.teamKey);
         if (result.every((item) => item.ready)) break;
         if (attempt === 179) throw new Error("Timed out waiting for participant team event histories");
         await step.sleep("wait-participant-history-" + offset + "-" + attempt, "5 seconds");
       }
     }
-    const eventDirectoryCache = new Map<number, EventDirectory | null>();
     const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
     for (let offset = 0; offset < teamKeys.length; offset += 10) {
       const batch = teamKeys.slice(offset, offset + 10);
@@ -386,6 +383,32 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             }));
             return { requested: results.length };
           });
+          let analyticsReady = false;
+          for (let analyticsAttempt = 0; analyticsAttempt < 180; analyticsAttempt += 1) {
+            const analytics = await step.do("check-season-analytics-" + offset + "-" + analyticsAttempt, async () => {
+              return Promise.all(batch.map(async (eventKey) => {
+                const response = await dispatch(this.env, "event", eventKey, "state", {}, p.year);
+                if (!response.ok) return { key: eventKey, status: "failed" };
+                const state = await response.json() as { analytics?: { status?: string } };
+                return { key: eventKey, status: state.analytics?.status ?? "pending" };
+              }));
+            });
+            analyticsReady = analytics.every((item) => ["succeeded", "partial", "failed"].includes(item.status));
+            if (analyticsReady) {
+              for (const item of analytics) {
+                if (item.status === "succeeded") counts.analytics_succeeded += 1;
+                else if (item.status === "partial") counts.analytics_partial += 1;
+                else {
+                  counts.analytics_failed += 1;
+                  errors.push({ key: item.key, detail: "EventAnalytics calculation failed", at: Date.now() });
+                }
+              }
+              break;
+            }
+            if (analyticsAttempt === 179) throw new Error("Timed out waiting for EventAnalytics in event batch " + offset);
+            await step.sleep("wait-season-analytics-" + offset + "-" + analyticsAttempt, "5 seconds");
+          }
+          if (!analyticsReady) throw new Error("EventAnalytics did not reach a terminal state");
           break;
         }
         if (attempt === 179) {
