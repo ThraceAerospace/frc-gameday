@@ -33,6 +33,7 @@ interface WorkflowParameters {
 
 interface AdminDiscoveryJobRecord {
   year: number;
+  mode: "year";
   workflow_id: string;
   status: "running" | "completed" | "failed";
   stage: string;
@@ -476,7 +477,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       step.do(name, async () => {
         const current = await readJson<AdminDiscoveryJobRecord>(this.env.DISCOVERY_BUCKET, jobKey);
         const next: AdminDiscoveryJobRecord = {
-          year: season, workflow_id: jobId, status: "running", stage: "starting",
+          year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
           events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
           started_at: requestedAt, updated_at: Date.now(), ...current, ...patch,
           workflow_id: jobId, year: season, updated_at: Date.now(),
@@ -619,7 +620,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         return { published: true };
       });
       const summary = {
-        year: season, workflow_id: jobId, status: "completed", stage: "complete",
+        year: season, mode: "year", workflow_id: jobId, status: "completed", stage: "complete",
         events: eventDirectory.count, teams: teamKeys.length, team_pages: teamPages,
         steps: 4 + teamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
         error: null, started_at: requestedAt, updated_at: Date.now(),
@@ -636,7 +637,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       await step.do("record-manual-discovery-failure", async () => {
         const current = await readJson<AdminDiscoveryJobRecord>(this.env.DISCOVERY_BUCKET, jobKey);
         const failed: AdminDiscoveryJobRecord = {
-          year: season, workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
+          year: season, mode: "year", workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
           events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
           steps: current?.steps ?? 0, error: detail.slice(0, 500),
           started_at: requestedAt, updated_at: Date.now(),
@@ -704,7 +705,7 @@ export default {
       const requestedAt = Date.now();
       const workflowId = `admin-discovery-${year}-${requestedAt}`;
       const job: AdminDiscoveryJobRecord = {
-        year, workflow_id: workflowId, status: "running", stage: "queued",
+        year, mode: "year", workflow_id: workflowId, status: "running", stage: "queued",
         events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
         started_at: requestedAt, updated_at: requestedAt,
       };
