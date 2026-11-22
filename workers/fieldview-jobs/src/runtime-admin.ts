@@ -173,8 +173,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     if (!teamKeys.length) throw new Error("Timed out waiting for event participant roster");
     await update({ phase: "seeding-event-teams", total: teamKeys.length, team_keys: teamKeys });
     let processed = 0;
-    for (let offset = 0; offset < teamKeys.length; offset += 10) {
-      const batch = teamKeys.slice(offset, offset + 10);
+    for (let offset = 0; offset < teamKeys.length; offset += 100) {
+      const batch = teamKeys.slice(offset, offset + 100);
       await step.do("enqueue-event-team-batch-" + offset, async () => {
         const results = await Promise.all(batch.map(async (teamKey) => {
           const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
@@ -191,8 +191,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     // Seeding is not complete merely because the requests were queued. Wait for
     // each participant's authoritative event-history resource before scheduling
     // the historical events associated with that team.
-    for (let offset = 0; offset < teamKeys.length; offset += 10) {
-      const batch = teamKeys.slice(offset, offset + 10);
+    for (let offset = 0; offset < teamKeys.length; offset += 100) {
+      const batch = teamKeys.slice(offset, offset + 100);
       for (let attempt = 0; attempt < 180; attempt += 1) {
         const result = await step.do("verify-participant-history-" + offset + "-" + attempt, async () => {
           const statuses = await Promise.all(batch.map(async (teamKey) => {
@@ -212,8 +212,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       }
     }
     const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
-    for (let offset = 0; offset < teamKeys.length; offset += 10) {
-      const batch = teamKeys.slice(offset, offset + 10);
+    for (let offset = 0; offset < teamKeys.length; offset += 100) {
+      const batch = teamKeys.slice(offset, offset + 100);
       await step.do("read-participant-histories-" + offset, async () => {
         await Promise.all(batch.map(async (teamKey) => {
           const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
