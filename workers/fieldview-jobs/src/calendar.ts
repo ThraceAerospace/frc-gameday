@@ -85,11 +85,20 @@ export interface EventLifecycleDecision {
   completedUntil?: number;
 }
 
+export function isValidEventLifecycleInput(event: Pick<TbaEvent, "start_date" | "end_date" | "timezone">): boolean {
+  if (!validDateOnly(event.start_date) || !validDateOnly(event.end_date) ||
+      event.start_date > event.end_date || typeof event.timezone !== "string" || !event.timezone) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: event.timezone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Match EventRuntime's existing timezone-aware lifecycle and 24-hour retention policy. */
 export function lifecycleFor(event: TbaEvent, now: number): EventLifecycleDecision {
-  if (!validDateOnly(event.start_date) || !validDateOnly(event.end_date) || event.start_date > event.end_date) {
-    return { lifecycle: "expired" };
-  }
+  if (!isValidEventLifecycleInput(event)) return { lifecycle: "expired" };
   const start = zonedMidnight(event.start_date, event.timezone);
   const endExclusive = zonedMidnight(addDays(event.end_date, 1), event.timezone);
   if (start === null || endExclusive === null || endExclusive <= start) return { lifecycle: "expired" };
