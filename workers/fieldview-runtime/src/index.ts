@@ -222,7 +222,7 @@ export default {
             events.push(...projection.events);
           }
           if (complete) {
-            const stale = Date.now() - checkedAt > 2 * 60 * 60_000;
+            const stale = Date.now() - checkedAt > 36 * 36 * 60 * 60_000;
             events.sort((a, b) => String(a.key).localeCompare(String(b.key)));
             return Response.json({
               evaluatedAt: pointer.runAt,
@@ -253,7 +253,7 @@ export default {
             year: number; events: Array<Record<string, unknown>>;
             updatedAt: number; checkedAt: number; etag: string | null;
           }>();
-          const stale = Date.now() - discovery.checkedAt > 60 * 60_000;
+          const stale = Date.now() - discovery.checkedAt > 36 * 60 * 60_000;
           const retrievedAt = new Date(discovery.updatedAt).toISOString();
           return Response.json({
             year: discovery.year,
@@ -312,7 +312,7 @@ export default {
       if (teams.length !== manifest.teamCount) {
         return Response.json({ error: "Published team discovery count does not match its pages" }, { status: 503 });
       }
-      const stale = Date.now() - manifest.checkedAt > 60 * 60_000;
+      const stale = Date.now() - manifest.checkedAt > 36 * 60 * 60_000;
       const retrievedAt = new Date(manifest.updatedAt).toISOString();
       return Response.json({
         year,
