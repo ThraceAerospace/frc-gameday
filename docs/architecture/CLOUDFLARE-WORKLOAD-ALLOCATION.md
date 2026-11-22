@@ -23,13 +23,13 @@ The first migration slice is implemented in this branch. It moves current-season
 
 ### Components
 
-- `workers/fieldview-jobs` is a separate regular Worker. Its one daily Cron Trigger creates a deterministic `DailyEventReadinessWorkflow` instance for that scheduled date.
+- `workers/fieldview-jobs` is a separate regular Worker. The Workflow binding owns its daily `0 16 * * *` schedule directly; no top-level Worker Cron Trigger or `scheduled()` handler is needed. Workflow concurrency is capped at one so a manual run cannot overlap the scheduled run.
 - `DailyEventReadinessWorkflow` fetches TBA event directories for the UTC year containing the run date plus the adjacent years. The adjacent-year reads are intentional: event inclusion is calculated in each event's IANA timezone, so a week around New Year can include events whose season year differs from the Worker UTC year.
 - The Workflow stores complete per-year discovery documents in the shared `fieldview-discovery` R2 bucket. A TBA 304 updates `checkedAt` while retaining the last good event payload and its original `updatedAt`.
 - Discovery runs as one step per year and writes immutable 50-event R2 chunks before publishing the directory document. Classification then runs one step per 50-event chunk, keeping repeated date/timezone calculations and JSON parsing bounded under the Free plan. The Workflow classifies the Monday-Sunday window using each event's timezone and inclusive date-only start/end values, writes versioned per-year projections and a per-run manifest to R2, and publishes a single current-generation pointer only after every projection is written.
 - It then initializes matching EventRuntime instances in batches of ten through a narrow service-binding endpoint on `fieldview-runtime`. The runtime Worker reads the pointer and all versioned per-year projections before returning a complete this-week result; it does not expose a partially published generation.
 - `fieldview-runtime` reads `/events/discovery` and `/events/this-week` from R2 when those projections exist. The this-week projection uses a versioned per-year snapshot set plus one generation pointer, so a failed run cannot expose a mixed partial generation. The existing TaskScheduler read path remains as a compatibility fallback during rollout.
-- The runtime Worker no longer has the daily Cron Trigger. TaskScheduler no longer starts discovery merely because it activates, and its disabled-scheduler alarm path no longer runs daily classification. Its other administrative jobs and legacy responsibilities remain in place.
+- Neither Worker uses a classic Cron Trigger for this job. The native Workflow schedule starts the run. TaskScheduler no longer starts discovery merely because it activates, and its alarm path no longer runs daily classification. Its other administrative jobs and legacy responsibilities remain in place.
 
 ### Explicitly not included in this first slice
 
@@ -41,7 +41,7 @@ This is the first extraction, not the completed event-readiness program. It curr
 2. Configure `TBA_API_KEY` and `RUNTIME_ADMIN_TOKEN` as secrets on `fieldview-jobs`. The latter is still the prototype authorization mechanism; it must be replaced before production.
 3. Deploy `fieldview-jobs` first. Its service binding targets the already-deployed `fieldview-runtime` Worker.
 4. Deploy `fieldview-runtime` second. Its service binding now targets the deployed `fieldview-jobs` Worker, and its R2-backed public reads/internal initialization route become active.
-5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next daily Cron occurrence. Manual and scheduled triggers share one deterministic instance ID per UTC date; a duplicate returns HTTP 409.
+5. Trigger the first run with authenticated `POST /internal/admin/daily-event-readiness` on `fieldview-runtime`, or wait for the next daily Cron occurrence. Manual triggers use a deterministic ID per UTC date; a duplicate manual trigger returns HTTP 409. The Workflow concurrency limit serializes manual and schedule-created instances.
 6. Confirm the Workflow summary reports successful discovery/classification and that the runtime Worker serves both R2-backed read routes before relying on the old TaskScheduler discovery cache being retired.
 
 The Worker configs deliberately use the same R2 bucket name. No R2 bucket identifier is embedded in source; bucket creation is an account-level deployment prerequisite.
@@ -188,7 +188,7 @@ The first extraction is designed around the Free plan rather than assuming paid-
 
 | Resource | Free-plan constraint relevant to FieldView | Design response |
 |---|---|---|
-| Workers | 100,000 requests/day shared with Workflow requests; 10 ms CPU per invocation; 128 MB memory; 50 subrequests per invocation; five Cron Triggers/account | One daily Cron on the jobs Worker; bounded batches; no per-event Cron or global scheduler DO |
+| Workers | 100,000 requests/day shared with Workflow requests; 10 ms CPU per invocation; 128 MB memory; 50 subrequests per invocation | No classic Worker Cron Trigger is used for this job; the native Workflow schedule starts it. Keep bounded batches and avoid per-event Workers. |
 | Workflows | 100,000 requests/day shared with Workers; 10 ms CPU per step; 3,000 steps/day; 1 GB-month Workflow storage | One discovery step, one projection/manifest step, then one initialization step per ten events; step results are compact |
 | R2 | 10 GB-month storage, 1 million Class A operations/month, 10 million Class B operations/month, free egress | Store immutable year snapshots, small per-run manifests, and the current this-week projection; do not write one object per event |
 | KV | 100,000 reads/day and 1,000 writes/day | Not used for the daily discovery projection; R2 is a better fit for these complete snapshot writes |
