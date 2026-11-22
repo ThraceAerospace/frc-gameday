@@ -1,6 +1,4 @@
 import type { EventKey, TeamKey } from "../ids.js";
-import type { FieldViewEventTeam } from "../event.js";
-import type { FieldViewMatch } from "../match.js";
 import type { FieldViewSourceMetadata } from "../source-metadata.js";
 import type { FieldViewTeam, FieldViewTeamEventState } from "../team.js";
 import type { FieldViewTeamEventAnalytics } from "../analytics.js";
@@ -9,9 +7,11 @@ export interface NormalizeFieldViewTeamEventStateInput {
   event_key: EventKey;
   team_key: TeamKey;
   sources: FieldViewTeamEventState["sources"];
-  team?: FieldViewTeam | null;
-  event_team?: FieldViewEventTeam | null;
-  matches?: FieldViewMatch[] | null;
+  /** Foreign inputs used only to construct references; never persisted here. */
+  team?: import("../team.js").FieldViewTeam | null;
+  event_team?: import("../event.js").FieldViewEventTeam | null;
+  matches?: import("../match.js").FieldViewMatch[] | null;
+  event_source_revision?: number | null;
   analytics?: FieldViewTeamEventAnalytics | null;
 }
 
@@ -49,9 +49,24 @@ export function normalizeFieldViewTeamEventState(
     event_key: input.event_key,
     team_key: input.team_key,
     sources: input.sources,
-    ...(input.team === undefined ? {} : { team: input.team }),
-    ...(input.event_team === undefined ? {} : { event_team: input.event_team }),
-    ...(input.matches === undefined ? {} : { matches: input.matches }),
+    ...(input.event_team === undefined ? {} : {
+      event_team_ref: input.event_team === null ? null : {
+        owner: "event-runtime",
+        owner_id: input.event_key,
+        record_type: "event-team",
+        record_id: input.team_key,
+        revision: input.event_source_revision ?? null,
+      },
+    }),
+    ...(input.matches === undefined ? {} : {
+      match_refs: input.matches === null ? null : input.matches.map((match) => ({
+        owner: "event-runtime",
+        owner_id: input.event_key,
+        record_type: "match",
+        record_id: match.key,
+        revision: input.event_source_revision ?? null,
+      })),
+    }),
     ...(input.analytics === undefined ? {} : { analytics: input.analytics }),
   };
 }
