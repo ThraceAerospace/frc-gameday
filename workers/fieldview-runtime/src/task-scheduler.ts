@@ -365,6 +365,18 @@ export class TaskScheduler {
       : Promise.resolve();
   }
 
+  private async readR2Json<T>(key: string): Promise<T | undefined> {
+    const object = await this.env.DISCOVERY_BUCKET?.get(key);
+    if (!object) return undefined;
+    try { return await object.json<T>(); }
+    catch { return undefined; }
+  }
+
+  private async readR2Keys(key: string): Promise<string[]> {
+    const value = await this.readR2Json<unknown>(key);
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  }
+
   async fetch(request: Request): Promise<Response> {
     const startedAt = performance.now();
     const url = new URL(request.url);
@@ -731,7 +743,11 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid inventory season year" }, { status: 400 });
       }
       const storageKey = kind === "event" ? "registry:events" : "registry:teams";
-      const registered = await this.storage.get<string[]>(storageKey) ?? [];
+      const r2DiscoveredKeys = kind === "event" ? await this.readR2Keys(`registry/events/${year}.json`) : [];
+      const registered = [...new Set([
+        ...(await this.storage.get<string[]>(storageKey) ?? []),
+        ...r2DiscoveredKeys,
+      ])];
       const discovery = kind === "event"
         ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
           await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))
@@ -744,7 +760,9 @@ export class TaskScheduler {
         .filter((key) => key.toLowerCase().includes(query)).sort();
       return Response.json({
         kind, year, query, total: keys.length, cursor,
-        discovery_ready: discovery !== undefined && (kind === "event" || (discovery as TeamDiscoveryCache).complete === true),
+        discovery_ready: kind === "event"
+          ? discovery !== undefined || r2DiscoveredKeys.length > 0
+          : (discovery as TeamDiscoveryCache | undefined)?.complete === true,
         next_cursor: cursor + limit < keys.length ? cursor + limit : null,
         keys: keys.slice(cursor, cursor + limit),
       }, { headers: { "Cache-Control": "no-store" } });
@@ -762,10 +780,15 @@ export class TaskScheduler {
         return Response.json({ error: "Invalid entity season year" }, { status: 400 });
       }
       const registryKey = kind === "event" ? "registry:events" : "registry:teams";
-      const registered = await this.storage.get<string[]>(registryKey) ?? [];
+      const r2DiscoveredKeys = kind === "event" ? await this.readR2Keys(`registry/events/${year}.json`) : [];
+      const registered = [...new Set([
+        ...(await this.storage.get<string[]>(registryKey) ?? []),
+        ...r2DiscoveredKeys,
+      ])];
       const discovery = kind === "event"
         ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))
+          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
+          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`))
         : (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
           await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
       const discovered = kind === "event"
@@ -875,7 +898,8 @@ export class TaskScheduler {
 
     if (request.method === "GET" && url.pathname === "/admin/overview") {
       const currentSeasonYear = new Date().getUTCFullYear();
-      const currentSeasonIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentSeasonYear);
+      const currentSeasonIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentSeasonYear) ??
+        await this.readR2Json<DiscoveryCache>(`discovery/events/${currentSeasonYear}.json`);
       const currentSeasonCheckedAt = currentSeasonIndex?.checkedAt ?? currentSeasonIndex?.updatedAt ?? null;
       const currentSeasonIndexStatus = !currentSeasonIndex ? "missing"
         : currentSeasonCheckedAt !== null && Date.now() - currentSeasonCheckedAt > eventPollingPolicy(this.env).discoveryIntervalMs
@@ -883,6 +907,8 @@ export class TaskScheduler {
       const eventKeys = [...new Set([
         ...(await this.storage.get<string[]>("registry:events") ?? []),
         ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
+        ...(await this.readR2Keys(`registry/events/${currentSeasonYear}.json`)),
+        ...(await this.readR2Keys("registry/runtime-events.json")),
       ])].sort();
       const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
       // The overview is deliberately metadata-only. Never fan out to dozens of
@@ -1158,6 +1184,7 @@ export class TaskScheduler {
         const registeredEvents = new Set([
           ...(await this.storage.get<string[]>("registry:runtime-events") ?? []),
           ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
+          ...(await this.readR2Keys("registry/runtime-events.json")),
         ]);
         const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
         const batch = all.slice(audit.cursor, audit.cursor + 5);
