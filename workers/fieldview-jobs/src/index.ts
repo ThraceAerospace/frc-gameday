@@ -133,9 +133,9 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     });
     const years = [currentSeason.year];
 
-    // Publish the current-season team directory from TBA's paginated endpoint.
-    // Each page is an immutable catalog record; the manifest is the publication
-    // boundary and is written only after every page has been validated.
+    // Orchestrate current-season team directory acquisition through DiscoveryStore.
+    // DiscoveryStore validates and persists each page, then publishes the manifest
+    // only after every page has been validated.
     const teamDirectoryGeneration = await step.do("create-team-directory-generation", async () => Date.now());
     let teamPageCount = 0;
     let teamCount = 0;
