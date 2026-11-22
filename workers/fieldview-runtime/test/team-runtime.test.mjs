@@ -121,7 +121,8 @@ test("TeamRuntime public snapshots queue missing resources without blocking on p
   assert.equal(calls.length, 0, "provider I/O must not run inline with the admin request");
   await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7, "the TeamRuntime alarm fans out all seven independent resources");
-  assert.equal(storage.values.get("team-state:2026")?.team?.team_number, 3461, "provider polling refreshes the persisted canonical TeamState");
+  assert.equal(storage.values.get("team-state:2026:publication")?.state?.team?.team_number, 3461, "provider polling refreshes the single canonical TeamState publication");
+  assert.equal(storage.values.has("team-state:2026"), false, "the duplicate raw TeamState key is not persisted");
   const second = await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": teamKey } }));
   const snapshot = await second.json();
   assert.equal(snapshot.team.team_number, 3461);
@@ -404,11 +405,12 @@ test("TeamRuntime initializes a persisted partial TeamState on its first non-sna
     },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(storage.values.get("team-state:2026"), {
+  assert.deepEqual(storage.values.get("team-state:2026:publication")?.state, {
     team_key: teamKey,
     year: 2026,
     sources: {},
   });
+  assert.equal(storage.values.has("team-state:2026"), false, "TeamState is stored only inside its canonical publication");
 });
 
 
@@ -549,10 +551,12 @@ test("TeamRuntime always creates the current-season TeamState when first reached
   assert.equal(storage.values.has("team-state:" + currentYear), false);
   assert.equal(storage.values.has("team-state:" + historicalYear), false);
   await runtime.alarm();
-  assert.equal(storage.values.get("team-state:" + currentYear)?.year, currentYear,
+  assert.equal(storage.values.get("team-state:" + currentYear + ":publication")?.state?.year, currentYear,
     "background runtime initialization restores the current-season state");
-  assert.equal(storage.values.get("team-state:" + historicalYear)?.year, historicalYear,
+  assert.equal(storage.values.get("team-state:" + historicalYear + ":publication")?.state?.year, historicalYear,
     "the requested historical season is materialized in background");
+  assert.equal(storage.values.has("team-state:" + currentYear), false);
+  assert.equal(storage.values.has("team-state:" + historicalYear), false);
 });
 
 
