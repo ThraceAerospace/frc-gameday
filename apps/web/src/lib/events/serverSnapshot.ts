@@ -1,4 +1,4 @@
-import type { FieldViewDistrictDirectory, FieldViewDistrictSnapshot, FieldViewEvent, FieldViewEventState, FieldViewTeam, FieldViewTeamState } from "@fieldview/domain";
+import type { FieldViewEvent, FieldViewEventState, FieldViewTeam, FieldViewTeamState } from "@fieldview/domain";
 
 type RuntimeFetchInit = RequestInit & {
   next?: { revalidate?: number; tags?: string[] };
@@ -229,39 +229,4 @@ export async function getCanonicalTeamSnapshot(
   } catch {
     return null;
   }
-}
-
-/** Read the Worker-owned district directory without triggering provider acquisition. */
-export async function getCanonicalDistrictDirectory(
-  year: number,
-  fetcher: typeof fetch = fetch,
-): Promise<FieldViewDistrictDirectory | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  if (!baseUrl || !Number.isSafeInteger(year)) return null;
-  try {
-    const url = new URL("/districts/discovery?year=" + year, baseUrl);
-    const response = await fetchCanonicalRuntime("district-discovery", url, fetcher);
-    if (!response.ok) return null;
-    const value = await readCanonicalJson<FieldViewDistrictDirectory>("district-discovery", response);
-    if (value.year !== year || (value.districts !== null && value.districts !== undefined && !Array.isArray(value.districts))) return null;
-    return value;
-  } catch { return null; }
-}
-
-/** Read one canonical district aggregate; this endpoint never acquires missing resources. */
-export async function getCanonicalDistrictSnapshot(
-  districtKey: string,
-  year: number,
-  fetcher: typeof fetch = fetch,
-): Promise<FieldViewDistrictSnapshot | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  if (!baseUrl || !districtKey || !Number.isSafeInteger(year)) return null;
-  try {
-    const url = new URL("/districts/" + encodeURIComponent(districtKey) + "/snapshot?year=" + year, baseUrl);
-    const response = await fetchCanonicalRuntime("district-snapshot", url, fetcher);
-    if (!response.ok) return null;
-    const value = await readCanonicalJson<FieldViewDistrictSnapshot>("district-snapshot", response);
-    if (value.district_key !== districtKey || value.year !== year) return null;
-    return value;
-  } catch { return null; }
 }
