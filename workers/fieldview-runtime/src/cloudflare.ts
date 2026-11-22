@@ -55,6 +55,8 @@ export interface RuntimeEnvironment {
   TASK_SCHEDULER?: DurableObjectNamespaceLike;
   /** Immutable discovery/read projections written by the jobs Workflow. */
   DISCOVERY_BUCKET?: R2BucketLike;
+  /** Service binding used only to create manually requested background Workflows. */
+  FIELDVIEW_JOBS?: { fetch(request: Request): Promise<Response> };
   EVENT_DISCOVERY_INTERVAL_MS?: string | number;
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
