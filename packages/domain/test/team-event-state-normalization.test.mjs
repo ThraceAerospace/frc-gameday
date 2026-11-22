@@ -54,3 +54,21 @@ test("TeamEventState rejects matches in which the team did not appear", () => {
     matches: [{ ...match, alliances: { red: { team_keys: ["frc2"], score: 0 }, blue: { team_keys: [], score: 0 } } }],
   }), /did not appear/);
 });
+
+test("TeamEventState validates team identity and source revision for foreign references", () => {
+  assert.throws(() => normalizeFieldViewTeamEventState({
+    event_key: "2026test", team_key: "frc1", sources,
+    team: { key: "frc2", team_number: 2 },
+  }), /Team identity/);
+  assert.throws(() => normalizeFieldViewTeamEventState({
+    event_key: "2026test", team_key: "frc1", sources,
+    matches: [match], event_source_revision: -1,
+  }), /source revision/);
+  const state = normalizeFieldViewTeamEventState({
+    event_key: "2026test", team_key: "frc1", sources,
+    event_team: { event_key: "2026test", team_key: "frc1", sources: {} },
+    matches: [match], event_source_revision: 7,
+  });
+  assert.equal(state.event_team_ref.revision, 7);
+  assert.equal(state.match_refs[0].revision, 7);
+});
