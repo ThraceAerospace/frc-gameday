@@ -360,12 +360,7 @@ export class TaskScheduler {
             const legacyRecords = await this.storage.list({ prefix });
             for (const key of legacyRecords.keys()) await this.storage.delete(key);
           }
-          const year = new Date().getUTCFullYear();
-          const index = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year);
-          const checkedAt = index?.checkedAt ?? index?.updatedAt ?? 0;
-          if (!index || Date.now() - checkedAt >= eventPollingPolicy(this.env).discoveryIntervalMs) {
-            await this.queueCurrentSeasonDiscovery();
-          }
+          // Scheduled discovery is owned by the fieldview-jobs Workflow.
         })
       : Promise.resolve();
   }
@@ -1459,25 +1454,9 @@ export class TaskScheduler {
   }
 
   private async handleAlarm(): Promise<void> {
-    // Recover the mandatory current-season event index before advancing other
-    // scheduler work. A failed discovery preserves the previous index and
-    // schedules a retry; no visitor request is needed to start recovery.
-    const currentYear = new Date().getUTCFullYear();
-    const currentIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentYear);
-    const currentCheckedAt = currentIndex?.checkedAt ?? currentIndex?.updatedAt ?? 0;
-    if (!currentIndex || Date.now() - currentCheckedAt >= eventPollingPolicy(this.env).discoveryIntervalMs) {
-      try {
-        await this.measureStage("current-season-index-recovery", () =>
-          this.refreshCurrentYearEventDirectory(eventPollingPolicy(this.env)));
-        await this.storage.delete("scheduler:current-season-index-error");
-      } catch (error) {
-        await this.storage.put("scheduler:current-season-index-error",
-          error instanceof Error ? error.message : String(error));
-        await this.storage.setAlarm(Date.now() + 60_000);
-        return;
-      }
-    }
-
+    // Current-season discovery and this-week projection are owned by the
+    // fieldview-jobs Workflow; this DO alarm only advances legacy admin jobs
+    // while those responsibilities are being migrated.
     const eventSeedJobs = await this.storage.list<EventTeamSeedJob>({ prefix: "admin:event-team-seed:" });
     const activeEventSeed = [...eventSeedJobs.values()].find((job) => job.status === "running");
     if (activeEventSeed) {
@@ -1526,18 +1505,7 @@ export class TaskScheduler {
       return;
     }
     if (await this.storage.get<boolean>("scheduler:enabled") !== true) {
-      const dailyRequested = await this.storage.get<boolean>("scheduler:daily-run-requested") === true;
-      const weeklyProgress = await this.storage.get<ThisWeekProgress>(THIS_WEEK_PROGRESS_KEY);
-      const lifecycleProgress = await this.storage.get<{ cursor: number }>("scheduler:event-lifecycle-progress");
-      if (!dailyRequested && !weeklyProgress && !lifecycleProgress) return;
-      try {
-        const pending = await this.runDailyClassification(eventPollingPolicy(this.env));
-        if (!pending) await this.storage.deleteAlarm();
-      } catch (error) {
-        const retryAt = Date.now() + 60_000;
-        await this.storage.put("scheduler:this-week-error", error instanceof Error ? error.message : String(error));
-        await this.storage.setAlarm(Math.max(Date.now() + 100, retryAt));
-      }
+      await this.storage.deleteAlarm();
       return;
     }
     const policy = eventPollingPolicy(this.env);
