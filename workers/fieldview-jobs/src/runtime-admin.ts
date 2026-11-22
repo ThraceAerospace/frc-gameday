@@ -42,7 +42,7 @@ async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", ke
     body: json({ kind, key, action, ...(year === undefined ? {} : { year }), ...body }),
   }));
 }
-function validTeam(key: unknown): key is string { return typeof key === "string" && /^frc\\d+$/.test(key); }
+function validTeam(key: unknown): key is string { return typeof key === "string" && /^frc\d+$/.test(key); }
 function validEvent(key: unknown): key is string { return typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key); }
 
 export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnvironment, RuntimeAdminParameters> {
