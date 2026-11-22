@@ -1,13 +1,13 @@
-export interface DiscoveryObjectLike { json<T>(): Promise<T>; text(): Promise<string>; }
-export interface DiscoveryBucketLike {
-  get(key: string): Promise<DiscoveryObjectLike | null>;
+export interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
+export interface DiscoveryStoreClient {
+  get(key: string): Promise<DiscoveryRecord | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
 interface FetcherLike { fetch(request: Request): Promise<Response>; }
 
-/** R2-shaped adapter backed by the Runtime Worker's private DiscoveryStore DO. */
-export function createDiscoveryBucket(runtime: FetcherLike, token: string): DiscoveryBucketLike {
+/** service-binding client backed by the Runtime Worker's private DiscoveryStore DO. */
+export function createDiscoveryStoreClient(runtime: FetcherLike, token: string): DiscoveryStoreClient {
   const send = async (path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", "Bearer " + token);

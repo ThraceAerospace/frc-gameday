@@ -13,14 +13,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-interface DiscoveryObjectLike { json<T>(): Promise<T>; text(): Promise<string>; }
-interface DiscoveryBucketLike {
-  get(key: string): Promise<DiscoveryObjectLike | null>;
+interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
+interface DiscoveryStoreClient {
+  get(key: string): Promise<DiscoveryRecord | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
-function discoveryBucket(env: RuntimeEnvironment): DiscoveryBucketLike | undefined {
-  if (!env.DISCOVERY_STORE) return undefined;
+function discoveryStore(env: RuntimeEnvironment): DiscoveryStoreClient {
+  if (!env.DISCOVERY_STORE) return {
+    async get() { return null; }, async put() {}, async list() { return { objects: [], truncated: false }; },
+  };
   const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
   return {
     async get(key) {
@@ -51,9 +53,9 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!discoveryBucket(env)) return;
+  if (!discoveryStore(env)) return;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-  await discoveryBucket(env).put(prefix + key + ".json", "{}", {
+  await discoveryStore(env).put(prefix + key + ".json", "{}", {
     httpMetadata: { contentType: "application/json" },
   });
 }
@@ -274,15 +276,15 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (discoveryBucket(env)) {
-        const pointerObject = await discoveryBucket(env).get("projections/events/this-week/current.json");
+      if (discoveryStore(env)) {
+        const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
         if (pointerObject) {
           const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
           const events: Array<Record<string, unknown>> = [];
           let checkedAt = Number.MAX_SAFE_INTEGER;
           let complete = true;
           for (const year of pointer.years) {
-            const object = await discoveryBucket(env).get(
+            const object = await discoveryStore(env).get(
               `projections/events/this-week/${pointer.runAt}/${year}.json`,
             );
             if (!object) { complete = false; break; }
@@ -318,8 +320,8 @@ export default {
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
       const requestedYear = Number(url.searchParams.get("year"));
-      if (discoveryBucket(env) && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
-        const object = await discoveryBucket(env).get("discovery/events/" + requestedYear + ".json");
+      if (discoveryStore(env) && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
+        const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
         if (object) {
           const discovery = await object.json<{
             year: number; events: Array<Record<string, unknown>>;
@@ -358,8 +360,8 @@ export default {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
-      if (!discoveryBucket(env)) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
-      const manifestObject = await discoveryBucket(env).get(`discovery/teams/${year}.json`);
+      if (!discoveryStore(env)) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      const manifestObject = await discoveryStore(env).get(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
           status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
@@ -373,7 +375,7 @@ export default {
       }
       const teams: Array<Record<string, unknown>> = [];
       for (let page = 0; page < manifest.pageCount; page += 1) {
-        const pageObject = await discoveryBucket(env).get(
+        const pageObject = await discoveryStore(env).get(
           `discovery/team-pages/${year}/${manifest.generation}/${page}.json`,
         );
         if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
@@ -581,7 +583,7 @@ export default {
         return Response.json({ error: "Invalid inventory query" }, { status: 400 });
       }
       const discoveryKey = kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`;
-      const discoveryObject = await discoveryBucket(env)?.get(discoveryKey);
+      const discoveryObject = await discoveryStore(env)?.get(discoveryKey);
       let discovered: string[] = [];
       if (discoveryObject) {
         try {
@@ -593,10 +595,10 @@ export default {
       }
       const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
       const runtimeKeys: string[] = [];
-      if (discoveryBucket(env)) {
+      if (discoveryStore(env)) {
         let cursorToken: string | undefined;
         do {
-          const page = await discoveryBucket(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
+          const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
           for (const object of page.objects) {
             const key = object.key.slice(prefix.length).replace(/\.json$/, "");
             if (key && (kind === "team" || key.startsWith(String(year)))) runtimeKeys.push(key);
@@ -617,7 +619,7 @@ export default {
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
           !Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
-      const directoryObject = await discoveryBucket(env)?.get(
+      const directoryObject = await discoveryStore(env)?.get(
         kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`,
       );
       let discovered = false;
@@ -629,7 +631,7 @@ export default {
             : Array.isArray(directory) && directory.includes(key);
         } catch { discovered = false; }
       }
-      const marker = await discoveryBucket(env)?.get(
+      const marker = await discoveryStore(env)?.get(
         (kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/") + key + ".json",
       );
       if (!discovered && !marker) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
@@ -668,11 +670,11 @@ export default {
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      const object = await discoveryBucket(env)?.get("discovery/current-season.json");
+      const object = await discoveryStore(env)?.get("discovery/current-season.json");
       const current = object ? await object.json<{ year: number }>().catch(() => null) : null;
       const year = current?.year ?? null;
-      const eventObject = year === null ? null : await discoveryBucket(env)?.get(`discovery/events/${year}.json`);
-      const teamObject = year === null ? null : await discoveryBucket(env)?.get(`discovery/teams/${year}.json`);
+      const eventObject = year === null ? null : await discoveryStore(env)?.get(`discovery/events/${year}.json`);
+      const teamObject = year === null ? null : await discoveryStore(env)?.get(`discovery/teams/${year}.json`);
       const events = eventObject ? await eventObject.json<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>().catch(() => null) : null;
       const teams = teamObject ? await teamObject.json<{ teamCount?: number; updatedAt?: number }>().catch(() => null) : null;
       let multiplexer: unknown = null;
@@ -686,12 +688,12 @@ export default {
         } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
       }
       const runtimeKeys = async (kind: "event" | "team") => {
-        if (!discoveryBucket(env)) return [] as string[];
+        if (!discoveryStore(env)) return [] as string[];
         const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
         const keys: string[] = [];
         let cursor: string | undefined;
         do {
-          const page = await discoveryBucket(env).list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+          const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
           for (const item of page.objects) {
             const key = item.key.slice(prefix.length).replace(/\.json$/, "");
             if (key && (kind === "team" || key.startsWith(String(year)))) keys.push(key);
@@ -700,8 +702,8 @@ export default {
         } while (cursor);
         return keys;
       };
-      const eventRegistryObject = year === null ? null : await discoveryBucket(env)?.get(`registry/events/${year}.json`);
-      const teamRegistryObject = year === null ? null : await discoveryBucket(env)?.get(`registry/teams/${year}.json`);
+      const eventRegistryObject = year === null ? null : await discoveryStore(env)?.get(`registry/events/${year}.json`);
+      const teamRegistryObject = year === null ? null : await discoveryStore(env)?.get(`registry/teams/${year}.json`);
       const eventRegistry = eventRegistryObject ? await eventRegistryObject.json<string[]>().catch(() => []) : [];
       const teamRegistry = teamRegistryObject ? await teamRegistryObject.json<string[]>().catch(() => []) : [];
       const eventRuntimeKeys = await runtimeKeys("event");

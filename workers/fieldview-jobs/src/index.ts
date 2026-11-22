@@ -6,7 +6,7 @@ import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts"
 import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
-import { createDiscoveryBucket, type DiscoveryBucketLike } from "./discovery-store.ts";
+import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
 export { RuntimeAdminWorkflow };
 
@@ -51,12 +51,12 @@ interface AdminDiscoveryJobRecord {
   updated_at: number;
 }
 
-async function readJson<T>(bucket: DiscoveryBucketLike, key: string): Promise<T | null> {
+async function readJson<T>(bucket: DiscoveryStoreClient, key: string): Promise<T | null> {
   const object = await bucket.get(key);
   return object ? object.json<T>() : null;
 }
 
-async function listRuntimeRegistry(bucket: DiscoveryBucketLike, kind: "event" | "team"): Promise<string[]> {
+async function listRuntimeRegistry(bucket: DiscoveryStoreClient, kind: "event" | "team"): Promise<string[]> {
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const keys: string[] = [];
   let cursor: string | undefined;
@@ -71,7 +71,7 @@ async function listRuntimeRegistry(bucket: DiscoveryBucketLike, kind: "event" | 
   return keys.sort();
 }
 
-async function readPublishedSeason(bucket: DiscoveryBucketLike, year: number): Promise<{
+async function readPublishedSeason(bucket: DiscoveryStoreClient, year: number): Promise<{
   events: TbaEvent[];
   eventUpdatedAt: number;
   teamKeys: string[];
@@ -131,7 +131,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
     }, async () => {
       const known = await readJson<{ year: number; checkedAt: number }>(
-        createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "discovery/current-season.json",
+        createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "discovery/current-season.json",
       );
       try {
         const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
@@ -144,7 +144,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           throw new Error("TBA status returned an invalid current_season");
         }
         const resolved = { year, checkedAt: Date.now() };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put("discovery/current-season.json", JSON.stringify(resolved), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put("discovery/current-season.json", JSON.stringify(resolved), {
           httpMetadata: { contentType: "application/json" },
         });
         return resolved;
@@ -158,7 +158,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const years = [currentSeason.year];
 
     // Publish the current-season team directory from TBA's paginated endpoint.
-    // Each page is an immutable R2 object; the manifest is the publication
+    // Each page is an immutable catalog record; the manifest is the publication
     // boundary and is written only after every page has been validated.
     const teamDirectoryGeneration = await step.do("create-team-directory-generation", async () => Date.now());
     const teamPageSize = 500;
@@ -177,7 +177,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
           throw new Error(`TBA team discovery page ${page} returned an invalid team directory`);
         }
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `discovery/team-pages/${currentSeason.year}/${teamDirectoryGeneration}/${page}.json`,
           JSON.stringify(teams),
           { httpMetadata: { contentType: "application/json" } },
@@ -198,12 +198,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     teamCount = uniqueCurrentSeasonTeamKeys.length;
     await step.do("publish-current-season-team-directory", async () => {
       // Publish the registry first; the manifest is the final commit point.
-      await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+      await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
         `registry/teams/${currentSeason.year}.json`,
         JSON.stringify(uniqueCurrentSeasonTeamKeys),
         { httpMetadata: { contentType: "application/json" } },
       );
-      await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+      await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
         `discovery/teams/${currentSeason.year}.json`,
         JSON.stringify({
           year: currentSeason.year,
@@ -225,7 +225,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
         const key = `discovery/events/${year}.json`;
-        const previous = await readJson<DiscoveryDocument>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
+        const previous = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
         const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
@@ -234,12 +234,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         if (response.status === 304 && previous) {
           const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / eventChunkSize);
           const refreshed = { ...previous, chunkCount, checkedAt };
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
             `registry/events/${year}.json`,
             JSON.stringify(previous.events.map((item) => item.key)),
             { httpMetadata: { contentType: "application/json" } },
           );
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(refreshed), {
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
           return { year, count: previous.events.length, checkedAt, generation: previous.updatedAt, chunkCount, needsChunking: false };
@@ -253,12 +253,12 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const document: DiscoveryDocument = {
           year, events, chunkCount, etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `discovery/staging/${year}/${checkedAt}.json`,
           JSON.stringify(document),
           { httpMetadata: { contentType: "application/json" } },
         );
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `discovery/staging/${year}/${checkedAt}-keys.json`,
           JSON.stringify(events.map((item) => item.key)),
           { httpMetadata: { contentType: "application/json" } },
@@ -274,13 +274,13 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         for (let firstChunk = 0; firstChunk < directory.chunkCount; firstChunk += chunkWriteBatchSize) {
           const endChunk = Math.min(directory.chunkCount, firstChunk + chunkWriteBatchSize);
           await step.do(`write-event-chunks-${directory.year}-${firstChunk}`, async () => {
-            const object = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+            const object = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
               `discovery/staging/${directory.year}/${directory.generation}.json`,
             );
             if (!object) throw new Error(`Missing staged event directory for ${directory.year}`);
             const document = await object.json<DiscoveryDocument>();
             for (let chunkIndex = firstChunk; chunkIndex < endChunk; chunkIndex += 1) {
-              await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+              await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
                 `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
                 JSON.stringify(document.events.slice(chunkIndex * eventChunkSize, (chunkIndex + 1) * eventChunkSize)),
                 { httpMetadata: { contentType: "application/json" } },
@@ -292,19 +292,19 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       }
       await step.do(`publish-event-directory-${directory.year}`, async () => {
         if (!directory.needsChunking) return { year: directory.year, published: false };
-        const stagedDocument = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+        const stagedDocument = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
           `discovery/staging/${directory.year}/${directory.generation}.json`,
         );
-        const stagedKeys = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+        const stagedKeys = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
           `discovery/staging/${directory.year}/${directory.generation}-keys.json`,
         );
         if (!stagedDocument || !stagedKeys) throw new Error(`Incomplete staged event directory for ${directory.year}`);
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `registry/events/${directory.year}.json`, await stagedKeys.text(),
           { httpMetadata: { contentType: "application/json" } },
         );
         // The directory document is the publication point; write it last.
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `discovery/events/${directory.year}.json`, await stagedDocument.text(),
           { httpMetadata: { contentType: "application/json" } },
         );
@@ -322,7 +322,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       const yearLifecycleRefs: Array<{ key: string; lifecycle: ReturnType<typeof lifecycleFor> }> = [];
       for (let chunkIndex = 0; chunkIndex < directory.chunkCount; chunkIndex += 1) {
         const classification = await step.do(`classify-this-week-and-lifecycle-${directory.year}-${chunkIndex}`, async () => {
-          const object = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+          const object = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
             `discovery/event-chunks/${directory.year}/${directory.generation}/${chunkIndex}.json`,
           );
           if (!object) throw new Error(`Missing event discovery chunk ${directory.year}/${chunkIndex}`);
@@ -345,7 +345,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           checkedAt: directory.checkedAt,
           events: yearMatches,
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
           `projections/events/this-week/${runAt}/${directory.year}.json`,
           JSON.stringify(projection),
           { httpMetadata: { contentType: "application/json" } },
@@ -417,7 +417,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             }
           }
           for (const teamKey of seeded) {
-            await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/runtime-teams/${teamKey}.json`, "{}", {
+            await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/runtime-teams/${teamKey}.json`, "{}", {
               httpMetadata: { contentType: "application/json" },
             });
           }
@@ -435,7 +435,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       const manifestKey = `workflows/daily-event-readiness/${runAt}/events.json`;
       const eventRefs = classified.flatMap(({ year, eventRefs: items }) =>
         items.map(({ key, lifecycle }) => ({ year, key, ...lifecycle })));
-      await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(manifestKey, JSON.stringify(eventRefs), {
+      await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(manifestKey, JSON.stringify(eventRefs), {
         httpMetadata: { contentType: "application/json" },
       });
       return { manifestKey, eventCount: eventRefs.length, runDate };
@@ -475,7 +475,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             else batchInitialized.push(item.key);
           }
           for (const eventKey of batchInitialized) {
-            await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/runtime-events/${eventKey}.json`, "{}", {
+            await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/runtime-events/${eventKey}.json`, "{}", {
               httpMetadata: { contentType: "application/json" },
             });
           }
@@ -491,7 +491,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
 
     await step.do("publish-this-week-generation", async () => {
       const pointer = { runAt, runDate: prepared.runDate, years };
-      await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+      await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
         "projections/events/this-week/current.json",
         JSON.stringify(pointer),
         { httpMetadata: { contentType: "application/json" } },
@@ -516,7 +516,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       failures: failures.slice(0, 100),
     };
     await step.do("write-run-summary", async () => {
-      await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+      await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
         `workflows/daily-event-readiness/${runAt}/summary.json`,
         JSON.stringify(summary),
         { httpMetadata: { contentType: "application/json" } },
@@ -540,14 +540,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const jobKey = `admin/discovery-jobs/${season}.json`;
     const updateJob = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) =>
       step.do(name, async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), jobKey);
+        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), jobKey);
         const next: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
           events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
           started_at: requestedAt, updated_at: Date.now(), ...(current ?? {}), ...patch,
           workflow_id: jobId, year: season, updated_at: Date.now(),
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(next), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(next), {
           httpMetadata: { contentType: "application/json" },
         });
         return next;
@@ -561,7 +561,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
         const key = `discovery/events/${season}.json`;
-        const previous = await readJson<DiscoveryDocument>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
+        const previous = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
         const headers = new Headers({ "X-TBA-Auth-Key": this.env.TBA_API_KEY });
         if (previous?.etag) headers.set("If-None-Match", previous.etag);
         const api = new TBAApiClient({ apiKey: this.env.TBA_API_KEY });
@@ -569,10 +569,10 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         const checkedAt = Date.now();
         if (response.status === 304 && previous) {
           const refreshed = { ...previous, checkedAt };
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/events/${season}.json`,
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/events/${season}.json`,
             JSON.stringify(previous.events.map((item) => item.key)),
             { httpMetadata: { contentType: "application/json" } });
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(refreshed), {
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(refreshed), {
             httpMetadata: { contentType: "application/json" },
           });
           return {
@@ -590,10 +590,10 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           year: season, events, chunkCount: Math.ceil(events.length / eventChunkSize),
           etag: response.headers.get("ETag"), updatedAt: checkedAt, checkedAt,
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/staging/${season}/${generation}.json`, JSON.stringify(document), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/staging/${season}/${generation}.json`, JSON.stringify(document), {
           httpMetadata: { contentType: "application/json" },
         });
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/staging/${season}/${generation}-keys.json`,
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/staging/${season}/${generation}-keys.json`,
           JSON.stringify(events.map((item) => item.key)),
           { httpMetadata: { contentType: "application/json" } });
         return {
@@ -609,13 +609,13 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         for (let firstChunk = 0; firstChunk < eventDirectory.chunkCount; firstChunk += 10) {
           const endChunk = Math.min(eventDirectory.chunkCount, firstChunk + 10);
           await step.do(`write-manual-event-chunks-${firstChunk}`, async () => {
-            const object = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+            const object = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
               `discovery/staging/${season}/${eventDirectory.generation}.json`,
             );
             if (!object) throw new Error(`Missing staged event directory for ${season}`);
             const document = await object.json<DiscoveryDocument>();
             for (let index = firstChunk; index < endChunk; index += 1) {
-              await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+              await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
                 `discovery/event-chunks/${season}/${eventDirectory.generation}/${index}.json`,
                 JSON.stringify(document.events.slice(index * eventChunkSize, (index + 1) * eventChunkSize)),
                 { httpMetadata: { contentType: "application/json" } },
@@ -625,17 +625,17 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
           });
         }
         await step.do("publish-manual-event-directory", async () => {
-          const stagedDocument = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+          const stagedDocument = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
             `discovery/staging/${season}/${eventDirectory.generation}.json`,
           );
-          const stagedKeys = await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
+          const stagedKeys = await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).get(
             `discovery/staging/${season}/${eventDirectory.generation}-keys.json`,
           );
           if (!stagedDocument || !stagedKeys) throw new Error("Manual event discovery staging is incomplete");
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/events/${season}.json`, await stagedKeys.text(), {
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/events/${season}.json`, await stagedKeys.text(), {
             httpMetadata: { contentType: "application/json" },
           });
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/events/${season}.json`, await stagedDocument.text(), {
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/events/${season}.json`, await stagedDocument.text(), {
             httpMetadata: { contentType: "application/json" },
           });
           return { published: true };
@@ -658,7 +658,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
             !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
             throw new Error(`TBA team discovery page ${page} returned an invalid team directory`);
           }
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
             `discovery/team-pages/${season}/${teamGeneration}/${page}.json`,
             JSON.stringify(teams),
             { httpMetadata: { contentType: "application/json" } },
@@ -677,10 +677,10 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         steps: 3 + teamPages,
       });
       await step.do("publish-manual-team-directory", async () => {
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/teams/${season}.json`, JSON.stringify(uniqueTeamKeys), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`registry/teams/${season}.json`, JSON.stringify(uniqueTeamKeys), {
           httpMetadata: { contentType: "application/json" },
         });
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/teams/${season}.json`, JSON.stringify({
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(`discovery/teams/${season}.json`, JSON.stringify({
           year: season, generation: teamGeneration, pageCount: teamPages,
           teamCount: uniqueTeamKeys.length, updatedAt: teamGeneration, checkedAt: Date.now(),
         }), { httpMetadata: { contentType: "application/json" } });
@@ -693,7 +693,7 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
         error: null, started_at: requestedAt, updated_at: Date.now(),
       };
       await step.do("publish-manual-discovery-summary", async () => {
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(summary), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(summary), {
           httpMetadata: { contentType: "application/json" },
         });
         return summary;
@@ -702,14 +702,14 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await step.do("record-manual-discovery-failure", async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), jobKey);
+        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), jobKey);
         const failed: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
           events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
           steps: current?.steps ?? 0, error: detail.slice(0, 500),
           started_at: requestedAt, updated_at: Date.now(),
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(failed), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(jobKey, JSON.stringify(failed), {
           httpMetadata: { contentType: "application/json" },
         });
         return failed;
@@ -729,11 +729,11 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
     const itemsPrefix = `admin/coverage-audit-items/${year}/${workflowId}/`;
     try {
       const prepared = await step.do("prepare-coverage-audit", async () => {
-        const directory = await readPublishedSeason(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), year);
-        if (!directory) throw new Error("Complete R2 event and paginated team discovery is required before starting the coverage audit");
+        const directory = await readPublishedSeason(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), year);
+        if (!directory) throw new Error("Complete event and paginated team discovery is required before starting the coverage audit");
         const now = Date.now();
-        const runtimeEvents = new Set(await listRuntimeRegistry(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "event"));
-        const runtimeTeams = new Set(await listRuntimeRegistry(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "team"));
+        const runtimeEvents = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "event"));
+        const runtimeTeams = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "team"));
         const items: CoverageAuditItem[] = [
           ...directory.events
             .filter((item) => {
@@ -768,7 +768,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           else if (lifecycle === "upcoming") counts.events_upcoming += 1;
         }
         const allItemsKey = itemsPrefix + "all.json";
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(allItemsKey, JSON.stringify(items), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(allItemsKey, JSON.stringify(items), {
           httpMetadata: { contentType: "application/json" },
         });
         const record: CoverageAuditRecord = {
@@ -776,7 +776,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           cursor: 0, total: items.length, event_discovery_updated_at: directory.eventUpdatedAt,
           team_discovery_updated_at: directory.teamUpdatedAt, items_prefix: itemsPrefix, counts, error: null,
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
           httpMetadata: { contentType: "application/json" },
         });
         return { total: items.length, chunkCount: Math.ceil(items.length / 100), counts, itemsPrefix, record };
@@ -785,10 +785,10 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
       for (let firstChunk = 0; firstChunk < prepared.chunkCount; firstChunk += 10) {
         const endChunk = Math.min(prepared.chunkCount, firstChunk + 10);
         await step.do(`write-coverage-audit-items-${firstChunk}`, async () => {
-          const allItems = await readJson<CoverageAuditItem[]>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), prepared.itemsPrefix + "all.json");
+          const allItems = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), prepared.itemsPrefix + "all.json");
           if (!allItems || allItems.length !== prepared.total) throw new Error("Coverage audit item manifest is missing or incomplete");
           for (let chunk = firstChunk; chunk < endChunk; chunk += 1) {
-            await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
+            await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(
               prepared.itemsPrefix + `${chunk}.json`,
               JSON.stringify(allItems.slice(chunk * 100, (chunk + 1) * 100)),
               { httpMetadata: { contentType: "application/json" } },
@@ -805,7 +805,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
         }, async () => {
           const chunkIndex = Math.floor(cursor / 100);
-          const chunk = await readJson<CoverageAuditItem[]>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), prepared.itemsPrefix + `${chunkIndex}.json`);
+          const chunk = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), prepared.itemsPrefix + `${chunkIndex}.json`);
           if (!chunk) throw new Error(`Coverage audit item chunk ${chunkIndex} is missing`);
           const batch = chunk.slice(cursor % 100, cursor % 100 + 5);
           const nextCounts = { ...counts };
@@ -888,7 +888,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
             ...prepared.record, cursor: nextCursor, counts: nextCounts,
             status: "running", updated_at: Date.now(),
           };
-          await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
+          await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
             httpMetadata: { contentType: "application/json" },
           });
           return { cursor: nextCursor, counts: nextCounts };
@@ -898,7 +898,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
       }
 
       const completed = await step.do("complete-coverage-audit", async () => {
-        const current = await readPublishedSeason(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), year);
+        const current = await readPublishedSeason(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), year);
         const stale = !current ||
           current.eventUpdatedAt !== prepared.record.event_discovery_updated_at ||
           current.teamUpdatedAt !== prepared.record.team_discovery_updated_at;
@@ -906,7 +906,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           ...prepared.record, cursor, counts, status: stale ? "stale" : "completed",
           updated_at: Date.now(), error: null,
         };
-        await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
+        await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify(record), {
           httpMetadata: { contentType: "application/json" },
         });
         return record;
@@ -915,8 +915,8 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await step.do("record-coverage-audit-failure", async () => {
-        const current = await readJson<CoverageAuditRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), auditKey);
-        if (current) await createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify({
+        const current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), auditKey);
+        if (current) await createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN).put(auditKey, JSON.stringify({
           ...current, status: "failed", error: detail.slice(0, 500), updated_at: Date.now(),
         }), { httpMetadata: { contentType: "application/json" } });
         return { status: "failed", error: detail };
@@ -947,10 +947,10 @@ export default {
       if (operation === "event-team-seed" && (!/^[a-zA-Z0-9_-]+$/.test(eventKey) || !eventKey.startsWith(String(year)))) return Response.json({ error: "A valid event_key and matching year are required" }, { status: 400 });
       const subject = operation === "team-seed" ? teamKey : operation === "event-team-seed" ? eventKey : String(year);
       const indexKey = `admin/runtime-job-index/${operation}/${subject}.json`;
-      let pointer = await readJson<{ workflow_id: string }>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), indexKey);
+      let pointer = await readJson<{ workflow_id: string }>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), indexKey);
       if (request.method === "GET") {
         if (!pointer) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
-        const record = await readJson<Record<string, unknown>>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        const record = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
         if (!record) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
         let workflowStatus: string | null = null;
         try { workflowStatus = (await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status()).status; } catch { workflowStatus = null; }
@@ -958,7 +958,7 @@ export default {
           : workflowStatus === "terminated" ? "cancelled"
           : workflowStatus === "errored" ? "failed"
           : workflowStatus === "complete" ? record.status : record.status;
-        const history = await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
+        const history = await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
         return Response.json({ ...record, status: mappedStatus, workflow_status: workflowStatus, history_count: history.objects.length }, {
           headers: { "Cache-Control": "no-store" },
         });
@@ -967,7 +967,7 @@ export default {
       let retryingPartial = false;
       if (!["start", "pause", "resume", "cancel", "preview"].includes(action)) return Response.json({ error: "Invalid runtime job action" }, { status: 400 });
       if (action === "resume" && pointer) {
-        const prior = await readJson<Record<string, unknown>>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        const prior = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
         const priorStatus = await env.RUNTIME_ADMIN.get(pointer.workflow_id).then((instance) => instance.status()).catch(() => null);
         if (prior?.status === "completed_with_errors" && priorStatus?.status === "complete") {
           action = "start";
@@ -975,8 +975,8 @@ export default {
         }
       }
       if (action === "preview") {
-        const events = await readJson<DiscoveryDocument>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `discovery/events/${year}.json`);
-        const teams = await readJson<string[]>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `registry/teams/${year}.json`);
+        const events = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `discovery/events/${year}.json`);
+        const teams = await readJson<string[]>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `registry/teams/${year}.json`);
         return Response.json({ year, ready: Boolean(events?.events?.length && teams?.length),
           events: events?.events?.length ?? 0, teams: teams?.length ?? 0,
           planned_runtime_initializations: (events?.events?.length ?? 0) + (teams?.length ?? 0),
@@ -1008,8 +1008,8 @@ export default {
         } catch { /* Previous Workflow instance is no longer available. */ }
       }
       if (pointer) {
-        const previous = await readJson<Record<string, unknown>>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
-        if (previous) await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(
+        const previous = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        if (previous) await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(
           `admin/runtime-job-history/${operation}/${subject}/${pointer.workflow_id}.json`,
           JSON.stringify(previous), { httpMetadata: { contentType: "application/json" } },
         );
@@ -1028,12 +1028,12 @@ export default {
           seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0,
         } : {}),
       };
-      await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
-      await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
+      await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
+      await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
       try { await env.RUNTIME_ADMIN.create({ id: workflowId, params }); }
       catch (error) {
         const failed = { ...initial, status: "failed", phase: "failed", errors: [{ key: subject, detail: error instanceof Error ? error.message : String(error), at: Date.now() }] };
-        await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
+        await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
         return Response.json(failed, { status: 409 });
       }
       return Response.json(initial, { status: 202, headers: { "Cache-Control": "no-store" } });
@@ -1047,8 +1047,8 @@ export default {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid audit year" }, { status: 400 });
       }
-      const record = await readJson<CoverageAuditRecord>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/coverage-audits/${year}.json`);
-      const discoveryReady = (await readPublishedSeason(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), year)) !== null;
+      const record = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/coverage-audits/${year}.json`);
+      const discoveryReady = (await readPublishedSeason(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), year)) !== null;
       if (!record) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, {
         headers: { "Cache-Control": "no-store" },
       });
@@ -1084,9 +1084,9 @@ export default {
         return Response.json({ error: "Expected a valid year and start, continue, or pause action" }, { status: 400 });
       }
       const key = `admin/coverage-audits/${year}.json`;
-      let current = await readJson<CoverageAuditRecord>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), key);
+      let current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), key);
       if (action === "start") {
-        const directory = await readPublishedSeason(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), year);
+        const directory = await readPublishedSeason(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), year);
         if (!directory) return Response.json({
           error: "Run complete event and paginated team discovery before starting the full coverage audit.",
         }, { status: 409 });
@@ -1102,7 +1102,7 @@ export default {
           } catch { /* Missing or terminal instance can be replaced by a new audit. */ }
         }
         if (current) {
-          await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(
+          await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(
             `admin/coverage-audit-history/${year}/${current.workflow_id}.json`,
             JSON.stringify(current),
             { httpMetadata: { contentType: "application/json" } },
@@ -1126,7 +1126,7 @@ export default {
           event_discovery_updated_at: directory.eventUpdatedAt, team_discovery_updated_at: directory.teamUpdatedAt,
           items_prefix: `admin/coverage-audit-items/${year}/${workflowId}/`, counts: zeroCounts, error: null,
         };
-        await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(current), {
+        await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(current), {
           httpMetadata: { contentType: "application/json" },
         });
         try {
@@ -1136,7 +1136,7 @@ export default {
         } catch (error) {
           const failed = { ...current, status: "failed" as const,
             error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-          await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(failed), {
+          await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(failed), {
             httpMetadata: { contentType: "application/json" },
           });
           return Response.json(failed, { status: 409 });
@@ -1169,7 +1169,7 @@ export default {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      const job = await readJson<AdminDiscoveryJobRecord>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/discovery-jobs/${year}.json`);
+      const job = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), `admin/discovery-jobs/${year}.json`);
       if (!job) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
       let workflowStatus: string | null = null;
       try {
@@ -1197,7 +1197,7 @@ export default {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
       const key = `admin/discovery-jobs/${year}.json`;
-      const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), key);
+      const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN), key);
       if (current?.status === "running") {
         try {
           const instance = await env.DAILY_EVENT_READINESS.get(current.workflow_id);
@@ -1216,7 +1216,7 @@ export default {
         events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
         started_at: requestedAt, updated_at: requestedAt,
       };
-      await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(job), {
+      await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(job), {
         httpMetadata: { contentType: "application/json" },
       });
       try {
@@ -1227,7 +1227,7 @@ export default {
       } catch (error) {
         const failed = { ...job, status: "failed" as const, stage: "failed",
           error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-        await createDiscoveryBucket(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(failed), {
+        await createDiscoveryStoreClient(env.FIELDVIEW_RUNTIME, env.RUNTIME_ADMIN_TOKEN).put(key, JSON.stringify(failed), {
           httpMetadata: { contentType: "application/json" },
         });
         return Response.json(failed, { status: 409 });

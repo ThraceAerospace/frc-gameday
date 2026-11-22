@@ -2,7 +2,7 @@ import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
 import { lifecycleFor } from "./calendar.ts";
-import { createDiscoveryBucket, type DiscoveryBucketLike } from "./discovery-store.ts";
+import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
 interface RuntimeAdminEnvironment {
   RUNTIME_ADMIN_TOKEN: string;
@@ -29,11 +29,11 @@ interface EventDirectory { year: number; events: Array<{ key: string; start_date
 const json = (value: unknown) => JSON.stringify(value);
 const recordKey = (id: string) => "admin/runtime-jobs/" + id + ".json";
 
-async function read<T>(bucket: DiscoveryBucketLike, key: string): Promise<T | null> {
+async function read<T>(bucket: DiscoveryStoreClient, key: string): Promise<T | null> {
   const object = await bucket.get(key);
   return object ? object.json<T>() : null;
 }
-async function write(bucket: DiscoveryBucketLike, key: string, value: unknown): Promise<void> {
+async function write(bucket: DiscoveryStoreClient, key: string, value: unknown): Promise<void> {
   await bucket.put(key, json(value), { httpMetadata: { contentType: "application/json" } });
 }
 async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}, year?: number): Promise<Response> {
@@ -50,10 +50,10 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
   async run(event: WorkflowEvent<RuntimeAdminParameters>, step: WorkflowStep): Promise<RuntimeAdminRecord> {
     const p = event.payload;
     const key = recordKey(p.workflowId);
-    const initial = await step.do("load-runtime-admin-job", async () => read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key));
+    const initial = await step.do("load-runtime-admin-job", async () => read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key));
     if (!initial) throw new Error("Runtime admin job record is missing");
     const update = async (patch: Partial<RuntimeAdminRecord>) => {
-      const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
+      const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
       if (!current || current.status !== "running") return current;
       const next = {
         ...current, ...patch,
@@ -64,12 +64,12 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
           ? { scheduled_events: patch.processed } : {}),
         updated_at: Date.now(),
       };
-      await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key, next);
+      await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key, next);
       return next;
     };
     const fail = async (detail: string) => {
-      const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
-      if (current?.status === "running") await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key, {
+      const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key);
+      if (current?.status === "running") await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), key, {
         ...current, status: "failed", phase: "failed", stage: "failed", updated_at: Date.now(),
         ...(current.operation === "event-team-seed"
           ? { failed_teams: Math.max(0, current.total - (current.seeded_teams ?? 0)) } : {}),
@@ -150,10 +150,10 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       scheduled += scheduledInBatch;
       await update({ processed: scheduled });
     }
-    const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
+    const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
       stage: "complete", team_key: teamKey, scheduled_events: scheduled, processed: scheduled, updated_at: Date.now() };
-    await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
+    await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
     return completed;
   }
 
@@ -274,14 +274,14 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       });
       historicalScheduled += scheduledInBatch;
     }
-    const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
+    const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)),
       status: failedTeams.size > 0 ? "completed_with_errors" as const : "completed" as const,
       phase: "complete", stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
       seeded_teams: processed - failedTeams.size, failed_teams: failedTeams.size,
       historical_events_scheduled: historicalScheduled, errors: jobErrors.slice(-100),
       processed, updated_at: Date.now() };
-    await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
+    await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
     return completed;
   }
 
@@ -289,8 +289,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     p: RuntimeAdminParameters, step: WorkflowStep,
     update: (patch: Partial<RuntimeAdminRecord>) => Promise<RuntimeAdminRecord | null>,
   ): Promise<RuntimeAdminRecord> {
-    const events = await read<EventDirectory>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "discovery/events/" + p.year + ".json");
-    const teams = await read<string[]>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "registry/teams/" + p.year + ".json");
+    const events = await read<EventDirectory>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "discovery/events/" + p.year + ".json");
+    const teams = await read<string[]>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), "registry/teams/" + p.year + ".json");
     if (!events || !Array.isArray(events.events) || !Array.isArray(teams) || !teams.length) {
       throw new Error("Complete event and team discovery before season ingestion");
     }
@@ -367,12 +367,12 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       for (const key of teamKeys) if (!readyTeams.has(key)) errors.push({
         key, detail: "TeamRuntime resources remain pending after 30 days", at: Date.now(),
       });
-      const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
+      const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
       const failed: RuntimeAdminRecord = {
         ...(current ?? initialRecord(p)), status: "completed_with_errors", phase: "team-resources-incomplete",
         processed: readyTeams.size, counts, errors: errors.slice(-100), updated_at: Date.now(),
       };
-      await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), failed);
+      await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), failed);
       return failed;
     }
 
@@ -461,7 +461,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       await step.sleep("wait-season-event-pass-" + pass, "10 minutes");
     }
 
-    const current = await read<RuntimeAdminRecord>(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
+    const current = await read<RuntimeAdminRecord>(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId));
     if (!eventsReady) {
       for (const key of eventKeys) if (!readyEvents.has(key)) errors.push({
         key, detail: "EventRuntime resources or analytics remain pending after 30 days", at: Date.now(),
@@ -473,7 +473,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       phase: eventsReady ? "complete" : "event-resources-incomplete",
       processed: counts.teams_queued + readyEvents.size, counts, errors: errors.slice(-100), updated_at: Date.now(),
     };
-    await write(createDiscoveryBucket(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
+    await write(createDiscoveryStoreClient(this.env.FIELDVIEW_RUNTIME, this.env.RUNTIME_ADMIN_TOKEN), recordKey(p.workflowId), completed);
     return completed;
   }
 }

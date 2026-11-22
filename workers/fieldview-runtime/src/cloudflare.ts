@@ -42,8 +42,8 @@ export interface RuntimeEnvironment {
   TEAM_ACTIVE_REFRESH_INTERVAL_MS?: string | number;
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
-  /** Immutable discovery/read projections written by the jobs Workflow. */
-  DISCOVERY_BUCKET?: R2BucketLike;
+  /** Shared discovery catalog persisted by a SQLite-backed Durable Object. */
+  DISCOVERY_STORE?: DurableObjectNamespaceLike;
   /** Service binding used only to create manually requested background Workflows. */
   FIELDVIEW_JOBS?: { fetch(request: Request): Promise<Response> };
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
