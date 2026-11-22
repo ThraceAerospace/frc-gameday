@@ -15,7 +15,7 @@ The environments must have independent Durable Object namespaces, Workflow bindi
 
 ## Current repository state
 
-The existing `workers/fieldview-runtime` and `workers/fieldview-jobs` directories and their production/testing Wrangler files are the experimental split-Worker prototype. They are not yet consolidated into the accepted target. Do not deploy those configurations as a final environment topology. The source and Wrangler refactor must be completed and validated before experimental Cloudflare resources are removed or replacement resources are created.
+The existing `workers/fieldview-runtime` and `workers/fieldview-jobs` directories and their production/testing Wrangler files remain the experimental split-Worker prototype. The consolidated entrypoint and target configurations now live under `workers/fieldview`: `src/index.ts`, `wrangler.preprod.toml`, and `wrangler.production.toml`. The entrypoint composes Runtime and Jobs as modules, exports all four Durable Object classes and all three Workflows, and uses an in-process Jobs callback rather than a service binding. Workflow code accesses DiscoveryStore, EventRuntime, and TeamRuntime through their local namespaces; DiscoveryStore owns system-wide TBA discovery provider requests. This source/configuration path is not yet validated by the full typecheck, test suite, local Worker execution, or Wrangler validation. Do not deploy it or the experimental split configurations until those checks pass.
 
 The existing test Worker deployments have no production data and are disposable. Nevertheless, leave them untouched until the consolidated implementation and configuration pass repository validation.
 
