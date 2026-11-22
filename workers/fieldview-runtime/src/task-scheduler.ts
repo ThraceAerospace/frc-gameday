@@ -627,7 +627,6 @@ export class TaskScheduler {
       const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) > 0;
       const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
         await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
       const audit = await this.storage.get<{
         year: number; status: string; started_at: number; updated_at: number; cursor: number;
