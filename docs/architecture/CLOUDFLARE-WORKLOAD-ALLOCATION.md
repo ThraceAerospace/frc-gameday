@@ -16,6 +16,16 @@ The governing rules are:
 
 `EventRuntime` is not a general-purpose job runner. Its alarms and internal scheduling are appropriate for active event lifecycle polling because polling and webhook reconciliation must serialize against the same canonical event state. Do not move that active-event loop into a Workflow or Queue.
 
+
+### TBA webhook routing contract
+
+The Worker entry point is the routing boundary for authenticated TBA webhooks. It validates the signature and payload, derives the event key, and determines the affected team keys from the message type and payload. It then dispatches the same authenticated webhook payload directly to:
+
+- the matching `EventRuntime` for event-scoped reconciliation; and
+- each affected `TeamRuntime` for team-scoped reconciliation, when the webhook identifies teams.
+
+The entry point waits for all targeted runtimes and reports partial dispatch failures rather than acknowledging a fully successful fan-out. Each Durable Object independently validates and reconciles the webhook against its own canonical state. Do not route this through TaskScheduler, a Workflow, or a Queue: the entry point performs recipient selection and synchronous fan-out, while EventRuntime and TeamRuntime own their respective state mutations. Keep this path intact while removing TaskScheduler and extracting scheduled orchestration.
+
 ## Target responsibility boundaries
 
 | Cloudflare resource | FieldView responsibility | Do not use it for |
@@ -169,6 +179,7 @@ The request must have explicit scope and limits. Do not accept arbitrary URLs or
 
 - The daily event readiness job is a Workflow with a recurring schedule and no global TaskScheduler alarm dependency.
 - Active events continue polling TBA from EventRuntime and TBA webhooks continue to reconcile directly in EventRuntime; this behavior is not moved to Workflows or Queues.
+- The Worker entry point fans each authenticated event-scoped TBA webhook out to EventRuntime and, when team keys are present, each affected TeamRuntime; tests cover recipient selection, multi-team fan-out, and partial dispatch failure.
 - TaskScheduler is removed entirely, including its binding, export, routes, and admin operations, once replacement discovery/job APIs are live.
 - Every matching event has a canonical EventRuntime state and an explicit this-week classification.
 - Every discovered participant has a TeamRuntime TeamState for the event's season, or a recorded reason why it could not be seeded.
