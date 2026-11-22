@@ -101,30 +101,22 @@ test("internal administrative routes still require the service bearer token", as
 
 
 
-test("team seed delegates cross-runtime orchestration to TaskScheduler", async () => {
+test("internal team seed dispatches directly to the canonical TeamRuntime", async () => {
   const calls = [];
   const env = {
     RUNTIME_ADMIN_TOKEN: "server-only-token",
     TEAM_RUNTIME: {
       idFromName(name) { calls.push({ operation: "team-id", name }); return name; },
-      get() { throw new Error("Worker must not invoke TeamRuntime for a cross-runtime seed"); },
-    },
-    EVENT_RUNTIME: {
-      idFromName(name) { calls.push({ operation: "event-id", name }); return name; },
-      get() { throw new Error("Worker must not invoke EventRuntime for a cross-runtime seed"); },
-    },
-    TASK_SCHEDULER: {
-      idFromName(name) { calls.push({ operation: "scheduler-id", name }); return name; },
       get(id) {
         return { async fetch(request) {
           calls.push({
-            operation: "scheduler-fetch",
+            operation: "team-fetch",
             id,
-            path: new URL(request.url).pathname,
-            body: await request.json(),
-            authorization: request.headers.get("Authorization"),
+            path: new URL(request.url).pathname + new URL(request.url).search,
+            method: request.method,
+            teamKey: request.headers.get("X-FieldView-Team-Key"),
           });
-          return Response.json({ coordinated: true, event_seed: { requested: 2, attempted: 2, results: [] } });
+          return Response.json({ queued: true }, { status: 202 });
         } };
       },
     },
@@ -136,17 +128,10 @@ test("team seed delegates cross-runtime orchestration to TaskScheduler", async (
     }),
     env,
   );
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).coordinated, true);
+  assert.equal(response.status, 202);
   assert.deepEqual(calls, [
-    { operation: "scheduler-id", name: "global" },
-    {
-      operation: "scheduler-fetch",
-      id: "global",
-      path: "/admin/team-seed",
-      body: { team_key: "frc3461", year: 2026 },
-      authorization: "Bearer server-only-token",
-    },
+    { operation: "team-id", name: "frc3461" },
+    { operation: "team-fetch", id: "frc3461", path: "/seed?year=2026", method: "POST", teamKey: "frc3461" },
   ]);
 });
 
@@ -195,63 +180,31 @@ test("shared public stream route forwards to the single multiplexer without cred
   ]);
 });
 
-test("public event discovery route reads the global scheduler cache without credentials", async () => {
-  const calls = [];
-  const env = {
-    TASK_SCHEDULER: {
-      idFromName(name) { calls.push({ operation: "id", name }); return name; },
-      get(id) {
-        return {
-          async fetch(request) {
-            calls.push({
-              operation: "fetch",
-              id,
-              url: new URL(request.url).pathname + new URL(request.url).search,
-              method: request.method,
-              authorization: request.headers.get("Authorization"),
-            });
-            return Response.json({ year: 2026, events: [] });
-          },
-        };
-      },
-    },
-  };
+test("public event discovery does not fall back to TaskScheduler when R2 publication is missing", async () => {
+  const { env } = makeEnvironment();
   const response = await worker.fetch(
     new Request("https://runtime.example/events/discovery?year=2026"),
     env,
   );
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, [
-    { operation: "id", name: "global" },
-    {
-      operation: "fetch",
-      id: "global",
-      url: "/events?year=2026",
-      method: "GET",
-      authorization: null,
-    },
-  ]);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Event discovery is not published for the requested season" });
 });
 
 
-test("public team discovery route reads the global scheduler cache without credentials", async () => {
-  const calls = [];
+test("public team discovery reads the published current-season R2 pages", async () => {
   const env = {
-    TASK_SCHEDULER: {
-      idFromName(name) { calls.push({ operation: "id", name }); return name; },
-      get(id) {
-        return {
-          async fetch(request) {
-            calls.push({
-              operation: "fetch",
-              id,
-              url: new URL(request.url).pathname + new URL(request.url).search,
-              method: request.method,
-              authorization: request.headers.get("Authorization"),
-            });
-            return Response.json({ year: 2026, teams: [] });
+    DISCOVERY_BUCKET: {
+      async get(key) {
+        const documents = {
+          "discovery/teams/2026.json": {
+            year: 2026, generation: 1234, pageCount: 1, teamCount: 1, updatedAt: 1234, checkedAt: Date.now(),
           },
+          "discovery/team-pages/2026/1234/0.json": [
+            { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE", city: "Southington" },
+          ],
         };
+        const value = documents[key];
+        return value ? { async json() { return value; } } : null;
       },
     },
   };
@@ -260,16 +213,10 @@ test("public team discovery route reads the global scheduler cache without crede
     env,
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(calls, [
-    { operation: "id", name: "global" },
-    {
-      operation: "fetch",
-      id: "global",
-      url: "/teams?year=2026",
-      method: "GET",
-      authorization: null,
-    },
-  ]);
+  const body = await response.json();
+  assert.equal(body.year, 2026);
+  assert.equal(body.teams.length, 1);
+  assert.equal(body.teams[0].key, "frc3461");
 });
 
 test("internal lifecycle mutation route requires admin auth and forwards the request body", async () => {
