@@ -6,14 +6,9 @@ import { teamResourceEndpoints } from "./team-runtime.ts";
 import type { TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
-const DISCOVERY_PREFIX = "discovery:";
-const TEAM_DISCOVERY_PREFIX = "team-discovery:";
-const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
+  const ADMIN_DISCOVERY_PREFIX = "admin-discovery:";
 const ADMIN_TEAM_DISCOVERY_PREFIX = "admin-team-discovery:";
-const THIS_WEEK_PROJECTION_KEY = "scheduler:this-week-projection";
-const THIS_WEEK_PROGRESS_KEY = "scheduler:this-week-progress";
-const THIS_WEEK_LAST_RUN_KEY = "scheduler:this-week-last-run-date";
-
+   
 export interface EventPollingPolicy {
   discoveryIntervalMs: number;
   upcomingIntervalMs: number;
@@ -605,7 +600,7 @@ export class TaskScheduler {
       }
       job.updatedAt = Date.now();
       await this.storage.put(key, job);
-      if (job.status !== "running" && await this.storage.get<boolean>("scheduler:enabled") !== true) await this.storage.deleteAlarm();
+      if (job.status !== "running") await this.storage.deleteAlarm();
       return Response.json(seasonIngestSummary(job));
     }
 
@@ -631,9 +626,8 @@ export class TaskScheduler {
       ])];
       const discovery = kind === "event"
         ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year))
-        : (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
+          await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`))
+        : await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
       const discoveredKeys = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.map((item) => item.key) ?? []
         : (discovery as TeamDiscoveryCache | undefined)?.teamKeys ?? [];
@@ -668,10 +662,8 @@ export class TaskScheduler {
       ])];
       const discovery = kind === "event"
         ? (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
           await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`))
-        : (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year));
+        : await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
       const discovered = kind === "event"
         ? (discovery as DiscoveryCache | undefined)?.events.some((item) => item.key === key) ?? false
         : (discovery as TeamDiscoveryCache | undefined)?.teamKeys?.includes(key) ?? false;
@@ -699,12 +691,9 @@ export class TaskScheduler {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid audit year" }, { status: 400 });
       const eventDiscoveryReady = (await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
         await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`)) !== undefined;
-      const teamDiscoveryReady = (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year))?.complete === true;
-      const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-        await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+      const teamDiscoveryReady = (await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year))?.complete === true;
+      const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
       const discoveryReady = eventDiscoveryReady && teamDiscoveryReady && teamDiscovery?.complete === true && (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) > 0;
       const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
         await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
@@ -745,10 +734,8 @@ export class TaskScheduler {
       }>(storageKey);
       if (action === "start") {
         const eventDiscovery = await this.storage.get<DiscoveryCache>(ADMIN_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + year) ??
           await this.readR2Json<DiscoveryCache>(`discovery/events/${year}.json`);
-        const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year) ??
-          await this.storage.get<TeamDiscoveryCache>(TEAM_DISCOVERY_PREFIX + year);
+        const teamDiscovery = await this.storage.get<TeamDiscoveryCache>(ADMIN_TEAM_DISCOVERY_PREFIX + year);
         if (!eventDiscovery || !teamDiscovery || teamDiscovery.complete !== true || (teamDiscovery.teamCount ?? teamDiscovery.teamKeys?.length ?? 0) === 0) return Response.json({ error: "Run complete paginated season discovery before starting the full coverage audit." }, { status: 409 });
         const eventKeys = [...new Set(eventDiscovery.events.map((event) => event.key).filter((key) => typeof key === "string"))].sort();
         const teamKeys = [...new Set(teamDiscovery.teamKeys ?? [])].sort();
@@ -781,17 +768,13 @@ export class TaskScheduler {
     }
 
     if (request.method === "GET" && url.pathname === "/admin/overview") {
-      const currentSeasonYear = new Date().getUTCFullYear();
-      const currentSeasonIndex = await this.storage.get<DiscoveryCache>(DISCOVERY_PREFIX + currentSeasonYear) ??
-        await this.readR2Json<DiscoveryCache>(`discovery/events/${currentSeasonYear}.json`);
-      const currentSeasonCheckedAt = currentSeasonIndex?.checkedAt ?? currentSeasonIndex?.updatedAt ?? null;
-      const currentSeasonIndexStatus = !currentSeasonIndex ? "missing"
-        : currentSeasonCheckedAt !== null && Date.now() - currentSeasonCheckedAt > eventPollingPolicy(this.env).discoveryIntervalMs
-          ? "stale" : "available";
+      const currentSeason = await this.readR2Json<{ year: number }>("discovery/current-season.json");
+      const currentSeasonYear = currentSeason?.year ?? null;
+      const currentSeasonIndex = currentSeasonYear === null
+        ? undefined
+        : await this.readR2Json<DiscoveryCache>(`discovery/events/${currentSeasonYear}.json`);
       const eventKeys = [...new Set([
-        ...(await this.storage.get<string[]>("registry:events") ?? []),
-        ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
-        ...(await this.readR2Keys(`registry/events/${currentSeasonYear}.json`)),
+        ...(currentSeasonYear === null ? [] : await this.readR2Keys(`registry/events/${currentSeasonYear}.json`)),
         ...(await this.readR2Keys("registry/runtime-events.json")),
       ])].sort();
       const teamKeys = [...new Set(await this.storage.get<string[]>("registry:teams") ?? [])].sort();
@@ -812,23 +795,13 @@ export class TaskScheduler {
       }
       return Response.json({
         generated_at: new Date().toISOString(),
-        scheduler: {
-          enabled: await this.storage.get<boolean>("scheduler:enabled") ?? false,
-          last_run_at: await this.storage.get<number>("scheduler:last-run-at") ?? null,
-          next_alarm_at: await this.storage.getAlarm?.() ?? null,
-          last_error: await this.storage.get<string>("scheduler:last-error") ?? null,
-          team_discovery_error: await this.storage.get<string>("scheduler:team-discovery-error") ?? null,
-          current_season_index: {
-            year: currentSeasonYear,
-            status: currentSeasonIndexStatus,
-            persisted: Boolean(currentSeasonIndex),
-            event_count: currentSeasonIndex?.events.length ?? 0,
-            updated_at: currentSeasonIndex?.updatedAt ?? null,
-            checked_at: currentSeasonCheckedAt,
-            revalidation_pending: false,
-            revalidation_owner: "fieldview-jobs",
-            last_error: await this.storage.get<string>("scheduler:current-season-index-error") ?? null,
-          },
+        current_season: {
+          year: currentSeasonYear,
+          status: !currentSeasonIndex ? "missing" :
+            Date.now() - (currentSeasonIndex.checkedAt ?? currentSeasonIndex.updatedAt) > 2 * 60 * 60_000 ? "stale" : "available",
+          event_count: currentSeasonIndex?.events.length ?? 0,
+          updated_at: currentSeasonIndex?.updatedAt ?? null,
+          checked_at: currentSeasonIndex?.checkedAt ?? null,
         },
         events, teams, multiplexer,
         truncated: false,
@@ -1017,7 +990,6 @@ export class TaskScheduler {
         const all = [...audit.event_keys.map((key) => ({ kind: "event" as const, key })), ...audit.team_keys.map((key) => ({ kind: "team" as const, key }))];
         const registeredEvents = new Set([
           ...(await this.storage.get<string[]>("registry:runtime-events") ?? []),
-          ...(await this.storage.get<string[]>("scheduler:event-keys") ?? []),
           ...(await this.readR2Keys("registry/runtime-events.json")),
         ]);
         const registeredTeams = new Set(await this.storage.get<string[]>("registry:teams") ?? []);
@@ -1690,7 +1662,7 @@ export class TaskScheduler {
 
   private async discoverTeams(
     year: number,
-    prefix = TEAM_DISCOVERY_PREFIX,
+    prefix = ADMIN_TEAM_DISCOVERY_PREFIX,
     maxPages = 100,
   ): Promise<{ requestCount: number; pageCount: number; teamCount: number; complete: boolean }> {
     const key = prefix + year;
@@ -1698,8 +1670,8 @@ export class TaskScheduler {
     const refreshKey = key + ":refresh";
     const storedRefresh = await this.storage.get<{ cursor: number; pageEtags: Record<string, string | null>; payloadChanged: boolean }>(refreshKey);
     const lastCheckedAt = cached?.checkedAt ?? cached?.updatedAt ?? 0;
-    if (prefix === TEAM_DISCOVERY_PREFIX && cached?.complete === true && !storedRefresh &&
-        Date.now() - lastCheckedAt < eventPollingPolicy(this.env).discoveryIntervalMs) {
+    if (cached?.complete === true && !storedRefresh &&
+        Date.now() - lastCheckedAt < DEFAULT_EVENT_POLLING_POLICY.discoveryIntervalMs) {
       return {
         requestCount: 0, pageCount: cached.pageCount ?? 0,
         teamCount: cached.teamCount ?? cached.teamKeys?.length ?? 0, complete: true,
