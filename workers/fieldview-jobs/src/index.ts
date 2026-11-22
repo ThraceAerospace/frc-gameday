@@ -131,11 +131,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     });
 
     const prepared = await step.do("classify-this-week-events", async () => {
-      const allEvents: TbaEvent[] = [];
-      for (const year of years) {
-        const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
-        if (document) allEvents.push(...document.events);
-      }
       const unique = new Map<string, { year: number; event: TbaEvent }>();
       for (const year of years) {
         const document = await readJson<DiscoveryDocument>(this.env.DISCOVERY_BUCKET, `discovery/events/${year}.json`);
@@ -168,17 +163,22 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
     const failures: Array<{ event_key: string; error: string }> = [];
     for (let offset = 0; offset < keys.length; offset += 10) {
       const batch = keys.slice(offset, offset + 10);
-      await step.do(`initialize-events-${offset / 10}`, {
+      const result = await step.do(`initialize-events-${offset / 10}`, {
         retries: { limit: 2, delay: "15 seconds", backoff: "exponential" },
       }, async () => {
+        const batchInitialized: string[] = [];
+        const batchFailures: Array<{ event_key: string; error: string }> = [];
+        const documents = new Map<number, DiscoveryDocument | null>();
         for (const item of batch) {
-          const document = await readJson<DiscoveryDocument>(
-            this.env.DISCOVERY_BUCKET,
-            `discovery/events/${item.year}.json`,
-          );
-          const eventData = document?.events.find((candidate) => candidate.key === item.key);
+          if (!documents.has(item.year)) {
+            documents.set(item.year, await readJson<DiscoveryDocument>(
+              this.env.DISCOVERY_BUCKET,
+              `discovery/events/${item.year}.json`,
+            ));
+          }
+          const eventData = documents.get(item.year)?.events.find((candidate) => candidate.key === item.key);
           if (!eventData) {
-            failures.push({ event_key: item.key, error: "Event was not present in the retained discovery snapshot" });
+            batchFailures.push({ event_key: item.key, error: "Event was not present in the retained discovery snapshot" });
             continue;
           }
           const classification = lifecycleFor(eventData, Date.now());
@@ -193,11 +193,13 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
               body: JSON.stringify({ event_key: item.key, lifecycle: classification }),
             },
           ));
-          if (!response.ok) failures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
-          else initialized.push(item.key);
+          if (!response.ok) batchFailures.push({ event_key: item.key, error: `Runtime returned HTTP ${response.status}` });
+          else batchInitialized.push(item.key);
         }
-        return { processed: batch.length };
+        return { initialized: batchInitialized, failures: batchFailures };
       });
+      initialized.push(...result.initialized);
+      failures.push(...result.failures);
     }
 
     const summary = {
