@@ -903,6 +903,129 @@ export default {
   async fetch(request: Request, env: JobsEnvironment): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ service: "fieldview-jobs", status: "ok" });
+    if (url.pathname === "/internal/admin/coverage-audit" && request.method === "GET") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "Invalid audit year" }, { status: 400 });
+      }
+      const record = await readJson<CoverageAuditRecord>(env.DISCOVERY_BUCKET, `admin/coverage-audits/${year}.json`);
+      const discoveryReady = (await readPublishedSeason(env.DISCOVERY_BUCKET, year)) !== null;
+      if (!record) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+      let workflowStatus: string | null = null;
+      try {
+        const instance = await env.COVERAGE_AUDIT.get(record.workflow_id);
+        workflowStatus = (await instance.status()).status;
+      } catch { workflowStatus = null; }
+      const status = workflowStatus === "paused" ? "paused"
+        : workflowStatus === "errored" ? "failed"
+        : workflowStatus === "terminated" ? "cancelled"
+        : workflowStatus === "complete" ? record.status
+        : record.status;
+      return Response.json({
+        ...record, status, workflow_status: workflowStatus, discovery_ready: discoveryReady,
+        processed: record.cursor, remaining: Math.max(0, record.total - record.cursor),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/internal/admin/coverage-audit" && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const body: unknown = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return Response.json({ error: "Invalid coverage audit request" }, { status: 400 });
+      }
+      const value = body as Record<string, unknown>;
+      const year = Number(value.year);
+      const action = value.action;
+      if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+          !["start", "continue", "pause"].includes(String(action))) {
+        return Response.json({ error: "Expected a valid year and start, continue, or pause action" }, { status: 400 });
+      }
+      const key = `admin/coverage-audits/${year}.json`;
+      let current = await readJson<CoverageAuditRecord>(env.DISCOVERY_BUCKET, key);
+      if (action === "start") {
+        const directory = await readPublishedSeason(env.DISCOVERY_BUCKET, year);
+        if (!directory) return Response.json({
+          error: "Run complete event and paginated team discovery before starting the full coverage audit.",
+        }, { status: 409 });
+        if (current?.status === "running") {
+          try {
+            const existing = await env.COVERAGE_AUDIT.get(current.workflow_id);
+            const status = await existing.status();
+            if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
+              return Response.json({ ...current, workflow_status: status.status }, {
+                status: 202, headers: { "Cache-Control": "no-store" },
+              });
+            }
+          } catch { /* Missing or terminal instance can be replaced by a new audit. */ }
+        }
+        if (current) {
+          await env.DISCOVERY_BUCKET.put(
+            `admin/coverage-audit-history/${year}/${current.workflow_id}.json`,
+            JSON.stringify(current),
+            { httpMetadata: { contentType: "application/json" } },
+          );
+        }
+        const startedAt = Date.now();
+        const workflowId = `coverage-audit-${year}-${startedAt}`;
+        const zeroCounts: CoverageAuditCounts = {
+          events_total: directory.events.length, events_happened: 0, events_active: 0, events_upcoming: 0, events_invalid_dates: 0,
+          teams_total: directory.teamKeys.length, team_pages: directory.teamPageCount,
+          event_runtime_missing: 0, team_runtime_missing: 0,
+          event_state_complete: 0, event_state_partial: 0, event_state_stale: 0, event_state_missing: 0, event_state_failed: 0,
+          event_analytics_succeeded: 0, event_analytics_partial: 0, event_analytics_stale: 0, event_analytics_waiting: 0, event_analytics_missing: 0, event_analytics_failed: 0,
+          event_cohort_complete: 0, event_cohort_partial: 0, event_cohort_discovering: 0, event_cohort_missing: 0,
+          team_snapshot_complete: 0, team_snapshot_partial: 0, team_snapshot_missing: 0, team_snapshot_failed: 0,
+          event_resources_incomplete: 0, team_resources_incomplete: 0, read_errors: 0,
+        };
+        current = {
+          year, workflow_id: workflowId, status: "running", started_at: startedAt, updated_at: startedAt,
+          cursor: 0, total: directory.events.length + directory.teamKeys.length,
+          event_discovery_updated_at: directory.eventUpdatedAt, team_discovery_updated_at: directory.teamUpdatedAt,
+          items_prefix: `admin/coverage-audit-items/${year}/${workflowId}/`, counts: zeroCounts, error: null,
+        };
+        await env.DISCOVERY_BUCKET.put(key, JSON.stringify(current), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        try {
+          await env.COVERAGE_AUDIT.create({
+            id: workflowId, params: { year, workflowId, startedAt },
+          });
+        } catch (error) {
+          const failed = { ...current, status: "failed" as const,
+            error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
+          await env.DISCOVERY_BUCKET.put(key, JSON.stringify(failed), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          return Response.json(failed, { status: 409 });
+        }
+        return Response.json(current, { status: 202, headers: { "Cache-Control": "no-store" } });
+      }
+      if (!current) return Response.json({ error: "No coverage audit exists for this season" }, { status: 404 });
+      let instance;
+      try { instance = await env.COVERAGE_AUDIT.get(current.workflow_id); }
+      catch { return Response.json({ error: "Coverage audit Workflow instance is unavailable" }, { status: 404 }); }
+      const status = await instance.status();
+      if (action === "pause") {
+        if (!["queued", "running", "waiting", "waitingForPause"].includes(status.status)) {
+          return Response.json({ error: "Only an active coverage audit can be paused" }, { status: 409 });
+        }
+        await instance.pause();
+      } else {
+        if (status.status !== "paused") return Response.json({ error: "Only a paused coverage audit can be resumed" }, { status: 409 });
+        await instance.resume();
+      }
+      return Response.json({ ...current, status: action === "pause" ? "paused" : "running" }, {
+        status: 202, headers: { "Cache-Control": "no-store" },
+      });
+    }
     if (url.pathname === "/internal/admin/discovery-job" && request.method === "GET") {
       if (!env.RUNTIME_ADMIN_TOKEN ||
           request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
