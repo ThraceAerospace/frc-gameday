@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+# Keep only the newest pending/running CI run per branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
