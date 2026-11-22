@@ -320,7 +320,7 @@ export default {
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
       const requestedYear = Number(url.searchParams.get("year"));
-      if (discoveryStore(env) && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
+      if (env.DISCOVERY_STORE && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
         const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
         if (object) {
           const discovery = await object.json<{
