@@ -742,12 +742,6 @@ export class TaskScheduler {
       });
     }
 
-    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
-        await this.storage.setAlarm(Date.now() + 100);
-      }
-      return Response.json({ queued: true, pending: true }, { status: 202 });
-    }
-
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
