@@ -334,10 +334,10 @@ export class EventRuntime {
           // now separate publications, so strip those duplicate payloads once
           // during activation before exposing the persisted snapshot.
           if (publication?.state && typeof publication.state === "object") {
-            const legacyState = publication.state as Record<string, unknown>;
+            const legacyState = publication.state as unknown as Record<string, unknown>;
             if ("analytics" in legacyState || "team_states" in legacyState) {
               const { analytics: _analytics, team_states: _teamStates, ...eventState } = legacyState;
-              const migrated = { ...publication, state: eventState as EventStatePublication["state"] };
+              const migrated = { ...publication, state: eventState as unknown as EventStatePublication["state"] };
               await this.storage.put(EVENT_STATE_PUBLICATION_KEY, migrated);
               this.hydratedPublication = migrated;
             } else {
