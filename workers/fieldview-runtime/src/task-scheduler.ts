@@ -915,8 +915,8 @@ export class TaskScheduler {
             event_count: currentSeasonIndex?.events.length ?? 0,
             updated_at: currentSeasonIndex?.updatedAt ?? null,
             checked_at: currentSeasonCheckedAt,
-            revalidation_pending: currentSeasonIndexStatus !== "available" ||
-              await this.storage.get<boolean>("scheduler:daily-run-requested") === true,
+            revalidation_pending: false,
+            revalidation_owner: "fieldview-jobs",
             last_error: await this.storage.get<string>("scheduler:current-season-index-error") ?? null,
           },
         },
@@ -926,10 +926,7 @@ export class TaskScheduler {
       });
     }
 
-    if (request.method === "POST" && url.pathname === "/daily") {
-      await this.storage.put("scheduler:daily-run-requested", true);
-      const currentAlarm = await this.storage.getAlarm?.();
-      if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
+    if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now()) {
         await this.storage.setAlarm(Date.now() + 100);
       }
       return Response.json({ queued: true, pending: true }, { status: 202 });
