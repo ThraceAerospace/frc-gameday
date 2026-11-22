@@ -35,6 +35,11 @@ export interface R2ObjectLike {
 export interface R2BucketLike {
   get(key: string): Promise<R2ObjectLike | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
+    objects: Array<{ key: string }>;
+    truncated: boolean;
+    cursor?: string;
+  }>;
 }
 
 export interface RuntimeEnvironment {
