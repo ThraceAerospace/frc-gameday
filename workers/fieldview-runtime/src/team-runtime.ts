@@ -1248,7 +1248,14 @@ export class TeamRuntime {
       ...due.manualDue.map((item) => item.year),
       ...Object.values(activeEvents).map((item) => item.year),
     ]);
+    const currentYear = new Date().getUTCFullYear();
     const refreshYears = new Set<number>(due.manualDue.map((item) => item.year));
+    // A runtime first reached through a historical season still owns a
+    // current-season TeamState. Materialize its initial empty/partial
+    // publication during background alarm work, never in the public read.
+    if (!(await this.storage.get("team-state:" + currentYear + ":publication"))) {
+      refreshYears.add(currentYear);
+    }
     for (const task of due.ready) {
       for (const year of candidateYears) {
         if (this.endpoints(year).some((resource) => resource.endpoint === task.endpoint)) {
