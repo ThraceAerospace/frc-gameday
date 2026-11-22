@@ -518,7 +518,8 @@ export class TeamRuntime {
       // Lazy, owner-local migration of old records that embedded foreign
       // EventRuntime data. This preserves the logical revision while replacing
       // copied event/team/match records with stable references.
-      const state = normalizeFieldViewTeamEventState({
+      const hasLegacyEmbeddedRecords = "team" in storedState || "event_team" in storedState || "matches" in storedState;
+      const state = hasLegacyEmbeddedRecords ? normalizeFieldViewTeamEventState({
         event_key: eventKey as FieldViewTeamEventState["event_key"],
         team_key: this.teamKey as FieldViewTeamEventState["team_key"],
         sources: storedState.sources,
@@ -527,8 +528,8 @@ export class TeamRuntime {
         ...(storedState.matches === undefined ? {} : { matches: storedState.matches }),
         ...(storedState.analytics === undefined ? {} : { analytics: storedState.analytics }),
         event_source_revision: inputs?.event_source_revision ?? null,
-      });
-      if (JSON.stringify(state) !== JSON.stringify(storedState)) {
+      }) : storedState;
+      if (hasLegacyEmbeddedRecords && JSON.stringify(state) !== JSON.stringify(storedState)) {
         await this.storage.put(stateKey, state);
       }
       return Response.json(state, {
