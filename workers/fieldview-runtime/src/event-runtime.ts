@@ -716,42 +716,19 @@ export class EventRuntime {
       });
       if (accepted) {
         const version = await this.storage.get<number>("snapshot-revision") ?? 0;
-        let teamPatch: Record<string, unknown> | undefined;
-        const namespace = this.env.TEAM_RUNTIME;
-        if (namespace && this.env.RUNTIME_ADMIN_TOKEN) {
-          try {
-            const stub = namespace.get(namespace.idFromName(body.team_key));
-            const response = await stub.fetch(new Request(
-              "https://team-runtime/event-state?event_key=" + encodeURIComponent(this.eventKey) +
-                "&year=" + this.eventKey.slice(0, 4),
-              { headers: {
-                Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-                "X-FieldView-Team-Key": body.team_key,
-              } },
-            ));
-            const teamSourceRevision = response.headers.get("X-FieldView-Team-Source-Revision");
-            if (response.ok && teamSourceRevision !== null &&
-                Number(teamSourceRevision) === body.team_state_revision) {
-              teamPatch = {
-                team_key: body.team_key,
-                team_state: await response.json(),
-                team_event_revision: Number(response.headers.get("X-FieldView-Team-Event-Revision")),
-              };
-            }
-          } catch {
-            // A missed patch is recovered by the client's conditional snapshot read.
-          }
-        }
-        await this.publishSnapshotRevision(
-          version,
-          teamPatch
-            ? { ...teamPatch, event_comparison_invalidated: true }
-            : {
-                team_key: body.team_key,
-                team_state_pending: true,
-                event_comparison_invalidated: true,
-              },
-        );
+        // Publish only the logical foreign reference. TeamRuntime remains the
+        // owner and read endpoint for the actual TeamEventState; notifications
+        // must not copy that record into EventRuntime's event publication.
+        await this.publishSnapshotRevision(version, {
+          team_state_ref: {
+            owner: "team-runtime",
+            owner_id: body.team_key,
+            record_type: "team-event-state",
+            record_id: this.eventKey,
+            revision: typeof body.team_event_revision === "number" ? body.team_event_revision : null,
+          },
+          event_comparison_invalidated: true,
+        });
       }
       return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
     }
@@ -2188,7 +2165,7 @@ export class EventRuntime {
     // Rebuilding the event DTO here would reread every event endpoint and
     // fan out to every TeamRuntime just to publish one team's changed state.
     const teamProjectionOnly = Boolean(
-      patch && typeof patch.team_key === "string" && !("state" in patch),
+      patch && isRecord(patch.team_state_ref) && !("state" in patch),
     );
     let publication: EventStatePublication | null = null;
     try {
