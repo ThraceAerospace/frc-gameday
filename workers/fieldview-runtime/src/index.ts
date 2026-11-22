@@ -49,7 +49,7 @@ function discoveryStore(env: RuntimeEnvironment): DiscoveryStoreClient {
 
 function jobsRequest(env: RuntimeEnvironment, request: Request): Promise<Response> {
   if (env.JOBS_REQUEST) return env.JOBS_REQUEST(request);
-  if (env.FIELDVIEW_JOBS) return jobsRequest(env, request);
+  if (env.FIELDVIEW_JOBS) return env.FIELDVIEW_JOBS.fetch(request);
   return Promise.resolve(Response.json({ error: "Jobs module is unavailable" }, { status: 503 }));
 }
 
