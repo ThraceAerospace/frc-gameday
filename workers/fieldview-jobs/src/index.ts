@@ -106,12 +106,6 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       await this.env.DISCOVERY_BUCKET.put(manifestKey, JSON.stringify(eventRefs), {
         httpMetadata: { contentType: "application/json" },
       });
-      const pointer = { runAt, runDate, years };
-      await this.env.DISCOVERY_BUCKET.put(
-        "projections/events/this-week/current.json",
-        JSON.stringify(pointer),
-        { httpMetadata: { contentType: "application/json" } },
-      );
       return { manifestKey, eventCount: eventRefs.length, runDate };
     });
 
@@ -146,6 +140,16 @@ export class DailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironm
       initialized.push(...result.initialized);
       failures.push(...result.failures);
     }
+
+    await step.do("publish-this-week-generation", async () => {
+      const pointer = { runAt, runDate: prepared.runDate, years };
+      await this.env.DISCOVERY_BUCKET.put(
+        "projections/events/this-week/current.json",
+        JSON.stringify(pointer),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      return { published: true, eventCount: prepared.eventCount };
+    });
 
     const summary = {
       run_date: prepared.runDate,
