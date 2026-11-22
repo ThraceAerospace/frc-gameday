@@ -70,7 +70,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     const fail = async (detail: string) => {
       const current = await read<RuntimeAdminRecord>(this.env.DISCOVERY_BUCKET, key);
       if (current?.status === "running") await write(this.env.DISCOVERY_BUCKET, key, {
-        ...current, status: "failed", phase: "failed", updated_at: Date.now(),
+        ...current, status: "failed", phase: "failed", stage: "failed", updated_at: Date.now(),
+        ...(current.operation === "event-team-seed"
+          ? { failed_teams: Math.max(0, current.total - (current.seeded_teams ?? 0)) } : {}),
         errors: [...current.errors, { key: p.workflowId, detail: detail.slice(0, 400), at: Date.now() }].slice(-100),
       });
     };
