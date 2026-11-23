@@ -14,7 +14,7 @@ export async function dispatchRuntime(
   if (!env.RUNTIME_ADMIN_TOKEN) return Response.json({ error: "Runtime authorization is unavailable" }, { status: 503 });
   if (kind === "team" && !/^frc\d+$/.test(key)) return Response.json({ error: "Invalid team key" }, { status: 400 });
   if (kind === "event" && !/^[a-zA-Z0-9_-]+$/.test(key)) return Response.json({ error: "Invalid event key" }, { status: 400 });
-  const season = year ?? await readCurrentSeason(env);
+  const season = year ?? (kind === "team" ? await readCurrentSeason(env) : Number(key.slice(0, 4)));
   if (season === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
   if (!Number.isInteger(season) || season < 1992 || season > 2200) {
     return Response.json({ error: "Invalid season year" }, { status: 400 });
