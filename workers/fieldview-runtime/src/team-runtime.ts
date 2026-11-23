@@ -281,6 +281,7 @@ export class TeamRuntime {
     const publicRead = request.method === "GET" && url.pathname === "/snapshot";
     const publicEventStateRead = request.method === "GET" && url.pathname === "/event-state";
     const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
+    const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
@@ -488,12 +489,12 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = new Date().getUTCFullYear();
-    const initializedCurrentState = publicEventStateRead
+    const initializedCurrentState = publicEventStateRead || readinessRequest
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
         ? null
         : await this.snapshot(currentYear);
-    const initializedState = publicEventStateRead
+    const initializedState = publicEventStateRead || readinessRequest
       ? null
       : year === currentYear && initializedCurrentState
         ? initializedCurrentState
