@@ -1224,12 +1224,12 @@ export class TeamRuntime {
     // Keep one provider request in flight per TeamRuntime alarm.
     for (const item of due.manualDue) {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
-      if (!resource) return;
+      if (!resource) continue;
       const previous = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
       const result = await this.pollResourceNow(resource);
       const current = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
       if (result.status !== "failed" && current?.revision !== previous?.revision && isStatboticsRefreshTrigger(resource)) {
-        await this.enqueueManualPolls(this.endpoints(item.year).filter((candidate) => candidate.provider === "statbotics"), item.year);
+        await this.enqueueManualPolls(this.endpoints(item.year).filter((candidate) => candidate.provider === "statbotics"), item.year, false);
       }
       const retryableFailure = result.status === "failed";
       const retryAt = Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
