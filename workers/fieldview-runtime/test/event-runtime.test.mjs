@@ -437,7 +437,7 @@ test("EventRuntime public snapshots return 204 until readiness publishes canonic
   assert.ok(statboticsTask, "Statbotics receives its own durable one-shot alarm task");
   assert.equal(statboticsTask.dueAt, refreshAt);
   assert.equal(providerCalls, 0, "readiness only schedules work and never fetches inline");
-  assert.equal((await runtime.fetch(request())).status, 404, "frontend reads remain gated until EventState is published");
+  assert.equal((await runtime.fetch(request())).status, 204, "an existing EventRuntime without EventState returns no content");
 
   storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
   storage.values.set(statboticsTaskKey, { ...statboticsTask, dueAt: Date.now() - 1 });
