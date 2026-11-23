@@ -883,7 +883,7 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication) {
+      if (!publication || publication.status === "failed") {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" },
