@@ -522,6 +522,11 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
 
 test("TeamRuntime owns and serves its season analytics aggregate", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = new Date().getUTCFullYear();
+  storage.values.set("team-key", teamKey);
+  storage.values.set("team-state:" + year + ":publication", {
+    input_signature: "seeded-team-state",
+    state: { team_key: teamKey, year, sources: {} },
+  });
   const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
     resource.provider === "tba" && resource.endpoint.includes("/events/"));
   assert.ok(eventResource);
@@ -603,9 +608,12 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
     return Response.json([]);
   }), teamKey);
 
-  await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": teamKey },
+  const readiness = await runtime.fetch(new Request("https://team/readiness?year=2026", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshAt: Date.now() + 60_000 }),
   }));
+  assert.equal(readiness.status, 200);
   const scheduled = [...storage.values.keys()].filter((key) => key.startsWith("task:"));
   assert.equal(scheduled.some((key) => key.includes("/team_year/")), false);
   assert.equal(scheduled.some((key) => key.includes("/team_events?")), false);
