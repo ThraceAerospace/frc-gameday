@@ -215,7 +215,7 @@ export class TeamRuntime {
       await tx.setAlarm(next);
     }
   }
-  private async enqueueManualPolls(resources: TeamResource[], year: number, immediate = true): Promise<void> {
+  private async enqueueManualPolls(resources: TeamResource[], year: number, immediate = true, scheduledAt?: number): Promise<void> {
     await this.storage.transaction(async (tx) => {
       const current = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const existing = new Map(current.map((item) => [item.endpoint, item]));
@@ -228,7 +228,8 @@ export class TeamRuntime {
           endpoint: resource.endpoint, year,
           // Read-driven refreshes coalesce behind an existing retry deadline.
           // A newly queued resource is still eligible immediately.
-          dueAt: immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
+          dueAt: scheduledAt !== undefined ? Math.min(previous?.dueAt ?? scheduledAt, scheduledAt)
+            : immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
           attempts: previous?.attempts ?? 0,
         });
       }
@@ -762,6 +763,46 @@ export class TeamRuntime {
           last_error: state.lastError ?? null,
         })),
       }, { status: 202 });
+    }
+    if (request.method === "POST" && url.pathname === "/readiness") {
+      const body: unknown = await request.json().catch(() => null);
+      const requestedAt = body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>).refreshAt : undefined;
+      if (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt) ||
+          requestedAt < Date.now() || requestedAt > Date.now() + 5 * 60_000) {
+        return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
+      }
+      const publication = await this.storage.get<{ state?: unknown }>("team-state:" + year + ":publication");
+      const publishedState = publication?.state;
+      const validState = Boolean(publishedState && typeof publishedState === "object" &&
+        !Array.isArray(publishedState) &&
+        (publishedState as Record<string, unknown>).team_key === this.teamKey);
+      const resources = this.endpoints(year);
+      const states = await Promise.all(resources.map((resource) =>
+        this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
+      const now = Date.now();
+      const staleResources = resources.filter((resource, index) => {
+        const source = states[index];
+        return !source || source.status === "failed" || source.status === "stale" ||
+          (source.lastFetchedAt === null && source.status !== "unavailable") ||
+          (source.expiresAt !== null && source.expiresAt <= now);
+      }).map((resource) => resource.endpoint);
+      const refreshQueued = !validState || staleResources.length > 0;
+      if (refreshQueued) {
+        const refreshAt = Math.max(now + 1_000, requestedAt);
+        // Register steady-state schedules without running them now, then queue
+        // the complete team resource set behind the same randomized deadline.
+        await this.schedule(year, true);
+        await this.enqueueManualPolls(resources, year, true, refreshAt);
+      }
+      return Response.json({
+        team_key: this.teamKey,
+        year,
+        state_valid: validState,
+        stale_resources: staleResources,
+        refresh_queued: refreshQueued,
+        refresh_at: refreshQueued ? requestedAt : null,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
       const body: unknown = await request.json().catch(() => null);
