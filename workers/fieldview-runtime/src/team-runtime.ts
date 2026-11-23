@@ -1278,12 +1278,19 @@ export class TeamRuntime {
         }
         return { failed: result.status === "failed", revisionChanged };
       });
-      const key = taskKey(task.endpoint), current = await this.storage.get<TeamPollTask>(key);
-      if (current) {
-        await this.storage.put(key, outcome.failed
+      const key = taskKey(task.endpoint);
+      await this.storage.transaction(async (tx) => {
+        const current = await tx.get<TeamPollTask>(key);
+        // An administrator may have replaced this task while its poll ran.
+        if (!current || current.generation !== task.generation) {
+          await this.rearm(tx);
+          return;
+        }
+        await tx.put(key, outcome.failed
           ? { ...current, dueAt: Date.now() + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))), attempts: task.attempts }
           : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
-      }
+        await this.rearm(tx);
+      });
       if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
         const endpointParts = task.endpoint.split("/");
         const year = Number(endpointParts[4] ?? new Date().getUTCFullYear());
