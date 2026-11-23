@@ -18,7 +18,8 @@
     "generate:tba-types": "node packages/providers/tba/scripts/generate-types.mjs",
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
-    "generate:statbotics-types": "node packages/providers/statbotics/scripts/generate-types.mjs"
+    "generate:statbotics-types": "node packages/providers/statbotics/scripts/generate-types.mjs",
+    "dev:worker": "npx wrangler dev --config workers/fieldview/wrangler.preprod.toml --env-file .env"
   },
   "devDependencies": {
     "eslint": "^9",
