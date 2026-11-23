@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeFieldViewEventState } from "@fieldview/domain";
-import { getCanonicalEventSnapshot } from "./serverSnapshot.ts";
+import { getCanonicalCurrentSeason, getCanonicalEventSnapshot } from "./serverSnapshot.ts";
 
 test("server snapshot reader uses the configured runtime and preserves its revision", async () => {
   process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
@@ -104,4 +104,24 @@ test("canonical team state reader validates identity, year, and revision", async
     }),
   );
   assert.equal(wrongYear, null);
+});
+
+
+test("canonical current-season reader uses the persisted TBA status value", async () => {
+  process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
+  let requestedUrl = "";
+  let requestedCache = "";
+  const season = await getCanonicalCurrentSeason(async (url, init) => {
+    requestedUrl = String(url);
+    requestedCache = init?.cache ?? "";
+    return Response.json({ year: 2027, checkedAt: 1795405924680 });
+  });
+  assert.equal(requestedUrl, "https://runtime.example.test/season/current");
+  assert.equal(requestedCache, "no-store");
+  assert.deepEqual(season, { year: 2027, checkedAt: 1795405924680 });
+
+  const invalid = await getCanonicalCurrentSeason(async () =>
+    Response.json({ year: 2026.5, checkedAt: Date.now() }),
+  );
+  assert.equal(invalid, null);
 });
