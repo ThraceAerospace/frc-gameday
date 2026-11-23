@@ -288,9 +288,7 @@ export class TeamRuntime {
     // runtime is exposed to public readers.
     if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead) {
       if (!(await this.restoreIdentity())) {
-        return Response.json({ error: "Team state is not ready" }, {
-          status: 404, headers: { "Cache-Control": "no-store" },
-        });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       if (request.headers.get("X-FieldView-Team-Key") !== this.teamKey) {
         return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
@@ -374,14 +372,17 @@ export class TeamRuntime {
     if (publicSeasonAnalyticsRead) {
       const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const teamState = teamPublication?.state;
-      if (!teamPublication || typeof teamPublication.input_signature !== "string" || !teamState || typeof teamState !== "object" || Array.isArray(teamState) ||
+      if (!teamPublication || !teamState) {
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      }
+      if (typeof teamPublication.input_signature !== "string" || typeof teamState !== "object" || Array.isArray(teamState) ||
           (teamState as Record<string, unknown>).team_key !== this.teamKey ||
           (teamState as Record<string, unknown>).year !== year ||
           !(teamState as Record<string, unknown>).sources ||
           typeof (teamState as Record<string, unknown>).sources !== "object" ||
           Array.isArray((teamState as Record<string, unknown>).sources)) {
-        return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
-          status: 404, headers: { "Cache-Control": "no-store" },
+        return Response.json({ error: "Invalid TeamState publication", team_key: this.teamKey, year }, {
+          status: 500, headers: { "Cache-Control": "no-store" },
         });
       }
       const cacheKey = "team-season-analytics:" + year;
@@ -426,10 +427,7 @@ export class TeamRuntime {
         await this.enqueueManualPolls(needed, year, false);
       }
       if (!cached) {
-        return Response.json({
-          team_key: this.teamKey, year, status: "unavailable",
-          publication: { status: "missing" }, revalidation: "scheduled",
-        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       return Response.json(cached.response, {
         headers: {
@@ -453,10 +451,11 @@ export class TeamRuntime {
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
       const publishedState = publication?.state as Record<string, unknown> | undefined;
-      if (!publication || typeof publication.input_signature !== "string" || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
+      if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (typeof publication.input_signature !== "string" || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
           !publishedState.sources || typeof publishedState.sources !== "object" || Array.isArray(publishedState.sources)) {
-        return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
-          status: 404, headers: { "Cache-Control": "no-store" },
+        return Response.json({ error: "Invalid TeamState publication", team_key: this.teamKey, year }, {
+          status: 500, headers: { "Cache-Control": "no-store" },
         });
       }
       const resources = this.endpoints(year);
@@ -513,7 +512,7 @@ export class TeamRuntime {
         event_team?: import("../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
         matches?: import("../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
       }>(stateKey);
-      if (!storedState) return Response.json({ error: "Team event state is not yet available" }, { status: 404 });
+      if (!storedState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
       // Lazy, owner-local migration of old records that embedded foreign
       // EventRuntime data. This preserves the logical revision while replacing
