@@ -1735,7 +1735,8 @@ export class EventRuntime {
     });
 
     // Manual work is independent of recurring poll tasks and is always serviced first.
-    await Promise.all(dueTasks.manualDue.map(async (item) => {
+    // Keep one provider request in flight per EventRuntime alarm.
+    for (const item of dueTasks.manualDue) {
       const result = await this.pollEndpoint(item.endpoint);
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
       const retryableFailure = !result && latest?.status === "failed";
@@ -1750,9 +1751,9 @@ export class EventRuntime {
         await transaction.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(transaction);
       });
-    }));
+    }
 
-    await Promise.all(dueTasks.due.map(async (task) => {
+    for (const task of dueTasks.due) {
       const succeeded = await this.pollEndpoint(task.endpoint);
       if (task.retryOnFailure === false) {
         await this.storage.delete(taskStorageKey(task.endpoint));
@@ -1796,7 +1797,7 @@ export class EventRuntime {
         }
         await this.rearm(transaction);
       });
-    }));
+    }
     if (dueTasks.analyticsDue) await this.recalculateAnalytics();
   }
 
