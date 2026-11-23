@@ -471,7 +471,7 @@ export class TeamRuntime {
       const headers = {
         "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
         "X-FieldView-Publication-Status": stale ? "stale" : "available",
-        "X-FieldView-Revalidation": needed.length ? "scheduled" : "idle",
+        "X-FieldView-Revalidation": "idle",
         ETag: etag,
         "Cache-Control": "private, no-cache",
       };
@@ -486,14 +486,18 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = new Date().getUTCFullYear();
-    const initializedCurrentState = await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
+    const initializedCurrentState = publicEventStateRead
       ? null
-      : await this.snapshot(currentYear, publicRead && year === currentYear ? request : undefined);
-    const initializedState = year === currentYear && initializedCurrentState
-      ? initializedCurrentState
-      : await this.snapshot(year, publicRead ? request : undefined);
-    if (publicRead && initializedState.status === 304) return initializedState;
-    if (publicRead) return initializedState;
+      : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
+        ? null
+        : await this.snapshot(currentYear);
+    const initializedState = publicEventStateRead
+      ? null
+      : year === currentYear && initializedCurrentState
+        ? initializedCurrentState
+        : await this.snapshot(year);
+    if (publicRead && initializedState?.status === 304) return initializedState;
+    if (publicRead && initializedState) return initializedState;
     if (publicSeasonAnalyticsRead) {
       return this.buildSeasonAnalyticsResponse(year);
     }
