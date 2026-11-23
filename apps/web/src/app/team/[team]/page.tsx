@@ -11,7 +11,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { notFound } from "next/navigation";
-import { getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
+import { getCanonicalCurrentSeason, getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import type {
   FieldViewEventSnapshot,
   FieldViewTeamSnapshot,
@@ -89,7 +89,17 @@ export default async function TeamPage({
   const { team: rawTeam } = await params;
   const search = await searchParams;
   const teamKey = normalizeTeamKey(rawTeam);
-  const currentYear = new Date().getFullYear();
+  const currentSeason = await getCanonicalCurrentSeason();
+  if (!currentSeason) {
+    return (
+      <SiteShell>
+        <PageContainer>
+          <PageHeader eyebrow="Team profile" title={teamKey.replace(/^frc/i, "")} description="The TBA current season is not available yet. Refresh FieldView season discovery and reload this page." />
+        </PageContainer>
+      </SiteShell>
+    );
+  }
+  const currentYear = currentSeason.year;
 
   const initialCanonical = await getCanonicalTeamSnapshot(teamKey, currentYear);
   const teamSource = initialCanonical?.snapshot.sources.tba_team;
