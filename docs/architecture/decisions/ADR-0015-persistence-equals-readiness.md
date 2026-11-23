@@ -1,9 +1,11 @@
 # ADR-0015: Persistence equals readiness and reads are stale-while-revalidate
 
-- **Status:** Accepted
+- **Status:** Accepted (partially superseded by ADR-0018)
 - **Date:** 2026-11-21
 - **Decision owners:** FieldView architecture
 - **Scope:** EventRuntime, TeamRuntime, TaskScheduler, Worker read routes, browser synchronization
+
+> **2026-11-22 clarification:** ADR-0018 supersedes the read-triggered initialization/revalidation behavior in this ADR. Public event/team state reads now return 404 until a valid canonical publication exists and never enqueue provider work. Once published, the last-good state remains readable while refresh runs.
 
 ## Context
 
