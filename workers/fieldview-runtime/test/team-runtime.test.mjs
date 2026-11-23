@@ -136,7 +136,7 @@ test("TeamRuntime public snapshots return 204 until readiness publishes canonica
   assert.ok(queue.every((item) => item.dueAt === refreshAt), "all team resources share the randomized durable deadline");
   assert.equal(calls.length, 0, "readiness only queues work; it does not fetch providers inline");
 
-  assert.equal((await read()).status, 404, "the frontend remains gated until the publication exists");
+  assert.equal((await read()).status, 204, "an existing TeamRuntime without TeamState returns no content");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
   await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7, "the TeamRuntime alarm processes each provider resource");
