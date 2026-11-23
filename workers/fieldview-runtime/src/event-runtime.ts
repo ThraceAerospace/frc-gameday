@@ -408,6 +408,10 @@ export class EventRuntime {
     // Public reads never create or replace a publication. Explicit runtime
     // commands and the local alarm own publication work.
     if (request.method === "POST" && url.pathname === "/subscriptions") {
+      const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!currentState || currentState.status === "failed") {
+        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+      }
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
           (body.topic !== undefined && body.topic !== "event-state" && body.topic !== "analytics") ||
@@ -435,12 +439,6 @@ export class EventRuntime {
       }
       const registered = body.action === "subscribe";
       await this.storage.put(registeredKey, registered);
-      // Establish a first partial publication when the first live subscriber
-      // arrives. This is a local, provider-free projection from owned state;
-      // public snapshot reads remain strictly read-only.
-      if (registered && !(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY))) {
-        await this.publishEventState();
-      }
       return Response.json({
         registered,
         event_key: this.eventKey,
@@ -711,6 +709,10 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/stream") {
+      const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!currentState || currentState.status === "failed") {
+        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+      }
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return Response.json({ error: "WebSocket upgrade required" }, { status: 426 });
       if (!this.state.acceptWebSocket || !this.state.getWebSockets) return Response.json({ error: "WebSocket subscriptions are unavailable" }, { status: 501 });
       const pair = this.env.webSocketPairFactory ? this.env.webSocketPairFactory() : new (globalThis as typeof globalThis & { WebSocketPair: new () => { 0: WebSocket; 1: WebSocket } }).WebSocketPair();
@@ -722,6 +724,10 @@ export class EventRuntime {
       return this.env.webSocketResponseFactory ? this.env.webSocketResponseFactory(pair[0]) : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
     }
     if (request.method === "GET" && url.pathname === "/analytics") {
+      const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!eventState || eventState.status === "failed") {
+        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+      }
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const revision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       const endpointStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
@@ -816,13 +822,14 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
+      const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      if (!eventState || eventState.status === "failed") {
+        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+      }
       const matchKey = url.searchParams.get("match_key");
       if (!matchKey || !/^[a-zA-Z0-9_]+$/.test(matchKey) || !matchKey.startsWith(this.eventKey + "_")) {
         return Response.json({ error: "Invalid or mismatched Statbotics match key" }, { status: 400 });
       }
-      // Provider acquisition is owned by EventRuntime. A read only queues
-      // missing/stale work; it never performs a provider request inline.
-      await this.queueSnapshotRefresh();
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const state = await this.storage.get<EndpointState<StatboticsMatch[]>>(endpointStorageKey(endpoint));
       if (!state || state.lastFetchedAt === null || !Array.isArray(state.data)) {
