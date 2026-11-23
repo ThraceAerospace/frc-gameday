@@ -48,7 +48,7 @@ new_sqlite_classes = ["EventRuntime", "TeamRuntime", "Multiplexer", "DiscoverySt
 name = "daily-event-readiness"
 binding = "DAILY_EVENT_READINESS"
 class_name = "DailyEventReadinessWorkflow"
-schedules = ["0 16 * * *"]
+schedules = ["0 10 * * *"]
 concurrency = { limit = 1 }
 
 [[workflows]]
