@@ -388,7 +388,9 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
       maxConcurrentRequests = Math.max(maxConcurrentRequests, activeRequests);
       await new Promise((resolve) => setTimeout(resolve, 1));
       activeRequests -= 1;
-      return String(input) === eventResourceEndpoints(eventKey)[0]
+      const requestUrl = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input);
+      const isEventMetadata = new URL(requestUrl).pathname.endsWith("/event/" + eventKey);
+      return isEventMetadata
         ? Response.json({
           key: eventKey, name: "2026 Demand", year: 2026,
           start_date: "2026-04-01", end_date: "2026-04-03",
