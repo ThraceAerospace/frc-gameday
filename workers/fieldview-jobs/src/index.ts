@@ -662,11 +662,13 @@ export class DailyEventReadinessWorkflow extends LegacyDailyEventReadinessWorkfl
       eventKeys.push(...directory.events);
     }
 
+    const thisWeekEvents = eventKeys.filter((item) =>
+      item && typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key) &&
+      classifyEventThisWeek(item, runAt)?.isThisWeek,
+    );
     const eventResults: Array<{ key: string; state_valid: boolean; refresh_queued: boolean; error?: string }> = [];
-    const thisWeekEvents: TbaEvent[] = [];
     for (const item of eventKeys) {
       if (!item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) continue;
-      if (classifyEventThisWeek(item, runAt)?.isThisWeek) thisWeekEvents.push(item);
       try {
         const refreshAt = await step.do("readiness-event-refresh-time-" + item.key, async () =>
           Date.now() + Math.floor(Math.random() * 5 * 60_000));
