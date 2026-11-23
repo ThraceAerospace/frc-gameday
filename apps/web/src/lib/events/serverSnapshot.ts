@@ -42,6 +42,30 @@ async function readCanonicalJson<T>(operation: string, response: Response): Prom
   }
 }
 
+export type CanonicalCurrentSeasonResponse = {
+  year: number;
+  checkedAt: number;
+};
+
+/** Read the persisted TBA status current_season value; never infer it from the clock. */
+export async function getCanonicalCurrentSeason(
+  fetcher: typeof fetch = fetch,
+): Promise<CanonicalCurrentSeasonResponse | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+  if (!baseUrl) return null;
+  try {
+    const url = new URL("/season/current", baseUrl);
+    const response = await fetchCanonicalRuntime("current-season", url, fetcher, { cache: "no-store" });
+    if (!response.ok) return null;
+    const value = await readCanonicalJson<CanonicalCurrentSeasonResponse>("current-season", response);
+    if (!Number.isInteger(value.year) || value.year < 1992 || value.year > 2200 ||
+        !Number.isFinite(value.checkedAt)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export type CanonicalEventSnapshotResponse = {
   version: number;
   snapshot: FieldViewEventState;
