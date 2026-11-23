@@ -27,6 +27,17 @@ class MemoryStorage {
   }
 }
 
+function seedEventPublication(storage, eventKey) {
+  storage.values.set("event-key", eventKey);
+  storage.values.set("event-state:publication", {
+    sourceRevision: 0,
+    snapshotVersion: 0,
+    generatedAt: Date.now(),
+    status: "partial",
+    state: { event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {} },
+  });
+}
+
 test("EventRuntime hydrates its persisted event publication before serving reads", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026hydrated";
@@ -621,6 +632,7 @@ test("Statbotics refresh is a one-shot triggered by changed TBA REST representat
 test("EventRuntime serves event-scoped Statbotics matches from its durable provider state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
+  seedEventPublication(storage, eventKey);
   const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
   const records = [{
     key: "2026test_qm1",
@@ -804,6 +816,7 @@ test("Statbotics 304 responses retry without replacing the last good representat
 test("versioned WebSocket subscriptions announce gaps and publish snapshot revisions", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
+  seedEventPublication(storage, eventKey);
   const endpoint = TBA_ENDPOINTS.eventMatches(eventKey);
   const acceptedSockets = [];
   class FakeSocket { sent = []; closed = false; send(message) { this.sent.push(message); } close() { this.closed = true; } }
@@ -929,6 +942,7 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
   const storage = new MemoryStorage();
   const deliveries = [];
   const eventKey = "2026test";
+  seedEventPublication(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -981,6 +995,7 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
 test("EventRuntime tracks analytics multiplexer registration independently", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
+  seedEventPublication(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -1137,6 +1152,7 @@ test("webhook refresh retains the 65-second one-shot authoritative TBA refetch",
 test("EventRuntime ignores out-of-order multiplexer registration generations", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
+  seedEventPublication(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -1471,7 +1487,7 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
 });
 
 
-test("EventRuntime persists a partial EventState on its first non-snapshot request", async () => {
+test("EventRuntime subscriptions remain unavailable until a canonical EventState is published", async () => {
   const storage = new MemoryStorage(), eventKey = "2026firstrequest";
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
@@ -1488,10 +1504,10 @@ test("EventRuntime persists a partial EventState on its first non-snapshot reque
     },
     body: JSON.stringify({ action: "subscribe" }),
   }));
-  assert.equal(response.status, 200);
-  const publication = storage.values.get("event-state:publication");
-  assert.equal(publication.state.event_key, eventKey);
-  assert.equal(Object.hasOwn(publication.state, "team_states"), false);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Event state is not ready" });
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "a frontend subscription must not synthesize an empty EventState");
 });
 
 
