@@ -410,7 +410,8 @@ export class EventRuntime {
     // commands and the local alarm own publication work.
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!currentState || currentState.status === "failed") {
+      if (!currentState || currentState.status === "failed" || !isRecord(currentState.state) ||
+          currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
         return Response.json({ error: "Event state is not ready" }, { status: 404 });
       }
       const body: unknown = await request.json().catch(() => null);
@@ -711,7 +712,8 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/stream") {
       const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!currentState || currentState.status === "failed") {
+      if (!currentState || currentState.status === "failed" || !isRecord(currentState.state) ||
+          currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
         return Response.json({ error: "Event state is not ready" }, { status: 404 });
       }
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return Response.json({ error: "WebSocket upgrade required" }, { status: 426 });
@@ -726,7 +728,8 @@ export class EventRuntime {
     }
     if (request.method === "GET" && url.pathname === "/analytics") {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!eventState || eventState.status === "failed") {
+      if (!eventState || eventState.status === "failed" || !isRecord(eventState.state) ||
+          eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
         return Response.json({ error: "Event state is not ready" }, { status: 404 });
       }
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
@@ -824,7 +827,8 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!eventState || eventState.status === "failed") {
+      if (!eventState || eventState.status === "failed" || !isRecord(eventState.state) ||
+          eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
         return Response.json({ error: "Event state is not ready" }, { status: 404 });
       }
       const matchKey = url.searchParams.get("match_key");
@@ -853,7 +857,8 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication || publication.status === "failed") {
+      if (!publication || publication.status === "failed" || !isRecord(publication.state) ||
+          publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" }, team_state_coverage: { status: "unavailable", expected_count: 0, materialized_count: 0 },
@@ -892,7 +897,8 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication || publication.status === "failed") {
+      if (!publication || publication.status === "failed" || !isRecord(publication.state) ||
+          publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" },
