@@ -157,6 +157,28 @@ test("manual discovery and coverage audits are dispatched to the jobs Worker", a
   assert.deepEqual(auditCall.body, { action: "start", year: 2026 });
 });
 
+test("discovery job status is authenticated and forwarded to the Jobs Worker", async () => {
+  const { env, calls } = makeEnvironment();
+  const denied = await worker.fetch(
+    new Request("https://runtime.example/internal/admin/discover-year?year=2027"),
+    env,
+  );
+  assert.equal(denied.status, 401);
+  assert.equal(calls.some((call) => call.operation === "jobs"), false);
+
+  const allowed = await worker.fetch(
+    new Request("https://runtime.example/internal/admin/discover-year?year=2027", {
+      headers: { Authorization: "Bearer server-only-token" },
+    }),
+    env,
+  );
+  assert.equal(allowed.status, 202);
+  const forwarded = calls.find((call) => call.operation === "jobs");
+  assert.equal(forwarded.url, "/internal/admin/discover-year?year=2027");
+  assert.equal(forwarded.method, "GET");
+  assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
+});
+
 test("internal Workflow runtime-state route authenticates and reads the canonical EventRuntime state", async () => {
   const { env, calls } = makeEnvironment();
   const denied = await worker.fetch(
