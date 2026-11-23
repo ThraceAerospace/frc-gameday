@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getCanonicalCurrentSeason } from "@/lib/events/serverSnapshot";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,9 +39,17 @@ export async function GET(request: Request) {
   const eventSeedKey = query.get("eventSeed");
   const teamSeedKey = query.get("teamSeed");
   const discoveryJobYear = query.get("discoveryJob");
+  const needsDefaultYear = Boolean(teamSeedKey || (kind && key) || inventoryKind);
+  const currentSeason = !query.get("year") && needsDefaultYear
+    ? await getCanonicalCurrentSeason()
+    : null;
+  const defaultYear = query.get("year") ?? (currentSeason ? String(currentSeason.year) : null);
+  if (needsDefaultYear && !defaultYear) {
+    return NextResponse.json({ error: "TBA current season is unavailable" }, { status: 503 });
+  }
   const target = teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
     team_key: teamSeedKey,
-    year: query.get("year") ?? String(new Date().getUTCFullYear()),
+    year: defaultYear!,
   }).toString()
     : discoveryJobYear ? "/internal/admin/discovery-job?" + new URLSearchParams({ year: discoveryJobYear }).toString()
     : eventSeedKey ? "/internal/admin/event-team-seed?" + new URLSearchParams({
@@ -49,13 +58,13 @@ export async function GET(request: Request) {
   }).toString()
     : seasonIngestYear ? "/internal/admin/season-ingest?year=" + encodeURIComponent(seasonIngestYear)
     : coverageAuditYear ? "/internal/admin/coverage-audit?year=" + encodeURIComponent(coverageAuditYear)
-    : kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key) + "&year=" + encodeURIComponent(query.get("year") ?? String(new Date().getUTCFullYear()))
+    : kind && key ? "/internal/admin/entity?kind=" + encodeURIComponent(kind) + "&key=" + encodeURIComponent(key) + "&year=" + encodeURIComponent(defaultYear!)
     : inventoryKind ? "/internal/admin/inventory?" + new URLSearchParams({
       kind: inventoryKind,
       q: query.get("q") ?? "",
       cursor: query.get("cursor") ?? "0",
       limit: query.get("limit") ?? "50",
-      year: query.get("year") ?? String(new Date().getUTCFullYear()),
+      year: defaultYear!,
     }).toString()
     : "/internal/admin/overview";
   try {
