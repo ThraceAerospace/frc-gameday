@@ -150,6 +150,19 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       });
 
     try {
+      // Always refresh and persist TBA's authoritative current_season before
+      // running a manual directory discovery. The requested year remains
+      // explicit (historical discovery is supported), but it never changes
+      // the canonical current-season pointer.
+      await step.do("resolve-and-publish-current-season", async () => {
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resolve-current-season");
+        if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
+        const resolved = await response.json() as { year?: unknown };
+        if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200) {
+          throw new Error("TBA returned an invalid current_season");
+        }
+        return resolved;
+      });
       await updateJob("record-discovery-started", { stage: "discovering_events" });
       const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
       const eventChunkSize = 25;
