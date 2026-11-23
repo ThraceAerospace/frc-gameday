@@ -449,6 +449,49 @@ export class EventRuntime {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/readiness") {
+      const body: unknown = await request.json().catch(() => null);
+      const requestedAt = isRecord(body) ? body.refreshAt : undefined;
+      if (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt) ||
+          requestedAt < Date.now() || requestedAt > Date.now() + 5 * 60_000) {
+        return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
+      }
+      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const validState = Boolean(publication && publication.status !== "failed" &&
+        Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
+        publication.state.event_key === this.eventKey);
+      const sources = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const expectedEndpoints = [...this.allowedEndpoints,
+        STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const now = Date.now();
+      const staleSources = expectedEndpoints.filter((endpoint) => {
+        const source = sources.get(endpointStorageKey(endpoint));
+        return !source || source.status === "failed" || source.status === "stale" ||
+          (source.lastFetchedAt === null && source.lastWebhookAt === null && source.status !== "unavailable") ||
+          (source.expiresAt !== null && source.expiresAt <= now);
+      });
+      const refreshQueued = !validState || staleSources.length > 0;
+      if (refreshQueued) {
+        const refreshAt = Math.max(now + 1_000, requestedAt);
+        // All event-owned TBA resources share this event's randomized start time.
+        // Statbotics is an event-scoped manual request and uses the same deadline.
+        await this.schedulePolls([...this.allowedEndpoints], 86_400_000, refreshAt, true);
+        await this.enqueueManualPolls(
+          [STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)],
+          true,
+          refreshAt,
+        );
+      }
+      return Response.json({
+        event_key: this.eventKey,
+        state_valid: validState,
+        publication_status: publication?.status ?? "missing",
+        stale_sources: staleSources,
+        refresh_queued: refreshQueued,
+        refresh_at: refreshQueued ? requestedAt : null,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/lifecycle") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || !["upcoming", "active", "completed", "expired"].includes(String(body.lifecycle))) {
@@ -1514,7 +1557,7 @@ export class EventRuntime {
     });
   }
 
-  private async enqueueManualPolls(endpoints: string[], immediate = true): Promise<void> {
+  private async enqueueManualPolls(endpoints: string[], immediate = true, scheduledAt?: number): Promise<void> {
     await this.storage.transaction(async (transaction) => {
       const current = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
@@ -1524,7 +1567,8 @@ export class EventRuntime {
           endpoint,
           // Read-driven refreshes coalesce behind an existing retry deadline.
           // A newly queued resource is still eligible immediately.
-          dueAt: immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
+          dueAt: scheduledAt !== undefined ? Math.min(previous?.dueAt ?? scheduledAt, scheduledAt)
+            : immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
           attempts: previous?.attempts ?? 0,
         });
       }
