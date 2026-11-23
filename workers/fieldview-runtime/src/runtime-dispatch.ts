@@ -56,6 +56,14 @@ export async function dispatchRuntime(
   const method = action === "state" || action === "analytics" ? "GET" : "POST";
   const payload = { ...body };
   delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
+
+  // EventRuntime requires polling intervals when its lifecycle is initialized.
+  // Keep these aligned with the legacy dispatch route and Wrangler environment.
+  if (action === "lifecycle") {
+    payload.upcomingIntervalMs = Number(env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000);
+    payload.activeIntervalMs = Number(env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
+  }
+
   const response = await stub.fetch(new Request("https://event-runtime/" + path, {
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
