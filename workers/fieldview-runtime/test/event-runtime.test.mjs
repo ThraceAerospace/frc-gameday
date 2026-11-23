@@ -898,11 +898,7 @@ test("public snapshot and stream reads need no user credential while state inspe
     fetcher: async () => new Response("unused"),
   }, eventKey);
 
-  const initialPublication = await runtime.fetch(new Request("https://event-runtime/publish-state", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(initialPublication.status, 200);
+  seedEventPublication(storage, eventKey);
   const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
