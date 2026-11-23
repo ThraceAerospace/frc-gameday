@@ -290,6 +290,22 @@ export default {
       }));
     }
 
+    if (url.pathname === "/season/current" && request.method === "GET") {
+      if (!env.DISCOVERY_STORE) {
+        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      }
+      const object = await discoveryStore(env).get("discovery/current-season.json");
+      if (!object) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      const current = await object.json<{ year?: unknown; checkedAt?: unknown }>().catch(() => null);
+      if (!current || !Number.isInteger(current.year) || Number(current.year) < 1992 ||
+          Number(current.year) > 2200 || !Number.isFinite(current.checkedAt)) {
+        return Response.json({ error: "Published current-season record is invalid" }, { status: 500 });
+      }
+      return Response.json({ year: current.year, checkedAt: current.checkedAt }, {
+        headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+      });
+    }
+
     if (url.pathname === "/events/this-week" && request.method === "GET") {
       if (!env.DISCOVERY_STORE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
