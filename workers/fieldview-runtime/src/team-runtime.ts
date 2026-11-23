@@ -439,7 +439,9 @@ export class TeamRuntime {
           representation_signature?: string;
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
-      if (!publication) {
+      const publishedState = publication?.state as Record<string, unknown> | undefined;
+      if (!publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
+          !publishedState.sources || typeof publishedState.sources !== "object") {
         return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
           status: 404, headers: { "Cache-Control": "no-store" },
         });
