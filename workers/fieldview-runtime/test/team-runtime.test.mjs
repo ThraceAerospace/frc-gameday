@@ -94,7 +94,7 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
   assert.equal(readiness.publications.length, 1);
 });
 
-test("TeamRuntime public snapshots return 404 until readiness publishes canonical state", async () => {
+test("TeamRuntime public snapshots return 204 until readiness publishes canonical state", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461", year = 2026;
   let activeRequests = 0, maxConcurrentRequests = 0;
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
@@ -110,8 +110,8 @@ test("TeamRuntime public snapshots return 404 until readiness publishes canonica
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
   const first = await read();
-  assert.equal(first.status, 404);
-  assert.deepEqual(await first.json(), { error: "Team state is not ready", team_key: teamKey, year });
+  assert.equal(first.status, 204);
+  assert.equal(await first.text(), "", "an existing TeamRuntime without TeamState returns no content");
   assert.equal(calls.length, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
@@ -551,7 +551,8 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
   const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 503, "the first analytics read reports unavailable while background initialization is queued");
+  assert.equal(response.status, 204, "missing season analytics returns no content while background initialization is queued");
+  assert.equal(await response.text(), "");
   assert.equal(storage.values.has("team-season-analytics:" + year), false);
   assert.equal(providerCalls, 0, "the analytics GET does not acquire provider data or calculate inline");
   assert.ok(storage.values.has("season-analytics:due:" + year));
@@ -621,7 +622,7 @@ test("TeamRuntime readiness initializes current and requested season publication
   const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + historicalYear, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 404, "a cold historical read remains unavailable");
+  assert.equal(response.status, 204, "an existing TeamRuntime without historical TeamState returns no content");
   assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
   assert.equal(storage.values.has("team-state:" + historicalYear + ":publication"), false);
   const readiness = await runtime.fetch(new Request("https://team-runtime/readiness?year=" + historicalYear, {
