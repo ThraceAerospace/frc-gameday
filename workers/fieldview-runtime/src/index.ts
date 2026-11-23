@@ -748,6 +748,8 @@ export default {
     if (validTeamRoute && request.method === "GET") {
       const canonicalTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
       if (teamAction === "analytics") {
+        const runtimeMarker = await discoveryStore(env).get(`registry/runtime-teams/${canonicalTeamKey}.json`);
+        if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
         const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
@@ -763,6 +765,8 @@ export default {
         headers.set("Cache-Control", "no-store");
         return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
       }
+      const runtimeMarker = await discoveryStore(env).get(`registry/runtime-teams/${canonicalTeamKey}.json`);
+      if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
       // Public team snapshots must not mutate the global runtime registry.
       const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(canonicalTeamKey));
@@ -836,7 +840,11 @@ export default {
     }
 
     if (validPublicRoute && request.method === "GET") {
-      // Public snapshots are read-only. Event registration belongs to discovery and lifecycle workflows.
+      // A missing runtime marker means readiness has not created this entity.
+      // Do not activate a Durable Object merely to answer a cold public read.
+      const runtimeMarker = await discoveryStore(env).get(`registry/runtime-events/${publicEventKey}.json`);
+      if (!runtimeMarker) return Response.json({ error: "Event state is not ready" }, { status: 404 });
+      if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(publicEventKey));
       const headers = new Headers({
         "X-FieldView-Event-Key": publicEventKey,
