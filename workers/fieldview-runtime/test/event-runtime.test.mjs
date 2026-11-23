@@ -1279,7 +1279,7 @@ test("canonical analytics are coalesced into EventRuntime alarm work and publish
 });
 
 
-test("EventRuntime runs independent provider requests concurrently", async () => {
+test("EventRuntime serializes provider requests within each alarm", async () => {
   const storage = new MemoryStorage(), eventKey = "2026parallel";
   let inFlight = 0, maximumInFlight = 0;
   const runtime = new EventRuntime({ storage }, {
@@ -1298,7 +1298,7 @@ test("EventRuntime runs independent provider requests concurrently", async () =>
   const endpoints = eventResourceEndpoints(eventKey).slice(0, 4);
   await runtime.schedulePolls(endpoints, 60_000, Date.now() - 1);
   await runtime.alarm();
-  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one EventRuntime");
+  assert.equal(maximumInFlight, 1, "one EventRuntime alarm must have at most one provider request in flight");
 });
 
 test("EventRuntime serves participant discovery from its owned TBA resource", async () => {
