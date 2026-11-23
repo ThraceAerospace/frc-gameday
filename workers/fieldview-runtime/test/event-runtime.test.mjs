@@ -406,6 +406,12 @@ test("EventRuntime public snapshots return 204 until readiness publishes canonic
   const firstRead = await runtime.fetch(request());
   assert.equal(firstRead.status, 204, "an existing EventRuntime without EventState returns no content");
   assert.equal(await firstRead.text(), "");
+  const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(analyticsRead.status, 204, "an existing EventRuntime without EventAnalytics returns no content");
+  assert.equal(await analyticsRead.text(), "");
+
   assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
 
