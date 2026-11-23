@@ -79,6 +79,33 @@ test("team seed dispatch calls TeamRuntime directly with the requested season", 
   assert.equal(captured.headers.get("X-FieldView-Team-Key"), "frc3461");
 });
 
+test("readiness dispatch forwards randomized refresh deadlines to both runtime types", async () => {
+  const captured = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    EVENT_RUNTIME: namespace(async (request, id) => {
+      captured.push({ kind: "event", id, url: new URL(request.url), method: request.method, body: await request.json() });
+      return Response.json({ state_valid: false, refresh_queued: true });
+    }),
+    TEAM_RUNTIME: namespace(async (request, id) => {
+      captured.push({ kind: "team", id, url: new URL(request.url), method: request.method, body: await request.json() });
+      return Response.json({ state_valid: false, refresh_queued: true });
+    }),
+    DISCOVERY_STORE: namespace(async () => Response.json({ ok: true })),
+  };
+  const refreshAt = Date.now() + 120_000;
+  const event = await dispatchRuntime(env, "event", "2027rikin", "readiness", { refreshAt }, 2027);
+  const team = await dispatchRuntime(env, "team", "frc3461", "readiness", { refreshAt }, 2027);
+  assert.equal(event.status, 200);
+  assert.equal(team.status, 200);
+  assert.deepEqual(captured.map(({ kind, id, url, method, body }) => ({
+    kind, id, path: url.pathname, year: url.searchParams.get("year"), method, body,
+  })), [
+    { kind: "event", id: "2027rikin", path: "/readiness", year: null, method: "POST", body: { refreshAt } },
+    { kind: "team", id: "frc3461", path: "/readiness", year: "2027", method: "POST", body: { refreshAt } },
+  ]);
+});
+
 test("dispatch rejects unsupported actions and invalid entity keys", async () => {
   const env = { RUNTIME_ADMIN_TOKEN: "test-token" };
   assert.equal((await dispatchRuntime(env, "event", "bad key", "state", {}, 2026)).status, 400);
