@@ -1,4 +1,4 @@
-import { getCanonicalEventDiscovery } from "@/lib/events/serverSnapshot";
+import { getCanonicalCurrentSeason, getCanonicalEventDiscovery } from "@/lib/events/serverSnapshot";
 import type { FieldViewEvent } from "@fieldview/domain";
 
 type EventState = "upcoming" | "in_progress" | "complete";
@@ -72,7 +72,9 @@ function getEventState(
 
 export async function GET() {
   try {
-    const events = await getCanonicalEventDiscovery(new Date().getUTCFullYear());
+    const currentSeason = await getCanonicalCurrentSeason();
+    if (!currentSeason) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
+    const events = await getCanonicalEventDiscovery(currentSeason.year);
     if (!events) return Response.json({ error: "Event discovery snapshot unavailable" }, { status: 503 });
     const now = new Date();
 
