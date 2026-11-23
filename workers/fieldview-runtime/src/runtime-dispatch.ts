@@ -35,7 +35,10 @@ export async function dispatchRuntime(
       : action === "readiness" ? "readiness?year=" + season : null;
     if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
     const method = action === "state" || action === "snapshot" ? "GET" : "POST";
-    const response = await stub.fetch(new Request("https://team-runtime/" + path, { method, headers }));
+    const response = await stub.fetch(new Request("https://team-runtime/" + path, {
+      method, headers,
+      ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+    }));
     if (response.ok) await registerRuntimeMarker(env, "team", key);
     return response;
   }
