@@ -752,7 +752,8 @@ export default {
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
-        const runtimeMarker = await discoveryStore(env).get(`registry/runtime-teams/${canonicalTeamKey}.json`);
+        const discovery = discoveryStore(env);
+        const runtimeMarker = discovery ? await discovery.get(`registry/runtime-teams/${canonicalTeamKey}.json`) : null;
         if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
         if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(canonicalTeamKey));
@@ -765,7 +766,8 @@ export default {
         headers.set("Cache-Control", "no-store");
         return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
       }
-      const runtimeMarker = await discoveryStore(env).get(`registry/runtime-teams/${canonicalTeamKey}.json`);
+      const discovery = discoveryStore(env);
+      const runtimeMarker = discovery ? await discovery.get(`registry/runtime-teams/${canonicalTeamKey}.json`) : null;
       if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
       // Public team snapshots must not mutate the global runtime registry.
@@ -842,7 +844,8 @@ export default {
     if (validPublicRoute && request.method === "GET") {
       // A missing runtime marker means readiness has not created this entity.
       // Do not activate a Durable Object merely to answer a cold public read.
-      const runtimeMarker = await discoveryStore(env).get(`registry/runtime-events/${publicEventKey}.json`);
+      const discovery = discoveryStore(env);
+      const runtimeMarker = discovery ? await discovery.get(`registry/runtime-events/${publicEventKey}.json`) : null;
       if (!runtimeMarker) return Response.json({ error: "Event state is not ready" }, { status: 404 });
       if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(publicEventKey));
