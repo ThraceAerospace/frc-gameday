@@ -111,7 +111,7 @@ test("TeamRuntime public snapshots return 404 until readiness publishes canonica
   }));
   const first = await read();
   assert.equal(first.status, 404);
-  assert.deepEqual(await first.json(), { error: "Team state is not ready" });
+  assert.deepEqual(await first.json(), { error: "Team state is not ready", team_key: teamKey, year });
   assert.equal(calls.length, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
