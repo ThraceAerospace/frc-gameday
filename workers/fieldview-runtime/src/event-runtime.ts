@@ -1766,7 +1766,7 @@ export class EventRuntime {
       const succeeded = await this.pollEndpoint(task.endpoint);
       if (task.retryOnFailure === false) {
         await this.storage.delete(taskStorageKey(task.endpoint));
-        return;
+        continue;
       }
       await this.storage.transaction(async (transaction) => {
         const key = taskStorageKey(task.endpoint);
