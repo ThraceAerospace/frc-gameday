@@ -111,3 +111,35 @@ test("dispatch rejects unsupported actions and invalid entity keys", async () =>
   assert.equal((await dispatchRuntime(env, "event", "bad key", "state", {}, 2026)).status, 400);
   assert.equal((await dispatchRuntime(env, "team", "frc3461", "unknown", {}, 2026)).status, 503);
 });
+
+
+test("team dispatch defaults to persisted TBA current season instead of the system year", async () => {
+  let captured;
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    TEAM_RUNTIME: namespace(async (request) => {
+      captured = new URL(request.url);
+      return new Response(null, { status: 202 });
+    }),
+    DISCOVERY_STORE: namespace(async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname === "/get") return Response.json({ year: 2027, checkedAt: Date.now() });
+      return Response.json({ ok: true });
+    }),
+  };
+  const response = await dispatchRuntime(env, "team", "frc3461", "seed");
+  assert.equal(response.status, 202);
+  assert.equal(captured.searchParams.get("year"), "2027");
+});
+
+test("team dispatch refuses to infer a season when the TBA current-season pointer is missing", async () => {
+  let activated = false;
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    TEAM_RUNTIME: namespace(async () => { activated = true; return new Response(null, { status: 202 }); }),
+    DISCOVERY_STORE: namespace(async () => new Response(null, { status: 404 })),
+  };
+  const response = await dispatchRuntime(env, "team", "frc3461", "seed");
+  assert.equal(response.status, 503);
+  assert.equal(activated, false);
+});
