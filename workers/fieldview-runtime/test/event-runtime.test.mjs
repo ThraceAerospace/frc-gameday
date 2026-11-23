@@ -382,13 +382,19 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => {
+    fetcher: async (input) => {
       providerCalls += 1;
       activeRequests += 1;
       maxConcurrentRequests = Math.max(maxConcurrentRequests, activeRequests);
       await new Promise((resolve) => setTimeout(resolve, 1));
       activeRequests -= 1;
-      return Response.json([]);
+      return String(input) === eventResourceEndpoints(eventKey)[0]
+        ? Response.json({
+          key: eventKey, name: "2026 Demand", year: 2026,
+          start_date: "2026-04-01", end_date: "2026-04-03",
+          timezone: "America/New_York", event_type: 0,
+        })
+        : Response.json([]);
     },
   }, eventKey);
   const request = () => new Request("https://event-runtime/snapshot", {
