@@ -235,7 +235,7 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
 });
 
 
-test("TeamRuntime admin seed fans out independent resources concurrently", async () => {
+test("TeamRuntime admin seed queues resources for sequential alarm processing", async () => {
   const storage = new MemoryStorage(), calls = [];
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -392,7 +392,7 @@ test("TeamRuntime tracks multiple active events and increases polling responsive
   assert.ok(snapshot.polling.every((task) => task.interval_ms === 86_400_000));
 });
 
-test("TeamRuntime runs independent provider requests concurrently", async () => {
+test("TeamRuntime serializes provider requests within each alarm", async () => {
   const storage = new MemoryStorage();
   let inFlight = 0, maximumInFlight = 0;
   const runtime = new TeamRuntime({ storage }, env(async () => {
@@ -407,7 +407,7 @@ test("TeamRuntime runs independent provider requests concurrently", async () => 
   }));
   // Refresh queues durable work; the alarm owns provider I/O.
   await runtime.alarm();
-  assert.ok(maximumInFlight > 1, "multiple provider requests should be in flight within one TeamRuntime alarm");
+  assert.equal(maximumInFlight, 1, "one TeamRuntime alarm must have at most one provider request in flight");
 });
 
 
