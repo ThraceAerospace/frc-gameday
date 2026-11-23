@@ -471,8 +471,9 @@ export class EventRuntime {
           (source.expiresAt !== null && source.expiresAt <= now);
       });
       const refreshQueued = !validState || staleSources.length > 0;
+      let refreshAt: number | null = null;
       if (refreshQueued) {
-        const refreshAt = Math.max(now + 1_000, requestedAt);
+        refreshAt = Math.max(now + 1_000, requestedAt);
         // Queue every event-owned resource behind one randomized deadline.
         // The alarm consumes this queue sequentially and does not create recurring work.
         await this.enqueueManualPolls([...this.allowedEndpoints], true, refreshAt);
@@ -484,7 +485,7 @@ export class EventRuntime {
         publication_status: publication?.status ?? "missing",
         stale_sources: staleSources,
         refresh_queued: refreshQueued,
-        refresh_at: refreshQueued ? requestedAt : null,
+        refresh_at: refreshQueued ? refreshAt : null,
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
