@@ -371,9 +371,9 @@ export class TeamRuntime {
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
     if (publicSeasonAnalyticsRead) {
-      const teamPublication = await this.storage.get<{ state?: unknown }>("team-state:" + year + ":publication");
+      const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const teamState = teamPublication?.state;
-      if (!teamState || typeof teamState !== "object" || Array.isArray(teamState) ||
+      if (!teamPublication || typeof teamPublication.input_signature !== "string" || !teamState || typeof teamState !== "object" || Array.isArray(teamState) ||
           (teamState as Record<string, unknown>).team_key !== this.teamKey ||
           (teamState as Record<string, unknown>).year !== year ||
           !(teamState as Record<string, unknown>).sources ||
@@ -452,7 +452,7 @@ export class TeamRuntime {
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
       const publishedState = publication?.state as Record<string, unknown> | undefined;
-      if (!publication || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
+      if (!publication || typeof publication.input_signature !== "string" || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
           !publishedState.sources || typeof publishedState.sources !== "object" || Array.isArray(publishedState.sources)) {
         return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
           status: 404, headers: { "Cache-Control": "no-store" },
@@ -757,9 +757,9 @@ export class TeamRuntime {
           requestedAt < Date.now() || requestedAt > Date.now() + 5 * 60_000) {
         return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
       }
-      const publication = await this.storage.get<{ state?: unknown }>("team-state:" + year + ":publication");
+      const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const publishedState = publication?.state;
-      const validState = Boolean(publishedState && typeof publishedState === "object" &&
+      const validState = Boolean(publication && typeof publication.input_signature === "string" && publishedState && typeof publishedState === "object" &&
         !Array.isArray(publishedState) &&
         (publishedState as Record<string, unknown>).team_key === this.teamKey &&
         (publishedState as Record<string, unknown>).year === year &&
