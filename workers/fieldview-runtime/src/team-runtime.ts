@@ -755,7 +755,7 @@ export class TeamRuntime {
       const requestedAt = body && typeof body === "object" && !Array.isArray(body)
         ? (body as Record<string, unknown>).refreshAt : undefined;
       if (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt) ||
-          requestedAt < Date.now() || requestedAt > Date.now() + 5 * 60_000) {
+          requestedAt > Date.now() + 5 * 60_000) {
         return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
       }
       const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
