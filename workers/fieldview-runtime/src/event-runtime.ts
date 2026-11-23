@@ -1885,10 +1885,8 @@ export class EventRuntime {
     });
     if (publishedVersion !== null) {
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
-      await Promise.all([
-        this.publishSnapshotRevision(publishedVersion),
-        this.publishAnalyticsRevision(analyticsRevision),
-      ]);
+      await this.publishSnapshotRevision(publishedVersion);
+      await this.publishAnalyticsRevision(analyticsRevision);
     }
   }
 
