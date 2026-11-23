@@ -8,6 +8,17 @@ function makeEnvironment() {
     calls,
     env: {
       RUNTIME_ADMIN_TOKEN: "server-only-token",
+      DISCOVERY_STORE: {
+        idFromName(name) { return name; },
+        get() {
+          return { async fetch(request) {
+            const key = new URL(request.url).searchParams.get("key") ?? "";
+            return key.startsWith("registry/runtime-events/") || key.startsWith("registry/runtime-teams/")
+              ? Response.json({})
+              : new Response(null, { status: 404 });
+          } };
+        },
+      },
       EVENT_RUNTIME: {
         idFromName(name) { calls.push({ operation: "id", name }); return name; },
         get(id) {
@@ -76,6 +87,29 @@ test("public event stream route forwards WebSocket upgrade and since revision", 
   assert.equal(forwarded.url, "/stream?since=11");
   assert.equal(forwarded.headers.get("Upgrade"), "websocket");
   assert.equal(forwarded.headers.get("Authorization"), null);
+});
+
+test("public event and team reads return 404 without activating unready runtimes", async () => {
+  const calls = [];
+  const env = {
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() { return { async fetch() { return new Response(null, { status: 404 }); } }; },
+    },
+    EVENT_RUNTIME: {
+      idFromName(name) { calls.push({ kind: "event-id", name }); return name; },
+      get() { throw new Error("unready EventRuntime must not be activated"); },
+    },
+    TEAM_RUNTIME: {
+      idFromName(name) { calls.push({ kind: "team-id", name }); return name; },
+      get() { throw new Error("unready TeamRuntime must not be activated"); },
+    },
+  };
+  const event = await worker.fetch(new Request("https://runtime.example/events/2026cold/snapshot"), env);
+  const team = await worker.fetch(new Request("https://runtime.example/teams/frc3461/snapshot?year=2026"), env);
+  assert.equal(event.status, 404);
+  assert.equal(team.status, 404);
+  assert.deepEqual(calls, [], "a public read must not instantiate a Durable Object before readiness creates its registry marker");
 });
 
 test("public routes reject writes and malformed event keys", async () => {
@@ -336,6 +370,10 @@ test("internal lifecycle mutation route requires admin auth and forwards the req
 test("public team snapshot route selects the team Durable Object and forwards the season", async () => {
   const calls = [];
   const env = {
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() { return { async fetch() { return Response.json({}); } }; },
+    },
     TEAM_RUNTIME: {
       idFromName(name) { calls.push({ operation: "id", name }); return name; },
       get(id) {
@@ -432,6 +470,10 @@ test("public team season analytics forwards to the canonical TeamRuntime endpoin
     events: [],
   };
   const env = {
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() { return { async fetch() { return Response.json({}); } }; },
+    },
     TEAM_RUNTIME: {
       idFromName(name) { calls.push({ kind: "team-id", name }); return name; },
       get(id) {
