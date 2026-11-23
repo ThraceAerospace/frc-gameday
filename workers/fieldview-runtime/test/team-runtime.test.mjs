@@ -568,6 +568,52 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
 });
 
 
+test("TeamRuntime readiness skips fresh sources and queues every resource when one source is stale", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", year = 2027, now = Date.now();
+  storage.values.set("team-key", teamKey);
+  storage.values.set("team-state:" + year + ":publication", {
+    input_signature: "seeded-team-state",
+    state: { team_key: teamKey, year, sources: {} },
+  });
+  const resources = teamResourceEndpoints(teamKey, year);
+  for (const resource of resources) {
+    storage.values.set("endpoint:" + resource.endpoint, {
+      endpoint: resource.endpoint, status: "available", revision: 1,
+      lastFetchedAt: now, expiresAt: now + 60_000,
+    });
+  }
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("readiness must not fetch providers inline");
+  }), teamKey);
+  const inspect = (refreshAt) => runtime.fetch(new Request("https://team-runtime/readiness?year=" + year, {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshAt }),
+  }));
+
+  const fresh = await inspect(Date.now() + 60_000);
+  assert.equal(fresh.status, 200);
+  const freshResult = await fresh.json();
+  assert.equal(freshResult.state_valid, true);
+  assert.equal(freshResult.refresh_queued, false);
+  assert.deepEqual(freshResult.stale_resources, []);
+  assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
+  assert.equal(storage.alarmAt, null);
+
+  const staleEndpoint = resources[0].endpoint;
+  storage.values.get("endpoint:" + staleEndpoint).expiresAt = Date.now() - 1;
+  const refreshAt = Date.now() + 90_000;
+  const stale = await inspect(refreshAt);
+  assert.equal(stale.status, 200);
+  const staleResult = await stale.json();
+  assert.equal(staleResult.state_valid, true);
+  assert.equal(staleResult.refresh_queued, true);
+  assert.deepEqual(staleResult.stale_resources, [staleEndpoint]);
+  const queue = storage.values.get("manual:poll-queue");
+  assert.equal(queue.length, resources.length, "one stale source queues the complete TeamRuntime resource set");
+  assert.ok(queue.every((item) => item.dueAt === refreshAt));
+});
+
 test("TeamRuntime readiness initializes current and requested season publications without public-read side effects", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
   const currentYear = new Date().getUTCFullYear(), historicalYear = currentYear - 1;
