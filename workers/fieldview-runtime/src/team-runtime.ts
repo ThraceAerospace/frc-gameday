@@ -1286,7 +1286,7 @@ export class TeamRuntime {
       if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
         const endpointParts = task.endpoint.split("/");
         const year = Number(endpointParts[4] ?? new Date().getUTCFullYear());
-        await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year);
+        await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year, false);
       }
     }
     const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
