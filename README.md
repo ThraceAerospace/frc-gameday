@@ -49,12 +49,30 @@ All event-related dates and times displayed by FieldView must use the event's IA
 
 ## Development
 
+Install dependencies and create one ignored environment file at the repository root:
+
 ```bash
 npm install
+cp .env.example .env
+```
+
+Keep all local web and Worker environment values in that root `.env`. Do not create workspace-specific `.env.local`, `.dev.vars`, or other duplicate secret files. The root `.env` is ignored by Git.
+
+Run the web app and checks:
+
+```bash
 npm run dev
 npm run lint
 npm run build
 ```
+
+Run the consolidated Cloudflare Worker locally with the same root file:
+
+```bash
+npx wrangler dev --config workers/fieldview/wrangler.preprod.toml --env-file .env
+```
+
+The Next.js config loads the root `.env` explicitly; Wrangler receives it through `--env-file`. Cloudflare-hosted Preproduction and Production secrets remain independently configured in Cloudflare and are not synchronized from this local file.
 
 TBA and Statbotics types are generated from their upstream OpenAPI documents. The `predev` and `prebuild` lifecycle scripts regenerate both type sets automatically. To run either generator directly:
 
@@ -63,7 +81,7 @@ npm run generate:tba-types
 npm run generate:statbotics-types
 ```
 
-Do not commit secrets. The application uses environment configuration for Redis, TBA authentication/webhook verification, and optional provider/runtime overrides.
+Do not commit secrets. Add only the variables required by the services you run locally (for example, `TBA_API_KEY`, `TBA_WEBHOOK_SECRET`, `RUNTIME_ADMIN_TOKEN`, and any legacy web-service credentials still needed by your local setup).
 
 There is currently no dedicated test script in the legacy root `package.json`; test infrastructure is part of the repository foundation work.
 
