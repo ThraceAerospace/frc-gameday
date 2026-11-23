@@ -393,10 +393,11 @@ export class EventRuntime {
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
       (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
+    const publicSubscriptionRead = request.method === "POST" && url.pathname === "/subscriptions";
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (publicRead) {
+    if (publicRead || publicSubscriptionRead) {
       if (!(await this.restoreEventKey(request))) {
         return Response.json({ error: "Event state is not ready" }, {
           status: 404, headers: { "Cache-Control": "no-store" },
