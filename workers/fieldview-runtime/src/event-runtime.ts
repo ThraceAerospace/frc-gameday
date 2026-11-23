@@ -475,10 +475,8 @@ export class EventRuntime {
         const refreshAt = Math.max(now + 1_000, requestedAt);
         // Queue every event-owned resource behind one randomized deadline.
         // The alarm consumes this queue sequentially and does not create recurring work.
-        await this.enqueueManualPolls([
-          ...this.allowedEndpoints,
-          STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
-        ], true, refreshAt);
+        await this.enqueueManualPolls([...this.allowedEndpoints], true, refreshAt);
+        await this.scheduleStatboticsRefresh(refreshAt, 0);
       }
       return Response.json({
         event_key: this.eventKey,
@@ -2111,9 +2109,16 @@ export class EventRuntime {
     await this.storage.transaction(async (transaction) => {
       const key = taskStorageKey(endpoint);
       const previous = await transaction.get<PollTask>(key);
+      const dueAt = now + delayMs;
+      // Never move an already scheduled refresh later. In particular, a TBA
+      // change during a readiness sweep must not postpone its randomized slot.
+      if (previous && previous.dueAt <= dueAt) {
+        await this.rearm(transaction);
+        return;
+      }
       await transaction.put(key, {
         endpoint,
-        dueAt: now + delayMs,
+        dueAt,
         intervalMs: null,
         generation: (previous?.generation ?? 0) + 1,
         attempts: 0,
