@@ -365,13 +365,20 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
 test("EventRuntime public snapshots return 404 until readiness publishes canonical state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
-  let providerCalls = 0;
+  let providerCalls = 0, activeRequests = 0, maxConcurrentRequests = 0;
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => { providerCalls += 1; return Response.json([]); },
+    fetcher: async () => {
+      providerCalls += 1;
+      activeRequests += 1;
+      maxConcurrentRequests = Math.max(maxConcurrentRequests, activeRequests);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      activeRequests -= 1;
+      return Response.json([]);
+    },
   }, eventKey);
   const request = () => new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
@@ -411,6 +418,7 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
   storage.values.set(statboticsTaskKey, { ...statboticsTask, dueAt: Date.now() - 1 });
   await runtime.alarm();
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
+  assert.equal(maxConcurrentRequests, 1, "one EventRuntime alarm must never run provider requests concurrently");
   const published = await runtime.fetch(request());
   assert.equal(published.status, 200, "the canonical EventState becomes readable after refresh publication");
 });
