@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
+import { getCanonicalCurrentSeason, getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
 import SiteShell from "@/components/navigation/SiteShell";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
@@ -7,18 +7,19 @@ import SurfaceCard from "@/components/ui/SurfaceCard";
 import { formatTeamNumber } from "@/lib/tba/formatters";
 
 export default async function TeamsPage() {
-  const year = new Date().getFullYear();
-  const teams = await getCanonicalTeamDiscovery(year);
+  const currentSeason = await getCanonicalCurrentSeason();
+  const year = currentSeason?.year ?? null;
+  const teams = year === null ? null : await getCanonicalTeamDiscovery(year);
 
   return (
     <SiteShell>
       <PageContainer>
-        <PageHeader eyebrow="Teams" title={`${year} teams`} description="Browse teams listed for the current season, then open a team page." />
+        <PageHeader eyebrow="Teams" title={`${year ?? "Current season"} teams`} description="Browse teams listed for the current season, then open a team page." />
 
         {!teams ? (
           <SurfaceCard className="mt-6 border-dashed p-8 text-center">
             <p className="font-semibold text-[var(--fv-text)]">Team directory snapshot unavailable</p>
-            <p className="mt-1 text-sm text-[var(--fv-muted)]">The FieldView runtime has not published the {year} team directory yet. Start or refresh runtime discovery, then reload this page.</p>
+            <p className="mt-1 text-sm text-[var(--fv-muted)]">The TBA current season or its FieldView team directory is not available yet. Refresh season discovery, then reload this page.</p>
           </SurfaceCard>
         ) : teams.length === 0 ? (
           <SurfaceCard className="mt-6 border-dashed p-8 text-center">
