@@ -96,8 +96,13 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
 
 test("TeamRuntime public snapshots return 404 until readiness publishes canonical state", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461", year = 2026;
+  let activeRequests = 0, maxConcurrentRequests = 0;
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
+    activeRequests += 1;
+    maxConcurrentRequests = Math.max(maxConcurrentRequests, activeRequests);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    activeRequests -= 1;
     if (String(url).endsWith("/team/frc3461")) return Response.json({ key: teamKey, team_number: 3461 }, { headers: { ETag: '"team-v1"' } });
     return Response.json([]);
   }), teamKey);
@@ -130,6 +135,7 @@ test("TeamRuntime public snapshots return 404 until readiness publishes canonica
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
   await drainManualQueue(runtime, storage);
   assert.equal(calls.length, 7, "the TeamRuntime alarm processes each provider resource");
+  assert.equal(maxConcurrentRequests, 1, "one TeamRuntime alarm must never run provider requests concurrently");
   const second = await read();
   assert.equal(second.status, 200);
   const snapshot = await second.json();
