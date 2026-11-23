@@ -294,8 +294,7 @@ export default {
       if (!env.DISCOVERY_STORE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      {
-        const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
+      const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
         if (pointerObject) {
           const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
           const events: Array<Record<string, unknown>> = [];
@@ -330,7 +329,6 @@ export default {
             }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
           }
         }
-      }
       return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
 
@@ -342,8 +340,7 @@ export default {
       if (!env.DISCOVERY_STORE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      {
-        const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
+      const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
         if (object) {
           const discovery = await object.json<{
             year: number; events: Array<Record<string, unknown>>;
@@ -371,7 +368,6 @@ export default {
             },
           });
         }
-      }
       return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
 
