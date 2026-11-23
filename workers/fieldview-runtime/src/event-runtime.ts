@@ -399,9 +399,7 @@ export class EventRuntime {
     }
     if (publicRead || publicSubscriptionRead) {
       if (!(await this.restoreEventKey(request))) {
-        return Response.json({ error: "Event state is not ready" }, {
-          status: 404, headers: { "Cache-Control": "no-store" },
-        });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
     } else if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
@@ -420,7 +418,7 @@ export class EventRuntime {
         const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
         if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
             currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-          return Response.json({ error: "Event state is not ready" }, { status: 404 });
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
         }
       }
       const topic = body.topic === "analytics" ? "analytics" : "event-state";
@@ -716,7 +714,7 @@ export class EventRuntime {
       const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
           currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return Response.json({ error: "WebSocket upgrade required" }, { status: 426 });
       if (!this.state.acceptWebSocket || !this.state.getWebSockets) return Response.json({ error: "WebSocket subscriptions are unavailable" }, { status: 501 });
@@ -732,9 +730,10 @@ export class EventRuntime {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!eventState || eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
-        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       const revision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       const endpointStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
@@ -831,7 +830,7 @@ export class EventRuntime {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!eventState || eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
-        return Response.json({ error: "Event state is not ready" }, { status: 404 });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       const matchKey = url.searchParams.get("match_key");
       if (!matchKey || !/^[a-zA-Z0-9_]+$/.test(matchKey) || !matchKey.startsWith(this.eventKey + "_")) {
@@ -839,8 +838,9 @@ export class EventRuntime {
       }
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const state = await this.storage.get<EndpointState<StatboticsMatch[]>>(endpointStorageKey(endpoint));
-      if (!state || state.lastFetchedAt === null || !Array.isArray(state.data)) {
-        return Response.json({ available: false, status: state?.status ?? "pending" }, {
+      if (!state) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (state.lastFetchedAt === null || !Array.isArray(state.data)) {
+        return Response.json({ available: false, status: state.status }, {
           status: 503, headers: { "Cache-Control": "no-store" },
         });
       }
@@ -861,10 +861,7 @@ export class EventRuntime {
       const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!publication || publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
-        return Response.json({
-          event_key: this.eventKey, status: "unavailable",
-          publication: { status: "missing" }, team_state_coverage: { status: "unavailable", expected_count: 0, materialized_count: 0 },
-        }, { status: 404, headers: { "Cache-Control": "no-store" } });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
@@ -901,11 +898,7 @@ export class EventRuntime {
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!publication || publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
-        return Response.json({
-          event_key: this.eventKey, status: "unavailable",
-          publication: { status: "missing" },
-          team_state_coverage: { state: "unavailable", expected_count: 0, materialized_count: 0, pending_team_keys: [] },
-        }, { status: 404, headers: { "Cache-Control": "no-store" } });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       const viewSourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const viewExpectedEndpoints = [...eventResourceEndpoints(this.eventKey),
