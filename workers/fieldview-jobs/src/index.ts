@@ -116,9 +116,12 @@ interface CoverageAuditParameters { year: number; workflowId: string; startedAt:
  */
 export class LegacyDailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
-    if (event.payload?.operation === "discover-season") {
-      return this.discoverSeason(event.payload, step);
+    // The old bulk event-initialization path is intentionally disabled. The
+    // replacement DailyEventReadinessWorkflow owns the scheduled readiness sweep.
+    if (event.payload?.operation !== "discover-season") {
+      throw new Error("Legacy bulk readiness execution is disabled");
     }
+    return this.discoverSeason(event.payload, step);
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
 
