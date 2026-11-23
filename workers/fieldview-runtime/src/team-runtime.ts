@@ -790,9 +790,8 @@ export class TeamRuntime {
       const refreshQueued = !validState || staleResources.length > 0;
       if (refreshQueued) {
         const refreshAt = Math.max(now + 1_000, requestedAt);
-        // Register steady-state schedules without running them now, then queue
-        // the complete team resource set behind the same randomized deadline.
-        await this.schedule(year, true);
+        // Queue the complete team resource set behind one randomized deadline.
+        // Existing recurring schedules, if any, are left untouched.
         await this.enqueueManualPolls(resources, year, true, refreshAt);
       }
       return Response.json({
