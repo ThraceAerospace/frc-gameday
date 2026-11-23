@@ -780,8 +780,9 @@ export class TeamRuntime {
           (source.expiresAt !== null && source.expiresAt <= now);
       }).map((resource) => resource.endpoint);
       const refreshQueued = !validState || staleResources.length > 0;
+      let refreshAt: number | null = null;
       if (refreshQueued) {
-        const refreshAt = Math.max(now + 1_000, requestedAt);
+        refreshAt = Math.max(now + 1_000, requestedAt);
         // Queue the complete team resource set behind one randomized deadline.
         // Existing recurring schedules, if any, are left untouched.
         await this.enqueueManualPolls(resources, year, true, refreshAt);
@@ -792,7 +793,7 @@ export class TeamRuntime {
         state_valid: validState,
         stale_resources: staleResources,
         refresh_queued: refreshQueued,
-        refresh_at: refreshQueued ? requestedAt : null,
+        refresh_at: refreshQueued ? refreshAt : null,
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
