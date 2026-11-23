@@ -473,14 +473,12 @@ export class EventRuntime {
       const refreshQueued = !validState || staleSources.length > 0;
       if (refreshQueued) {
         const refreshAt = Math.max(now + 1_000, requestedAt);
-        // All event-owned TBA resources share this event's randomized start time.
-        // Statbotics is an event-scoped manual request and uses the same deadline.
-        await this.schedulePolls([...this.allowedEndpoints], 86_400_000, refreshAt, true);
-        await this.enqueueManualPolls(
-          [STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)],
-          true,
-          refreshAt,
-        );
+        // Queue every event-owned resource behind one randomized deadline.
+        // The alarm consumes this queue sequentially and does not create recurring work.
+        await this.enqueueManualPolls([
+          ...this.allowedEndpoints,
+          STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
+        ], true, refreshAt);
       }
       return Response.json({
         event_key: this.eventKey,
