@@ -529,3 +529,31 @@ test("public team analytics rejects invalid seasons before accessing runtimes", 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "Invalid season year" });
 });
+
+
+test("public current-season route returns 204 until TBA status has been persisted", async () => {
+  const { env } = makeEnvironment();
+  const response = await worker.fetch(new Request("https://runtime.example/season/current"), env);
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+});
+
+test("public current-season route returns the persisted TBA current_season value", async () => {
+  const env = {
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() {
+        return { async fetch(request) {
+          const url = new URL(request.url);
+          assert.equal(url.pathname, "/get");
+          assert.equal(url.searchParams.get("key"), "discovery/current-season.json");
+          return Response.json({ year: 2027, checkedAt: 1795405924680 });
+        } };
+      },
+    },
+  };
+  const response = await worker.fetch(new Request("https://runtime.example/season/current"), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { year: 2027, checkedAt: 1795405924680 });
+});
