@@ -362,7 +362,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
 });
 
-test("public event snapshot reads queue missing resources without running provider I/O inline", async () => {
+test("EventRuntime public snapshots return 404 until readiness publishes canonical state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0;
@@ -378,29 +378,41 @@ test("public event snapshot reads queue missing resources without running provid
   });
 
   const firstRead = await runtime.fetch(request());
-  assert.equal(firstRead.status, 503, "a missing publication is explicitly unavailable rather than built inline");
-  assert.equal((await firstRead.json()).publication.status, "missing");
-  assert.equal((await runtime.fetch(request())).status, 503);
-  assert.equal(providerCalls, 0, "snapshot requests must not wait for provider work");
-  assert.ok(storage.alarmAt !== null, "missing resources should arm durable background work");
-  assert.equal([...storage.values.keys()].filter((key) => key.startsWith("task:")).length, eventResourceEndpoints(eventKey).length);
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
-  assert.equal((await runtime.fetch(request())).status, 503, "repeated reads keep returning the unavailable state until a publication exists");
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, eventResourceEndpoints(eventKey).length + 1);
+  assert.equal(firstRead.status, 404, "a missing EventState is not exposed as a placeholder");
+  assert.deepEqual(await firstRead.json(), { error: "Event state is not ready" });
+  assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
+  assert.equal(storage.alarmAt, null, "public reads do not arm background work");
 
-  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+  const refreshAt = Date.now() + 60_000;
+  const readiness = await runtime.fetch(new Request("https://event-runtime/readiness", {
     method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refreshAt }),
   }));
-  assert.equal(refresh.status, 202);
-  assert.equal(providerCalls, 0, "admin refresh must queue provider work without blocking the request");
-  for (let index = 0; index < eventResourceEndpoints(eventKey).length; index += 1) {
-    const queue = storage.values.get("manual:poll-queue") ?? [];
-    if (queue.length === 0) break;
-    storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
-    await runtime.alarm();
-  }
+  assert.equal(readiness.status, 200);
+  const result = await readiness.json();
+  assert.equal(result.state_valid, false);
+  assert.equal(result.refresh_queued, true);
+  const queue = storage.values.get("manual:poll-queue") ?? [];
+  assert.equal(queue.length, eventResourceEndpoints(eventKey).length);
+  assert.ok(queue.every((item) => item.dueAt === refreshAt), "all TBA event resources share the randomized durable deadline");
+  const statboticsTask = [...storage.values.entries()].find(([key]) =>
+    key.startsWith("task:") && key.includes("statbotics"));
+  assert.ok(statboticsTask, "Statbotics receives its own durable one-shot alarm task");
+  assert.equal(statboticsTask[1].dueAt, refreshAt);
+  assert.equal(providerCalls, 0, "readiness only schedules work and never fetches inline");
+  assert.equal((await runtime.fetch(request())).status, 404, "frontend reads remain gated until EventState is published");
+
+  storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
+  storage.values.set(statboticsTask[0], { ...statboticsTask[1], dueAt: Date.now() - 1 });
+  await runtime.alarm();
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
+  const published = await runtime.fetch(request());
+  assert.equal(published.status, 200, "the canonical EventState becomes readable after refresh publication");
 });
 
 test("explicit EventState publication composes canonical event-team domain objects with source metadata", async () => {
@@ -892,8 +904,8 @@ test("public snapshot and stream reads need no user credential while state inspe
   }));
   assert.equal(authorizedState.status, 200);
   const diagnostics = await authorizedState.json();
-  assert.equal(diagnostics.polling.length, eventResourceEndpoints(eventKey).length, "public reads should register recurring tasks for missing resources");
-  assert.ok(storage.alarmAt !== null);
+  assert.equal(diagnostics.polling.length, 0, "public reads do not register recurring tasks");
+  assert.equal(storage.alarmAt, null, "public reads do not schedule background acquisition");
   assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
   const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
@@ -1187,8 +1199,13 @@ test("canonical analytics are coalesced into EventRuntime alarm work and publish
   assert.equal(storage.values.has("analytics:publication"), false,
     "snapshot reads must not execute or persist analytics calculations");
 
-  // The read has queued all missing inputs. Drain those durable provider jobs
-  // while holding analytics for a separate explicit calculation assertion.
+  // Explicit admin refresh queues the missing provider inputs. Drain those
+  // durable jobs while holding analytics for a separate calculation assertion.
+  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(refresh.status, 202);
   storage.values.set("analytics:due-at", Date.now() + 60_000);
   for (let index = 0; index < eventResourceEndpoints(eventKey).length + 2; index += 1) {
     const queue = storage.values.get("manual:poll-queue") ?? [];
