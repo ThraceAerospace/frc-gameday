@@ -35,6 +35,31 @@ test("event dispatch calls EventRuntime directly and records its runtime marker"
   assert.equal(markers.get("registry/runtime-events/2026test.json"), "{}");
 });
 
+test("lifecycle dispatch forwards configured polling intervals to EventRuntime", async () => {
+  let capturedBody;
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    EVENT_UPCOMING_INTERVAL_MS: "1800000",
+    EVENT_ACTIVE_INTERVAL_MS: "300000",
+    EVENT_RUNTIME: namespace(async (request) => {
+      assert.equal(new URL(request.url).pathname, "/lifecycle");
+      capturedBody = await request.json();
+      return Response.json({ queued: true }, { status: 202 });
+    }),
+  };
+
+  const response = await dispatchRuntime(env, "event", "2027rikin", "lifecycle", {
+    lifecycle: "upcoming",
+  }, 2027);
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(capturedBody, {
+    lifecycle: "upcoming",
+    upcomingIntervalMs: 1_800_000,
+    activeIntervalMs: 300_000,
+  });
+});
+
 test("team seed dispatch calls TeamRuntime directly with the requested season", async () => {
   let captured;
   const env = {
