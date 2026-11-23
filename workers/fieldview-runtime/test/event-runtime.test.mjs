@@ -373,7 +373,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
 });
 
-test("EventRuntime public snapshots return 404 until readiness publishes canonical state", async () => {
+test("EventRuntime public snapshots return 204 until readiness publishes canonical state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0, activeRequests = 0, maxConcurrentRequests = 0;
@@ -404,10 +404,8 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
   });
 
   const firstRead = await runtime.fetch(request());
-  assert.equal(firstRead.status, 404, "a missing EventState is not exposed as a placeholder");
-  const unavailable = await firstRead.json();
-  assert.equal(unavailable.status, "unavailable");
-  assert.equal(unavailable.publication.status, "missing");
+  assert.equal(firstRead.status, 204, "an existing EventRuntime without EventState returns no content");
+  assert.equal(await firstRead.text(), "");
   assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
 
@@ -1558,8 +1556,8 @@ test("EventRuntime subscriptions remain unavailable until a canonical EventState
     },
     body: JSON.stringify({ action: "subscribe" }),
   }));
-  assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "Event state is not ready" });
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "", "a missing EventState has no response body");
   assert.equal(storage.values.has("event-state:publication"), false,
     "a frontend subscription must not synthesize an empty EventState");
 });
