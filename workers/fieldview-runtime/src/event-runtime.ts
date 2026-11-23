@@ -1765,7 +1765,10 @@ export class EventRuntime {
     for (const task of dueTasks.due) {
       const succeeded = await this.pollEndpoint(task.endpoint);
       if (task.retryOnFailure === false) {
-        await this.storage.delete(taskStorageKey(task.endpoint));
+        await this.storage.transaction(async (transaction) => {
+          await transaction.delete(taskStorageKey(task.endpoint));
+          await this.rearm(transaction);
+        });
         continue;
       }
       await this.storage.transaction(async (transaction) => {
