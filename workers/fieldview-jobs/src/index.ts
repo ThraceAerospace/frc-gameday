@@ -366,53 +366,6 @@ export class DailyEventReadinessWorkflow extends LegacyDailyEventReadinessWorkfl
       item && typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key) &&
       classifyEventThisWeek(item, runAt)?.isThisWeek,
     );
-    const eventResults: Array<{ key: string; state_valid: boolean; refresh_queued: boolean; error?: string }> = [];
-    for (const item of eventKeys) {
-      if (!item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) continue;
-      try {
-        const refreshAt = await step.do("readiness-event-refresh-time-" + item.key, async () =>
-          Date.now() + Math.floor(Math.random() * 5 * 60_000));
-        const result = await step.do("readiness-inspect-event-" + item.key, {
-          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
-        }, async () => {
-          const response = await dispatchRuntime(this.env, "event", item.key, "readiness", { refreshAt }, year);
-          if (!response.ok) throw new Error("EventRuntime readiness returned HTTP " + response.status + ": " + await response.text());
-          return response.json() as Promise<{ state_valid?: boolean; refresh_queued?: boolean }>;
-        });
-        eventResults.push({
-          key: item.key,
-          state_valid: result.state_valid === true,
-          refresh_queued: result.refresh_queued === true,
-        });
-      } catch (error) {
-        eventResults.push({ key: item.key, state_valid: false, refresh_queued: false, error: String(error).slice(0, 300) });
-      }
-    }
-
-    // Team readiness follows the same sequential, delayed pattern. It checks
-    // every current-season team, not only teams participating in this week's events.
-    const teamResults: Array<{ key: string; state_valid: boolean; refresh_queued: boolean; error?: string }> = [];
-    for (const teamKey of uniqueTeamKeys) {
-      try {
-        const refreshAt = await step.do("readiness-team-refresh-time-" + teamKey, async () =>
-          Date.now() + Math.floor(Math.random() * 5 * 60_000));
-        const result = await step.do("readiness-inspect-team-" + teamKey, {
-          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
-        }, async () => {
-          const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", { refreshAt }, year);
-          if (!response.ok) throw new Error("TeamRuntime readiness returned HTTP " + response.status + ": " + await response.text());
-          return response.json() as Promise<{ state_valid?: boolean; refresh_queued?: boolean }>;
-        });
-        teamResults.push({
-          key: teamKey,
-          state_valid: result.state_valid === true,
-          refresh_queued: result.refresh_queued === true,
-        });
-      } catch (error) {
-        teamResults.push({ key: teamKey, state_valid: false, refresh_queued: false, error: String(error).slice(0, 300) });
-      }
-    }
-
     const thisWeekProjection = {
       evaluatedAt: runAt,
       runDate,
@@ -431,6 +384,65 @@ export class DailyEventReadinessWorkflow extends LegacyDailyEventReadinessWorkfl
       return { eventCount: thisWeekEvents.length };
     });
 
+    const eventResults: Array<{
+      key: string; state_valid: boolean; refresh_queued: boolean;
+      refresh_at?: number | null; stale_sources?: string[]; error?: string;
+    }> = [];
+    for (const item of eventKeys) {
+      if (!item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) continue;
+      try {
+        const result = await step.do("readiness-event-" + item.key, {
+          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+        }, async () => {
+          const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
+          const response = await dispatchRuntime(this.env, "event", item.key, "readiness", { refreshAt }, year);
+          if (!response.ok) throw new Error("EventRuntime readiness returned HTTP " + response.status + ": " + await response.text());
+          return response.json() as Promise<{
+            state_valid?: boolean; refresh_queued?: boolean; refresh_at?: number | null; stale_sources?: string[];
+          }>;
+        });
+        eventResults.push({
+          key: item.key,
+          state_valid: result.state_valid === true,
+          refresh_queued: result.refresh_queued === true,
+          refresh_at: result.refresh_at ?? null,
+          stale_sources: result.stale_sources ?? [],
+        });
+      } catch (error) {
+        eventResults.push({ key: item.key, state_valid: false, refresh_queued: false, error: String(error).slice(0, 300) });
+      }
+    }
+
+    // Team readiness follows the same sequential, delayed pattern. It checks
+    // every current-season team, not only teams participating in this week's events.
+    const teamResults: Array<{
+      key: string; state_valid: boolean; refresh_queued: boolean;
+      refresh_at?: number | null; stale_resources?: string[]; error?: string;
+    }> = [];
+    for (const teamKey of uniqueTeamKeys) {
+      try {
+        const result = await step.do("readiness-team-" + teamKey, {
+          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+        }, async () => {
+          const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
+          const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", { refreshAt }, year);
+          if (!response.ok) throw new Error("TeamRuntime readiness returned HTTP " + response.status + ": " + await response.text());
+          return response.json() as Promise<{
+            state_valid?: boolean; refresh_queued?: boolean; refresh_at?: number | null; stale_resources?: string[];
+          }>;
+        });
+        teamResults.push({
+          key: teamKey,
+          state_valid: result.state_valid === true,
+          refresh_queued: result.refresh_queued === true,
+          refresh_at: result.refresh_at ?? null,
+          stale_resources: result.stale_resources ?? [],
+        });
+      } catch (error) {
+        teamResults.push({ key: teamKey, state_valid: false, refresh_queued: false, error: String(error).slice(0, 300) });
+      }
+    }
+
     const summary = {
       run_date: runDate,
       current_season: year,
@@ -440,11 +452,13 @@ export class DailyEventReadinessWorkflow extends LegacyDailyEventReadinessWorkfl
       events_refresh_queued: eventResults.filter((item) => item.refresh_queued).length,
       events_failed: eventResults.filter((item) => item.error).length,
       event_failures: eventResults.filter((item) => item.error).slice(0, 100),
+      event_readiness: eventResults,
       teams_total: uniqueTeamKeys.length,
       teams_state_valid: teamResults.filter((item) => item.state_valid).length,
       teams_refresh_queued: teamResults.filter((item) => item.refresh_queued).length,
       teams_failed: teamResults.filter((item) => item.error).length,
       team_failures: teamResults.filter((item) => item.error).slice(0, 100),
+      team_readiness: teamResults,
       this_week_events: thisWeekEvents.length,
       team_directory: { pages: teamPages, teams: uniqueTeamKeys.length },
       event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
