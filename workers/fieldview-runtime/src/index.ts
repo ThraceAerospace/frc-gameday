@@ -291,7 +291,10 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (env.DISCOVERY_STORE) {
+      if (!env.DISCOVERY_STORE) {
+        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      }
+      {
         const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
         if (pointerObject) {
           const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
@@ -333,7 +336,13 @@ export default {
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
       const requestedYear = Number(url.searchParams.get("year"));
-      if (env.DISCOVERY_STORE && Number.isSafeInteger(requestedYear) && requestedYear >= 1992 && requestedYear <= 2200) {
+      if (!Number.isSafeInteger(requestedYear) || requestedYear < 1992 || requestedYear > 2200) {
+        return Response.json({ error: "Invalid discovery year" }, { status: 400 });
+      }
+      if (!env.DISCOVERY_STORE) {
+        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      }
+      {
         const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
         if (object) {
           const discovery = await object.json<{
