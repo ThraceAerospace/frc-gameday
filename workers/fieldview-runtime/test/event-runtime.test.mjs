@@ -1453,9 +1453,10 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
     sourceRevision: 0,
     snapshotVersion: 1,
     generatedAt: Date.now(),
-    status: "failed",
+    status: "partial",
     state: {
       event_key: eventKey,
+      event: { key: eventKey },
       sources: {},
       teams: [],
       team_states: [{ event_key: eventKey, team_key: "frc3461", sources: {} }],
