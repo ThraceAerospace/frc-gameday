@@ -279,25 +279,27 @@ test("shared public stream route forwards to the single multiplexer without cred
   ]);
 });
 
-test("public event discovery does not fall back to TaskScheduler when R2 publication is missing", async () => {
+test("public event discovery returns 204 when the service is available but the season data is not published", async () => {
   const { env } = makeEnvironment();
   const response = await worker.fetch(
     new Request("https://runtime.example/events/discovery?year=2026"),
     env,
   );
-  assert.equal(response.status, 503);
-  assert.deepEqual(await response.json(), { error: "Event discovery is not published for the requested season" });
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
 
-test("this-week reads do not fall back to TaskScheduler when the R2 projection is missing", async () => {
+test("this-week reads return 204 when the service is available but the projection is not published", async () => {
   const { env } = makeEnvironment();
   const response = await worker.fetch(
     new Request("https://runtime.example/events/this-week"),
     env,
   );
-  assert.equal(response.status, 503);
-  assert.deepEqual(await response.json(), { error: "This-week projection is not published" });
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
 test("public team discovery reads the published current-season Durable Object pages", async () => {
