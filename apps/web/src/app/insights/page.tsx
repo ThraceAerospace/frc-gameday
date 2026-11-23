@@ -1,10 +1,13 @@
 import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
-import { getCanonicalEventDiscovery, getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
+import { getCanonicalCurrentSeason, getCanonicalEventDiscovery, getCanonicalTeamDiscovery } from "@/lib/events/serverSnapshot";
 
 export default async function InsightsPage() {
-  const year = new Date().getFullYear();
-  const [eventSnapshot, teamSnapshot] = await Promise.all([getCanonicalEventDiscovery(year), getCanonicalTeamDiscovery(year)]);
+  const currentSeason = await getCanonicalCurrentSeason();
+  const year = currentSeason?.year ?? null;
+  const [eventSnapshot, teamSnapshot] = year === null
+    ? [null, null]
+    : await Promise.all([getCanonicalEventDiscovery(year), getCanonicalTeamDiscovery(year)]);
   const events = eventSnapshot ?? [];
   const teams = teamSnapshot ?? [];
   const eventCounts = new Map<string, number>();
@@ -23,7 +26,7 @@ export default async function InsightsPage() {
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">A season-wide overview of event distribution and team participation. This is the starting point for FieldView's deeper statistical comparisons across events and teams.</p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <Metric label="Season" value={year} detail="Current season" />
+          <Metric label="Season" value={year ?? "Unavailable"} detail="TBA current_season" />
           <Metric label="Events" value={events.length} detail={eventSnapshot ? "Canonical event snapshots" : "Snapshot unavailable"} />
           <Metric label="Teams" value={teams.length} detail={teamSnapshot ? "Canonical team snapshots" : "Snapshot unavailable"} />
         </div>
