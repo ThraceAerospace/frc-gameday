@@ -1282,7 +1282,7 @@ export class TeamRuntime {
       await this.storage.transaction(async (tx) => {
         const current = await tx.get<TeamPollTask>(key);
         // An administrator may have replaced this task while its poll ran.
-        if (!current || current.generation !== task.generation) {
+        if (!current || current.attempts !== task.attempts + 1 || current.provider !== task.provider) {
           await this.rearm(tx);
           return;
         }
