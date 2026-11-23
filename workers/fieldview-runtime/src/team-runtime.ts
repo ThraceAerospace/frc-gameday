@@ -1311,7 +1311,7 @@ export class TeamRuntime {
         }
       }
     }
-    await Promise.all([...refreshYears].map(async (year) => {
+    for (const year of refreshYears) {
       const publicationKey = "team-state:" + year + ":publication";
       const previous = (await this.storage.get<{ state: unknown }>(publicationKey))?.state;
       await this.snapshot(year);
@@ -1319,7 +1319,7 @@ export class TeamRuntime {
       if (JSON.stringify(previous) !== JSON.stringify(current)) {
         await this.notifyEventsOfSeasonStateChange(year);
       }
-    }));
+    }
 
     const analyticsJobs = await this.storage.list<number>({ prefix: SEASON_ANALYTICS_DUE_PREFIX });
     const nextAnalyticsJob = [...analyticsJobs.entries()]
