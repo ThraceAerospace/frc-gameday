@@ -285,7 +285,7 @@ export class TeamRuntime {
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
-    if (publicRead || publicSeasonAnalyticsRead) {
+    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead) {
       if (!(await this.restoreIdentity())) {
         return Response.json({ error: "Team state is not ready" }, {
           status: 404, headers: { "Cache-Control": "no-store" },
@@ -371,6 +371,16 @@ export class TeamRuntime {
     if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
     if (publicSeasonAnalyticsRead) {
+      const teamPublication = await this.storage.get<{ state?: unknown }>("team-state:" + year + ":publication");
+      const teamState = teamPublication?.state;
+      if (!teamState || typeof teamState !== "object" || Array.isArray(teamState) ||
+          (teamState as Record<string, unknown>).team_key !== this.teamKey ||
+          (teamState as Record<string, unknown>).year !== year ||
+          !(teamState as Record<string, unknown>).sources) {
+        return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
+        });
+      }
       const cacheKey = "team-season-analytics:" + year;
       const cached = await this.storage.get<{
         team_source_revision: number;
@@ -483,28 +493,7 @@ export class TeamRuntime {
       ? initializedCurrentState
       : await this.snapshot(year, publicRead ? request : undefined);
     if (publicRead && initializedState.status === 304) return initializedState;
-    if (publicRead || publicSeasonAnalyticsRead) {
-      // Queue only missing/stale resources. Do not execute an alarm inline:
-      // the caller receives the best current snapshot while durable work runs.
-      const resources = this.endpoints(year);
-      const states = await Promise.all(resources.map(({ endpoint }) =>
-        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-      const now = Date.now();
-      const needed = resources.filter((resource, index) => {
-        // Statbotics team-year/team-event data is event-driven, not a recurring
-        // profile poll. A meaningful TBA team or season-event-list change below
-        // queues a bounded refresh while explicit seed/refresh remains available.
-        if (resource.provider === "statbotics") return false;
-        const state = states[index];
-        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt <= now);
-      });
-      if (needed.length > 0) {
-        await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year);
-      }
-      if (publicRead) return initializedState;
-    }
+    if (publicRead) return initializedState;
     if (publicSeasonAnalyticsRead) {
       return this.buildSeasonAnalyticsResponse(year);
     }
