@@ -112,6 +112,11 @@ test("TeamRuntime public snapshots return 204 until readiness publishes canonica
   const first = await read();
   assert.equal(first.status, 204);
   assert.equal(await first.text(), "", "an existing TeamRuntime without TeamState returns no content");
+  const eventState = await runtime.fetch(new Request("https://team/event-state?event_key=2026demand&year=" + year, {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(eventState.status, 204, "an existing TeamRuntime without TeamEventState returns no content");
+  assert.equal(await eventState.text(), "");
   assert.equal(calls.length, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
