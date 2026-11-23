@@ -1,10 +1,8 @@
-import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 import path from "node:path";
 
-// The repository root is the single local environment-file location.
-// npm workspace scripts execute this config from apps/web.
-loadEnvConfig(path.resolve(process.cwd(), "../.."));
+// Node 22+ loads the repository-wide file without workspace env variants.
+process.loadEnvFile(path.resolve(process.cwd(), "../..", ".env"));
 
 const nextConfig: NextConfig = {
   transpilePackages: [
