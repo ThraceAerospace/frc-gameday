@@ -459,7 +459,7 @@ export class EventRuntime {
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const validState = Boolean(publication && publication.status !== "failed" &&
         Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
-        publication.state.event_key === this.eventKey);
+        publication.state.event_key === this.eventKey && isRecord(publication.state.sources));
       const sources = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const expectedEndpoints = [...this.allowedEndpoints,
         STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
@@ -844,7 +844,7 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication) {
+      if (!publication || publication.status === "failed") {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" }, team_state_coverage: { status: "unavailable", expected_count: 0, materialized_count: 0 },
