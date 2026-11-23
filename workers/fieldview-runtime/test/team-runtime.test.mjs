@@ -20,7 +20,7 @@ class MemoryStorage {
     finally { release(); }
   }
 }
-const env = (fetcher) => ({ TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin", TBA_WEBHOOK_SECRET: "unused", EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => new Response() }) }, fetcher });
+const env = (fetcher) => ({ TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin", TBA_WEBHOOK_SECRET: "unused", EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => new Response() }) }, DISCOVERY_STORE: { idFromName: (key) => key, get: () => ({ fetch: async () => Response.json({ year: 2026, checkedAt: Date.now() }) }) }, fetcher });
 
 async function drainManualQueue(runtime, storage, max = 20) {
   for (let index = 0; index < max; index += 1) {
