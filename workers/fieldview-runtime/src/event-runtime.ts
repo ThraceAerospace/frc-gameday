@@ -416,9 +416,10 @@ export class EventRuntime {
       }
       if (body.action === "subscribe") {
         const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-        if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
+        if (!currentState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        if (currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
             currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+          return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
         }
       }
       const topic = body.topic === "analytics" ? "analytics" : "event-state";
@@ -712,9 +713,10 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/stream") {
       const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
+      if (!currentState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        if (currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
           currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return Response.json({ error: "WebSocket upgrade required" }, { status: 426 });
       if (!this.state.acceptWebSocket || !this.state.getWebSockets) return Response.json({ error: "WebSocket subscriptions are unavailable" }, { status: 501 });
@@ -728,9 +730,10 @@ export class EventRuntime {
     }
     if (request.method === "GET" && url.pathname === "/analytics") {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!eventState || eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
+      if (!eventState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
@@ -828,9 +831,10 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!eventState || eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
+      if (!eventState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const matchKey = url.searchParams.get("match_key");
       if (!matchKey || !/^[a-zA-Z0-9_]+$/.test(matchKey) || !matchKey.startsWith(this.eventKey + "_")) {
@@ -859,9 +863,10 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication || publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
+      if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
@@ -896,9 +901,10 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/view") {
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!publication || publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
+      if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "EventState publication is invalid or failed" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const viewSourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const viewExpectedEndpoints = [...eventResourceEndpoints(this.eventKey),
