@@ -14,7 +14,8 @@ export async function dispatchRuntime(
   if (!env.RUNTIME_ADMIN_TOKEN) return Response.json({ error: "Runtime authorization is unavailable" }, { status: 503 });
   if (kind === "team" && !/^frc\d+$/.test(key)) return Response.json({ error: "Invalid team key" }, { status: 400 });
   if (kind === "event" && !/^[a-zA-Z0-9_-]+$/.test(key)) return Response.json({ error: "Invalid event key" }, { status: 400 });
-  const season = year ?? new Date().getUTCFullYear();
+  const season = year ?? await readCurrentSeason(env);
+  if (season === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
   if (!Number.isInteger(season) || season < 1992 || season > 2200) {
     return Response.json({ error: "Invalid season year" }, { status: 400 });
   }
@@ -87,4 +88,19 @@ async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind,
     body: JSON.stringify({ key: prefix + key + ".json", value: "{}" }),
   }));
   if (!response.ok) throw new Error("Unable to register runtime marker: HTTP " + response.status);
+}
+
+
+async function readCurrentSeason(env: RuntimeEnvironment): Promise<number | null> {
+  if (!env.DISCOVERY_STORE) return null;
+  const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
+  const response = await stub.fetch(new Request(
+    "https://discovery-store/get?key=" + encodeURIComponent("discovery/current-season.json"),
+  ));
+  if (!response.ok) return null;
+  const current = await response.json().catch(() => null) as { year?: unknown } | null;
+  return current && Number.isInteger(current.year) &&
+    Number(current.year) >= 1992 && Number(current.year) <= 2200
+    ? Number(current.year)
+    : null;
 }
