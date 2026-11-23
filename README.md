@@ -49,11 +49,11 @@ All event-related dates and times displayed by FieldView must use the event's IA
 
 ## Development
 
-Install dependencies and create one ignored environment file at the repository root:
+Create one ignored environment file at the repository root:
 
 ```bash
 npm install
-cp .env.example .env
+touch .env
 ```
 
 Keep all local web and Worker environment values in that root `.env`. Do not create workspace-specific `.env.local`, `.dev.vars`, or other duplicate secret files. The root `.env` is ignored by Git.
