@@ -224,6 +224,15 @@ export default {
       return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
 
+    if (url.pathname === "/internal/admin/discover-year" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/discover-year" + url.search, {
+        method: "GET",
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
@@ -319,9 +328,7 @@ export default {
           }
         }
       }
-      return Response.json({ error: "This-week projection is not published" }, {
-        status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
-      });
+      return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/events/discovery" && request.method === "GET") {
@@ -356,9 +363,7 @@ export default {
           });
         }
       }
-      return Response.json({ error: "Event discovery is not published for the requested season" }, {
-        status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
-      });
+      return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/teams/discovery" && request.method === "GET") {
