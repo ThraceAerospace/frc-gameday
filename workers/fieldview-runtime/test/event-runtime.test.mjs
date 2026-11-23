@@ -397,7 +397,9 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
 
   const firstRead = await runtime.fetch(request());
   assert.equal(firstRead.status, 404, "a missing EventState is not exposed as a placeholder");
-  assert.deepEqual(await firstRead.json(), { error: "Event state is not ready" });
+  const unavailable = await firstRead.json();
+  assert.equal(unavailable.status, "unavailable");
+  assert.equal(unavailable.publication.status, "missing");
   assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
 
