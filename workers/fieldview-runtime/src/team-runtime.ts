@@ -166,6 +166,20 @@ export class TeamRuntime {
     }
     return interval;
   }
+  private async currentSeasonYear(): Promise<number | null> {
+    if (!this.env.DISCOVERY_STORE) return null;
+    const stub = this.env.DISCOVERY_STORE.get(this.env.DISCOVERY_STORE.idFromName("shared"));
+    const response = await stub.fetch(new Request(
+      "https://discovery-store/get?key=" + encodeURIComponent("discovery/current-season.json"),
+    ));
+    if (!response.ok) return null;
+    const current = await response.json().catch(() => null) as { year?: unknown } | null;
+    return current && Number.isInteger(current.year) &&
+      Number(current.year) >= 1992 && Number(current.year) <= 2200
+      ? Number(current.year)
+      : null;
+  }
+
   private endpoints(year: number): TeamResource[] {
     return teamResourceEndpoints(this.teamKey, year);
   }
@@ -366,8 +380,9 @@ export class TeamRuntime {
     }
 
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
-    const year = yearText === null ? new Date().getUTCFullYear() : Number(yearText);
-    if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) return Response.json({ error: "Invalid season year" }, { status: 400 });
+    const year = yearText === null ? await this.currentSeasonYear() : Number(yearText);
+    if (year === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
+    if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
 
     if (publicSeasonAnalyticsRead) {
       const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
@@ -487,8 +502,8 @@ export class TeamRuntime {
     // reads above are deliberately isolated from this write-capable path.
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
-    const currentYear = new Date().getUTCFullYear();
-    const initializedCurrentState = publicEventStateRead || readinessRequest
+    const currentYear = await this.currentSeasonYear();
+    const initializedCurrentState = publicEventStateRead || readinessRequest || currentYear === null
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
         ? null
@@ -1293,22 +1308,24 @@ export class TeamRuntime {
       });
       if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
         const endpointParts = task.endpoint.split("/");
-        const year = Number(endpointParts[4] ?? new Date().getUTCFullYear());
-        await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year, false);
+        const year = Number(endpointParts[4] ?? await this.currentSeasonYear());
+        if (Number.isInteger(year) && year >= 1992 && year <= 2200) {
+          await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year, false);
+        }
       }
     }
     const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+    const currentYear = await this.currentSeasonYear();
     const candidateYears = new Set<number>([
-      new Date().getUTCFullYear(),
+      ...(currentYear === null ? [] : [currentYear]),
       ...due.manualDue.map((item) => item.year),
       ...Object.values(activeEvents).map((item) => item.year),
     ]);
-    const currentYear = new Date().getUTCFullYear();
     const refreshYears = new Set<number>(due.manualDue.map((item) => item.year));
     // A runtime first reached through a historical season still owns a
     // current-season TeamState. Materialize its initial empty/partial
     // publication during background alarm work, never in the public read.
-    if (!(await this.storage.get("team-state:" + currentYear + ":publication"))) {
+    if (currentYear !== null && !(await this.storage.get("team-state:" + currentYear + ":publication"))) {
       refreshYears.add(currentYear);
     }
     for (const task of due.ready) {
