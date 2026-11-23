@@ -764,13 +764,15 @@ export class TeamRuntime {
       const publishedState = publication?.state;
       const validState = Boolean(publishedState && typeof publishedState === "object" &&
         !Array.isArray(publishedState) &&
-        (publishedState as Record<string, unknown>).team_key === this.teamKey);
+        (publishedState as Record<string, unknown>).team_key === this.teamKey &&
+        (publishedState as Record<string, unknown>).year === year &&
+        (publishedState as Record<string, unknown>).sources &&
+        typeof (publishedState as Record<string, unknown>).sources === "object");
       const resources = this.endpoints(year);
-      const states = await Promise.all(resources.map((resource) =>
-        this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
+      const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const now = Date.now();
-      const staleResources = resources.filter((resource, index) => {
-        const source = states[index];
+      const staleResources = resources.filter((resource) => {
+        const source = states.get(endpointKey(resource.endpoint));
         return !source || source.status === "failed" || source.status === "stale" ||
           (source.lastFetchedAt === null && source.status !== "unavailable") ||
           (source.expiresAt !== null && source.expiresAt <= now);
