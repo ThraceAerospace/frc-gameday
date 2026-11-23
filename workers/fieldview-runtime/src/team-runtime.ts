@@ -287,8 +287,8 @@ export class TeamRuntime {
     // runtime is exposed to public readers.
     if (publicRead || publicSeasonAnalyticsRead) {
       if (!(await this.restoreIdentity())) {
-        return Response.json({ team_key: null, status: "unavailable", publication: "missing" }, {
-          status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
+        return Response.json({ error: "Team state is not ready" }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
         });
       }
       if (request.headers.get("X-FieldView-Team-Key") !== this.teamKey) {
@@ -439,6 +439,11 @@ export class TeamRuntime {
           representation_signature?: string;
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
+      if (!publication) {
+        return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
+        });
+      }
       const resources = this.endpoints(year);
       const states = await Promise.all(resources.map(({ endpoint }) =>
         this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
@@ -447,23 +452,6 @@ export class TeamRuntime {
         state.revision, state.status, state.lastFetchedAt, state.expiresAt,
         state.etag, state.expiresAt !== null && state.expiresAt < now,
       ] : null));
-      const needed = resources.filter((resource, index) => {
-        if (resource.provider === "statbotics") return false;
-        const state = states[index];
-        return !state || (state.lastFetchedAt === null && state.status !== "unavailable") ||
-          state.status === "failed" || state.status === "stale" ||
-          (state.expiresAt !== null && state.expiresAt <= now);
-      });
-      if (needed.length > 0) {
-        await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year, false);
-      }
-      if (!publication) {
-        return Response.json({
-          team_key: this.teamKey, year, status: "unavailable",
-          publication: { status: "missing" }, revalidation: needed.length ? "scheduled" : "pending",
-        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
-      }
       const stale = publication.input_signature !== signature;
       const etag = 'W/"fv-team-snapshot-v1-' + year + '-' +
         (await this.storage.get<number>("snapshot-revision") ?? 0) + '-' +
