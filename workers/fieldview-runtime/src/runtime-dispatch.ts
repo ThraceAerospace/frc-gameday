@@ -31,7 +31,8 @@ export async function dispatchRuntime(
     const path = action === "seed" ? "seed?year=" + season
       : action === "state" ? "state?year=" + season
       : action === "snapshot" ? "snapshot?year=" + season + "&noSchedule=1"
-      : action === "refresh" ? "refresh?year=" + season : null;
+      : action === "refresh" ? "refresh?year=" + season
+      : action === "readiness" ? "readiness?year=" + season : null;
     if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
     const method = action === "state" || action === "snapshot" ? "GET" : "POST";
     const response = await stub.fetch(new Request("https://team-runtime/" + path, { method, headers }));
@@ -43,6 +44,7 @@ export async function dispatchRuntime(
   const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
   const paths: Record<string, string> = {
     participants: "participants",
+    readiness: "readiness",
     state: "state",
     refresh: "refresh",
     lifecycle: "lifecycle",
