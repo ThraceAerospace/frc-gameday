@@ -1230,7 +1230,8 @@ export class TeamRuntime {
       await this.rearm(tx);
       return { ready, manualDue };
     });
-    await Promise.all(due.manualDue.map(async (item) => {
+    // Keep one provider request in flight per TeamRuntime alarm.
+    for (const item of due.manualDue) {
       const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
       if (!resource) return;
       const previous = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
@@ -1251,8 +1252,8 @@ export class TeamRuntime {
         await tx.put(MANUAL_QUEUE_KEY, next);
         await this.rearm(tx);
       });
-    }));
-    await Promise.all(due.ready.map(async (task) => {
+    }
+    for (const task of due.ready) {
       const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
       const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(task.endpoint);
       const requestState = createPollRequestSnapshot(initial), headers = new Headers();
@@ -1300,7 +1301,7 @@ export class TeamRuntime {
         const year = Number(endpointParts[4] ?? new Date().getUTCFullYear());
         await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year);
       }
-    }));
+    }
     const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
     const candidateYears = new Set<number>([
       new Date().getUTCFullYear(),
