@@ -110,11 +110,8 @@ interface CoverageAuditRecord {
 }
 interface CoverageAuditParameters { year: number; workflowId: string; startedAt: number; }
 
-/**
- * Daily discovery and this-week projection now run as a Workflow. EventRuntime
- * remains the owner of canonical event state and active-event polling.
- */
-export class LegacyDailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
+/** Manual season-discovery Workflow base; bulk daily readiness is disabled. */
+export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     if (event.payload?.operation !== "discover-season") {
       throw new Error("Legacy bulk readiness execution is disabled");
@@ -262,7 +259,7 @@ export class LegacyDailyEventReadinessWorkflow extends WorkflowEntrypoint<JobsEn
  * Sequential readiness sweep. The Workflow never acquires entity resources:
  * each runtime inspects its own durable publication and queues local refreshes.
  */
-export class DailyEventReadinessWorkflow extends LegacyDailyEventReadinessWorkflow {
+export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
   override async run(
     event: WorkflowEvent<WorkflowParameters>,
     step: WorkflowStep,
