@@ -400,15 +400,15 @@ test("EventRuntime public snapshots return 404 until readiness publishes canonic
   const queue = storage.values.get("manual:poll-queue") ?? [];
   assert.equal(queue.length, eventResourceEndpoints(eventKey).length);
   assert.ok(queue.every((item) => item.dueAt === refreshAt), "all TBA event resources share the randomized durable deadline");
-  const statboticsTask = [...storage.values.entries()].find(([key]) =>
-    key.startsWith("task:") && key.includes("statbotics"));
+  const statboticsTaskKey = "task:" + STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const statboticsTask = storage.values.get(statboticsTaskKey);
   assert.ok(statboticsTask, "Statbotics receives its own durable one-shot alarm task");
-  assert.equal(statboticsTask[1].dueAt, refreshAt);
+  assert.equal(statboticsTask.dueAt, refreshAt);
   assert.equal(providerCalls, 0, "readiness only schedules work and never fetches inline");
   assert.equal((await runtime.fetch(request())).status, 404, "frontend reads remain gated until EventState is published");
 
   storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
-  storage.values.set(statboticsTask[0], { ...statboticsTask[1], dueAt: Date.now() - 1 });
+  storage.values.set(statboticsTaskKey, { ...statboticsTask, dueAt: Date.now() - 1 });
   await runtime.alarm();
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
   const published = await runtime.fetch(request());
