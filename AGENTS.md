@@ -17,7 +17,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0014 for the runtime execution/orchestration contract, and ADR-0017 for the one-Worker-per-environment deployment decision.
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0014 for the runtime execution/orchestration contract, ADR-0017 for the one-Worker-per-environment deployment decision, and ADR-0018 for sequential readiness sweeps and publication-gated reads.
 
 ## Non-negotiable product and data principles
 
