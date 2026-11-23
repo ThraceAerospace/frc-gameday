@@ -398,8 +398,8 @@ export class EventRuntime {
     }
     if (publicRead) {
       if (!(await this.restoreEventKey(request))) {
-        return Response.json({ event_key: null, status: "unavailable", publication: "missing" }, {
-          status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" },
+        return Response.json({ error: "Event state is not ready" }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
         });
       }
     } else if (!(await this.bindEventKey(request))) {
@@ -845,13 +845,12 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      await this.queueSnapshotRefresh();
       const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!publication) {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" }, team_state_coverage: { status: "unavailable", expected_count: 0, materialized_count: 0 },
-        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+        }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
       const etag = eventSnapshotEtag(publication, comparisonInputUpdatedAt);
@@ -885,14 +884,13 @@ export class EventRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
-      await this.queueSnapshotRefresh();
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!publication) {
         return Response.json({
           event_key: this.eventKey, status: "unavailable",
           publication: { status: "missing" },
           team_state_coverage: { state: "unavailable", expected_count: 0, materialized_count: 0, pending_team_keys: [] },
-        }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } });
+        }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       const viewSourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const viewExpectedEndpoints = [...eventResourceEndpoints(this.eventKey),
