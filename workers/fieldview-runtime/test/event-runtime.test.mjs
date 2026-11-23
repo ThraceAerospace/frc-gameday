@@ -1483,6 +1483,53 @@ test("EventRuntime removes legacy embedded TeamEventStates from its durable even
 });
 
 
+test("EventRuntime readiness skips fresh sources and queues every resource when one source is stale", async () => {
+  const storage = new MemoryStorage(), eventKey = "2027rikin", now = Date.now();
+  seedEventPublication(storage, eventKey);
+  const endpoints = eventResourceEndpoints(eventKey);
+  for (const endpoint of [...endpoints, STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0)]) {
+    storage.values.set("endpoint:" + endpoint, {
+      endpoint, status: "available", revision: 1, lastFetchedAt: now,
+      lastWebhookAt: null, expiresAt: now + 60_000, etag: null, data: [],
+    });
+  }
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { throw new Error("readiness must not fetch providers inline"); },
+  }, eventKey);
+  const inspect = (refreshAt) => runtime.fetch(new Request("https://event-runtime/readiness", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshAt }),
+  }));
+
+  const fresh = await inspect(Date.now() + 60_000);
+  assert.equal(fresh.status, 200);
+  const freshResult = await fresh.json();
+  assert.equal(freshResult.state_valid, true);
+  assert.equal(freshResult.refresh_queued, false);
+  assert.deepEqual(freshResult.stale_sources, []);
+  assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
+  assert.equal(storage.alarmAt, null);
+
+  const staleEndpoint = endpoints[0];
+  storage.values.get("endpoint:" + staleEndpoint).expiresAt = Date.now() - 1;
+  const refreshAt = Date.now() + 90_000;
+  const stale = await inspect(refreshAt);
+  assert.equal(stale.status, 200);
+  const staleResult = await stale.json();
+  assert.equal(staleResult.state_valid, true);
+  assert.equal(staleResult.refresh_queued, true);
+  assert.deepEqual(staleResult.stale_sources, [staleEndpoint]);
+  assert.equal(storage.values.get("manual:poll-queue").length, endpoints.length,
+    "one stale source queues the complete TBA event resource set");
+  assert.equal(storage.values.get("manual:poll-queue")[0].dueAt, refreshAt);
+  const statboticsTask = storage.values.get("task:" + STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0));
+  assert.equal(statboticsTask.dueAt, refreshAt);
+});
+
 test("EventRuntime subscriptions remain unavailable until a canonical EventState is published", async () => {
   const storage = new MemoryStorage(), eventKey = "2026firstrequest";
   const runtime = new EventRuntime({ storage }, {
