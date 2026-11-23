@@ -409,17 +409,19 @@ export class EventRuntime {
     // Public reads never create or replace a publication. Explicit runtime
     // commands and the local alarm own publication work.
     if (request.method === "POST" && url.pathname === "/subscriptions") {
-      const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
-          currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-        return Response.json({ error: "Event state is not ready" }, { status: 404 });
-      }
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
           (body.topic !== undefined && body.topic !== "event-state" && body.topic !== "analytics") ||
           (body.generation !== undefined &&
             (!Number.isSafeInteger(body.generation) || (body.generation as number) < 1))) {
         return Response.json({ error: "Expected a valid topic, subscribe or unsubscribe action, and an optional positive generation" }, { status: 400 });
+      }
+      if (body.action === "subscribe") {
+        const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+        if (!currentState || currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
+            currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
+          return Response.json({ error: "Event state is not ready" }, { status: 404 });
+        }
       }
       const topic = body.topic === "analytics" ? "analytics" : "event-state";
       const generationKey = topic === "analytics"
