@@ -376,7 +376,9 @@ export class TeamRuntime {
       if (!teamState || typeof teamState !== "object" || Array.isArray(teamState) ||
           (teamState as Record<string, unknown>).team_key !== this.teamKey ||
           (teamState as Record<string, unknown>).year !== year ||
-          !(teamState as Record<string, unknown>).sources) {
+          !(teamState as Record<string, unknown>).sources ||
+          typeof (teamState as Record<string, unknown>).sources !== "object" ||
+          Array.isArray((teamState as Record<string, unknown>).sources)) {
         return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
           status: 404, headers: { "Cache-Control": "no-store" },
         });
@@ -451,7 +453,7 @@ export class TeamRuntime {
         }>(stateKey + ":publication");
       const publishedState = publication?.state as Record<string, unknown> | undefined;
       if (!publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
-          !publishedState.sources || typeof publishedState.sources !== "object") {
+          !publishedState.sources || typeof publishedState.sources !== "object" || Array.isArray(publishedState.sources)) {
         return Response.json({ error: "Team state is not ready", team_key: this.teamKey, year }, {
           status: 404, headers: { "Cache-Control": "no-store" },
         });
@@ -762,7 +764,8 @@ export class TeamRuntime {
         (publishedState as Record<string, unknown>).team_key === this.teamKey &&
         (publishedState as Record<string, unknown>).year === year &&
         (publishedState as Record<string, unknown>).sources &&
-        typeof (publishedState as Record<string, unknown>).sources === "object");
+        typeof (publishedState as Record<string, unknown>).sources === "object" &&
+        !Array.isArray((publishedState as Record<string, unknown>).sources));
       const resources = this.endpoints(year);
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const now = Date.now();
