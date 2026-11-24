@@ -265,4 +265,14 @@ See ADR-0015 for the read-first persistence-equals-readiness decision.
 - Event-scoped participant resources such as `/event/{key}/teams` remain EventRuntime-owned and do not initialize TeamRuntime.
 - EventRuntime analytics may consume TeamRuntime data only for TeamRuntimes already present in DiscoveryStore's runtime registry (normally through team readiness or an explicit team initialization operation). It must not activate unregistered TeamRuntimes as a side effect.
 - A shared external scheduler may start both Workflows, but neither Workflow depends on the other. Do not add TeamRuntime work back into EventRuntime readiness or combine their progress/concurrency boundaries.
+
+## Workflow execution history
+
+- DiscoveryStore is the authoritative persistence owner for system-wide Workflow execution records and final reports. Do not add D1 or KV solely for admin job history.
+- Each event/team readiness execution has a stable Workflow ID, a durable run record, a history index entry, a final summary, and chunked per-entity results. Keep entity results in bounded chunks rather than one unbounded JSON object.
+- The admin API exposes run history and detail by Workflow ID. The dashboard may poll execution status, but it does not require incremental per-entity progress updates.
+- Persist final execution status only after the summary and all result chunks are durable. If a Workflow terminates before finalization, reconcile its persisted running record against the Cloudflare Workflow instance status and expose failed/cancelled state.
+- Keep high-volume diagnostic logs in platform observability; DiscoveryStore records are structured operational job history, not a replacement for application logs.
+- Do not store credentials, authorization headers, or provider secrets in execution records.
+
 - The GitHub Actions scheduler starts the preproduction event and team readiness endpoints separately. Cloudflare Workflow bindings do not declare paid-plan cron schedules.
