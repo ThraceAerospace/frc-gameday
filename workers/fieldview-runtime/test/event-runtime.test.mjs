@@ -1608,6 +1608,8 @@ test("EventRuntime readiness inspects freshness without queueing provider work",
   assert.equal(fresh.status, 200);
   const freshResult = await fresh.json();
   assert.equal(freshResult.state_valid, true);
+  assert.equal(freshResult.refresh_required, false);
+  assert.equal(freshResult.refresh_dispatched, false);
   assert.deepEqual(freshResult.stale_sources, []);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal(storage.alarmAt, null);
@@ -1618,13 +1620,13 @@ test("EventRuntime readiness inspects freshness without queueing provider work",
   assert.equal(stale.status, 200);
   const staleResult = await stale.json();
   assert.equal(staleResult.state_valid, true);
-  assert.equal(staleResult.refresh_queued, true);
+  assert.equal(staleResult.refresh_required, true);
+  assert.equal(staleResult.refresh_dispatched, false);
   assert.deepEqual(staleResult.stale_sources, [staleEndpoint]);
-  assert.equal(storage.values.get("manual:poll-queue").length, endpoints.length,
-    "one stale source queues the complete TBA event resource set");
-  assert.equal(storage.values.get("manual:poll-queue")[0].dueAt, refreshAt);
+  assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
+  assert.equal(storage.alarmAt, null);
   const statboticsTask = storage.values.get("task:" + STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0));
-  assert.equal(statboticsTask.dueAt, refreshAt);
+  assert.equal(statboticsTask, undefined);
 });
 
 test("EventRuntime subscriptions remain unavailable until a canonical EventState is published", async () => {
