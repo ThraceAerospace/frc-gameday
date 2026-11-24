@@ -24,4 +24,4 @@ export default {
 };
 
 export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "../../fieldview-runtime/src/index.ts";
-export { DailyEventReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow } from "../../fieldview-jobs/src/index.ts";
+export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow } from "../../fieldview-jobs/src/index.ts";
