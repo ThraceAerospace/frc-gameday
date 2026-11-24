@@ -374,7 +374,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
 });
 
-test("EventRuntime public snapshots return 204 until readiness publishes canonical state", async () => {
+test("EventRuntime public snapshots return 204 until an explicit refresh publishes canonical state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0, activeRequests = 0, maxConcurrentRequests = 0;
@@ -435,11 +435,13 @@ test("EventRuntime public snapshots return 204 until readiness publishes canonic
   assert.equal(providerCalls, 0, "readiness inspects coverage and never fetches providers");
   assert.equal((await runtime.fetch(request())).status, 204, "an existing EventRuntime without EventState returns no content");
 
-  storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
-  storage.values.set(statboticsTaskKey, { ...statboticsTask, dueAt: Date.now() - 1 });
-  await runtime.alarm();
+  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(refresh.status, 200);
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
-  assert.equal(maxConcurrentRequests, 1, "one EventRuntime alarm must never run provider requests concurrently");
+  assert.equal(maxConcurrentRequests, 1, "one EventRuntime refresh command executes provider requests sequentially");
   const published = await runtime.fetch(request());
   assert.equal(published.status, 200, "the canonical EventState becomes readable after refresh publication");
 });
