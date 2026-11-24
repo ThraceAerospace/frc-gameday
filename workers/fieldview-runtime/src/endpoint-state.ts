@@ -50,7 +50,7 @@ export function createPollRequestSnapshot<T>(state: EndpointState<T>): PollReque
   return {
     revision: state.revision,
     validatorRevision: state.validatorRevision,
-    ifNoneMatch: state.etag,
+    ifNoneMatch: state.lastFetchedAt === null ? null : state.etag,
   };
 }
 
@@ -76,15 +76,10 @@ export function applyPollResponse<T>(
   }
 
   if (response.status === "not-modified") {
-    // A delayed 304 only validates the ETag sent with that request. If another
-    // poll installed a different validator, it must not refresh that validator's TTL.
-    if (request.validatorRevision !== current.validatorRevision) {
-      return { ...current, lastAttemptAt: now };
-    }
-    if (current.lastFetchedAt === null) {
-      return { ...current, status: current.lastWebhookAt !== null ? "stale" : "failed", lastAttemptAt: now };
-    }
-    return { ...current, status: "available", lastFetchedAt: now, expiresAt: response.expiresAt, lastAttemptAt: now };
+    // A 304 is a strict no-op. It validates the representation for the caller,
+    // but must not mutate endpoint metadata, timestamps, validators, revisions,
+    // diagnostics, or durable storage.
+    return current;
   }
 
   const validatorIsCurrent = request.validatorRevision === current.validatorRevision;
