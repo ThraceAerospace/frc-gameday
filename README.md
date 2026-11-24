@@ -14,7 +14,7 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 
 ## Architecture migration
 
-The `fieldview-architecture-migration` branch is incrementally moving FieldView toward an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend.
+The `fieldview-architecture-migration` branch is rebuilding FieldView around an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend. The backend is deployed as one shared Runtime Worker per environment (`runtime-preprod` and `runtime-production`) from the single `workers/fieldview/wrangler.toml` configuration. FieldView is its first product; the generic Runtime name leaves room for future FIRST program support without implying those integrations already exist.
 
 The current implementation described below is the legacy system being migrated. It remains in place until replacement slices have passed validation; no production cutover is implied.
 
@@ -69,10 +69,10 @@ npm run build
 Run the consolidated Cloudflare Worker locally with the same root file:
 
 ```bash
-npx wrangler dev --config workers/fieldview/wrangler.preprod.toml --env-file .env
+npm run dev:worker
 ```
 
-The Next.js config loads the root `.env` explicitly; Wrangler receives it through `--env-file`. Cloudflare-hosted Preproduction and Production secrets remain independently configured in Cloudflare and are not synchronized from this local file.
+The `dev:worker` script loads the root `.env`, then starts Wrangler with `workers/fieldview/wrangler.toml` and the explicit `preprod` environment. Cloudflare-hosted Preproduction and Production secrets remain independently configured in Cloudflare and are not synchronized from this local file. The base `runtime` configuration is a shared template; always select a named environment for local execution or deployment.
 
 TBA and Statbotics types are generated from their upstream OpenAPI documents. The `predev` and `prebuild` lifecycle scripts regenerate both type sets automatically. To run either generator directly:
 
