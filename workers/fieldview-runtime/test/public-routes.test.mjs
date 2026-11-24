@@ -46,7 +46,7 @@ function makeEnvironment() {
             url: new URL(request.url).pathname + new URL(request.url).search,
             method: request.method,
             headers: new Headers(request.headers),
-            body: request.method === "POST" ? await request.json() : null,
+            body: request.method === "POST" ? await request.json().catch(() => null) : null,
           });
           return Response.json({ accepted: true }, { status: 202 });
         },
@@ -694,8 +694,7 @@ test("daily team readiness starts its independent Jobs Workflow", async () => {
   const { env, calls } = makeEnvironment();
   const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
     method: "POST",
-    headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
-    body: "{}",
+    headers: { Authorization: "Bearer server-only-token" },
   }), env);
 
   assert.equal(response.status, 202);
