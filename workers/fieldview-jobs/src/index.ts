@@ -294,10 +294,13 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       year: null as number | null, total: 0, summary: null as Record<string, unknown> | null,
       result_chunks: 0, error: null as string | null,
     };
-    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
-    await store().put(`admin/workflow-runs/index/event-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
-      JSON.stringify({ workflow_id: runId, workflow_type: "event-readiness", started_at: runAt, year: null }),
-      { httpMetadata: { contentType: "application/json" } });
+    await step.do("readiness-persist-run-start", async () => {
+      await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+      await store().put(`admin/workflow-runs/index/event-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+        JSON.stringify({ workflow_id: runId, workflow_type: "event-readiness", started_at: runAt, year: null }),
+        { httpMetadata: { contentType: "application/json" } });
+      return { workflow_id: runId, status: "running" };
+    });
 
     const currentSeason = await step.do("readiness-resolve-current-season", {
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
@@ -307,9 +310,12 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
-    runRecord.year = year;
-    runRecord.updated_at = Date.now();
-    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+    await step.do("readiness-persist-season", async () => {
+      runRecord.year = year;
+      runRecord.updated_at = Date.now();
+      await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+      return { year };
+    });
 
     // Acquire and publish the TBA event directory. Chunk writes are discovery
     // storage operations, not fan-out to entity runtimes.
@@ -479,10 +485,13 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       year: null as number | null, total: 0, summary: null as Record<string, unknown> | null,
       result_chunks: 0, error: null as string | null,
     };
-    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
-    await store().put(`admin/workflow-runs/index/team-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
-      JSON.stringify({ workflow_id: runId, workflow_type: "team-readiness", started_at: runAt, year: null }),
-      { httpMetadata: { contentType: "application/json" } });
+    await step.do("team-readiness-persist-run-start", async () => {
+      await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+      await store().put(`admin/workflow-runs/index/team-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+        JSON.stringify({ workflow_id: runId, workflow_type: "team-readiness", started_at: runAt, year: null }),
+        { httpMetadata: { contentType: "application/json" } });
+      return { workflow_id: runId, status: "running" };
+    });
 
     const currentSeason = await step.do("team-readiness-resolve-current-season", {
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
@@ -492,9 +501,12 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
-    runRecord.year = year;
-    runRecord.updated_at = Date.now();
-    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+    await step.do("team-readiness-persist-season", async () => {
+      runRecord.year = year;
+      runRecord.updated_at = Date.now();
+      await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+      return { year };
+    });
 
     // Team Discovery is refreshed and published independently of Event Discovery.
     const teamGeneration = await step.do("team-readiness-directory-generation", async () => Date.now());
