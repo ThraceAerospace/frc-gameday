@@ -844,7 +844,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
 export default {
   async fetch(request: Request, env: JobsEnvironment): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/health") return Response.json({ service: "fieldview-jobs", status: "ok" });
+    if (url.pathname === "/health") return Response.json({ service: "runtime-workflows", status: "ok" });
     if (url.pathname === "/internal/admin/runtime-job" && (request.method === "GET" || request.method === "POST")) {
       if (!env.RUNTIME_ADMIN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
