@@ -726,7 +726,8 @@ export class TeamRuntime {
       const resources = this.endpoints(year);
       const requested = body && typeof body === "object" && !Array.isArray(body) &&
         Array.isArray((body as Record<string, unknown>).endpoints)
-        ? (body as Record<string, unknown>).endpoints as unknown[] : resources.map((resource) => resource.endpoint);
+        ? (body as Record<string, unknown>).endpoints as unknown[]
+        : resources.filter((resource) => resource.provider !== "statbotics").map((resource) => resource.endpoint);
       if (!requested.every((endpoint) => typeof endpoint === "string" &&
           resources.some((resource) => resource.endpoint === endpoint))) {
         return Response.json({ error: "Refresh endpoints must belong to this team and season" }, { status: 400 });
@@ -739,10 +740,27 @@ export class TeamRuntime {
       ];
       const previousTeamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const previousPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
+      const previousResourceRevisions = new Map<string, number>();
+      for (const resource of prioritized) {
+        const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
+        previousResourceRevisions.set(resource.endpoint, state?.revision ?? 0);
+      }
       const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
       for (const resource of prioritized) {
         const result = await this.pollResourceNow(resource);
         results.push({ endpoint: resource.endpoint, ...result });
+      }
+      const tbaRepresentationChanged = prioritized.some((resource) => resource.provider === "tba" &&
+        (results.find((result) => result.endpoint === resource.endpoint)?.revision ?? 0) >
+          (previousResourceRevisions.get(resource.endpoint) ?? 0));
+      if (tbaRepresentationChanged) {
+        const alreadySelected = new Set(prioritized.map((resource) => resource.endpoint));
+        const statboticsResources = resources.filter((resource) =>
+          resource.provider === "statbotics" && !alreadySelected.has(resource.endpoint));
+        for (const resource of statboticsResources) {
+          const result = await this.pollResourceNow(resource);
+          results.push({ endpoint: resource.endpoint, ...result });
+        }
       }
       const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const teamStateChanged = teamStateRevision !== previousTeamStateRevision || !previousPublication;
