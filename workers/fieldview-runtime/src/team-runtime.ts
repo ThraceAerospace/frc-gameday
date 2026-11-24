@@ -453,7 +453,7 @@ export class TeamRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/season-analytics/refresh") {
-      if (!authorized(request, this.env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!isRuntimeAdminAuthorized(request, this.env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       // Analytics refresh is an explicit command. Public GET remains a
       // side-effect-free read of the last published aggregate.
       return this.buildSeasonAnalyticsResponse(year);
