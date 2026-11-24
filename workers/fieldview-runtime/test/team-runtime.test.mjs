@@ -522,7 +522,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
 });
 
 
-test("TeamRuntime owns and serves its season analytics aggregate", async () => {
+test("TeamRuntime season analytics GET is read-only and explicit refresh publishes the aggregate", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = new Date().getUTCFullYear();
   storage.values.set("team-key", teamKey);
   storage.values.set("team-state:" + year + ":publication", {
@@ -553,12 +553,18 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
   const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 204, "missing season analytics returns no content while background initialization is queued");
+  assert.equal(response.status, 204, "missing season analytics returns no content without implicit work");
   assert.equal(await response.text(), "");
   assert.equal(storage.values.has("team-season-analytics:" + year), false);
   assert.equal(providerCalls, 0, "the analytics GET does not acquire provider data or calculate inline");
-  assert.ok(storage.values.has("season-analytics:due:" + year));
-  await runtime.alarm();
+  assert.equal(storage.values.has("season-analytics:due:" + year), false);
+  assert.equal(storage.alarmAt, null);
+  const explicitRefresh = await runtime.fetch(new Request("https://team-runtime/season-analytics/refresh?year=" + year, {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(explicitRefresh.status, 200);
+  assert.equal(providerCalls, 0, "the analytics command calculates from already-owned canonical inputs");
   const refreshed = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
@@ -571,7 +577,7 @@ test("TeamRuntime owns and serves its season analytics aggregate", async () => {
 });
 
 
-test("TeamRuntime readiness skips fresh sources and queues every resource when one source is stale", async () => {
+test("TeamRuntime readiness inspects freshness without queueing provider work", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = 2027, now = Date.now();
   storage.values.set("team-key", teamKey);
   storage.values.set("team-state:" + year + ":publication", {
@@ -588,36 +594,36 @@ test("TeamRuntime readiness skips fresh sources and queues every resource when o
   const runtime = new TeamRuntime({ storage }, env(async () => {
     throw new Error("readiness must not fetch providers inline");
   }), teamKey);
-  const inspect = (refreshAt) => runtime.fetch(new Request("https://team-runtime/readiness?year=" + year, {
+  const inspect = () => runtime.fetch(new Request("https://team-runtime/readiness?year=" + year, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshAt }),
+    body: JSON.stringify({}),
   }));
 
-  const fresh = await inspect(Date.now() + 60_000);
+  const fresh = await inspect();
   assert.equal(fresh.status, 200);
   const freshResult = await fresh.json();
   assert.equal(freshResult.state_valid, true);
-  assert.equal(freshResult.refresh_queued, false);
+  assert.equal(freshResult.refresh_required, false);
+  assert.equal(freshResult.refresh_dispatched, false);
   assert.deepEqual(freshResult.stale_resources, []);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal(storage.alarmAt, null);
 
   const staleEndpoint = resources[0].endpoint;
   storage.values.get("endpoint:" + staleEndpoint).expiresAt = Date.now() - 1;
-  const refreshAt = Date.now() + 90_000;
-  const stale = await inspect(refreshAt);
+  const stale = await inspect();
   assert.equal(stale.status, 200);
   const staleResult = await stale.json();
   assert.equal(staleResult.state_valid, true);
-  assert.equal(staleResult.refresh_queued, true);
+  assert.equal(staleResult.refresh_required, true);
+  assert.equal(staleResult.refresh_dispatched, false);
   assert.deepEqual(staleResult.stale_resources, [staleEndpoint]);
-  const queue = storage.values.get("manual:poll-queue");
-  assert.equal(queue.length, resources.length, "one stale source queues the complete TeamRuntime resource set");
-  assert.ok(queue.every((item) => item.dueAt === refreshAt));
+  assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
+  assert.equal(storage.alarmAt, null);
 });
 
-test("TeamRuntime readiness initializes current and requested season publications without public-read side effects", async () => {
+test("TeamRuntime readiness inspects only; explicit refresh materializes the requested season", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
   const currentYear = new Date().getUTCFullYear(), historicalYear = currentYear - 1;
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
@@ -630,15 +636,24 @@ test("TeamRuntime readiness initializes current and requested season publication
   const readiness = await runtime.fetch(new Request("https://team-runtime/readiness?year=" + historicalYear, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshAt: Date.now() + 60_000 }),
+    body: JSON.stringify({}),
   }));
   assert.equal(readiness.status, 200);
-  assert.equal((await readiness.json()).refresh_queued, true);
-  await drainManualQueue(runtime, storage);
-  assert.equal(storage.values.get("team-state:" + currentYear + ":publication")?.state?.year, currentYear,
-    "background alarm initialization restores the current-season state");
-  assert.equal(storage.values.get("team-state:" + historicalYear + ":publication")?.state?.year, historicalYear,
-    "the requested historical season is materialized by its readiness queue");
+  assert.equal((await readiness.json()).refresh_required, true);
+  assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
+  assert.equal(storage.values.has("team-state:" + historicalYear + ":publication"), false);
+
+  const historicalRefresh = await runtime.fetch(new Request("https://team-runtime/refresh?year=" + historicalYear, {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(historicalRefresh.status, 200);
+  assert.equal(storage.values.get("team-state:" + historicalYear + ":publication")?.state?.year, historicalYear);
+
+  const currentRefresh = await runtime.fetch(new Request("https://team-runtime/refresh?year=" + currentYear, {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(currentRefresh.status, 200);
+  assert.equal(storage.values.get("team-state:" + currentYear + ":publication")?.state?.year, currentYear);
   assert.equal(storage.values.has("team-state:" + currentYear), false);
   assert.equal(storage.values.has("team-state:" + historicalYear), false);
 });
@@ -657,17 +672,15 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
     return Response.json([]);
   }), teamKey);
 
-  const readiness = await runtime.fetch(new Request("https://team/readiness?year=2026", {
+  const refresh = await runtime.fetch(new Request("https://team/refresh?year=2026", {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshAt: Date.now() + 60_000 }),
+    body: JSON.stringify({}),
   }));
-  assert.equal(readiness.status, 200);
+  assert.equal(refresh.status, 200);
   const scheduled = [...storage.values.keys()].filter((key) => key.startsWith("task:"));
   assert.equal(scheduled.some((key) => key.includes("/team_year/")), false);
   assert.equal(scheduled.some((key) => key.includes("/team_events?")), false);
-
-  await drainManualQueue(runtime, storage);
   assert.ok(calls.some((url) => url.includes("/team_year/3461/2026")), "a changed TBA team record triggers Statbotics team-year acquisition");
   assert.ok(calls.some((url) => url.includes("/team_events?team=3461&year=2026")), "a changed TBA event history triggers Statbotics team-event acquisition");
   const polling = [...storage.values.entries()].filter(([key]) => key.startsWith("task:"));
@@ -755,8 +768,8 @@ test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime r
     owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: legacyMatch.key, revision: 9,
   }]);
   assert.equal(migrated.analytics.team_key, teamKey);
-  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), false,
-    "the owning TeamRuntime replaces the old duplicated record in its own storage");
+  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), true,
+    "public reads normalize the legacy copy but never rewrite durable storage");
 });
 
 test("TeamRuntime keeps match webhook data foreign to its team event state", async () => {
