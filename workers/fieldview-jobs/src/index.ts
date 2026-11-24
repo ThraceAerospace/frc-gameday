@@ -1205,7 +1205,7 @@ export default {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const scheduledAt = Date.now();
-      const id = `daily-event-readiness-${new Date(scheduledAt).toISOString().slice(0, 10)}`;
+      const id = `daily-event-readiness-${scheduledAt}`;
       try {
         await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
       } catch {
@@ -1220,7 +1220,7 @@ export default {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const scheduledAt = Date.now();
-      const id = `daily-team-readiness-${new Date(scheduledAt).toISOString().slice(0, 10)}`;
+      const id = `daily-team-readiness-${scheduledAt}`;
       try {
         await env.DAILY_TEAM_READINESS.create({ id, params: { scheduledAt } });
       } catch {
