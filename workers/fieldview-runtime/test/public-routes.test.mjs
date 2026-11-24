@@ -688,3 +688,18 @@ test("public current-season route returns the persisted TBA current_season value
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { year: 2027, checkedAt: 1795405924680 });
 });
+
+
+test("daily team readiness starts its independent Jobs Workflow", async () => {
+  const { env, calls } = makeEnvironment();
+  const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
+    method: "POST",
+    headers: { Authorization: "Bearer server-only-token" },
+  }), env);
+
+  assert.equal(response.status, 202);
+  assert.ok(calls.some((call) =>
+    call.operation === "jobs" &&
+    call.url === "/internal/admin/daily-team-readiness" &&
+    call.method === "POST"));
+});
