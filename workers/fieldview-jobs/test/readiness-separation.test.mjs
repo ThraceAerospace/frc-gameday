@@ -28,6 +28,16 @@ test("team readiness owns only Team Discovery and TeamRuntime readiness", () => 
   assert.match(teamWorkflow, /workflows\/daily-team-readiness\//);
 });
 
+test("readiness inspects only registered runtimes and never dispatches provider refreshes", () => {
+  assert.match(eventWorkflow, /listRuntimeRegistry\(store\(\), "event"\)/);
+  assert.match(teamWorkflow, /listRuntimeRegistry\(store\(\), "team"\)/);
+  assert.match(eventWorkflow, /registeredEventKeys\.has\(item\.key\)/);
+  assert.match(teamWorkflow, /registeredTeamKeys\.has\(teamKey\)/);
+  assert.doesNotMatch(eventWorkflow, /refreshNow/);
+  assert.doesNotMatch(teamWorkflow, /refreshNow/);
+  assert.match(source, /refresh_dispatched: false/);
+});
+
 test("readiness executions persist indexed run records, final summaries, and chunked entity results", () => {
   for (const [workflow, type] of [[eventWorkflow, "event-readiness"], [teamWorkflow, "team-readiness"]]) {
     assert.match(workflow, new RegExp(`admin/workflow-runs/index/${type}`));
