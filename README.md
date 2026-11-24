@@ -14,7 +14,7 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 
 ## Architecture migration
 
-The `fieldview-architecture-migration` branch is rebuilding FieldView around an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend. The backend is deployed as one shared Runtime Worker per environment (`runtime-preprod` and `runtime-production`) from the single `workers/fieldview/wrangler.toml` configuration. FieldView is its first product; the generic Runtime name leaves room for future FIRST program support without implying those integrations already exist.
+The `fieldview-architecture-migration` branch is rebuilding FieldView around an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend. The backend is deployed through one environment-neutral Runtime Worker named `runtime`, configured in `workers/fieldview/wrangler.toml`. Production uses the top-level configuration; branch testing uses Cloudflare Workers Previews under the same Worker, with preview-specific settings and isolated Durable Object namespaces. FieldView is its first product; the generic Runtime name leaves room for future FIRST program support without implying those integrations already exist.
 
 The legacy implementation described below is historical context for the migration. This branch follows the owner-approved retire-first, rebuild-cleanly strategy: temporary functionality loss is acceptable while replacement capabilities are built. No merge to `main`, production cutover, or deployed infrastructure changes are implied.
 
@@ -66,13 +66,13 @@ npm run lint
 npm run build
 ```
 
-Run the consolidated Cloudflare Worker locally with the same root file:
+Run the consolidated Cloudflare Worker locally with the same root file. To create or update the current branch's Cloudflare Preview, use `npx --yes wrangler@^4.135.0 preview` (Preview URLs are enabled in the Worker configuration):
 
 ```bash
 npm run dev:worker
 ```
 
-The `dev:worker` script loads the root `.env`, then starts Wrangler with `workers/fieldview/wrangler.toml` and the explicit `preprod` environment. Cloudflare-hosted Preproduction and Production secrets remain independently configured in Cloudflare and are not synchronized from this local file. The base `runtime` configuration is a shared template; always select a named environment for local execution or deployment.
+The `dev:worker` script loads the root `.env`, then starts Wrangler with `workers/fieldview/wrangler.toml` without a named environment. The top-level configuration is the production Worker configuration; the `previews` block defines branch-preview variables and bindings. Local development uses local bindings and the root `.env`; do not select a Wrangler environment.
 
 TBA and Statbotics types are generated from their upstream OpenAPI documents. The `predev` and `prebuild` lifecycle scripts regenerate both type sets automatically. To run either generator directly:
 
