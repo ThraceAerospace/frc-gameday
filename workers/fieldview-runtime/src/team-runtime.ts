@@ -755,6 +755,9 @@ export class TeamRuntime {
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/readiness") {
+      const readinessBody: unknown = await request.json().catch(() => null);
+      const refreshNow = readinessBody && typeof readinessBody === "object" && !Array.isArray(readinessBody) &&
+        (readinessBody as Record<string, unknown>).refreshNow === true;
       const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const publishedState = publication?.state;
       const validState = Boolean(publication && typeof publication.input_signature === "string" && publishedState && typeof publishedState === "object" &&
@@ -775,7 +778,7 @@ export class TeamRuntime {
       }).map((resource) => resource.endpoint);
       const refreshRequired = !validState || staleResources.length > 0;
       const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
-      if (refreshRequired) {
+      if (refreshRequired && refreshNow) {
         // EventRuntime and TeamRuntime share the same refresh contract:
         // one explicit command, self-owned provider acquisition, sequential
         // bounded requests, canonical reconciliation, and publication.
@@ -793,7 +796,8 @@ export class TeamRuntime {
         state_valid: Boolean(latest && latestState?.team_key === this.teamKey && latestState?.year === year),
         stale_resources: staleResources,
         refresh_required: refreshRequired,
-        refresh_completed: refreshRequired,
+        refresh_dispatched: refreshRequired && refreshNow,
+        refresh_completed: refreshRequired && refreshNow,
         results,
       }, { headers: { "Cache-Control": "no-store" } });
     }
