@@ -216,7 +216,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Season-ingest operation failed");
       setSeasonIngest(body as SeasonIngest);
-      setMessage(action === "start" ? "Season ingestion started and will continue in durable Worker alarms." : "Season ingestion " + action + " requested.");
+      setMessage(action === "start" ? "Season ingestion started and will continue through durable Workflow steps." : "Season ingestion " + action + " requested.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
     finally { setBusy(false); }
   }, [token, requestHeaders, year]);
