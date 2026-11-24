@@ -742,7 +742,7 @@ export class TeamRuntime {
       let snapshot: unknown = previousPublication?.state ?? null;
       if (teamStateChanged) {
         const snapshotResponse = await this.snapshot(year);
-        snapshot = snapshotResponse.ok ? await snapshotResponse.json() : null;
+        snapshot = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
       }
       const persistedEventStates = teamStateChanged
         ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
