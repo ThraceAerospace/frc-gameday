@@ -453,14 +453,12 @@ test("this-week reads return 204 when the service is available but the projectio
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
-test("public team discovery reads the published current-season Durable Object pages", async () => {
+test("public team discovery returns team keys from the published Durable Object pages", async () => {
   const documents = new Map([
     ["discovery/teams/2026.json", {
-      year: 2026, generation: 1234, pageCount: 1, teamCount: 1, updatedAt: 1234, checkedAt: Date.now(),
+      year: 2026, generation: 1234, pageCount: 1, teamCount: 3, updatedAt: 1234, checkedAt: Date.now(),
     }],
-    ["discovery/team-pages/2026/1234/0.json", [
-      { key: "frc3461", team_number: 3461, nickname: "Operation PEACCE", city: "Southington" },
-    ]],
+    ["discovery/team-pages/2026/1234/0.json", ["frc1", "frc4", "frc3461"]],
   ]);
   const env = {
     DISCOVERY_STORE: {
@@ -482,8 +480,36 @@ test("public team discovery reads the published current-season Durable Object pa
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.year, 2026);
-  assert.equal(body.teams.length, 1);
-  assert.equal(body.teams[0].key, "frc3461");
+  assert.deepEqual(body.team_keys, ["frc1", "frc4", "frc3461"]);
+  assert.equal(body.team_count, 3);
+  assert.equal("teams" in body, false);
+  assert.equal(body.team_keys.every((key) => typeof key === "string"), true);
+});
+
+test("public team discovery rejects malformed published team-key pages", async () => {
+  const documents = new Map([
+    ["discovery/teams/2026.json", {
+      year: 2026, generation: 1234, pageCount: 1, teamCount: 1, updatedAt: 1234, checkedAt: Date.now(),
+    }],
+    ["discovery/team-pages/2026/1234/0.json", ["frc3461", { key: "frc9999" }]],
+  ]);
+  const env = {
+    DISCOVERY_STORE: {
+      idFromName(name) { assert.equal(name, "shared"); return name; },
+      get() {
+        return { async fetch(request) {
+          const value = documents.get(new URL(request.url).searchParams.get("key"));
+          return value === undefined ? new Response(null, { status: 404 }) : Response.json(value);
+        } };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("https://runtime.example/teams/discovery?year=2026"),
+    env,
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Team discovery page 0 is invalid" });
 });
 
 test("internal lifecycle mutation route requires admin auth and forwards the request body", async () => {
