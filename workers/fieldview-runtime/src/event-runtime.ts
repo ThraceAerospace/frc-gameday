@@ -338,7 +338,8 @@ export class EventRuntime {
             if ("analytics" in legacyState || "team_states" in legacyState) {
               const { analytics: _analytics, team_states: _teamStates, ...eventState } = legacyState;
               const migrated = { ...publication, state: eventState as unknown as EventStatePublication["state"] };
-              await this.storage.put(EVENT_STATE_PUBLICATION_KEY, migrated);
+              // Normalize the in-memory hydrated view only. Persistent migration
+              // and legacy cleanup require an explicit administrative operation.
               this.hydratedPublication = migrated;
             } else {
               this.hydratedPublication = publication;
@@ -346,13 +347,8 @@ export class EventRuntime {
           } else {
             this.hydratedPublication = publication;
           }
-          // Retire the former duplicated EventView publication and its chunks.
-          // It is no longer a source of truth or a required read model.
-          await this.storage.transaction(async (transaction) => {
-            const legacyChunks = await transaction.list({ prefix: "event-view:publication:v" });
-            for (const key of legacyChunks.keys()) await transaction.delete(key);
-            await transaction.delete("event-view:publication");
-          });
+          // Legacy EventView keys are left untouched here. Cleanup belongs in
+          // an explicit migration job, never in object activation/read paths.
         })
       : Promise.resolve();
   }
