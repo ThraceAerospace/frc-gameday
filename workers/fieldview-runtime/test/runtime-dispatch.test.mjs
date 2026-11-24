@@ -19,6 +19,11 @@ test("event dispatch calls EventRuntime directly and records its runtime marker"
       return Response.json({ ready: true, team_keys: ["frc1"] });
     }),
     DISCOVERY_STORE: namespace(async (request) => {
+      const url = new URL(request.url);
+      if (request.method === "GET" && url.pathname === "/get") {
+        const key = url.searchParams.get("key");
+        return markers.has(key) ? Response.json({ value: markers.get(key) }) : new Response(null, { status: 404 });
+      }
       const body = await request.json();
       markers.set(body.key, body.value);
       return Response.json({ ok: true });
@@ -79,7 +84,7 @@ test("team seed dispatch calls TeamRuntime directly with the requested season", 
   assert.equal(captured.headers.get("X-FieldView-Team-Key"), "frc3461");
 });
 
-test("readiness dispatch forwards randomized refresh deadlines to both runtime types", async () => {
+test("readiness dispatch sends inspection-only requests to both runtime types", async () => {
   const captured = [];
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
@@ -93,16 +98,15 @@ test("readiness dispatch forwards randomized refresh deadlines to both runtime t
     }),
     DISCOVERY_STORE: namespace(async () => Response.json({ ok: true })),
   };
-  const refreshAt = Date.now() + 120_000;
-  const event = await dispatchRuntime(env, "event", "2027rikin", "readiness", { refreshAt }, 2027);
-  const team = await dispatchRuntime(env, "team", "frc3461", "readiness", { refreshAt }, 2027);
+  const event = await dispatchRuntime(env, "event", "2027rikin", "readiness", {}, 2027);
+  const team = await dispatchRuntime(env, "team", "frc3461", "readiness", {}, 2027);
   assert.equal(event.status, 200);
   assert.equal(team.status, 200);
   assert.deepEqual(captured.map(({ kind, id, url, method, body }) => ({
     kind, id, path: url.pathname, year: url.searchParams.get("year"), method, body,
   })), [
-    { kind: "event", id: "2027rikin", path: "/readiness", year: null, method: "POST", body: { refreshAt } },
-    { kind: "team", id: "frc3461", path: "/readiness", year: "2027", method: "POST", body: { refreshAt } },
+    { kind: "event", id: "2027rikin", path: "/readiness", year: null, method: "POST", body: {} },
+    { kind: "team", id: "frc3461", path: "/readiness", year: "2027", method: "POST", body: {} },
   ]);
 });
 
