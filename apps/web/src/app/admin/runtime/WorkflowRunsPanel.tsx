@@ -108,10 +108,10 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {(["event-readiness", "team-readiness"] as WorkflowType[]).map((item) => (
-          <button key={item} onClick={() => { setType(item); setSelected(null); }} className={"rounded-lg px-3 py-2 text-sm " + (type === item ? "bg-[var(--fv-accent)] text-white" : "border border-[var(--fv-border)]")}>{label(item)}</button>
+          <button key={item} onClick={() => { setType(item); setSelected(null); }} className={"rounded-lg px-3 py-2 text-sm " + (type === item ? "bg-[var(--fv-brand)] text-white" : "border border-[var(--fv-border)]")}>{label(item)}</button>
         ))}
         <span className="text-sm text-[var(--fv-muted)]">Season {year || "—"}</span>
-        <button disabled={busy || !year} onClick={() => void dispatch()} className="ml-auto rounded-lg bg-[var(--fv-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Starting…" : "Start " + label(type)}</button>
+        <button disabled={busy || !year} onClick={() => void dispatch()} className="ml-auto rounded-lg bg-[var(--fv-brand)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Starting…" : "Start " + label(type)}</button>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
@@ -120,7 +120,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
           <div className="max-h-[420px] space-y-2 overflow-y-auto">
             {runs.runs.length === 0 && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-3 text-sm text-[var(--fv-muted)]">No {label(type).toLowerCase()} runs recorded yet.</p>}
             {runs.runs.map((run) => (
-              <button key={run.workflow_id} onClick={() => void loadRun(run.workflow_id).catch((cause) => setError(String(cause)))} className={"block w-full rounded-lg border p-3 text-left " + (selected?.workflow_id === run.workflow_id ? "border-[var(--fv-accent)] bg-[var(--fv-surface)]" : "border-[var(--fv-border)]")}>
+              <button key={run.workflow_id} onClick={() => void loadRun(run.workflow_id).catch((cause) => setError(String(cause)))} className={"block w-full rounded-lg border p-3 text-left " + (selected?.workflow_id === run.workflow_id ? "border-[var(--fv-brand)] bg-[var(--fv-surface)]" : "border-[var(--fv-border)]")}>
                 <span className={"block text-sm font-semibold " + statusClass(run.status)}>{(run.status ?? "unknown").replaceAll("_", " ")}</span>
                 <span className="mt-1 block text-xs text-[var(--fv-muted)]">{timestamp(run.started_at)} · {run.year ?? "season pending"}</span>
                 <span className="mt-1 block break-all font-mono text-[11px] text-[var(--fv-muted)]">{run.workflow_id}</span>
