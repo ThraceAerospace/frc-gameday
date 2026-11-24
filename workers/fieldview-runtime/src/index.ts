@@ -192,12 +192,12 @@ export default {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || typeof body.event_key !== "string" ||
           !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(body.event_key) ||
-          !Array.isArray(body.team_keys) ||
+          !Array.isArray(body.team_keys) || body.team_keys.length > 12 ||
           !body.team_keys.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)) ||
           (body.event_endpoints !== undefined &&
             (!Array.isArray(body.event_endpoints) || !body.event_endpoints.every((endpoint) => typeof endpoint === "string"))) ||
           (body.team_endpoints !== undefined && !isRecord(body.team_endpoints))) {
-        return Response.json({ error: "Expected an event_key, valid team_keys, and optional endpoint lists" }, { status: 400 });
+        return Response.json({ error: "Expected an event_key, up to 12 valid team_keys, and optional endpoint lists" }, { status: 400 });
       }
       if (isRecord(body.team_endpoints)) {
         const targetKeys = new Set(body.team_keys as string[]);
