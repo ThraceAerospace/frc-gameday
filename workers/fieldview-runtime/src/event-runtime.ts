@@ -612,6 +612,11 @@ export class EventRuntime {
         }
         state = refreshed;
       }
+      if (!Array.isArray(state.data)) {
+        return Response.json({ ready: false, status: state.status }, {
+          status: 503, headers: { "Cache-Control": "no-store" },
+        });
+      }
       const teamKeys = [...new Set(state.data.map((team) => team?.key).filter((key): key is string =>
         typeof key === "string" && /^frc\d+$/.test(key)))].sort();
       return Response.json({ ready: true, team_keys: teamKeys }, {
@@ -2084,8 +2089,7 @@ export class EventRuntime {
         ...next,
         lastError: responseState.status === "failed" ? responseState.reason : null,
         lastHttpStatus: responseState.status === "modified" ? 200
-          : responseState.status === "not-modified" ? 304
-            : responseState.status === "unavailable" ? responseState.httpStatus : null,
+          : responseState.status === "unavailable" ? responseState.httpStatus : null,
       };
       await transaction.put(key, nextWithDiagnostic);
       if (next.revision !== latest.revision) {
@@ -2133,8 +2137,7 @@ export class EventRuntime {
     // A Statbotics 304 means its representation has not caught up to the TBA
     // change that triggered this bounded refresh. Retry without discarding data.
     return responseState.status !== "failed" && responseState.status !== "unavailable" &&
-      result.status !== "failed" && result.status !== "unavailable" && result.acquired &&
-      !(isStatboticsEndpoint && responseState.status === "not-modified");
+      result.status !== "failed" && result.status !== "unavailable" && result.acquired;
   }
 
   private isStatboticsTriggerEndpoint(endpoint: string): boolean {
