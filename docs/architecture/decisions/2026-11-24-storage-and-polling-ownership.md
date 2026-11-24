@@ -91,7 +91,7 @@ A refresh command is an explicit request for the target runtime to update itself
 
 ## Readiness orchestration
 
-Event readiness and Team readiness remain independently scoped Workflows where their discovery and coverage requirements differ. They may share the same runtime refresh command contract and coordinator dispatch primitives. They do not implement a second runtime execution model: readiness checks durable publication/source coverage and directly dispatches bounded refresh commands to the relevant runtimes. Workflow execution records belong to System Records, not Discovery.
+Event readiness and Team readiness remain independently scoped Workflows where their discovery and coverage requirements differ. They inspect durable publication/source coverage and report which runtimes require refresh; they do not themselves dispatch provider refreshes. The polling coordinator owns all live refresh timing and dispatch, using the shared runtime command contract. Workflow execution records belong to System Records, not Discovery.
 
 ## Architectural boundaries
 
