@@ -13,6 +13,15 @@ This document is the working migration plan for evolving the existing FieldView 
 
 The accepted storage and polling decision in `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` supersedes earlier local-queue/alarm polling assumptions in this plan. EventRuntime and TeamRuntime are the same runtime abstraction at different scopes. Explicit refresh commands now execute provider acquisition inside the target runtime. The migration branch has begun this transition: both runtime refresh endpoints self-fetch; readiness endpoints are inspection-only unless an explicit `refreshNow` command is supplied; TeamRuntime accepts scope-limited resource lists; a bounded direct-dispatch helper and internal coordinator endpoint have been added. Existing recurring alarm paths remain temporarily while lifecycle scheduling and all callers are migrated. This is an in-progress transition, not a completed polling cutover. No infrastructure was deployed or reconfigured.
 
+### Remaining realignment work
+
+1. Wire the polling coordinator to the authoritative weekly candidate projection and event-local lifecycle evaluation; add the recurring schedule only after the coordinator's budget and eligibility behavior are validated.
+2. Have the coordinator derive and dispatch only affected TeamRuntime targets. Preserve one explicit refresh command per runtime and bounded direct concurrency; do not add a Queue by default.
+3. Move cross-runtime analytics/input orchestration out of EventRuntime/TeamRuntime direct RPC paths where it represents cross-runtime work. Keep each runtime authoritative for its own calculation and persisted output.
+4. Implement the D1-backed Discovery and System Records repositories with separate schemas/interfaces, plus the optional KV `events-this-week` projection. Inventory and classify every current DiscoveryStore record before migration.
+5. Remove per-runtime polling queues/alarms only after every recurring poll, webhook follow-up, retry, analytics invalidation, and recovery path has a verified coordinator-owned replacement.
+6. Finish the read-side-effect audit, strict 304 no-op audit across every provider path, restart/recovery behavior, and a complete account-wide workload budget. Validate with repository CI before any deployment.
+
 ## 1. Confirmed decisions
 
 | Area | Decision |
