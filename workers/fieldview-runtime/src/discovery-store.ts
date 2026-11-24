@@ -77,16 +77,23 @@ export class DiscoveryStore {
   private async resolveCurrentSeason(): Promise<Response> {
     const key = "discovery/current-season.json";
     const knownRaw = await this.storage.get<string>(PREFIX + key);
-    let known: { year?: unknown; checkedAt?: unknown } | null = null;
-    try { known = knownRaw ? JSON.parse(knownRaw) as { year?: unknown; checkedAt?: unknown } : null; } catch { known = null; }
+    let known: { year?: unknown; maxTeamPage?: unknown; checkedAt?: unknown } | null = null;
+    try { known = knownRaw ? JSON.parse(knownRaw) as { year?: unknown; maxTeamPage?: unknown; checkedAt?: unknown } : null; } catch { known = null; }
     try {
       const response = await this.requireApi().request(TBA_ENDPOINTS.status());
       if (!response.ok) throw new Error("TBA status returned HTTP " + response.status);
-      const status = await response.json() as { current_season?: unknown };
+      const status = await response.json() as { current_season?: unknown; max_team_page?: unknown };
       const raw = status?.current_season;
       const year = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
       if (!Number.isInteger(year) || year < 1992 || year > 2200) throw new Error("TBA status returned an invalid current_season");
-      const resolved = { year, checkedAt: Date.now() };
+      const rawMaxTeamPage = status?.max_team_page;
+      const maxTeamPage = typeof rawMaxTeamPage === "number" ? rawMaxTeamPage
+        : typeof rawMaxTeamPage === "string" ? Number(rawMaxTeamPage) : NaN;
+      const resolved = {
+        year,
+        ...(Number.isInteger(maxTeamPage) && maxTeamPage >= 0 ? { maxTeamPage } : {}),
+        checkedAt: Date.now(),
+      };
       await this.putValue(key, JSON.stringify(resolved));
       return Response.json(resolved);
     } catch (error) {
@@ -101,60 +108,124 @@ export class DiscoveryStore {
     const year = Number(input.year), generation = Number(input.generation), page = Number(input.page);
     if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
         !Number.isSafeInteger(generation) || generation < 0 ||
-        !Number.isSafeInteger(page) || page < 0 || page > 99) {
+        !Number.isInteger(page) || page < 0) {
       return Response.json({ error: "Invalid team directory page request" }, { status: 400 });
     }
-    const response = await this.requireApi().request(TBA_ENDPOINTS.teamsByYearPage(year, page));
+    const response = await this.requireApi().request(TBA_ENDPOINTS.teamsByYearPageKeys(year, page));
     if (!response.ok) return Response.json({ error: "TBA team discovery page returned HTTP " + response.status }, { status: response.status });
-    const teams = await response.json() as Array<{ key?: unknown }>;
-    if (!Array.isArray(teams) || teams.length > 500 || teams.some((team) =>
-      !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+    const teamKeys = await response.json() as unknown;
+    if (!Array.isArray(teamKeys) || teamKeys.some((key) =>
+      typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
       return Response.json({ error: "TBA returned an invalid team directory page" }, { status: 502 });
     }
     await this.putValue(
       `discovery/team-pages/${year}/${generation}/${page}.json`,
-      JSON.stringify(teams),
+      JSON.stringify(teamKeys),
     );
-    return Response.json({
-      page, count: teams.length, hasMore: teams.length === 500,
-      teamKeys: teams.map((team) => team.key as string),
-    });
+    return Response.json({ page, count: teamKeys.length, teamKeys });
+  }
+
+  private async resumePartialTeamDirectory(input: Record<string, unknown>): Promise<Response> {
+    const year = Number(input.year), expectedPageCount = Number(input.expectedPageCount);
+    if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
+        !Number.isInteger(expectedPageCount) || expectedPageCount < 1) {
+      return Response.json({ error: "Invalid partial team directory lookup" }, { status: 400 });
+    }
+    const prefix = PREFIX + `discovery/partial-teams/${year}/`;
+    const entries = await this.storage.list<string>({ prefix });
+    const candidates = [...entries.entries()]
+      .map(([key, value]) => ({ key, value, generation: Number(key.slice(prefix.length, -5)) }))
+      .filter((item) => item.key.endsWith(".json") && Number.isSafeInteger(item.generation) && item.generation >= 0)
+      .sort((a, b) => b.generation - a.generation);
+    for (const candidate of candidates) {
+      try {
+        const partial = JSON.parse(candidate.value) as {
+          expectedPageCount?: unknown; failedPages?: unknown; teamKeys?: unknown; complete?: unknown; warnings?: unknown;
+        };
+        if (partial.complete !== false || partial.expectedPageCount !== expectedPageCount ||
+            !Array.isArray(partial.failedPages) || !Array.isArray(partial.teamKeys)) continue;
+        const failedPages = partial.failedPages as number[];
+        const teamKeys = partial.teamKeys as string[];
+        if (failedPages.some((page) => !Number.isInteger(page) || page < 0 || page >= expectedPageCount) ||
+            teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) continue;
+        let pagesValid = true;
+        for (let page = 0; page < expectedPageCount; page += 1) {
+          if (failedPages.includes(page)) continue;
+          const stored = await this.storage.get<string>(PREFIX + `discovery/team-pages/${year}/${candidate.generation}/${page}.json`);
+          if (!stored) { pagesValid = false; break; }
+        }
+        if (!pagesValid) continue;
+        return Response.json({
+          resumable: true, generation: candidate.generation,
+          teamKeys, failedPages: [...new Set(failedPages)].sort((a, b) => a - b),
+          warnings: Array.isArray(partial.warnings) ? partial.warnings : [],
+        });
+      } catch { /* Ignore malformed partial records and inspect the next candidate. */ }
+    }
+    return Response.json({ resumable: false });
   }
 
   private async publishTeamDirectory(input: Record<string, unknown>): Promise<Response> {
     const year = Number(input.year), generation = Number(input.generation), pageCount = Number(input.pageCount);
     const teamKeys = input.teamKeys;
+    const rawFailedPages = input.failedPages ?? [];
+    const rawWarnings = input.warnings ?? [];
     if (!Number.isInteger(year) || year < 1992 || year > 2200 ||
         !Number.isSafeInteger(generation) || generation < 0 ||
-        !Number.isSafeInteger(pageCount) || pageCount < 1 ||
-        !Array.isArray(teamKeys) || teamKeys.length === 0 ||
-        teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
+        !Number.isInteger(pageCount) || pageCount < 1 ||
+        !Array.isArray(teamKeys) ||
+        teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key)) ||
+        !Array.isArray(rawFailedPages) || rawFailedPages.some((page) =>
+          !Number.isInteger(page) || Number(page) < 0 || Number(page) >= pageCount) ||
+        !Array.isArray(rawWarnings) || rawWarnings.some((warning) => typeof warning !== "string")) {
       return Response.json({ error: "Invalid team directory publication" }, { status: 400 });
     }
+    const warnings = (rawWarnings as string[]).slice(0, 200);
+    const failedPages = [...new Set(rawFailedPages as number[])].sort((a, b) => a - b);
+    const failedPageSet = new Set(failedPages);
     const unique = [...new Set(teamKeys as string[])].sort();
     const observed = new Set<string>();
     for (let page = 0; page < pageCount; page += 1) {
       const raw = await this.storage.get<string>(PREFIX + `discovery/team-pages/${year}/${generation}/${page}.json`);
-      if (!raw) return Response.json({ error: `Team directory page ${page} is missing` }, { status: 409 });
-      let pageTeams: Array<{ key?: unknown }>;
-      try { pageTeams = JSON.parse(raw) as Array<{ key?: unknown }>; } catch {
+      if (failedPageSet.has(page)) {
+        if (raw !== undefined) return Response.json({ error: `Failed team page ${page} unexpectedly has a successful result` }, { status: 409 });
+        continue;
+      }
+      if (!raw) return Response.json({ error: `Team directory page ${page} is missing and was not recorded as failed` }, { status: 409 });
+      let pageKeys: unknown;
+      try { pageKeys = JSON.parse(raw) as unknown; } catch {
         return Response.json({ error: `Team directory page ${page} is invalid JSON` }, { status: 409 });
       }
-      if (!Array.isArray(pageTeams) || pageTeams.some((team) =>
-        !team || typeof team.key !== "string" || !/^frc[0-9]+$/.test(team.key))) {
+      if (!Array.isArray(pageKeys) || pageKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
         return Response.json({ error: `Team directory page ${page} is invalid` }, { status: 409 });
       }
-      for (const team of pageTeams) observed.add(team.key as string);
+      for (const key of pageKeys) observed.add(key as string);
     }
     const observedKeys = [...observed].sort();
     if (observedKeys.length !== unique.length || observedKeys.some((key, index) => key !== unique[index])) {
       return Response.json({ error: "Team directory page contents do not match the publication manifest" }, { status: 409 });
     }
+    if (failedPages.length) {
+      const partial = {
+        year, generation, status: "partial", complete: false, expectedPageCount: pageCount,
+        successfulPageCount: pageCount - failedPages.length, failedPages, warnings,
+        teamCount: unique.length, teamKeys: unique, updatedAt: generation, checkedAt: Date.now(),
+      };
+      await this.putValue(`discovery/partial-teams/${year}/${generation}.json`, JSON.stringify(partial));
+      return Response.json({
+        year, status: "partial", complete: false, pages: pageCount - failedPages.length,
+        expectedPages: pageCount, failedPages, teams: unique.length,
+      });
+    }
+    if (!unique.length) return Response.json({ error: "TBA returned an empty team directory" }, { status: 502 });
     await this.putValue(`registry/teams/${year}.json`, JSON.stringify(unique));
     await this.putValue(`discovery/teams/${year}.json`, JSON.stringify({
-      year, generation, pageCount, teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
+      year, generation, pageCount, expectedPageCount: pageCount, successfulPageCount: pageCount,
+      failedPages: [], status: "completed", complete: true,
+      teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
     }));
-    return Response.json({ year, pages: pageCount, teams: unique.length });
+    await this.deleteKey(`discovery/partial-teams/${year}/${generation}.json`);
+    return Response.json({ year, status: "completed", complete: true, pages: pageCount, teams: unique.length });
   }
 
   private async discoverEventDirectory(input: Record<string, unknown>): Promise<Response> {
@@ -275,6 +346,7 @@ export class DiscoveryStore {
       const action = url.pathname.slice("/catalog/".length);
       if (action === "resolve-current-season") return this.resolveCurrentSeason();
       if (action === "discover-team-page") return this.discoverTeamPage(body);
+      if (action === "resume-partial-team-directory") return this.resumePartialTeamDirectory(body);
       if (action === "publish-team-directory") return this.publishTeamDirectory(body);
       if (action === "discover-event-directory") return this.discoverEventDirectory(body);
       if (action === "write-event-chunks") return this.writeEventChunks(body);
