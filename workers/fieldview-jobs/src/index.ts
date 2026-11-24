@@ -392,12 +392,20 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       return { eventCount: thisWeekEvents.length };
     });
 
+    const registeredEventKeys = new Set(await step.do(
+      "readiness-list-registered-event-runtimes",
+      async () => listRuntimeRegistry(store(), "event"),
+    ));
+    const registeredEventCount = eventKeys.filter((item) =>
+      item && typeof item.key === "string" && registeredEventKeys.has(item.key),
+    ).length;
     const eventResults: Array<{
       key: string; state_valid: boolean; refresh_required: boolean; refresh_dispatched: boolean;
       stale_sources?: string[]; error?: string;
     }> = [];
     for (const item of eventKeys) {
-      if (!item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) continue;
+      if (!item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key) ||
+          !registeredEventKeys.has(item.key)) continue;
       try {
         const result = await step.do("readiness-event-" + item.key, {
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
@@ -425,6 +433,8 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       current_season: year,
       season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
       events_total: eventKeys.length,
+      events_registered: registeredEventCount,
+      events_unregistered: eventKeys.length - registeredEventCount,
       events_state_valid: eventResults.filter((item) => item.state_valid).length,
       events_refresh_required: eventResults.filter((item) => item.refresh_required).length,
       events_failed: eventResults.filter((item) => item.error).length,
@@ -435,7 +445,8 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
     };
     const summaryRecord = {
       run_date: summary.run_date, current_season: summary.current_season, season_source: summary.season_source,
-      events_total: summary.events_total, events_state_valid: summary.events_state_valid,
+      events_total: summary.events_total, events_registered: summary.events_registered,
+      events_unregistered: summary.events_unregistered, events_state_valid: summary.events_state_valid,
       events_refresh_required: summary.events_refresh_required, events_failed: summary.events_failed,
       this_week_events: summary.this_week_events, event_directory: summary.event_directory,
     };
@@ -539,11 +550,16 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       return response.json();
     });
 
+    const registeredTeamKeys = new Set(await step.do(
+      "team-readiness-list-registered-team-runtimes",
+      async () => listRuntimeRegistry(store(), "team"),
+    ));
+    const registeredTeamKeyList = uniqueTeamKeys.filter((teamKey) => registeredTeamKeys.has(teamKey));
     const teamResults: Array<{
       key: string; state_valid: boolean; refresh_required: boolean; refresh_dispatched: boolean;
       stale_resources?: string[]; error?: string;
     }> = [];
-    for (const teamKey of uniqueTeamKeys) {
+    for (const teamKey of registeredTeamKeyList) {
       try {
         const result = await step.do("team-readiness-" + teamKey, {
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
@@ -571,6 +587,8 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       current_season: year,
       season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
       teams_total: uniqueTeamKeys.length,
+      teams_registered: registeredTeamKeyList.length,
+      teams_unregistered: uniqueTeamKeys.length - registeredTeamKeyList.length,
       teams_state_valid: teamResults.filter((item) => item.state_valid).length,
       teams_refresh_required: teamResults.filter((item) => item.refresh_required).length,
       teams_failed: teamResults.filter((item) => item.error).length,
@@ -580,7 +598,8 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
     };
     const summaryRecord = {
       run_date: summary.run_date, current_season: summary.current_season, season_source: summary.season_source,
-      teams_total: summary.teams_total, teams_state_valid: summary.teams_state_valid,
+      teams_total: summary.teams_total, teams_registered: summary.teams_registered,
+      teams_unregistered: summary.teams_unregistered, teams_state_valid: summary.teams_state_valid,
       teams_refresh_required: summary.teams_refresh_required, teams_failed: summary.teams_failed,
       team_directory: summary.team_directory,
     };
