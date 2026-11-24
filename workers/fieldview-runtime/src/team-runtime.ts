@@ -864,10 +864,36 @@ export class TeamRuntime {
         ? (body as Record<string, unknown>).endpoint : null;
       const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
+      const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const previousPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const result = await this.pollResourceNow(resource);
-      return Response.json({ endpoint: resource.endpoint, queued: false, attempted: true, ...result }, {
-        headers: { "Cache-Control": "no-store" },
-      });
+      const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const teamStateChanged = teamStateRevision !== previousRevision || !previousPublication;
+      let snapshot: unknown = previousPublication?.state ?? null;
+      if (teamStateChanged) {
+        const snapshotResponse = await this.snapshot(year);
+        snapshot = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
+      }
+      const persistedEventStates = teamStateChanged
+        ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
+        : new Map<string, FieldViewTeamEventState>();
+      const activeEvents = teamStateChanged
+        ? await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {}
+        : {};
+      const affectedEventKeys = new Set<string>([
+        ...[...persistedEventStates.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length))
+          .filter((key) => /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(key) && Number(key.slice(0, 4)) === year),
+        ...Object.entries(activeEvents).filter(([, membership]) => membership.year === year).map(([eventKey]) => eventKey),
+      ]);
+      const affectedEvents = await Promise.all([...affectedEventKeys].sort().map(async (event_key) => ({
+        event_key,
+        team_event_revision: await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + event_key) ?? 0,
+      })));
+      return Response.json({
+        endpoint, queued: false, attempted: true, ...result,
+        team_key: this.teamKey, year, team_state_revision: teamStateRevision,
+        affected_events: affectedEvents, snapshot,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
