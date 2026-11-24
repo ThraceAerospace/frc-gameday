@@ -298,7 +298,7 @@ export class TeamRuntime {
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
     const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
-    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead) {
+    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest) {
       if (diagnosticsRead && !isRuntimeAdminAuthorized(request, this.env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
