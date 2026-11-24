@@ -642,8 +642,13 @@ export class EventRuntime {
       if (!endpoint || (!this.allowedEndpoints.has(endpoint) && endpoint !== statboticsEndpoint)) {
         return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
       }
+      const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint);
-      const publication = await this.publishEventState();
+      const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = currentRevision !== previousRevision || !currentPublication
+        ? await this.publishEventState()
+        : currentPublication;
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
@@ -656,8 +661,13 @@ export class EventRuntime {
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
-      const publication = await this.publishEventState();
+      const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = currentRevision !== previousRevision || !currentPublication
+        ? await this.publishEventState()
+        : currentPublication;
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
         scheduled: false, queued: false, attempted: true, success,
