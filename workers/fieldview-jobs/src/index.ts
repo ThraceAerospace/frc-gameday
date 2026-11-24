@@ -1206,12 +1206,29 @@ export default {
       }
       const scheduledAt = Date.now();
       const id = `daily-event-readiness-${scheduledAt}`;
+      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const initial = {
+        workflow_id: id, workflow_type: "event-readiness", status: "running",
+        started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
+        year: null, total: 0, summary: null, result_chunks: 0, error: null,
+      };
+      await store.put(`admin/workflow-runs/event-readiness/${id}/record.json`, JSON.stringify(initial), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      await store.put(`admin/workflow-runs/index/event-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
+        JSON.stringify({ workflow_id: id, workflow_type: "event-readiness", started_at: scheduledAt, year: null, status: "running" }),
+        { httpMetadata: { contentType: "application/json" } });
       try {
         await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
-      } catch {
-        return Response.json({ error: "A daily event-readiness Workflow already exists for this UTC date", workflow_id: id }, { status: 409 });
+      } catch (error) {
+        const failed = { ...initial, status: "failed", updated_at: Date.now(), completed_at: Date.now(),
+          error: error instanceof Error ? error.message : String(error) };
+        await store.put(`admin/workflow-runs/event-readiness/${id}/record.json`, JSON.stringify(failed), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return Response.json({ ...failed }, { status: 409 });
       }
-      return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "running" }, { status: 202 });
     }
 
     if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
@@ -1221,12 +1238,29 @@ export default {
       }
       const scheduledAt = Date.now();
       const id = `daily-team-readiness-${scheduledAt}`;
+      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const initial = {
+        workflow_id: id, workflow_type: "team-readiness", status: "running",
+        started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
+        year: null, total: 0, summary: null, result_chunks: 0, error: null,
+      };
+      await store.put(`admin/workflow-runs/team-readiness/${id}/record.json`, JSON.stringify(initial), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      await store.put(`admin/workflow-runs/index/team-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
+        JSON.stringify({ workflow_id: id, workflow_type: "team-readiness", started_at: scheduledAt, year: null, status: "running" }),
+        { httpMetadata: { contentType: "application/json" } });
       try {
         await env.DAILY_TEAM_READINESS.create({ id, params: { scheduledAt } });
-      } catch {
-        return Response.json({ error: "A daily team-readiness Workflow already exists for this UTC date", workflow_id: id }, { status: 409 });
+      } catch (error) {
+        const failed = { ...initial, status: "failed", updated_at: Date.now(), completed_at: Date.now(),
+          error: error instanceof Error ? error.message : String(error) };
+        await store.put(`admin/workflow-runs/team-readiness/${id}/record.json`, JSON.stringify(failed), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        return Response.json({ ...failed }, { status: 409 });
       }
-      return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "running" }, { status: 202 });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   },
