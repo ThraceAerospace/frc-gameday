@@ -1119,8 +1119,8 @@ export class EventRuntime {
 
   /**
    * Event analytics may consume TeamRuntime publications, but it must never
-   * create a TeamRuntime as a side effect. Only address team objects that the
-   * independent team-readiness process has already registered.
+   * create a TeamRuntime as a side effect. Only address team objects already
+   * present in DiscoveryStore's TeamRuntime registry.
    */
   private async registeredTeamRuntimeKeys(): Promise<Set<string>> {
     if (!this.env.DISCOVERY_STORE) return new Set();
