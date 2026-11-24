@@ -2069,7 +2069,7 @@ export class EventRuntime {
 
     if (responseState.status === "not-modified") {
       const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
-      return latest?.lastFetchedAt !== null && latest?.lastFetchedAt !== undefined;
+      return !isStatboticsEndpoint && latest?.lastFetchedAt !== null && latest?.lastFetchedAt !== undefined;
     }
 
     const result = await this.storage.transaction(async (transaction) => {
