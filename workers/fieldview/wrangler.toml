@@ -1,5 +1,5 @@
-# FieldView's single Cloudflare Worker configuration.
-name = "fieldview"
+# Shared Runtime Worker configuration for FieldView and future FIRST products.
+name = "runtime"
 # Deploy explicitly with --env preprod or --env production.
 # Each environment owns a fresh, independent Durable Object namespace.
 
@@ -16,7 +16,7 @@ head_sampling_rate = 0.1
 
 # Preproduction
 [env.preprod]
-name = "fieldview-preprod"
+name = "runtime-preprod"
 workers_dev = true
 preview_urls = false
 
@@ -71,7 +71,7 @@ concurrency = { limit = 3 }
 # Production. Do not deploy until preproduction validation and the production
 # system-administrator authorization design are complete.
 [env.production]
-name = "fieldview-production"
+name = "runtime-production"
 workers_dev = false
 preview_urls = false
 
