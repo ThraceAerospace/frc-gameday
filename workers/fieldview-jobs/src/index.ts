@@ -434,6 +434,12 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       this_week_events: thisWeekEvents.length,
       event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
     };
+    const summaryRecord = {
+      run_date: summary.run_date, current_season: summary.current_season, season_source: summary.season_source,
+      events_total: summary.events_total, events_state_valid: summary.events_state_valid,
+      events_refresh_queued: summary.events_refresh_queued, events_failed: summary.events_failed,
+      this_week_events: summary.this_week_events, event_directory: summary.event_directory,
+    };
     const resultChunks = Math.ceil(eventResults.length / 25);
     await step.do("readiness-write-run-results", async () => {
       for (let offset = 0; offset < eventResults.length; offset += 25) {
@@ -441,7 +447,7 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
         await store().put(`${runPrefix}/results/${String(Math.floor(offset / 25)).padStart(4, "0")}.json`,
           JSON.stringify({ offset, results: chunk }), { httpMetadata: { contentType: "application/json" } });
       }
-      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summary), {
+      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summaryRecord), {
         httpMetadata: { contentType: "application/json" },
       });
       const completed = {
@@ -574,6 +580,12 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       team_readiness: teamResults,
       team_directory: { pages: teamPages, teams: uniqueTeamKeys.length },
     };
+    const summaryRecord = {
+      run_date: summary.run_date, current_season: summary.current_season, season_source: summary.season_source,
+      teams_total: summary.teams_total, teams_state_valid: summary.teams_state_valid,
+      teams_refresh_queued: summary.teams_refresh_queued, teams_failed: summary.teams_failed,
+      team_directory: summary.team_directory,
+    };
     const resultChunks = Math.ceil(teamResults.length / 25);
     await step.do("team-readiness-write-run-results", async () => {
       for (let offset = 0; offset < teamResults.length; offset += 25) {
@@ -581,7 +593,7 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
         await store().put(`${runPrefix}/results/${String(Math.floor(offset / 25)).padStart(4, "0")}.json`,
           JSON.stringify({ offset, results: chunk }), { httpMetadata: { contentType: "application/json" } });
       }
-      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summary), {
+      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summaryRecord), {
         httpMetadata: { contentType: "application/json" },
       });
       const completed = {
