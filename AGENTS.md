@@ -17,7 +17,7 @@ The repository is undergoing an **incremental architecture migration** on branch
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0014 for the runtime execution/orchestration contract, ADR-0017 for the one-Worker-per-environment deployment decision, and ADR-0018 for sequential readiness sweeps and publication-gated reads.
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0017 for the one-Worker-per-environment deployment decision, ADR-0018 for publication-gated reads, and `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` for the current runtime, polling, and storage ownership model. ADR-0014 is historical and superseded.
 
 ## Non-negotiable product and data principles
 
@@ -264,7 +264,7 @@ See ADR-0015 for the read-first persistence-equals-readiness decision.
 - Team readiness independently resolves TBA's canonical `current_season`, refreshes/publishes the Team Discovery directory, and inspects TeamRuntime TeamState coverage for that season.
 - Event-scoped participant resources such as `/event/{key}/teams` remain EventRuntime-owned and do not initialize TeamRuntime.
 - Event analytics dependencies must be selected by the polling coordinator or a dedicated Workflow using System Records runtime registration. EventRuntime must not dispatch to or activate TeamRuntimes directly as a side effect.
-- A shared external scheduler may start both Workflows, but neither Workflow depends on the other. Do not add TeamRuntime work back into EventRuntime readiness or combine their progress/concurrency boundaries.
+- A shared external scheduler may start both Workflows, but neither Workflow depends on the other. They remain separate coverage operations and must not be used as the live polling scheduler.
 
 ## Workflow execution history
 
@@ -275,4 +275,4 @@ See ADR-0015 for the read-first persistence-equals-readiness decision.
 - Keep high-volume diagnostic logs in platform observability; System Records are structured operational history, not a replacement for application logs.
 - Do not store credentials, authorization headers, or provider secrets in execution records.
 
-- The GitHub Actions scheduler starts the preproduction event and team readiness endpoints separately. Cloudflare Workflow bindings do not declare paid-plan cron schedules.
+- The GitHub Actions scheduler starts the preproduction event and team readiness endpoints separately. Cloudflare Workflow bindings do not declare paid-plan cron schedules. These are readiness/discovery runs, not live polling triggers.
