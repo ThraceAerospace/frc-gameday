@@ -31,7 +31,7 @@ type RunList = { runs: Array<Partial<WorkflowRun> & { workflow_id: string }>; to
 function timestamp(value?: number | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium", timeStyle: "short", timeZone: "UTC", timeZoneName: "short",
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short",
   }).format(new Date(value));
 }
 function label(type: WorkflowType) { return type === "event-readiness" ? "Event readiness" : "Team readiness"; }
@@ -48,11 +48,10 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   const [selected, setSelected] = useState<WorkflowRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const headers = { Authorization: "Bearer " + token };
 
   const loadRuns = useCallback(async () => {
     if (!token) return;
-    const response = await fetch("/api/admin/runtime?workflowRuns=" + type + "&limit=30", { headers, cache: "no-store" });
+    const response = await fetch("/api/admin/runtime?workflowRuns=" + type + "&limit=30", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to load workflow history");
     setRuns(body as RunList);
@@ -79,7 +78,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/admin/runtime", {
-        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
         body: JSON.stringify({ workflowType: type }),
       });
       const body = await response.json();
