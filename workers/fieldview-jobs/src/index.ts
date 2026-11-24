@@ -1176,7 +1176,22 @@ export default {
         const indexRecord = await object.json<Record<string, unknown>>();
         const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
         const recordObject = id ? await store.get(`admin/workflow-runs/${type}/${id}/record.json`) : null;
-        const record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
+        let record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
+        if (id && record.status === "running") {
+          try {
+            const binding = type === "event-readiness" ? env.DAILY_EVENT_READINESS : env.DAILY_TEAM_READINESS;
+            const workflowStatus = (await binding.get(id).then((instance) => instance.status())).status;
+            if (workflowStatus === "errored" || workflowStatus === "terminated") {
+              record = { ...record, status: workflowStatus === "errored" ? "failed" : "cancelled",
+                updated_at: Date.now(), completed_at: Date.now(),
+                ...(workflowStatus === "errored" ? { error: "Cloudflare Workflow execution failed; inspect the Workflow instance for details." } : {}) };
+              await store.put(`admin/workflow-runs/${type}/${id}/record.json`, JSON.stringify(record), {
+                httpMetadata: { contentType: "application/json" },
+              });
+            }
+            record = { ...record, workflow_status: workflowStatus };
+          } catch { /* Retain the durable run record if the Workflow status API is temporarily unavailable. */ }
+        }
         runs.push({ ...indexRecord, ...record });
       }
       return Response.json({ type, runs, total: page.objects.length }, {
