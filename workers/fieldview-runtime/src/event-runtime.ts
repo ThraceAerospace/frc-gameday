@@ -449,8 +449,6 @@ export class EventRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/readiness") {
-      const readinessBody: unknown = await request.json().catch(() => null);
-      const refreshNow = isRecord(readinessBody) && readinessBody.refreshNow === true;
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const validState = Boolean(publication && publication.status !== "failed" &&
         Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
@@ -466,22 +464,6 @@ export class EventRuntime {
           (source.expiresAt !== null && source.expiresAt <= now);
       });
       const refreshRequired = !validState || staleSources.length > 0;
-      const refreshResults: Array<{ endpoint: string; success: boolean }> = [];
-      if (refreshRequired && refreshNow) {
-        const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-        // One command refreshes this EventRuntime's complete owned resource
-        // set. Provider acquisition remains inside this runtime and is bounded
-        // sequentially; the coordinator never proxies provider payloads.
-        for (const endpoint of expectedEndpoints) {
-          refreshResults.push({
-            endpoint,
-            success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }),
-          });
-        }
-        const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-        const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-        if (currentRevision !== previousRevision || !currentPublication) await this.publishEventState();
-      }
       const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       return Response.json({
         event_key: this.eventKey,
@@ -489,10 +471,10 @@ export class EventRuntime {
         publication_status: latestPublication?.status ?? "missing",
         stale_sources: staleSources,
         refresh_required: refreshRequired,
-        refresh_dispatched: refreshRequired && refreshNow,
-        refresh_completed: refreshRequired && refreshNow && refreshResults.every((result) => result.success),
-        refreshed_endpoints: refreshResults.filter((result) => result.success).map((result) => result.endpoint),
-        failed_endpoints: refreshResults.filter((result) => !result.success).map((result) => result.endpoint),
+        refresh_dispatched: false,
+        refresh_completed: false,
+        refreshed_endpoints: [],
+        failed_endpoints: [],
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
