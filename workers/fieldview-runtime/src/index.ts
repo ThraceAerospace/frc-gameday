@@ -233,6 +233,14 @@ export default {
       }));
     }
 
+    if (url.pathname === "/internal/admin/workflow-runs" && request.method === "GET") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/workflow-runs" + url.search, {
+        method: "GET", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
