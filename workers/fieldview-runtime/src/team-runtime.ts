@@ -796,6 +796,7 @@ export class TeamRuntime {
       const refreshRequired = !validState || staleResources.length > 0;
       const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
       if (refreshRequired && refreshNow) {
+        const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
         // EventRuntime and TeamRuntime share the same refresh contract:
         // one explicit command, self-owned provider acquisition, sequential
         // bounded requests, canonical reconciliation, and publication.
@@ -803,7 +804,8 @@ export class TeamRuntime {
           const result = await this.pollResourceNow(resource);
           results.push({ endpoint: resource.endpoint, ...result });
         }
-        await this.snapshot(year);
+        const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+        if (currentRevision !== previousRevision || !publication) await this.snapshot(year);
       }
       const latest = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const latestState = latest?.state as Record<string, unknown> | undefined;
@@ -814,7 +816,7 @@ export class TeamRuntime {
         stale_resources: staleResources,
         refresh_required: refreshRequired,
         refresh_dispatched: refreshRequired && refreshNow,
-        refresh_completed: refreshRequired && refreshNow,
+        refresh_completed: refreshRequired && refreshNow && results.every((result) => result.success),
         results,
       }, { headers: { "Cache-Control": "no-store" } });
     }
