@@ -480,9 +480,6 @@ export class EventRuntime {
           refreshed.push(endpoint);
         }
         await this.publishEventState();
-        if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-          await this.recalculateAnalytics();
-        }
       }
       const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       return Response.json({
@@ -587,9 +584,6 @@ export class EventRuntime {
         results.push({ endpoint, success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }) });
       }
       const publication = await this.publishEventState();
-      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-        await this.recalculateAnalytics();
-      }
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({
         event_key: this.eventKey,
@@ -652,9 +646,6 @@ export class EventRuntime {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const success = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
       const publication = await this.publishEventState();
-      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-        await this.recalculateAnalytics();
-      }
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
         scheduled: false, queued: false, attempted: true, success,
