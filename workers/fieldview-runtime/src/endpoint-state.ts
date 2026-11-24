@@ -1,5 +1,5 @@
 /**
- * Platform-independent endpoint state transitions for EventRuntime.
+ * Shared platform-independent endpoint state transitions for EventRuntime and TeamRuntime.
  * Cloudflare storage adapters persist these values and run transitions inside
  * short transactions. This module has no provider, domain, or platform imports.
  */
@@ -17,7 +17,7 @@ export interface EndpointState<T> {
   lastFetchedAt: number | null;
   expiresAt: number | null;
   revision: number;
-  /** Advances only when a 200 response installs a new upstream validator state. */
+  /** Advances on each accepted 200 to fence concurrent polls; independent of canonical revision. */
   validatorRevision: number;
   lastAttemptAt: number | null;
   lastWebhookAt: number | null;
