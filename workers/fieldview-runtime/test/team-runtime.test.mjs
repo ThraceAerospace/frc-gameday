@@ -66,7 +66,7 @@ test("TeamRuntime does not replace a last-good publication after a failed provid
     "failed revalidation must preserve the exact last-good publication record");
 });
 
-test("TeamRuntime hydrates persisted season publications before serving reads", async () => {
+test("TeamRuntime hydrates persisted season publications without deleting legacy copies", async () => {
   const storage = new MemoryStorage();
   const state = { team_key: "frc3461", year: 2026, events: [], sources: {} };
   storage.values.set("team-key", "frc3461");
@@ -84,8 +84,8 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
   assert.equal((await response.json()).team_key, "frc3461");
   assert.equal(activationCalls, 1);
   assert.equal(providerCalls, 0);
-  assert.equal(storage.values.has("team-state:2026"), false,
-    "activation removes a legacy duplicate when its canonical publication is present");
+  assert.equal(storage.values.has("team-state:2026"), true,
+    "activation leaves legacy duplicates untouched for an explicit migration");
   const diagnostics = await runtime.fetch(new Request("https://team/state", {
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
@@ -94,7 +94,7 @@ test("TeamRuntime hydrates persisted season publications before serving reads", 
   assert.equal(readiness.publications.length, 1);
 });
 
-test("TeamRuntime public snapshots return 204 until readiness publishes canonical state", async () => {
+test("TeamRuntime public snapshots remain read-only until an explicit refresh publishes state", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461", year = 2026;
   let activeRequests = 0, maxConcurrentRequests = 0;
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
@@ -121,25 +121,29 @@ test("TeamRuntime public snapshots return 204 until readiness publishes canonica
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 
-  const refreshAt = Date.now() + 60_000;
   const readiness = await runtime.fetch(new Request("https://team/readiness?year=" + year, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshAt }),
+    body: JSON.stringify({}),
   }));
   assert.equal(readiness.status, 200);
   const result = await readiness.json();
   assert.equal(result.state_valid, false);
-  assert.equal(result.refresh_queued, true);
-  const queue = storage.values.get("manual:poll-queue") ?? [];
-  assert.equal(queue.length, 7);
-  assert.ok(queue.every((item) => item.dueAt === refreshAt), "all team resources share the randomized durable deadline");
-  assert.equal(calls.length, 0, "readiness only queues work; it does not fetch providers inline");
+  assert.equal(result.refresh_required, true);
+  assert.equal(result.refresh_dispatched, false);
+  assert.equal(calls.length, 0, "readiness inspects coverage without provider I/O");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 
   assert.equal((await read()).status, 204, "an existing TeamRuntime without TeamState returns no content");
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 7);
-  await drainManualQueue(runtime, storage);
-  assert.equal(calls.length, 7, "the TeamRuntime alarm processes each provider resource");
+  const refresh = await runtime.fetch(new Request("https://team/refresh?year=" + year, {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  }));
+  assert.equal(refresh.status, 200);
+  assert.equal(calls.length, 7, "the explicit refresh command fetches each required resource inside TeamRuntime");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
+  assert.equal(storage.alarmAt, null);
   assert.equal(maxConcurrentRequests, 1, "one TeamRuntime alarm must never run provider requests concurrently");
   const second = await read();
   assert.equal(second.status, 200);
@@ -152,7 +156,7 @@ test("TeamRuntime public snapshots return 204 until readiness publishes canonica
   assert.equal(snapshot.media.length, 0);
 });
 
-test("TeamRuntime seed only queues provider work and returns without fetching", async () => {
+test("TeamRuntime seed performs its own provider refresh before returning", async () => {
   const storage = new MemoryStorage();
   const calls = [];
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
@@ -163,13 +167,13 @@ test("TeamRuntime seed only queues provider work and returns without fetching", 
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.queued, true);
-  assert.equal(result.attempted, false);
-  assert.equal(calls.length, 0, "TeamRuntime seed must not run its alarm or provider I/O inline");
-  assert.ok(storage.alarmAt !== null, "the runtime alarm owns execution of the queued seed");
-  assert.ok((storage.values.get("manual:poll-queue") ?? []).length > 0);
+  assert.equal(result.queued, false);
+  assert.equal(result.attempted, true);
+  assert.equal(calls.length, 7, "TeamRuntime seed fetches its own provider resources inline");
+  assert.equal(storage.alarmAt, null);
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 });
 
 test("TeamRuntime serves a cached canonical TeamState until provider inputs change", async () => {
@@ -240,7 +244,7 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
 });
 
 
-test("TeamRuntime admin seed queues resources for sequential alarm processing", async () => {
+test("TeamRuntime admin seed directly refreshes resources sequentially", async () => {
   const storage = new MemoryStorage(), calls = [];
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
@@ -251,13 +255,12 @@ test("TeamRuntime admin seed queues resources for sequential alarm processing", 
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.queued, true);
-  assert.equal(result.attempted, false);
-  assert.equal(calls.length, 0, "seed requests must not fetch providers inline");
-  await drainManualQueue(runtime, storage);
-  assert.equal(calls.length, 7);
+  assert.equal(result.queued, false);
+  assert.equal(result.attempted, true);
+  assert.equal(calls.length, 7, "seed requests fetch providers directly inside the runtime");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
   const snapshot = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
     headers: { "X-FieldView-Team-Key": "frc3461" },
   }));
@@ -334,19 +337,13 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
     return Response.json([]);
   }), "2485");
   const headers = { "X-FieldView-Team-Key": "2485", Authorization: "Bearer admin" };
-  await runtime.fetch(new Request("https://team/refresh?year=2026", { method: "POST", headers }));
-  await drainManualQueue(runtime, storage);
+  const refresh = await runtime.fetch(new Request("https://team/refresh?year=2026", { method: "POST", headers }));
+  assert.equal(refresh.status, 200);
+  assert.equal(calls.length, 7, "TBA changes trigger one-shot Statbotics enrichment within the same direct refresh");
 
   const state = await runtime.fetch(new Request("https://team/state", { headers }));
   const diagnostics = await state.json();
-  const providers = new Map(diagnostics.polling.map((task) => [task.endpoint, task.provider]));
-  assert.equal(providers.get("/team/frc2485"), "tba");
-  assert.equal(providers.get("/team/frc2485/districts"), "tba");
-  assert.equal(providers.get("/team/frc2485/events/2026"), "tba");
-  assert.equal(providers.get("/team/frc2485/media/2026"), "tba");
-  assert.equal(providers.has("/team_year/2485/2026"), false, "Statbotics team-year data is not periodically polled");
-  assert.equal(providers.has("/team_events?team=2485&year=2026&limit=1000&offset=0"), false, "Statbotics team-event data is not periodically polled");
-  assert.equal(providers.get("/team/2485"), "frc-colors");
+  assert.equal(diagnostics.polling.length, 0, "direct refresh does not create a durable per-runtime polling queue");
 
   assert.ok(calls.some((url) => url.includes("thebluealliance.com") && url.endsWith("/team/frc2485")));
   assert.ok(calls.some((url) => url.includes("statbotics") && url.includes("/team_year/2485/2026")));
