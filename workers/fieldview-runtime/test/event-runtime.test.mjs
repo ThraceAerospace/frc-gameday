@@ -1545,6 +1545,53 @@ test("event analytics never activates TeamRuntimes that independent team readine
     "an unregistered TeamRuntime must not be created by EventRuntime analytics");
 });
 
+
+test("EventRuntime analytics skips TeamRuntimes until the independent team readiness registry contains them", async () => {
+  const storage = new MemoryStorage();
+  let teamRuntimeActivations = 0;
+  let discoveryLists = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    TEAM_RUNTIME: {
+      idFromName: (key) => { teamRuntimeActivations += 1; return key; },
+      get: () => ({
+        fetch: async () => {
+          teamRuntimeActivations += 1;
+          return Response.json({});
+        },
+      }),
+    },
+    DISCOVERY_STORE: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (request) => {
+          assert.equal(new URL(request.url).pathname, "/list");
+          discoveryLists += 1;
+          return Response.json({ objects: [], truncated: false });
+        },
+      }),
+    },
+  }, "2027independent");
+
+  const collected = await runtime.collectEventTeamSeasonComparisonInput({
+    event: {
+      key: "2027independent",
+      name: "Independent Readiness",
+      event_code: "independent",
+      start_date: "2027-01-01",
+    },
+    teams: [{ key: "frc3461", team_number: 3461 }],
+  });
+
+  assert.ok(collected);
+  assert.equal(collected.comparisonInput.discovery_pending_teams, 1);
+  assert.equal(discoveryLists, 1, "analytics checks the TeamRuntime registry");
+  assert.equal(teamRuntimeActivations, 0,
+    "EventRuntime analytics must not create an unregistered TeamRuntime");
+});
+
 test("EventRuntime readiness skips fresh sources and queues every resource when one source is stale", async () => {
   const storage = new MemoryStorage(), eventKey = "2027rikin", now = Date.now();
   seedEventPublication(storage, eventKey);
