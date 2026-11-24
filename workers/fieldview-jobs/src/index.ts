@@ -21,6 +21,7 @@ interface DiscoveryDocument {
 
 interface JobsEnvironment extends RuntimeEnvironment {
   DAILY_EVENT_READINESS: Workflow;
+  DAILY_TEAM_READINESS: Workflow;
   COVERAGE_AUDIT: Workflow;
   RUNTIME_ADMIN: Workflow;
 }
@@ -294,31 +295,6 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
     });
     const year = currentSeason.year;
 
-    // Refresh the canonical team directory before checking any TeamRuntime.
-    const teamGeneration = await step.do("readiness-team-directory-generation", async () => Date.now());
-    const teamKeys: string[] = [];
-    let teamPages = 0;
-    for (let page = 0; ; page += 1) {
-      const result = await step.do("readiness-discover-team-page-" + page, {
-        retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
-      }, async () => {
-        const response = await store().catalog("discover-team-page", { year, generation: teamGeneration, page });
-        if (!response.ok) throw new Error("Team directory page returned HTTP " + response.status);
-        return response.json() as Promise<{ teamKeys: string[]; hasMore: boolean; count: number }>;
-      });
-      teamPages += 1;
-      teamKeys.push(...result.teamKeys);
-      if (!result.hasMore) break;
-    }
-    const uniqueTeamKeys = [...new Set(teamKeys)].sort();
-    await step.do("readiness-publish-team-directory", async () => {
-      const response = await store().catalog("publish-team-directory", {
-        year, generation: teamGeneration, pageCount: teamPages, teamKeys: uniqueTeamKeys,
-      });
-      if (!response.ok) throw new Error("Team directory publication returned HTTP " + response.status);
-      return response.json();
-    });
-
     // Acquire and publish the TBA event directory. Chunk writes are discovery
     // storage operations, not fan-out to entity runtimes.
     const eventDirectory = await step.do("readiness-discover-event-directory", {
@@ -423,15 +399,83 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       }
     }
 
-    // Team readiness follows the same sequential, delayed pattern. It checks
-    // every current-season team, not only teams participating in this week's events.
+    const summary = {
+      run_date: runDate,
+      current_season: year,
+      season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
+      events_total: eventKeys.length,
+      events_state_valid: eventResults.filter((item) => item.state_valid).length,
+      events_refresh_queued: eventResults.filter((item) => item.refresh_queued).length,
+      events_failed: eventResults.filter((item) => item.error).length,
+      event_failures: eventResults.filter((item) => item.error).slice(0, 100),
+      event_readiness: eventResults,
+      this_week_events: thisWeekEvents.length,
+      event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
+    };
+    await step.do("readiness-write-run-summary", async () => {
+      await store().put(
+        `workflows/daily-event-readiness/${runAt}/summary.json`,
+        JSON.stringify(summary),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      return summary;
+    });
+    return summary;
+  }
+}
+
+/**
+ * Independent sequential TeamRuntime readiness sweep. It owns only the team
+ * discovery directory and TeamRuntime readiness; it never scans EventRuntime.
+ */
+export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
+  async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
+    const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
+    const runDate = new Date(runAt).toISOString().slice(0, 10);
+    const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+
+    const currentSeason = await step.do("team-readiness-resolve-current-season", {
+      retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
+    }, async () => {
+      const response = await store().catalog("resolve-current-season");
+      if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
+      return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
+    });
+    const year = currentSeason.year;
+
+    // Team Discovery is refreshed and published independently of Event Discovery.
+    const teamGeneration = await step.do("team-readiness-directory-generation", async () => Date.now());
+    const teamKeys: string[] = [];
+    let teamPages = 0;
+    for (let page = 0; ; page += 1) {
+      const result = await step.do("team-readiness-discover-page-" + page, {
+        retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
+      }, async () => {
+        const response = await store().catalog("discover-team-page", { year, generation: teamGeneration, page });
+        if (!response.ok) throw new Error("Team directory page returned HTTP " + response.status);
+        return response.json() as Promise<{ teamKeys: string[]; hasMore: boolean; count: number }>;
+      });
+      teamPages += 1;
+      teamKeys.push(...result.teamKeys);
+      if (!result.hasMore) break;
+    }
+    const uniqueTeamKeys = [...new Set(teamKeys)].sort();
+    if (uniqueTeamKeys.length === 0) throw new Error("TBA returned an empty team directory for the canonical current season");
+    await step.do("team-readiness-publish-directory", async () => {
+      const response = await store().catalog("publish-team-directory", {
+        year, generation: teamGeneration, pageCount: teamPages, teamKeys: uniqueTeamKeys,
+      });
+      if (!response.ok) throw new Error("Team directory publication returned HTTP " + response.status);
+      return response.json();
+    });
+
     const teamResults: Array<{
       key: string; state_valid: boolean; refresh_queued: boolean;
       refresh_at?: number | null; stale_resources?: string[]; error?: string;
     }> = [];
     for (const teamKey of uniqueTeamKeys) {
       try {
-        const result = await step.do("readiness-team-" + teamKey, {
+        const result = await step.do("team-readiness-" + teamKey, {
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
         }, async () => {
           const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
@@ -457,25 +501,17 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       run_date: runDate,
       current_season: year,
       season_source: currentSeason.fallback ? "last-known-good" : "tba-status",
-      events_total: eventKeys.length,
-      events_state_valid: eventResults.filter((item) => item.state_valid).length,
-      events_refresh_queued: eventResults.filter((item) => item.refresh_queued).length,
-      events_failed: eventResults.filter((item) => item.error).length,
-      event_failures: eventResults.filter((item) => item.error).slice(0, 100),
-      event_readiness: eventResults,
       teams_total: uniqueTeamKeys.length,
       teams_state_valid: teamResults.filter((item) => item.state_valid).length,
       teams_refresh_queued: teamResults.filter((item) => item.refresh_queued).length,
       teams_failed: teamResults.filter((item) => item.error).length,
       team_failures: teamResults.filter((item) => item.error).slice(0, 100),
       team_readiness: teamResults,
-      this_week_events: thisWeekEvents.length,
       team_directory: { pages: teamPages, teams: uniqueTeamKeys.length },
-      event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
     };
-    await step.do("readiness-write-run-summary", async () => {
+    await step.do("team-readiness-write-run-summary", async () => {
       await store().put(
-        `workflows/daily-event-readiness/${runAt}/summary.json`,
+        `workflows/daily-team-readiness/${runAt}/summary.json`,
         JSON.stringify(summary),
         { httpMetadata: { contentType: "application/json" } },
       );
@@ -1010,6 +1046,21 @@ export default {
         await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
       } catch {
         return Response.json({ error: "A daily event-readiness Workflow already exists for this UTC date", workflow_id: id }, { status: 409 });
+      }
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
+    }
+
+    if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const scheduledAt = Date.now();
+      const id = `daily-team-readiness-${new Date(scheduledAt).toISOString().slice(0, 10)}`;
+      try {
+        await env.DAILY_TEAM_READINESS.create({ id, params: { scheduledAt } });
+      } catch {
+        return Response.json({ error: "A daily team-readiness Workflow already exists for this UTC date", workflow_id: id }, { status: 409 });
       }
       return Response.json({ workflow_id: id, scheduled_at: scheduledAt }, { status: 202 });
     }
