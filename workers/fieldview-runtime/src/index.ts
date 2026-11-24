@@ -5,7 +5,6 @@ import { DiscoveryStore } from "./discovery-store.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
-import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 
 export { EventRuntime, Multiplexer, TeamRuntime, DiscoveryStore };
@@ -527,26 +526,26 @@ export default {
       if (manifest.year !== year || !Number.isSafeInteger(manifest.pageCount) || manifest.pageCount < 1) {
         return Response.json({ error: "Published team discovery manifest is invalid" }, { status: 503 });
       }
-      const teams: Array<Record<string, unknown>> = [];
+      const teamKeys: string[] = [];
       for (let page = 0; page < manifest.pageCount; page += 1) {
         const pageObject = await discoveryStore(env).get(
           `discovery/team-pages/${year}/${manifest.generation}/${page}.json`,
         );
         if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
-        const pageTeams = await pageObject.json<unknown>();
-        if (!Array.isArray(pageTeams)) return Response.json({ error: `Team discovery page ${page} is invalid` }, { status: 503 });
-        teams.push(...(pageTeams as Array<Record<string, unknown>>));
+        const pageTeamKeys = await pageObject.json<unknown>();
+        if (!Array.isArray(pageTeamKeys) ||
+            pageTeamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
+          return Response.json({ error: `Team discovery page ${page} is invalid` }, { status: 503 });
+        }
+        teamKeys.push(...pageTeamKeys);
       }
-      if (teams.length !== manifest.teamCount) {
+      if (teamKeys.length !== manifest.teamCount) {
         return Response.json({ error: "Published team discovery count does not match its pages" }, { status: 503 });
       }
-      const stale = Date.now() - manifest.checkedAt > 36 * 60 * 60_000;
-      const retrievedAt = new Date(manifest.updatedAt).toISOString();
       return Response.json({
         year,
-        teams: teams.map((team) => normalizeFieldViewTeam(team as never, {
-          tba_teams: { status: stale ? "stale" : "available", retrieved_at: retrievedAt },
-        })),
+        team_keys: teamKeys,
+        team_count: teamKeys.length,
         updatedAt: manifest.updatedAt,
         checkedAt: manifest.checkedAt,
       }, { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=300" } });
