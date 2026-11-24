@@ -1295,6 +1295,9 @@ export class TeamRuntime {
         result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
       }
       const outcome = await this.storage.transaction(async (tx) => {
+        if (result.status === "not-modified") {
+          return { failed: false, revisionChanged: false };
+        }
         const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
         const next = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
         await tx.put(key, {
