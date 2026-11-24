@@ -453,6 +453,8 @@ export class EventRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/readiness") {
+      const readinessBody: unknown = await request.json().catch(() => null);
+      const refreshNow = isRecord(readinessBody) && readinessBody.refreshNow === true;
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const validState = Boolean(publication && publication.status !== "failed" &&
         Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
@@ -469,7 +471,7 @@ export class EventRuntime {
       });
       const refreshRequired = !validState || staleSources.length > 0;
       const refreshed: string[] = [];
-      if (refreshRequired) {
+      if (refreshRequired && refreshNow) {
         // One command refreshes this EventRuntime's complete owned resource
         // set. Provider acquisition remains inside this runtime and is bounded
         // sequentially; the coordinator never proxies provider payloads.
@@ -489,7 +491,8 @@ export class EventRuntime {
         publication_status: latestPublication?.status ?? "missing",
         stale_sources: staleSources,
         refresh_required: refreshRequired,
-        refresh_completed: refreshRequired,
+        refresh_dispatched: refreshRequired && refreshNow,
+        refresh_completed: refreshRequired && refreshNow,
         refreshed_endpoints: refreshed,
       }, { headers: { "Cache-Control": "no-store" } });
     }
