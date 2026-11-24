@@ -6,6 +6,7 @@ import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
 import { normalizeFieldViewTeam } from "../../../packages/domain/src/normalization/team.ts";
+import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 
 export { EventRuntime, Multiplexer, TeamRuntime, DiscoveryStore };
 
@@ -186,6 +187,51 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
 export default {
   async fetch(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/internal/polling/refresh" && request.method === "POST") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || typeof body.event_key !== "string" ||
+          !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(body.event_key) ||
+          !Array.isArray(body.team_keys) ||
+          !body.team_keys.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key))) {
+        return Response.json({ error: "Expected an event_key and an array of valid team_keys" }, { status: 400 });
+      }
+      const eventKey = body.event_key;
+      const year = Number(eventKey.slice(0, 4));
+      const eventTarget: RuntimeRefreshTarget = {
+        kind: "event", key: eventKey, year,
+        ...(Array.isArray(body.event_endpoints) &&
+          body.event_endpoints.every((endpoint) => typeof endpoint === "string")
+          ? { endpoints: body.event_endpoints as string[] } : {}),
+      };
+      const eventOutcome = await dispatchRuntimeRefresh(env, eventTarget);
+      if (!eventOutcome.ok) {
+        return Response.json({
+          event: eventOutcome,
+          teams: [],
+          stopped_after_event_failure: true,
+        }, { status: 502 });
+      }
+      const teamTargets: RuntimeRefreshTarget[] = [...new Set(body.team_keys as string[])].map((key) => ({
+        kind: "team",
+        key,
+        year,
+        ...(isRecord(body.team_endpoints) && Array.isArray(body.team_endpoints[key]) &&
+          (body.team_endpoints[key] as unknown[]).every((endpoint) => typeof endpoint === "string")
+          ? { endpoints: body.team_endpoints[key] as string[] } : {}),
+      }));
+      const teamOutcomes = await dispatchRuntimeRefreshBatch(env, teamTargets, 4);
+      return Response.json({
+        event: eventOutcome,
+        teams: teamOutcomes,
+        team_refreshes_succeeded: teamOutcomes.filter((outcome) => outcome.ok).length,
+        team_refreshes_failed: teamOutcomes.filter((outcome) => !outcome.ok).length,
+      }, {
+        status: teamOutcomes.some((outcome) => !outcome.ok) ? 207 : 200,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     if (url.pathname.startsWith("/internal/discovery/")) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.DISCOVERY_STORE) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
