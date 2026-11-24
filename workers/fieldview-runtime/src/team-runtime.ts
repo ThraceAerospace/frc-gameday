@@ -49,6 +49,11 @@ async function hashSignature(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function isRuntimeAdminAuthorized(request: Request, env: RuntimeEnvironment): boolean {
+  const token = env.RUNTIME_ADMIN_TOKEN;
+  return Boolean(token && request.headers.get("Authorization") === "Bearer " + token);
+}
+
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
 const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
@@ -294,7 +299,7 @@ export class TeamRuntime {
     // runtime is exposed to public readers.
     const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
     if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead) {
-      if (diagnosticsRead && !authorized(request, this.env)) {
+      if (diagnosticsRead && !isRuntimeAdminAuthorized(request, this.env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       if (!(await this.restoreIdentity())) {
