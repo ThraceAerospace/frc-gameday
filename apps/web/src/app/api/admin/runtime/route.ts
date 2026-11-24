@@ -39,6 +39,8 @@ export async function GET(request: Request) {
   const eventSeedKey = query.get("eventSeed");
   const teamSeedKey = query.get("teamSeed");
   const discoveryJobYear = query.get("discoveryJob");
+  const workflowRunsType = query.get("workflowRuns");
+  const workflowRunId = query.get("runId");
   const needsDefaultYear = Boolean(teamSeedKey || (kind && key) || inventoryKind);
   const currentSeason = !query.get("year") && needsDefaultYear
     ? await getCanonicalCurrentSeason()
@@ -47,7 +49,12 @@ export async function GET(request: Request) {
   if (needsDefaultYear && !defaultYear) {
     return NextResponse.json({ error: "TBA current season is unavailable" }, { status: 503 });
   }
-  const target = teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
+  const target = workflowRunsType ? "/internal/admin/workflow-runs?" + new URLSearchParams({
+    type: workflowRunsType,
+    ...(workflowRunId ? { id: workflowRunId } : {}),
+    ...(query.get("limit") ? { limit: query.get("limit")! } : {}),
+  }).toString()
+    : teamSeedKey ? "/internal/admin/team-seed?" + new URLSearchParams({
     team_key: teamSeedKey,
     year: defaultYear!,
   }).toString()
