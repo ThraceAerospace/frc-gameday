@@ -1108,6 +1108,65 @@ export default {
       }
       return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
+    if (url.pathname === "/internal/admin/workflow-runs" && request.method === "GET") {
+      if (!env.RUNTIME_ADMIN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const type = url.searchParams.get("type");
+      if (type !== "event-readiness" && type !== "team-readiness") {
+        return Response.json({ error: "A valid workflow type is required" }, { status: 400 });
+      }
+      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const workflowId = url.searchParams.get("id");
+      if (workflowId) {
+        if (!/^[a-zA-Z0-9_-]{1,160}$/.test(workflowId)) return Response.json({ error: "Invalid workflow ID" }, { status: 400 });
+        const prefix = `admin/workflow-runs/${type}/${workflowId}`;
+        const recordObject = await store.get(`${prefix}/record.json`);
+        if (!recordObject) return Response.json({ error: "Workflow run not found" }, { status: 404 });
+        const record = await recordObject.json<Record<string, unknown>>();
+        const workflowBinding = type === "event-readiness" ? env.DAILY_EVENT_READINESS : env.DAILY_TEAM_READINESS;
+        let workflowStatus: string | null = null;
+        let workflowError: string | null = null;
+        try {
+          const status = await workflowBinding.get(workflowId).then((instance) => instance.status());
+          workflowStatus = status.status;
+          if (status.status === "errored") workflowError = JSON.stringify(status).slice(0, 1000);
+        } catch { workflowStatus = null; }
+        let resolvedRecord = record;
+        if (workflowStatus === "errored" && record.status === "running") {
+          resolvedRecord = { ...record, status: "failed", updated_at: Date.now(), completed_at: Date.now(), error: workflowError ?? "Workflow execution failed" };
+          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
+        } else if (workflowStatus === "terminated" && record.status === "running") {
+          resolvedRecord = { ...record, status: "cancelled", updated_at: Date.now(), completed_at: Date.now() };
+          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
+        }
+        const summaryObject = await store.get(`${prefix}/summary.json`);
+        const summary = summaryObject ? await summaryObject.json<Record<string, unknown>>() : null;
+        const results: unknown[] = [];
+        const chunkCount = Number(resolvedRecord.result_chunks ?? 0);
+        for (let chunk = 0; chunk < chunkCount; chunk += 1) {
+          const object = await store.get(`${prefix}/results/${String(chunk).padStart(4, "0")}.json`);
+          if (!object) continue;
+          const value = await object.json<{ results?: unknown[] }>();
+          if (Array.isArray(value.results)) results.push(...value.results);
+        }
+        return Response.json({ ...resolvedRecord, workflow_status: workflowStatus, summary, results }, {
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 25) || 25));
+      const page = await store.list({ prefix: `admin/workflow-runs/index/${type}/`, limit: 1000 });
+      const entries = page.objects.slice(-limit).reverse();
+      const runs = [];
+      for (const entry of entries) {
+        const object = await store.get(entry.key);
+        if (object) runs.push(await object.json<Record<string, unknown>>());
+      }
+      return Response.json({ type, runs, total: page.objects.length }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!env.RUNTIME_ADMIN_TOKEN ||
           request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
