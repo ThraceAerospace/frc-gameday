@@ -40,7 +40,7 @@ export async function dispatchRuntime(
       method, headers,
       ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     }));
-    if (response.ok && action === "refresh") {
+    if (response.ok && (action === "refresh" || action === "seed")) {
       const refreshResult = await response.clone().json().catch(() => null) as {
         team_state_revision?: unknown;
         affected_events?: Array<{ event_key?: unknown; team_event_revision?: unknown }>;
