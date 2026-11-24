@@ -40,7 +40,7 @@ export async function dispatchRuntime(
       method, headers,
       ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     }));
-    if (response.ok && (action === "refresh" || action === "seed")) {
+    if (response.ok && (action === "refresh" || action === "seed" || action === "resource-refresh")) {
       const refreshResult = await response.clone().json().catch(() => null) as {
         team_state_revision?: unknown;
         affected_events?: Array<{ event_key?: unknown; team_event_revision?: unknown }>;
@@ -63,7 +63,7 @@ export async function dispatchRuntime(
         }
       }
     }
-    if (response.ok && action !== "refresh") await registerRuntimeMarker(env, "team", key);
+    if (response.ok && action !== "refresh" && action !== "resource-refresh") await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
