@@ -1117,6 +1117,36 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  /**
+   * Event analytics may consume TeamRuntime publications, but it must never
+   * create a TeamRuntime as a side effect. Only address team objects that the
+   * independent team-readiness process has already registered.
+   */
+  private async registeredTeamRuntimeKeys(): Promise<Set<string>> {
+    if (!this.env.DISCOVERY_STORE) return new Set();
+    const stub = this.env.DISCOVERY_STORE.get(this.env.DISCOVERY_STORE.idFromName("shared"));
+    const registered = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const query = new URLSearchParams({ prefix: "registry/runtime-teams/", limit: "1000" });
+      if (cursor) query.set("cursor", cursor);
+      const response = await stub.fetch(new Request("https://discovery-store/list?" + query));
+      if (!response.ok) return new Set();
+      const page = await response.json() as {
+        objects?: Array<{ key?: unknown }>;
+        truncated?: boolean;
+        cursor?: string;
+      };
+      for (const object of page.objects ?? []) {
+        if (typeof object.key !== "string") continue;
+        const match = /^registry\/runtime-teams\/(frc[0-9]+)\.json$/.exec(object.key);
+        if (match) registered.add(match[1]);
+      }
+      cursor = page.truncated && typeof page.cursor === "string" ? page.cursor : undefined;
+    } while (cursor);
+    return registered;
+  }
+
   private async collectEventTeamSeasonComparisonInput(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
   ): Promise<{
@@ -1134,7 +1164,9 @@ export class EventRuntime {
         ? [{ teamNumber: team.team_number, teamKey: team.key }]
         : [],
     );
+    const registeredTeamKeys = await this.registeredTeamRuntimeKeys();
     const results = await Promise.all(participants.map(async ({ teamKey }) => {
+      if (!registeredTeamKeys.has(teamKey)) return { teamKey, snapshot: null, revision: null };
       try {
         const stub = namespace.get(namespace.idFromName(teamKey));
         const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
@@ -1226,7 +1258,8 @@ export class EventRuntime {
   ): Promise<{ states: FieldViewTeamEventState[]; revisions: Array<{ team_key: string; revision: number | null }> }> {
     const namespace = this.env.TEAM_RUNTIME;
     if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return { states: [], revisions: [] };
-    const teams = eventState.teams ?? [];
+    const registeredTeamKeys = await this.registeredTeamRuntimeKeys();
+    const teams = (eventState.teams ?? []).filter((team) => registeredTeamKeys.has(team.key));
     const results = await Promise.all(teams.map(async (team) => {
       const teamKey = team.key;
       try {
