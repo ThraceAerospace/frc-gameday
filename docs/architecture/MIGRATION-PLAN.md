@@ -2,10 +2,10 @@
 
 **Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending
 **Target branch:** `fieldview-architecture-migration`
-**Strategy:** Incremental migration
+**Strategy:** Owner-approved retire-first, rebuild-cleanly migration
 **Last updated:** 2026-11-24
 
-This document is the working migration plan for evolving the existing FieldView application into the target architecture. It is deliberately separate from the historical application audit: audit findings describe observed problems in the old implementation, while this document describes the destination and the order in which responsibilities will move.
+This document is the working migration plan for evolving FieldView into the target architecture. The owner has explicitly approved temporary functionality loss on fieldview-architecture-migration so obsolete implementations can be retired and rebuilt against the target architecture. Preserve canonical contracts, useful domain/provider/analytics work, architectural decisions, and platform-required migration history; do not preserve obsolete compatibility paths solely to keep the old application functioning. The retirement classifications are in docs/architecture/RETIREMENT-AUDIT.md. This does not authorize merging to main, production deployment, or deletion/reconfiguration of deployed infrastructure.
 
 
 
@@ -21,7 +21,7 @@ Direct refresh now uses one shared EventRuntime/TeamRuntime command contract. Th
 2. Derive affected team keys from changed event match representations/alliances and dispatch only those TeamRuntimes. The current coordinator endpoint accepts up to 12 caller-supplied team keys but does not yet derive them. Preserve one explicit refresh command per runtime and bounded direct concurrency; do not add a Queue by default.
 3. Move cross-runtime analytics/input orchestration out of EventRuntime/TeamRuntime direct RPC paths where it represents cross-runtime work. Some EventRuntime-to-TeamRuntime analytics calls still exist. Keep each runtime authoritative for its own calculation and persisted output.
 4. Implement the D1-backed Discovery and System Records repositories with separate schemas/interfaces, plus the optional KV `events-this-week` projection. Inventory and classify every current DiscoveryStore record before migration.
-5. Remove per-runtime polling queues/alarms only after every recurring poll, webhook follow-up, retry, analytics invalidation, and recovery path has a verified coordinator-owned replacement.
+5. Retire per-runtime polling queues/alarms as an explicit ownership change. Inventory every alarm-triggered responsibility; move required work to coordinator-owned explicit refresh commands or deliberately initiated Workflows. Do not preserve a continuously armed runtime scheduler. Any retained alarm must satisfy docs/architecture/decisions/2026-11-24-alarm-usage-policy.md and be a documented one-shot recovery mechanism.
 6. Finish the read-side-effect audit, strict 304 no-op audit across every provider path, restart/recovery behavior, and a complete account-wide workload budget. Validate with repository CI before any deployment.
 
 ## 1. Confirmed decisions
@@ -30,7 +30,7 @@ Direct refresh now uses one shared EventRuntime/TeamRuntime command contract. Th
 | --- | --- |
 | Repository tooling | npm workspaces |
 | Frontend | Retain Next.js |
-| Migration strategy | Incremental, with old and new implementations coexisting temporarily |
+| Migration strategy | Owner-approved retire-first/rebuild-cleanly; temporary functionality loss on the migration branch is acceptable |
 | Backend runtime | Hybrid Cloudflare Workers and Durable Objects |
 | Canonical identity | TBA team, event, and match keys; TBA-first aggregates with field-specific provider enrichment |
 | Weekly event discovery | Publish one `events-this-week` candidate set on Monday, valid through Sunday, using inclusive date-range overlap and each event's IANA timezone. Admins can manually rebuild the projection for postponements. This candidate set is discovery input only; the polling coordinator evaluates active lifecycle eligibility at dispatch time (2026-11-24 decision) |
@@ -40,7 +40,7 @@ These decisions are settled unless a concrete implementation constraint requires
 
 ## 2. Migration principles
 
-1. **Keep the application usable throughout migration.** Each meaningful change should leave the branch buildable and should preserve existing product behavior unless that behavior is intentionally being redesigned.
+1. **Build the target architecture, not compatibility for its own sake.** Temporary branch functionality loss is acceptable. Retire obsolete implementations when ownership has moved or when the outage is intentional; preserve canonical contracts, useful product behavior, and required platform migration history. Keep focused changes testable, but a fully working application is not a prerequisite for every cleanup step.
 2. **Move ownership, not just files.** A migration is complete when the new boundary owns the responsibility and old callers no longer bypass it.
 3. **One authoritative owner per responsibility.** Temporary mirrors and comparison paths are acceptable, but two systems must not independently write the same authoritative state.
 4. **Preserve provider data until FieldView normalization.** TBA and Statbotics payloads pass unchanged into FieldView normalization; every other provider's data passes through unchanged. No value may be implicitly renamed, converted, reinterpreted, defaulted, omitted, or overwritten. Any transformation requires explicit description and approval before implementation, and must have a specifically named, documented field in each forward-facing model.
