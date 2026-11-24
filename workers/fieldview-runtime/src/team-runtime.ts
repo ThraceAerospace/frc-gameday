@@ -731,11 +731,20 @@ export class TeamRuntime {
       return Response.json({ team_key: this.teamKey, active_events: Object.keys(activeEvents).sort(), active: value.active, changed });
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
+      const body: unknown = await request.json().catch(() => ({}));
       const resources = this.endpoints(year);
+      const requested = body && typeof body === "object" && !Array.isArray(body) &&
+        Array.isArray((body as Record<string, unknown>).endpoints)
+        ? (body as Record<string, unknown>).endpoints as unknown[] : resources.map((resource) => resource.endpoint);
+      if (!requested.every((endpoint) => typeof endpoint === "string" &&
+          resources.some((resource) => resource.endpoint === endpoint))) {
+        return Response.json({ error: "Refresh endpoints must belong to this team and season" }, { status: 400 });
+      }
+      const selected = resources.filter((resource) => requested.includes(resource.endpoint));
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
       const prioritized = [
-        ...resources.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
-        ...resources.filter((resource) => resource.endpoint !== historyEndpoint),
+        ...selected.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
+        ...selected.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
       const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
       for (const resource of prioritized) {
