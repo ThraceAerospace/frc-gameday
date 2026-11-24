@@ -102,6 +102,24 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid operation payload" }, { status: 400 });
   }
+  const workflowType = (body as Record<string, unknown>).workflowType;
+  if (workflowType === "event-readiness" || workflowType === "team-readiness") {
+    try {
+      const path = workflowType === "event-readiness"
+        ? "/internal/admin/daily-event-readiness"
+        : "/internal/admin/daily-team-readiness";
+      const response = await fetch(new URL(path, runtimeUrl), {
+        method: "POST",
+        headers: { Authorization: "Bearer " + runtimeToken },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const result = await response.json().catch(() => ({ error: "Runtime returned invalid JSON" }));
+      return NextResponse.json(result, { status: response.status, headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to dispatch readiness workflow" }, { status: 502 });
+    }
+  }
   try {
     const response = await fetch(new URL("/internal/admin/operations", runtimeUrl), {
       method: "POST",
