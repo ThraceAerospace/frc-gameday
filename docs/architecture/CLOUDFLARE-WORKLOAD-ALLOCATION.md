@@ -1,20 +1,24 @@
 # Cloudflare Workload Allocation and Background Jobs
 
-**Status:** Current-season event/team discovery and participant seeding extracted into Workflows; deployment and operational verification pending  
+**Status:** Historical 2026-11-22 workload proposal; superseded by the accepted 2026-11-24 storage and polling decision  
 **Branch:** `fieldview-architecture-migration`  
 **Date:** 2026-11-22
 
+
+
+> **Architecture update — 2026-11-24:** This document's original implementation proposal is historical. Its split-Worker, TaskScheduler, DiscoveryStore-as-operational-store, per-runtime polling queue/alarm, and default Queue assumptions are superseded. The current authority is [the accepted storage and polling decision](decisions/2026-11-24-storage-and-polling-ownership.md), [the migration plan](MIGRATION-PLAN.md), and [the environment guide](../development/CLOUDFLARE-ENVIRONMENTS.md). The implementation details below are retained as migration history, not current instructions. Do not provision or deploy resources from the historical prerequisites in this document.
+
 ## Objective
 
-Move scheduled orchestration, broad discovery, bulk ingestion, and cross-entity coordination out of Durable Objects—ideally eliminating `TaskScheduler` entirely. Preserve active event runtime behavior inside `EventRuntime`.
+Use one polling coordinator inside the consolidated Worker to select eligible runtime scopes and directly dispatch bounded refresh commands. Keep provider acquisition, conditional requests, reconciliation, canonical persistence, and publication inside the runtime that owns each scope. Keep Discovery, System Records, and Runtime State separate.
 
 The governing rules are:
 
-> Workers and Workflows own scheduled/background work. Durable Objects own active, entity-scoped runtime state.
+> The polling coordinator owns lifecycle scheduling, target selection, bounded concurrency, and aggregate budgets. EventRuntime and TeamRuntime own their respective provider acquisition, reconciliation, canonical state, and publication.
 
-> An active event's TBA polling, webhook reconciliation, canonical state mutation, and live publication stay inside that event's `EventRuntime`.
+> EventRuntime and TeamRuntime are the same runtime abstraction at different data scopes. A refresh command asks the target runtime to update itself; the coordinator does not fetch provider resources or construct deltas.
 
-`EventRuntime` is not a general-purpose job runner. Its alarms and internal scheduling are appropriate for active event lifecycle polling because polling and webhook reconciliation must serialize against the same canonical event state. Do not move that active-event loop into a Workflow or Queue.
+A Queue is not the default dispatch mechanism. Use direct bounded dispatch unless measured throughput, backpressure, or reliability requirements justify Queue infrastructure. Per-runtime polling alarms and durable local queues are transitional and must be removed only after every trigger, retry, webhook follow-up, analytics dependency, and recovery path has an explicit replacement.
 
 
 ## Implemented extraction: current-season discovery and runtime initialization
@@ -63,21 +67,22 @@ The external TBA contract preserves the established authentication behavior: ove
 
 Each Durable Object independently validates and reconciles the webhook against its own canonical state. Do not route this through TaskScheduler, a Workflow, or a Queue: the entry point performs recipient selection and background fan-out, while EventRuntime and TeamRuntime own their respective state mutations. Keep this path intact while removing TaskScheduler and extracting scheduled orchestration. Use bounded internal retries or a durable retry mechanism only if needed later; never surface dispatch failures to TBA.
 
-## Target responsibility boundaries
+## Current target responsibility boundaries
 
-| Cloudflare resource | FieldView responsibility | Do not use it for |
+| Resource/domain | FieldView responsibility | Do not use it for |
 |---|---|---|
-| Worker | Stateless HTTP entry points, provider adapters, authorization, bounded task execution | Long-lived global mutable scheduler state |
-| Workflows | Durable multi-step jobs, checkpoints, retries, pause/resume, manual and scheduled runs | Canonical event/team state |
-| Cron Triggers / scheduled Workflow bindings | Start recurring scheduled jobs and Workflow instances | Active event lifecycle polling |
-| Queues | Buffer independent resource tasks and notification fan-out; absorb bursts | Multi-step business process state |
-| EventRuntime DO | Active event lifecycle: TBA polling while active, direct webhook reconciliation, canonical event state, analytics invalidation/publication, live updates | Global discovery, season scans, cross-event orchestration, bulk ingestion |
-| TeamRuntime DO | Canonical team and team-event state; entity-scoped reconciliation when required | Global team discovery, season scans, bulk ingestion, scheduled orchestration |
-| Multiplexer DO | Shared live subscription coordination | Provider polling, data ingestion, or job scheduling |
-| R2 | Immutable raw provider payloads, webhook archives, large ingestion artifacts and exports | Frequently mutated canonical records |
-| D1 (conditional) | Queryable job catalog, audit history, operator search and relational reporting if Workflow metadata is insufficient | Replacing entity-scoped DO consistency without a demonstrated need |
-| KV / Workers Cache | Read-heavy discovery projections and cacheable public responses | Strongly consistent canonical writes |
-| Workers Analytics Engine | High-cardinality operational metrics for ingestion, freshness, retries and fan-out | User-facing canonical analytics calculations |
+| Consolidated Worker | HTTP routing, webhook ingress, authorization, polling coordinator, bounded direct dispatch, Workflow entrypoints | Canonical event/team state or provider proxying for entity runtimes |
+| Polling coordinator | Event-local lifecycle eligibility, affected-runtime selection, overlap prevention, bounded concurrency, prioritization, aggregate budgets | Provider I/O, canonical reconciliation, delta construction, general durable job history |
+| EventRuntime DO | Event-scoped provider acquisition, ETags, reconciliation, canonical EventState, event publication, event-wide analytics | Team-owned provider resources, cross-runtime refresh dispatch, discovery, global scheduling |
+| TeamRuntime DO | Team/season/team-event provider acquisition, ETags, reconciliation, canonical TeamState, team-scoped analytics | Event-owned matches/resources, cross-runtime refresh dispatch, discovery, global scheduling |
+| Shared runtime contract | Same explicit refresh/readiness command and outcome semantics for EventRuntime and TeamRuntime | Separate polling implementations by scope |
+| Workflows | Durable multi-step discovery, readiness inspection, seeding, ingestion, coverage, and admin orchestration | Entity provider I/O, local polling queues, duplicate runtime execution models |
+| Discovery (D1) | Event/team directories, current-season metadata, weekly `events-this-week` candidate set, discovery refresh metadata/results | Workflow runs, runtime registration, operational history, canonical runtime state |
+| System Records (D1) | Workflow execution/progress/outcomes, runtime registration, admin actions, structured operational history | Discovery directories or canonical event/team state |
+| KV | Lightweight read-heavy projections such as `events-this-week` | Canonical state, locking, transactional coordination, authoritative operational records |
+| Multiplexer DO | Realtime subscriptions, connection coordination, publication fan-out | Provider polling, discovery, or background job scheduling |
+| R2 / object storage | Immutable raw provider payloads, webhook archives, large ingestion artifacts/exports when needed | Frequently mutated canonical records or authoritative discovery/system records |
+| Queue | Optional future backpressure/retry layer only if direct dispatch proves insufficient | Default runtime refresh dispatch or canonical business-process state |
 
 ## Workflow 1: Daily event readiness
 
