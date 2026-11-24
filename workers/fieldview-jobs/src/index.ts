@@ -1160,7 +1160,12 @@ export default {
       const runs = [];
       for (const entry of entries) {
         const object = await store.get(entry.key);
-        if (object) runs.push(await object.json<Record<string, unknown>>());
+        if (!object) continue;
+        const indexRecord = await object.json<Record<string, unknown>>();
+        const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
+        const recordObject = id ? await store.get(`admin/workflow-runs/${type}/${id}/record.json`) : null;
+        const record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
+        runs.push({ ...indexRecord, ...record });
       }
       return Response.json({ type, runs, total: page.objects.length }, {
         headers: { "Cache-Control": "no-store" },
