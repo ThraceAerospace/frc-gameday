@@ -7,8 +7,8 @@ type RunSummary = Record<string, number | string | null>;
 type RunResult = {
   key: string;
   state_valid: boolean;
-  refresh_queued: boolean;
-  refresh_at?: number | null;
+  refresh_required: boolean;
+  refresh_dispatched?: boolean;
   stale_sources?: string[];
   stale_resources?: string[];
   error?: string;
@@ -97,13 +97,13 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   const totalLabel = isEvent ? "Events" : "Teams";
   const total = summary[isEvent ? "events_total" : "teams_total"] ?? selected?.total ?? 0;
   const valid = summary[isEvent ? "events_state_valid" : "teams_state_valid"] ?? 0;
-  const queued = summary[isEvent ? "events_refresh_queued" : "teams_refresh_queued"] ?? 0;
+  const required = summary[isEvent ? "events_refresh_required" : "teams_refresh_required"] ?? 0;
   const failed = summary[isEvent ? "events_failed" : "teams_failed"] ?? 0;
 
   return (
     <section className="rounded-2xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="font-bold">Readiness workflows</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">Dispatch independent season-wide checks and inspect their persisted final reports.</p></div>
+        <div><h2 className="font-bold">Readiness workflows</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">Inspect independent season-wide discovery and runtime coverage; live refresh dispatch is handled separately.</p></div>
         <button onClick={() => void loadRuns().catch((cause) => setError(String(cause)))} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Refresh history</button>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -139,14 +139,14 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
               {["running", "queued"].includes(selected.status) && <p className="mt-3 text-sm text-[var(--fv-muted)]">The workflow is still running. The dashboard checks its status periodically; the final report appears when execution completes.</p>}
               {selected.error && <p className="mt-3 whitespace-pre-wrap text-sm text-rose-600">{selected.error}</p>}
               {selected.summary && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[ [totalLabel, total], ["Valid state", valid], ["Refresh queued", queued], ["Failed", failed] ].map(([name, value]) => <div key={String(name)} className="rounded-lg bg-[var(--fv-surface)] p-3"><p className="text-xs text-[var(--fv-muted)]">{name}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}
+                {[ [totalLabel, total], ["Valid state", valid], ["Refresh required", required], ["Failed", failed] ].map(([name, value]) => <div key={String(name)} className="rounded-lg bg-[var(--fv-surface)] p-3"><p className="text-xs text-[var(--fv-muted)]">{name}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}
               </div>}
             </div>
             {selected.results && selected.results.length > 0 && <div className="mt-3 max-h-[440px] overflow-auto rounded-lg border border-[var(--fv-border)]">
               <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-[var(--fv-surface)]"><tr><th className="p-2">Entity</th><th className="p-2">State</th><th className="p-2">Refresh</th><th className="p-2">Details</th></tr></thead>
+                <thead className="sticky top-0 bg-[var(--fv-surface)]"><tr><th className="p-2">Entity</th><th className="p-2">State</th><th className="p-2">Refresh required</th><th className="p-2">Details</th></tr></thead>
                 <tbody>{selected.results.map((item) => <tr key={item.key} className="border-t border-[var(--fv-border)]">
-                  <td className="p-2 font-mono">{item.key}</td><td className="p-2">{item.state_valid ? "Valid" : "Missing / invalid"}</td><td className="p-2">{item.refresh_queued ? "Queued · " + timestamp(item.refresh_at) : "Not needed"}</td>
+                  <td className="p-2 font-mono">{item.key}</td><td className="p-2">{item.state_valid ? "Valid" : "Missing / invalid"}</td><td className="p-2">{item.refresh_required ? (item.refresh_dispatched ? "Dispatched" : "Required") : "Not required"}</td>
                   <td className="max-w-[260px] whitespace-pre-wrap p-2">{item.error ?? ((item.stale_sources ?? item.stale_resources ?? []).join(", ") || "—")}</td>
                 </tr>)}</tbody>
               </table>
