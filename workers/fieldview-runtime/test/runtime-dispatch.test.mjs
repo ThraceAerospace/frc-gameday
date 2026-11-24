@@ -86,6 +86,7 @@ test("team seed dispatch calls TeamRuntime directly with the requested season", 
 
 test("readiness dispatch sends inspection-only requests to both runtime types", async () => {
   const captured = [];
+  let markerWrites = 0;
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
     EVENT_RUNTIME: namespace(async (request, id) => {
@@ -96,7 +97,11 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
       captured.push({ kind: "team", id, url: new URL(request.url), method: request.method, body: await request.json() });
       return Response.json({ state_valid: false, refresh_queued: true });
     }),
-    DISCOVERY_STORE: namespace(async () => Response.json({ ok: true })),
+    DISCOVERY_STORE: namespace(async (request) => {
+      if (request.method === "GET") return new Response(null, { status: 404 });
+      markerWrites += 1;
+      return Response.json({ ok: true });
+    }),
   };
   const event = await dispatchRuntime(env, "event", "2027rikin", "readiness", {}, 2027);
   const team = await dispatchRuntime(env, "team", "frc3461", "readiness", {}, 2027);
@@ -108,6 +113,7 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
     { kind: "event", id: "2027rikin", path: "/readiness", year: null, method: "POST", body: {} },
     { kind: "team", id: "frc3461", path: "/readiness", year: "2027", method: "POST", body: {} },
   ]);
+  assert.equal(markerWrites, 0, "readiness never creates runtime registry records");
 });
 
 
