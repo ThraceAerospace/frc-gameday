@@ -148,7 +148,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
                 <thead className="sticky top-0 bg-[var(--fv-surface)]"><tr><th className="p-2">Entity</th><th className="p-2">State</th><th className="p-2">Refresh</th><th className="p-2">Details</th></tr></thead>
                 <tbody>{selected.results.map((item) => <tr key={item.key} className="border-t border-[var(--fv-border)]">
                   <td className="p-2 font-mono">{item.key}</td><td className="p-2">{item.state_valid ? "Valid" : "Missing / invalid"}</td><td className="p-2">{item.refresh_queued ? "Queued" : "Not needed"}</td>
-                  <td className="max-w-[260px] whitespace-pre-wrap p-2">{item.error ?? (item.stale_sources ?? item.stale_resources ?? []).join(", ") || "—"}</td>
+                  <td className="max-w-[260px] whitespace-pre-wrap p-2">{item.error ?? ((item.stale_sources ?? item.stale_resources ?? []).join(", ") || "—")}</td>
                 </tr>)}</tbody>
               </table>
             </div>}
