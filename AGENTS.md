@@ -263,6 +263,6 @@ See ADR-0015 for the read-first persistence-equals-readiness decision.
 - Event readiness refreshes only the Event Discovery directory and sequentially checks/queues EventRuntime EventState acquisition. It must not discover teams or dispatch TeamRuntime readiness.
 - Team readiness independently resolves TBA's canonical `current_season`, refreshes/publishes the Team Discovery directory, and sequentially checks/queues TeamRuntime TeamState acquisition for that season.
 - Event-scoped participant resources such as `/event/{key}/teams` remain EventRuntime-owned and do not initialize TeamRuntime.
-- EventRuntime analytics may consume TeamRuntime data only for TeamRuntimes already registered by the independent team-readiness path. It must not activate unregistered TeamRuntimes as a side effect.
+- EventRuntime analytics may consume TeamRuntime data only for TeamRuntimes already present in DiscoveryStore's runtime registry (normally through team readiness or an explicit team initialization operation). It must not activate unregistered TeamRuntimes as a side effect.
 - A shared external scheduler may start both Workflows, but neither Workflow depends on the other. Do not add TeamRuntime work back into EventRuntime readiness or combine their progress/concurrency boundaries.
 - The GitHub Actions scheduler starts the preproduction event and team readiness endpoints separately. Cloudflare Workflow bindings do not declare paid-plan cron schedules.
