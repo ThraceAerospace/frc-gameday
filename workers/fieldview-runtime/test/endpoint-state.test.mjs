@@ -18,7 +18,7 @@ test("captures endpoint ETag and revision for a conditional poll", () => {
 
 test("304 is a strict no-op for endpoint state", () => {
   const initial = { ...createEndpointState("/event/2026test/matches"),
-    data: ["qm1"], providerData: ["qm1"], etag: '"v1"', lastFetchedAt: 100, revision: 4, validatorRevision: 1 };
+    data: ["qm1"], providerData: ["qm1"], etag: '"v1"', lastFetchedAt: 100, expiresAt: 200, revision: 4, validatorRevision: 1 };
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "not-modified", expiresAt: 500 }, 300, replace);
   assert.deepEqual(next, initial);
