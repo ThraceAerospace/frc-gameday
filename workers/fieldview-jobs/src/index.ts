@@ -284,7 +284,20 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
 
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
+    const runId = event.instanceId;
     const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const runPrefix = `admin/workflow-runs/event-readiness/${runId}`;
+    const runRecordKey = `${runPrefix}/record.json`;
+    const runRecord = {
+      workflow_id: runId, workflow_type: "event-readiness", status: "running",
+      started_at: runAt, updated_at: Date.now(), completed_at: null,
+      year: null as number | null, total: 0, summary: null as Record<string, unknown> | null,
+      result_chunks: 0, error: null as string | null,
+    };
+    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+    await store().put(`admin/workflow-runs/index/event-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+      JSON.stringify({ workflow_id: runId, workflow_type: "event-readiness", started_at: runAt, year: null }),
+      { httpMetadata: { contentType: "application/json" } });
 
     const currentSeason = await step.do("readiness-resolve-current-season", {
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
@@ -294,6 +307,9 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
+    runRecord.year = year;
+    runRecord.updated_at = Date.now();
+    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
 
     // Acquire and publish the TBA event directory. Chunk writes are discovery
     // storage operations, not fan-out to entity runtimes.
@@ -412,13 +428,34 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       this_week_events: thisWeekEvents.length,
       event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
     };
-    await step.do("readiness-write-run-summary", async () => {
-      await store().put(
-        `workflows/daily-event-readiness/${runAt}/summary.json`,
-        JSON.stringify(summary),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      return summary;
+    const resultChunks = Math.ceil(eventResults.length / 25);
+    await step.do("readiness-write-run-results", async () => {
+      for (let offset = 0; offset < eventResults.length; offset += 25) {
+        const chunk = eventResults.slice(offset, offset + 25);
+        await store().put(`${runPrefix}/results/${String(Math.floor(offset / 25)).padStart(4, "0")}.json`,
+          JSON.stringify({ offset, results: chunk }), { httpMetadata: { contentType: "application/json" } });
+      }
+      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summary), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      const completed = {
+        ...runRecord, status: summary.events_failed ? "completed_with_errors" : "completed",
+        updated_at: Date.now(), completed_at: Date.now(), year, total: eventResults.length,
+        summary: {
+          events_total: summary.events_total, events_state_valid: summary.events_state_valid,
+          events_refresh_queued: summary.events_refresh_queued, events_failed: summary.events_failed,
+          this_week_events: summary.this_week_events,
+        },
+        result_chunks: resultChunks, error: null,
+      };
+      await store().put(runRecordKey, JSON.stringify(completed), { httpMetadata: { contentType: "application/json" } });
+      await store().put(`admin/workflow-runs/index/event-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+        JSON.stringify({ workflow_id: runId, workflow_type: "event-readiness", started_at: runAt, completed_at: completed.completed_at, year, status: completed.status }),
+        { httpMetadata: { contentType: "application/json" } });
+      await store().put(`workflows/daily-event-readiness/${runAt}/summary.json`, JSON.stringify(summary), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      return completed;
     });
     return summary;
   }
@@ -432,7 +469,20 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
+    const runId = event.instanceId;
     const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const runPrefix = `admin/workflow-runs/team-readiness/${runId}`;
+    const runRecordKey = `${runPrefix}/record.json`;
+    const runRecord = {
+      workflow_id: runId, workflow_type: "team-readiness", status: "running",
+      started_at: runAt, updated_at: Date.now(), completed_at: null,
+      year: null as number | null, total: 0, summary: null as Record<string, unknown> | null,
+      result_chunks: 0, error: null as string | null,
+    };
+    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
+    await store().put(`admin/workflow-runs/index/team-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+      JSON.stringify({ workflow_id: runId, workflow_type: "team-readiness", started_at: runAt, year: null }),
+      { httpMetadata: { contentType: "application/json" } });
 
     const currentSeason = await step.do("team-readiness-resolve-current-season", {
       retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
@@ -442,6 +492,9 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
+    runRecord.year = year;
+    runRecord.updated_at = Date.now();
+    await store().put(runRecordKey, JSON.stringify(runRecord), { httpMetadata: { contentType: "application/json" } });
 
     // Team Discovery is refreshed and published independently of Event Discovery.
     const teamGeneration = await step.do("team-readiness-directory-generation", async () => Date.now());
@@ -509,13 +562,33 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       team_readiness: teamResults,
       team_directory: { pages: teamPages, teams: uniqueTeamKeys.length },
     };
-    await step.do("team-readiness-write-run-summary", async () => {
-      await store().put(
-        `workflows/daily-team-readiness/${runAt}/summary.json`,
-        JSON.stringify(summary),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      return summary;
+    const resultChunks = Math.ceil(teamResults.length / 25);
+    await step.do("team-readiness-write-run-results", async () => {
+      for (let offset = 0; offset < teamResults.length; offset += 25) {
+        const chunk = teamResults.slice(offset, offset + 25);
+        await store().put(`${runPrefix}/results/${String(Math.floor(offset / 25)).padStart(4, "0")}.json`,
+          JSON.stringify({ offset, results: chunk }), { httpMetadata: { contentType: "application/json" } });
+      }
+      await store().put(`${runPrefix}/summary.json`, JSON.stringify(summary), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      const completed = {
+        ...runRecord, status: summary.teams_failed ? "completed_with_errors" : "completed",
+        updated_at: Date.now(), completed_at: Date.now(), year, total: teamResults.length,
+        summary: {
+          teams_total: summary.teams_total, teams_state_valid: summary.teams_state_valid,
+          teams_refresh_queued: summary.teams_refresh_queued, teams_failed: summary.teams_failed,
+        },
+        result_chunks: resultChunks, error: null,
+      };
+      await store().put(runRecordKey, JSON.stringify(completed), { httpMetadata: { contentType: "application/json" } });
+      await store().put(`admin/workflow-runs/index/team-readiness/${String(runAt).padStart(16, "0")}-${runId}.json`,
+        JSON.stringify({ workflow_id: runId, workflow_type: "team-readiness", started_at: runAt, completed_at: completed.completed_at, year, status: completed.status }),
+        { httpMetadata: { contentType: "application/json" } });
+      await store().put(`workflows/daily-team-readiness/${runAt}/summary.json`, JSON.stringify(summary), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      return completed;
     });
     return summary;
   }
