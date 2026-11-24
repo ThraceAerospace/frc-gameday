@@ -195,8 +195,8 @@ Never commit secrets or real environment values. Document variable names, purpos
 **Use one local environment file for the entire repository: the root `.env`.** It is Git-ignored. The Next.js workspace loads that exact file from `apps/web/next.config.ts`; local Wrangler commands pass it explicitly with `--env-file .env`. Do not add or use per-workspace `.env.local`, Worker `.dev.vars`, or other local secret files. Cloudflare-hosted environments continue to use their own independently configured secrets and variables; the root file is local development only.
 
 Cloudflare environment selection is branch-determined and documented in `docs/development/CLOUDFLARE-ENVIRONMENTS.md`:
-- **Target:** exactly one Worker per environment: `fieldview-preprod` and `fieldview-production`.
-- The current `workers/fieldview-runtime` and `workers/fieldview-jobs` configurations are the experimental split-Worker prototype, not the accepted target topology. Do not deploy them as the final architecture.
+- **Target:** exactly one Worker per environment: `runtime-preprod` and `runtime-production`, configured by `workers/fieldview/wrangler.toml`.
+- `workers/fieldview-runtime` and `workers/fieldview-jobs` are retained source-module directories bundled by `workers/fieldview/src/index.ts`; they are not separately deployed Workers and have no independent Wrangler configurations.
 - Preproduction and Production must have separate Durable Object namespaces, Workflow bindings/instances, secrets, variables, and data.
 - Do not add branch-detection logic to application code, deploy automatically from CI, or change Vercel settings as part of this migration slice without explicit approval.
 - Production deployment is blocked until the temporary `RUNTIME_ADMIN_TOKEN` bearer authorization is replaced by the approved system-administrator authorization design. Never configure the testing token as a production secret.
