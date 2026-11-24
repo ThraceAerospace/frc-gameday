@@ -29,6 +29,20 @@ export type PollResponse<T> =
   | { status: "unavailable" }
   | { status: "failed" };
 
+function stableCanonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableCanonicalValue);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, stableCanonicalValue(record[key])]));
+  }
+  return value;
+}
+
+function sameCanonicalValue(left: unknown, right: unknown): boolean {
+  return (JSON.stringify(stableCanonicalValue(left)) ?? "undefined") ===
+    (JSON.stringify(stableCanonicalValue(right)) ?? "undefined");
+}
+
 export interface PollRequestSnapshot {
   revision: number;
   validatorRevision: number;
@@ -88,16 +102,20 @@ export function applyPollResponse<T>(
   // supersedes this in-flight poll, so discard its data and validator together.
   if (!validatorIsCurrent) return { ...current, lastAttemptAt: now };
 
+  const data = reconcile(current.data, response.data, request.revision);
+  const canonicalChanged = !sameCanonicalValue(current.data, data);
   return {
     ...current,
     status: "available",
-    data: reconcile(current.data, response.data, request.revision),
+    data,
     providerData: response.data,
     // A 200 without ETag explicitly clears the old validator.
     etag: response.etag,
     lastFetchedAt: now,
     expiresAt: response.expiresAt,
-    revision: current.revision + 1,
+    // Canonical revisions advance only when the reconciled representation changes.
+    // Validator revisions advance for every accepted 200, including identical data.
+    revision: current.revision + (canonicalChanged ? 1 : 0),
     validatorRevision: current.validatorRevision + 1,
     lastAttemptAt: now,
   };
@@ -110,10 +128,12 @@ export function applyWebhookUpdate<T>(
   now: number,
   reconcile: (latest: T | null, incoming: T) => T,
 ): EndpointState<T> {
+  const data = reconcile(current.data, incoming);
+  if (sameCanonicalValue(current.data, data)) return current;
   return {
     ...current,
     status: "available",
-    data: reconcile(current.data, incoming),
+    data,
     revision: current.revision + 1,
     lastWebhookAt: now,
   };
