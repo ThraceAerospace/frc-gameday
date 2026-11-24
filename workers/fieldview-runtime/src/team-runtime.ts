@@ -770,8 +770,8 @@ export class TeamRuntime {
     }
     if (request.method === "POST" && url.pathname === "/readiness") {
       const readinessBody: unknown = await request.json().catch(() => null);
-      const refreshNow = readinessBody && typeof readinessBody === "object" && !Array.isArray(readinessBody) &&
-        (readinessBody as Record<string, unknown>).refreshNow === true;
+      const refreshNow = readinessBody !== null && typeof readinessBody === "object" &&
+        !Array.isArray(readinessBody) && (readinessBody as Record<string, unknown>).refreshNow === true;
       const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const publishedState = publication?.state;
       const validState = Boolean(publication && typeof publication.input_signature === "string" && publishedState && typeof publishedState === "object" &&
