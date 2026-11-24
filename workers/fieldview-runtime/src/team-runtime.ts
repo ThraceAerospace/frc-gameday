@@ -753,10 +753,17 @@ export class TeamRuntime {
       const tbaRepresentationChanged = prioritized.some((resource) => resource.provider === "tba" &&
         (results.find((result) => result.endpoint === resource.endpoint)?.revision ?? 0) >
           (previousResourceRevisions.get(resource.endpoint) ?? 0));
-      if (tbaRepresentationChanged) {
-        const alreadySelected = new Set(prioritized.map((resource) => resource.endpoint));
-        const statboticsResources = resources.filter((resource) =>
-          resource.provider === "statbotics" && !alreadySelected.has(resource.endpoint));
+      const alreadySelected = new Set(prioritized.map((resource) => resource.endpoint));
+      const statboticsResources = resources.filter((resource) =>
+        resource.provider === "statbotics" && !alreadySelected.has(resource.endpoint));
+      const statboticsNeedsRefresh = tbaRepresentationChanged || (await Promise.all(
+        statboticsResources.map(async (resource) => {
+          const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
+          return !state || state.status === "failed" || state.status === "stale" ||
+            (state.expiresAt !== null && state.expiresAt <= Date.now());
+        }),
+      )).some(Boolean);
+      if (statboticsNeedsRefresh) {
         for (const resource of statboticsResources) {
           const result = await this.pollResourceNow(resource);
           results.push({ endpoint: resource.endpoint, ...result });
