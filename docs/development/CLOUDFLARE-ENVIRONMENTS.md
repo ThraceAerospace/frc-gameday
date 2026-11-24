@@ -9,7 +9,7 @@ FieldView uses exactly one Cloudflare Worker per environment:
 | Preproduction | `fieldview-preprod` | Full integration and release validation |
 | Production | `fieldview-production` | Live FieldView backend |
 
-Each Worker hosts the HTTP API, webhook ingress, EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore, and all three durable Workflows. Runtime and Jobs remain separate code modules, not separate deployed Workers. See [ADR-0017](../architecture/ADR-0017-single-worker-per-environment.md).
+Each Worker hosts the HTTP API, webhook ingress, EventRuntime, TeamRuntime, Multiplexer, the currently transitional DiscoveryStore Durable Object, and all deployed Workflows. Runtime and Jobs remain separate code modules, not separate deployed Workers. The target storage model adds environment-specific D1 repositories for Discovery and System Records; those are separate schemas/ownership domains even if they initially share a D1 database. See [ADR-0017](../architecture/ADR-0017-single-worker-per-environment.md).
 
 The environments must have independent Durable Object namespaces, Workflow bindings and instances, secrets, variables, and data. Preproduction must never share Production credentials or state.
 
@@ -36,6 +36,18 @@ npx wrangler dev --config workers/fieldview/wrangler.preprod.toml --env-file .en
 The production/testing Wrangler files under `workers/fieldview-runtime` and `workers/fieldview-jobs` remain the experimental split-Worker configurations and are not the target topology. Their source modules are currently reused by the consolidated Worker; they are code modules, not separate deployable services. The consolidated entrypoint and target configurations live under `workers/fieldview`: `src/index.ts`, `wrangler.preprod.toml`, and `wrangler.production.toml`. The entrypoint composes Runtime and Jobs as modules, exports all four Durable Object classes and all three Workflows, and uses an in-process Jobs callback rather than a service binding. Workflow code accesses DiscoveryStore, EventRuntime, and TeamRuntime through their local namespaces; DiscoveryStore owns system-wide TBA discovery acquisition and publication. The consolidated source path passes the repository typecheck and test suite in GitHub Actions. Both target Wrangler configurations pass `--dry-run`, and local Worker startup has been verified; end-to-end Workflow execution and data-readiness validation remain pending. Do not deploy it or the experimental split configurations until those checks pass.
 
 The existing test Worker deployments have no production data and are disposable. Nevertheless, leave them untouched until the consolidated implementation and configuration pass repository validation.
+
+
+
+## Storage-domain migration
+
+The accepted 2026-11-24 decision defines three storage domains:
+
+- Discovery: D1 is authoritative for event/team directories, current-season metadata, and discovery refresh records. KV may serve lightweight read-heavy projections such as `events-this-week`.
+- System Records: D1 stores Workflow execution/progress/outcomes, runtime registration, administrative actions, and operational history in a schema/repository separate from Discovery.
+- Runtime State: EventRuntime and TeamRuntime Durable Objects retain canonical entity state, provider validators, and reconciliation state; Multiplexer retains subscription coordination.
+
+The current Wrangler configurations still bind the transitional DiscoveryStore Durable Object because its records and callers have not yet been migrated. Do not remove that binding until every key/caller has been classified, D1 repositories and migrations are implemented, cutover/rollback is verified, and the old operational responsibilities are removed. Preproduction and Production must have independent D1/KV resources and must never share data or credentials. No resource creation, binding change, or deployment is authorized by this documentation update.
 
 ## Deployment controls
 
