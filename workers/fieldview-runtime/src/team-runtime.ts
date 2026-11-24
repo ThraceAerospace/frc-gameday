@@ -731,47 +731,30 @@ export class TeamRuntime {
       return Response.json({ team_key: this.teamKey, active_events: Object.keys(activeEvents).sort(), active: value.active, changed });
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
-      // Explicit admin ingestion queues durable work. Independent provider
-      // resources may be fetched concurrently; the 24-hour interval is the steady-state cadence.
-      await this.schedule(year, true);
       const resources = this.endpoints(year);
       const historyEndpoint = TBA_ENDPOINTS.teamEvents(this.teamKey, year);
-      // Event history is the prerequisite for event season-comparison input acquisition, so acquire
-      // it before the remaining profile and analytics resources.
       const prioritized = [
         ...resources.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
         ...resources.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
-      await this.enqueueManualPolls(prioritized, year);
-      // Both refresh and seed only enqueue durable work. TeamRuntime's alarm
-      // owns provider I/O; cross-runtime orchestration must never wait for it.
+      const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
+      for (const resource of prioritized) {
+        const result = await this.pollResourceNow(resource);
+        results.push({ endpoint: resource.endpoint, ...result });
+      }
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
-      const taskRegistry = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const providerByEndpoint = new Map([...taskRegistry.values()].map((task) => [task.endpoint, task.provider]));
       return Response.json({
-        scheduled: true,
-        queued: true,
-        attempted: false,
+        scheduled: false,
+        queued: false,
+        attempted: true,
         team_key: this.teamKey,
         year,
         snapshot,
-        diagnostics: [...(await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX })).values()].map((state) => ({
-          provider: providerByEndpoint.get(state.endpoint) ?? null,
-          endpoint: state.endpoint,
-          http_status: state.lastHttpStatus ?? null,
-          last_error: state.lastError ?? null,
-        })),
-      }, { status: 202 });
+        results,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/readiness") {
-      const body: unknown = await request.json().catch(() => null);
-      const requestedAt = body && typeof body === "object" && !Array.isArray(body)
-        ? (body as Record<string, unknown>).refreshAt : undefined;
-      if (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt) ||
-          requestedAt > Date.now() + 5 * 60_000) {
-        return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
-      }
       const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const publishedState = publication?.state;
       const validState = Boolean(publication && typeof publication.input_signature === "string" && publishedState && typeof publishedState === "object" &&
@@ -790,21 +773,28 @@ export class TeamRuntime {
           (source.lastFetchedAt === null && source.status !== "unavailable") ||
           (source.expiresAt !== null && source.expiresAt <= now);
       }).map((resource) => resource.endpoint);
-      const refreshQueued = !validState || staleResources.length > 0;
-      let refreshAt: number | null = null;
-      if (refreshQueued) {
-        refreshAt = Math.max(now + 1_000, requestedAt);
-        // Queue the complete team resource set behind one randomized deadline.
-        // Existing recurring schedules, if any, are left untouched.
-        await this.enqueueManualPolls(resources, year, true, refreshAt);
+      const refreshRequired = !validState || staleResources.length > 0;
+      const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
+      if (refreshRequired) {
+        // EventRuntime and TeamRuntime share the same refresh contract:
+        // one explicit command, self-owned provider acquisition, sequential
+        // bounded requests, canonical reconciliation, and publication.
+        for (const resource of resources) {
+          const result = await this.pollResourceNow(resource);
+          results.push({ endpoint: resource.endpoint, ...result });
+        }
+        await this.snapshot(year);
       }
+      const latest = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
+      const latestState = latest?.state as Record<string, unknown> | undefined;
       return Response.json({
         team_key: this.teamKey,
         year,
-        state_valid: validState,
+        state_valid: Boolean(latest && latestState?.team_key === this.teamKey && latestState?.year === year),
         stale_resources: staleResources,
-        refresh_queued: refreshQueued,
-        refresh_at: refreshQueued ? refreshAt : null,
+        refresh_required: refreshRequired,
+        refresh_completed: refreshRequired,
+        results,
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
@@ -813,9 +803,10 @@ export class TeamRuntime {
         ? (body as Record<string, unknown>).endpoint : null;
       const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
-      await this.enqueueManualPolls([resource], year);
-      const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
-      return Response.json({ endpoint: resource.endpoint, queued: true, status: state?.status ?? "pending" }, { status: 202 });
+      const result = await this.pollResourceNow(resource);
+      return Response.json({ endpoint: resource.endpoint, queued: false, attempted: true, ...result }, {
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
