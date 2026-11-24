@@ -430,7 +430,6 @@ test("EventRuntime public snapshots return 204 until readiness publishes canonic
   assert.equal(result.state_valid, false);
   assert.equal(result.refresh_required, true);
   assert.equal(result.refresh_dispatched, false);
-  assert.equal(result.refresh_queued, false);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal(storage.alarmAt, null);
   assert.equal(providerCalls, 0, "readiness inspects coverage and never fetches providers");
@@ -1583,7 +1582,7 @@ test("EventRuntime analytics skips TeamRuntimes until the independent team readi
     "EventRuntime analytics must not create an unregistered TeamRuntime");
 });
 
-test("EventRuntime readiness skips fresh sources and queues every resource when one source is stale", async () => {
+test("EventRuntime readiness inspects freshness without queueing provider work", async () => {
   const storage = new MemoryStorage(), eventKey = "2027rikin", now = Date.now();
   seedEventPublication(storage, eventKey);
   const endpoints = eventResourceEndpoints(eventKey);
@@ -1599,25 +1598,23 @@ test("EventRuntime readiness skips fresh sources and queues every resource when 
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     fetcher: async () => { throw new Error("readiness must not fetch providers inline"); },
   }, eventKey);
-  const inspect = (refreshAt) => runtime.fetch(new Request("https://event-runtime/readiness", {
+  const inspect = () => runtime.fetch(new Request("https://event-runtime/readiness", {
     method: "POST",
     headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshAt }),
+    body: JSON.stringify({}),
   }));
 
-  const fresh = await inspect(Date.now() + 60_000);
+  const fresh = await inspect();
   assert.equal(fresh.status, 200);
   const freshResult = await fresh.json();
   assert.equal(freshResult.state_valid, true);
-  assert.equal(freshResult.refresh_queued, false);
   assert.deepEqual(freshResult.stale_sources, []);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal(storage.alarmAt, null);
 
   const staleEndpoint = endpoints[0];
   storage.values.get("endpoint:" + staleEndpoint).expiresAt = Date.now() - 1;
-  const refreshAt = Date.now() + 90_000;
-  const stale = await inspect(refreshAt);
+  const stale = await inspect();
   assert.equal(stale.status, 200);
   const staleResult = await stale.json();
   assert.equal(staleResult.state_valid, true);
