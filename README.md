@@ -16,7 +16,7 @@ The priority is trustworthy data: acquiring it, reconciling it, deriving useful 
 
 The `fieldview-architecture-migration` branch is rebuilding FieldView around an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend. The backend is deployed as one shared Runtime Worker per environment (`runtime-preprod` and `runtime-production`) from the single `workers/fieldview/wrangler.toml` configuration. FieldView is its first product; the generic Runtime name leaves room for future FIRST program support without implying those integrations already exist.
 
-The current implementation described below is the legacy system being migrated. It remains in place until replacement slices have passed validation; no production cutover is implied.
+The legacy implementation described below is historical context for the migration. This branch follows the owner-approved retire-first, rebuild-cleanly strategy: temporary functionality loss is acceptable while replacement capabilities are built. No merge to `main`, production cutover, or deployed infrastructure changes are implied.
 
 - [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks.
 - [Migration inventory](docs/architecture/MIGRATION-INVENTORY.md) — current routes, dependencies, environment variables, and target ownership mapping.
@@ -83,7 +83,7 @@ npm run generate:statbotics-types
 
 Do not commit secrets. Add only the variables required by the services you run locally (for example, `TBA_API_KEY`, `TBA_WEBHOOK_SECRET`, `RUNTIME_ADMIN_TOKEN`, and any legacy web-service credentials still needed by your local setup).
 
-There is currently no dedicated test script in the legacy root `package.json`; test infrastructure is part of the repository foundation work.
+Run repository validation with `npm run typecheck`, `npm test`, and `npm run lint`. These checks cover the web application, domain, analytics, provider packages, and Worker modules.
 
 ## Documentation
 
