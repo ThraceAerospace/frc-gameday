@@ -27,3 +27,19 @@ test("team readiness owns only Team Discovery and TeamRuntime readiness", () => 
   assert.match(teamWorkflow, /resolve-current-season/);
   assert.match(teamWorkflow, /workflows\/daily-team-readiness\//);
 });
+
+test("readiness executions persist indexed run records, final summaries, and chunked entity results", () => {
+  for (const [workflow, type] of [[eventWorkflow, "event-readiness"], [teamWorkflow, "team-readiness"]]) {
+    assert.match(workflow, new RegExp(`admin/workflow-runs/index/${type}`));
+    assert.match(workflow, /result_chunks/);
+    assert.match(workflow, /results\//);
+    assert.match(workflow, /summary\.json/);
+    assert.match(workflow, /completed_with_errors/);
+  }
+});
+
+test("workflow run history is admin-authenticated and supports list and ID lookup", () => {
+  assert.match(source, /\/internal\/admin\/workflow-runs/);
+  assert.match(source, /workflowBinding\.get\(workflowId\)/);
+  assert.match(source, /workflow_id/);
+});
