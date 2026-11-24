@@ -45,9 +45,16 @@ export async function dispatchRuntime(
         team_state_revision?: unknown;
         affected_events?: Array<{ event_key?: unknown; team_event_revision?: unknown }>;
       } | null;
+      const relatedEventKey = body !== null && typeof body === "object" && !Array.isArray(body) &&
+        typeof (body as Record<string, unknown>).related_event_key === "string"
+        ? (body as Record<string, unknown>).related_event_key as string
+        : null;
       if (refreshResult && Number.isSafeInteger(refreshResult.team_state_revision) &&
           Array.isArray(refreshResult.affected_events)) {
-        for (const affected of refreshResult.affected_events) {
+        const affectedEvents = relatedEventKey
+          ? refreshResult.affected_events.filter((affected) => affected.event_key === relatedEventKey)
+          : refreshResult.affected_events;
+        for (const affected of affectedEvents) {
           if (typeof affected.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(affected.event_key) ||
               !Number.isSafeInteger(affected.team_event_revision)) continue;
           const notification = await dispatchRuntime(env, "event", affected.event_key, "team-state-changed", {
