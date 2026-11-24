@@ -60,6 +60,13 @@ jobs:
           }
 
           # These are separate Workflows with separate concurrency limits and
-          # progress records. The scheduler starts them independently.
-          start_workflow "/internal/admin/daily-event-readiness"
-          start_workflow "/internal/admin/daily-team-readiness"
+          # progress records. Attempt both starts even if one endpoint fails.
+          event_result=0
+          team_result=0
+          start_workflow "/internal/admin/daily-event-readiness" || event_result=$?
+          start_workflow "/internal/admin/daily-team-readiness" || team_result=$?
+
+          if [[ "$event_result" -ne 0 || "$team_result" -ne 0 ]]; then
+            echo "::error::One or more readiness Workflows failed to start."
+            exit 1
+          fi
