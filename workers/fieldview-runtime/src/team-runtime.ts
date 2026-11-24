@@ -441,6 +441,13 @@ export class TeamRuntime {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/season-analytics/refresh") {
+      if (!authorized(request, this.env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      // Analytics refresh is an explicit command. Public GET remains a
+      // side-effect-free read of the last published aggregate.
+      return this.buildSeasonAnalyticsResponse(year);
+    }
+
     if (publicRead) {
       // Serve the last atomically published representation. A GET never
       // rebuilds/persists a snapshot and never materializes another season.
@@ -949,7 +956,6 @@ export class TeamRuntime {
         JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions) &&
         JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions) &&
         JSON.stringify(cached.comparison_input_updated_ats) === JSON.stringify(comparisonInputUpdatedAts)) {
-      await this.storage.put(cacheKey, { ...cached, checkedAt: Date.now() });
       const collectionState = (cached.response.collection as Record<string, unknown> | undefined)?.state;
       return Response.json(cached.response, {
         headers: {
