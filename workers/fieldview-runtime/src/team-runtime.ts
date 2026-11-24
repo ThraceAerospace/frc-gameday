@@ -1135,6 +1135,17 @@ export class TeamRuntime {
     } catch (error) {
       result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
     }
+    if (result.status === "not-modified") {
+      const latest = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint)) ?? initial;
+      return {
+        success: latest.lastFetchedAt !== null,
+        status: latest.status,
+        revision: latest.revision,
+        last_fetched_at: latest.lastFetchedAt,
+        http_status: latest.lastHttpStatus ?? null,
+        last_error: latest.lastError ?? null,
+      };
+    }
     const next = await this.storage.transaction(async (tx) => {
       const key = endpointKey(resource.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
       const value = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
