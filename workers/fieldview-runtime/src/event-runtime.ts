@@ -453,12 +453,6 @@ export class EventRuntime {
     }
 
     if (request.method === "POST" && url.pathname === "/readiness") {
-      const body: unknown = await request.json().catch(() => null);
-      const requestedAt = isRecord(body) ? body.refreshAt : undefined;
-      if (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt) ||
-          requestedAt > Date.now() + 5 * 60_000) {
-        return Response.json({ error: "refreshAt must be within the next five minutes" }, { status: 400 });
-      }
       const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const validState = Boolean(publication && publication.status !== "failed" &&
         Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
@@ -473,22 +467,30 @@ export class EventRuntime {
           (source.lastFetchedAt === null && source.lastWebhookAt === null && source.status !== "unavailable") ||
           (source.expiresAt !== null && source.expiresAt <= now);
       });
-      const refreshQueued = !validState || staleSources.length > 0;
-      let refreshAt: number | null = null;
-      if (refreshQueued) {
-        refreshAt = Math.max(now + 1_000, requestedAt);
-        // Queue every event-owned resource behind one randomized deadline.
-        // The alarm consumes this queue sequentially and does not create recurring work.
-        await this.enqueueManualPolls([...this.allowedEndpoints], true, refreshAt);
-        await this.scheduleStatboticsRefresh(refreshAt, 0);
+      const refreshRequired = !validState || staleSources.length > 0;
+      const refreshed: string[] = [];
+      if (refreshRequired) {
+        // One command refreshes this EventRuntime's complete owned resource
+        // set. Provider acquisition remains inside this runtime and is bounded
+        // sequentially; the coordinator never proxies provider payloads.
+        for (const endpoint of expectedEndpoints) {
+          await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
+          refreshed.push(endpoint);
+        }
+        await this.publishEventState();
+        if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+          await this.recalculateAnalytics();
+        }
       }
+      const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       return Response.json({
         event_key: this.eventKey,
-        state_valid: validState,
-        publication_status: publication?.status ?? "missing",
+        state_valid: Boolean(latestPublication && latestPublication.status !== "failed"),
+        publication_status: latestPublication?.status ?? "missing",
         stale_sources: staleSources,
-        refresh_queued: refreshQueued,
-        refresh_at: refreshQueued ? refreshAt : null,
+        refresh_required: refreshRequired,
+        refresh_completed: refreshRequired,
+        refreshed_endpoints: refreshed,
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
@@ -575,37 +577,29 @@ export class EventRuntime {
       }
       const endpoints = requested as string[];
       const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
-      await this.ensureRecurringPolls(endpoints, 86_400_000);
-      const manualEndpoints = [...endpoints];
-      if (includeStatbotics) manualEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
-      await this.enqueueManualPolls(manualEndpoints);
-      // Explicit refreshes also force a fresh analytics publication, even when
-      // the provider returns an unchanged representation or HTTP 304.
-      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-        await this.storage.put("analytics:status", "pending");
+      const refreshEndpoints = [...endpoints];
+      if (includeStatbotics) refreshEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
+      const results: Array<{ endpoint: string; success: boolean }> = [];
+      for (const endpoint of refreshEndpoints) {
+        results.push({ endpoint, success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }) });
       }
-      await this.storage.transaction((transaction) => this.rearm(transaction));
+      const publication = await this.publishEventState();
+      if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
+        await this.recalculateAnalytics();
+      }
+      const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({
         event_key: this.eventKey,
-        requested: endpoints.length + (includeStatbotics ? 1 : 0),
-        queued: true,
-        state: await (async () => {
-          const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-          return [...entries.values()].map((state) => ({
-            endpoint: state.endpoint, status: state.status, revision: state.revision,
-            fetched_at: state.lastFetchedAt, attempted_at: state.lastAttemptAt,
-            http_status: (state as EndpointState<unknown> & { lastHttpStatus?: number }).lastHttpStatus ?? null,
-            last_error: (state as EndpointState<unknown> & { lastError?: string | null }).lastError ?? null,
-          }));
-        })(),
-        analytics: {
-          status: await this.storage.get<string>("analytics:status") ?? "pending",
-          last_calculated_at: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.calculatedAt ?? null,
-          source_revision: (await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY))?.sourceRevision ?? null,
-          last_error: await this.storage.get<string>("analytics:last-error") ?? null,
-        },
-      }, { status: 202 });
+        requested: refreshEndpoints.length,
+        attempted: results.length,
+        results,
+        publication_status: publication.status,
+        state: [...entries.values()].map((state) => ({
+          endpoint: state.endpoint, status: state.status, revision: state.revision,
+          fetched_at: state.lastFetchedAt, attempted_at: state.lastAttemptAt,
+          last_error: (state as EndpointState<unknown> & { lastError?: string | null }).lastError ?? null,
+        })),
+      }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/participants") {
