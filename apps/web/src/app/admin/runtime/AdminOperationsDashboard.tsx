@@ -297,15 +297,17 @@ export default function AdminOperationsDashboard() {
       if (entityKind !== "system" && key) void openEntity(entityKind, key, operationYear ?? selected?.year ?? year);
       const label = action.replaceAll("-", " ");
       setMessage(action === "discover-year"
-        ? label + " queued. The jobs Workflow will publish the selected season's directories; you can keep using the dashboard."
-        : ["refresh", "resource-refresh", "statbotics-refresh", "recalculate", "seed-event-teams", "seed"].includes(action)
-          ? label + " queued. The runtime will advance it in the background; you can keep using the dashboard."
-          : label + " accepted.");
+        ? label + " accepted. The discovery Workflow will publish the selected season's directories."
+        : ["refresh", "resource-refresh", "statbotics-refresh", "seed"].includes(action)
+          ? label + " completed. The runtime fetched and reconciled its own resources."
+          : ["recalculate", "seed-event-teams"].includes(action)
+            ? label + " accepted. The owning runtime or Workflow will publish the result asynchronously."
+            : label + " accepted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operation failed"); }
     finally { setBusy(false); }
   }, [requestHeaders, refresh, openEntity, selected, year]);
 
-  // Keep the selected runtime view current while its own alarm drains queued work.
+  // Keep the selected runtime view current after direct commands and asynchronous jobs.
   // This is a single-object read, not a fan-out across the runtime inventory.
   useEffect(() => {
     if (!authenticated || !selected) return;
