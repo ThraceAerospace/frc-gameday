@@ -1208,7 +1208,7 @@ export default {
       const id = `daily-event-readiness-${scheduledAt}`;
       const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
       const initial = {
-        workflow_id: id, workflow_type: "event-readiness", status: "running",
+        workflow_id: id, workflow_type: "event-readiness", status: "queued",
         started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
         year: null, total: 0, summary: null, result_chunks: 0, error: null,
       };
@@ -1216,7 +1216,7 @@ export default {
         httpMetadata: { contentType: "application/json" },
       });
       await store.put(`admin/workflow-runs/index/event-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
-        JSON.stringify({ workflow_id: id, workflow_type: "event-readiness", started_at: scheduledAt, year: null, status: "running" }),
+        JSON.stringify({ workflow_id: id, workflow_type: "event-readiness", started_at: scheduledAt, year: null, status: "queued" }),
         { httpMetadata: { contentType: "application/json" } });
       try {
         await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
@@ -1228,7 +1228,7 @@ export default {
         });
         return Response.json({ ...failed }, { status: 409 });
       }
-      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "running" }, { status: 202 });
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "queued" }, { status: 202 });
     }
 
     if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
@@ -1240,7 +1240,7 @@ export default {
       const id = `daily-team-readiness-${scheduledAt}`;
       const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
       const initial = {
-        workflow_id: id, workflow_type: "team-readiness", status: "running",
+        workflow_id: id, workflow_type: "team-readiness", status: "queued",
         started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
         year: null, total: 0, summary: null, result_chunks: 0, error: null,
       };
@@ -1248,7 +1248,7 @@ export default {
         httpMetadata: { contentType: "application/json" },
       });
       await store.put(`admin/workflow-runs/index/team-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
-        JSON.stringify({ workflow_id: id, workflow_type: "team-readiness", started_at: scheduledAt, year: null, status: "running" }),
+        JSON.stringify({ workflow_id: id, workflow_type: "team-readiness", started_at: scheduledAt, year: null, status: "queued" }),
         { httpMetadata: { contentType: "application/json" } });
       try {
         await env.DAILY_TEAM_READINESS.create({ id, params: { scheduledAt } });
