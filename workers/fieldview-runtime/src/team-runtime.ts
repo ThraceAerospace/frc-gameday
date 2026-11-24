@@ -122,7 +122,7 @@ export class TeamRuntime {
     this.frcColorsApi = new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {});
     this.hydrationMode = state.blockConcurrencyWhile ? "platform-barrier" : "storage-backed";
     // Restore only this TeamRuntime's persisted identity and publications.
-    // Provider refresh and cross-runtime work remain alarm-driven.
+    // Provider refresh and cross-runtime work are dispatched explicitly by the coordinator.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
           const [storedKey, publications] = await Promise.all([
@@ -130,23 +130,15 @@ export class TeamRuntime {
             this.storage.list<{ input_signature: string; representation_signature?: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
           ]);
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
-          const publishedYears = new Set<number>();
           for (const [key, publication] of publications) {
             const match = /^team-state:(\d+):publication$/.exec(key);
             if (match && publication?.state) {
               const year = Number(match[1]);
               this.publishedSnapshots.set(year, publication);
-              publishedYears.add(year);
             }
           }
-          // Retire the former duplicate raw-snapshot key when its canonical
-          // publication exists. A legacy-only key is retained until rebuilt.
-          for (const [key] of publications) {
-            const match = /^team-state:(\d+)$/.exec(key);
-            if (match && publishedYears.has(Number(match[1]))) {
-              await this.storage.delete(key);
-            }
-          }
+          // Legacy duplicate raw-snapshot keys remain untouched during activation.
+          // Persistent cleanup requires an explicit migration operation.
         })
       : Promise.resolve();
   }
