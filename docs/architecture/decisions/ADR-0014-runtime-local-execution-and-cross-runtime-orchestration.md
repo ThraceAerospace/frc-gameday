@@ -1,6 +1,8 @@
 # ADR-0014: Runtime-local execution and cross-runtime orchestration
 
-- **Status:** Accepted
+> **Historical decision — superseded.** The 2026-11-24 decision in [`2026-11-24-storage-and-polling-ownership.md`](2026-11-24-storage-and-polling-ownership.md) replaces the separate runtime-local polling/queue/alarm model with one shared EventRuntime/TeamRuntime abstraction and coordinator-owned direct refresh dispatch. It also separates Discovery, System Records, and Runtime State. This ADR is retained for historical context only; its TaskScheduler, per-runtime recurring queue/alarm, and DiscoveryStore operational-record provisions are no longer authoritative.
+
+- **Status:** Superseded by the accepted 2026-11-24 storage and polling decision
 - **Date:** 2026-11-21
 - **Decision owners:** FieldView architecture
 - **Scope:** Cloudflare Worker, EventRuntime, TeamRuntime, TaskScheduler
