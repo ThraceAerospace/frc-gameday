@@ -1,0 +1,65 @@
+name: Daily FieldView readiness
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fieldview-preprod-daily-readiness
+  cancel-in-progress: false
+
+jobs:
+  start-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FIELDVIEW_PREPROD_URL: https://fieldview-preprod.frc-fieldview.workers.dev
+      FIELDVIEW_PREPROD_ADMIN_TOKEN: ${{ secrets.FIELDVIEW_PREPROD_ADMIN_TOKEN }}
+    steps:
+      - name: Start independent event and team readiness workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${FIELDVIEW_PREPROD_ADMIN_TOKEN:-}" ]]; then
+            echo "::error::Repository secret FIELDVIEW_PREPROD_ADMIN_TOKEN is not configured."
+            exit 1
+          fi
+
+          start_workflow() {
+            local path="$1"
+            local response_file
+            local status
+            response_file="$(mktemp)"
+            status="$(curl --silent --show-error \
+              --output "$response_file" \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "Authorization: Bearer ${FIELDVIEW_PREPROD_ADMIN_TOKEN}" \
+              --header "Accept: application/json" \
+              "${FIELDVIEW_PREPROD_URL}${path}")"
+            cat "$response_file"
+            rm -f "$response_file"
+
+            case "$status" in
+              202)
+                echo "Accepted: $path"
+                ;;
+              409)
+                echo "Already started for this UTC date: $path"
+                ;;
+              *)
+                echo "::error::Failed to start $path (HTTP $status)."
+                return 1
+                ;;
+            esac
+          }
+
+          # These are separate Workflows with separate concurrency limits and
+          # progress records. The scheduler starts them independently.
+          start_workflow "/internal/admin/daily-event-readiness"
+          start_workflow "/internal/admin/daily-team-readiness"
