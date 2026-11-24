@@ -4,7 +4,7 @@
 
 FieldView is a data application for FIRST Robotics Competition. Its web application presents live event information, team/event history, remote display sessions, and server-calculated analytics.
 
-The repository is undergoing an **incremental architecture migration** on branch `fieldview-architecture-migration`. The current Next.js/Vercel/Redis/SharedWorker implementation is the legacy system being migrated, not the target architecture. Preserve a working application throughout the migration; do not perform a clean rebuild or a production cutover before the replacement path is validated.
+The repository is undergoing an owner-approved **retire-first, rebuild-cleanly architecture migration** on branch `fieldview-architecture-migration`. The current Next.js/Vercel/Redis/SharedWorker implementation is legacy, not the target architecture. Existing FieldView functionality may temporarily break on this branch; do not preserve obsolete implementations solely for compatibility. Preserve canonical domain contracts, provider packages, analytics semantics, EventRuntime/TeamRuntime, the Multiplexer, architectural knowledge, and platform-required migration history. Rebuild capabilities against the target architecture. This strategy does not authorize merging to `main`, production cutover, or deletion/reconfiguration of deployed infrastructure. See `docs/architecture/RETIREMENT-AUDIT.md`.
 
 ## Confirmed target decisions
 
