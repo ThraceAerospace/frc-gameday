@@ -2257,19 +2257,18 @@ export class EventRuntime {
           const key = endpointStorageKey(matchesEndpoint);
           const current = await transaction.get<EndpointState<unknown>>(key) ??
             createEndpointState<unknown>(matchesEndpoint);
-          const reconciled = reconcileWebhookEndpoint(matchesEndpoint, current.data, match);
-          const changed = JSON.stringify(current.data) !== JSON.stringify(reconciled);
+          const next = applyWebhookUpdate(current, match, now,
+            (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update));
+          const changed = next.revision !== current.revision;
           if (changed) {
-            const next = applyWebhookUpdate(current, match, now,
-              (latest, update) => reconcileWebhookEndpoint(matchesEndpoint, latest, update));
             await transaction.put(key, next);
             if (messageType === "match_score") {
               await recordAnalyticsInvalidation(transaction, "tba-event-matches", now, [match.key]);
             }
             const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
             await transaction.put("snapshot-revision", snapshotRevision + 1);
+            await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
           }
-          if (changed) await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
         }
       } else if (
         messageType === "upcoming_match" ||
