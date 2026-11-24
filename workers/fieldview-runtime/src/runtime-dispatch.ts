@@ -106,10 +106,18 @@ async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind,
   if (!env.DISCOVERY_STORE) return;
   const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+  const markerKey = prefix + key + ".json";
+  const existing = await stub.fetch(new Request(
+    "https://discovery-store/get?key=" + encodeURIComponent(markerKey),
+  ));
+  if (existing.ok) return;
+  if (existing.status !== 404) {
+    throw new Error("Unable to inspect runtime marker: HTTP " + existing.status);
+  }
   const response = await stub.fetch(new Request("https://discovery-store/put", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: prefix + key + ".json", value: "{}" }),
+    body: JSON.stringify({ key: markerKey, value: "{}" }),
   }));
   if (!response.ok) throw new Error("Unable to register runtime marker: HTTP " + response.status);
 }
