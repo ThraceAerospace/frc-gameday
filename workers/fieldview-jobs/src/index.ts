@@ -38,11 +38,16 @@ interface AdminDiscoveryJobRecord {
   year: number;
   mode: "year";
   workflow_id: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "partial" | "failed";
   stage: string;
   events: number;
   teams: number;
   team_pages: number;
+  expected_team_pages?: number;
+  failed_team_pages?: number[];
+  warnings?: string[];
+  team_directory_complete?: boolean;
+  team_generation?: number;
   steps: number;
   error: string | null;
   started_at: number;
@@ -78,12 +83,12 @@ async function readPublishedSeason(bucket: DiscoveryStoreClient, year: number): 
 } | null> {
   const events = await readJson<DiscoveryDocument>(bucket, `discovery/events/${year}.json`);
   const teamManifest = await readJson<{
-    year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number;
+    year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number; complete?: boolean;
   }>(bucket, `discovery/teams/${year}.json`);
   const teamKeys = await readJson<string[]>(bucket, `registry/teams/${year}.json`);
   if (!events || events.year !== year || !Array.isArray(events.events) ||
       events.events.some((item) => !item || typeof item.key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.key)) ||
-      !teamManifest || teamManifest.year !== year || !Number.isInteger(teamManifest.pageCount) ||
+      !teamManifest || teamManifest.complete !== true || teamManifest.year !== year || !Number.isInteger(teamManifest.pageCount) ||
       teamManifest.pageCount < 1 || !Number.isInteger(teamManifest.teamCount) ||
       !Array.isArray(teamKeys) || teamKeys.length !== teamManifest.teamCount ||
       teamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) return null;
@@ -137,7 +142,8 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), jobKey);
         const defaults: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
-          events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
+          events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [], warnings: [],
+          team_directory_complete: false, steps: 0, error: null,
           started_at: requestedAt, updated_at: Date.now(),
         };
         const next: AdminDiscoveryJobRecord = {
@@ -155,14 +161,17 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       // running a manual directory discovery. The requested year remains
       // explicit (historical discovery is supported), but it never changes
       // the canonical current-season pointer.
-      await step.do("resolve-and-publish-current-season", async () => {
+      const tbaStatus = await step.do("resolve-and-publish-current-season", async () => {
         const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resolve-current-season");
         if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
-        const resolved = await response.json() as { year?: unknown };
+        const resolved = await response.json() as { year?: unknown; maxTeamPage?: unknown };
         if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200) {
           throw new Error("TBA returned an invalid current_season");
         }
-        return resolved;
+        if (!Number.isInteger(resolved.maxTeamPage) || Number(resolved.maxTeamPage) < 0) {
+          throw new Error("TBA status did not provide a valid max_team_page; team discovery cannot determine its page range");
+        }
+        return { year: Number(resolved.year), maxTeamPage: Number(resolved.maxTeamPage) };
       });
       await updateJob("record-discovery-started", { stage: "discovering_events" });
       const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
@@ -204,41 +213,71 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         });
       }
 
-      const teamGeneration = await step.do("allocate-manual-team-directory-generation", async () => Date.now());
-            const teamKeys: string[] = [];
-      let teamPages = 0;
-      for (let page = 0; page < 100; page += 1) {
-        const result = await step.do(`discover-manual-team-page-${page}`, {
-          retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-        }, async () => {
-          const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-team-page", {
-            year: season, generation: teamGeneration, page,
-          });
-          if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
-          return response.json() as Promise<{ teamKeys: string[]; count: number; hasMore: boolean }>;
+      const expectedTeamPages = tbaStatus.maxTeamPage + 1;
+      const resume = await step.do("find-resumable-team-directory", async () => {
+        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resume-partial-team-directory", {
+          year: season, expectedPageCount: expectedTeamPages,
         });
-        teamKeys.push(...result.teamKeys);
-        teamPages += 1;
-        if (!result.hasMore) break;
-        if (page === 99) throw new Error("TBA team discovery exceeded the 100-page season limit");
+        if (!response.ok) throw new Error("DiscoveryStore partial directory lookup returned HTTP " + response.status);
+        return response.json() as Promise<{
+          resumable: boolean; generation?: number; teamKeys?: string[]; failedPages?: number[]; warnings?: string[];
+        }>;
+      });
+      const teamGeneration = resume.resumable && Number.isSafeInteger(resume.generation)
+        ? Number(resume.generation)
+        : await step.do("allocate-manual-team-directory-generation", async () => Date.now());
+      const teamKeys: string[] = [...(resume.resumable ? resume.teamKeys ?? [] : [])];
+      const failedTeamPages: number[] = [...(resume.resumable ? resume.failedPages ?? [] : [])];
+      const failedPageSet = new Set(failedTeamPages);
+      const warnings: string[] = [...(resume.resumable ? resume.warnings ?? [] : [])];
+      let teamPages = expectedTeamPages - failedTeamPages.length;
+      for (let page = 0; page <= tbaStatus.maxTeamPage; page += 1) {
+        if (resume.resumable && !failedPageSet.has(page)) continue;
+        try {
+          const result = await step.do(`discover-manual-team-page-${page}`, {
+            retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+          }, async () => {
+            const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-team-page", {
+              year: season, generation: teamGeneration, page,
+            });
+            if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
+            return response.json() as Promise<{ teamKeys: string[]; count: number }>;
+          });
+          teamKeys.push(...result.teamKeys);
+          failedPageSet.delete(page);
+          teamPages += 1;
+        } catch (error) {
+          failedPageSet.add(page);
+          warnings.push(`Team page ${page} failed after retries: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500));
+        }
       }
+      failedTeamPages.splice(0, failedTeamPages.length, ...[...failedPageSet].sort((a, b) => a - b));
       const uniqueTeamKeys = [...new Set(teamKeys)].sort();
-      if (uniqueTeamKeys.length === 0) throw new Error("TBA returned an empty team directory for the selected season");
+      if (failedTeamPages.length === 0 && uniqueTeamKeys.length === 0) {
+        throw new Error("TBA returned an empty team directory for the selected season");
+      }
       await updateJob("record-team-discovery-progress", {
         stage: "publishing_teams", teams: uniqueTeamKeys.length, team_pages: teamPages,
-        steps: 3 + teamPages,
+        expected_team_pages: expectedTeamPages, failed_team_pages: failedTeamPages,
+        warnings, team_directory_complete: failedTeamPages.length === 0, team_generation: teamGeneration,
+        steps: 3 + expectedTeamPages,
       });
-      await step.do("publish-manual-team-directory", async () => {
+      const publication = await step.do("publish-manual-team-directory", async () => {
         const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("publish-team-directory", {
-          year: season, generation: teamGeneration, pageCount: teamPages, teamKeys: uniqueTeamKeys,
+          year: season, generation: teamGeneration, pageCount: expectedTeamPages,
+          teamKeys: uniqueTeamKeys, failedPages: failedTeamPages, warnings,
         });
         if (!response.ok) throw new Error("DiscoveryStore team directory publication returned HTTP " + response.status);
-        return response.json();
+        return response.json() as Promise<{ status: "completed" | "partial"; complete: boolean }>;
       });
+      const partial = publication.status === "partial";
       const summary = {
-        year: season, mode: "year", workflow_id: jobId, status: "completed", stage: "complete",
+        year: season, mode: "year", workflow_id: jobId, status: partial ? "partial" : "completed",
+        stage: partial ? "partial" : "complete",
         events: eventDirectory.count, teams: uniqueTeamKeys.length, team_pages: teamPages,
-        steps: 4 + teamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
+        expected_team_pages: expectedTeamPages, failed_team_pages: failedTeamPages,
+        warnings, team_directory_complete: publication.complete, team_generation: teamGeneration,
+        steps: 4 + expectedTeamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
         error: null, started_at: requestedAt, updated_at: Date.now(),
       };
       await step.do("publish-manual-discovery-summary", async () => {
@@ -255,7 +294,9 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         const failed: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
           events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
-          steps: current?.steps ?? 0, error: detail.slice(0, 500),
+          expected_team_pages: current?.expected_team_pages, failed_team_pages: current?.failed_team_pages,
+          warnings: current?.warnings, team_directory_complete: current?.team_directory_complete ?? false,
+          team_generation: current?.team_generation, steps: current?.steps ?? 0, error: detail.slice(0, 500),
           started_at: requestedAt, updated_at: Date.now(),
         };
         await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(jobKey, JSON.stringify(failed), {
@@ -1094,7 +1135,6 @@ export default {
       const status = workflowStatus === "paused" ? "paused"
         : workflowStatus === "errored" ? "failed"
         : workflowStatus === "terminated" ? "cancelled"
-        : workflowStatus === "complete" ? "completed"
         : job.status;
       return Response.json({ ...job, status, workflow_status: workflowStatus }, {
         headers: { "Cache-Control": "no-store" },
