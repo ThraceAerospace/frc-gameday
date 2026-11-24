@@ -46,8 +46,6 @@ export interface RuntimeEnvironment {
   DISCOVERY_STORE?: DurableObjectNamespaceLike;
   /** In-process module interface used by the consolidated Worker entrypoint. */
   JOBS_REQUEST?: (request: Request) => Promise<Response>;
-  /** Legacy service binding retained only by the experimental split-Worker prototype. */
-  FIELDVIEW_JOBS?: { fetch(request: Request): Promise<Response> };
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
   EVENT_COMPLETED_RETENTION_MS?: string | number;
