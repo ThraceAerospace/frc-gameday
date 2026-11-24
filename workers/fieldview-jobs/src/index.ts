@@ -402,11 +402,10 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
         const result = await step.do("readiness-event-" + item.key, {
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
         }, async () => {
-          const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
-          const response = await dispatchRuntime(this.env, "event", item.key, "readiness", { refreshAt }, year);
+          const response = await dispatchRuntime(this.env, "event", item.key, "readiness", {}, year);
           if (!response.ok) throw new Error("EventRuntime readiness returned HTTP " + response.status + ": " + await response.text());
           return response.json() as Promise<{
-            state_valid?: boolean; refresh_queued?: boolean; stale_sources?: string[];
+            state_valid?: boolean; refresh_required?: boolean; refresh_dispatched?: boolean; stale_sources?: string[];
           }>;
         });
         eventResults.push({
@@ -549,11 +548,10 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
         const result = await step.do("team-readiness-" + teamKey, {
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
         }, async () => {
-          const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
-          const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", { refreshAt }, year);
+          const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, year);
           if (!response.ok) throw new Error("TeamRuntime readiness returned HTTP " + response.status + ": " + await response.text());
           return response.json() as Promise<{
-            state_valid?: boolean; refresh_queued?: boolean; stale_resources?: string[];
+            state_valid?: boolean; refresh_required?: boolean; refresh_dispatched?: boolean; stale_resources?: string[];
           }>;
         });
         teamResults.push({
