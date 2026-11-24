@@ -730,15 +730,26 @@ export class TeamRuntime {
         ...selected.filter((resource) => resource.provider === "tba" && resource.endpoint === historyEndpoint),
         ...selected.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
+      const previousTeamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const previousPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const results: Array<{ endpoint: string; success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }> = [];
       for (const resource of prioritized) {
         const result = await this.pollResourceNow(resource);
         results.push({ endpoint: resource.endpoint, ...result });
       }
-      const snapshotResponse = await this.snapshot(year);
-      const snapshot = await snapshotResponse.json() as Record<string, unknown>;
-      const persistedEventStates = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
-      const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+      const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const teamStateChanged = teamStateRevision !== previousTeamStateRevision || !previousPublication;
+      let snapshot: unknown = previousPublication?.state ?? null;
+      if (teamStateChanged) {
+        const snapshotResponse = await this.snapshot(year);
+        snapshot = snapshotResponse.ok ? await snapshotResponse.json() : null;
+      }
+      const persistedEventStates = teamStateChanged
+        ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
+        : new Map<string, FieldViewTeamEventState>();
+      const activeEvents = teamStateChanged
+        ? await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {}
+        : {};
       const affectedEventKeys = new Set<string>([
         ...[...persistedEventStates.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length))
           .filter((key) => /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(key) && Number(key.slice(0, 4)) === year),
@@ -754,7 +765,7 @@ export class TeamRuntime {
         attempted: true,
         team_key: this.teamKey,
         year,
-        team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+        team_state_revision: teamStateRevision,
         affected_events: affectedEvents,
         snapshot,
         results,
