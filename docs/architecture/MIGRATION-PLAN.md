@@ -11,7 +11,9 @@ This document is the working migration plan for evolving the existing FieldView 
 
 ## 2026-11-24 architecture realignment
 
-The accepted storage and polling decision in `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` supersedes earlier local-queue/alarm polling assumptions in this plan. EventRuntime and TeamRuntime are the same runtime abstraction at different scopes. Explicit refresh commands now execute provider acquisition inside the target runtime. The migration branch has begun this transition: both runtime refresh endpoints self-fetch; readiness endpoints are inspection-only unless an explicit `refreshNow` command is supplied; TeamRuntime accepts scope-limited resource lists; a bounded direct-dispatch helper and internal coordinator endpoint have been added. Existing recurring alarm paths remain temporarily while lifecycle scheduling and all callers are migrated. This is an in-progress transition, not a completed polling cutover. No infrastructure was deployed or reconfigured.
+The accepted storage and polling decision in `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` supersedes earlier local-queue/alarm polling assumptions in this plan. EventRuntime and TeamRuntime are the same runtime abstraction at different scopes. Explicit refresh commands now execute provider acquisition inside the target runtime. The migration branch has begun this transition: both runtime refresh endpoints self-fetch; readiness endpoints are always inspection-only; provider acquisition uses a separate explicit refresh command; TeamRuntime accepts scope-limited resource lists; a bounded direct-dispatch helper and internal coordinator endpoint have been added. Existing recurring alarm paths remain temporarily while lifecycle scheduling and all callers are migrated. This is an in-progress transition, not a completed polling cutover. No infrastructure was deployed or reconfigured.
+
+Direct refresh now uses one shared EventRuntime/TeamRuntime command contract. The coordinator dispatches the EventRuntime first, then up to 12 supplied TeamRuntime targets with bounded concurrency; team-to-event invalidation is restricted to the related event. Direct 304 responses do not mutate endpoint state or publish unchanged snapshots. Accepted 200 responses advance canonical endpoint revisions only when normalized data changes; validator revisions remain separate. Public reads and runtime activation no longer perform lazy migration, scheduling, or cleanup writes.
 
 ### Remaining realignment work
 
@@ -31,7 +33,7 @@ The accepted storage and polling decision in `docs/architecture/decisions/2026-1
 | Migration strategy | Incremental, with old and new implementations coexisting temporarily |
 | Backend runtime | Hybrid Cloudflare Workers and Durable Objects |
 | Canonical identity | TBA team, event, and match keys; TBA-first aggregates with field-specific provider enrichment |
-| Weekly event classification | DailyEventReadinessWorkflow evaluates inclusive date-only event ranges against Monday-Sunday in each event's own IANA timezone; it publishes a bounded, resumable daily projection and ensures EventRuntime ownership for matching events (ADR-0010) |
+| Weekly event discovery | Publish one `events-this-week` candidate set on Monday, valid through Sunday, using inclusive date-range overlap and each event's IANA timezone. Admins can manually rebuild the projection for postponements. This candidate set is discovery input only; the polling coordinator evaluates active lifecycle eligibility at dispatch time (2026-11-24 decision) |
 | TBA webhook routing | Worker ingress validates and scope-routes each original webhook directly to EventRuntime and affected TeamRuntimes; no EventRuntime relay or per-webhook TaskScheduler registration (ADR-0012) |
 
 These decisions are settled unless a concrete implementation constraint requires revisiting one.
