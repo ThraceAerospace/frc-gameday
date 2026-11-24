@@ -613,10 +613,14 @@ export class EventRuntime {
       if (!state || state.status !== "available" ||
           (state.lastFetchedAt == null && state.lastWebhookAt == null) ||
           (state.expiresAt !== null && state.expiresAt <= Date.now()) || !Array.isArray(state.data)) {
-        await this.enqueueManualPolls([endpoint]);
-        return Response.json({ ready: false, status: state?.status ?? "pending" }, {
-          status: 202, headers: { "Cache-Control": "no-store", "Retry-After": "2" },
-        });
+        await this.pollEndpoint(endpoint);
+        const refreshed = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
+        if (!refreshed || refreshed.status !== "available" || !Array.isArray(refreshed.data)) {
+          return Response.json({ ready: false, status: refreshed?.status ?? "pending" }, {
+            status: 503, headers: { "Cache-Control": "no-store" },
+          });
+        }
+        state = refreshed;
       }
       const teamKeys = [...new Set(state.data.map((team) => team?.key).filter((key): key is string =>
         typeof key === "string" && /^frc\d+$/.test(key)))].sort();
@@ -632,32 +636,34 @@ export class EventRuntime {
       if (!endpoint || (!this.allowedEndpoints.has(endpoint) && endpoint !== statboticsEndpoint)) {
         return Response.json({ error: "Resource endpoint is not part of this event" }, { status: 400 });
       }
-      await this.enqueueManualPolls([endpoint]);
+      const success = await this.pollEndpoint(endpoint);
+      const publication = await this.publishEventState();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
-        endpoint, queued: true, status: state?.status ?? "pending",
+        endpoint, queued: false, attempted: true, success,
+        status: state?.status ?? "pending", publication_status: publication.status,
         revision: state?.revision ?? 0, last_fetched_at: state?.lastFetchedAt ?? null,
         http_status: diagnostic?.lastHttpStatus ?? null, last_error: diagnostic?.lastError ?? null,
-      }, { status: 202 });
+      }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-      await this.enqueueManualPolls([endpoint]);
+      const success = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
+      const publication = await this.publishEventState();
       if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-        await this.storage.put(ANALYTICS_DUE_KEY, Date.now());
-        await this.storage.put("analytics:status", "pending");
+        await this.recalculateAnalytics();
       }
-      await this.storage.transaction((transaction) => this.rearm(transaction));
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
-        scheduled: true, queued: true, event_key: this.eventKey, endpoint,
+        scheduled: false, queued: false, attempted: true, success,
+        event_key: this.eventKey, endpoint, publication_status: publication.status,
         status: state?.status ?? "unknown", revision: state?.revision ?? 0,
         record_count: Array.isArray(state?.providerData) ? state.providerData.length : 0,
         fetched_at: state?.lastFetchedAt ?? null,
-        analytics_status: await this.storage.get<string>("analytics:status") ?? "pending",
-      }, { status: 202 });
+        analytics_status: await this.storage.get<string>("analytics:status") ?? "succeeded",
+      }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.method === "POST" && url.pathname === "/schedule") {
