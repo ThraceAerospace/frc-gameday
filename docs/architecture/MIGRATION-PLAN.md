@@ -17,9 +17,9 @@ Direct refresh now uses one shared EventRuntime/TeamRuntime command contract. Th
 
 ### Remaining realignment work
 
-1. Wire the polling coordinator to the authoritative weekly candidate projection and event-local lifecycle evaluation; add the recurring schedule only after the coordinator's budget and eligibility behavior are validated.
-2. Have the coordinator derive and dispatch only affected TeamRuntime targets. Preserve one explicit refresh command per runtime and bounded direct concurrency; do not add a Queue by default.
-3. Move cross-runtime analytics/input orchestration out of EventRuntime/TeamRuntime direct RPC paths where it represents cross-runtime work. Keep each runtime authoritative for its own calculation and persisted output.
+1. Replace the current daily `projections/events/this-week` publication with the canonical `events-this-week` weekly projection: publish on Monday, retain through Sunday, and add the admin manual-refresh control. The current DailyEventReadinessWorkflow still republishes the legacy projection on every daily run. Then wire the polling coordinator to that projection and event-local lifecycle evaluation; add the recurring schedule only after budget and eligibility behavior are validated.
+2. Derive affected team keys from changed event match representations/alliances and dispatch only those TeamRuntimes. The current coordinator endpoint accepts up to 12 caller-supplied team keys but does not yet derive them. Preserve one explicit refresh command per runtime and bounded direct concurrency; do not add a Queue by default.
+3. Move cross-runtime analytics/input orchestration out of EventRuntime/TeamRuntime direct RPC paths where it represents cross-runtime work. Some EventRuntime-to-TeamRuntime analytics calls still exist. Keep each runtime authoritative for its own calculation and persisted output.
 4. Implement the D1-backed Discovery and System Records repositories with separate schemas/interfaces, plus the optional KV `events-this-week` projection. Inventory and classify every current DiscoveryStore record before migration.
 5. Remove per-runtime polling queues/alarms only after every recurring poll, webhook follow-up, retry, analytics invalidation, and recovery path has a verified coordinator-owned replacement.
 6. Finish the read-side-effect audit, strict 304 no-op audit across every provider path, restart/recovery behavior, and a complete account-wide workload budget. Validate with repository CI before any deployment.
