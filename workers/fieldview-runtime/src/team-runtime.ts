@@ -745,12 +745,25 @@ export class TeamRuntime {
       }
       const snapshotResponse = await this.snapshot(year);
       const snapshot = await snapshotResponse.json() as Record<string, unknown>;
+      const persistedEventStates = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
+      const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
+      const affectedEventKeys = new Set<string>([
+        ...[...persistedEventStates.keys()].map((key) => key.slice(TEAM_EVENT_STATE_PREFIX.length))
+          .filter((key) => /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(key) && Number(key.slice(0, 4)) === year),
+        ...Object.entries(activeEvents).filter(([, membership]) => membership.year === year).map(([eventKey]) => eventKey),
+      ]);
+      const affectedEvents = await Promise.all([...affectedEventKeys].sort().map(async (event_key) => ({
+        event_key,
+        team_event_revision: await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + event_key) ?? 0,
+      })));
       return Response.json({
         scheduled: false,
         queued: false,
         attempted: true,
         team_key: this.teamKey,
         year,
+        team_state_revision: await this.storage.get<number>("snapshot-revision") ?? 0,
+        affected_events: affectedEvents,
         snapshot,
         results,
       }, { headers: { "Cache-Control": "no-store" } });
