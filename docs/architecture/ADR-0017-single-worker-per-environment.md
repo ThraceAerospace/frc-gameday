@@ -1,11 +1,11 @@
-# ADR-0017: One FieldView Worker per environment
+# ADR-0017: One Runtime Worker per environment
 
 > **Scope clarification (2026-11-24):** The one-Worker-per-environment deployment decision remains accepted. The storage ownership and runtime polling provisions in this ADR are superseded by [`decisions/2026-11-24-storage-and-polling-ownership.md`](decisions/2026-11-24-storage-and-polling-ownership.md). DiscoveryStore is not the target operational database; System Records do not belong in Discovery; EventRuntime and TeamRuntime share one runtime abstraction and use coordinator-owned direct refresh dispatch. The current `DiscoveryStore` Durable Object binding is transitional until Discovery and System Records D1 repositories are implemented and cut over.
 
 - **Status:** Accepted
 - **Date:** 2026-11-22
 
-FieldView will deploy exactly one Cloudflare Worker per environment: `fieldview-preprod` and `fieldview-production`. Each deployment hosts the HTTP API, webhook ingress, EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore, and the DailyEventReadinessWorkflow, CoverageAuditWorkflow, and RuntimeAdminWorkflow classes.
+The shared Runtime platform deploys exactly one Cloudflare Worker per environment: `runtime-preprod` and `runtime-production`. The base Wrangler project is named `runtime`; FieldView is the first product hosted by this shared backend platform. The generic Worker name establishes the deployment boundary but does not, by itself, claim that FTC or FLL domain support is implemented. Each deployment hosts the HTTP API, webhook ingress, EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore, and the DailyEventReadinessWorkflow, CoverageAuditWorkflow, and RuntimeAdminWorkflow classes.
 
 This is a deployment-boundary decision, not a monolith decision. Runtime, Jobs orchestration, provider adapters, domain logic, analytics, and HTTP routing remain separate modules with explicit responsibilities. EventRuntime and TeamRuntime remain independent Durable Object consistency and refresh boundaries. A single Worker does not mean a single Durable Object.
 
@@ -32,7 +32,7 @@ Benefits are one deployment and configuration per environment, no reciprocal ser
 
 1. Consolidate Runtime and Jobs entrypoints into one Worker script while preserving separate modules and contracts.
 2. Replace service-binding calls with internal functions or direct Durable Object namespace calls; do not use self-service bindings.
-3. Export EventRuntime, TeamRuntime, and Multiplexer Durable Object classes, plus all deployed Workflow classes, from each environment's Worker configuration. DiscoveryStore remains exported only while the transitional D1 migration requires it.
+3. Export EventRuntime, TeamRuntime, and Multiplexer Durable Object classes, plus all deployed Workflow classes, from each environment's Runtime Worker configuration. DiscoveryStore remains exported only while the transitional D1 migration requires it.
 4. Keep Durable Object class names and SQLite migration history explicit. Current experimental resources are disposable, so establish clean namespaces under the new Worker names rather than attempting cross-Worker class migration.
 5. Preserve asynchronous submit/observe/execute for long-running admin operations.
 6. Move system-wide TBA season/event/team directory acquisition into the D1-backed Discovery repository. Move Workflow/runtime registration and admin history into the separate System Records repository. Workflows may invoke discovery operations and dispatch bounded runtime commands, but must not make entity provider requests. Keep entity-scoped provider acquisition in EventRuntime and TeamRuntime.
