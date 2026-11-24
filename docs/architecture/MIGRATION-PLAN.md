@@ -461,3 +461,15 @@ Runtime readiness combines ADR-0015's durable hydration boundary with ADR-0018's
 - Preserve the configured Statbotics testing mirror at `https://api-statbotics.iterativerefinement.com/` while the official service is unavailable.
 
 The daily Workflow is scheduled for 10:00 UTC. The five-minute randomized window spreads refresh starts but is not a strict global concurrency cap. Do not deploy or cut over as part of this branch work.
+
+
+### Independent event and team readiness (2026-11-23)
+
+EventRuntime and TeamRuntime readiness are separate sequential Workflows:
+
+- `DailyEventReadinessWorkflow` refreshes/publishes Event Discovery, maintains the this-week event projection, and checks/queues only EventRuntime readiness.
+- `DailyTeamReadinessWorkflow` independently resolves TBA's canonical current season, refreshes/publishes Team Discovery, and checks/queues only TeamRuntime readiness for that season.
+- Both use randomized refresh deadlines within five minutes and have independent Workflow bindings/concurrency limits and summary paths.
+- EventRuntime analytics may read or update only TeamRuntimes already present in the TeamRuntime registry. Missing registry entries are treated as unavailable inputs; event readiness must not create TeamRuntimes.
+- The GitHub Actions scheduled workflow starts both authenticated preproduction endpoints. The shared scheduler does not couple the two Workflows; scheduled activation is not configured through Cloudflare Workflow cron schedules.
+- Event participant lists remain EventRuntime-owned data and do not imply TeamRuntime initialization.
