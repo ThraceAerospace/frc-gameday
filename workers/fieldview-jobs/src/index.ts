@@ -1145,10 +1145,10 @@ export default {
           if (status.status === "errored") workflowError = JSON.stringify(status).slice(0, 1000);
         } catch { workflowStatus = null; }
         let resolvedRecord = record;
-        if (workflowStatus === "errored" && record.status === "running") {
+        if (workflowStatus === "errored" && ["running", "queued"].includes(String(record.status))) {
           resolvedRecord = { ...record, status: "failed", updated_at: Date.now(), completed_at: Date.now(), error: workflowError ?? "Workflow execution failed" };
           await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
-        } else if (workflowStatus === "terminated" && record.status === "running") {
+        } else if (workflowStatus === "terminated" && ["running", "queued"].includes(String(record.status))) {
           resolvedRecord = { ...record, status: "cancelled", updated_at: Date.now(), completed_at: Date.now() };
           await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
         }
@@ -1177,7 +1177,7 @@ export default {
         const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
         const recordObject = id ? await store.get(`admin/workflow-runs/${type}/${id}/record.json`) : null;
         let record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
-        if (id && record.status === "running") {
+        if (id && ["running", "queued"].includes(String(record.status))) {
           try {
             const binding = type === "event-readiness" ? env.DAILY_EVENT_READINESS : env.DAILY_TEAM_READINESS;
             const workflowStatus = (await binding.get(id).then((instance) => instance.status())).status;
