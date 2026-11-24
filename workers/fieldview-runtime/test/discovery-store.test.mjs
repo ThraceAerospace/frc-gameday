@@ -84,8 +84,8 @@ test("DiscoveryStore acquires and publishes current-season, team, and event cata
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
       calls.push(url.pathname);
-      if (url.pathname.endsWith("/status")) return Response.json({ current_season: 2026 });
-      if (url.pathname.includes("/teams/2026")) return Response.json([{ key: "frc3461" }]);
+      if (url.pathname.endsWith("/status")) return Response.json({ current_season: 2026, max_team_page: 0 });
+      if (url.pathname.includes("/teams/2026/")) return Response.json(["frc3461"]);
       if (url.pathname.includes("/events/2026")) {
         return Response.json([{ key: "2026test", start_date: "2026-03-01", end_date: "2026-03-03", timezone: "America/New_York" }], {
           headers: { ETag: '"events-v1"' },
@@ -97,7 +97,7 @@ test("DiscoveryStore acquires and publishes current-season, team, and event cata
 
   const current = await store.fetch(new Request("https://store/catalog/resolve-current-season", { method: "POST", body: "{}" }));
   assert.equal(current.status, 200);
-  assert.equal((await current.json()).year, 2026);
+  assert.deepEqual(await current.json().then(({ year, maxTeamPage }) => ({ year, maxTeamPage })), { year: 2026, maxTeamPage: 0 });
 
   const teamPage = await store.fetch(new Request("https://store/catalog/discover-team-page", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -139,10 +139,82 @@ test("DiscoveryStore acquires and publishes current-season, team, and event cata
   }));
   assert.equal(published.status, 200);
   assert.deepEqual(JSON.parse(state.values.get("discovery-object:registry/teams/2026.json")), ["frc3461"]);
+  const teamManifest = JSON.parse(state.values.get("discovery-object:discovery/teams/2026.json"));
+  assert.equal(teamManifest.complete, true);
+  assert.equal(teamManifest.expectedPageCount, 1);
   assert.equal(JSON.parse(state.values.get("discovery-object:discovery/events/2026.json")).events[0].key, "2026test");
   assert.ok(calls.some((path) => path.endsWith("/status")));
-  assert.ok(calls.some((path) => path.includes("/teams/2026")));
+  assert.ok(calls.some((path) => path.includes("/teams/2026/0/keys")));
   assert.ok(calls.some((path) => path.includes("/events/2026")));
+});
+
+
+test("DiscoveryStore accepts page indexes beyond the former hardcoded limit and requests keys only", async () => {
+  let requestedPath = "";
+  const state = createState();
+  const store = new DiscoveryStore(state, {
+    TBA_API_KEY: "test-key",
+    fetcher: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requestedPath = new URL(request.url).pathname;
+      return Response.json(["frc3461", "frc9999"]);
+    },
+  });
+  const response = await store.fetch(new Request("https://store/catalog/discover-team-page", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 300, page: 100 }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(requestedPath.endsWith("/teams/2026/100/keys"), true);
+  assert.deepEqual((await response.json()).teamKeys, ["frc3461", "frc9999"]);
+  assert.deepEqual(JSON.parse(state.values.get("discovery-object:discovery/team-pages/2026/300/100.json")),
+    ["frc3461", "frc9999"]);
+});
+
+test("partial team publication records failures and supports retrying only failed pages", async () => {
+  const state = createState();
+  await state.storage.put("discovery-object:registry/teams/2026.json", JSON.stringify(["frc100"]));
+  await state.storage.put("discovery-object:discovery/teams/2026.json", JSON.stringify({
+    year: 2026, generation: 100, pageCount: 1, teamCount: 1, complete: true,
+  }));
+  const store = new DiscoveryStore(state, {
+    TBA_API_KEY: "test-key",
+    fetcher: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const path = new URL(request.url).pathname;
+      return Response.json(path.endsWith("/0/keys") ? ["frc3461"] : ["frc3462"]);
+    },
+  });
+  for (const page of [0, 2]) {
+    const acquired = await store.fetch(new Request("https://store/catalog/discover-team-page", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year: 2026, generation: 200, page }),
+    }));
+    assert.equal(acquired.status, 200);
+  }
+  const publication = await store.fetch(new Request("https://store/catalog/publish-team-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, generation: 200, pageCount: 3,
+      teamKeys: ["frc3461", "frc3462"], failedPages: [1], warnings: ["page 1 failed"] }),
+  }));
+  assert.equal(publication.status, 200);
+  const result = await publication.json();
+  assert.equal(result.status, "partial");
+  assert.deepEqual(result.failedPages, [1]);
+  assert.deepEqual(JSON.parse(state.values.get("discovery-object:registry/teams/2026.json")), ["frc100"]);
+  const partial = JSON.parse(state.values.get("discovery-object:discovery/partial-teams/2026/200.json"));
+  assert.equal(partial.complete, false);
+  assert.deepEqual(partial.teamKeys, ["frc3461", "frc3462"]);
+  const resume = await store.fetch(new Request("https://store/catalog/resume-partial-team-directory", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2026, expectedPageCount: 3 }),
+  }));
+  const resumed = await resume.json();
+  assert.equal(resumed.resumable, true);
+  assert.equal(resumed.generation, 200);
+  assert.deepEqual(resumed.failedPages, [1]);
+  assert.deepEqual(resumed.teamKeys, ["frc3461", "frc3462"]);
+  assert.deepEqual(resumed.warnings, ["page 1 failed"]);
 });
 
 test("DiscoveryStore validates catalog requests and fails closed without a TBA key", async () => {
