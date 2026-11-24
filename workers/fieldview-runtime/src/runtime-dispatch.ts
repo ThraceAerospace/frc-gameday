@@ -70,7 +70,7 @@ export async function dispatchRuntime(
         }
       }
     }
-    if (response.ok && action !== "refresh" && action !== "resource-refresh") await registerRuntimeMarker(env, "team", key);
+    if (response.ok && action !== "refresh" && action !== "resource-refresh" && action !== "readiness") await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
@@ -105,7 +105,7 @@ export async function dispatchRuntime(
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
   }));
-  if (response.ok && action !== "refresh" && action !== "team-state-changed") await registerRuntimeMarker(env, "event", key);
+  if (response.ok && action !== "refresh" && action !== "team-state-changed" && action !== "readiness") await registerRuntimeMarker(env, "event", key);
   return response;
 }
 
