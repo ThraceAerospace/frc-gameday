@@ -466,16 +466,21 @@ export class EventRuntime {
           (source.expiresAt !== null && source.expiresAt <= now);
       });
       const refreshRequired = !validState || staleSources.length > 0;
-      const refreshed: string[] = [];
+      const refreshResults: Array<{ endpoint: string; success: boolean }> = [];
       if (refreshRequired && refreshNow) {
+        const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
         // One command refreshes this EventRuntime's complete owned resource
         // set. Provider acquisition remains inside this runtime and is bounded
         // sequentially; the coordinator never proxies provider payloads.
         for (const endpoint of expectedEndpoints) {
-          await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
-          refreshed.push(endpoint);
+          refreshResults.push({
+            endpoint,
+            success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }),
+          });
         }
-        await this.publishEventState();
+        const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+        const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+        if (currentRevision !== previousRevision || !currentPublication) await this.publishEventState();
       }
       const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       return Response.json({
@@ -485,8 +490,9 @@ export class EventRuntime {
         stale_sources: staleSources,
         refresh_required: refreshRequired,
         refresh_dispatched: refreshRequired && refreshNow,
-        refresh_completed: refreshRequired && refreshNow,
-        refreshed_endpoints: refreshed,
+        refresh_completed: refreshRequired && refreshNow && refreshResults.every((result) => result.success),
+        refreshed_endpoints: refreshResults.filter((result) => result.success).map((result) => result.endpoint),
+        failed_endpoints: refreshResults.filter((result) => !result.success).map((result) => result.endpoint),
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
@@ -576,10 +582,15 @@ export class EventRuntime {
       const refreshEndpoints = [...endpoints];
       if (includeStatbotics) refreshEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
       const results: Array<{ endpoint: string; success: boolean }> = [];
+      const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       for (const endpoint of refreshEndpoints) {
         results.push({ endpoint, success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }) });
       }
-      const publication = await this.publishEventState();
+      const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = currentRevision !== previousRevision || !currentPublication
+        ? await this.publishEventState()
+        : currentPublication;
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       return Response.json({
         event_key: this.eventKey,
