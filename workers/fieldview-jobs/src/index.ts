@@ -230,7 +230,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       const failedTeamPages: number[] = [...(resume.resumable ? resume.failedPages ?? [] : [])];
       const failedPageSet = new Set(failedTeamPages);
       const warnings: string[] = [...(resume.resumable ? resume.warnings ?? [] : [])];
-      let teamPages = expectedTeamPages - failedTeamPages.length;
+      let teamPages = resume.resumable ? expectedTeamPages - failedTeamPages.length : 0;
       for (let page = 0; page <= tbaStatus.maxTeamPage; page += 1) {
         if (resume.resumable && !failedPageSet.has(page)) continue;
         try {
@@ -348,7 +348,7 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
     }, async () => {
       const response = await store().catalog("resolve-current-season");
       if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
-      return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
+      return response.json() as Promise<{ year: number; checkedAt: number; maxTeamPage?: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
     await step.do("readiness-persist-season", async () => {
@@ -566,20 +566,28 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
     });
 
     // Team Discovery is refreshed and published independently of Event Discovery.
+    // Use TBA's authoritative maximum page index; page indexes are inclusive.
+    const maxTeamPage = currentSeason.maxTeamPage;
+    if (!Number.isInteger(maxTeamPage) || maxTeamPage! < 0) {
+      throw new Error("TBA status did not provide a valid max_team_page; team readiness cannot determine its page range");
+    }
+    const expectedTeamPages = maxTeamPage! + 1;
     const teamGeneration = await step.do("team-readiness-directory-generation", async () => Date.now());
     const teamKeys: string[] = [];
     let teamPages = 0;
-    for (let page = 0; ; page += 1) {
+    for (let page = 0; page <= maxTeamPage!; page += 1) {
       const result = await step.do("team-readiness-discover-page-" + page, {
         retries: { limit: 2, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
         const response = await store().catalog("discover-team-page", { year, generation: teamGeneration, page });
         if (!response.ok) throw new Error("Team directory page returned HTTP " + response.status);
-        return response.json() as Promise<{ teamKeys: string[]; hasMore: boolean; count: number }>;
+        return response.json() as Promise<{ teamKeys: string[]; count: number }>;
       });
       teamPages += 1;
       teamKeys.push(...result.teamKeys);
-      if (!result.hasMore) break;
+    }
+    if (teamPages !== expectedTeamPages) {
+      throw new Error(`Team readiness fetched ${teamPages} of ${expectedTeamPages} expected TBA pages`);
     }
     const uniqueTeamKeys = [...new Set(teamKeys)].sort();
     if (uniqueTeamKeys.length === 0) throw new Error("TBA returned an empty team directory for the canonical current season");
