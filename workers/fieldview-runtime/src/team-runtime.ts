@@ -292,7 +292,11 @@ export class TeamRuntime {
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
-    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead) {
+    const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
+    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead) {
+      if (diagnosticsRead && !authorized(request, this.env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
       if (!(await this.restoreIdentity())) {
         return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
@@ -301,9 +305,11 @@ export class TeamRuntime {
       }
     } else {
       if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
-      // Retire legacy recurring Statbotics tasks only on an explicit/admin touch,
-      // never as a side effect of a public read.
-      await this.clearRecurringStatboticsTasks();
+      if (request.method !== "GET") {
+        // Retire legacy recurring Statbotics tasks only on explicit mutations,
+        // never as a side effect of any read.
+        await this.clearRecurringStatboticsTasks();
+      }
     }
     if (request.method === "POST" && url.pathname === "/webhook") {
       const eventKey = request.headers.get("X-FieldView-Event-Key") ?? "";
