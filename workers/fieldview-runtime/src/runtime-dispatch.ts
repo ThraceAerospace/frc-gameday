@@ -40,6 +40,29 @@ export async function dispatchRuntime(
       method, headers,
       ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     }));
+    if (response.ok && action === "refresh") {
+      const refreshResult = await response.clone().json().catch(() => null) as {
+        team_state_revision?: unknown;
+        affected_events?: Array<{ event_key?: unknown; team_event_revision?: unknown }>;
+      } | null;
+      if (refreshResult && Number.isSafeInteger(refreshResult.team_state_revision) &&
+          Array.isArray(refreshResult.affected_events)) {
+        for (const affected of refreshResult.affected_events) {
+          if (typeof affected.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(affected.event_key) ||
+              !Number.isSafeInteger(affected.team_event_revision)) continue;
+          const notification = await dispatchRuntime(env, "event", affected.event_key, "team-state-changed", {
+            team_key: key,
+            team_state_revision: refreshResult.team_state_revision as number,
+            team_event_revision: affected.team_event_revision as number,
+          }, season);
+          if (!notification.ok) {
+            console.warn("[POLLING] Team-to-event notification failed", JSON.stringify({
+              team_key: key, event_key: affected.event_key, status: notification.status,
+            }));
+          }
+        }
+      }
+    }
     if (response.ok && action !== "refresh") await registerRuntimeMarker(env, "team", key);
     return response;
   }
@@ -48,6 +71,7 @@ export async function dispatchRuntime(
   const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
   const paths: Record<string, string> = {
     participants: "participants",
+    "team-state-changed": "team-state-changed",
     readiness: "readiness",
     state: "state",
     refresh: "refresh",
@@ -74,7 +98,7 @@ export async function dispatchRuntime(
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
   }));
-  if (response.ok && action !== "refresh") await registerRuntimeMarker(env, "event", key);
+  if (response.ok && action !== "refresh" && action !== "team-state-changed") await registerRuntimeMarker(env, "event", key);
   return response;
 }
 
