@@ -242,6 +242,15 @@ export default {
       }));
     }
 
+    if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/daily-team-readiness", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (url.pathname === "/internal/admin/event-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
