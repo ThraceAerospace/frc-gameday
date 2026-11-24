@@ -110,6 +110,36 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
   ]);
 });
 
+
+test("team refresh invalidates only the related event when dispatched by the polling coordinator", async () => {
+  const eventCalls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    TEAM_RUNTIME: namespace(async () => Response.json({
+      team_state_revision: 8,
+      affected_events: [
+        { event_key: "2027rikin", team_event_revision: 3 },
+        { event_key: "2027other", team_event_revision: 5 },
+      ],
+    })),
+    EVENT_RUNTIME: namespace(async (request, id) => {
+      eventCalls.push({ id, path: new URL(request.url).pathname, body: await request.json() });
+      return Response.json({ accepted: true });
+    }),
+  };
+
+  const response = await dispatchRuntime(env, "team", "frc3461", "refresh", {
+    related_event_key: "2027rikin",
+  }, 2027);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(eventCalls, [{
+    id: "2027rikin",
+    path: "/team-state-changed",
+    body: { team_key: "frc3461", team_state_revision: 8, team_event_revision: 3 },
+  }]);
+});
+
 test("dispatch rejects unsupported actions and invalid entity keys", async () => {
   const env = { RUNTIME_ADMIN_TOKEN: "test-token" };
   assert.equal((await dispatchRuntime(env, "event", "bad key", "state", {}, 2026)).status, 400);
