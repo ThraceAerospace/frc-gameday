@@ -694,7 +694,8 @@ test("daily team readiness starts its independent Jobs Workflow", async () => {
   const { env, calls } = makeEnvironment();
   const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
     method: "POST",
-    headers: { Authorization: "Bearer server-only-token" },
+    headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+    body: "{}",
   }), env);
 
   assert.equal(response.status, 202);
