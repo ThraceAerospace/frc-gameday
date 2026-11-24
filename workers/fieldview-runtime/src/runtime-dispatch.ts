@@ -40,7 +40,7 @@ export async function dispatchRuntime(
       method, headers,
       ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     }));
-    if (response.ok) await registerRuntimeMarker(env, "team", key);
+    if (response.ok && action !== "refresh") await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
@@ -74,7 +74,7 @@ export async function dispatchRuntime(
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
   }));
-  if (response.ok) await registerRuntimeMarker(env, "event", key);
+  if (response.ok && action !== "refresh") await registerRuntimeMarker(env, "event", key);
   return response;
 }
 
