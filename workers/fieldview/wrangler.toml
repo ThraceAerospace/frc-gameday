@@ -57,6 +57,12 @@ class_name = "DailyEventReadinessWorkflow"
 concurrency = { limit = 1 }
 
 [[env.preprod.workflows]]
+name = "preprod-daily-team-readiness"
+binding = "DAILY_TEAM_READINESS"
+class_name = "DailyTeamReadinessWorkflow"
+concurrency = { limit = 1 }
+
+[[env.preprod.workflows]]
 name = "preprod-coverage-audit"
 binding = "COVERAGE_AUDIT"
 class_name = "CoverageAuditWorkflow"
