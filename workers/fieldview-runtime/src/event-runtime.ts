@@ -609,7 +609,7 @@ export class EventRuntime {
       // EventRuntime owns the event-participant provider resource. Coordinators
       // may request readiness, but never call TBA directly for the roster.
       const endpoint = TBA_ENDPOINTS.eventTeams(this.eventKey);
-      const state = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
+      let state = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
       if (!state || state.status !== "available" ||
           (state.lastFetchedAt == null && state.lastWebhookAt == null) ||
           (state.expiresAt !== null && state.expiresAt <= Date.now()) || !Array.isArray(state.data)) {
