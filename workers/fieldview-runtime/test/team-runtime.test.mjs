@@ -688,7 +688,7 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
 });
 
 
-test("TeamRuntime removes legacy recurring Statbotics tasks without discarding explicit one-shot work", async () => {
+test("TeamRuntime diagnostics reads preserve legacy task records until an explicit alarm", async () => {
   const storage = new MemoryStorage();
   const legacyEndpoint = "/team_year/3461/2026";
   storage.values.set("task:" + legacyEndpoint, {
@@ -707,9 +707,16 @@ test("TeamRuntime removes legacy recurring Statbotics tasks without discarding e
     },
   }));
   assert.equal(response.status, 200);
-  assert.equal(storage.values.has("task:" + legacyEndpoint), false, "legacy recurring Statbotics poll is removed");
+  assert.equal(storage.values.has("task:" + legacyEndpoint), true,
+    "diagnostic GET does not delete legacy recurring task records");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
-    "explicit one-shot Statbotics acquisition remains queued");
+    "diagnostic GET does not alter explicit one-shot work");
+
+  await runtime.alarm();
+  assert.equal(storage.values.has("task:" + legacyEndpoint), false,
+    "the explicit alarm cleanup retires legacy recurring Statbotics polling");
+  assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
+    "explicit one-shot work is preserved");
 });
 
 
