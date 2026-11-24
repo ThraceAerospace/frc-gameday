@@ -424,23 +424,17 @@ export class TeamRuntime {
       const collectionState = (cached?.response.collection as Record<string, unknown> | undefined)?.state;
       const partial = Boolean(cached) && collectionState !== "complete";
       const stale = revisionStale || freshnessStale;
-      if (stale || partial) await this.queueSeasonAnalyticsRefresh(year);
-
       const resources = this.endpoints(year);
       const states = await Promise.all(resources.map(({ endpoint }) =>
         this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
       const now = Date.now();
-      const needed = resources.filter((resource, index) => {
+      const resourcesStale = resources.some((resource, index) => {
         if (resource.provider === "statbotics") return false;
         const state = states[index];
         return !state || (state.lastFetchedAt === null && state.status !== "unavailable") ||
           state.status === "failed" || state.status === "stale" ||
           (state.expiresAt !== null && state.expiresAt <= now);
       });
-      if (needed.length > 0) {
-        await this.schedule(year, true);
-        await this.enqueueManualPolls(needed, year, false);
-      }
       if (!cached) {
         return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
@@ -449,7 +443,7 @@ export class TeamRuntime {
           "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-store",
           "X-FieldView-Analytics-Status": stale ? "stale" : partial ? "partial" : "complete",
-          "X-FieldView-Analytics-Revalidation": stale || partial ? "scheduled" : "idle",
+          "X-FieldView-Analytics-Revalidation": stale || partial || resourcesStale ? "required" : "idle",
           "X-FieldView-Analytics-Checked-At": String(checkedAt),
         },
       });
@@ -503,12 +497,12 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = await this.currentSeasonYear();
-    const initializedCurrentState = publicEventStateRead || readinessRequest || currentYear === null
+    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || currentYear === null
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
         ? null
         : await this.snapshot(currentYear);
-    const initializedState = publicEventStateRead || readinessRequest
+    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest
       ? null
       : year === currentYear && initializedCurrentState
         ? initializedCurrentState
@@ -543,9 +537,7 @@ export class TeamRuntime {
         ...(storedState.analytics === undefined ? {} : { analytics: storedState.analytics }),
         event_source_revision: inputs?.event_source_revision ?? null,
       }) : storedState;
-      if (hasLegacyEmbeddedRecords && JSON.stringify(state) !== JSON.stringify(storedState)) {
-        await this.storage.put(stateKey, state);
-      }
+      // Legacy compatibility is normalized in the response only. Public reads never migrate or rewrite storage.
       return Response.json(state, {
         headers: {
           "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
