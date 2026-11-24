@@ -555,7 +555,7 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
     }, async () => {
       const response = await store().catalog("resolve-current-season");
       if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
-      return response.json() as Promise<{ year: number; checkedAt: number; fallback?: boolean }>;
+      return response.json() as Promise<{ year: number; checkedAt: number; maxTeamPage?: number; fallback?: boolean }>;
     });
     const year = currentSeason.year;
     await step.do("team-readiness-persist-season", async () => {
