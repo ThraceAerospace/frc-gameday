@@ -50,7 +50,6 @@ function discoveryStore(env: RuntimeEnvironment): DiscoveryStoreClient {
 
 function jobsRequest(env: RuntimeEnvironment, request: Request): Promise<Response> {
   if (env.JOBS_REQUEST) return env.JOBS_REQUEST(request);
-  if (env.FIELDVIEW_JOBS) return env.FIELDVIEW_JOBS.fetch(request);
   return Promise.resolve(Response.json({ error: "Jobs module is unavailable" }, { status: 503 }));
 }
 
@@ -284,8 +283,8 @@ export default {
 
     if (url.pathname === "/internal/admin/discover-year" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/discover-year" + url.search, {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/discover-year" + url.search, {
         method: "GET",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
@@ -293,16 +292,16 @@ export default {
 
     if (url.pathname === "/internal/admin/workflow-runs" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/workflow-runs" + url.search, {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/workflow-runs" + url.search, {
         method: "GET", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
     }
 
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/daily-event-readiness", {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-event-readiness", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
@@ -310,8 +309,8 @@ export default {
 
     if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/daily-team-readiness", {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-team-readiness", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
@@ -566,8 +565,8 @@ export default {
           if (!Number.isInteger(year) || year < 1992 || year > 2200) {
             return Response.json({ error: "A valid discovery year is required" }, { status: 400 });
           }
-          if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-          return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/discover-year", {
+          if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+          return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/discover-year", {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ year }),
@@ -576,8 +575,8 @@ export default {
         if (action === "coverage-audit-start" || action === "coverage-audit-continue" || action === "coverage-audit-pause") {
           const year = Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid audit year is required" }, { status: 400 });
-          if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-          return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/coverage-audit", {
+          if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+          return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/coverage-audit", {
             method: "POST",
             headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ action: action === "coverage-audit-start" ? "start" : action === "coverage-audit-pause" ? "pause" : "continue", year }),
@@ -588,9 +587,9 @@ export default {
         }
         const year = Number(body.year);
         if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "A valid season-ingest year is required" }, { status: 400 });
-        if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+        if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
         const operation = action === "season-ingest-preview" ? "preview" : action.slice("season-ingest-".length);
-        return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+        return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/runtime-job", {
           method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
           body: JSON.stringify({ operation: "season-ingest", action: operation, year, confirm: body.confirm === true }),
         }));
@@ -606,8 +605,8 @@ export default {
         if (action === "seed-event-teams") {
           const year = body.year === undefined ? Number(key.slice(0, 4)) : Number(body.year);
           if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid event season year" }, { status: 400 });
-          if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-          return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+          if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+          return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/runtime-job", {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ operation: "event-team-seed", action: "start", event_key: key, year }),
           }));
@@ -639,8 +638,8 @@ export default {
         }
         const teamKey = /^\d+$/.test(key) ? "frc" + key : key;
         if (action === "seed") {
-          if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-          return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+          if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+          return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/runtime-job", {
             method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
             body: JSON.stringify({ operation: "team-seed", action: "start", team_key: teamKey, year }),
           }));
@@ -707,8 +706,8 @@ export default {
 
     if (url.pathname === "/internal/admin/coverage-audit" && (request.method === "GET" || request.method === "POST")) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/coverage-audit" + url.search, {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/coverage-audit" + url.search, {
         method: request.method,
         headers: {
           Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
@@ -720,8 +719,8 @@ export default {
 
     if (url.pathname === "/internal/admin/discovery-job" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/discovery-job" + url.search, {
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/discovery-job" + url.search, {
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
     }
@@ -802,7 +801,7 @@ export default {
     if (["/internal/admin/season-ingest", "/internal/admin/event-team-seed", "/internal/admin/team-seed"].includes(url.pathname) &&
         (request.method === "GET" || request.method === "POST")) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.JOBS_REQUEST && !env.FIELDVIEW_JOBS) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       const operation = url.pathname.endsWith("season-ingest") ? "season-ingest"
         : url.pathname.endsWith("event-team-seed") ? "event-team-seed" : "team-seed";
       if (request.method === "GET") {
@@ -811,13 +810,13 @@ export default {
           const value = url.searchParams.get(field);
           if (value !== null) query.set(field, value);
         }
-        return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/runtime-job?" + query, {
+        return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/runtime-job?" + query, {
           headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
         }));
       }
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body)) return Response.json({ error: "Invalid runtime job request" }, { status: 400 });
-      return jobsRequest(env, new Request("https://fieldview-jobs/internal/admin/runtime-job", {
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/runtime-job", {
         method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, operation }),
       }));
