@@ -62,28 +62,36 @@ Responsibilities:
 
 EventRuntime and TeamRuntime remain authoritative for their respective canonical state. Multiplexer Durable Objects remain responsible for real-time subscription coordination.
 
-## Event polling ownership
+## Runtime abstraction and refresh ownership
 
-The scheduled dispatcher determines which discovered events are eligible for polling. It reads the weekly candidate projection and evaluates each event's lifecycle using that event's timezone.
+EventRuntime and TeamRuntime are two scopes of the same runtime abstraction. They are not separate architectural patterns. Both implement the same lifecycle and refresh contract; their differences are limited to identity, owned resources, canonical state, reconciliation rules, and scope-specific derived outputs.
 
-For each eligible event, the dispatcher sends one refresh request to its EventRuntime. It does not fetch all TBA resources itself, construct canonical deltas externally, or send batches of provider data into the runtime.
+The shared runtime contract is:
+1. Accept an explicit refresh command for the runtime's own identity and scope.
+2. Load its own canonical working state and persisted provider validators.
+3. Fetch its own provider resources directly, using applicable conditional validators.
+4. Reconcile accepted responses against its latest working state.
+5. Persist only meaningful canonical changes and required recovery checkpoints.
+6. Publish versioned, data-bearing changes when appropriate.
+7. Preserve last-good canonical state on failed or partial acquisition, and treat HTTP 304 as a strict no-op.
 
-The EventRuntime owns the refresh operation:
-1. Load its current canonical state and stored endpoint validators.
-2. Fetch its own TBA resources, using the applicable stored ETags.
-3. Treat HTTP 304 responses as strict no-ops.
-4. Reconcile accepted provider responses against its latest canonical state.
-5. Generate the canonical delta.
-6. Advance canonical revisions only when canonical data actually changes.
-7. Persist meaningful canonical changes and publish the resulting state.
+EventRuntime owns event-scoped resources and canonical event state. TeamRuntime owns team-scoped resources, team/season state, team/event state, and team-scoped analytics. Neither runtime fetches or persists resources owned by the other. Cross-runtime dependencies use explicit versioned references or operation-specific inputs, not ownership transfer.
 
-The dispatcher remains responsible for bounded scheduling, overlap prevention, and deciding which events to invoke. EventRuntime remains responsible for provider acquisition and canonical state.
+### Polling coordinator and direct dispatch
+
+A single polling coordinator (implemented within the consolidated FieldView Worker deployment) determines which runtime identities need refresh and when. It is responsible for lifecycle eligibility, bounded concurrency, overlap prevention, prioritization, and aggregate operation budgets. It does not fetch provider resources, reconcile canonical state, or construct runtime deltas.
+
+For each eligible event, the coordinator sends a refresh command to that EventRuntime. When an event update affects team-scoped projections, the coordinator identifies the affected team keys and sends refresh commands to those TeamRuntimes as well. The EventRuntime does not relay webhooks or dispatch work to TeamRuntime; scope routing belongs at the coordinator/Worker ingress boundary.
+
+EventRuntime refresh does not automatically imply refreshing every participating TeamRuntime. Only teams whose owned projections are affected should be dispatched. Event participant rosters and match alliance membership can provide the affected team set where appropriate.
+
+Direct bounded dispatch is the default. A Queue is not required merely to batch runtime refresh requests. Do not introduce Queue infrastructure, message persistence, deduplication, retry, and consumer machinery without measured evidence that direct dispatch cannot meet throughput, backpressure, or reliability requirements. The coordinator may process targets in bounded sequential or concurrent groups while preserving per-runtime overlap protection. A Queue may be reconsidered only when an observed requirement justifies its additional operational and quota costs.
+
+A refresh command is an explicit request for the target runtime to update itself; it is not a payload batch containing provider responses. Each runtime owns provider acquisition, validators, reconciliation, persistence, and publication. A coordinator dispatching a command must not claim that the refresh completed until the runtime reports its outcome.
 
 ## Readiness orchestration
 
-Event readiness and Team readiness remain separate Workflows. They have distinct responsibilities and independently warm/check their respective runtime domains.
-
-Workflow execution records belong to System Records, not Discovery.
+Event readiness and Team readiness remain independently scoped Workflows where their discovery and coverage requirements differ. They may share the same runtime refresh command contract and coordinator dispatch primitives. They do not implement a second runtime execution model: readiness checks durable publication/source coverage and directly dispatches bounded refresh commands to the relevant runtimes. Workflow execution records belong to System Records, not Discovery.
 
 ## Architectural boundaries
 
