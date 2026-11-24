@@ -16,16 +16,19 @@ test("captures endpoint ETag and revision for a conditional poll", () => {
     { revision: 1, validatorRevision: 1, ifNoneMatch: '"v1"' });
 });
 
-test("304 retains data and ETag while refreshing freshness", () => {
+test("304 is a strict no-op for endpoint state", () => {
   const initial = { ...createEndpointState("/event/2026test/matches"),
     data: ["qm1"], providerData: ["qm1"], etag: '"v1"', lastFetchedAt: 100, revision: 4, validatorRevision: 1 };
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "not-modified", expiresAt: 500 }, 300, replace);
-  assert.deepEqual(next.data, ["qm1"]);
-  assert.deepEqual(next.providerData, ["qm1"]);
+  assert.deepEqual(next, initial);
+  assert.equal(next.data, initial.data);
+  assert.equal(next.providerData, initial.providerData);
   assert.equal(next.etag, '"v1"');
-  assert.equal(next.lastFetchedAt, 300);
+  assert.equal(next.lastFetchedAt, 100);
+  assert.equal(next.expiresAt, 200);
   assert.equal(next.revision, 4);
+  assert.equal(next.lastAttemptAt, null);
 });
 
 test("200 without ETag clears the old validator", () => {
@@ -142,11 +145,13 @@ test("an unavailable response does not erase a previously usable representation"
   assert.equal(next.lastFetchedAt, 100);
 });
 
-test("304 without a retained HTTP representation is a failed refresh", () => {
+test("304 without a retained HTTP representation is still a strict no-op", () => {
   const initial = createEndpointState("/event/2026test/matches");
   const next = applyPollResponse(initial, createPollRequestSnapshot(initial),
     { status: "not-modified", expiresAt: 100 }, 50, replace);
-  assert.equal(next.status, "failed");
+  assert.deepEqual(next, initial);
+  assert.equal(next.status, "unknown");
   assert.equal(next.lastFetchedAt, null);
   assert.equal(next.providerData, null);
+  assert.equal(createPollRequestSnapshot(initial).ifNoneMatch, null);
 });
