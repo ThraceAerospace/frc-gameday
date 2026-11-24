@@ -1713,6 +1713,18 @@ test("EventRuntime builds one shared comparison input from every roster TeamStat
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     TEAM_RUNTIME: teamNamespace,
+    DISCOVERY_STORE: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async () => Response.json({
+          objects: [
+            { key: "registry/runtime-teams/frc3461.json" },
+            { key: "registry/runtime-teams/frc254.json" },
+          ],
+          truncated: false,
+        }),
+      }),
+    },
     fetcher: async () => Response.json([]),
   }, eventKey);
   const eventState = {
