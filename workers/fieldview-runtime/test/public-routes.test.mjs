@@ -39,8 +39,7 @@ function makeEnvironment() {
           };
         },
       },
-      FIELDVIEW_JOBS: {
-        async fetch(request) {
+      JOBS_REQUEST: async (request) => {
           calls.push({
             operation: "jobs",
             url: new URL(request.url).pathname + new URL(request.url).search,
@@ -49,7 +48,6 @@ function makeEnvironment() {
             body: request.method === "POST" ? await request.json().catch(() => null) : null,
           });
           return Response.json({ accepted: true }, { status: 202 });
-        },
       },
     },
   };
@@ -258,7 +256,7 @@ test("public routes reject writes and malformed event keys", async () => {
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
 });
 
-test("manual discovery and coverage audits are dispatched to the jobs Worker", async () => {
+test("manual discovery and coverage audits are dispatched to the local Jobs module", async () => {
   const { env, calls } = makeEnvironment();
   const discovery = await worker.fetch(
     new Request("https://runtime.example/internal/admin/operations", {
@@ -288,7 +286,7 @@ test("manual discovery and coverage audits are dispatched to the jobs Worker", a
   assert.deepEqual(auditCall.body, { action: "start", year: 2026 });
 });
 
-test("discovery job status is authenticated and forwarded to the Jobs Worker", async () => {
+test("discovery job status is authenticated and forwarded to the local Jobs module", async () => {
   const { env, calls } = makeEnvironment();
   const denied = await worker.fetch(
     new Request("https://runtime.example/internal/admin/discover-year?year=2027"),
@@ -690,7 +688,7 @@ test("public current-season route returns the persisted TBA current_season value
 });
 
 
-test("daily team readiness starts its independent Jobs Workflow", async () => {
+test("daily team readiness starts its independent Workflow through the local Jobs module", async () => {
   const { env, calls } = makeEnvironment();
   const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
     method: "POST",
