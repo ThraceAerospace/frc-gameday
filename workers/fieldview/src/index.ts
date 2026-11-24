@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.
 
 type RuntimeContext = Parameters<typeof runtimeWorker.fetch>[2];
 type JobsEnvironment = Parameters<typeof jobsWorker.fetch>[1];
-type FieldViewEnvironment = RuntimeEnvironment & JobsEnvironment;
+type RuntimeWorkerEnvironment = RuntimeEnvironment & JobsEnvironment;
 
 /**
  * Single deployment boundary for Runtime and Jobs.
@@ -14,7 +14,7 @@ type FieldViewEnvironment = RuntimeEnvironment & JobsEnvironment;
  * directly through runtime-dispatch.ts and discovery-store.ts.
  */
 export default {
-  fetch(request: Request, env: FieldViewEnvironment, context: RuntimeContext): Promise<Response> {
+  fetch(request: Request, env: RuntimeWorkerEnvironment, context: RuntimeContext): Promise<Response> {
     const runtimeEnv: RuntimeEnvironment = {
       ...env,
       JOBS_REQUEST: (jobsRequest) => jobsWorker.fetch(jobsRequest, env),
