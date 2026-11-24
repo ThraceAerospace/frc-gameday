@@ -232,15 +232,17 @@ test("TeamRuntime retains last-good data and marks a failed refresh stale", asyn
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461", "Content-Type": "application/json" },
     body: JSON.stringify({ endpoint: "/team/frc3461" }),
   });
-  await runtime.fetch(ingestProfile());
-  await drainManualQueue(runtime, storage);
+  const firstRefresh = await runtime.fetch(ingestProfile());
+  assert.equal(firstRefresh.status, 200);
   fail = true;
   const refresh = await runtime.fetch(ingestProfile());
-  assert.equal(refresh.status, 202);
-  await drainManualQueue(runtime, storage);
-  const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", { headers: { "X-FieldView-Team-Key": "frc3461" } }))).json();
+  assert.equal(refresh.status, 200);
+  const snapshotResponse = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(snapshotResponse.headers.get("X-FieldView-Publication-Status"), "stale");
+  const snapshot = await snapshotResponse.json();
   assert.equal(snapshot.team.team_number, 3461);
-  assert.equal(snapshot.sources.tba_team.status, "stale");
 });
 
 
