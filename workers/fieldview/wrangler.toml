@@ -1,4 +1,5 @@
 # FieldView's single Cloudflare Worker configuration.
+name = "fieldview"
 # Deploy explicitly with --env preprod or --env production.
 # Each environment owns a fresh, independent Durable Object namespace.
 
