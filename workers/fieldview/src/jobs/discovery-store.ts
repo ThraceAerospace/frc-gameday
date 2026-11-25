@@ -1,4 +1,4 @@
-import type { DurableObjectNamespaceLike } from "../../fieldview-runtime/src/cloudflare.ts";
+import type { DurableObjectNamespaceLike } from "../runtime/cloudflare.ts";
 
 export interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
 export interface DiscoveryStoreClient {
