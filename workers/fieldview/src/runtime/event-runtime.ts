@@ -595,6 +595,9 @@ export class EventRuntime {
         ? affectedTeamsForChangedMatches(previousMatches?.providerData, latestMatches.providerData)
         : undefined;
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
+      const analyticsAffectedTeamKeys = currentRevision !== previousRevision &&
+        (affectedTeamKeys === undefined || (Array.isArray(affectedTeamKeys) && affectedTeamKeys.length === 0))
+        ? null : affectedTeamKeys;
       const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const publication = currentRevision !== previousRevision || !currentPublication
         ? await this.publishEventState()
@@ -605,7 +608,7 @@ export class EventRuntime {
         requested: refreshEndpoints.length,
         attempted: results.length,
         results,
-        ...(affectedTeamKeys === undefined ? {} : { affected_team_keys: affectedTeamKeys }),
+        ...(analyticsAffectedTeamKeys === undefined ? {} : { affected_team_keys: analyticsAffectedTeamKeys }),
         publication_status: publication.status,
         state: [...entries.values()].map((state) => ({
           endpoint: state.endpoint, status: state.status, revision: state.revision,
