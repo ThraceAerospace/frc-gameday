@@ -13,7 +13,7 @@ import type { FieldViewSourceRecordMetadata } from "../../../../packages/domain/
 import { normalizeFieldViewTeamState } from "../../../../packages/domain/src/normalization/team-state.ts";
 import { normalizeFieldViewTeamEventState } from "../../../../packages/domain/src/normalization/team-event-state.ts";
 import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
-import type { FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
+import type { FieldViewTeamEventState, FieldViewTeamState } from "../../../../packages/domain/src/team.ts";
 import type { FieldViewEventTeamSeasonComparisonInput, FieldViewAnalyticsInputRecord } from "../../../../packages/domain/src/analytics.ts";
 import { calculateCanonicalTeamEventAnalytics } from "../../../../packages/analytics/src/canonical-match-analytics.ts";
 import { buildSeasonDiagnostics } from "../../../../packages/analytics/src/season-diagnostics.ts";
