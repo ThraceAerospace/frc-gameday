@@ -50,6 +50,8 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   const [error, setError] = useState("");
   const [weeklyBusy, setWeeklyBusy] = useState(false);
   const [weeklyMessage, setWeeklyMessage] = useState("");
+  const [weeklyWorkflowId, setWeeklyWorkflowId] = useState<string | null>(null);
+  const [weeklyWorkflowStatus, setWeeklyWorkflowStatus] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
     if (!token) return;
@@ -104,11 +106,36 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to refresh weekly event candidates");
+      setWeeklyWorkflowId(typeof body.workflow_id === "string" ? body.workflow_id : null);
+      setWeeklyWorkflowStatus("queued");
       setWeeklyMessage("Weekly event candidate refresh accepted. FieldView is rediscovering TBA events and will publish the new Monday–Sunday projection asynchronously.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to refresh weekly event candidates");
     } finally { setWeeklyBusy(false); }
   }
+
+  const loadWeeklyProjectionStatus = useCallback(async () => {
+    if (!token || !weeklyWorkflowId) return;
+    const params = new URLSearchParams({ weeklyProjectionRun: weeklyWorkflowId });
+    const response = await fetch("/api/admin/runtime?" + params, {
+      headers: { Authorization: "Bearer " + token }, cache: "no-store",
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? "Unable to read weekly projection status");
+    setWeeklyWorkflowStatus(String(body.workflow_status ?? "unknown"));
+  }, [token, weeklyWorkflowId]);
+
+  useEffect(() => {
+    if (!weeklyWorkflowId || ["complete", "completed", "errored", "terminated"].includes(weeklyWorkflowStatus ?? "")) return;
+    let active = true;
+    const poll = async () => {
+      try { if (active) await loadWeeklyProjectionStatus(); }
+      catch (cause) { if (active) setError(cause instanceof Error ? cause.message : String(cause)); }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 5_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [weeklyWorkflowId, weeklyWorkflowStatus, loadWeeklyProjectionStatus]);
 
   const summary = selected?.summary ?? {};
   const isEvent = type === "event-readiness";
@@ -133,7 +160,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
         <button disabled={busy || !year} onClick={() => void dispatch()} className="ml-auto rounded-lg bg-[var(--fv-brand)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Starting…" : "Start " + label(type)}</button>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
-      {weeklyMessage && <p role="status" className="mt-3 text-sm text-[var(--fv-muted)]">{weeklyMessage}</p>}
+      {weeklyMessage && <p role="status" className="mt-3 text-sm text-[var(--fv-muted)]">{weeklyMessage}{weeklyWorkflowStatus ? " Workflow status: " + weeklyWorkflowStatus + "." : ""}</p>}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
         <div className="min-w-0">
           <h3 className="mb-2 text-sm font-semibold">Execution history ({runs.total})</h3>
