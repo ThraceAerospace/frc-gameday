@@ -1292,6 +1292,7 @@ test("EventRuntime accepts analytics publication only for the current event sour
       contract_version: 1,
       event_key: eventKey,
       event_source_revision: 1,
+      recalculated_team_keys: [],
       team_results: [],
     }),
   }));
