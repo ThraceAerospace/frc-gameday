@@ -108,7 +108,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     const year = Number(eventKey.slice(0, 4));
     const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
     const eventHeaders = headers(this.env, "X-FieldView-Event-Key", eventKey);
-    const scheduleRetry = async (reason: string): Promise<string | null> => {
+    const scheduleRetry = async (reason: string, retryAffected: string[] | null = affected): Promise<string | null> => {
       if (attempt >= 2 || !this.env.EVENT_ANALYTICS_WORKFLOW) return null;
       const retryId = "event-analytics-" + eventKey + "-" + requestedAt + "-retry-" + (attempt + 1);
       await step.do("schedule-" + reason + "-retry-" + (attempt + 1), async () => {
@@ -116,7 +116,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
           id: retryId,
           params: {
             event_key: eventKey,
-            affected_team_keys: affected,
+            affected_team_keys: retryAffected,
             requested_at: requestedAt,
             attempt: attempt + 1,
           },
@@ -312,7 +312,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     });
     if (!publicationResult.ok) {
       if (publicationResult.status === 409) {
-        const retryId = await scheduleRetry("event-revision-conflict");
+        const retryId = await scheduleRetry("event-revision-conflict", null);
         if (retryId) return {
           event_key: eventKey,
           status: "retry_scheduled",
