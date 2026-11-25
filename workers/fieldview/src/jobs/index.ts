@@ -3,11 +3,13 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 
-import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
+import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
 import { PollingCoordinatorWorkflow } from "./polling-coordinator.ts";
-export { PollingCoordinatorWorkflow };
+import { WeeklyEventProjectionWorkflow } from "./weekly-event-projection.ts";
+import type { WeeklyEventProjectionParameters } from "./weekly-event-projection.ts";
+export { PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow };
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
 export { RuntimeAdminWorkflow };
@@ -27,6 +29,7 @@ interface JobsEnvironment extends RuntimeEnvironment {
   COVERAGE_AUDIT: Workflow;
   RUNTIME_ADMIN: Workflow;
   POLLING_COORDINATOR?: Workflow;
+  WEEKLY_EVENT_PROJECTION?: Workflow;
 }
 
 interface WorkflowParameters {
@@ -414,28 +417,6 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       eventKeys.push(...directory.events);
     }
 
-    const thisWeekEvents = eventKeys.filter((item) =>
-      item && typeof item.key === "string" && /^[a-zA-Z0-9_-]+$/.test(item.key) &&
-      classifyEventThisWeek(item, runAt)?.isThisWeek,
-    );
-    const thisWeekProjection = {
-      evaluatedAt: runAt,
-      runDate,
-      checkedAt: eventDirectory.checkedAt,
-      events: thisWeekEvents,
-    };
-    await step.do("readiness-publish-this-week-projection", async () => {
-      await store().put(
-        `projections/events/this-week/${runAt}/${year}.json`,
-        JSON.stringify(thisWeekProjection),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      await store().put("projections/events/this-week/current.json", JSON.stringify({
-        runAt, runDate, years: [year],
-      }), { httpMetadata: { contentType: "application/json" } });
-      return { eventCount: thisWeekEvents.length };
-    });
-
     const registeredEventKeys = new Set(await step.do(
       "readiness-list-registered-event-runtimes",
       async () => listRuntimeRegistry(store(), "event"),
@@ -484,7 +465,6 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       events_failed: eventResults.filter((item) => item.error).length,
       event_failures: eventResults.filter((item) => item.error).slice(0, 100),
       event_readiness: eventResults,
-      this_week_events: thisWeekEvents.length,
       event_directory: { count: eventDirectory.count, generation: eventDirectory.generation },
     };
     const summaryRecord = {
@@ -492,7 +472,7 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       events_total: summary.events_total, events_registered: summary.events_registered,
       events_unregistered: summary.events_unregistered, events_state_valid: summary.events_state_valid,
       events_refresh_required: summary.events_refresh_required, events_failed: summary.events_failed,
-      this_week_events: summary.this_week_events, event_directory: summary.event_directory,
+      event_directory: summary.event_directory,
     };
     const resultChunks = Math.ceil(eventResults.length / 25);
     await step.do("readiness-write-run-results", async () => {
@@ -510,7 +490,6 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
         summary: {
           events_total: summary.events_total, events_state_valid: summary.events_state_valid,
           events_refresh_required: summary.events_refresh_required, events_failed: summary.events_failed,
-          this_week_events: summary.this_week_events,
         },
         result_chunks: resultChunks, error: null,
       };
@@ -1276,6 +1255,40 @@ export default {
       }
       return Response.json({ type, runs, total: page.objects.length }, {
         headers: { "Cache-Control": "no-store" },
+      });
+    }
+
+    if (url.pathname === "/internal/admin/events-this-week/refresh" &&
+        (request.method === "GET" || request.method === "POST")) {
+      if (!env.RUNTIME_ADMIN_TOKEN ||
+          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const workflow = env.WEEKLY_EVENT_PROJECTION;
+      if (!workflow) return Response.json({ error: "Weekly event projection Workflow is unavailable" }, { status: 503 });
+      if (request.method === "GET") {
+        const id = url.searchParams.get("id");
+        if (!id || !/^events-this-week-manual-[0-9]{10,16}$/.test(id)) {
+          return Response.json({ error: "A valid workflow ID is required" }, { status: 400 });
+        }
+        try {
+          const status = await workflow.get(id).then((instance) => instance.status());
+          return Response.json({ workflow_id: id, workflow_status: status.status }, {
+            headers: { "Cache-Control": "no-store" },
+          });
+        } catch {
+          return Response.json({ error: "Weekly event projection Workflow was not found" }, { status: 404 });
+        }
+      }
+      const requestedAt = Date.now();
+      const id = "events-this-week-manual-" + requestedAt;
+      try {
+        await workflow.create({ id, params: { requestedAt, reason: "manual" } });
+      } catch (error) {
+        return Response.json({ error: error instanceof Error ? error.message : "Unable to start weekly event projection" }, { status: 409 });
+      }
+      return Response.json({ workflow_id: id, scheduled_at: requestedAt, status: "queued" }, {
+        status: 202, headers: { "Cache-Control": "no-store" },
       });
     }
 
