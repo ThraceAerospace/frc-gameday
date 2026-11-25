@@ -221,7 +221,6 @@ async function recordAnalyticsInvalidation(
     ANALYTICS_DUE_KEY,
     existingDueAt === undefined ? requestedDueAt : Math.min(existingDueAt, requestedDueAt),
   );
-  await transaction.delete(ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY);
   await transaction.put("analytics:status", "pending");
 }
 
