@@ -1774,6 +1774,31 @@ export class EventRuntime {
         await this.rearm(transaction);
         return null;
       }
+      if (orchestratedTeamResults !== undefined) {
+        const latestTeamRevisions = await transaction.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX });
+        const staleTeamInput = orchestratedTeamResults.some((result) => {
+          const latest = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + result.team_key);
+          return latest !== undefined && latest > result.team_source_revision;
+        });
+        if (staleTeamInput) {
+          await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
+          await transaction.put("analytics:status", "pending");
+          await this.rearm(transaction);
+          return null;
+        }
+        for (const result of orchestratedTeamResults) {
+          const key = TEAM_STATE_REVISION_PREFIX + result.team_key;
+          const latest = latestTeamRevisions.get(key);
+          if (latest === undefined || result.team_source_revision > latest) {
+            await transaction.put(key, result.team_source_revision);
+          }
+          const eventRevisionKey = TEAM_EVENT_REVISION_PREFIX + result.team_key;
+          const latestEventRevision = await transaction.get<number>(eventRevisionKey);
+          if (latestEventRevision === undefined || result.team_event_revision > latestEventRevision) {
+            await transaction.put(eventRevisionKey, result.team_event_revision);
+          }
+        }
+      }
       const analyticsRevision = (await transaction.get<number>(ANALYTICS_REVISION_KEY) ?? 0) + 1;
       publication.analyticsRevision = analyticsRevision;
       await transaction.put(ANALYTICS_REVISION_KEY, analyticsRevision);
