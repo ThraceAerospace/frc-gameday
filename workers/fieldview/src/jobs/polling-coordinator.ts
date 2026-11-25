@@ -127,7 +127,6 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
-    const affectedTeams: string[] = [];
     for (const candidate of candidates) {
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
@@ -145,6 +144,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             ? readinessBody.stale_sources.filter((endpoint): endpoint is string => typeof endpoint === "string")
             : [];
           let eventRefresh: PollingEventResult["event_refresh"] = "not_due";
+          let affectedTeamKeys: string[] = [];
           let error: string | undefined;
           if (readinessBody.refresh_required === true) {
             const outcome = await dispatchRuntimeRefresh(this.env, {
@@ -154,12 +154,11 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             eventRefresh = outcome.ok ? "succeeded" : "failed";
             if (!outcome.ok) error = outcome.error ?? "Event refresh failed";
             const refreshResponse = outcome.response;
-            const affectedTeamKeys = refreshResponse && typeof refreshResponse === "object" &&
+            affectedTeamKeys = refreshResponse && typeof refreshResponse === "object" &&
               !Array.isArray(refreshResponse) && Array.isArray((refreshResponse as Record<string, unknown>).affected_team_keys)
               ? [...new Set(((refreshResponse as Record<string, unknown>).affected_team_keys as unknown[])
                   .filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
               : [];
-            if (affectedTeamKeys.length) affectedTeams.push(...affectedTeamKeys);
           }
 
           let participantKeys: string[] = [];
@@ -180,7 +179,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             lifecycle: candidate.lifecycle,
             event_refresh: eventRefresh,
             ...(participantKeys.length ? { participant_team_keys: participantKeys } : {}),
-            ...(affectedTeams.length ? { affected_team_keys: [...new Set(affectedTeams)].sort() } : {}),
+            ...(affectedTeamKeys.length ? { affected_team_keys: affectedTeamKeys } : {}),
             ...(error ? { error } : {}),
           };
         } catch (error) {
