@@ -63,7 +63,12 @@ export class WeeklyEventProjectionWorkflow extends WorkflowEntrypoint<Env, Weekl
       events.push(...document.events);
     }
     const projection = buildEventsThisWeekProjection(events, year, evaluatedAt, directory.checkedAt);
-    await step.do("publish-events-this-week", () => store().put("projections/events-this-week/current.json", JSON.stringify(projection)));
+    await step.do("publish-events-this-week", async () => {
+      await store().put("projections/events-this-week/current.json", JSON.stringify(projection), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      return { published: true, year, weekStart: projection.weekStart, eventCount: projection.events.length };
+    });
     return { workflow_id: event.instanceId, reason: event.payload?.reason ?? "scheduled", year, evaluated_at: evaluatedAt,
       week_start: projection.weekStart, week_end: projection.weekEnd, discovered_events: events.length, candidate_events: projection.events.length };
   }
