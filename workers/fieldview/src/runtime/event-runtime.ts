@@ -1731,7 +1731,6 @@ export class EventRuntime {
     // Run calculations only from explicit runtime commands, never public reads.
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
-    await this.storage.put("analytics:status", "running");
     let calculated: {
       version: number;
       sourceRevision: number;
@@ -1753,6 +1752,7 @@ export class EventRuntime {
       });
       return false;
     }
+    await this.storage.put("analytics:status", "running");
     const state = calculated.state;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
