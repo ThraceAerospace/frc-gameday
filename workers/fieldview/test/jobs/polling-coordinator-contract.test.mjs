@@ -20,7 +20,7 @@ test("the scheduled Worker entrypoint starts the polling coordinator Workflow", 
 
 test("the coordinator reads published discovery and never acquires provider data directly", () => {
   assert.match(coordinator, /discovery\/current-season\.json/);
-  assert.match(coordinator, /projections\/events\/this-week\/current\.json/);
+  assert.match(coordinator, /projections\/events-this-week\/current\.json/);
   assert.match(coordinator, /selectActiveEvents\(/);
   assert.match(coordinator, /isRuntimeRegistered\(/);
   assert.match(coordinator, /dispatchRuntime\(/);
