@@ -30,12 +30,13 @@ async function startTeamAnalyticsWorkflows(
     if (!outcome.ok || outcome.kind !== "team" || !outcome.response ||
         typeof outcome.response !== "object" || Array.isArray(outcome.response)) continue;
     const body = outcome.response as Record<string, unknown>;
-    if (!Number.isSafeInteger(body.team_state_revision) || !Array.isArray(body.affected_events)) continue;
+    if (typeof body.team_state_revision !== "number" ||
+        !Number.isSafeInteger(body.team_state_revision) || !Array.isArray(body.affected_events)) continue;
     for (const affected of body.affected_events) {
       if (!affected || typeof affected !== "object" || Array.isArray(affected)) continue;
       const item = affected as Record<string, unknown>;
       if (typeof item.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(item.event_key) ||
-          !Number.isSafeInteger(item.team_event_revision)) continue;
+          typeof item.team_event_revision !== "number" || !Number.isSafeInteger(item.team_event_revision)) continue;
       const revisions = grouped.get(item.event_key) ?? [];
       revisions.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
       grouped.set(item.event_key, revisions);
