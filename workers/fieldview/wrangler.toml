@@ -80,6 +80,12 @@ class_name = "PollingCoordinatorWorkflow"
 concurrency = { limit = 1 }
 
 [[workflows]]
+name = "event-analytics"
+binding = "EVENT_ANALYTICS_WORKFLOW"
+class_name = "EventAnalyticsWorkflow"
+concurrency = { limit = 8 }
+
+[[workflows]]
 name = "runtime-admin"
 binding = "RUNTIME_ADMIN"
 class_name = "RuntimeAdminWorkflow"
