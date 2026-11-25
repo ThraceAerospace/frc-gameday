@@ -18,7 +18,7 @@ export function affectedTeamsForChangedMatches(previous: unknown, next: unknown)
       if (!alliance || typeof alliance !== "object" || Array.isArray(alliance)) continue;
       const keys = (alliance as Record<string, unknown>).team_keys;
       if (!Array.isArray(keys)) continue;
-      for (const key of keys) if (typeof key === "string" && /^frc\\d+$/.test(key)) result.add(key);
+      for (const key of keys) if (typeof key === "string" && /^frc\d+$/.test(key)) result.add(key);
     }
     return [...result];
   };
