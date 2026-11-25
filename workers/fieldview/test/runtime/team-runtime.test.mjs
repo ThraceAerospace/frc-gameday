@@ -179,49 +179,6 @@ test("TeamRuntime seed performs its own provider refresh before returning", asyn
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 });
 
-test.skip("TeamRuntime serves a cached canonical TeamState until provider inputs change", async () => {
-  const storage = new MemoryStorage();
-  let profileVersion = 1;
-  const runtime = new TeamRuntime({ storage }, env(async (url) => {
-    if (String(url).endsWith("/team/frc3461")) {
-      return Response.json({ key: "frc3461", team_number: 3461, nickname: "Version " + profileVersion });
-    }
-    return Response.json([]);
-  }), "frc3461");
-  const ingest = () => runtime.fetch(new Request("https://team/ingest-resource?year=2026", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer admin",
-      "X-FieldView-Team-Key": "frc3461",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ endpoint: "/team/frc3461" }),
-  }));
-  const read = () => runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
-  }));
-
-  await ingest();
-  await drainManualQueue(runtime, storage);
-  const first = await (await read()).json();
-  const publicationKey = "team-state:2026:publication";
-  const firstPublication = storage.values.get(publicationKey);
-  assert.equal(first.team.nickname, "Version 1");
-  assert.ok(firstPublication, "the generated TeamState is durably published");
-
-  const repeated = await (await read()).json();
-  assert.deepEqual(repeated, first);
-  assert.strictEqual(storage.values.get(publicationKey), firstPublication,
-    "an unchanged input set must reuse the exact persisted publication");
-
-  profileVersion = 2;
-  await ingest();
-  await drainManualQueue(runtime, storage);
-  const updated = await (await read()).json();
-  assert.equal(updated.team.nickname, "Version 2");
-  assert.notStrictEqual(storage.values.get(publicationKey), firstPublication,
-    "a changed provider representation must atomically replace the published TeamState");
-});
 
 test("TeamRuntime retains last-good data and marks a failed refresh stale", async () => {
   const storage = new MemoryStorage(); let fail = false;
@@ -283,56 +240,9 @@ test("TeamRuntime rejects identity mismatch and protects admin state", async () 
   assert.equal(state.status, 401);
 });
 
-test.skip("TeamRuntime restores team identity before a reconstructed object's alarm", async () => {
-  const storage = new MemoryStorage(), calls = [];
-  const fetcher = async (url) => { calls.push(String(url)); return Response.json([]); };
-  const first = new TeamRuntime({ storage }, env(fetcher), "frc3461");
-  await first.fetch(new Request("https://team/refresh?year=2026", {
-    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
-  }));
-  const reconstructed = new TeamRuntime({ storage }, env(fetcher));
-  await drainManualQueue(reconstructed, storage);
-  assert.equal(calls.length, 7);
-  assert.ok(calls.some((url) => url.includes("frc3461")));
-});
 
 
-test.skip("TeamRuntime converts numeric public team IDs to TBA frc-prefixed keys", async () => {
-  const storage = new MemoryStorage(), calls = [];
-  const runtime = new TeamRuntime({ storage }, env(async (url) => {
-    calls.push(String(url));
-    if (String(url).endsWith("/team/frc3461")) return Response.json({ key: "frc3461", team_number: 3461 });
-    return Response.json([]);
-  }), "3461");
-  await runtime.fetch(new Request("https://team/refresh?year=2026", {
-    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "3461" },
-  }));
-  await drainManualQueue(runtime, storage);
-  assert.equal(calls.length, 7);
-  assert.ok(calls.some((url) => url.includes("/team/frc3461")));
-  const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "3461" },
-  }))).json();
-  assert.equal(snapshot.team_key, "3461");
-  assert.equal(snapshot.team.team_number, 3461);
-});
 
-test.skip("TeamRuntime preserves an explicit null team representation", async () => {
-  const storage = new MemoryStorage();
-  const runtime = new TeamRuntime({ storage }, env(async (url) => {
-    if (String(url).endsWith("/team/frc3461")) return Response.json(null, { headers: { ETag: '"team-null"' } });
-    return Response.json([]);
-  }), "frc3461");
-  await runtime.fetch(new Request("https://team/refresh?year=2026", {
-    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
-  }));
-  await drainManualQueue(runtime, storage);
-  const snapshot = await (await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
-  }))).json();
-  assert.equal(snapshot.team, null);
-  assert.equal(snapshot.sources.tba_team.status, "available");
-});
 
 
 test("TeamRuntime dispatches each team resource through its declared provider", async () => {
@@ -392,23 +302,6 @@ test("TeamRuntime records active events for the coordinator without creating pol
   assert.deepEqual(snapshot.polling, []);
 });
 
-test.skip("TeamRuntime serializes provider requests within each alarm", async () => {
-  const storage = new MemoryStorage();
-  let inFlight = 0, maximumInFlight = 0;
-  const runtime = new TeamRuntime({ storage }, env(async () => {
-    inFlight += 1;
-    maximumInFlight = Math.max(maximumInFlight, inFlight);
-    await Promise.resolve();
-    inFlight -= 1;
-    return Response.json([]);
-  }), "frc3461");
-  await runtime.fetch(new Request("https://team/refresh?year=2026", {
-    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
-  }));
-  // Refresh queues durable work; the alarm owns provider I/O.
-  await runtime.alarm();
-  assert.equal(maximumInFlight, 1, "one TeamRuntime alarm must have at most one provider request in flight");
-});
 
 
 test("TeamRuntime initializes a persisted partial TeamState on its first non-snapshot request", async () => {
@@ -686,52 +579,8 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
 });
 
 
-test.skip("TeamRuntime diagnostics reads preserve legacy task records until an explicit alarm", async () => {
-  const storage = new MemoryStorage();
-  const legacyEndpoint = "/team_year/3461/2026";
-  storage.values.set("task:" + legacyEndpoint, {
-    provider: "statbotics", endpoint: legacyEndpoint,
-    dueAt: Date.now() + 86_400_000, intervalMs: 86_400_000, attempts: 0,
-  });
-  storage.values.set("manual:poll-queue", [{
-    endpoint: legacyEndpoint, year: 2026, dueAt: Date.now() + 60_000, attempts: 0,
-  }]);
-  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), "frc3461");
-
-  const response = await runtime.fetch(new Request("https://team/state", {
-    headers: {
-      Authorization: "Bearer admin",
-      "X-FieldView-Team-Key": "frc3461",
-    },
-  }));
-  assert.equal(response.status, 200);
-  assert.equal(storage.values.has("task:" + legacyEndpoint), true,
-    "diagnostic GET does not delete legacy recurring task records");
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
-    "diagnostic GET does not alter explicit one-shot work");
-
-  await runtime.alarm();
-  assert.equal(storage.values.has("task:" + legacyEndpoint), false,
-    "the explicit alarm cleanup retires legacy recurring Statbotics polling");
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).some((item) => item.endpoint === legacyEndpoint), true,
-    "explicit one-shot work is preserved");
-});
 
 
-test.skip("TeamRuntime alarm removes legacy recurring Statbotics tasks before processing due work", async () => {
-  const storage = new MemoryStorage();
-  const legacyEndpoint = "/team_events?team=3461&year=2026&limit=1000&offset=0";
-  storage.values.set("team-key", "frc3461");
-  storage.values.set("task:" + legacyEndpoint, {
-    provider: "statbotics", endpoint: legacyEndpoint,
-    dueAt: Date.now() - 1, intervalMs: 86_400_000, attempts: 0,
-  });
-  const runtime = new TeamRuntime({ storage }, env(async () => {
-    throw new Error("legacy recurring Statbotics task must not execute");
-  }));
-  await runtime.alarm();
-  assert.equal(storage.values.has("task:" + legacyEndpoint), false);
-});
 
 test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime references", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", eventKey = "2026legacy";
