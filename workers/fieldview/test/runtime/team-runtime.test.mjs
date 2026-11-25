@@ -362,6 +362,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      contract_version: 1,
       event_key: eventKey,
       event_source_revision: 4,
       event_state: eventState,
@@ -371,7 +372,16 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   assert.equal(response.status, 200);
   const published = await response.json();
   const saved = storage.values.get("team-event-state:" + eventKey);
-  assert.deepEqual(published, saved, "the calculation command returns the persisted canonical TeamEventState");
+  assert.deepEqual(published, {
+    contract_version: 1,
+    event_key: eventKey,
+    team_key: teamKey,
+    event_source_revision: 4,
+    team_source_revision: 0,
+    comparison_input_updated_at: comparisonInput.updated_at,
+    team_event_revision: 1,
+    state: saved,
+  }, "the command returns the versioned result envelope and persisted canonical TeamEventState");
   assert.equal(response.headers.get("X-FieldView-Team-Event-Revision"), "1");
   assert.equal(response.headers.get("X-FieldView-Event-Source-Revision"), "4");
   assert.equal(response.headers.get("X-FieldView-Team-Source-Revision"), "0");
@@ -410,6 +420,22 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     }),
   }));
   assert.equal(stale.status, 409);
+  const unsupported = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contract_version: 2,
+      event_key: eventKey,
+      event_source_revision: 4,
+      event_state: eventState,
+      comparison_input: comparisonInput,
+    }),
+  }));
+  assert.equal(unsupported.status, 400);
 });
 
 
