@@ -206,7 +206,8 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       registeredTeams.some((team) => {
         const next = seasonInputs.find((item) => item.team_key === team.team_key);
         const previous = existingStates.find((item) => item.team_key === team.team_key)?.result;
-        return !next?.state || !previous || previous.team_source_revision !== next.revision ||
+        return !next?.state || !previous || !previous.state.analytics ||
+          previous.team_source_revision !== next.revision ||
           previous.comparison_input_updated_at !== previousUpdatedAt;
       });
     const recalculateAll = affected === null || previousUpdatedAt <= 0 || seasonInputChanged;
