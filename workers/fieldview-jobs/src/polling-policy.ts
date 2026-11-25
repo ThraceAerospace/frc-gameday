@@ -1,3 +1,8 @@
+/** Hard per-run limits: these cap dispatched work, not just concurrency. */
+export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
+export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
+export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
+
 import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 
@@ -25,11 +30,6 @@ export function selectPollingCandidates(
   return active.filter((item) => selectedKeys.has(item.key)).map((event) => ({ event, lifecycle: "active" as const }));
 }
 
-
-/** Hard per-run limits: these cap dispatched work, not just concurrency. */
-export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
-export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
-export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
 
 /**
  * Select a bounded, deterministic rotating slice. Rotation prevents a fixed
