@@ -30,9 +30,7 @@ import {
   type AnalyticsInvalidation,
   type AnalyticsSourceKey,
 } from "../../../../packages/analytics/src/invalidation.ts";
-import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
 import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
-import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
 import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isEventAnalyticsPublicationCommand, isTeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
@@ -69,7 +67,6 @@ const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
 const TEAM_EVENT_REVISION_PREFIX = "team-event-revision:";
 const EVENT_COMPARISON_INPUT_UPDATED_AT_KEY = "event-team-comparison-input:updated-at";
-const EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY = "event-team-comparison-input:last-updated-at";
 const ANALYTICS_TEAM_STATE_RETRY_DELAY_MS = 5 * 60_000;
 const ANALYTICS_TEAM_STATE_MAX_RETRIES = 12;
 
@@ -1132,208 +1129,6 @@ export class EventRuntime {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  /**
-   * Event analytics may consume TeamRuntime publications, but it must never
-   * create a TeamRuntime as a side effect. Only address team objects already
-   * present in DiscoveryStore's TeamRuntime registry.
-   */
-  private async registeredTeamRuntimeKeys(): Promise<Set<string>> {
-    if (!this.env.DISCOVERY_STORE) return new Set();
-    const stub = this.env.DISCOVERY_STORE.get(this.env.DISCOVERY_STORE.idFromName("shared"));
-    const registered = new Set<string>();
-    let cursor: string | undefined;
-    do {
-      const query = new URLSearchParams({ prefix: "registry/runtime-teams/", limit: "1000" });
-      if (cursor) query.set("cursor", cursor);
-      const response = await stub.fetch(new Request("https://discovery-store/list?" + query));
-      if (!response.ok) return new Set();
-      const page = await response.json() as {
-        objects?: Array<{ key?: unknown }>;
-        truncated?: boolean;
-        cursor?: string;
-      };
-      for (const object of page.objects ?? []) {
-        if (typeof object.key !== "string") continue;
-        const match = /^registry\/runtime-teams\/(frc[0-9]+)\.json$/.exec(object.key);
-        if (match) registered.add(match[1]);
-      }
-      cursor = page.truncated && typeof page.cursor === "string" ? page.cursor : undefined;
-    } while (cursor);
-    return registered;
-  }
-
-  private async collectEventTeamSeasonComparisonInput(
-    eventState: ReturnType<typeof normalizeFieldViewEventState>,
-  ): Promise<{
-    comparisonInput: import("../../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput;
-    inputs: FieldViewAnalyticsInputRecord[];
-  } | undefined> {
-    const event = eventState.event;
-    const teams = eventState.teams;
-    const namespace = this.env.TEAM_RUNTIME;
-    if (!event || !teams || !namespace) return undefined;
-    const year = Number(event.key.slice(0, 4));
-    if (!Number.isSafeInteger(year) || year < 1992) return undefined;
-    const participants = teams.flatMap((team) =>
-      typeof team.team_number === "number" && typeof team.key === "string"
-        ? [{ teamNumber: team.team_number, teamKey: team.key }]
-        : [],
-    );
-    const registeredTeamKeys = await this.registeredTeamRuntimeKeys();
-    const results = await Promise.all(participants.map(async ({ teamKey }) => {
-      if (!registeredTeamKeys.has(teamKey)) return { teamKey, snapshot: null, revision: null };
-      try {
-        const stub = namespace.get(namespace.idFromName(teamKey));
-        const response = await stub.fetch(new Request("https://team-runtime/snapshot?year=" + year + "&noSchedule=1", {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-            "X-FieldView-Team-Key": teamKey,
-          },
-        }));
-        if (!response.ok) return { teamKey, snapshot: null, revision: null };
-        return {
-          teamKey,
-          snapshot: await response.json() as FieldViewTeamState,
-          revision: response.headers.get("X-FieldView-Snapshot-Version") === null
-            ? null : Number(response.headers.get("X-FieldView-Snapshot-Version")),
-        };
-      } catch {
-        return { teamKey, snapshot: null, revision: null };
-      }
-    }));
-    const latestTeamRevisions = await this.storage.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX });
-    const hasStaleTeamState = results.some((item) => {
-      if (item.revision === null) return false;
-      const latestRevision = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + item.teamKey);
-      return latestRevision !== undefined && latestRevision > item.revision;
-    });
-    if (hasStaleTeamState) return undefined;
-    const snapshots = results.map((item) => item.snapshot);
-    const inputs: FieldViewAnalyticsInputRecord[] = results.map(({ teamKey, snapshot, revision }) => {
-      const source = snapshot?.sources.statbotics_team_events;
-      const events = snapshot?.events ?? [];
-      const statboticsEvents = snapshot?.statbotics_events ?? [];
-      const fetchedAt = typeof source?.retrieved_at === "string"
-        ? Date.parse(source.retrieved_at) : null;
-      const status = !source || source.status === "failed" || source.status === "unavailable" ||
-        snapshot?.statbotics_events === undefined || snapshot?.statbotics_events === null
-        ? "unavailable" as const
-        : source.status === "stale" || statboticsEvents.length < events.length
-          ? "partial" as const : "available" as const;
-      return {
-        input_key: "team:" + teamKey + ":statbotics-team-events",
-        provider: "statbotics",
-        resource: "team-events",
-        source_revision: revision,
-        fetched_at: fetchedAt !== null && Number.isFinite(fetchedAt) ? fetchedAt : null,
-        record_count: events.length,
-        included_count: Math.min(events.length, statboticsEvents.length),
-        excluded_count: Math.max(0, events.length - statboticsEvents.length),
-        status,
-      };
-    });
-    const comparisonInputUpdatedAt = await this.storage.transaction(async (transaction) => {
-      const previous = await transaction.get<number>(EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY) ?? 0;
-      const next = Math.max(Date.now(), previous + 1);
-      await transaction.put(EVENT_COMPARISON_INPUT_LAST_UPDATED_AT_KEY, next);
-      return next;
-    });
-    const comparisonInput = buildFieldViewEventTeamSeasonComparisonInput(
-      event, participants.map((team) => team.teamNumber), snapshots, comparisonInputUpdatedAt,
-      results.map((item) => ({ team_key: item.teamKey, revision: item.revision })),
-    );
-    const comparisonInputAccepted = await this.storage.transaction(async (transaction) => {
-      const latestRevisions = await transaction.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX });
-      for (const item of results) {
-        if (item.revision === null) continue;
-        const key = TEAM_STATE_REVISION_PREFIX + item.teamKey;
-        const latestRevision = latestRevisions.get(key);
-        if (latestRevision !== undefined && latestRevision > item.revision) return false;
-      }
-      for (const item of results) {
-        if (item.revision === null) continue;
-        const key = TEAM_STATE_REVISION_PREFIX + item.teamKey;
-        const latestRevision = latestRevisions.get(key);
-        if (latestRevision === undefined || item.revision > latestRevision) {
-          await transaction.put(key, item.revision);
-        }
-      }
-      await transaction.put(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY, comparisonInput.updated_at);
-      return true;
-    });
-    if (!comparisonInputAccepted) return undefined;
-    return { comparisonInput, inputs };
-  }
-
-  private async calculateTeamEventStates(
-    eventState: ReturnType<typeof normalizeFieldViewEventState>,
-    comparisonInput: import("../../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput,
-    eventSourceRevision: number,
-  ): Promise<{ states: FieldViewTeamEventState[]; revisions: Array<{ team_key: string; revision: number | null }> }> {
-    const namespace = this.env.TEAM_RUNTIME;
-    if (!namespace || !this.env.RUNTIME_ADMIN_TOKEN) return { states: [], revisions: [] };
-    const registeredTeamKeys = await this.registeredTeamRuntimeKeys();
-    const teams = (eventState.teams ?? []).filter((team) => registeredTeamKeys.has(team.key));
-    const results = await Promise.all(teams.map(async (team) => {
-      const teamKey = team.key;
-      try {
-        const stub = namespace.get(namespace.idFromName(teamKey));
-        const headers = {
-          Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Team-Key": teamKey,
-          "Content-Type": "application/json",
-        };
-        const calculated = await stub.fetch(new Request("https://team-runtime/event-analytics?year=" + this.eventKey.slice(0, 4), {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
-            event_key: this.eventKey,
-            event_source_revision: eventSourceRevision,
-            event_state: eventState,
-            comparison_input: comparisonInput,
-          }),
-        }));
-        if (!calculated.ok) return null;
-        // The calculation command returns the persisted TeamEventState and its
-        // source-revision headers. Avoid a second cross-runtime read per team.
-        const result: unknown = await calculated.json();
-        if (!isTeamEventAnalyticsResult(result) || result.event_key !== this.eventKey ||
-            result.team_key !== teamKey || result.event_source_revision !== eventSourceRevision ||
-            result.comparison_input_updated_at !== comparisonInput.updated_at) return null;
-        return { team_key: teamKey, result };
-      } catch {
-        return null;
-      }
-    }));
-
-    // Validate the whole fan-out against one coherent local revision read,
-    // rather than issuing two EventRuntime storage reads for every team.
-    const [currentComparisonInputUpdatedAt, latestTeamRevisions] = await Promise.all([
-      this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY),
-      this.storage.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX }),
-    ]);
-    const available = await Promise.all(results.flatMap((item) => {
-      if (!item) return [];
-      const expectedTeamRevision = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + item.team_key);
-      if (currentComparisonInputUpdatedAt !== comparisonInput.updated_at ||
-          expectedTeamRevision === undefined ||
-          item.result.team_source_revision !== expectedTeamRevision) {
-        return [];
-      }
-      return [{
-        team_key: item.team_key,
-        revision: item.result.team_event_revision,
-        state: item.result.state,
-      }];
-    }));
-    return {
-      states: available.map((item) => item.state),
-      revisions: available.map(({ team_key, revision }) => ({ team_key, revision })),
-    };
-  }
-
   private async queueSnapshotRefresh(): Promise<void> {
     // Snapshot reads never enqueue hidden provider work.
     return;
@@ -1481,45 +1276,33 @@ export class EventRuntime {
       ),
     ];
     if (calculateAnalytics) {
-      // The durable Workflow supplies TeamRuntime-owned results. The legacy
-      // direct path remains temporarily available until Workflow dispatch is
-      // wired for every environment; the publication endpoint never uses it.
-      const comparisonInputCollection = orchestratedTeamResults === undefined
-        ? await this.collectEventTeamSeasonComparisonInput(normalizedState)
-        : undefined;
-      const analyticsInputs = [...inputRecords, ...(comparisonInputCollection?.inputs ?? [])];
+      if (orchestratedTeamResults === undefined) {
+        throw new Error("Event analytics publication requires Workflow-owned TeamRuntime results");
+      }
       const eventAnalyticsState = await calculateCanonicalMatchAnalytics(normalizedState, inputRecords);
-      const teamResults = orchestratedTeamResults !== undefined
-        ? {
-            states: orchestratedTeamResults.map((result) => result.state),
-            revisions: orchestratedTeamResults.map((result) => ({
-              team_key: result.team_key,
-              revision: result.team_event_revision,
-            })),
-          }
-        : comparisonInputCollection
-          ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
-          : { states: [], revisions: [] };
-      const teamStates = teamResults.states;
+      const teamStates = orchestratedTeamResults.map((result) => result.state);
+      const teamStateRevisions = orchestratedTeamResults.map((result) => ({
+        team_key: result.team_key,
+        revision: result.team_event_revision,
+      }));
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
       const participantKeys = new Set((normalizedState.teams ?? []).map((team) => team.key));
-      if (orchestratedTeamResults?.some((result) => !participantKeys.has(result.team_key))) {
+      if (orchestratedTeamResults.some((result) => !participantKeys.has(result.team_key))) {
         throw new Error("Analytics publication contains a team outside the event roster");
       }
-      const comparisonInputUpdatedAt = orchestratedTeamResults?.[0]?.comparison_input_updated_at ??
-        comparisonInputCollection?.comparisonInput.updated_at ??
+      const comparisonInputUpdatedAt = orchestratedTeamResults[0]?.comparison_input_updated_at ??
         await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null;
-      const comparisonTeamRevisions = orchestratedTeamResults !== undefined
-        ? orchestratedTeamResults.map((result) => ({ team_key: result.team_key, revision: result.team_source_revision }))
-        : comparisonInputCollection?.comparisonInput.team_state_revisions ?? [];
+      const comparisonTeamRevisions = orchestratedTeamResults.map((result) => ({
+        team_key: result.team_key,
+        revision: result.team_source_revision,
+      }));
       const teamStatesComplete = teamStates.length === expectedTeamCount &&
-        teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null) &&
-        (orchestratedTeamResults !== undefined || comparisonInputCollection?.comparisonInput.state === "complete");
+        teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null);
       const teamComparison = calculateFieldViewEventTeamComparisonAnalytics(
         teamStates,
         expectedTeamCount,
         comparisonTeamRevisions,
-        teamResults.revisions,
+        teamStateRevisions,
         comparisonInputUpdatedAt,
       );
       const teamSummaries = buildFieldViewEventTeamSummaries(normalizedState, teamStates);
@@ -1529,8 +1312,8 @@ export class EventRuntime {
       return {
         version: state.version,
         sourceRevision: state.sourceRevision,
-        analyticsInputsComplete: analyticsInputs.every((input) => input.status === "available") && teamStatesComplete,
-        teamStateRevisions: teamResults.revisions,
+        analyticsInputsComplete: inputRecords.every((input) => input.status === "available") && teamStatesComplete,
+        teamStateRevisions,
         state: {
           ...eventAnalyticsState,
           ...(eventAnalytics === undefined ? {} : { analytics: eventAnalytics }),
