@@ -355,7 +355,7 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
   assert.ok(calls.some((url) => url.includes("frc-colors") && url.endsWith("/team/2485")));
 });
 
-test("TeamRuntime tracks multiple active events and increases polling responsiveness", async () => {
+test("TeamRuntime records active events for the coordinator without creating polling tasks", async () => {
   const storage = new MemoryStorage();
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), "frc3461");
   const activity = (eventKey, active) => runtime.fetch(new Request("https://team/activity", {
@@ -370,33 +370,26 @@ test("TeamRuntime tracks multiple active events and increases polling responsive
   }));
   let snapshot = await state.json();
   assert.deepEqual(snapshot.active_events, ["2026eventa", "2026eventb"]);
-  assert.ok(snapshot.polling.every((task) => task.interval_ms === 60_000));
+  assert.deepEqual(snapshot.polling, []);
   const firstUpdatedAt = storage.values.get("activity:active-events")["2026eventa"].updatedAt;
-  const firstDueAt = snapshot.polling[0].due_at;
   await activity("2026eventa", true);
-  assert.equal(storage.values.get("activity:active-events")["2026eventa"].updatedAt, firstUpdatedAt, "duplicate activation must be idempotent");
-  state = await runtime.fetch(new Request("https://team/state", {
-    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
-  }));
-  snapshot = await state.json();
-  assert.equal(snapshot.polling[0].due_at, firstDueAt, "duplicate activation must not reschedule provider work");
-  assert.ok(snapshot.polling.every((task) => task.due_at <= Date.now()));
-
+  assert.equal(storage.values.get("activity:active-events")["2026eventa"].updatedAt, firstUpdatedAt,
+    "duplicate activation must be idempotent");
   await activity("2026eventa", false);
   state = await runtime.fetch(new Request("https://team/state", {
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
   snapshot = await state.json();
-  assert.deepEqual(snapshot.active_events, ["2026eventb"], "one event ending must not clear another active event");
-  assert.ok(snapshot.polling.every((task) => task.interval_ms === 60_000));
-
+  assert.deepEqual(snapshot.active_events, ["2026eventb"],
+    "one event ending must not clear another active event");
+  assert.deepEqual(snapshot.polling, []);
   await activity("2026eventb", false);
   state = await runtime.fetch(new Request("https://team/state", {
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
   }));
   snapshot = await state.json();
   assert.deepEqual(snapshot.active_events, []);
-  assert.ok(snapshot.polling.every((task) => task.interval_ms === 86_400_000));
+  assert.deepEqual(snapshot.polling, []);
 });
 
 test.skip("TeamRuntime serializes provider requests within each alarm", async () => {
