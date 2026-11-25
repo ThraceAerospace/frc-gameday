@@ -416,7 +416,7 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   assert.equal(await analyticsRead.text(), "");
 
   assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
-  assert.equal(storage.alarmAt, null, "public reads do not arm background work");
+  assert.equal("alarmAt" in storage, false, "public reads do not interact with alarm storage");
 
   const readiness = await runtime.fetch(new Request("https://event-runtime/readiness", {
     method: "POST",
@@ -433,7 +433,7 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   assert.equal(result.refresh_required, true);
   assert.equal(result.refresh_dispatched, false);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
-  assert.equal(storage.alarmAt, null);
+  assert.equal("alarmAt" in storage, false, "readiness does not interact with alarm storage");
   assert.equal(providerCalls, 0, "readiness inspects coverage and never fetches providers");
   assert.equal((await runtime.fetch(request())).status, 204, "an existing EventRuntime without EventState returns no content");
 
@@ -937,7 +937,7 @@ test("public snapshot and stream reads need no user credential while state inspe
   assert.equal(authorizedState.status, 200);
   const diagnostics = await authorizedState.json();
   assert.equal(diagnostics.polling.length, 0, "public reads do not register recurring tasks");
-  assert.equal(storage.alarmAt, null, "public reads do not schedule background acquisition");
+  assert.equal("alarmAt" in storage, false, "public reads do not interact with alarm storage");
   assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
   const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
@@ -1616,7 +1616,7 @@ test("EventRuntime readiness inspects freshness without queueing provider work",
   assert.equal(freshResult.refresh_dispatched, false);
   assert.deepEqual(freshResult.stale_sources, []);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
-  assert.equal(storage.alarmAt, null);
+  assert.equal("alarmAt" in storage, false, "readiness does not interact with alarm storage");
 
   const staleEndpoint = endpoints[0];
   storage.values.get("endpoint:" + staleEndpoint).expiresAt = Date.now() - 1;
@@ -1628,7 +1628,7 @@ test("EventRuntime readiness inspects freshness without queueing provider work",
   assert.equal(staleResult.refresh_dispatched, false);
   assert.deepEqual(staleResult.stale_sources, [staleEndpoint]);
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
-  assert.equal(storage.alarmAt, null);
+  assert.equal("alarmAt" in storage, false, "readiness does not interact with alarm storage");
   const statboticsTask = storage.values.get("task:" + STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0));
   assert.equal(statboticsTask, undefined);
 });
