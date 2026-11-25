@@ -1315,6 +1315,7 @@ export class EventRuntime {
           method: "POST",
           headers,
           body: JSON.stringify({
+            contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
             event_key: this.eventKey,
             event_source_revision: eventSourceRevision,
             event_state: eventState,
@@ -1324,7 +1325,11 @@ export class EventRuntime {
         if (!calculated.ok) return null;
         // The calculation command returns the persisted TeamEventState and its
         // source-revision headers. Avoid a second cross-runtime read per team.
-        return { team_key: teamKey, response: calculated };
+        const result: unknown = await calculated.json();
+        if (!isTeamEventAnalyticsResult(result) || result.event_key !== this.eventKey ||
+            result.team_key !== teamKey || result.event_source_revision !== eventSourceRevision ||
+            result.comparison_input_updated_at !== comparisonInput.updated_at) return null;
+        return { team_key: teamKey, result };
       } catch {
         return null;
       }
@@ -1341,22 +1346,15 @@ export class EventRuntime {
       const expectedTeamRevision = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + item.team_key);
       if (currentComparisonInputUpdatedAt !== comparisonInput.updated_at ||
           expectedTeamRevision === undefined ||
-          Number(item.response.headers.get("X-FieldView-Event-Source-Revision")) !== eventSourceRevision ||
-          Number(item.response.headers.get("X-FieldView-Team-Source-Revision")) !== expectedTeamRevision ||
-          Number(item.response.headers.get("X-FieldView-Comparison-Input-Updated-At")) !== comparisonInput.updated_at) {
+          item.result.team_source_revision !== expectedTeamRevision) {
         return [];
       }
-      const revision = Number(item.response.headers.get("X-FieldView-Team-Event-Revision"));
       return [{
         team_key: item.team_key,
-        revision: Number.isSafeInteger(revision) && revision >= 0 ? revision : null,
-        response: item.response,
+        revision: item.result.team_event_revision,
+        state: item.result.state,
       }];
-    }).map(async (item) => ({
-      team_key: item.team_key,
-      revision: item.revision,
-      state: await item.response.json() as FieldViewTeamEventState,
-    })));
+    }));
     return {
       states: available.map((item) => item.state),
       revisions: available.map(({ team_key, revision }) => ({ team_key, revision })),
