@@ -1321,53 +1321,8 @@ export class EventRuntime {
   }
 
   private async queueSnapshotRefresh(): Promise<void> {
-    // Demand-driven acquisition: persist missing/stale work and return the
-    // current publication immediately. The Durable Object alarm performs
-    // provider I/O after this request has completed.
-    const now = Date.now();
-    const resources = [...this.allowedEndpoints];
-    const states = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-    const needed = resources.filter((endpoint) => {
-      const state = states.get(endpointStorageKey(endpoint));
-      return !state || (state.lastFetchedAt === null && state.status !== "unavailable") || state.status === "failed" || state.status === "stale" ||
-        (state.expiresAt !== null && state.expiresAt <= now);
-    });
-    if (needed.length > 0) {
-      await this.ensureRecurringPolls(resources, 86_400_000);
-      await this.enqueueManualPolls(needed, false);
-    }
-    const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const statboticsState = states.get(endpointStorageKey(statboticsEndpoint));
-    if (!statboticsState || (statboticsState.lastFetchedAt === null && statboticsState.status !== "unavailable") ||
-        statboticsState.status === "failed" || statboticsState.status === "stale" ||
-        (statboticsState.expiresAt !== null && statboticsState.expiresAt <= now)) {
-      await this.enqueueManualPolls([statboticsEndpoint], false);
-    }
-    if (await this.storage.get<boolean>(ANALYTICS_ENABLED_KEY) !== false) {
-      const [analyticsPublication, eventStatePublication] = await Promise.all([
-        this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY),
-        this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
-      ]);
-      if (!analyticsPublication || !eventStatePublication ||
-          analyticsPublication.sourceRevision !== eventStatePublication.sourceRevision) {
-        const [existingDue, analyticsStatus] = await Promise.all([
-          this.storage.get<number>(ANALYTICS_DUE_KEY),
-          this.storage.get<string>("analytics:status"),
-        ]);
-        let changed = false;
-        if (analyticsStatus !== "running") {
-          if (existingDue === undefined) {
-            await this.storage.put(ANALYTICS_DUE_KEY, now);
-            changed = true;
-          }
-          if (analyticsStatus !== "pending") {
-            await this.storage.put("analytics:status", "pending");
-            changed = true;
-          }
-        }
-        if (changed) await this.storage.transaction((transaction) => this.rearm(transaction));
-      }
-    }
+    // Snapshot reads never enqueue hidden provider work.
+    return;
   }
 
   private async buildEventState(calculateAnalytics = false): Promise<{
@@ -1566,79 +1521,17 @@ export class EventRuntime {
     };
   }
 
-  async schedulePolls(endpoints: string[], intervalMs: number, now = Date.now(), forceImmediate = false): Promise<void> {
-    if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
-      throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
-    }
-    await this.storage.transaction(async (transaction) => {
-      for (const endpoint of endpoints) {
-        const key = taskStorageKey(endpoint);
-        const previous = await transaction.get<PollTask>(key);
-        const unchanged = !forceImmediate && previous?.retryOnFailure === true && previous.intervalMs === intervalMs;
-        const task: PollTask = {
-          endpoint,
-          dueAt: unchanged ? previous.dueAt : now,
-          intervalMs,
-          generation: unchanged ? previous.generation : (previous?.generation ?? 0) + 1,
-          attempts: unchanged ? previous.attempts : 0,
-          retryOnFailure: true,
-          ...(previous?.authoritativeRefetchAt === undefined
-            ? {}
-            : { authoritativeRefetchAt: previous.authoritativeRefetchAt }),
-        };
-        const unchangedTask = previous !== undefined &&
-          previous.endpoint === task.endpoint &&
-          previous.dueAt === task.dueAt &&
-          previous.intervalMs === task.intervalMs &&
-          previous.generation === task.generation &&
-          previous.attempts === task.attempts &&
-          previous.retryOnFailure === task.retryOnFailure &&
-          previous.maxAttempts === task.maxAttempts &&
-          previous.authoritativeRefetchAt === task.authoritativeRefetchAt;
-        if (!unchangedTask) await transaction.put(key, task);
-      }
-      await this.rearm(transaction);
-    });
+  // Polling cadence is owned by the Worker-level coordinator, never this DO.
+  async schedulePolls(_endpoints: string[], _intervalMs: number, _now = Date.now(), _forceImmediate = false): Promise<void> {
+    return;
   }
 
-  private async enqueueManualPolls(endpoints: string[], immediate = true, scheduledAt?: number): Promise<void> {
-    await this.storage.transaction(async (transaction) => {
-      const current = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const byEndpoint = new Map(current.map((item) => [item.endpoint, item]));
-      for (const endpoint of endpoints) {
-        const previous = byEndpoint.get(endpoint);
-        byEndpoint.set(endpoint, {
-          endpoint,
-          // Read-driven refreshes coalesce behind an existing retry deadline.
-          // A newly queued resource is still eligible immediately.
-          dueAt: scheduledAt !== undefined ? Math.min(previous?.dueAt ?? scheduledAt, scheduledAt)
-            : immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
-          attempts: previous?.attempts ?? 0,
-        });
-      }
-      const next = [...byEndpoint.values()];
-      const unchanged = current.length === next.length && current.every((item, index) =>
-        item.endpoint === next[index]?.endpoint &&
-        item.dueAt === next[index]?.dueAt &&
-        item.attempts === next[index]?.attempts);
-      if (!unchanged) await transaction.put(MANUAL_QUEUE_KEY, next);
-      await this.rearm(transaction);
-    });
+  private async enqueueManualPolls(_endpoints: string[], _immediate = true, _scheduledAt?: number): Promise<void> {
+    return;
   }
 
-  private async ensureRecurringPolls(endpoints: string[], intervalMs: number): Promise<void> {
-    await this.storage.transaction(async (transaction) => {
-      for (const endpoint of endpoints) {
-        const key = taskStorageKey(endpoint);
-        const existing = await transaction.get<PollTask>(key);
-        if (existing) continue;
-        await transaction.put(key, {
-          endpoint, dueAt: Date.now() + intervalMs, intervalMs,
-          generation: 1, attempts: 0, retryOnFailure: true,
-        } satisfies PollTask);
-      }
-      await this.rearm(transaction);
-    });
+  private async ensureRecurringPolls(_endpoints: string[], _intervalMs: number): Promise<void> {
+    return;
   }
 
   private async restoreEventIdentity(): Promise<boolean> {
@@ -1736,116 +1629,10 @@ export class EventRuntime {
     return publication;
   }
 
+  // Legacy alarms may still be pending in persisted DO storage after rollout.
+  // Delete them once and never perform provider work from an alarm.
   async alarm(): Promise<void> {
-    // Durable Objects can be reconstructed between requests and alarms. Never
-    // route provider work using constructor-only in-memory identity.
-    const hasEventIdentity = await this.restoreEventIdentity();
-    const now = Date.now();
-    const completedUntil = await this.storage.get<number>("lifecycle:completed-until");
-    if (completedUntil !== undefined && now >= completedUntil) {
-      await this.cancelRecurringPolls(true);
-    }
-    // Reserve due work before network I/O. Retriable TBA work keeps a durable
-    // retry deadline; at-most-once Statbotics work is removed before its fetch.
-    const dueTasks = await this.storage.transaction(async (transaction) => {
-      const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
-      const due = [...tasks.values()].filter((task) => task.dueAt <= now)
-        .sort((left, right) => left.dueAt - right.dueAt || left.endpoint.localeCompare(right.endpoint));
-      if (due.length > 0 && !hasEventIdentity) {
-        throw new Error("Cannot execute event alarm without persisted event identity");
-      }
-      const queued = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const manualDue = queued.filter((item) => item.dueAt <= now);
-      if (manualDue.length > 0 && !hasEventIdentity) throw new Error("Cannot execute manual event work without persisted event identity");
-
-      const manualEndpoints = new Set(manualDue.map((item) => item.endpoint));
-      const readyTasks = due.filter((task) => !manualEndpoints.has(task.endpoint));
-      for (const task of readyTasks) {
-        await transaction.put(taskStorageKey(task.endpoint), {
-          ...task, dueAt: now + this.retryDelay(task), attempts: task.attempts + 1,
-        });
-      }
-      if (manualDue.length > 0) {
-        const dueEndpoints = new Set(manualDue.map((item) => item.endpoint));
-        await transaction.put(MANUAL_QUEUE_KEY, queued.map((item) =>
-          dueEndpoints.has(item.endpoint) ? { ...item, dueAt: now + 60_000 } : item));
-      }
-
-      const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
-      const analyticsDue = analyticsDueAt !== undefined && analyticsDueAt <= now;
-      if (analyticsDue) await transaction.delete(ANALYTICS_DUE_KEY);
-      await this.rearm(transaction);
-      return { due: readyTasks, manualDue, analyticsDue };
-    });
-
-    // Manual work is independent of recurring poll tasks and is always serviced first.
-    // Keep one provider request in flight per EventRuntime alarm.
-    for (const item of dueTasks.manualDue) {
-      const result = await this.pollEndpoint(item.endpoint);
-      const latest = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(item.endpoint));
-      const retryableFailure = !result && latest?.status === "failed";
-      const retryAt = Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
-      await this.storage.transaction(async (transaction) => {
-        const queue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-        const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
-        if (retryableFailure && item.attempts < 8) {
-          // Provider failures are retried without discarding the last-good representation.
-          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
-        }
-        await transaction.put(MANUAL_QUEUE_KEY, next);
-        await this.rearm(transaction);
-      });
-    }
-
-    for (const task of dueTasks.due) {
-      const succeeded = await this.pollEndpoint(task.endpoint);
-      if (task.retryOnFailure === false) {
-        await this.storage.transaction(async (transaction) => {
-          await transaction.delete(taskStorageKey(task.endpoint));
-          await this.rearm(transaction);
-        });
-        continue;
-      }
-      await this.storage.transaction(async (transaction) => {
-        const key = taskStorageKey(task.endpoint);
-        const current = await transaction.get<PollTask>(key);
-        // An administrator may have replaced this task while its poll ran.
-        if (!current || current.generation !== task.generation) return;
-        const completedAt = Date.now();
-        const attempts = succeeded ? 0 : current.attempts;
-        const exhausted = current.maxAttempts !== undefined && attempts >= current.maxAttempts;
-        if (succeeded && current.authoritativeRefetchAt !== undefined &&
-            completedAt >= current.authoritativeRefetchAt) {
-          const { authoritativeRefetchAt: _completedRefetch, ...recurringTask } = current;
-          if (current.intervalMs === null) {
-            await transaction.delete(key);
-          } else {
-            await transaction.put(key, {
-              ...recurringTask,
-              attempts: 0,
-              dueAt: completedAt + current.intervalMs,
-            });
-          }
-        } else if (succeeded && current.authoritativeRefetchAt !== undefined) {
-          await transaction.put(key, {
-            ...current,
-            attempts: 0,
-            dueAt: current.authoritativeRefetchAt,
-          });
-        } else if (current.intervalMs === null && (succeeded || exhausted) &&
-            current.authoritativeRefetchAt === undefined) {
-          await transaction.delete(key);
-        } else {
-          await transaction.put(key, {
-            ...current,
-            attempts,
-            dueAt: completedAt + (succeeded ? current.intervalMs! : this.retryDelay(current)),
-          });
-        }
-        await this.rearm(transaction);
-      });
-    }
-    if (dueTasks.analyticsDue) await this.recalculateAnalytics();
+    await this.storage.deleteAlarm();
   }
 
   private async recalculateAnalytics(): Promise<void> {
@@ -1985,15 +1772,8 @@ export class EventRuntime {
     })).catch(() => undefined);
   }
 
-  private async cancelRecurringPolls(clearCompletedUntil = false): Promise<void> {
-    await this.storage.transaction(async (transaction) => {
-      const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
-      for (const [key, task] of tasks) {
-        if (task.retryOnFailure !== false) await transaction.delete(key);
-      }
-      if (clearCompletedUntil) await transaction.delete("lifecycle:completed-until");
-      await this.rearm(transaction);
-    });
+  private async cancelRecurringPolls(_clearCompletedUntil = false): Promise<void> {
+    return;
   }
 
   private retryDelay(task: PollTask): number {
@@ -2001,23 +1781,9 @@ export class EventRuntime {
     return Math.min(5 * 60_000, baseDelay * (2 ** Math.min(Math.max(0, task.attempts - 1), 7)));
   }
 
-  private async rearm(transaction: DurableObjectTransactionLike): Promise<void> {
-    const tasks = await transaction.list<PollTask>({ prefix: TASK_PREFIX });
-    const completedUntil = await transaction.get<number>("lifecycle:completed-until");
-    const analyticsDueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
-    const manualQueue = await transaction.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-    const nextDue = [...tasks.values()].reduce<number | null>(
-      (next, task) => next === null || task.dueAt < next ? task.dueAt : next,
-      [...manualQueue.map((item) => item.dueAt), completedUntil, analyticsDueAt]
-        .filter((value): value is number => value !== undefined)
-        .reduce<number | null>((next, value) => next === null || value < next ? value : next, null),
-    );
-    const currentAlarm = await transaction.getAlarm?.();
-    if (nextDue === null) {
-      if (currentAlarm !== null && currentAlarm !== undefined) await transaction.deleteAlarm();
-    } else if (currentAlarm !== nextDue) {
-      await transaction.setAlarm(nextDue);
-    }
+  private async rearm(_transaction: DurableObjectTransactionLike): Promise<void> {
+    // Durable Objects never arm polling or analytics alarms.
+    return;
   }
 
   private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean> {
@@ -2153,34 +1919,8 @@ export class EventRuntime {
     ].includes(endpoint);
   }
 
-  private async scheduleStatboticsRefresh(now: number, overrideDelayMs?: number): Promise<void> {
-    const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const configuredDelay = this.env.STATBOTICS_REFRESH_DELAY_MS;
-    const delayMs = overrideDelayMs ?? (configuredDelay === undefined ? 5 * 60_000 : Number(configuredDelay));
-    if (!Number.isSafeInteger(delayMs) || delayMs < 0) {
-      throw new Error("STATBOTICS_REFRESH_DELAY_MS must be a non-negative integer");
-    }
-    await this.storage.transaction(async (transaction) => {
-      const key = taskStorageKey(endpoint);
-      const previous = await transaction.get<PollTask>(key);
-      const dueAt = now + delayMs;
-      // Never move an already scheduled refresh later. In particular, a TBA
-      // change during a readiness sweep must not postpone its randomized slot.
-      if (previous && previous.dueAt <= dueAt) {
-        await this.rearm(transaction);
-        return;
-      }
-      await transaction.put(key, {
-        endpoint,
-        dueAt,
-        intervalMs: null,
-        generation: (previous?.generation ?? 0) + 1,
-        attempts: 0,
-        retryOnFailure: true,
-        maxAttempts: 4,
-      });
-      await this.rearm(transaction);
-    });
+  private async scheduleStatboticsRefresh(_now: number, _overrideDelayMs?: number): Promise<void> {
+    return;
   }
 
   private authoritativeRefetchDelayMs(): number {
@@ -2193,21 +1933,11 @@ export class EventRuntime {
   }
 
   private async scheduleImmediatePoll(
-    transaction: DurableObjectTransactionLike,
-    endpoint: string,
-    now: number,
+    _transaction: DurableObjectTransactionLike,
+    _endpoint: string,
+    _now: number,
   ): Promise<void> {
-    const key = taskStorageKey(endpoint);
-    const previous = await transaction.get<PollTask>(key);
-    await transaction.put(key, {
-      endpoint,
-      dueAt: now,
-      intervalMs: previous?.intervalMs ?? null,
-      generation: (previous?.generation ?? 0) + 1,
-      attempts: 0,
-      retryOnFailure: true,
-      authoritativeRefetchAt: now + this.authoritativeRefetchDelayMs(),
-    });
+    return;
   }
 
   private async applyTbaWebhook(

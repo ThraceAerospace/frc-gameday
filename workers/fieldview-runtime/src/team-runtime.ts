@@ -200,90 +200,20 @@ export class TeamRuntime {
     this.teamKey = key; return true;
   }
   private async clearRecurringStatboticsTasks(): Promise<void> {
-    const existing = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
-    if (![...existing.values()].some((task) => task.provider === "statbotics")) return;
-    await this.storage.transaction(async (tx) => {
-      const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      for (const [key, task] of tasks) {
-        if (task.provider === "statbotics") await tx.delete(key);
-      }
-      await this.rearm(tx);
-    });
+    return;
   }
-
-  private async rearm(tx: DurableObjectTransactionLike): Promise<void> {
-    const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-    const manual = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-    const seasonAnalytics = await tx.list<number>({ prefix: SEASON_ANALYTICS_DUE_PREFIX });
-    const next = [...tasks.values()].reduce<number | null>((value, task) => value === null || task.dueAt < value ? task.dueAt : value,
-      [...manual.map((item) => item.dueAt), ...seasonAnalytics.values()].reduce<number | null>(
-        (value, dueAt) => value === null || dueAt < value ? dueAt : value, null,
-      ));
-    const current = await tx.getAlarm?.();
-    if (next === null) {
-      if (current !== null && current !== undefined) await tx.deleteAlarm();
-    } else if (current !== next) {
-      await tx.setAlarm(next);
-    }
+  private async rearm(_tx: DurableObjectTransactionLike): Promise<void> {
+    // Durable Objects never arm polling or analytics alarms.
+    return;
   }
-  private async enqueueManualPolls(resources: TeamResource[], year: number, immediate = true, scheduledAt?: number): Promise<void> {
-    await this.storage.transaction(async (tx) => {
-      const current = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const existing = new Map(current.map((item) => [item.endpoint, item]));
-      const ordered = new Map<string, ManualTeamPollRequest>();
-      // Preserve caller priority (team event history is first during seed),
-      // while retaining already queued work after the explicitly requested items.
-      for (const resource of resources) {
-        const previous = existing.get(resource.endpoint);
-        ordered.set(resource.endpoint, {
-          endpoint: resource.endpoint, year,
-          // Read-driven refreshes coalesce behind an existing retry deadline.
-          // A newly queued resource is still eligible immediately.
-          dueAt: scheduledAt !== undefined ? Math.min(previous?.dueAt ?? scheduledAt, scheduledAt)
-            : immediate ? Math.min(previous?.dueAt ?? Date.now(), Date.now()) : previous?.dueAt ?? Date.now(),
-          attempts: previous?.attempts ?? 0,
-        });
-      }
-      for (const item of current) if (!ordered.has(item.endpoint)) ordered.set(item.endpoint, item);
-      const next = [...ordered.values()];
-      const unchanged = current.length === next.length && current.every((item, index) =>
-        item.endpoint === next[index]?.endpoint && item.year === next[index]?.year &&
-        item.dueAt === next[index]?.dueAt && item.attempts === next[index]?.attempts);
-      if (!unchanged) await tx.put(MANUAL_QUEUE_KEY, next);
-      await this.rearm(tx);
-    });
+  private async enqueueManualPolls(
+    _resources: TeamResource[], _year: number, _immediate = true, _scheduledAt?: number,
+  ): Promise<void> {
+    return;
   }
-  private async schedule(year: number, immediate: boolean): Promise<void> {
-    const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
-    const intervalMs = Object.keys(activeEvents).length > 0 ? this.activeRefreshIntervalMs() : this.refreshIntervalMs();
-    await this.storage.transaction(async (tx) => {
-      const now = Date.now();
-      // Discard malformed tasks from older/incorrect resource scheduling formats.
-      // In particular, provider identity must be stored alongside a string endpoint.
-      const existingTasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      for (const [key, task] of existingTasks) {
-        if (typeof task.endpoint !== "string" ||
-          (task.provider !== "tba" && task.provider !== "statbotics" && task.provider !== "frc-colors")) {
-          await tx.delete(key);
-        }
-      }
-      for (const resource of this.endpoints(year).filter((item) => item.provider !== "statbotics")) {
-        const { provider, endpoint } = resource;
-        const key = taskKey(endpoint), previous = await tx.get<TeamPollTask>(key);
-        // Resource registration must never advance an existing recurring fetch.
-        const task = {
-          provider, endpoint,
-          dueAt: previous ? Math.min(previous.dueAt, immediate ? now + intervalMs : now) : (immediate ? now + intervalMs : now),
-          intervalMs, attempts: previous?.attempts ?? 0,
-        } satisfies TeamPollTask;
-        if (!previous || previous.provider !== task.provider || previous.endpoint !== task.endpoint ||
-            previous.dueAt !== task.dueAt || previous.intervalMs !== task.intervalMs ||
-            previous.attempts !== task.attempts) {
-          await tx.put(key, task);
-        }
-      }
-      await this.rearm(tx);
-    });
+  private async schedule(_year: number, _immediate: boolean): Promise<void> {
+    // Active-event membership is data for the coordinator, not a DO schedule.
+    return;
   }
   async fetch(request: Request): Promise<Response> {
     await this.activation;
@@ -931,20 +861,10 @@ export class TeamRuntime {
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  private async queueSeasonAnalyticsRefresh(year: number): Promise<void> {
-    const key = SEASON_ANALYTICS_DUE_PREFIX + year;
-    const existing = await this.storage.get<number>(key);
-    const dueAt = existing ?? Date.now();
-    if (existing === undefined) await this.storage.put(key, dueAt);
-    // Do not move an existing retry deadline forward on every stale read.
-    if (existing === undefined || existing <= Date.now()) {
-      const currentAlarm = await this.storage.getAlarm?.();
-      if (currentAlarm === null || currentAlarm === undefined || currentAlarm > Date.now() + 100) {
-        await this.storage.setAlarm(Date.now() + 100);
-      }
-    }
+  private async queueSeasonAnalyticsRefresh(_year: number): Promise<void> {
+    // Analytics refreshes must be explicitly dispatched by the coordinator.
+    return;
   }
-
   private async buildSeasonAnalyticsResponse(year: number): Promise<Response> {
     const teamState = await this.snapshot(year).then((response) => response.json()) as ReturnType<typeof normalizeFieldViewTeamState>;
     if (teamState.events === undefined || teamState.events === null) {
@@ -1270,179 +1190,9 @@ export class TeamRuntime {
     }));
   }
 
+  // Retire any alarm persisted by an older deployment. Never poll or retry here.
   async alarm(): Promise<void> {
-    if (!(await this.restoreIdentity())) return;
-    // A Durable Object alarm may be the first invocation after a deployment.
-    // Apply the same legacy recurring-Statbotics cleanup as ordinary requests.
-    await this.clearRecurringStatboticsTasks();
-    const now = Date.now();
-    const due = await this.storage.transaction(async (tx) => {
-      const tasks = await tx.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const dueTasks: TeamPollTask[] = [];
-      for (const [key, task] of tasks) {
-        // Durable Object storage can outlive code revisions. Never let a task
-        // written with the former resource-object shape reach endpoint state
-        // handling; the next explicit refresh will schedule it correctly.
-        if (typeof task.endpoint !== "string" ||
-          (task.provider !== "tba" && task.provider !== "statbotics" && task.provider !== "frc-colors") ||
-          !Number.isFinite(task.dueAt) || !Number.isFinite(task.intervalMs) ||
-          !Number.isFinite(task.attempts)) {
-          await tx.delete(key);
-          continue;
-        }
-        if (task.dueAt <= now) dueTasks.push(task);
-      }
-      dueTasks.sort((left, right) => left.dueAt - right.dueAt || left.endpoint.localeCompare(right.endpoint));
-      const queued = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const manualDue = queued.filter((item) => item.dueAt <= now);
-      const manualEndpoints = new Set(manualDue.map((item) => item.endpoint));
-      const ready = dueTasks.filter((task) => !manualEndpoints.has(task.endpoint));
-      for (const task of ready) {
-        const next = { ...task, attempts: task.attempts + 1 };
-        const retryAt = now + Math.min(3_600_000, 30_000 * (2 ** Math.min(next.attempts - 1, 6)));
-        await tx.put(taskKey(task.endpoint), { ...next, dueAt: retryAt });
-      }
-      if (manualDue.length > 0) {
-        const dueEndpoints = new Set(manualDue.map((item) => item.endpoint));
-        await tx.put(MANUAL_QUEUE_KEY, queued.map((item) =>
-          dueEndpoints.has(item.endpoint) ? { ...item, dueAt: now + 60_000 } : item));
-      }
-      await this.rearm(tx);
-      return { ready, manualDue };
-    });
-    // Keep one provider request in flight per TeamRuntime alarm.
-    for (const item of due.manualDue) {
-      const resource = this.endpoints(item.year).find((candidate) => candidate.endpoint === item.endpoint);
-      if (!resource) continue;
-      const previous = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
-      const result = await this.pollResourceNow(resource);
-      const current = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
-      if (result.status !== "failed" && current?.revision !== previous?.revision && isStatboticsRefreshTrigger(resource)) {
-        await this.enqueueManualPolls(this.endpoints(item.year).filter((candidate) => candidate.provider === "statbotics"), item.year, false);
-      }
-      const retryableFailure = result.status === "failed";
-      const retryAt = Date.now() + Math.min(60_000, 1_000 * (2 ** Math.min(item.attempts, 6)));
-      await this.storage.transaction(async (tx) => {
-        const queue = await tx.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-        const next = queue.filter((queued) => queued.endpoint !== item.endpoint);
-        if (retryableFailure && item.attempts < 8) {
-          // A provider failure is retried without discarding the last-good representation.
-          next.push({ ...item, dueAt: retryAt, attempts: item.attempts + 1 });
-        }
-        await tx.put(MANUAL_QUEUE_KEY, next);
-        await this.rearm(tx);
-      });
-    }
-    for (const task of due.ready) {
-      const stored = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(task.endpoint));
-      const initial: TeamEndpointState<unknown> = stored ?? createEndpointState<unknown>(task.endpoint);
-      const requestState = createPollRequestSnapshot(initial), headers = new Headers();
-      if (requestState.ifNoneMatch) headers.set("If-None-Match", requestState.ifNoneMatch);
-      let result: { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null } |
-        { status: "not-modified"; expiresAt: number | null } | { status: "unavailable"; httpStatus: number } |
-        { status: "failed"; httpStatus?: number; error?: string };
-      try {
-        const client = task.provider === "tba" ? this.api
-          : task.provider === "statbotics" ? this.statboticsApi
-            : task.provider === "frc-colors" ? this.frcColorsApi : null;
-        if (!client) throw new Error(`Unsupported team resource provider: ${String(task.provider)}`);
-        const response = await client.request(task.endpoint, { headers });
-        const ttl = maxAge(response.headers.get("Cache-Control"));
-        const expiresAt = ttl === null ? null : Date.now() + ttl * 1000;
-        if (response.status === 304) result = { status: "not-modified", expiresAt: expiresAt ?? initial.expiresAt };
-        else if (response.status === 404) result = { status: "unavailable", httpStatus: response.status };
-        else if (!response.ok) result = { status: "failed", httpStatus: response.status };
-        else result = { status: "modified", data: await response.json(), etag: response.headers.get("ETag"), expiresAt };
-      } catch (error) {
-        result = { status: "failed", error: error instanceof Error ? error.message : String(error) };
-      }
-      const outcome = await this.storage.transaction(async (tx) => {
-        if (result.status === "not-modified") {
-          return { failed: false, revisionChanged: false };
-        }
-        const key = endpointKey(task.endpoint), latest = await tx.get<TeamEndpointState<unknown>>(key) ?? initial;
-        const next = applyPollResponse(latest, requestState, result, Date.now(), (_current, fetched) => fetched);
-        await tx.put(key, {
-          ...next,
-          lastHttpStatus: "httpStatus" in result ? result.httpStatus : result.status === "modified" ? 200 : latest.lastHttpStatus ?? null,
-          lastError: "error" in result ? result.error : null,
-        });
-        const revisionChanged = next.revision !== latest.revision;
-        if (revisionChanged) {
-          await tx.put("snapshot-revision", (await tx.get<number>("snapshot-revision") ?? 0) + 1);
-        }
-        return { failed: result.status === "failed", revisionChanged };
-      });
-      const key = taskKey(task.endpoint);
-      await this.storage.transaction(async (tx) => {
-        const current = await tx.get<TeamPollTask>(key);
-        // An administrator may have replaced this task while its poll ran.
-        if (!current || current.attempts !== task.attempts + 1 || current.provider !== task.provider) {
-          await this.rearm(tx);
-          return;
-        }
-        await tx.put(key, outcome.failed
-          ? { ...current, dueAt: Date.now() + Math.min(3_600_000, 30_000 * (2 ** Math.min(task.attempts - 1, 6))), attempts: task.attempts }
-          : { ...current, dueAt: Date.now() + task.intervalMs, attempts: 0 });
-        await this.rearm(tx);
-      });
-      if (!outcome.failed && outcome.revisionChanged && isStatboticsRefreshTrigger({ provider: task.provider, endpoint: task.endpoint })) {
-        const endpointParts = task.endpoint.split("/");
-        const year = Number(endpointParts[4] ?? await this.currentSeasonYear());
-        if (Number.isInteger(year) && year >= 1992 && year <= 2200) {
-          await this.enqueueManualPolls(this.endpoints(year).filter((candidate) => candidate.provider === "statbotics"), year, false);
-        }
-      }
-    }
-    const activeEvents = await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {};
-    const currentYear = await this.currentSeasonYear();
-    const candidateYears = new Set<number>([
-      ...(currentYear === null ? [] : [currentYear]),
-      ...due.manualDue.map((item) => item.year),
-      ...Object.values(activeEvents).map((item) => item.year),
-    ]);
-    const refreshYears = new Set<number>(due.manualDue.map((item) => item.year));
-    // A runtime first reached through a historical season still owns a
-    // current-season TeamState. Materialize its initial empty/partial
-    // publication during background alarm work, never in the public read.
-    if (currentYear !== null && !(await this.storage.get("team-state:" + currentYear + ":publication"))) {
-      refreshYears.add(currentYear);
-    }
-    for (const task of due.ready) {
-      for (const year of candidateYears) {
-        if (this.endpoints(year).some((resource) => resource.endpoint === task.endpoint)) {
-          refreshYears.add(year);
-        }
-      }
-    }
-    for (const year of refreshYears) {
-      const publicationKey = "team-state:" + year + ":publication";
-      const previous = (await this.storage.get<{ state: unknown }>(publicationKey))?.state;
-      await this.snapshot(year);
-      const current = (await this.storage.get<{ state: unknown }>(publicationKey))?.state;
-      if (JSON.stringify(previous) !== JSON.stringify(current)) {
-        await this.notifyEventsOfSeasonStateChange(year);
-      }
-    }
-
-    const analyticsJobs = await this.storage.list<number>({ prefix: SEASON_ANALYTICS_DUE_PREFIX });
-    const nextAnalyticsJob = [...analyticsJobs.entries()]
-      .filter(([, dueAt]) => dueAt <= Date.now())
-      .sort((a, b) => a[1] - b[1])[0];
-    if (nextAnalyticsJob) {
-      const [jobKey] = nextAnalyticsJob;
-      const year = Number(jobKey.slice(SEASON_ANALYTICS_DUE_PREFIX.length));
-      try {
-        const response = await this.buildSeasonAnalyticsResponse(year);
-        if (response.ok && response.headers.get("X-FieldView-Analytics-Status") === "complete") {
-          await this.storage.delete(jobKey);
-        } else {
-          await this.storage.put(jobKey, Date.now() + 60_000);
-        }
-      } catch {
-        await this.storage.put(jobKey, Date.now() + 60_000);
-      }
-    }
-    await this.storage.transaction((tx) => this.rearm(tx));
+    await this.storage.deleteAlarm();
   }
+
 }
