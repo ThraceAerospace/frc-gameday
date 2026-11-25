@@ -30,6 +30,7 @@ interface PollingEventResult {
   lifecycle: "active";
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
+  affected_team_keys?: string[];
   error?: string;
 }
 
@@ -126,6 +127,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
+    const affectedTeams: string[] = [];
     for (const candidate of candidates) {
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
@@ -151,6 +153,13 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             });
             eventRefresh = outcome.ok ? "succeeded" : "failed";
             if (!outcome.ok) error = outcome.error ?? "Event refresh failed";
+            const refreshResponse = outcome.response;
+            const affectedTeamKeys = refreshResponse && typeof refreshResponse === "object" &&
+              !Array.isArray(refreshResponse) && Array.isArray((refreshResponse as Record<string, unknown>).affected_team_keys)
+              ? [...new Set(((refreshResponse as Record<string, unknown>).affected_team_keys as unknown[])
+                  .filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
+              : [];
+            if (affectedTeamKeys.length) affectedTeams.push(...affectedTeamKeys);
           }
 
           let participantKeys: string[] = [];
@@ -171,6 +180,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             lifecycle: candidate.lifecycle,
             event_refresh: eventRefresh,
             ...(participantKeys.length ? { participant_team_keys: participantKeys } : {}),
+            ...(affectedTeams.length ? { affected_team_keys: [...new Set(affectedTeams)].sort() } : {}),
             ...(error ? { error } : {}),
           };
         } catch (error) {
@@ -259,6 +269,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       events_failed: results.filter((item) => item.event_refresh === "failed").length,
       daily_team_poll: pollTeams,
       participant_teams_discovered: participantTeamKeys.size,
+      affected_teams_discovered: new Set(results.flatMap((item) => item.affected_team_keys ?? [])).size,
       team_registry_checks_processed: teamRegistryChecksProcessed,
       team_registry_checks_deferred_by_budget: teamRegistryChecksDeferredByBudget,
       team_readiness_checks_processed: teamReadinessChecksProcessed,
