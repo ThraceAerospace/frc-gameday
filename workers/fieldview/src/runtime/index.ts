@@ -188,6 +188,8 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
         const existing = await env.EVENT_ANALYTICS_WORKFLOW.get(workflowId).then((instance) => instance.status());
         if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) {
           shouldCreate = false;
+        } else {
+          workflowId += "-retry-" + Date.now();
         }
       } catch {
         // No workflow exists for this webhook identity.
