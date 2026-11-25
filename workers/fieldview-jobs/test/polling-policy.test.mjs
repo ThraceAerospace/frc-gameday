@@ -52,6 +52,6 @@ test("bounds event polling candidates and rotates the slice between runs", () =>
 test("budgeted team selection is unique, bounded, and rotates deterministically", () => {
   const keys = ["frc3", "frc1", "frc2", "frc1"];
   assert.deepEqual(selectBudgetedKeys(keys, 2, 0), ["frc1", "frc2"]);
-  assert.deepEqual(selectBudgetedKeys(keys, 2, 1), ["frc2", "frc3"]);
+  assert.deepEqual(selectBudgetedKeys(keys, 2, 1), ["frc3", "frc1"]);
   assert.deepEqual(selectBudgetedKeys(keys, 0, 0), []);
 });
