@@ -413,6 +413,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      contract_version: 1,
       event_key: eventKey,
       event_source_revision: 4,
       event_state: eventState,
