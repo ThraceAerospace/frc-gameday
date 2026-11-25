@@ -1,8 +1,12 @@
 # ADR-0010: Event-local weekly classification and home-page projection
 
-- **Status:** Accepted and implemented on the migration branch
+- **Status:** Historical decision; event-local date semantics remain valid, while ownership, scheduling, and runtime activation are superseded by `2026-11-24-storage-and-polling-ownership.md`
 - **Date:** 2026-11-20
 - **Decision owners:** FieldView project
+
+## Supersession
+
+The 2026-11-24 storage and polling ownership decision supersedes this ADR's EventScheduler ownership, daily publication cadence, EventRuntime lifecycle mutation, and Durable Object alarm batching. The current implementation uses a dedicated Monday weekly-projection Workflow, publishes one canonical `events-this-week` record, and leaves event lifecycle eligibility to the polling coordinator at each dispatch. The date-only inclusive overlap rules and event-local IANA timezone semantics below remain authoritative.
 
 ## Context
 
