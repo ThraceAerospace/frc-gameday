@@ -33,7 +33,8 @@ import {
 import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
 import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
-import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isTeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
+import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isEventAnalyticsPublicationCommand, isTeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
+import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
@@ -1037,6 +1038,23 @@ export class EventRuntime {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/analytics-orchestration-publication") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isEventAnalyticsPublicationCommand(body) || body.event_key !== this.eventKey) {
+        return Response.json({ error: "Invalid event analytics publication command" }, { status: 400 });
+      }
+      const published = await this.recalculateAnalytics(body.team_results, body.event_source_revision);
+      if (!published) {
+        return Response.json({ error: "Event analytics inputs changed or publication could not be completed" }, { status: 409 });
+      }
+      return Response.json({
+        accepted: true,
+        event_key: this.eventKey,
+        event_source_revision: body.event_source_revision,
+        team_result_count: body.team_results.length,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
@@ -1367,7 +1385,11 @@ export class EventRuntime {
     return;
   }
 
-  private async buildEventState(calculateAnalytics = false): Promise<{
+  private async buildEventState(
+    calculateAnalytics = false,
+    orchestratedTeamResults?: TeamEventAnalyticsResult[],
+    expectedEventSourceRevision?: number,
+  ): Promise<{
     version: number;
     sourceRevision: number;
     analyticsInputsComplete?: boolean;
@@ -1425,6 +1447,9 @@ export class EventRuntime {
     const advancementPointsSource = toSourceMetadata(advancementPointsState, now);
     const statboticsMatchesSource = toSourceMetadata(statboticsMatchesState, now);
 
+    if (expectedEventSourceRevision !== undefined && state.sourceRevision !== expectedEventSourceRevision) {
+      throw new Error("Event source revision changed before analytics publication");
+    }
     const normalizedState = normalizeFieldViewEventState({
         event_key: this.eventKey as EventKey,
         ...(hasAcquiredValue(eventState) ? { tba_event: eventState!.data as TBAEvent | null } : {}),
@@ -1502,25 +1527,42 @@ export class EventRuntime {
       ),
     ];
     if (calculateAnalytics) {
-      const comparisonInputCollection = await this.collectEventTeamSeasonComparisonInput(normalizedState);
+      // The durable Workflow supplies TeamRuntime-owned results. The legacy
+      // direct path remains temporarily available until Workflow dispatch is
+      // wired for every environment; the publication endpoint never uses it.
+      const comparisonInputCollection = orchestratedTeamResults === undefined
+        ? await this.collectEventTeamSeasonComparisonInput(normalizedState)
+        : undefined;
       const analyticsInputs = [...inputRecords, ...(comparisonInputCollection?.inputs ?? [])];
-      // EventRuntime calculates event/match analytics only. TeamRuntime owns
-      // the per-team calculations and persists each TeamEventState.
       const eventAnalyticsState = await calculateCanonicalMatchAnalytics(normalizedState, inputRecords);
-      const teamResults = comparisonInputCollection
-        ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
-        : { states: [], revisions: [] };
+      const teamResults = orchestratedTeamResults !== undefined
+        ? {
+            states: orchestratedTeamResults.map((result) => result.state),
+            revisions: orchestratedTeamResults.map((result) => ({
+              team_key: result.team_key,
+              revision: result.team_event_revision,
+            })),
+          }
+        : comparisonInputCollection
+          ? await this.calculateTeamEventStates(eventAnalyticsState, comparisonInputCollection.comparisonInput, state.sourceRevision)
+          : { states: [], revisions: [] };
       const teamStates = teamResults.states;
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
+      const comparisonInputUpdatedAt = orchestratedTeamResults?.[0]?.comparison_input_updated_at ??
+        comparisonInputCollection?.comparisonInput.updated_at ??
+        await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null;
+      const comparisonTeamRevisions = orchestratedTeamResults !== undefined
+        ? orchestratedTeamResults.map((result) => ({ team_key: result.team_key, revision: result.team_source_revision }))
+        : comparisonInputCollection?.comparisonInput.team_state_revisions ?? [];
       const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
         teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null) &&
-        comparisonInputCollection?.comparisonInput.state === "complete";
+        (orchestratedTeamResults !== undefined || comparisonInputCollection?.comparisonInput.state === "complete");
       const teamComparison = calculateFieldViewEventTeamComparisonAnalytics(
         teamStates,
         expectedTeamCount,
-        comparisonInputCollection?.comparisonInput.team_state_revisions ?? [],
+        comparisonTeamRevisions,
         teamResults.revisions,
-        comparisonInputCollection?.comparisonInput.updated_at ?? null,
+        comparisonInputUpdatedAt,
       );
       const teamSummaries = buildFieldViewEventTeamSummaries(normalizedState, teamStates);
       const eventAnalytics = eventAnalyticsState.analytics
@@ -1678,7 +1720,10 @@ export class EventRuntime {
     return publication;
   }
 
-  private async recalculateAnalytics(): Promise<void> {
+  private async recalculateAnalytics(
+    orchestratedTeamResults?: TeamEventAnalyticsResult[],
+    expectedEventSourceRevision?: number,
+  ): Promise<boolean> {
     // Run calculations only from explicit runtime commands, never public reads.
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
@@ -1691,7 +1736,7 @@ export class EventRuntime {
         teamStateRevisions?: Array<{ team_key: string; revision: number | null }>;
     };
     try {
-      calculated = await this.buildEventState(true);
+      calculated = await this.buildEventState(true, orchestratedTeamResults, expectedEventSourceRevision);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.storage.transaction(async (transaction) => {
@@ -1700,7 +1745,7 @@ export class EventRuntime {
         await transaction.put("analytics:last-error", detail.slice(0, 300));
         await this.rearm(transaction);
       });
-      return;
+      return false;
     }
     const state = calculated.state;
     const publication: AnalyticsPublication = {
@@ -1755,7 +1800,9 @@ export class EventRuntime {
       const analyticsRevision = await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0;
       await this.publishSnapshotRevision(publishedVersion);
       await this.publishAnalyticsRevision(analyticsRevision);
+      return true;
     }
+    return false;
   }
 
   private async publishAnalyticsRevision(version: number): Promise<void> {
