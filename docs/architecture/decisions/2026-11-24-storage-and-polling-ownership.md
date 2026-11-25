@@ -135,7 +135,8 @@ This is an architecture decision, not authorization to deploy resources, change 
 
 - Only `events-this-week` is maintained as the weekly event candidate set; a separate `events-in-progress` list is not required.
 - Event eligibility is evaluated by the dispatcher at dispatch time using event-local date boundaries.
-- The weekly candidate list is refreshed on Monday and can also be manually refreshed through the admin interface.
+- The weekly candidate list is refreshed every Monday at 16:00 UTC and can also be manually refreshed through the admin interface. The projection window rolls at that UTC boundary, remains the candidate set through the following Sunday in event-local time, and the polling coordinator re-evaluates lifecycle eligibility on every dispatch.
+- Cloudflare does not provision isolated Workflow instances for Worker Previews. Keep the weekly projection Workflow binding in the top-level production configuration only; do not bind a Preview to the production Workflow. Manual weekly refresh is unavailable in branch Previews until an isolated non-production Workflow strategy exists.
 - EventRuntime performs its own TBA resource fetching, reconciliation, delta generation, and persistence.
 - Event and Team readiness remain separate Workflows.
 - HTTP 304 responses are strict no-ops, and unchanged canonical state is not rewritten.
