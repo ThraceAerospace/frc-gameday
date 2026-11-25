@@ -1558,7 +1558,7 @@ export class EventRuntime {
       const comparisonTeamRevisions = orchestratedTeamResults !== undefined
         ? orchestratedTeamResults.map((result) => ({ team_key: result.team_key, revision: result.team_source_revision }))
         : comparisonInputCollection?.comparisonInput.team_state_revisions ?? [];
-      const teamStatesComplete = expectedTeamCount > 0 && teamStates.length === expectedTeamCount &&
+      const teamStatesComplete = teamStates.length === expectedTeamCount &&
         teamStates.every((teamState) => teamState.analytics !== undefined && teamState.analytics !== null) &&
         (orchestratedTeamResults !== undefined || comparisonInputCollection?.comparisonInput.state === "complete");
       const teamComparison = calculateFieldViewEventTeamComparisonAnalytics(
