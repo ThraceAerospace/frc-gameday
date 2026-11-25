@@ -108,6 +108,23 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     const year = Number(eventKey.slice(0, 4));
     const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
     const eventHeaders = headers(this.env, "X-FieldView-Event-Key", eventKey);
+    const scheduleRetry = async (reason: string): Promise<string | null> => {
+      if (attempt >= 2 || !this.env.EVENT_ANALYTICS_WORKFLOW) return null;
+      const retryId = "event-analytics-" + eventKey + "-" + requestedAt + "-retry-" + (attempt + 1);
+      await step.do("schedule-" + reason + "-retry-" + (attempt + 1), async () => {
+        await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
+          id: retryId,
+          params: {
+            event_key: eventKey,
+            affected_team_keys: affected,
+            requested_at: requestedAt,
+            attempt: attempt + 1,
+          },
+        });
+        return retryId;
+      });
+      return retryId;
+    };
 
     const eventInput = await step.do("read-versioned-event-analytics-input", {
       retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
@@ -214,7 +231,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       teamStateRevisions,
     );
 
-    const recalculated = await step.do("recalculate-affected-team-event-analytics", {
+    const recalculationOutcomes = await step.do("recalculate-affected-team-event-analytics", {
       retries: { limit: 3, delay: "15 seconds", backoff: "exponential" },
     }, async () => mapLimit(teamsToRecalculate, 6, async (team) => {
       const response = await teamNamespace.get(teamNamespace.idFromName(team.team_key)).fetch(
@@ -230,15 +247,28 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
           }),
         }),
       );
-      if (!response.ok) throw new Error("TeamRuntime " + team.team_key + " analytics returned HTTP " + response.status);
+      if (!response.ok) return { team_key: team.team_key, status: response.status, result: null };
       const result: unknown = await response.json();
       if (!isTeamEventAnalyticsResult(result) || result.team_key !== team.team_key ||
           result.event_key !== eventKey || result.event_source_revision !== eventInput.event_source_revision ||
           result.comparison_input_updated_at !== updatedAt) {
         throw new Error("TeamRuntime " + team.team_key + " returned an invalid analytics result envelope");
       }
-      return result;
+      return { team_key: team.team_key, status: response.status, result };
     }));
+    if (recalculationOutcomes.some((item) => item.status === 409)) {
+      const retryId = await scheduleRetry("team-revision-conflict");
+      if (retryId) return {
+        event_key: eventKey, status: "retry_scheduled", retry_workflow_id: retryId,
+        reason: "team_revision_conflict",
+      };
+      throw new Error("TeamRuntime analytics input revisions changed during orchestration");
+    }
+    const failedTeam = recalculationOutcomes.find((item) => item.result === null);
+    if (failedTeam) {
+      throw new Error("TeamRuntime " + failedTeam.team_key + " analytics returned HTTP " + failedTeam.status);
+    }
+    const recalculated = recalculationOutcomes.map((item) => item.result as TeamEventAnalyticsResult);
 
     const recalculatedByKey = new Map(recalculated.map((result) => [result.team_key, result]));
     const teamResults: TeamEventAnalyticsResult[] = [];
@@ -272,25 +302,13 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       };
     });
     if (!publicationResult.ok) {
-      if (publicationResult.status === 409 && attempt < 2 && this.env.EVENT_ANALYTICS_WORKFLOW) {
-        const retryId = "event-analytics-" + eventKey + "-" + requestedAt + "-retry-" + (attempt + 1);
-        await step.do("schedule-revision-conflict-retry-" + (attempt + 1), async () => {
-          await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
-            id: retryId,
-            params: {
-              event_key: eventKey,
-              affected_team_keys: affected,
-              requested_at: requestedAt,
-              attempt: attempt + 1,
-            },
-          });
-          return retryId;
-        });
-        return {
+      if (publicationResult.status === 409) {
+        const retryId = await scheduleRetry("event-revision-conflict");
+        if (retryId) return {
           event_key: eventKey,
           status: "retry_scheduled",
           retry_workflow_id: retryId,
-          reason: "revision_conflict",
+          reason: "event_revision_conflict",
         };
       }
       throw new Error("EventRuntime analytics publication returned HTTP " + publicationResult.status);
