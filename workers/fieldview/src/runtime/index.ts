@@ -297,6 +297,16 @@ export default {
       }));
     }
 
+    if (url.pathname === "/internal/admin/events-this-week/refresh" &&
+        (request.method === "GET" || request.method === "POST")) {
+      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/events-this-week/refresh" + url.search, {
+        method: request.method,
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
@@ -431,41 +441,37 @@ export default {
       if (!env.DISCOVERY_STORE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const pointerObject = await discoveryStore(env).get("projections/events/this-week/current.json");
-        if (pointerObject) {
-          const pointer = await pointerObject.json<{ runAt: number; runDate: string; years: number[] }>();
-          const events: Array<Record<string, unknown>> = [];
-          let checkedAt = Number.MAX_SAFE_INTEGER;
-          let complete = true;
-          for (const year of pointer.years) {
-            const object = await discoveryStore(env).get(
-              `projections/events/this-week/${pointer.runAt}/${year}.json`,
-            );
-            if (!object) { complete = false; break; }
-            const projection = await object.json<{
-              checkedAt: number;
-              events: Array<Record<string, unknown>>;
-            }>();
-            checkedAt = Math.min(checkedAt, projection.checkedAt);
-            events.push(...projection.events);
-          }
-          if (complete) {
-            const stale = Date.now() - checkedAt > 36 * 60 * 60_000;
-            events.sort((a, b) => String(a.key).localeCompare(String(b.key)));
-            return Response.json({
-              evaluatedAt: pointer.runAt,
-              runDate: pointer.runDate,
-              checkedAt,
-              events: events.map((event) => normalizeFieldViewEvent(event as never, {
-                tba_event: {
-                  status: stale ? "stale" : "available",
-                  retrieved_at: new Date(checkedAt).toISOString(),
-                },
-              })),
-              index: { status: stale ? "stale" : "available", persisted: true },
-            }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
-          }
+      const object = await discoveryStore(env).get("projections/events-this-week/current.json");
+      if (object) {
+        const projection = await object.json<{
+          schemaVersion: number; year: number; evaluatedAt: number; runDate: string;
+          weekStart: string; checkedAt: number; events: Array<Record<string, unknown>>;
+        }>();
+        if (projection.schemaVersion === 1 && Number.isInteger(projection.year) &&
+            Number.isFinite(projection.evaluatedAt) && Number.isFinite(projection.checkedAt) &&
+            Array.isArray(projection.events)) {
+          const now = new Date();
+          const weekday = now.getUTCDay();
+          now.setUTCHours(0, 0, 0, 0);
+          now.setUTCDate(now.getUTCDate() - ((weekday + 6) % 7));
+          const currentWeekStart = now.toISOString().slice(0, 10);
+          const stale = projection.weekStart !== currentWeekStart;
+          const events = [...projection.events].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+          return Response.json({
+            evaluatedAt: projection.evaluatedAt,
+            runDate: projection.runDate,
+            checkedAt: projection.checkedAt,
+            weekStart: projection.weekStart,
+            events: events.map((event) => normalizeFieldViewEvent(event as never, {
+              tba_event: {
+                status: stale ? "stale" : "available",
+                retrieved_at: new Date(projection.checkedAt).toISOString(),
+              },
+            })),
+            index: { status: stale ? "stale" : "available", persisted: true },
+          }, { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } });
         }
+      }
       return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
 
