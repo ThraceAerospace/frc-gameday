@@ -6,11 +6,7 @@ export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
 export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
 export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
 
-/**
- * Only registered events whose event-local lifecycle is active may receive
- * recurring live polling. Upcoming events require a separate, explicitly
- * budgeted pre-event policy; they are not part of this coordinator pass.
- */
+/** Return valid events that are active according to their own IANA timezone. */
 export function selectActiveEvents(events: TbaEvent[], now: number): TbaEvent[] {
   return events
     .filter((event) => event && typeof event.key === "string" && isValidEventLifecycleInput(event))
@@ -47,4 +43,18 @@ export function selectBudgetedKeys(
   const slot = Number.isSafeInteger(rotationSlot) ? rotationSlot : 0;
   const start = (((slot % unique.length) * (count % unique.length)) % unique.length + unique.length) % unique.length;
   return Array.from({ length: count }, (_, index) => unique[(start + index) % unique.length]);
+}
+
+
+/** Rotate a bounded slice while preserving the caller's priority ordering. */
+export function selectBudgetedItems<T>(
+  items: T[],
+  limit: number,
+  rotationSlot: number,
+): T[] {
+  if (!Number.isFinite(limit) || limit <= 0 || items.length === 0) return [];
+  const count = Math.min(items.length, Math.floor(limit));
+  const slot = Number.isSafeInteger(rotationSlot) ? rotationSlot : 0;
+  const start = (((slot % items.length) * (count % items.length)) % items.length + items.length) % items.length;
+  return Array.from({ length: count }, (_, index) => items[(start + index) % items.length]);
 }
