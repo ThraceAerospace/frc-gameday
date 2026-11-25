@@ -213,7 +213,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     const recalculateAll = affected === null || previousUpdatedAt <= 0 || seasonInputChanged;
     const affectedSet = new Set(affected ?? []);
     const teamsToRecalculate = registeredTeams.filter((team) => {
-      const hasSeasonInput = seasonInputs.find((item) => item.team_key === team.team_key)?.state !== null;
+      const hasSeasonInput = Boolean(seasonInputs.find((item) => item.team_key === team.team_key)?.state);
       return hasSeasonInput && (recalculateAll || affectedSet.has(team.team_key));
     });
     const updatedAt = recalculateAll
