@@ -95,7 +95,6 @@ export async function dispatchRuntime(
   const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
   const paths: Record<string, string> = {
     participants: "participants",
-    "team-state-changed": "team-state-changed",
     readiness: "readiness",
     state: "state",
     refresh: "refresh",
