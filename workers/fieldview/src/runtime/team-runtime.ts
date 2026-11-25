@@ -648,18 +648,8 @@ export class TeamRuntime {
         if (changed) await tx.put(ACTIVE_EVENTS_KEY, current);
         return current;
       });
-      const years = new Set<number>([eventYear as number, ...Object.values(activeEvents).map((item) => item.year)]);
-      const expectedInterval = Object.keys(activeEvents).length > 0 ? this.activeRefreshIntervalMs() : this.refreshIntervalMs();
-      const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
-      const scheduleMissingOrOutdated = [...years].some((activeYear) =>
-        this.endpoints(activeYear).filter((resource) => resource.provider !== "statbotics").some((resource) => {
-          const task = tasks.get(taskKey(resource.endpoint));
-          return !task || task.intervalMs !== expectedInterval;
-        }),
-      );
-      if (changed || scheduleMissingOrOutdated) {
-        await Promise.all([...years].map((activeYear) => this.schedule(activeYear, false)));
-      }
+      // Active-event membership is coordinator input only. The TeamRuntime
+      // does not create recurring tasks or schedule provider work.
       return Response.json({ team_key: this.teamKey, active_events: Object.keys(activeEvents).sort(), active: value.active, changed });
     }
     if (request.method === "POST" && (url.pathname === "/refresh" || url.pathname === "/seed")) {
