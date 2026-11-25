@@ -63,16 +63,21 @@ test("publishing a new team generation removes superseded team pages", async () 
   assert.equal(state.values.has("discovery-object:discovery/team-pages/2026/200/0.json"), true);
 });
 
-test("publishing a new weekly projection pointer removes the previous generation", async () => {
+test("weekly event candidates are persisted as one canonical projection record", async () => {
   const state = createState();
-  await state.storage.put("discovery-object:projections/events/this-week/100/2026.json", "{}");
-  await state.storage.put("discovery-object:projections/events/this-week/200/2026.json", "{}");
-  await state.storage.put("discovery-object:projections/events/this-week/current.json", JSON.stringify({ runAt: 100 }));
+  const projection = {
+    schemaVersion: 1, year: 2026, evaluatedAt: 1795450000000,
+    runDate: "2026-11-23", weekStart: "2026-11-23", weekEnd: "2026-11-29",
+    checkedAt: 1795450000000, events: [{ key: "2026test" }],
+  };
   const store = new DiscoveryStore(state);
-  await store.fetch(new Request("https://store/put", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: "projections/events/this-week/current.json", value: JSON.stringify({ runAt: 200 }) }) }));
-  assert.equal(state.values.has("discovery-object:projections/events/this-week/100/2026.json"), false);
-  assert.equal(state.values.has("discovery-object:projections/events/this-week/200/2026.json"), true);
+  const put = await store.fetch(new Request("https://store/put", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: "projections/events-this-week/current.json", value: JSON.stringify(projection) }) }));
+  assert.equal(put.status, 200);
+  const get = await store.fetch(new Request("https://store/get?key=" + encodeURIComponent("projections/events-this-week/current.json")));
+  assert.deepEqual(await get.json(), projection);
+  assert.equal([...state.values.keys()].some((key) => key.includes("projections/events/this-week/")), false);
 });
 
 test("DiscoveryStore acquires and publishes current-season, team, and event catalogs", async () => {
