@@ -6,6 +6,13 @@ import type { TbaEvent } from "./calendar.ts";
  * recurring live polling. Upcoming events require a separate, explicitly
  * budgeted pre-event policy; they are not part of this coordinator pass.
  */
+export function selectActiveEvents(events: TbaEvent[], now: number): TbaEvent[] {
+  return events
+    .filter((event) => event && typeof event.key === "string" && isValidEventLifecycleInput(event))
+    .filter((event) => lifecycleFor(event, now).lifecycle === "active")
+    .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.key.localeCompare(b.key));
+}
+
 export function selectPollingCandidates(
   events: TbaEvent[],
   registeredEventKeys: ReadonlySet<string>,
@@ -13,15 +20,9 @@ export function selectPollingCandidates(
   limit = MAX_EVENT_CANDIDATES_PER_RUN,
   rotationSlot = 0,
 ): Array<{ event: TbaEvent; lifecycle: "active" }> {
-  const active = events
-    .filter((event) => event && typeof event.key === "string" &&
-      registeredEventKeys.has(event.key) && isValidEventLifecycleInput(event))
-    .map((event) => ({ event, lifecycle: lifecycleFor(event, now).lifecycle }))
-    .filter((item): item is { event: TbaEvent; lifecycle: "active" } =>
-      item.lifecycle === "active")
-    .sort((a, b) => a.event.start_date.localeCompare(b.event.start_date) || a.event.key.localeCompare(b.event.key));
-  const selectedKeys = new Set(selectBudgetedKeys(active.map((item) => item.event.key), limit, rotationSlot));
-  return active.filter((item) => selectedKeys.has(item.event.key));
+  const active = selectActiveEvents(events, now).filter((event) => registeredEventKeys.has(event.key));
+  const selectedKeys = new Set(selectBudgetedKeys(active.map((item) => item.key), limit, rotationSlot));
+  return active.filter((item) => selectedKeys.has(item.key)).map((event) => ({ event, lifecycle: "active" as const }));
 }
 
 
