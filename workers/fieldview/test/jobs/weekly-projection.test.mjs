@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEventsThisWeekProjection, utcWeekWindow } from "../../src/jobs/weekly-projection.ts";
+import { buildEventsThisWeekProjection, utcProjectionWeekWindow, utcWeekWindow } from "../../src/jobs/weekly-projection.ts";
 
 const event = (key, start_date, end_date, timezone = "America/Los_Angeles") => ({
   key, start_date, end_date, timezone,
@@ -44,4 +44,9 @@ test("UTC week identity is Monday through Sunday across year boundaries", () => 
   assert.deepEqual(utcWeekWindow(Date.parse("2027-01-01T12:00:00.000Z")), {
     weekStart: "2026-12-28", weekEnd: "2027-01-03",
   });
+});
+
+test("weekly projection rollover remains on the prior window until Monday 16:00 UTC", () => {
+  assert.equal(utcProjectionWeekWindow(Date.parse("2026-11-30T15:59:00.000Z")).weekStart, "2026-11-23");
+  assert.equal(utcProjectionWeekWindow(Date.parse("2026-11-30T16:00:00.000Z")).weekStart, "2026-11-30");
 });
