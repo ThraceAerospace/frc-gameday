@@ -8,7 +8,6 @@ import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
 import { PollingCoordinatorWorkflow } from "./polling-coordinator.ts";
 import { WeeklyEventProjectionWorkflow } from "./weekly-event-projection.ts";
-import type { WeeklyEventProjectionParameters } from "./weekly-event-projection.ts";
 export { PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow };
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
