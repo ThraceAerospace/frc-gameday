@@ -809,56 +809,6 @@ export class EventRuntime {
       });
     }
 
-    if (request.method === "POST" && url.pathname === "/team-state-changed") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.team_key !== "string" ||
-          !/^(?:frc)?[0-9]+$/.test(body.team_key) ||
-          !Number.isSafeInteger(body.team_state_revision) || (body.team_state_revision as number) < 0 ||
-          (body.team_event_revision !== undefined &&
-            (!Number.isSafeInteger(body.team_event_revision) || (body.team_event_revision as number) < 0))) {
-        return Response.json({ error: "Invalid team state change notification" }, { status: 400 });
-      }
-      const accepted = await this.storage.transaction(async (transaction) => {
-        const revisionKey = TEAM_STATE_REVISION_PREFIX + body.team_key;
-        const eventRevisionKey = TEAM_EVENT_REVISION_PREFIX + body.team_key;
-        const previousRevision = await transaction.get<number>(revisionKey) ?? -1;
-        const previousEventRevision = await transaction.get<number>(eventRevisionKey) ?? -1;
-        const teamEventRevision = typeof body.team_event_revision === "number"
-          ? body.team_event_revision : null;
-        const sourceChanged = (body.team_state_revision as number) > previousRevision;
-        const eventChanged = teamEventRevision !== null && teamEventRevision > previousEventRevision;
-        if (!sourceChanged && !eventChanged) return false;
-        if (sourceChanged) await transaction.put(revisionKey, body.team_state_revision);
-        if (eventChanged && teamEventRevision !== null) {
-          await transaction.put(eventRevisionKey, teamEventRevision);
-        }
-        await transaction.delete(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
-        await transaction.put(ANALYTICS_DUE_KEY, Date.now());
-        await transaction.put("analytics:status", "pending");
-        await transaction.put("snapshot-revision", (await transaction.get<number>("snapshot-revision") ?? 0) + 1);
-        await transaction.delete(ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY);
-        await this.rearm(transaction);
-        return true;
-      });
-      if (accepted) {
-        const version = await this.storage.get<number>("snapshot-revision") ?? 0;
-        // Publish only the logical foreign reference. TeamRuntime remains the
-        // owner and read endpoint for the actual TeamEventState; notifications
-        // must not copy that record into EventRuntime's event publication.
-        await this.publishSnapshotRevision(version, {
-          team_state_ref: {
-            owner: "team-runtime",
-            owner_id: body.team_key,
-            record_type: "team-event-state",
-            record_id: this.eventKey,
-            revision: typeof body.team_event_revision === "number" ? body.team_event_revision : null,
-          },
-          event_comparison_invalidated: true,
-        });
-      }
-      return Response.json({ accepted, duplicate: !accepted, event_key: this.eventKey, team_key: body.team_key });
-    }
-
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
       const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       if (!eventState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
