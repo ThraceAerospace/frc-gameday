@@ -1,8 +1,8 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
-import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
-import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
+import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
+import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { lifecycleFor } from "./calendar.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
