@@ -92,7 +92,8 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       );
       const expectedWeek = utcProjectionWeekWindow(scheduledAt);
       if (!projection || projection.schemaVersion !== 1 || projection.year !== current.year ||
-          projection.weekStart !== expectedWeek.weekStart || !Number.isSafeInteger(projection.evaluatedAt) ||
+          projection.weekStart !== expectedWeek.weekStart || projection.weekEnd !== expectedWeek.weekEnd ||
+          !Number.isSafeInteger(projection.evaluatedAt) ||
           projection.evaluatedAt > scheduledAt + 5 * 60_000 || !Number.isFinite(projection.checkedAt) ||
           !Array.isArray(projection.events)) {
         throw new Error("The canonical events-this-week projection is missing, stale, or incomplete; refresh weekly event discovery");
