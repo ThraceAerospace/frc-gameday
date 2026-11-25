@@ -50,10 +50,6 @@ export class DiscoveryStore {
         await this.deleteKey(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}.json`);
         await this.deleteKey(`discovery/staging/${eventDirectory[1]}/${oldValue.updatedAt}-keys.json`);
       }
-      if (key === "projections/events/this-week/current.json" &&
-          typeof oldValue.runAt === "number" && oldValue.runAt !== newValue.runAt) {
-        await this.deletePrefix(`projections/events/this-week/${oldValue.runAt}/`);
-      }
       const coverageAudit = key.match(/^admin\/coverage-audits\/(\d{4})\.json$/);
       if (coverageAudit && typeof oldValue.items_prefix === "string" && oldValue.items_prefix !== newValue.items_prefix) {
         await this.deletePrefix(oldValue.items_prefix);
