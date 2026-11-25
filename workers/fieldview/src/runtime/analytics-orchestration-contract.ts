@@ -15,6 +15,7 @@ export interface EventAnalyticsTeamInput {
   contract_version: typeof EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION;
   event_key: string;
   event_source_revision: number;
+  comparison_input_updated_at: number | null;
   event_state: FieldViewEventState;
 }
 
@@ -66,6 +67,7 @@ export function isEventAnalyticsTeamInput(value: unknown): value is EventAnalyti
     value.contract_version === EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION &&
     typeof value.event_key === "string" && /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) &&
     isRevision(value.event_source_revision) &&
+    (value.comparison_input_updated_at === null || isRevision(value.comparison_input_updated_at)) &&
     isRecord(value.event_state) && value.event_state.event_key === value.event_key;
 }
 
