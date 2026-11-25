@@ -1775,6 +1775,12 @@ export class EventRuntime {
         return null;
       }
       if (orchestratedTeamResults !== undefined) {
+        if (orchestratedTeamResults.length > 0) {
+          await transaction.put(
+            EVENT_COMPARISON_INPUT_UPDATED_AT_KEY,
+            orchestratedTeamResults[0].comparison_input_updated_at,
+          );
+        }
         const latestTeamRevisions = await transaction.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX });
         const staleTeamInput = orchestratedTeamResults.some((result) => {
           const latest = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + result.team_key);
