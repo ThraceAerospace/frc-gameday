@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyTbaWebhookHmac } from "../src/webhook-auth.ts";
+import { verifyTbaWebhookHmac } from "../../src/runtime/webhook-auth.ts";
 
 async function sign(secret, body) {
   const key = await crypto.subtle.importKey(

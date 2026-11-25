@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createProviderSourceVersion } from "../src/source-record.ts";
-import { createEndpointState } from "../src/endpoint-state.ts";
+import { createProviderSourceVersion } from "../../src/runtime/source-record.ts";
+import { createEndpointState } from "../../src/runtime/endpoint-state.ts";
 
 test("stores an accepted 200 payload unchanged as a provider source version", () => {
   const previous = createEndpointState("/event/2026test/matches");

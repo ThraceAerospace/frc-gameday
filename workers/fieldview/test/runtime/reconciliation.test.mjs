@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   reconcilePolledEndpoint,
   reconcileWebhookEndpoint,
-} from "../src/reconciliation.ts";
+} from "../../src/runtime/reconciliation.ts";
 
 test("poll reconciliation retains completed results when TBA returns a regressed match", () => {
   const endpoint = "/event/2026test/matches";

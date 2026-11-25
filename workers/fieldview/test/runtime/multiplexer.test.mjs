@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Multiplexer } from "../src/multiplexer.ts";
+import { Multiplexer } from "../../src/runtime/multiplexer.ts";
 
 class MemoryStorage {
   values = new Map();

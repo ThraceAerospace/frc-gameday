@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DiscoveryStore } from "../src/discovery-store.ts";
+import { DiscoveryStore } from "../../src/runtime/discovery-store.ts";
 
 function createState() {
   const values = new Map();

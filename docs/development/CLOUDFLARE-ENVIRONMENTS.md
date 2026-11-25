@@ -41,16 +41,16 @@ Workers Previews require Wrangler 4.135.0 or later. Use the repository's configu
 
 ## Local secrets
 
-Use exactly one local environment file: `.env` at the repository root. It is ignored by Git and shared by the Next.js workspace and the consolidated local Worker.
+Keep Worker and frontend environment configuration separate.
 
-- Next.js loads the root file through `@next/env` in `apps/web/next.config.ts`.
-- The local Worker process loads the same root file through the `dev:worker` script.
-- Do not create workspace-specific `.env.local`, `.dev.vars`, or other duplicate secret files.
-- Keep the root file local. Cloudflare Production and Preview secrets are configured separately in Cloudflare and are not synchronized from this local file.
+- The Worker uses one local file: `workers/fieldview/.dev.vars`. It is Git-ignored and Wrangler loads it automatically for local development.
+- Do not source the frontend `.env` or Vercel environment into the Worker process.
+- Frontend/Vercel environment variables remain managed independently by the frontend workflow; they are not copied into `.dev.vars`.
+- Cloudflare Production and Preview secrets are configured separately in Cloudflare and are never committed to source control.
 
 ## Current repository state
 
-The `workers/fieldview-runtime` and `workers/fieldview-jobs` directories are source modules, not independently deployed Workers. Their code is composed by `workers/fieldview/src/index.ts`, the single deployment entrypoint. Jobs dispatch uses an in-process callback; no Runtime-to-Jobs, Jobs-to-Runtime, or self-service Worker service bindings are used.
+Runtime and Jobs are separated as `workers/fieldview/src/runtime` and `workers/fieldview/src/jobs`, with corresponding tests under `workers/fieldview/test`. They are modules in one Worker project, composed by `workers/fieldview/src/index.ts`, the single deployment entrypoint. Jobs dispatch uses an in-process callback; no Runtime-to-Jobs, Jobs-to-Runtime, or self-service Worker service bindings are used.
 
 The single Wrangler configuration declares the four Durable Object classes (EventRuntime, TeamRuntime, Multiplexer, and transitional DiscoveryStore) and the four production Workflows (DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, and RuntimeAdminWorkflow). Durable Object classes and migrations are shared in configuration but Cloudflare provisions isolated namespace/storage for each Preview. Preview Workflow bindings are intentionally omitted for the isolation reason above.
 

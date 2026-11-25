@@ -1,24 +1,24 @@
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
-import { StatboticsApiClient } from "../../../packages/providers/statbotics/src/client.ts";
-import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
-import { FRCColorsApiClient } from "../../../packages/providers/frc-colors/src/client.ts";
-import { FRC_COLORS_ENDPOINTS } from "../../../packages/providers/frc-colors/src/endpoints.ts";
-import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../packages/providers/statbotics/src/types.ts";
-import type { FRCColorsTeam } from "../../../packages/providers/frc-colors/src/types.ts";
+import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
+import { StatboticsApiClient } from "../../../../packages/providers/statbotics/src/client.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../../packages/providers/statbotics/src/endpoints.ts";
+import { FRCColorsApiClient } from "../../../../packages/providers/frc-colors/src/client.ts";
+import { FRC_COLORS_ENDPOINTS } from "../../../../packages/providers/frc-colors/src/endpoints.ts";
+import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../../packages/providers/statbotics/src/types.ts";
+import type { FRCColorsTeam } from "../../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
 import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
-import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../packages/providers/tba/src/types.ts";
-import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
-import { normalizeFieldViewTeamState } from "../../../packages/domain/src/normalization/team-state.ts";
-import { normalizeFieldViewTeamEventState } from "../../../packages/domain/src/normalization/team-event-state.ts";
-import type { FieldViewEventState } from "../../../packages/domain/src/event.ts";
-import type { FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
-import type { FieldViewEventTeamSeasonComparisonInput, FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
-import { calculateCanonicalTeamEventAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
-import { buildSeasonDiagnostics } from "../../../packages/analytics/src/season-diagnostics.ts";
-import type { SeasonMatchEvidence } from "../../../packages/analytics/src/season-diagnostics.ts";
-import type { FieldViewTeamEventAnalytics } from "../../../packages/domain/src/analytics.ts";
+import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
+import type { FieldViewSourceRecordMetadata } from "../../../../packages/domain/src/source-metadata.ts";
+import { normalizeFieldViewTeamState } from "../../../../packages/domain/src/normalization/team-state.ts";
+import { normalizeFieldViewTeamEventState } from "../../../../packages/domain/src/normalization/team-event-state.ts";
+import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
+import type { FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
+import type { FieldViewEventTeamSeasonComparisonInput, FieldViewAnalyticsInputRecord } from "../../../../packages/domain/src/analytics.ts";
+import { calculateCanonicalTeamEventAnalytics } from "../../../../packages/analytics/src/canonical-match-analytics.ts";
+import { buildSeasonDiagnostics } from "../../../../packages/analytics/src/season-diagnostics.ts";
+import type { SeasonMatchEvidence } from "../../../../packages/analytics/src/season-diagnostics.ts";
+import type { FieldViewTeamEventAnalytics } from "../../../../packages/domain/src/analytics.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
@@ -457,9 +457,9 @@ export class TeamRuntime {
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const storedState = await this.storage.get<FieldViewTeamEventState & {
-        team?: import("../../../packages/domain/src/team.ts").FieldViewTeam | null;
-        event_team?: import("../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
-        matches?: import("../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
+        team?: import("../../../../packages/domain/src/team.ts").FieldViewTeam | null;
+        event_team?: import("../../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
+        matches?: import("../../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
       }>(stateKey);
       if (!storedState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
@@ -1188,11 +1188,6 @@ export class TeamRuntime {
         // EventRuntime reconciliation is recoverable through its next scheduled refresh.
       }
     }));
-  }
-
-  // Retire any alarm persisted by an older deployment. Never poll or retry here.
-  async alarm(): Promise<void> {
-    await this.storage.deleteAlarm();
   }
 
 }

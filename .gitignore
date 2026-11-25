@@ -36,8 +36,7 @@ yarn-error.log*
 # Environment files and secrets
 .env*
 !.env.example
-# Legacy local secret file: keep ignored until its values are moved into root .env.
-workers/fieldview-runtime/.dev.vars
+\n# Local Cloudflare Worker secrets (Wrangler loads this automatically).\nworkers/fieldview/.dev.vars
 
 # vercel
 .vercel

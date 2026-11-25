@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
 import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
 import { lifecycleFor } from "./calendar.ts";

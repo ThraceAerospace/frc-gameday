@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("../src/index.ts", import.meta.url), "utf8");
+const source = await readFile(new URL("../../src/jobs/index.ts", import.meta.url), "utf8");
 const eventStart = source.indexOf("export class DailyEventReadinessWorkflow");
 const teamStart = source.indexOf("export class DailyTeamReadinessWorkflow");
 const auditStart = source.indexOf("export class CoverageAuditWorkflow");

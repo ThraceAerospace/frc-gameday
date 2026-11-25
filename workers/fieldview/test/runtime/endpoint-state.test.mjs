@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyPollResponse, applyWebhookUpdate, createEndpointState, createPollRequestSnapshot,
-} from "../src/endpoint-state.ts";
+} from "../../src/runtime/endpoint-state.ts";
 
 const replace = (_current, incoming) => incoming;
 

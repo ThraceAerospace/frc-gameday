@@ -10,7 +10,6 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "src/**/*.ts",
-    "../fieldview-jobs/types.d.ts"
+    "src/**/*.ts"
   ]
 }

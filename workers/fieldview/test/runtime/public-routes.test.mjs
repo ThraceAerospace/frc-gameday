@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import worker from "../src/index.ts";
+import worker from "../../src/runtime/index.ts";
 
 function makeEnvironment() {
   const calls = [];

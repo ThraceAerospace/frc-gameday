@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems } from "../src/polling-policy.ts";
+import { selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems } from "../../src/jobs/polling-policy.ts";
 
 const now = Date.parse("2026-11-24T18:00:00Z");
 const events = [

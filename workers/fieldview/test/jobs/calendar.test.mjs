@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "../src/calendar.ts";
+import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "../../src/jobs/calendar.ts";
 
 test("classifies the Monday-Sunday week using the event timezone", () => {
   const event = { start_date: "2026-11-22", end_date: "2026-11-23", timezone: "America/Los_Angeles" };

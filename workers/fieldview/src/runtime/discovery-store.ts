@@ -1,6 +1,6 @@
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
+import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 const PREFIX = "discovery-object:";
 const MAX_LIST_LIMIT = 1000;
 

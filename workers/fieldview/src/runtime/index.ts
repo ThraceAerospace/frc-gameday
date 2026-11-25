@@ -4,7 +4,7 @@ import { TeamRuntime } from "./team-runtime.ts";
 import { DiscoveryStore } from "./discovery-store.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
-import { normalizeFieldViewEvent } from "../../../packages/domain/src/normalization/event.ts";
+import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 
 export { EventRuntime, Multiplexer, TeamRuntime, DiscoveryStore };

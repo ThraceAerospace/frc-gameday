@@ -1,7 +1,7 @@
-import { TBAApiClient } from "../../../packages/providers/tba/src/client.ts";
-import { TBA_ENDPOINTS } from "../../../packages/providers/tba/src/endpoints.ts";
-import { StatboticsApiClient } from "../../../packages/providers/statbotics/src/client.ts";
-import { STATBOTICS_ENDPOINTS } from "../../../packages/providers/statbotics/src/endpoints.ts";
+import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
+import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
+import { StatboticsApiClient } from "../../../../packages/providers/statbotics/src/client.ts";
+import { STATBOTICS_ENDPOINTS } from "../../../../packages/providers/statbotics/src/endpoints.ts";
 import {
   applyPollResponse,
   applyWebhookUpdate,
@@ -16,23 +16,23 @@ import type {
 } from "./cloudflare.ts";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
-import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoints, TBAEventOPRs, TBAEventPredictions, TBAEventRanking, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../packages/providers/tba/src/types.ts";
-import type { StatboticsMatch } from "../../../packages/providers/statbotics/src/types.ts";
-import type { EventKey } from "../../../packages/domain/src/ids.ts";
-import type { FieldViewSourceRecordMetadata } from "../../../packages/domain/src/source-metadata.ts";
-import type { FieldViewAnalyticsInputRecord } from "../../../packages/domain/src/analytics.ts";
-import { normalizeFieldViewEventState } from "../../../packages/domain/src/normalization/event-state.ts";
-import { calculateCanonicalMatchAnalytics } from "../../../packages/analytics/src/canonical-match-analytics.ts";
+import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoints, TBAEventOPRs, TBAEventPredictions, TBAEventRanking, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
+import type { StatboticsMatch } from "../../../../packages/providers/statbotics/src/types.ts";
+import type { EventKey } from "../../../../packages/domain/src/ids.ts";
+import type { FieldViewSourceRecordMetadata } from "../../../../packages/domain/src/source-metadata.ts";
+import type { FieldViewAnalyticsInputRecord } from "../../../../packages/domain/src/analytics.ts";
+import { normalizeFieldViewEventState } from "../../../../packages/domain/src/normalization/event-state.ts";
+import { calculateCanonicalMatchAnalytics } from "../../../../packages/analytics/src/canonical-match-analytics.ts";
 import {
   mergeAnalyticsInvalidations,
   planAnalyticsInvalidation,
   type AnalyticsInvalidation,
   type AnalyticsSourceKey,
-} from "../../../packages/analytics/src/invalidation.ts";
-import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../packages/analytics/src/event-team-season-comparison.ts";
-import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../packages/analytics/src/event-team-comparison-analytics.ts";
-import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../packages/domain/src/team.ts";
-import type { FieldViewEventView } from "../../../packages/domain/src/event-view.ts";
+} from "../../../../packages/analytics/src/invalidation.ts";
+import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
+import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
+import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
+import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
@@ -404,7 +404,7 @@ export class EventRuntime {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
     // Public reads never create or replace a publication. Explicit runtime
-    // commands and the local alarm own publication work.
+    // commands own publication work.
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
@@ -536,8 +536,6 @@ export class EventRuntime {
           await this.rearm(transaction);
         });
       }
-      // EventRuntime owns the local polling queue. The Durable Object alarm
-      // executes its work after this cross-runtime lifecycle command returns.
       return Response.json({ lifecycle, queued: true, event_key: this.eventKey }, { status: 202 });
     }
 
@@ -1162,7 +1160,7 @@ export class EventRuntime {
   private async collectEventTeamSeasonComparisonInput(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
   ): Promise<{
-    comparisonInput: import("../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput;
+    comparisonInput: import("../../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput;
     inputs: FieldViewAnalyticsInputRecord[];
   } | undefined> {
     const event = eventState.event;
@@ -1265,7 +1263,7 @@ export class EventRuntime {
 
   private async calculateTeamEventStates(
     eventState: ReturnType<typeof normalizeFieldViewEventState>,
-    comparisonInput: import("../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput,
+    comparisonInput: import("../../../../packages/domain/src/analytics.ts").FieldViewEventTeamSeasonComparisonInput,
     eventSourceRevision: number,
   ): Promise<{ states: FieldViewTeamEventState[]; revisions: Array<{ team_key: string; revision: number | null }> }> {
     const namespace = this.env.TEAM_RUNTIME;
@@ -1642,14 +1640,8 @@ export class EventRuntime {
     return publication;
   }
 
-  // Legacy alarms may still be pending in persisted DO storage after rollout.
-  // Delete them once and never perform provider work from an alarm.
-  async alarm(): Promise<void> {
-    await this.storage.deleteAlarm();
-  }
-
   private async recalculateAnalytics(): Promise<void> {
-    // Run calculations from the Durable Object alarm, never from public reads.
+    // Run calculations only from explicit runtime commands, never public reads.
     // If sources change during calculation, discard the result and coalesce
     // another run rather than publishing a mixed-revision analytics payload.
     await this.storage.put("analytics:status", "running");

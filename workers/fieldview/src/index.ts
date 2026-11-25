@@ -1,6 +1,6 @@
-import runtimeWorker from "../../fieldview-runtime/src/index.ts";
-import jobsWorker from "../../fieldview-jobs/src/index.ts";
-import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
+import runtimeWorker from "./runtime/index.ts";
+import jobsWorker from "./jobs/index.ts";
+import type { RuntimeEnvironment } from "./runtime/cloudflare.ts";
 
 type RuntimeContext = Parameters<typeof runtimeWorker.fetch>[2];
 type JobsEnvironment = Parameters<typeof jobsWorker.fetch>[1];
@@ -41,5 +41,5 @@ export default {
   },
 };
 
-export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "../../fieldview-runtime/src/index.ts";
-export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow } from "../../fieldview-jobs/src/index.ts";
+export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "./runtime/index.ts";
+export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow } from "./jobs/index.ts";

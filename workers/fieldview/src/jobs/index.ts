@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
-import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
+import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
+import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 
 import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";

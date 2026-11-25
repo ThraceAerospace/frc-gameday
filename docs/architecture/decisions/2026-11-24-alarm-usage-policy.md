@@ -16,7 +16,7 @@ FieldView Durable Objects must not use alarms for any purpose. In particular, th
 - Event or team analytics scheduling/retries.
 - Any other recurring or deferred background work.
 
-The EventRuntime and TeamRuntime alarm handlers exist only to delete an alarm left behind by an older deployment. They must not fetch providers, process queued work, calculate analytics, write retry deadlines, or re-arm themselves.
+There are no application-defined alarm handlers and no application calls to `setAlarm()` or `deleteAlarm()`. Alarm scheduling and delivery are left entirely to the platform defaults; FieldView does not use this facility.
 
 ## Ownership
 
@@ -35,8 +35,8 @@ A runtime may acquire its own resources after an explicit refresh command. That 
 4. Failed refreshes preserve last-good state. A later coordinator pass or explicit command decides whether to retry.
 5. Analytics may be recalculated during an explicit refresh/command, but must not be queued behind a DO alarm.
 6. No code path in a Durable Object calls `setAlarm`.
-7. On receiving an alarm persisted by an older deployment, a DO immediately deletes it and performs no other work.
+7. Do not add an `alarm()` handler or attempt to inspect, cancel, or clean up legacy alarm state.
 
 ## Migration note
 
-This intentionally removes the legacy EventRuntime and TeamRuntime alarm polling engines and their scheduling entry points. Automatic polling and deferred alarm-driven analytics may remain unavailable until the Worker-level coordinator explicitly dispatches the required refresh commands. That breakage is intentional; it is preferable to continuing uncontrolled Durable Object quota consumption.
+This intentionally removes the legacy EventRuntime and TeamRuntime alarm polling engines and their scheduling entry points. The application does not register alarm handlers or perform alarm cleanup. Automatic polling and deferred alarm-driven analytics may remain unavailable until the Worker-level coordinator explicitly dispatches the required refresh commands. That breakage is intentional; it is preferable to continuing uncontrolled Durable Object quota consumption.
