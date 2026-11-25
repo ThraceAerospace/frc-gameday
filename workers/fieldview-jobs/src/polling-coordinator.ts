@@ -25,7 +25,7 @@ interface CurrentSeason {
 }
 interface PollingEventResult {
   event_key: string;
-  lifecycle: "upcoming" | "active";
+  lifecycle: "active";
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
   error?: string;
@@ -118,9 +118,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
         try {
-          const minimumIntervalMs = candidate.lifecycle === "active"
-            ? Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000)
-            : Number(this.env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000);
+          const minimumIntervalMs = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
           const readiness = await dispatchRuntime(this.env, "event", eventKey, "readiness", {
             minimumIntervalMs,
           }, discovery.year);
@@ -128,12 +126,16 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             return { event_key: eventKey, lifecycle: candidate.lifecycle, event_refresh: "unavailable" };
           }
           if (!readiness.ok) throw new Error("Event readiness returned HTTP " + readiness.status);
-          const readinessBody = await readiness.json() as { refresh_required?: boolean };
+          const readinessBody = await readiness.json() as { refresh_required?: boolean; stale_sources?: unknown };
+          const staleEndpoints = Array.isArray(readinessBody.stale_sources)
+            ? readinessBody.stale_sources.filter((endpoint): endpoint is string => typeof endpoint === "string")
+            : [];
           let eventRefresh: PollingEventResult["event_refresh"] = "not_due";
           let error: string | undefined;
           if (readinessBody.refresh_required === true) {
             const outcome = await dispatchRuntimeRefresh(this.env, {
               kind: "event", key: eventKey, year: discovery.year,
+              ...(staleEndpoints.length ? { endpoints: staleEndpoints } : {}),
             });
             eventRefresh = outcome.ok ? "succeeded" : "failed";
             if (!outcome.ok) error = outcome.error ?? "Event refresh failed";
@@ -189,18 +191,22 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         mapLimit(registeredTeamKeys, 4, async (teamKey) => {
           try {
             const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
-            if (response.status === 204) return { teamKey, refresh: false, error: undefined as string | undefined };
-            if (!response.ok) return { teamKey, refresh: false, error: "HTTP " + response.status };
-            const body = await response.json() as { refresh_required?: boolean };
-            return { teamKey, refresh: body.refresh_required === true, error: undefined as string | undefined };
+            if (response.status === 204) return { teamKey, refresh: false, staleEndpoints: [] as string[], error: undefined as string | undefined };
+            if (!response.ok) return { teamKey, refresh: false, staleEndpoints: [] as string[], error: "HTTP " + response.status };
+            const body = await response.json() as { refresh_required?: boolean; stale_resources?: unknown };
+            const staleEndpoints = Array.isArray(body.stale_resources)
+              ? body.stale_resources.filter((endpoint): endpoint is string => typeof endpoint === "string")
+              : [];
+            return { teamKey, refresh: body.refresh_required === true, staleEndpoints, error: undefined as string | undefined };
           } catch (error) {
-            return { teamKey, refresh: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
+            return { teamKey, refresh: false, staleEndpoints: [] as string[], error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
           }
         }),
       );
       teamReadinessFailed = readiness.filter((item) => item.error).length;
       const dueTeams = readiness.filter((item) => item.refresh).map((item) => ({
         kind: "team" as const, key: item.teamKey, year: discovery.year,
+        ...(item.staleEndpoints.length ? { endpoints: item.staleEndpoints } : {}),
       }));
       const teamOutcomes = await step.do("refresh-due-team-runtimes", async () =>
         dispatchRuntimeRefreshBatch(this.env, dueTeams, 4),
