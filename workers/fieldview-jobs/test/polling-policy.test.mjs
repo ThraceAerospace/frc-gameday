@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectPollingCandidates, selectBudgetedKeys } from "../src/polling-policy.ts";
+import { selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems } from "../src/polling-policy.ts";
 
 const now = Date.parse("2026-11-24T18:00:00Z");
 const events = [
@@ -54,4 +54,17 @@ test("budgeted team selection is unique, bounded, and rotates deterministically"
   assert.deepEqual(selectBudgetedKeys(keys, 2, 0), ["frc1", "frc2"]);
   assert.deepEqual(selectBudgetedKeys(keys, 2, 1), ["frc3", "frc1"]);
   assert.deepEqual(selectBudgetedKeys(keys, 0, 0), []);
+});
+
+
+test("rotates event candidates without losing lifecycle priority order", () => {
+  const candidates = [
+    { key: "first", start_date: "2026-11-20" },
+    { key: "second", start_date: "2026-11-21" },
+    { key: "third", start_date: "2026-11-22" },
+    { key: "fourth", start_date: "2026-11-23" },
+    { key: "fifth", start_date: "2026-11-24" },
+  ];
+  assert.deepEqual(selectBudgetedItems(candidates, 2, 0).map((item) => item.key), ["first", "second"]);
+  assert.deepEqual(selectBudgetedItems(candidates, 2, 1).map((item) => item.key), ["third", "fourth"]);
 });
