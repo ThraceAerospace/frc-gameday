@@ -8,7 +8,8 @@ import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
 import { PollingCoordinatorWorkflow } from "./polling-coordinator.ts";
 import { WeeklyEventProjectionWorkflow } from "./weekly-event-projection.ts";
-export { PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow };
+import { EventAnalyticsWorkflow } from "./event-analytics.ts";
+export { PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow };
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
 export { RuntimeAdminWorkflow };
@@ -29,6 +30,7 @@ interface JobsEnvironment extends RuntimeEnvironment {
   RUNTIME_ADMIN: Workflow;
   POLLING_COORDINATOR?: Workflow;
   WEEKLY_EVENT_PROJECTION?: Workflow;
+  EVENT_ANALYTICS_WORKFLOW?: Workflow;
 }
 
 interface WorkflowParameters {
