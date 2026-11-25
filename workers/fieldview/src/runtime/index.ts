@@ -177,6 +177,37 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     }));
     return;
   }
+  if (env.EVENT_ANALYTICS_WORKFLOW) {
+    const affectedTeamKeys = ["match_score", "match_video", "upcoming_match"].includes(messageType)
+      ? [...teamKeys].sort()
+      : null;
+    const workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
+    try {
+      let shouldCreate = true;
+      try {
+        const existing = await env.EVENT_ANALYTICS_WORKFLOW.get(workflowId).then((instance) => instance.status());
+        if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) {
+          shouldCreate = false;
+        }
+      } catch {
+        // No workflow exists for this webhook identity.
+      }
+      if (shouldCreate) {
+        await env.EVENT_ANALYTICS_WORKFLOW.create({
+          id: workflowId,
+          params: {
+            event_key: eventKey,
+            affected_team_keys: affectedTeamKeys,
+            requested_at: Date.now(),
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[WEBHOOK][TBA] Failed to start event analytics Workflow", JSON.stringify({
+        event_key: eventKey, webhook_id: webhookId, error: String(error),
+      }));
+    }
+  }
   console.log("[WEBHOOK][TBA] Runtime fan-out completed", JSON.stringify({
     event_key: eventKey, webhook_id: webhookId, target_count: targets.length,
   }));
