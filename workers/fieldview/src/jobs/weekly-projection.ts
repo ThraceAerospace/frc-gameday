@@ -12,6 +12,11 @@ export interface EventsThisWeekProjection {
   events: TbaEvent[];
 }
 
+/** The weekly projection window rolls over at Monday 16:00 UTC, after North American events enter Monday locally. */
+export function utcProjectionWeekWindow(timestamp: number): { weekStart: string; weekEnd: string } {
+  return utcWeekWindow(timestamp - 16 * 60 * 60_000);
+}
+
 export function utcWeekWindow(timestamp: number): { weekStart: string; weekEnd: string } {
   const date = new Date(timestamp);
   const weekday = date.getUTCDay();
@@ -31,7 +36,7 @@ export function buildEventsThisWeekProjection(
 ): EventsThisWeekProjection {
   if (!Number.isInteger(year) || year < 1992 || year > 2200) throw new Error("Invalid projection season");
   if (!Number.isFinite(evaluatedAt) || !Number.isFinite(checkedAt)) throw new Error("Invalid projection timestamps");
-  const { weekStart, weekEnd } = utcWeekWindow(evaluatedAt);
+  const { weekStart, weekEnd } = utcProjectionWeekWindow(evaluatedAt);
   const candidates = events.filter((event) =>
     event && typeof event.key === "string" && /^[a-zA-Z0-9_-]+$/.test(event.key) &&
     classifyEventThisWeek(event, evaluatedAt)?.isThisWeek === true,
