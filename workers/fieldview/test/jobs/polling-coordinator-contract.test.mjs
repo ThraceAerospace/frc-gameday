@@ -1,0 +1,54 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
+const [entrypoint, coordinator, eventRuntime, teamRuntime] = await Promise.all([
+  read("../../src/index.ts"),
+  read("../../src/jobs/polling-coordinator.ts"),
+  read("../../src/runtime/event-runtime.ts"),
+  read("../../src/runtime/team-runtime.ts"),
+]);
+
+test("the scheduled Worker entrypoint starts the polling coordinator Workflow", () => {
+  assert.match(entrypoint, /scheduled\s*\(/);
+  assert.match(entrypoint, /env\.POLLING_COORDINATOR\.create\(/);
+  assert.match(entrypoint, /params:\s*\{\s*scheduledAt,\s*pollTeams:/);
+  assert.match(entrypoint, /context\.waitUntil\(/);
+  assert.doesNotMatch(entrypoint, /setAlarm\s*\(|deleteAlarm\s*\(/);
+});
+
+test("the coordinator reads published discovery and never acquires provider data directly", () => {
+  assert.match(coordinator, /discovery\/current-season\.json/);
+  assert.match(coordinator, /projections\/events\/this-week\/current\.json/);
+  assert.match(coordinator, /selectActiveEvents\(/);
+  assert.match(coordinator, /isRuntimeRegistered\(/);
+  assert.match(coordinator, /dispatchRuntime\(/);
+  assert.match(coordinator, /dispatchRuntimeRefresh\(/);
+  assert.doesNotMatch(coordinator, /this\.env\.TBA_API_KEY/);
+  assert.doesNotMatch(coordinator, /fetch\s*\(/);
+});
+
+test("event provider refresh is dispatched only after readiness says it is due", () => {
+  const readinessIndex = coordinator.indexOf('"readiness"');
+  const refreshIndex = coordinator.indexOf("dispatchRuntimeRefresh(this.env");
+  assert.ok(readinessIndex >= 0 && refreshIndex > readinessIndex);
+  assert.match(coordinator, /readinessBody\.refresh_required\s*===\s*true/);
+  assert.match(coordinator, /staleEndpoints\.length\s*\?/);
+});
+
+test("daily team work is separately gated and bounded", () => {
+  assert.match(coordinator, /if\s*\(pollTeams\s*&&\s*participantTeamKeys\.size\s*>\s*0\)/);
+  assert.match(coordinator, /MAX_TEAM_READINESS_CHECKS_PER_RUN/);
+  assert.match(coordinator, /MAX_TEAM_REFRESH_COMMANDS_PER_RUN/);
+  assert.match(coordinator, /dispatchRuntimeRefreshBatch\(this\.env,\s*boundedDueTeams,\s*4\)/);
+  assert.match(coordinator, /mapLimit\([^\n]*,\s*4,/);
+});
+
+test("Durable Object runtimes contain no alarm handlers or alarm scheduling APIs", () => {
+  for (const [name, source] of [["EventRuntime", eventRuntime], ["TeamRuntime", teamRuntime]]) {
+    assert.doesNotMatch(source, /\balarm\s*\(/, name + " must not define an alarm handler");
+    assert.doesNotMatch(source, /\bsetAlarm\s*\(/, name + " must not schedule an alarm");
+    assert.doesNotMatch(source, /\bdeleteAlarm\s*\(/, name + " must not delete an alarm");
+  }
+});
