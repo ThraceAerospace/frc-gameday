@@ -182,7 +182,7 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     const affectedTeamKeys = ["match_score", "upcoming_match"].includes(messageType) && teamKeys.size > 0
       ? [...teamKeys].sort()
       : null;
-    const workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
+    let workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
     try {
       let shouldCreate = true;
       try {
