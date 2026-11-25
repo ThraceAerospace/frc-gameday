@@ -117,8 +117,8 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
 });
 
 
-test("team refresh invalidates only the related event when dispatched by the polling coordinator", async () => {
-  const eventCalls = [];
+test("team refresh starts a durable analytics Workflow for only the related event", async () => {
+  const workflowCalls = [];
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
     TEAM_RUNTIME: namespace(async () => Response.json({
@@ -128,10 +128,10 @@ test("team refresh invalidates only the related event when dispatched by the pol
         { event_key: "2027other", team_event_revision: 5 },
       ],
     })),
-    EVENT_RUNTIME: namespace(async (request, id) => {
-      eventCalls.push({ id, path: new URL(request.url).pathname, body: await request.json() });
-      return Response.json({ accepted: true });
-    }),
+    EVENT_ANALYTICS_WORKFLOW: {
+      get: async () => { throw new Error("Workflow instance does not exist"); },
+      create: async (input) => { workflowCalls.push(input); return {}; },
+    },
   };
 
   const response = await dispatchRuntime(env, "team", "frc3461", "refresh", {
@@ -139,11 +139,14 @@ test("team refresh invalidates only the related event when dispatched by the pol
   }, 2027);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(eventCalls, [{
-    id: "2027rikin",
-    path: "/team-state-changed",
-    body: { team_key: "frc3461", team_state_revision: 8, team_event_revision: 3 },
-  }]);
+  assert.equal(workflowCalls.length, 1);
+  assert.equal(workflowCalls[0].id, "team-event-analytics-2027rikin-frc3461-8-3");
+  assert.deepEqual(workflowCalls[0].params, {
+    event_key: "2027rikin",
+    affected_team_keys: null,
+    requested_at: workflowCalls[0].params.requested_at,
+  });
+  assert.ok(Number.isSafeInteger(workflowCalls[0].params.requested_at));
 });
 
 test("dispatch rejects unsupported actions and invalid entity keys", async () => {
