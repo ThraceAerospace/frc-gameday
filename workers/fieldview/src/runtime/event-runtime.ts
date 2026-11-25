@@ -31,7 +31,7 @@ import {
   type AnalyticsSourceKey,
 } from "../../../../packages/analytics/src/invalidation.ts";
 import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
-import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isEventAnalyticsPublicationCommand, isTeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
+import { isEventAnalyticsPublicationCommand } from "./analytics-orchestration-contract.ts";
 import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 
