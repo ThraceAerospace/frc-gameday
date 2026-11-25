@@ -113,6 +113,27 @@ test("accepts an event publication command containing coherent team results", ()
   }), true);
 });
 
+test("allows retained unaffected team results from an earlier event revision", () => {
+  const current = {
+    contract_version: 1, event_key: "2026test", team_key: "frc3461",
+    event_source_revision: 12, team_source_revision: 8,
+    comparison_input_updated_at: 1700000000000, team_event_revision: 4,
+    state: { event_key: "2026test", team_key: "frc3461" },
+  };
+  const retained = {
+    ...current, team_key: "frc2", event_source_revision: 10,
+    state: { event_key: "2026test", team_key: "frc2" },
+  };
+  assert.equal(isEventAnalyticsPublicationCommand({
+    contract_version: 1, event_key: "2026test", event_source_revision: 12,
+    recalculated_team_keys: ["frc3461"], team_results: [current, retained],
+  }), true);
+  assert.equal(isEventAnalyticsPublicationCommand({
+    contract_version: 1, event_key: "2026test", event_source_revision: 12,
+    recalculated_team_keys: ["frc2"], team_results: [current, retained],
+  }), false);
+});
+
 test("rejects event publication results built from different comparison inputs", () => {
   const result = {
     contract_version: 1,
