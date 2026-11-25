@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+  isEventAnalyticsTeamInput,
+  isTeamAnalyticsSeasonInput,
   isTeamEventAnalyticsCommand,
   isTeamEventAnalyticsResult,
 } from "../../src/runtime/analytics-orchestration-contract.ts";
@@ -54,4 +56,34 @@ test("rejects TeamRuntime results with mismatched identity or incomplete revisio
   };
   assert.equal(isTeamEventAnalyticsResult({ ...result, state: { ...result.state, team_key: "frc2" } }), false);
   assert.equal(isTeamEventAnalyticsResult({ ...result, team_event_revision: null }), false);
+});
+
+test("accepts revisioned EventRuntime and TeamRuntime input envelopes", () => {
+  assert.equal(isEventAnalyticsTeamInput({
+    contract_version: 1,
+    event_key: "2026test",
+    event_source_revision: 9,
+    event_state: { event_key: "2026test" },
+  }), true);
+  assert.equal(isTeamAnalyticsSeasonInput({
+    contract_version: 1,
+    team_key: "frc3461",
+    team_source_revision: 4,
+    team_state: { team_key: "frc3461" },
+  }), true);
+});
+
+test("rejects input envelopes with mismatched identities or invalid revisions", () => {
+  assert.equal(isEventAnalyticsTeamInput({
+    contract_version: 1, event_key: "2026test", event_source_revision: -1,
+    event_state: { event_key: "2026test" },
+  }), false);
+  assert.equal(isEventAnalyticsTeamInput({
+    contract_version: 1, event_key: "2026test", event_source_revision: 1,
+    event_state: { event_key: "2025other" },
+  }), false);
+  assert.equal(isTeamAnalyticsSeasonInput({
+    contract_version: 1, team_key: "frc3461", team_source_revision: 1,
+    team_state: { team_key: "frc2" },
+  }), false);
 });
