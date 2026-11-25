@@ -109,7 +109,7 @@ export async function dispatchRuntimeRefresh(
 
 /**
  * Dispatch a set of runtime refresh commands with bounded concurrency.
- * This is direct RPC fan-out, not a durable queue or a provider-data batch.
+ * Refreshes remain bounded direct RPC; affected cross-runtime analytics are coalesced into a Workflow.
  */
 export async function dispatchRuntimeRefreshBatch(
   env: RuntimeEnvironment,
