@@ -6,18 +6,20 @@ import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/
 import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
+import { utcWeekWindow } from "./weekly-projection.ts";
 
 type PollingEnvironment = RuntimeEnvironment;
 export interface PollingCoordinatorParameters {
   scheduledAt: number;
   pollTeams?: boolean;
 }
-interface WeekProjectionPointer {
-  runAt: number;
-  years: number[];
-}
 interface WeekProjection {
+  schemaVersion: 1;
+  year: number;
   evaluatedAt: number;
+  weekStart: string;
+  weekEnd: string;
+  checkedAt: number;
   events: TbaEvent[];
 }
 interface CurrentSeason {
@@ -84,20 +86,18 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       if (!current || !Number.isInteger(current.year) || current.year < 1992 || current.year > 2200) {
         throw new Error("The authoritative TBA current-season discovery record is unavailable");
       }
-      const pointer = await readJson<WeekProjectionPointer>(store(), "projections/events/this-week/current.json");
-      if (!pointer || !Number.isSafeInteger(pointer.runAt) || !Array.isArray(pointer.years) ||
-          !pointer.years.includes(current.year) || scheduledAt - pointer.runAt > 8 * 24 * 60 * 60_000 ||
-          pointer.runAt > scheduledAt + 5 * 60_000) {
-        throw new Error("The current-week event projection is missing or stale; run event discovery/readiness first");
-      }
       const projection = await readJson<WeekProjection>(
         store(),
-        `projections/events/this-week/${pointer.runAt}/${current.year}.json`,
+        "projections/events-this-week/current.json",
       );
-      if (!projection || !Array.isArray(projection.events)) {
-        throw new Error("The published current-week event projection is incomplete");
+      const expectedWeek = utcWeekWindow(scheduledAt);
+      if (!projection || projection.schemaVersion !== 1 || projection.year !== current.year ||
+          projection.weekStart !== expectedWeek.weekStart || !Number.isSafeInteger(projection.evaluatedAt) ||
+          projection.evaluatedAt > scheduledAt + 5 * 60_000 || !Number.isFinite(projection.checkedAt) ||
+          !Array.isArray(projection.events)) {
+        throw new Error("The canonical events-this-week projection is missing, stale, or incomplete; refresh weekly event discovery");
       }
-      return { year: current.year, projectionRunAt: pointer.runAt, events: projection.events };
+      return { year: current.year, projectionRunAt: projection.evaluatedAt, events: projection.events };
     });
 
     const projectionEvents = discovery.events.filter((item) =>
