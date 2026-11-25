@@ -44,6 +44,6 @@ export function selectBudgetedKeys(
   if (!Number.isFinite(limit) || limit <= 0 || unique.length === 0) return [];
   const count = Math.min(unique.length, Math.floor(limit));
   const slot = Number.isSafeInteger(rotationSlot) ? rotationSlot : 0;
-  const start = ((slot % unique.length) + unique.length) % unique.length;
+  const start = (((slot % unique.length) * (count % unique.length)) % unique.length + unique.length) % unique.length;
   return Array.from({ length: count }, (_, index) => unique[(start + index) % unique.length]);
 }
