@@ -19,6 +19,7 @@ import { calculateCanonicalTeamEventAnalytics } from "../../../../packages/analy
 import { buildSeasonDiagnostics } from "../../../../packages/analytics/src/season-diagnostics.ts";
 import type { SeasonMatchEvidence } from "../../../../packages/analytics/src/season-diagnostics.ts";
 import type { FieldViewTeamEventAnalytics } from "../../../../packages/domain/src/analytics.ts";
+import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isTeamEventAnalyticsCommand, type TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
@@ -493,17 +494,14 @@ export class TeamRuntime {
     if (request.method === "POST" && url.pathname === "/event-analytics") {
       const body: unknown = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Expected event analytics input" }, { status: 400 });
-      const input = body as Record<string, unknown>;
-      const eventKey = input.event_key;
-      const eventState = input.event_state as FieldViewEventState | undefined;
-      const comparisonInput = input.comparison_input as FieldViewEventTeamSeasonComparisonInput | undefined;
-      const eventSourceRevision = input.event_source_revision;
-      if (typeof eventKey !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) ||
-          !eventState || eventState.event_key !== eventKey ||
-          !comparisonInput || !Array.isArray(comparisonInput.records) ||
-          !Number.isSafeInteger(eventSourceRevision) || (eventSourceRevision as number) < 0) {
-        return Response.json({ error: "Invalid team event analytics input" }, { status: 400 });
+      if (!isTeamEventAnalyticsCommand(body)) {
+        return Response.json({ error: "Invalid or unsupported team event analytics command" }, { status: 400 });
       }
+      const input = body;
+      const eventKey = input.event_key;
+      const eventState = input.event_state;
+      const comparisonInput = input.comparison_input;
+      const eventSourceRevision = input.event_source_revision;
       const year = Number(eventKey.slice(0, 4));
       const teamStateResponse = await this.snapshot(year);
       const teamState = await teamStateResponse.json() as ReturnType<typeof normalizeFieldViewTeamState>;
@@ -588,7 +586,17 @@ export class TeamRuntime {
       const prior = await this.storage.get<FieldViewTeamEventState>(stateKey);
       if (prior && JSON.stringify(prior) === JSON.stringify(result)) {
         const revision = await this.storage.get<number>(revisionKey) ?? 0;
-        return Response.json(result, { headers: {
+        const response: TeamEventAnalyticsResult = {
+          contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+          event_key: eventKey,
+          team_key: this.teamKey,
+          event_source_revision: eventSourceRevision,
+          team_source_revision: teamSourceRevision,
+          comparison_input_updated_at: comparisonInput.updated_at,
+          team_event_revision: revision,
+          state: result,
+        };
+        return Response.json(response, { headers: {
           "X-FieldView-Team-Key": this.teamKey,
           "X-FieldView-Event-Key": eventKey,
           "X-FieldView-Team-Event-Changed": "false",
@@ -611,7 +619,17 @@ export class TeamRuntime {
         });
         return next;
       });
-      return Response.json(result, { headers: {
+      const response: TeamEventAnalyticsResult = {
+        contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+        event_key: eventKey,
+        team_key: this.teamKey,
+        event_source_revision: eventSourceRevision,
+        team_source_revision: teamSourceRevision,
+        comparison_input_updated_at: comparisonInput.updated_at,
+        team_event_revision: revision,
+        state: result,
+      };
+      return Response.json(response, { headers: {
         "X-FieldView-Team-Key": this.teamKey,
         "X-FieldView-Event-Key": eventKey,
         "X-FieldView-Team-Event-Changed": "true",
