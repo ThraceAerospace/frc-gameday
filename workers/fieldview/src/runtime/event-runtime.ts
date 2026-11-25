@@ -1548,6 +1548,10 @@ export class EventRuntime {
           : { states: [], revisions: [] };
       const teamStates = teamResults.states;
       const expectedTeamCount = normalizedState.teams?.length ?? 0;
+      const participantKeys = new Set((normalizedState.teams ?? []).map((team) => team.key));
+      if (orchestratedTeamResults?.some((result) => !participantKeys.has(result.team_key))) {
+        throw new Error("Analytics publication contains a team outside the event roster");
+      }
       const comparisonInputUpdatedAt = orchestratedTeamResults?.[0]?.comparison_input_updated_at ??
         comparisonInputCollection?.comparisonInput.updated_at ??
         await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null;
@@ -1739,6 +1743,8 @@ export class EventRuntime {
       calculated = await this.buildEventState(true, orchestratedTeamResults, expectedEventSourceRevision);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      if (expectedEventSourceRevision !== undefined &&
+          detail === "Event source revision changed before analytics publication") return false;
       await this.storage.transaction(async (transaction) => {
         await transaction.put("analytics:status", "failed");
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 30_000);
