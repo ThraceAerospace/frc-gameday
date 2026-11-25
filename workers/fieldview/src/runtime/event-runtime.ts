@@ -1533,8 +1533,15 @@ export class EventRuntime {
   }
 
   // Polling cadence is owned by the Worker-level coordinator, never this DO.
-  async schedulePolls(_endpoints: string[], _intervalMs: number, _now = Date.now(), _forceImmediate = false): Promise<void> {
-    return;
+  // Retain endpoint validation for internal callers, but never persist a DO task
+  // or arm an alarm here.
+  async schedulePolls(endpoints: string[], intervalMs: number, _now = Date.now(), _forceImmediate = false): Promise<void> {
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1_000) {
+      throw new Error("intervalMs must be an integer of at least 1000");
+    }
+    if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
+      throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
+    }
   }
 
   private async enqueueManualPolls(_endpoints: string[], _immediate = true, _scheduledAt?: number): Promise<void> {
