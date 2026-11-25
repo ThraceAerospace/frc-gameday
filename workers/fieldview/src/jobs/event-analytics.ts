@@ -202,12 +202,13 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     }));
 
     const previousUpdatedAt = Number(eventInput.comparison_input_updated_at ?? 0);
-    const seasonInputChanged = registeredTeams.some((team) => {
-      const next = seasonInputs.find((item) => item.team_key === team.team_key);
-      const previous = existingStates.find((item) => item.team_key === team.team_key)?.result;
-      return !next?.state || !previous || previous.team_source_revision !== next.revision ||
-        previous.comparison_input_updated_at !== previousUpdatedAt;
-    });
+    const seasonInputChanged = registered.length !== participants.length ||
+      registeredTeams.some((team) => {
+        const next = seasonInputs.find((item) => item.team_key === team.team_key);
+        const previous = existingStates.find((item) => item.team_key === team.team_key)?.result;
+        return !next?.state || !previous || previous.team_source_revision !== next.revision ||
+          previous.comparison_input_updated_at !== previousUpdatedAt;
+      });
     const recalculateAll = affected === null || previousUpdatedAt <= 0 || seasonInputChanged;
     const affectedSet = new Set(affected ?? []);
     const teamsToRecalculate = registeredTeams.filter((team) =>
