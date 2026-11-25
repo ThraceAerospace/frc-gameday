@@ -101,7 +101,6 @@ export async function dispatchRuntime(
     lifecycle: "lifecycle",
     schedule: "schedule",
     publish: "publish-state",
-    recalculate: "recalculate",
     analytics: "analytics",
   };
   const path = paths[action];
