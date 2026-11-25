@@ -54,37 +54,7 @@ export async function dispatchRuntime(
         const affectedEvents = relatedEventKey
           ? refreshResult.affected_events.filter((affected) => affected.event_key === relatedEventKey)
           : refreshResult.affected_events;
-        if (env.EVENT_ANALYTICS_WORKFLOW) {
-          for (const affected of affectedEvents) {
-            if (typeof affected.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(affected.event_key) ||
-                !Number.isSafeInteger(affected.team_event_revision)) continue;
-            const baseId = "team-event-analytics-" + affected.event_key + "-" + key + "-" +
-              refreshResult.team_state_revision + "-" + affected.team_event_revision;
-            let workflowId = baseId;
-            let shouldCreate = true;
-            try {
-              const existing = await env.EVENT_ANALYTICS_WORKFLOW.get(baseId).then((instance) => instance.status());
-              if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(existing.status)) {
-                shouldCreate = false;
-              } else if (existing.status === "complete") {
-                shouldCreate = false;
-              } else {
-                workflowId = baseId + "-retry-" + Date.now();
-              }
-            } catch {
-              // No instance exists for this revision; create it below.
-            }
-            if (!shouldCreate) continue;
-            await env.EVENT_ANALYTICS_WORKFLOW.create({
-              id: workflowId,
-              params: {
-                event_key: affected.event_key,
-                affected_team_keys: null,
-                requested_at: Date.now(),
-              },
-            });
-          }
-        }
+
       }
     }
     if (response.ok && action !== "readiness") await registerRuntimeMarker(env, "team", key);
