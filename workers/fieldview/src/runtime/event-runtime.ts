@@ -60,7 +60,7 @@ const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
 const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
-// Preserve the legacy storage key strings so existing Durable Object retry state survives the naming migration.
+// Preserve the established invalidation key name across the runtime migration.
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
 const TEAM_STATE_REVISION_PREFIX = "team-state-revision:";
 const TEAM_EVENT_REVISION_PREFIX = "team-event-revision:";
