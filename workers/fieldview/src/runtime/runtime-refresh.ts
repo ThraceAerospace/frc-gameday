@@ -7,8 +7,6 @@ export interface RuntimeRefreshTarget {
   year?: number;
   /** Optional scope-owned resources to refresh; omitted means the runtime's full owned set. */
   endpoints?: string[];
-  /** Internal batch seam: defer Workflow creation until every team refresh has settled. */
-  orchestrateAnalytics?: boolean;
 }
 
 export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
@@ -80,6 +78,7 @@ async function startTeamAnalyticsWorkflows(
 export async function dispatchRuntimeRefresh(
   env: RuntimeEnvironment,
   target: RuntimeRefreshTarget,
+  options: { orchestrateAnalytics?: boolean } = {},
 ): Promise<RuntimeRefreshOutcome> {
   const response = await dispatchRuntime(
     env,
@@ -102,7 +101,7 @@ export async function dispatchRuntimeRefresh(
     ...(!response.ok ? { error: typeof body === "string" ? body : JSON.stringify(body) } : {}),
     ...(body === undefined ? {} : { response: body }),
   };
-  if (target.kind === "team" && target.orchestrateAnalytics !== false) {
+  if (target.kind === "team" && options.orchestrateAnalytics !== false) {
     await startTeamAnalyticsWorkflows(env, [outcome]);
   }
   return outcome;
@@ -128,10 +127,7 @@ export async function dispatchRuntimeRefreshBatch(
       if (index >= targets.length) return;
       const target = targets[index];
       try {
-        outcomes[index] = await dispatchRuntimeRefresh(env, {
-          ...target,
-          orchestrateAnalytics: target.kind === "team" ? false : target.orchestrateAnalytics,
-        });
+        outcomes[index] = await dispatchRuntimeRefresh(env, target, { orchestrateAnalytics: false });
       } catch (error) {
         outcomes[index] = {
           ...target,
