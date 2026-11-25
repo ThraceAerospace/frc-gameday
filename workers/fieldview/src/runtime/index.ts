@@ -264,8 +264,26 @@ export default {
           ? { endpoints: body.team_endpoints[key] as string[] } : {}),
       }));
       const teamOutcomes = await dispatchRuntimeRefreshBatch(env, teamTargets, 4);
+      let analyticsWorkflowId: string | undefined;
+      if (teamTargets.length === 0 && env.EVENT_ANALYTICS_WORKFLOW &&
+          isRecord(eventOutcome.response) && "affected_team_keys" in eventOutcome.response) {
+        const affected = eventOutcome.response.affected_team_keys;
+        if (affected === null || (Array.isArray(affected) && affected.length > 0 &&
+            affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) {
+          analyticsWorkflowId = "manual-event-analytics-" + eventKey + "-" + Date.now();
+          await env.EVENT_ANALYTICS_WORKFLOW.create({
+            id: analyticsWorkflowId,
+            params: {
+              event_key: eventKey,
+              affected_team_keys: affected as string[] | null,
+              requested_at: Date.now(),
+            },
+          });
+        }
+      }
       return Response.json({
         event: eventOutcome,
+        ...(analyticsWorkflowId ? { analytics_workflow_id: analyticsWorkflowId } : {}),
         teams: teamOutcomes,
         team_refreshes_succeeded: teamOutcomes.filter((outcome) => outcome.ok).length,
         team_refreshes_failed: teamOutcomes.filter((outcome) => !outcome.ok).length,
