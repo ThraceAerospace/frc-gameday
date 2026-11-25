@@ -16,6 +16,24 @@ type RuntimeWorkerEnvironment = RuntimeEnvironment & JobsEnvironment;
 export default {
   scheduled(controller: { scheduledTime: number; cron?: string }, env: RuntimeWorkerEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): void {
     const scheduledAt = controller.scheduledTime;
+    if (controller.cron === "0 16 * * 1") {
+      if (!env.WEEKLY_EVENT_PROJECTION) {
+        console.warn("[DISCOVERY] Weekly event projection Workflow binding is not configured");
+        return;
+      }
+      const workflowId = "events-this-week-" + scheduledAt;
+      context.waitUntil(env.WEEKLY_EVENT_PROJECTION.create({
+        id: workflowId,
+        params: { requestedAt: scheduledAt, reason: "scheduled" },
+      }).then(() => {
+        console.log("[DISCOVERY] Weekly event projection accepted", JSON.stringify({ workflow_id: workflowId, scheduled_at: scheduledAt }));
+      }).catch((error) => {
+        console.error("[DISCOVERY] Weekly event projection could not be started", JSON.stringify({
+          workflow_id: workflowId, scheduled_at: scheduledAt, error: error instanceof Error ? error.message : String(error),
+        }));
+      }));
+      return;
+    }
     if (!env.POLLING_COORDINATOR) {
       console.warn("[POLLING] Coordinator binding is not configured in this environment");
       return;
@@ -42,4 +60,4 @@ export default {
 };
 
 export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "./runtime/index.ts";
-export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow } from "./jobs/index.ts";
+export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow } from "./jobs/index.ts";
