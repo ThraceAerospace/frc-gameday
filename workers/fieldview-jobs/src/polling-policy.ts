@@ -1,10 +1,10 @@
+import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
+import type { TbaEvent } from "./calendar.ts";
+
 /** Hard per-run limits: these cap dispatched work, not just concurrency. */
 export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
 export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
 export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
-
-import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
-import type { TbaEvent } from "./calendar.ts";
 
 /**
  * Only registered events whose event-local lifecycle is active may receive
