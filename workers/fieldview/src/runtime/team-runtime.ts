@@ -294,9 +294,8 @@ export class TeamRuntime {
       if (!existing) return Response.json({ accepted: true, affected: true, projection: "not-yet-materialized" });
       // EventRuntime owns canonical match records and match webhooks. TeamRuntime
       // stores only references to those records, so event match notifications
-      // do not mutate a copied match projection here. EventRuntime's own webhook
-      // reconciliation invalidates event analytics and later requests fresh
-      // TeamEventState from each participant owner.
+      // do not mutate a copied match projection here. The Worker starts an
+      // EventAnalyticsWorkflow after webhook fan-out to refresh affected owners.
       const matchKey = typeof data.match_key === "string" ? data.match_key
         : match && typeof match === "object" && !Array.isArray(match) &&
             typeof (match as Record<string, unknown>).key === "string"
