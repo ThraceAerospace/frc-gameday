@@ -35,7 +35,7 @@ test("the weekly workflow refreshes Discovery and publishes one current projecti
 
 test("the polling coordinator consumes the current week's projection and evaluates lifecycle at dispatch time", () => {
   assert.match(coordinator, /projections\/events-this-week\/current\.json/);
-  assert.match(coordinator, /utcWeekWindow\(scheduledAt\)/);
+  assert.match(coordinator, /utcProjectionWeekWindow\(scheduledAt\)/);
   assert.match(coordinator, /selectActiveEvents\(projectionEvents, scheduledAt\)/);
   assert.doesNotMatch(coordinator, /projections\/events\/this-week/);
 });
