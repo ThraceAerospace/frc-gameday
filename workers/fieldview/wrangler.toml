@@ -79,6 +79,8 @@ binding = "POLLING_COORDINATOR"
 class_name = "PollingCoordinatorWorkflow"
 concurrency = { limit = 1 }
 
+# Production-only Workflow binding. Intentionally omitted from [previews.workflows.bindings]:
+# Cloudflare Previews cannot provision isolated Workflow instances and must not call production Workflows.
 [[workflows]]
 name = "event-analytics"
 binding = "EVENT_ANALYTICS_WORKFLOW"
