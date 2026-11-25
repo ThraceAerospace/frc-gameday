@@ -804,6 +804,31 @@ export class TeamRuntime {
         affected_events: affectedEvents, snapshot,
       }, { headers: { "Cache-Control": "no-store" } });
     }
+    if (request.method === "GET" && url.pathname === "/analytics-season-input") {
+      const year = Number(url.searchParams.get("year"));
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+        return Response.json({ error: "A valid season year is required" }, { status: 400 });
+      }
+      const snapshot = await this.snapshot(year);
+      if (!snapshot.ok) return snapshot;
+      const teamState = await snapshot.json() as FieldViewTeamState;
+      const revision = Number(snapshot.headers.get("X-FieldView-Snapshot-Version"));
+      if (!Number.isSafeInteger(revision) || revision < 0 || teamState.team_key !== this.teamKey) {
+        return Response.json({ error: "Team analytics input is not revisioned or has mismatched identity" }, { status: 409 });
+      }
+      return Response.json({
+        contract_version: 1,
+        team_key: this.teamKey,
+        team_source_revision: revision,
+        team_state: teamState,
+      }, {
+        headers: {
+          "X-FieldView-Team-Source-Revision": String(revision),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/state") {
       const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
