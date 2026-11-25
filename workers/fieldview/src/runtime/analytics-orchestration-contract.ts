@@ -105,11 +105,15 @@ export function isEventAnalyticsPublicationCommand(value: unknown): value is Eve
       !Array.isArray(value.team_results)) return false;
 
   const seenTeams = new Set<string>();
+  let comparisonInputUpdatedAt: number | undefined;
   for (const result of value.team_results) {
     if (!isTeamEventAnalyticsResult(result) ||
         result.event_key !== value.event_key ||
         result.event_source_revision !== value.event_source_revision ||
-        seenTeams.has(result.team_key)) return false;
+        seenTeams.has(result.team_key) ||
+        (comparisonInputUpdatedAt !== undefined &&
+          result.comparison_input_updated_at !== comparisonInputUpdatedAt)) return false;
+    comparisonInputUpdatedAt = result.comparison_input_updated_at;
     seenTeams.add(result.team_key);
   }
   return true;
