@@ -585,7 +585,25 @@ export class TeamRuntime {
       }
       const prior = await this.storage.get<FieldViewTeamEventState>(stateKey);
       if (prior && JSON.stringify(prior) === JSON.stringify(result)) {
-        const revision = await this.storage.get<number>(revisionKey) ?? 0;
+        const revision = await this.storage.transaction(async (tx) => {
+          if ((await tx.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) return null;
+          const current = await tx.get<FieldViewTeamEventState>(stateKey);
+          if (!current || JSON.stringify(current) !== JSON.stringify(result)) return null;
+          const currentRevision = await tx.get<number>(revisionKey) ?? 0;
+          // Even when calculated metrics are unchanged, advance the input
+          // envelope so owner-local readers and future Workflows see the
+          // latest comparison revision without inventing a state revision.
+          await tx.put(stateKey + ":inputs", {
+            event_source_revision: eventSourceRevision,
+            team_source_revision: teamSourceRevision,
+            comparison_input_updated_at: comparisonInput.updated_at,
+            calculated_at: Date.now(),
+          });
+          return currentRevision;
+        });
+        if (revision === null) {
+          return Response.json({ error: "Team analytics inputs changed during publication" }, { status: 409 });
+        }
         const response: TeamEventAnalyticsResult = {
           contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
           event_key: eventKey,
