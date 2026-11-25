@@ -911,50 +911,17 @@ export class TeamRuntime {
       event.key,
       await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + event.key) ?? 0,
     ] as const)));
-    const eventAnalyticsInputs = Object.fromEntries(await Promise.all(events.map(async (event) => {
-      if (!this.env.EVENT_RUNTIME || !this.env.RUNTIME_ADMIN_TOKEN) {
-        return [event.key, { source_revision: null, comparison_input_updated_at: null }] as const;
-      }
-      try {
-        const stub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(event.key));
-        const response = await stub.fetch(new Request("https://event-runtime/analytics-state", {
-          headers: {
-            Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
-            "X-FieldView-Event-Key": event.key,
-          },
-        }));
-        if (!response.ok) return [event.key, { source_revision: null, comparison_input_updated_at: null }] as const;
-        const state = await response.json() as {
-          source_revision?: number;
-          comparison_input_updated_at?: number | null;
-          analytics?: { source_revision?: number | null; status?: string };
-        };
-        const analyticsRevision = state.analytics?.source_revision ?? null;
-        const analyticsStatus = state.analytics?.status;
-        const current = analyticsRevision !== null && analyticsRevision === state.source_revision &&
-          analyticsStatus !== "stale" && analyticsStatus !== "failed" && analyticsStatus !== "pending";
-        return [event.key, {
-          source_revision: current ? analyticsRevision : null,
-          comparison_input_updated_at: state.comparison_input_updated_at ?? null,
-        }] as const;
-      } catch {
-        return [event.key, { source_revision: null, comparison_input_updated_at: null }] as const;
-      }
-    })));
-    const eventSourceRevisions = Object.fromEntries(Object.entries(eventAnalyticsInputs).map(([key, value]) => [key, value.source_revision]));
-    const comparisonInputUpdatedAts = Object.fromEntries(Object.entries(eventAnalyticsInputs).map(([key, value]) => [key, value.comparison_input_updated_at]));
+    // TeamRuntime cannot query EventRuntime during a season read. The analytics
+    // Workflow owns cross-runtime freshness and writes versioned TeamEventState
+    // results here; local revisions invalidate this aggregate when those results change.
     const cacheKey = "team-season-analytics:" + year;
     const cached = await this.storage.get<{
       team_source_revision: number;
       event_revisions: Record<string, number>;
-      event_source_revisions: Record<string, number | null>;
-      comparison_input_updated_ats: Record<string, number | null>;
       response: Record<string, unknown>;
     }>(cacheKey);
     if (cached && cached.team_source_revision === teamSourceRevision &&
-        JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions) &&
-        JSON.stringify(cached.event_source_revisions) === JSON.stringify(eventSourceRevisions) &&
-        JSON.stringify(cached.comparison_input_updated_ats) === JSON.stringify(comparisonInputUpdatedAts)) {
+        JSON.stringify(cached.event_revisions) === JSON.stringify(eventRevisions)) {
       const collectionState = (cached.response.collection as Record<string, unknown> | undefined)?.state;
       return Response.json(cached.response, {
         headers: {
@@ -966,10 +933,15 @@ export class TeamRuntime {
 
     const eventResults = await Promise.all(events.map(async (event) => {
       const eventState = await this.storage.get<FieldViewTeamEventState>(TEAM_EVENT_STATE_PREFIX + event.key);
-      const inputs = await this.storage.get<{ team_source_revision: number; event_source_revision: number; comparison_input_updated_at: number }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
-      const current = Boolean(eventState?.analytics && inputs?.team_source_revision === teamSourceRevision &&
-        inputs?.event_source_revision === eventSourceRevisions[event.key] &&
-        inputs?.comparison_input_updated_at === comparisonInputUpdatedAts[event.key]);
+      const inputs = await this.storage.get<{
+        team_source_revision: number;
+        event_source_revision: number;
+        comparison_input_updated_at: number;
+      }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
+      const current = Boolean(eventState?.analytics &&
+        inputs?.team_source_revision === teamSourceRevision &&
+        Number.isSafeInteger(inputs?.event_source_revision) && (inputs?.event_source_revision ?? -1) >= 0 &&
+        Number.isSafeInteger(inputs?.comparison_input_updated_at) && (inputs?.comparison_input_updated_at ?? -1) >= 0);
       const analytics = current ? eventState!.analytics as FieldViewTeamEventAnalytics : null;
       return {
         event: { key: event.key, name: event.name, shortName: event.event_code ?? null, startDate: event.start_date },
@@ -1017,8 +989,6 @@ export class TeamRuntime {
     await this.storage.put(cacheKey, {
       team_source_revision: teamSourceRevision,
       event_revisions: eventRevisions,
-      event_source_revisions: eventSourceRevisions,
-      comparison_input_updated_ats: comparisonInputUpdatedAts,
       checkedAt: Date.now(),
       response: result,
     });
