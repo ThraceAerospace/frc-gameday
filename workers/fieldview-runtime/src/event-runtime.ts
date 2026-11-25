@@ -566,14 +566,17 @@ export class EventRuntime {
 
     if (request.method === "POST" && url.pathname === "/refresh") {
       const body: unknown = await request.json().catch(() => ({}));
-      const requested = isRecord(body) && Array.isArray(body.endpoints) ? body.endpoints : [...this.allowedEndpoints];
-      if (!requested.every((endpoint) => typeof endpoint === "string" && this.allowedEndpoints.has(endpoint))) {
+      const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
+      const requested = isRecord(body) && Array.isArray(body.endpoints)
+        ? body.endpoints
+        : [...this.allowedEndpoints, statboticsEndpoint];
+      if (!requested.every((endpoint) => typeof endpoint === "string" &&
+          (this.allowedEndpoints.has(endpoint) || endpoint === statboticsEndpoint))) {
         return Response.json({ error: "Refresh endpoints must belong to this event" }, { status: 400 });
       }
-      const endpoints = requested as string[];
-      const includeStatbotics = !isRecord(body) || body.includeStatbotics !== false;
-      const refreshEndpoints = [...endpoints];
-      if (includeStatbotics) refreshEndpoints.push(STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0));
+      // An explicit endpoint list is exact, including the Statbotics resource.
+      // Omitting the list requests the complete EventRuntime-owned resource set.
+      const refreshEndpoints = [...new Set(requested as string[])];
       const results: Array<{ endpoint: string; success: boolean }> = [];
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       for (const endpoint of refreshEndpoints) {
