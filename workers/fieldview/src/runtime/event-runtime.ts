@@ -33,6 +33,7 @@ import {
 import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
 import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
 import type { FieldViewTeamState, FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
+import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isTeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
