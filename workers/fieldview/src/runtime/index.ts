@@ -178,7 +178,7 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     return;
   }
   if (env.EVENT_ANALYTICS_WORKFLOW) {
-    const affectedTeamKeys = ["match_score", "match_video", "upcoming_match"].includes(messageType)
+    const affectedTeamKeys = ["match_score", "upcoming_match"].includes(messageType) && teamKeys.size > 0
       ? [...teamKeys].sort()
       : null;
     const workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
