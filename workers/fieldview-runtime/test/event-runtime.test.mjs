@@ -1837,3 +1837,38 @@ test("EventRuntime admin state diagnostics do not fan out to TeamRuntime", async
     materialized: null,
   });
 });
+
+test("explicit EventRuntime refresh targets only the requested Statbotics resource", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026targeted";
+  const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
+  const calls = [];
+  seedEventPublication(storage, eventKey);
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    TBA_WEBHOOK_SECRET: "test-webhook-secret",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async (url) => {
+      calls.push(String(url));
+      return Response.json([{ key: eventKey + "_qm1" }], {
+        headers: { ETag: '"statbotics-targeted-v1"' },
+      });
+    },
+  }, eventKey);
+
+  const response = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoints: [endpoint] }),
+  }));
+
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.results.map((item) => item.endpoint), [endpoint]);
+  assert.equal(calls.length, 1, "an explicit resource list must not refresh every TBA endpoint");
+  assert.ok(calls[0].includes(endpoint));
+});
