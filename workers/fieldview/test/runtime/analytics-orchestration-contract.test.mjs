@@ -105,6 +105,7 @@ test("accepts an event publication command containing coherent team results", ()
     contract_version: 1,
     event_key: "2026test",
     event_source_revision: 12,
+    recalculated_team_keys: ["frc3461"],
     team_results: [result],
   }), true);
 });
@@ -124,6 +125,7 @@ test("rejects event publication results built from different comparison inputs",
     contract_version: 1,
     event_key: "2026test",
     event_source_revision: 12,
+    recalculated_team_keys: ["frc3461"],
     team_results: [result, { ...result, team_key: "frc2", state: { ...result.state, team_key: "frc2" }, comparison_input_updated_at: 1700000000001 }],
   }), false);
 });
@@ -143,6 +145,7 @@ test("rejects mixed-revision, mismatched, and duplicate team results", () => {
     contract_version: 1,
     event_key: "2026test",
     event_source_revision: 12,
+    recalculated_team_keys: ["frc3461"],
     team_results: [result],
   };
   assert.equal(isEventAnalyticsPublicationCommand({
