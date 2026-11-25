@@ -456,7 +456,8 @@ export default {
           now.setUTCDate(now.getUTCDate() - ((weekday + 6) % 7));
           const currentWeekStart = now.toISOString().slice(0, 10);
           const stale = projection.weekStart !== currentWeekStart;
-          const events = [...projection.events].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+          const events = projection.events.filter((event) => event && typeof event.key === "string")
+            .sort((a, b) => String(a.key).localeCompare(String(b.key)));
           return Response.json({
             evaluatedAt: projection.evaluatedAt,
             runDate: projection.runDate,
