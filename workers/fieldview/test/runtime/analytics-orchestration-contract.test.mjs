@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
-  isEventAnalyticsTeamInput,
+  isEventAnalyticsTeamInput,\n  isEventAnalyticsPublicationCommand,
   isTeamAnalyticsSeasonInput,
   isTeamEventAnalyticsCommand,
   isTeamEventAnalyticsResult,
@@ -85,5 +85,53 @@ test("rejects input envelopes with mismatched identities or invalid revisions", 
   assert.equal(isTeamAnalyticsSeasonInput({
     contract_version: 1, team_key: "frc3461", team_source_revision: 1,
     team_state: { team_key: "frc2" },
+  }), false);
+});
+
+
+test("accepts an event publication command containing coherent team results", () => {
+  const result = {
+    contract_version: 1,
+    event_key: "2026test",
+    team_key: "frc3461",
+    event_source_revision: 12,
+    team_source_revision: 8,
+    comparison_input_updated_at: 1700000000000,
+    team_event_revision: 4,
+    state: { event_key: "2026test", team_key: "frc3461" },
+  };
+  assert.equal(isEventAnalyticsPublicationCommand({
+    contract_version: 1,
+    event_key: "2026test",
+    event_source_revision: 12,
+    team_results: [result],
+  }), true);
+});
+
+test("rejects mixed-revision, mismatched, and duplicate team results", () => {
+  const result = {
+    contract_version: 1,
+    event_key: "2026test",
+    team_key: "frc3461",
+    event_source_revision: 12,
+    team_source_revision: 8,
+    comparison_input_updated_at: 1700000000000,
+    team_event_revision: 4,
+    state: { event_key: "2026test", team_key: "frc3461" },
+  };
+  const publication = {
+    contract_version: 1,
+    event_key: "2026test",
+    event_source_revision: 12,
+    team_results: [result],
+  };
+  assert.equal(isEventAnalyticsPublicationCommand({
+    ...publication, team_results: [{ ...result, event_source_revision: 11 }],
+  }), false);
+  assert.equal(isEventAnalyticsPublicationCommand({
+    ...publication, team_results: [{ ...result, event_key: "2025other" }],
+  }), false);
+  assert.equal(isEventAnalyticsPublicationCommand({
+    ...publication, team_results: [result, result],
   }), false);
 });
