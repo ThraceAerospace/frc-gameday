@@ -29,13 +29,15 @@ EventRuntime readiness remains read-only. The supplied minimum interval prevents
 
 The daily 04:02 UTC pass asks EventRuntime for the participant roster of each active event. EventRuntime owns that TBA resource and may acquire it in response to this explicit command. The coordinator unions the rosters, filters to already registered TeamRuntimes, checks their readiness, and explicitly refreshes only teams reporting stale/missing resources. Team readiness and refresh fan-out are bounded to four concurrent calls. Live five-minute event ticks do not repeatedly inspect every participant TeamRuntime, and unregistered teams are never initialized by polling.
 
-The initial TeamRuntime pass is daily and limited to the union of participants in current-week events. It does not yet implement a separate all-season TeamRuntime sweep or a fine-grained changed-match-to-team diff. Those require their own bounded selection policy and are intentionally not approximated by activating every team in the season.
+The initial TeamRuntime pass is daily and limited to the union of participants in the selected active-event rosters. It checks at most 50 registered team candidates and dispatches at most 20 TeamRuntime refresh commands per daily run, with deterministic rotating slices so a fixed prefix does not monopolize the budget. It does not yet implement a separate all-season TeamRuntime sweep or a fine-grained changed-match-to-team diff. Those require their own bounded selection policy and are intentionally not approximated by activating every team in the season.
 
 ## Cost and failure behavior
 
 - Cron cadence is five minutes; event-level eligibility is governed by the lifecycle interval and runtime source freshness.
 - Only the published current-week event projection is scanned; the full season directory and all team discovery records are not scanned on every tick.
-- Runtime refresh concurrency is bounded; no Cloudflare Queue or Durable Object alarm is introduced.
+- Event registration/readiness is bounded to 8 active event candidates per five-minute run; event candidate slices rotate between runs.
+- Team registration/readiness is bounded to 50 candidates and TeamRuntime refresh dispatch to 20 commands per daily run; both slices rotate by day.
+- Direct refresh concurrency remains capped at four; no Cloudflare Queue or Durable Object alarm is introduced.
 - Workflow steps retain execution progress. Per-event failures are recorded in the Workflow result and do not prevent later candidates from being considered.
 - If the weekly projection is unavailable or stale, the run fails closed. Run event discovery/readiness to republish it.
-- The coordinator has not been deployed or exercised against live Cloudflare bindings as part of this source change. Hard per-run and account-wide provider/write budgets, the canonical Monday-to-Sunday `events-this-week` projection, and changed-match-to-team target derivation remain incomplete; the current daily team pass is not a substitute for those capabilities.
+- The coordinator has not been deployed or exercised against live Cloudflare bindings as part of this source change. The per-run event/team candidate and refresh-command ceilings are implemented in source and covered by policy tests. Account-wide provider/write budgets, the canonical Monday-to-Sunday `events-this-week` projection, and changed-match-to-team target derivation remain incomplete; the current daily team pass is not a substitute for those capabilities.
