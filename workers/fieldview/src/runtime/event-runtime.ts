@@ -15,6 +15,7 @@ import type {
   RuntimeEnvironment,
 } from "./cloudflare.ts";
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
+import { affectedTeamsForChangedMatches } from "./affected-match-teams.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
 import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoints, TBAEventOPRs, TBAEventPredictions, TBAEventRanking, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
 import type { StatboticsMatch } from "../../../../packages/providers/statbotics/src/types.ts";
@@ -576,10 +577,21 @@ export class EventRuntime {
       // Omitting the list requests the complete EventRuntime-owned resource set.
       const refreshEndpoints = [...new Set(requested as string[])];
       const results: Array<{ endpoint: string; success: boolean }> = [];
+      const matchesEndpoint = TBA_ENDPOINTS.eventMatches(this.eventKey);
+      const previousMatches = refreshEndpoints.includes(matchesEndpoint)
+        ? await this.storage.get<EndpointState<unknown>>(endpointStorageKey(matchesEndpoint))
+        : undefined;
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       for (const endpoint of refreshEndpoints) {
         results.push({ endpoint, success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }) });
       }
+      const matchRefresh = results.find((item) => item.endpoint === matchesEndpoint);
+      const latestMatches = refreshEndpoints.includes(matchesEndpoint)
+        ? await this.storage.get<EndpointState<unknown>>(endpointStorageKey(matchesEndpoint))
+        : undefined;
+      const affectedTeamKeys = matchRefresh?.success && latestMatches
+        ? affectedTeamsForChangedMatches(previousMatches?.providerData, latestMatches.providerData)
+        : undefined;
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const publication = currentRevision !== previousRevision || !currentPublication
@@ -591,6 +603,7 @@ export class EventRuntime {
         requested: refreshEndpoints.length,
         attempted: results.length,
         results,
+        ...(affectedTeamKeys === undefined ? {} : { affected_team_keys: affectedTeamKeys }),
         publication_status: publication.status,
         state: [...entries.values()].map((state) => ({
           endpoint: state.endpoint, status: state.status, revision: state.revision,
