@@ -1028,6 +1028,7 @@ export class EventRuntime {
         contract_version: 1,
         event_key: this.eventKey,
         event_source_revision: current.sourceRevision,
+        comparison_input_updated_at: await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null,
         event_state: current.state,
       }, {
         headers: {
