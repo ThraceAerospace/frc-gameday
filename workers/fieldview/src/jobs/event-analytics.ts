@@ -1,0 +1,272 @@
+import { WorkflowEntrypoint } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
+import {
+  EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+  isEventAnalyticsTeamInput,
+  isTeamAnalyticsSeasonInput,
+  isTeamEventAnalyticsResult,
+} from "../runtime/analytics-orchestration-contract.ts";
+import type {
+  EventAnalyticsPublicationCommand,
+  TeamEventAnalyticsResult,
+} from "../runtime/analytics-orchestration-contract.ts";
+import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
+import type { FieldViewTeamState } from "../../../../packages/domain/src/team.ts";
+import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
+import { createDiscoveryStoreClient } from "./discovery-store.ts";
+
+export interface EventAnalyticsWorkflowParameters {
+  event_key: string;
+  /** null means the match collection was not safely comparable and the full roster must be recalculated. */
+  affected_team_keys: string[] | null;
+  requested_at: number;
+}
+
+interface ExistingTeamEventState {
+  result: TeamEventAnalyticsResult | null;
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, callback: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await callback(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+function headers(env: RuntimeEnvironment, identityHeader: string, identity: string): Headers {
+  if (!env.RUNTIME_ADMIN_TOKEN) throw new Error("Runtime authorization is unavailable");
+  return new Headers({
+    Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+    [identityHeader]: identity,
+    "Content-Type": "application/json",
+  });
+}
+
+function validEventKey(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value);
+}
+
+function existingResult(
+  eventKey: string,
+  teamKey: string,
+  state: unknown,
+  responseHeaders: Headers,
+): TeamEventAnalyticsResult | null {
+  const eventRevision = Number(responseHeaders.get("X-FieldView-Event-Source-Revision"));
+  const teamRevision = Number(responseHeaders.get("X-FieldView-Team-Source-Revision"));
+  const comparisonUpdatedAt = Number(responseHeaders.get("X-FieldView-Comparison-Input-Updated-At"));
+  const teamEventRevision = Number(responseHeaders.get("X-FieldView-Team-Event-Revision"));
+  const result = {
+    contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+    event_key: eventKey,
+    team_key: teamKey,
+    event_source_revision: eventRevision,
+    team_source_revision: teamRevision,
+    comparison_input_updated_at: comparisonUpdatedAt,
+    team_event_revision: teamEventRevision,
+    state,
+  };
+  return isTeamEventAnalyticsResult(result) ? result : null;
+}
+
+/**
+ * Coordinates cross-runtime analytics without owning provider I/O or canonical
+ * state. TeamRuntime owns every TeamEventState; EventRuntime owns aggregation.
+ */
+export class EventAnalyticsWorkflow extends WorkflowEntrypoint<RuntimeEnvironment, EventAnalyticsWorkflowParameters> {
+  async run(event: WorkflowEvent<EventAnalyticsWorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
+    const eventKey = event.payload?.event_key;
+    const affected = event.payload?.affected_team_keys;
+    const requestedAt = event.payload?.requested_at;
+    if (!validEventKey(eventKey) ||
+        !(affected === null || (Array.isArray(affected) &&
+          affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) ||
+        !Number.isSafeInteger(requestedAt)) {
+      throw new Error("Invalid event analytics Workflow parameters");
+    }
+    if (!this.env.EVENT_RUNTIME || !this.env.TEAM_RUNTIME || !this.env.DISCOVERY_STORE) {
+      throw new Error("Event analytics Workflow runtime bindings are unavailable");
+    }
+    const year = Number(eventKey.slice(0, 4));
+    const eventStub = this.env.EVENT_RUNTIME.get(this.env.EVENT_RUNTIME.idFromName(eventKey));
+    const eventHeaders = headers(this.env, "X-FieldView-Event-Key", eventKey);
+
+    const eventInput = await step.do("read-versioned-event-analytics-input", {
+      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+    }, async () => {
+      const response = await eventStub.fetch(new Request("https://event-runtime/analytics-orchestration-input", {
+        headers: eventHeaders,
+      }));
+      if (!response.ok) throw new Error("Event analytics input returned HTTP " + response.status);
+      const value: unknown = await response.json();
+      if (!isEventAnalyticsTeamInput(value) || value.event_key !== eventKey) {
+        throw new Error("Event analytics input failed its versioned contract");
+      }
+      return value;
+    });
+
+    const eventState = eventInput.event_state as FieldViewEventState;
+    if (!eventState.event || !Array.isArray(eventState.teams)) {
+      throw new Error("Event analytics input is missing its event identity or roster");
+    }
+    const participants = eventState.teams.flatMap((team) =>
+      typeof team.team_number === "number" && /^frc[0-9]+$/.test(team.key)
+        ? [{ team_key: team.key, team_number: team.team_number }]
+        : [],
+    );
+    const discovery = createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const registered = await step.do("resolve-registered-team-runtime-owners", async () =>
+      mapLimit(participants, 8, async (team) => ({
+        ...team,
+        registered: Boolean(await discovery.get("registry/runtime-teams/" + team.team_key + ".json")),
+      })),
+    );
+    const registeredTeams = registered.filter((team) => team.registered);
+    const teamNamespace = this.env.TEAM_RUNTIME;
+
+    const seasonInputs = await step.do("read-versioned-team-season-inputs", {
+      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+    }, async () => mapLimit(registeredTeams, 8, async (team) => {
+      try {
+        const response = await teamNamespace.get(teamNamespace.idFromName(team.team_key)).fetch(
+          new Request("https://team-runtime/analytics-season-input?year=" + year, {
+            headers: headers(this.env, "X-FieldView-Team-Key", team.team_key),
+          }),
+        );
+        if (!response.ok) return { team_key: team.team_key, input: null, state: null, revision: null };
+        const value: unknown = await response.json();
+        if (!isTeamAnalyticsSeasonInput(value) || value.team_key !== team.team_key) {
+          return { team_key: team.team_key, input: null, state: null, revision: null };
+        }
+        return {
+          team_key: team.team_key,
+          input: value,
+          state: value.team_state as FieldViewTeamState,
+          revision: value.team_source_revision,
+        };
+      } catch {
+        return { team_key: team.team_key, input: null, state: null, revision: null };
+      }
+    }));
+
+    const existingStates = await step.do("read-current-team-event-publications", {
+      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+    }, async () => mapLimit(registeredTeams, 8, async (team): Promise<ExistingTeamEventState & { team_key: string }> => {
+      try {
+        const response = await teamNamespace.get(teamNamespace.idFromName(team.team_key)).fetch(
+          new Request("https://team-runtime/event-state?event_key=" + encodeURIComponent(eventKey), {
+            headers: headers(this.env, "X-FieldView-Team-Key", team.team_key),
+          }),
+        );
+        if (!response.ok) return { team_key: team.team_key, result: null };
+        const state: unknown = await response.json();
+        return { team_key: team.team_key, result: existingResult(eventKey, team.team_key, state, response.headers) };
+      } catch {
+        return { team_key: team.team_key, result: null };
+      }
+    }));
+
+    const previousUpdatedAt = Number(eventInput.comparison_input_updated_at ?? 0);
+    const seasonInputChanged = registeredTeams.some((team) => {
+      const next = seasonInputs.find((item) => item.team_key === team.team_key);
+      const previous = existingStates.find((item) => item.team_key === team.team_key)?.result;
+      return !next?.state || !previous || previous.team_source_revision !== next.revision ||
+        previous.comparison_input_updated_at !== previousUpdatedAt;
+    });
+    const recalculateAll = affected === null || previousUpdatedAt <= 0 || seasonInputChanged;
+    const affectedSet = new Set(affected ?? []);
+    const teamsToRecalculate = registeredTeams.filter((team) =>
+      recalculateAll || affectedSet.has(team.team_key),
+    );
+    const updatedAt = recalculateAll
+      ? Math.max(Date.now(), previousUpdatedAt + 1)
+      : previousUpdatedAt;
+    const snapshots = participants.map((team) =>
+      seasonInputs.find((item) => item.team_key === team.team_key)?.state ?? null,
+    );
+    const teamStateRevisions = participants.map((team) => ({
+      team_key: team.team_key,
+      revision: seasonInputs.find((item) => item.team_key === team.team_key)?.revision ?? null,
+    }));
+    const comparisonInput = buildFieldViewEventTeamSeasonComparisonInput(
+      eventState.event,
+      participants.map((team) => team.team_number),
+      snapshots,
+      updatedAt,
+      teamStateRevisions,
+    );
+
+    const recalculated = await step.do("recalculate-affected-team-event-analytics", {
+      retries: { limit: 3, delay: "15 seconds", backoff: "exponential" },
+    }, async () => mapLimit(teamsToRecalculate, 6, async (team) => {
+      const response = await teamNamespace.get(teamNamespace.idFromName(team.team_key)).fetch(
+        new Request("https://team-runtime/event-analytics?year=" + year, {
+          method: "POST",
+          headers: headers(this.env, "X-FieldView-Team-Key", team.team_key),
+          body: JSON.stringify({
+            contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+            event_key: eventKey,
+            event_source_revision: eventInput.event_source_revision,
+            event_state: eventState,
+            comparison_input: comparisonInput,
+          }),
+        }),
+      );
+      if (!response.ok) throw new Error("TeamRuntime " + team.team_key + " analytics returned HTTP " + response.status);
+      const result: unknown = await response.json();
+      if (!isTeamEventAnalyticsResult(result) || result.team_key !== team.team_key ||
+          result.event_key !== eventKey || result.event_source_revision !== eventInput.event_source_revision ||
+          result.comparison_input_updated_at !== updatedAt) {
+        throw new Error("TeamRuntime " + team.team_key + " returned an invalid analytics result envelope");
+      }
+      return result;
+    }));
+
+    const recalculatedByKey = new Map(recalculated.map((result) => [result.team_key, result]));
+    const teamResults: TeamEventAnalyticsResult[] = [];
+    for (const team of registeredTeams) {
+      const fresh = recalculatedByKey.get(team.team_key);
+      const retained = existingStates.find((item) => item.team_key === team.team_key)?.result;
+      const result = fresh ?? retained;
+      if (result && result.comparison_input_updated_at === updatedAt) teamResults.push(result);
+    }
+    const recalculatedTeamKeys = recalculated.map((result) => result.team_key);
+    const publication: EventAnalyticsPublicationCommand = {
+      contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
+      event_key: eventKey,
+      event_source_revision: eventInput.event_source_revision,
+      recalculated_team_keys: recalculatedTeamKeys,
+      team_results: teamResults,
+    };
+
+    const published = await step.do("publish-event-analytics-aggregate", {
+      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+    }, async () => {
+      const response = await eventStub.fetch(new Request("https://event-runtime/analytics-orchestration-publication", {
+        method: "POST",
+        headers: eventHeaders,
+        body: JSON.stringify(publication),
+      }));
+      if (!response.ok) throw new Error("EventRuntime analytics publication returned HTTP " + response.status);
+      return response.json();
+    });
+
+    return {
+      event_key: eventKey,
+      event_source_revision: eventInput.event_source_revision,
+      registered_team_count: registeredTeams.length,
+      recalculated_team_count: recalculated.length,
+      retained_team_result_count: teamResults.length - recalculated.length,
+      published_team_result_count: teamResults.length,
+      event_publication: published,
+    };
+  }
+}
