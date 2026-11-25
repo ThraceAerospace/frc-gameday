@@ -94,3 +94,23 @@ export function isTeamEventAnalyticsResult(value: unknown): value is TeamEventAn
     isRecord(value.state) && value.state.event_key === value.event_key &&
     value.state.team_key === value.team_key;
 }
+
+
+export function isEventAnalyticsPublicationCommand(value: unknown): value is EventAnalyticsPublicationCommand {
+  if (!isRecord(value) ||
+      value.contract_version !== EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION ||
+      typeof value.event_key !== "string" ||
+      !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) ||
+      !isRevision(value.event_source_revision) ||
+      !Array.isArray(value.team_results)) return false;
+
+  const seenTeams = new Set<string>();
+  for (const result of value.team_results) {
+    if (!isTeamEventAnalyticsResult(result) ||
+        result.event_key !== value.event_key ||
+        result.event_source_revision !== value.event_source_revision ||
+        seenTeams.has(result.team_key)) return false;
+    seenTeams.add(result.team_key);
+  }
+  return true;
+}
