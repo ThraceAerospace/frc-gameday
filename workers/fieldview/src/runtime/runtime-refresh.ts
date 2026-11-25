@@ -7,6 +7,8 @@ export interface RuntimeRefreshTarget {
   year?: number;
   /** Optional scope-owned resources to refresh; omitted means the runtime's full owned set. */
   endpoints?: string[];
+  /** Internal batch seam: defer Workflow creation until every team refresh has settled. */
+  orchestrateAnalytics?: boolean;
 }
 
 export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
@@ -14,6 +16,59 @@ export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
   status: number | null;
   error?: string;
   response?: unknown;
+}
+
+
+async function startTeamAnalyticsWorkflows(
+  env: RuntimeEnvironment,
+  outcomes: RuntimeRefreshOutcome[],
+): Promise<void> {
+  const binding = env.EVENT_ANALYTICS_WORKFLOW;
+  if (!binding) return;
+  const grouped = new Map<string, string[]>();
+  for (const outcome of outcomes) {
+    if (!outcome.ok || outcome.kind !== "team" || !outcome.response ||
+        typeof outcome.response !== "object" || Array.isArray(outcome.response)) continue;
+    const body = outcome.response as Record<string, unknown>;
+    if (!Number.isSafeInteger(body.team_state_revision) || !Array.isArray(body.affected_events)) continue;
+    for (const affected of body.affected_events) {
+      if (!affected || typeof affected !== "object" || Array.isArray(affected)) continue;
+      const item = affected as Record<string, unknown>;
+      if (typeof item.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(item.event_key) ||
+          !Number.isSafeInteger(item.team_event_revision)) continue;
+      const revisions = grouped.get(item.event_key) ?? [];
+      revisions.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
+      grouped.set(item.event_key, revisions);
+    }
+  }
+
+  for (const [eventKey, revisions] of grouped) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(revisions.sort().join("|")));
+    const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
+    const baseId = "team-event-analytics-" + eventKey + "-" + hash;
+    let workflowId = baseId;
+    try {
+      const existing = await binding.get(baseId).then((instance) => instance.status());
+      if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) continue;
+      workflowId += "-retry-" + Date.now();
+    } catch {
+      // No Workflow instance exists for this team/event revision set.
+    }
+    try {
+      await binding.create({
+        id: workflowId,
+        params: { event_key: eventKey, affected_team_keys: null, requested_at: Date.now() },
+      });
+    } catch (error) {
+      try {
+        const existing = await binding.get(baseId).then((instance) => instance.status());
+        if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) continue;
+      } catch {
+        // Preserve the original creation failure.
+      }
+      throw error;
+    }
+  }
 }
 
 /**
@@ -39,13 +94,17 @@ export async function dispatchRuntimeRefresh(
     try { body = JSON.parse(raw); }
     catch { body = raw.slice(0, 500); }
   }
-  return {
+  const outcome: RuntimeRefreshOutcome = {
     ...target,
     ok: response.ok,
     status: response.status,
     ...(!response.ok ? { error: typeof body === "string" ? body : JSON.stringify(body) } : {}),
     ...(body === undefined ? {} : { response: body }),
   };
+  if (target.kind === "team" && target.orchestrateAnalytics !== false) {
+    await startTeamAnalyticsWorkflows(env, [outcome]);
+  }
+  return outcome;
 }
 
 /**
@@ -68,7 +127,10 @@ export async function dispatchRuntimeRefreshBatch(
       if (index >= targets.length) return;
       const target = targets[index];
       try {
-        outcomes[index] = await dispatchRuntimeRefresh(env, target);
+        outcomes[index] = await dispatchRuntimeRefresh(env, {
+          ...target,
+          orchestrateAnalytics: target.kind === "team" ? false : target.orchestrateAnalytics,
+        });
       } catch (error) {
         outcomes[index] = {
           ...target,
@@ -80,5 +142,6 @@ export async function dispatchRuntimeRefreshBatch(
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => run()));
+  await startTeamAnalyticsWorkflows(env, outcomes);
   return outcomes;
 }
