@@ -8,7 +8,7 @@ import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, select
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
-type PollingEnvironment = RuntimeEnvironment;
+type PollingEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW?: Workflow };
 export interface PollingCoordinatorParameters {
   scheduledAt: number;
   pollTeams?: boolean;
@@ -30,7 +30,8 @@ interface PollingEventResult {
   lifecycle: "active";
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
-  affected_team_keys?: string[];
+  affected_team_keys?: string[] | null;
+  analytics_workflow_id?: string;
   error?: string;
 }
 
@@ -144,7 +145,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             ? readinessBody.stale_sources.filter((endpoint): endpoint is string => typeof endpoint === "string")
             : [];
           let eventRefresh: PollingEventResult["event_refresh"] = "not_due";
-          let affectedTeamKeys: string[] = [];
+          let affectedTeamKeys: string[] | null | undefined;
           let error: string | undefined;
           if (readinessBody.refresh_required === true) {
             const outcome = await dispatchRuntimeRefresh(this.env, {
@@ -154,11 +155,14 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             eventRefresh = outcome.ok ? "succeeded" : "failed";
             if (!outcome.ok) error = outcome.error ?? "Event refresh failed";
             const refreshResponse = outcome.response;
-            affectedTeamKeys = refreshResponse && typeof refreshResponse === "object" &&
-              !Array.isArray(refreshResponse) && Array.isArray((refreshResponse as Record<string, unknown>).affected_team_keys)
-              ? [...new Set(((refreshResponse as Record<string, unknown>).affected_team_keys as unknown[])
-                  .filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
-              : [];
+            const affectedValue = refreshResponse && typeof refreshResponse === "object" &&
+              !Array.isArray(refreshResponse)
+              ? (refreshResponse as Record<string, unknown>).affected_team_keys
+              : undefined;
+            affectedTeamKeys = Array.isArray(affectedValue)
+              ? [...new Set(affectedValue.filter((key): key is string =>
+                  typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
+              : affectedValue === null ? null : undefined;
           }
 
           let participantKeys: string[] = [];
@@ -179,7 +183,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             lifecycle: candidate.lifecycle,
             event_refresh: eventRefresh,
             ...(participantKeys.length ? { participant_team_keys: participantKeys } : {}),
-            ...(affectedTeamKeys.length ? { affected_team_keys: affectedTeamKeys } : {}),
+            ...(affectedTeamKeys !== undefined ? { affected_team_keys: affectedTeamKeys } : {}),
             ...(error ? { error } : {}),
           };
         } catch (error) {
@@ -191,7 +195,33 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           };
         }
       });
-      results.push(result);
+      let completedResult = result;
+      if (result.event_refresh === "succeeded" &&
+          result.affected_team_keys !== undefined &&
+          (result.affected_team_keys === null || result.affected_team_keys.length > 0) &&
+          this.env.EVENT_ANALYTICS_WORKFLOW) {
+        const workflowId = "event-analytics-" + result.event_key + "-" + scheduledAt;
+        try {
+          await step.do("start-event-analytics-" + result.event_key, async () => {
+            await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
+              id: workflowId,
+              params: {
+                event_key: result.event_key,
+                affected_team_keys: result.affected_team_keys!,
+                requested_at: scheduledAt,
+              },
+            });
+            return workflowId;
+          });
+          completedResult = { ...result, analytics_workflow_id: workflowId };
+        } catch (error) {
+          completedResult = {
+            ...result,
+            error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+          };
+        }
+      }
+      results.push(completedResult);
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
     }
 
