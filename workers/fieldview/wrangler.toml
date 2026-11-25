@@ -10,7 +10,7 @@ workers_dev = true
 preview_urls = true
 
 [triggers]
-crons = ["*/5 * * * *", "2 4 * * *"]
+crons = ["*/5 * * * *", "2 4 * * *", "0 16 * * 1"]
 
 [observability]
 enabled = true
@@ -65,6 +65,12 @@ concurrency = { limit = 1 }
 name = "coverage-audit"
 binding = "COVERAGE_AUDIT"
 class_name = "CoverageAuditWorkflow"
+concurrency = { limit = 1 }
+
+[[workflows]]
+name = "weekly-event-projection"
+binding = "WEEKLY_EVENT_PROJECTION"
+class_name = "WeeklyEventProjectionWorkflow"
 concurrency = { limit = 1 }
 
 [[workflows]]
