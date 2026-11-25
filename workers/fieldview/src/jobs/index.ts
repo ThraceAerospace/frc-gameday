@@ -317,7 +317,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
 
 /**
  * Sequential readiness sweep. The Workflow never acquires entity resources:
- * each runtime inspects its own durable publication and queues local refreshes.
+ * each runtime inspects its own durable publication; the coordinator owns refresh dispatch.
  */
 export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
   override async run(
