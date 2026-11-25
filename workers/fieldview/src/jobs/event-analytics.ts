@@ -268,6 +268,13 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     }
     const failedTeam = recalculationOutcomes.find((item) => item.result === null);
     if (failedTeam) {
+      if (failedTeam.status >= 500) {
+        const retryId = await scheduleRetry("team-analytics-failure");
+        if (retryId) return {
+          event_key: eventKey, status: "retry_scheduled", retry_workflow_id: retryId,
+          reason: "team_analytics_failure",
+        };
+      }
       throw new Error("TeamRuntime " + failedTeam.team_key + " analytics returned HTTP " + failedTeam.status);
     }
     const recalculated = recalculationOutcomes.map((item) => item.result as TeamEventAnalyticsResult);
