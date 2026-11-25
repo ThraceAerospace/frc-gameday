@@ -450,7 +450,7 @@ export default {
         if (projection.schemaVersion === 1 && Number.isInteger(projection.year) &&
             Number.isFinite(projection.evaluatedAt) && Number.isFinite(projection.checkedAt) &&
             Array.isArray(projection.events)) {
-          const now = new Date();
+          const now = new Date(Date.now() - 16 * 60 * 60_000);
           const weekday = now.getUTCDay();
           now.setUTCHours(0, 0, 0, 0);
           now.setUTCDate(now.getUTCDate() - ((weekday + 6) % 7));
