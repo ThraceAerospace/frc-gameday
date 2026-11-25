@@ -212,9 +212,10 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       });
     const recalculateAll = affected === null || previousUpdatedAt <= 0 || seasonInputChanged;
     const affectedSet = new Set(affected ?? []);
-    const teamsToRecalculate = registeredTeams.filter((team) =>
-      recalculateAll || affectedSet.has(team.team_key),
-    );
+    const teamsToRecalculate = registeredTeams.filter((team) => {
+      const hasSeasonInput = seasonInputs.find((item) => item.team_key === team.team_key)?.state !== null;
+      return hasSeasonInput && (recalculateAll || affectedSet.has(team.team_key));
+    });
     const updatedAt = recalculateAll
       ? Math.max(Date.now(), previousUpdatedAt + 1)
       : previousUpdatedAt;
