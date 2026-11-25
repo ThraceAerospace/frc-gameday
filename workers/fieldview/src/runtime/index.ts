@@ -141,14 +141,14 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
       method: "POST", headers: new Headers(headers), body: rawBody,
     })) });
   } catch (error) {
-    console.error("[WEBHOOK][TBA] Failed to enqueue runtime fan-out", JSON.stringify({
+    console.error("[WEBHOOK][TBA] Failed to dispatch EventRuntime webhook", JSON.stringify({
       event_key: eventKey, webhook_id: webhookId, error: String(error),
     }));
     return;
   }
 
   const outcomes = await Promise.allSettled(targets.map((target) => target.promise));
-  const failures: Array<{ kind: "event" | "team"; key: string; error?: string; status?: number }> = [];
+  const failures: Array<{ kind: "event"; key: string; error?: string; status?: number }> = [];
   outcomes.forEach((outcome, index) => {
     if (outcome.status === "rejected") {
       failures.push({ kind: targets[index].kind, key: targets[index].key, error: String(outcome.reason) });
@@ -157,7 +157,7 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     }
   });
   if (failures.length > 0) {
-    console.error("[WEBHOOK][TBA] Runtime fan-out failed", JSON.stringify({
+    console.error("[WEBHOOK][TBA] EventRuntime webhook dispatch failed", JSON.stringify({
       event_key: eventKey, webhook_id: webhookId, target_count: targets.length, failures,
     }));
     return;
