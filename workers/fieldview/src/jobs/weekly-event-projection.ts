@@ -16,8 +16,10 @@ export class WeeklyEventProjectionWorkflow extends WorkflowEntrypoint<Env, Weekl
     const evaluatedAt = Number.isSafeInteger(event.payload?.requestedAt)
       ? Number(event.payload?.requestedAt) : event.schedule?.scheduledTime ?? Date.now();
     const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
-    const currentObject = await step.do("read-current-season", () => store().get("discovery/current-season.json"));
-    const current = currentObject ? await currentObject.json<CurrentSeason>() : null;
+    const current = await step.do("read-current-season", async () => {
+      const object = await store().get("discovery/current-season.json");
+      return object ? object.json<CurrentSeason>() : null;
+    });
     if (!current || !Number.isInteger(current.year) || current.year < 1992 || current.year > 2200) {
       throw new Error("The authoritative TBA current-season discovery record is unavailable");
     }
@@ -53,8 +55,10 @@ export class WeeklyEventProjectionWorkflow extends WorkflowEntrypoint<Env, Weekl
         events.push(...chunk);
       }
     } else {
-      const object = await step.do("read-event-directory", () => store().get("discovery/events/" + year + ".json"));
-      const document = object ? await object.json<DirectoryDocument>() : null;
+      const document = await step.do("read-event-directory", async () => {
+        const object = await store().get("discovery/events/" + year + ".json");
+        return object ? object.json<DirectoryDocument>() : null;
+      });
       if (!document || document.year !== year || !Array.isArray(document.events)) throw new Error("Published event directory is missing or invalid");
       events.push(...document.events);
     }
