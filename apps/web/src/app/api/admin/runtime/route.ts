@@ -40,6 +40,7 @@ export async function GET(request: Request) {
   const teamSeedKey = query.get("teamSeed");
   const discoveryJobYear = query.get("discoveryJob");
   const workflowRunsType = query.get("workflowRuns");
+  const weeklyProjectionRunId = query.get("weeklyProjectionRun");
   const workflowRunId = query.get("runId");
   const needsDefaultYear = Boolean(teamSeedKey || (kind && key) || inventoryKind);
   const currentSeason = !query.get("year") && needsDefaultYear
@@ -49,7 +50,8 @@ export async function GET(request: Request) {
   if (needsDefaultYear && !defaultYear) {
     return NextResponse.json({ error: "TBA current season is unavailable" }, { status: 503 });
   }
-  const target = workflowRunsType ? "/internal/admin/workflow-runs?" + new URLSearchParams({
+  const target = weeklyProjectionRunId ? "/internal/admin/events-this-week/refresh?id=" + encodeURIComponent(weeklyProjectionRunId)
+    : workflowRunsType ? "/internal/admin/workflow-runs?" + new URLSearchParams({
     type: workflowRunsType,
     ...(workflowRunId ? { id: workflowRunId } : {}),
     ...(query.get("limit") ? { limit: query.get("limit")! } : {}),
