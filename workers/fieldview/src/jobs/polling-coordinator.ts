@@ -6,7 +6,7 @@ import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/
 import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
-import { utcWeekWindow } from "./weekly-projection.ts";
+import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
 type PollingEnvironment = RuntimeEnvironment;
 export interface PollingCoordinatorParameters {
@@ -90,7 +90,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         store(),
         "projections/events-this-week/current.json",
       );
-      const expectedWeek = utcWeekWindow(scheduledAt);
+      const expectedWeek = utcProjectionWeekWindow(scheduledAt);
       if (!projection || projection.schemaVersion !== 1 || projection.year !== current.year ||
           projection.weekStart !== expectedWeek.weekStart || !Number.isSafeInteger(projection.evaluatedAt) ||
           projection.evaluatedAt > scheduledAt + 5 * 60_000 || !Number.isFinite(projection.checkedAt) ||
