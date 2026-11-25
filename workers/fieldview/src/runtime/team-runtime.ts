@@ -35,7 +35,6 @@ interface TeamEndpointState<T> extends EndpointState<T> {
 }
 const TASK_PREFIX = "task:";
 const MANUAL_QUEUE_KEY = "manual:poll-queue";
-const SEASON_ANALYTICS_DUE_PREFIX = "season-analytics:due:";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
 function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
@@ -337,8 +336,6 @@ export class TeamRuntime {
       const cached = await this.storage.get<{
         team_source_revision: number;
         event_revisions: Record<string, number>;
-        event_source_revisions: Record<string, number | null>;
-        comparison_input_updated_ats: Record<string, number | null>;
         checkedAt?: number;
         response: Record<string, unknown>;
       }>(cacheKey);
@@ -910,10 +907,6 @@ export class TeamRuntime {
         diagnostics: [...states.values()].map((state) => ({ provider: providerByEndpoint.get(state.endpoint) ?? null, endpoint: state.endpoint, http_status: state.lastHttpStatus ?? null, last_error: state.lastError ?? null })) });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
-  }
-  private async queueSeasonAnalyticsRefresh(_year: number): Promise<void> {
-    // Analytics refreshes must be explicitly dispatched by the coordinator.
-    return;
   }
   private async buildSeasonAnalyticsResponse(year: number): Promise<Response> {
     const teamState = await this.snapshot(year).then((response) => response.json()) as ReturnType<typeof normalizeFieldViewTeamState>;
