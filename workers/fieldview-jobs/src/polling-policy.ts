@@ -1,19 +1,21 @@
 import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 
-/** Registered events eligible for coordinator polling, ordered active-first. */
+/**
+ * Only registered events whose event-local lifecycle is active may receive
+ * recurring live polling. Upcoming events require a separate, explicitly
+ * budgeted pre-event policy; they are not part of this coordinator pass.
+ */
 export function selectPollingCandidates(
   events: TbaEvent[],
   registeredEventKeys: ReadonlySet<string>,
   now: number,
-): Array<{ event: TbaEvent; lifecycle: "upcoming" | "active" }> {
+): Array<{ event: TbaEvent; lifecycle: "active" }> {
   return events
     .filter((event) => event && typeof event.key === "string" &&
       registeredEventKeys.has(event.key) && isValidEventLifecycleInput(event))
     .map((event) => ({ event, lifecycle: lifecycleFor(event, now).lifecycle }))
-    .filter((item): item is { event: TbaEvent; lifecycle: "upcoming" | "active" } =>
-      item.lifecycle === "upcoming" || item.lifecycle === "active")
-    .sort((a, b) => (a.lifecycle === b.lifecycle
-      ? a.event.start_date.localeCompare(b.event.start_date)
-      : a.lifecycle === "active" ? -1 : 1));
+    .filter((item): item is { event: TbaEvent; lifecycle: "active" } =>
+      item.lifecycle === "active")
+    .sort((a, b) => a.event.start_date.localeCompare(b.event.start_date));
 }
