@@ -1017,6 +1017,25 @@ export class EventRuntime {
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    if (request.method === "GET" && url.pathname === "/analytics-orchestration-input") {
+      const current = await this.buildEventState(false);
+      if (!current.state.event || !Array.isArray(current.state.teams)) {
+        return Response.json({ error: "Event analytics inputs are not yet available" }, { status: 409 });
+      }
+      return Response.json({
+        contract_version: 1,
+        event_key: this.eventKey,
+        event_source_revision: current.sourceRevision,
+        event_state: current.state,
+      }, {
+        headers: {
+          "X-FieldView-Event-Source-Revision": String(current.sourceRevision),
+          "X-FieldView-Snapshot-Version": String(current.version),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
