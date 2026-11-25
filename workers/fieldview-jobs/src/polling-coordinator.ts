@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.
 import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../../fieldview-runtime/src/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectPollingCandidates, selectBudgetedKeys, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
 type PollingEnvironment = RuntimeEnvironment;
@@ -102,23 +102,25 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const projectionEvents = discovery.events.filter((item) =>
       item && typeof item.key === "string" && item.key.startsWith(String(discovery.year)));
-    const registeredEventKeys = await step.do("check-weekly-event-runtime-registration", async () => {
-      const checks = await mapLimit(projectionEvents, 4, async (item) => ({
+    const allActiveEvents = selectActiveEvents(projectionEvents, scheduledAt);
+    const configuredEventInterval = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
+    const eventRotationInterval = Number.isFinite(configuredEventInterval) && configuredEventInterval > 0
+      ? configuredEventInterval : 5 * 60_000;
+    const eventRotationSlot = Math.floor(scheduledAt / eventRotationInterval);
+    const eventTargetKeys = new Set(selectBudgetedKeys(
+      allActiveEvents.map((item) => item.key), MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
+    ));
+    const eventRegistrationCandidates = allActiveEvents.filter((item) => eventTargetKeys.has(item.key));
+    const registeredEventKeys = await step.do("check-budgeted-event-runtime-registration", async () => {
+      const checks = await mapLimit(eventRegistrationCandidates, 4, async (item) => ({
         key: item.key,
         registered: await isRuntimeRegistered(store(), "event", item.key),
       }));
       return checks.filter((item) => item.registered).map((item) => item.key);
     });
     const registeredEvents = new Set(registeredEventKeys);
-    const allActiveCandidates = selectPollingCandidates(
-      projectionEvents, registeredEvents, scheduledAt, Number.MAX_SAFE_INTEGER, 0,
-    );
-    const configuredEventInterval = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
-    const eventRotationInterval = Number.isFinite(configuredEventInterval) && configuredEventInterval > 0
-      ? configuredEventInterval : 5 * 60_000;
-    const eventRotationSlot = Math.floor(scheduledAt / eventRotationInterval);
     const candidates = selectPollingCandidates(
-      projectionEvents, registeredEvents, scheduledAt, MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
+      eventRegistrationCandidates, registeredEvents, scheduledAt, MAX_EVENT_CANDIDATES_PER_RUN, 0,
     );
 
     const results: PollingEventResult[] = [];
@@ -240,9 +242,11 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       current_season: discovery.year,
       week_projection_run_at: discovery.projectionRunAt,
       weekly_event_registry_checks: projectionEvents.length,
-      eligible_events: allActiveCandidates.length,
+      eligible_events: allActiveEvents.length,
+      event_registry_checks_processed: eventRegistrationCandidates.length,
+      event_registry_checks_deferred_by_budget: Math.max(0, allActiveEvents.length - eventRegistrationCandidates.length),
       event_candidates_processed: candidates.length,
-      event_candidates_deferred_by_budget: Math.max(0, allActiveCandidates.length - candidates.length),
+      event_candidates_not_registered: eventRegistrationCandidates.length - candidates.length,
       events_refreshed: results.filter((item) => item.event_refresh === "succeeded").length,
       events_not_due: results.filter((item) => item.event_refresh === "not_due").length,
       events_failed: results.filter((item) => item.event_refresh === "failed").length,
