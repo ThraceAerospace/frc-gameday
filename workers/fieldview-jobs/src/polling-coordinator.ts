@@ -190,12 +190,17 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     let teamRefreshesSucceeded = 0;
     let teamRefreshesFailed = 0;
     let readinessDeferredTeamCount = 0;
+    let teamRegistryChecksProcessed = 0;
+    let teamRegistryChecksDeferredByBudget = 0;
+    let teamReadinessChecksProcessed = 0;
     if (pollTeams && participantTeamKeys.size > 0) {
       const rosterKeys = [...participantTeamKeys];
       const teamRotationSlot = Math.floor(scheduledAt / (24 * 60 * 60_000));
       const boundedRosterKeys = selectBudgetedKeys(
         rosterKeys, MAX_TEAM_READINESS_CHECKS_PER_RUN, teamRotationSlot,
       );
+      teamRegistryChecksProcessed = boundedRosterKeys.length;
+      teamRegistryChecksDeferredByBudget = rosterKeys.length - boundedRosterKeys.length;
       const registration = await step.do("check-daily-team-runtime-registration", async () =>
         mapLimit(boundedRosterKeys, 4, async (teamKey) => ({
           teamKey,
@@ -203,6 +208,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         })),
       );
       const registeredTeamKeys = registration.filter((item) => item.registered).map((item) => item.teamKey);
+      teamReadinessChecksProcessed = registeredTeamKeys.length;
       const readiness = await step.do("check-daily-team-runtime-readiness", async () =>
         mapLimit(registeredTeamKeys, 4, async (teamKey) => {
           try {
@@ -241,7 +247,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       scheduled_at: scheduledAt,
       current_season: discovery.year,
       week_projection_run_at: discovery.projectionRunAt,
-      weekly_event_registry_checks: projectionEvents.length,
+      weekly_event_candidates_total: projectionEvents.length,
       eligible_events: allActiveEvents.length,
       event_registry_checks_processed: eventRegistrationCandidates.length,
       event_registry_checks_deferred_by_budget: Math.max(0, allActiveEvents.length - eventRegistrationCandidates.length),
@@ -252,8 +258,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       events_failed: results.filter((item) => item.event_refresh === "failed").length,
       daily_team_poll: pollTeams,
       participant_teams_discovered: participantTeamKeys.size,
-      team_readiness_checks_processed: pollTeams ? Math.min(participantTeamKeys.size, MAX_TEAM_READINESS_CHECKS_PER_RUN) : 0,
-      team_readiness_checks_deferred_by_budget: pollTeams ? Math.max(0, participantTeamKeys.size - MAX_TEAM_READINESS_CHECKS_PER_RUN) : 0,
+      team_registry_checks_processed: teamRegistryChecksProcessed,
+      team_registry_checks_deferred_by_budget: teamRegistryChecksDeferredByBudget,
+      team_readiness_checks_processed: teamReadinessChecksProcessed,
       team_readiness_failed: teamReadinessFailed,
       team_refreshes_deferred_by_budget: pollTeams ? Math.max(0, readinessDeferredTeamCount) : 0,
       team_refreshes_attempted: teamRefreshesAttempted,
