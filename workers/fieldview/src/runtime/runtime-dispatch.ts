@@ -121,7 +121,7 @@ export async function dispatchRuntime(
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
   }));
-  if (response.ok && action !== "readiness" && action !== "team-state-changed") await registerRuntimeMarker(env, "event", key);
+  if (response.ok && action !== "readiness") await registerRuntimeMarker(env, "event", key);
   return response;
 }
 
