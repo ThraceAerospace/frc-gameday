@@ -35,7 +35,7 @@ test("team refresh batch coalesces affected events into one durable analytics Wo
   assert.match(workflows[0].id, /^team-event-analytics-2027rikin-/);
   assert.deepEqual(workflows[0].params, {
     event_key: "2027rikin",
-    affected_team_keys: null,
+    affected_team_keys: ["frc2", "frc3461"],
     requested_at: workflows[0].params.requested_at,
   });
   assert.ok(Number.isSafeInteger(workflows[0].params.requested_at));
@@ -63,5 +63,6 @@ test("single team refresh starts a Workflow for every affected event", async () 
 
   assert.equal(outcome.ok, true);
   assert.deepEqual(workflows.map((item) => item.params.event_key).sort(), ["2027other", "2027rikin"]);
-  assert.ok(workflows.every((item) => item.params.affected_team_keys === null));
+  assert.ok(workflows.every((item) => item.params.affected_team_keys.length === 1 &&
+    item.params.affected_team_keys[0] === "frc3461"));
 });
