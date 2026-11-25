@@ -1265,3 +1265,41 @@ test("explicit EventRuntime refresh targets only the requested Statbotics resour
   assert.equal(calls.length, 1, "an explicit resource list must not refresh every TBA endpoint");
   assert.ok(calls[0].includes(endpoint));
 });
+
+
+test("EventRuntime accepts analytics publication only for the current event source revision", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026publication";
+  storage.values.set("event-key", eventKey);
+  storage.values.set("snapshot-revision", 0);
+  let teamRuntimeCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "admin",
+    TEAM_RUNTIME: {
+      idFromName: (key) => key,
+      get: () => ({ fetch: async () => { teamRuntimeCalls += 1; return Response.json({}); } }),
+    },
+  }, eventKey);
+
+  const response = await runtime.fetch(new Request("https://event-runtime/analytics-orchestration-publication", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contract_version: 1,
+      event_key: eventKey,
+      event_source_revision: 1,
+      team_results: [],
+    }),
+  }));
+
+  assert.equal(response.status, 409);
+  assert.equal(teamRuntimeCalls, 0, "the Workflow publication endpoint must not call TeamRuntime");
+  assert.equal(storage.values.has("analytics:publication"), false);
+  assert.equal(storage.values.has("analytics:status"), false,
+    "a stale publication command is a conflict, not a failed analytics calculation");
+});
+
