@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.
 import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../../fieldview-runtime/src/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
 type PollingEnvironment = RuntimeEnvironment;
@@ -107,9 +107,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     const eventRotationInterval = Number.isFinite(configuredEventInterval) && configuredEventInterval > 0
       ? configuredEventInterval : 5 * 60_000;
     const eventRotationSlot = Math.floor(scheduledAt / eventRotationInterval);
-    const eventTargetKeys = new Set(selectBudgetedKeys(
-      allActiveEvents.map((item) => item.key), MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
-    ));
+    const eventTargetKeys = new Set(selectBudgetedItems(
+      allActiveEvents, MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
+    ).map((item) => item.key));
     const eventRegistrationCandidates = allActiveEvents.filter((item) => eventTargetKeys.has(item.key));
     const registeredEventKeys = await step.do("check-budgeted-event-runtime-registration", async () => {
       const checks = await mapLimit(eventRegistrationCandidates, 4, async (item) => ({
