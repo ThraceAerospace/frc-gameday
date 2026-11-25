@@ -21,6 +21,7 @@ export interface EventAnalyticsWorkflowParameters {
   /** null means the match collection was not safely comparable and the full roster must be recalculated. */
   affected_team_keys: string[] | null;
   requested_at: number;
+  attempt?: number;
 }
 
 interface ExistingTeamEventState {
@@ -60,10 +61,16 @@ function existingResult(
   state: unknown,
   responseHeaders: Headers,
 ): TeamEventAnalyticsResult | null {
-  const eventRevision = Number(responseHeaders.get("X-FieldView-Event-Source-Revision"));
-  const teamRevision = Number(responseHeaders.get("X-FieldView-Team-Source-Revision"));
-  const comparisonUpdatedAt = Number(responseHeaders.get("X-FieldView-Comparison-Input-Updated-At"));
-  const teamEventRevision = Number(responseHeaders.get("X-FieldView-Team-Event-Revision"));
+  const eventRevisionHeader = responseHeaders.get("X-FieldView-Event-Source-Revision");
+  const teamRevisionHeader = responseHeaders.get("X-FieldView-Team-Source-Revision");
+  const comparisonUpdatedAtHeader = responseHeaders.get("X-FieldView-Comparison-Input-Updated-At");
+  const teamEventRevisionHeader = responseHeaders.get("X-FieldView-Team-Event-Revision");
+  if (eventRevisionHeader === null || teamRevisionHeader === null ||
+      comparisonUpdatedAtHeader === null || teamEventRevisionHeader === null) return null;
+  const eventRevision = Number(eventRevisionHeader);
+  const teamRevision = Number(teamRevisionHeader);
+  const comparisonUpdatedAt = Number(comparisonUpdatedAtHeader);
+  const teamEventRevision = Number(teamEventRevisionHeader);
   const result = {
     contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
     event_key: eventKey,
@@ -81,11 +88,14 @@ function existingResult(
  * Coordinates cross-runtime analytics without owning provider I/O or canonical
  * state. TeamRuntime owns every TeamEventState; EventRuntime owns aggregation.
  */
-export class EventAnalyticsWorkflow extends WorkflowEntrypoint<RuntimeEnvironment, EventAnalyticsWorkflowParameters> {
+type EventAnalyticsEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW?: Workflow };
+
+export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnvironment, EventAnalyticsWorkflowParameters> {
   async run(event: WorkflowEvent<EventAnalyticsWorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     const eventKey = event.payload?.event_key;
     const affected = event.payload?.affected_team_keys;
     const requestedAt = event.payload?.requested_at;
+    const attempt = Number.isSafeInteger(event.payload?.attempt) ? Number(event.payload?.attempt) : 0;
     if (!validEventKey(eventKey) ||
         !(affected === null || (Array.isArray(affected) &&
           affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) ||
@@ -247,7 +257,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<RuntimeEnvironmen
       team_results: teamResults,
     };
 
-    const published = await step.do("publish-event-analytics-aggregate", {
+    const publicationResult = await step.do("publish-event-analytics-aggregate", {
       retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
     }, async () => {
       const response = await eventStub.fetch(new Request("https://event-runtime/analytics-orchestration-publication", {
@@ -255,9 +265,36 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<RuntimeEnvironmen
         headers: eventHeaders,
         body: JSON.stringify(publication),
       }));
-      if (!response.ok) throw new Error("EventRuntime analytics publication returned HTTP " + response.status);
-      return response.json();
+      return {
+        ok: response.ok,
+        status: response.status,
+        body: await response.json().catch(() => null),
+      };
     });
+    if (!publicationResult.ok) {
+      if (publicationResult.status === 409 && attempt < 2 && this.env.EVENT_ANALYTICS_WORKFLOW) {
+        const retryId = "event-analytics-" + eventKey + "-" + requestedAt + "-retry-" + (attempt + 1);
+        await step.do("schedule-revision-conflict-retry-" + (attempt + 1), async () => {
+          await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
+            id: retryId,
+            params: {
+              event_key: eventKey,
+              affected_team_keys: affected,
+              requested_at: requestedAt,
+              attempt: attempt + 1,
+            },
+          });
+          return retryId;
+        });
+        return {
+          event_key: eventKey,
+          status: "retry_scheduled",
+          retry_workflow_id: retryId,
+          reason: "revision_conflict",
+        };
+      }
+      throw new Error("EventRuntime analytics publication returned HTTP " + publicationResult.status);
+    }
 
     return {
       event_key: eventKey,
@@ -266,7 +303,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<RuntimeEnvironmen
       recalculated_team_count: recalculated.length,
       retained_team_result_count: teamResults.length - recalculated.length,
       published_team_result_count: teamResults.length,
-      event_publication: published,
+      event_publication: publicationResult.body,
     };
   }
 }
