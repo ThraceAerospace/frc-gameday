@@ -64,6 +64,7 @@ test("accepts revisioned EventRuntime and TeamRuntime input envelopes", () => {
     contract_version: 1,
     event_key: "2026test",
     event_source_revision: 9,
+    comparison_input_updated_at: null,
     event_state: { event_key: "2026test" },
   }), true);
   assert.equal(isTeamAnalyticsSeasonInput({
@@ -77,10 +78,12 @@ test("accepts revisioned EventRuntime and TeamRuntime input envelopes", () => {
 test("rejects input envelopes with mismatched identities or invalid revisions", () => {
   assert.equal(isEventAnalyticsTeamInput({
     contract_version: 1, event_key: "2026test", event_source_revision: -1,
+    comparison_input_updated_at: null,
     event_state: { event_key: "2026test" },
   }), false);
   assert.equal(isEventAnalyticsTeamInput({
     contract_version: 1, event_key: "2026test", event_source_revision: 1,
+    comparison_input_updated_at: null,
     event_state: { event_key: "2025other" },
   }), false);
   assert.equal(isTeamAnalyticsSeasonInput({
