@@ -457,12 +457,22 @@ export class EventRuntime {
       const sources = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const expectedEndpoints = [...this.allowedEndpoints,
         STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      const body: unknown = await request.json().catch(() => null);
+      const requestedInterval = isRecord(body) ? body.minimumIntervalMs : undefined;
+      const minimumIntervalMs = typeof requestedInterval === "number" &&
+        Number.isSafeInteger(requestedInterval) && requestedInterval >= 1_000 &&
+        requestedInterval <= 24 * 60 * 60_000 ? requestedInterval : 0;
       const now = Date.now();
       const staleSources = expectedEndpoints.filter((endpoint) => {
         const source = sources.get(endpointStorageKey(endpoint));
-        return !source || source.status === "failed" || source.status === "stale" ||
-          (source.lastFetchedAt === null && source.lastWebhookAt === null && source.status !== "unavailable") ||
-          (source.expiresAt !== null && source.expiresAt <= now);
+        const lastAttemptAt = source?.lastAttemptAt ?? source?.lastFetchedAt ?? source?.lastWebhookAt;
+        const attemptedRecently = Boolean(source && lastAttemptAt !== null &&
+          lastAttemptAt !== undefined && now - lastAttemptAt < minimumIntervalMs);
+        return !source ||
+          ((source.status === "failed" || source.status === "stale") && !attemptedRecently) ||
+          (source.lastFetchedAt === null && source.lastWebhookAt === null &&
+            source.status !== "unavailable" && !attemptedRecently) ||
+          (!attemptedRecently && source.expiresAt !== null && source.expiresAt <= now);
       });
       const refreshRequired = !validState || staleSources.length > 0;
       const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);

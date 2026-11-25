@@ -6,6 +6,8 @@ import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts
 import { classifyEventThisWeek, isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { RuntimeAdminWorkflow } from "./runtime-admin.ts";
+import { PollingCoordinatorWorkflow } from "./polling-coordinator.ts";
+export { PollingCoordinatorWorkflow };
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
 export { RuntimeAdminWorkflow };
@@ -24,6 +26,7 @@ interface JobsEnvironment extends RuntimeEnvironment {
   DAILY_TEAM_READINESS: Workflow;
   COVERAGE_AUDIT: Workflow;
   RUNTIME_ADMIN: Workflow;
+  POLLING_COORDINATOR?: Workflow;
 }
 
 interface WorkflowParameters {

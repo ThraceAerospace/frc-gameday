@@ -14,6 +14,24 @@ type RuntimeWorkerEnvironment = RuntimeEnvironment & JobsEnvironment;
  * directly through runtime-dispatch.ts and discovery-store.ts.
  */
 export default {
+  scheduled(controller: { scheduledTime: number; cron?: string }, env: RuntimeWorkerEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): void {
+    const scheduledAt = controller.scheduledTime;
+    if (!env.POLLING_COORDINATOR) {
+      console.warn("[POLLING] Coordinator binding is not configured in this environment");
+      return;
+    }
+    const workflowId = "polling-" + scheduledAt;
+    context.waitUntil(env.POLLING_COORDINATOR.create({
+      id: workflowId,
+      params: { scheduledAt, pollTeams: controller.cron === "2 4 * * *" },
+    }).then(() => {
+      console.log("[POLLING] Coordinator workflow accepted", JSON.stringify({ workflow_id: workflowId, scheduled_at: scheduledAt }));
+    }).catch((error) => {
+      console.error("[POLLING] Coordinator workflow could not be started", JSON.stringify({
+        workflow_id: workflowId, scheduled_at: scheduledAt, error: error instanceof Error ? error.message : String(error),
+      }));
+    }));
+  },
   fetch(request: Request, env: RuntimeWorkerEnvironment, context: RuntimeContext): Promise<Response> {
     const runtimeEnv: RuntimeEnvironment = {
       ...env,
@@ -24,4 +42,4 @@ export default {
 };
 
 export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "../../fieldview-runtime/src/index.ts";
-export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow } from "../../fieldview-jobs/src/index.ts";
+export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow } from "../../fieldview-jobs/src/index.ts";

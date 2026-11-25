@@ -9,6 +9,9 @@ workers_dev = true
 # Enable branch Preview URLs on the same Worker.
 preview_urls = true
 
+[triggers]
+crons = ["*/5 * * * *", "2 4 * * *"]
+
 [observability]
 enabled = true
 head_sampling_rate = 1
@@ -66,6 +69,12 @@ class_name = "CoverageAuditWorkflow"
 concurrency = { limit = 1 }
 
 [[workflows]]
+name = "polling-coordinator"
+binding = "POLLING_COORDINATOR"
+class_name = "PollingCoordinatorWorkflow"
+concurrency = { limit = 1 }
+
+[[workflows]]
 name = "runtime-admin"
 binding = "RUNTIME_ADMIN"
 class_name = "RuntimeAdminWorkflow"
@@ -98,3 +107,4 @@ class_name = "Multiplexer"
 [[previews.durable_objects.bindings]]
 name = "DISCOVERY_STORE"
 class_name = "DiscoveryStore"
+
