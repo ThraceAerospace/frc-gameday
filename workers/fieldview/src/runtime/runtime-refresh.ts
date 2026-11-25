@@ -23,7 +23,7 @@ async function startTeamAnalyticsWorkflows(
 ): Promise<void> {
   const binding = env.EVENT_ANALYTICS_WORKFLOW;
   if (!binding) return;
-  const grouped = new Map<string, string[]>();
+  const grouped = new Map<string, { revisionParts: string[]; teamKeys: Set<string> }>();
   for (const outcome of outcomes) {
     if (!outcome.ok || outcome.kind !== "team" || !outcome.response ||
         typeof outcome.response !== "object" || Array.isArray(outcome.response)) continue;
@@ -35,14 +35,16 @@ async function startTeamAnalyticsWorkflows(
       const item = affected as Record<string, unknown>;
       if (typeof item.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(item.event_key) ||
           typeof item.team_event_revision !== "number" || !Number.isSafeInteger(item.team_event_revision)) continue;
-      const revisions = grouped.get(item.event_key) ?? [];
-      revisions.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
-      grouped.set(item.event_key, revisions);
+      const group = grouped.get(item.event_key) ?? { revisionParts: [], teamKeys: new Set<string>() };
+      group.revisionParts.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
+      group.teamKeys.add(outcome.key);
+      grouped.set(item.event_key, group);
     }
   }
 
-  for (const [eventKey, revisions] of grouped) {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(revisions.sort().join("|")));
+  for (const [eventKey, group] of grouped) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(group.revisionParts.sort().join("|")));
+    const affectedTeamKeys = [...group.teamKeys].sort();
     const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
     const baseId = "team-event-analytics-" + eventKey + "-" + hash;
     let workflowId = baseId;
@@ -56,7 +58,7 @@ async function startTeamAnalyticsWorkflows(
     try {
       await binding.create({
         id: workflowId,
-        params: { event_key: eventKey, affected_team_keys: null, requested_at: Date.now() },
+        params: { event_key: eventKey, affected_team_keys: affectedTeamKeys, requested_at: Date.now() },
       });
     } catch (error) {
       try {
