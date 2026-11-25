@@ -126,11 +126,6 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     console.error("[WEBHOOK][TBA] EventRuntime binding is unavailable", JSON.stringify({ event_key: eventKey }));
     return;
   }
-  if (teamKeys.size > 0 && !env.TEAM_RUNTIME) {
-    console.error("[WEBHOOK][TBA] TeamRuntime binding is unavailable", JSON.stringify({ event_key: eventKey, team_count: teamKeys.size }));
-    return;
-  }
-
   const digest = await crypto.subtle.digest("SHA-256", rawBody);
   const webhookId = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   const headers = new Headers({
@@ -139,22 +134,12 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     "X-FieldView-Webhook-Id": webhookId,
     "Content-Type": "application/json",
   });
-  const targets: Array<{ kind: "event" | "team"; key: string; promise: Promise<Response> }> = [];
+  const targets: Array<{ kind: "event"; key: string; promise: Promise<Response> }> = [];
   try {
     const eventStub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
     targets.push({ kind: "event", key: eventKey, promise: eventStub.fetch(new Request("https://event-runtime/webhook", {
       method: "POST", headers: new Headers(headers), body: rawBody,
     })) });
-    if (teamKeys.size > 0 && env.TEAM_RUNTIME) {
-      for (const teamKey of teamKeys) {
-        const teamStub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
-        const teamHeaders = new Headers(headers);
-        teamHeaders.set("X-FieldView-Team-Key", teamKey);
-        targets.push({ kind: "team", key: teamKey, promise: teamStub.fetch(new Request("https://team-runtime/webhook", {
-          method: "POST", headers: teamHeaders, body: rawBody,
-        })) });
-      }
-    }
   } catch (error) {
     console.error("[WEBHOOK][TBA] Failed to enqueue runtime fan-out", JSON.stringify({
       event_key: eventKey, webhook_id: webhookId, error: String(error),
@@ -177,7 +162,7 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     }));
     return;
   }
-  await Promise.all(targets.map((target) => registerRuntimeMarker(env, target.kind, target.key)));
+  await registerRuntimeMarker(env, "event", eventKey);
   if (env.EVENT_ANALYTICS_WORKFLOW) {
     const affectedTeamKeys = ["match_score", "upcoming_match"].includes(messageType) && teamKeys.size > 0
       ? [...teamKeys].sort()
@@ -211,8 +196,8 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
       }));
     }
   }
-  console.log("[WEBHOOK][TBA] Runtime fan-out completed", JSON.stringify({
-    event_key: eventKey, webhook_id: webhookId, target_count: targets.length,
+  console.log("[WEBHOOK][TBA] EventRuntime accepted webhook; analytics Workflow dispatch completed", JSON.stringify({
+    event_key: eventKey, webhook_id: webhookId,
   }));
 }
 
