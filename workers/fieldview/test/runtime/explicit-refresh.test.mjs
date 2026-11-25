@@ -47,7 +47,15 @@ test("explicit EventRuntime refresh preserves endpoint validators and last-good 
       if (headers.get("If-None-Match") === '"matches-v1"') {
         return new Response(null, { status: 304, headers: { "Cache-Control": "max-age=60" } });
       }
-      return Response.json([{ key: eventKey + "_qm1", event_key: eventKey }], {
+      return Response.json([{
+        key: eventKey + "_qm1",
+        event_key: eventKey,
+        comp_level: "qm",
+        alliances: {
+          red: { team_keys: [] },
+          blue: { team_keys: [] },
+        },
+      }], {
         headers: { ETag: '"matches-v1"', "Cache-Control": "max-age=60" },
       });
     },
