@@ -59,6 +59,22 @@ function isRevision(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
+export function isEventAnalyticsTeamInput(value: unknown): value is EventAnalyticsTeamInput {
+  return isRecord(value) &&
+    value.contract_version === EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION &&
+    typeof value.event_key === "string" && /^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) &&
+    isRevision(value.event_source_revision) &&
+    isRecord(value.event_state) && value.event_state.event_key === value.event_key;
+}
+
+export function isTeamAnalyticsSeasonInput(value: unknown): value is TeamAnalyticsSeasonInput {
+  return isRecord(value) &&
+    value.contract_version === EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION &&
+    typeof value.team_key === "string" && /^frc[0-9]+$/.test(value.team_key) &&
+    isRevision(value.team_source_revision) &&
+    isRecord(value.team_state) && value.team_state.team_key === value.team_key;
+}
+
 export function isTeamEventAnalyticsCommand(value: unknown): value is TeamEventAnalyticsCommand {
   if (!isRecord(value) || value.contract_version !== EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION ||
       typeof value.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) ||
