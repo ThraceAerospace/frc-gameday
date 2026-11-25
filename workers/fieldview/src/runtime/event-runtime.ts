@@ -1478,7 +1478,6 @@ export class EventRuntime {
       const currentRevision = await transaction.get<number>("snapshot-revision") ?? 0;
       if (currentRevision !== calculated.version) {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
-        await transaction.delete(ANALYTICS_TEAM_EVENT_STATE_RETRY_KEY);
         await transaction.put("analytics:status", "pending");
         await this.rearm(transaction);
         return null;
