@@ -48,6 +48,8 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   const [selected, setSelected] = useState<WorkflowRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [weeklyBusy, setWeeklyBusy] = useState(false);
+  const [weeklyMessage, setWeeklyMessage] = useState("");
 
   const loadRuns = useCallback(async () => {
     if (!token) return;
@@ -92,6 +94,22 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
     } finally { setBusy(false); }
   }
 
+  async function refreshWeeklyProjection() {
+    setWeeklyBusy(true); setWeeklyMessage(""); setError("");
+    try {
+      const response = await fetch("/api/admin/runtime", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ workflowType: "events-this-week" }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Unable to refresh weekly event candidates");
+      setWeeklyMessage("Weekly event candidate refresh accepted. FieldView is rediscovering TBA events and will publish the new Monday–Sunday projection asynchronously.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to refresh weekly event candidates");
+    } finally { setWeeklyBusy(false); }
+  }
+
   const summary = selected?.summary ?? {};
   const isEvent = type === "event-readiness";
   const totalLabel = isEvent ? "Events" : "Teams";
@@ -111,9 +129,11 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
           <button key={item} onClick={() => { setType(item); setSelected(null); }} className={"rounded-lg px-3 py-2 text-sm " + (type === item ? "bg-[var(--fv-brand)] text-white" : "border border-[var(--fv-border)]")}>{label(item)}</button>
         ))}
         <span className="text-sm text-[var(--fv-muted)]">Season {year || "—"}</span>
+        <button disabled={weeklyBusy} onClick={() => void refreshWeeklyProjection()} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-50">{weeklyBusy ? "Refreshing…" : "Rebuild weekly event candidates"}</button>
         <button disabled={busy || !year} onClick={() => void dispatch()} className="ml-auto rounded-lg bg-[var(--fv-brand)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Starting…" : "Start " + label(type)}</button>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
+      {weeklyMessage && <p role="status" className="mt-3 text-sm text-[var(--fv-muted)]">{weeklyMessage}</p>}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
         <div className="min-w-0">
           <h3 className="mb-2 text-sm font-semibold">Execution history ({runs.total})</h3>
