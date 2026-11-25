@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.
 import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../../fieldview-runtime/src/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectPollingCandidates } from "./polling-policy.ts";
+import { selectPollingCandidates, selectBudgetedKeys, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 
 type PollingEnvironment = RuntimeEnvironment;
@@ -110,7 +110,16 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       return checks.filter((item) => item.registered).map((item) => item.key);
     });
     const registeredEvents = new Set(registeredEventKeys);
-    const candidates = selectPollingCandidates(projectionEvents, registeredEvents, scheduledAt);
+    const allActiveCandidates = selectPollingCandidates(
+      projectionEvents, registeredEvents, scheduledAt, Number.MAX_SAFE_INTEGER, 0,
+    );
+    const configuredEventInterval = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
+    const eventRotationInterval = Number.isFinite(configuredEventInterval) && configuredEventInterval > 0
+      ? configuredEventInterval : 5 * 60_000;
+    const eventRotationSlot = Math.floor(scheduledAt / eventRotationInterval);
+    const candidates = selectPollingCandidates(
+      projectionEvents, registeredEvents, scheduledAt, MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
+    );
 
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
@@ -178,10 +187,15 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     let teamRefreshesAttempted = 0;
     let teamRefreshesSucceeded = 0;
     let teamRefreshesFailed = 0;
+    let readinessDeferredTeamCount = 0;
     if (pollTeams && participantTeamKeys.size > 0) {
       const rosterKeys = [...participantTeamKeys];
+      const teamRotationSlot = Math.floor(scheduledAt / (24 * 60 * 60_000));
+      const boundedRosterKeys = selectBudgetedKeys(
+        rosterKeys, MAX_TEAM_READINESS_CHECKS_PER_RUN, teamRotationSlot,
+      );
       const registration = await step.do("check-daily-team-runtime-registration", async () =>
-        mapLimit(rosterKeys, 4, async (teamKey) => ({
+        mapLimit(boundedRosterKeys, 4, async (teamKey) => ({
           teamKey,
           registered: await isRuntimeRegistered(store(), "team", teamKey),
         })),
@@ -208,8 +222,13 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         kind: "team" as const, key: item.teamKey, year: discovery.year,
         ...(item.staleEndpoints.length ? { endpoints: item.staleEndpoints } : {}),
       }));
+      const selectedTeamKeys = new Set(selectBudgetedKeys(
+        dueTeams.map((item) => item.key), MAX_TEAM_REFRESH_COMMANDS_PER_RUN, teamRotationSlot,
+      ));
+      const boundedDueTeams = dueTeams.filter((item) => selectedTeamKeys.has(item.key));
+      readinessDeferredTeamCount = dueTeams.length - boundedDueTeams.length;
       const teamOutcomes = await step.do("refresh-due-team-runtimes", async () =>
-        dispatchRuntimeRefreshBatch(this.env, dueTeams, 4),
+        dispatchRuntimeRefreshBatch(this.env, boundedDueTeams, 4),
       );
       teamRefreshesAttempted = teamOutcomes.length;
       teamRefreshesSucceeded = teamOutcomes.filter((item) => item.ok).length;
@@ -221,13 +240,18 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       current_season: discovery.year,
       week_projection_run_at: discovery.projectionRunAt,
       weekly_event_registry_checks: projectionEvents.length,
-      eligible_events: candidates.length,
+      eligible_events: allActiveCandidates.length,
+      event_candidates_processed: candidates.length,
+      event_candidates_deferred_by_budget: Math.max(0, allActiveCandidates.length - candidates.length),
       events_refreshed: results.filter((item) => item.event_refresh === "succeeded").length,
       events_not_due: results.filter((item) => item.event_refresh === "not_due").length,
       events_failed: results.filter((item) => item.event_refresh === "failed").length,
       daily_team_poll: pollTeams,
       participant_teams_discovered: participantTeamKeys.size,
+      team_readiness_checks_processed: pollTeams ? Math.min(participantTeamKeys.size, MAX_TEAM_READINESS_CHECKS_PER_RUN) : 0,
+      team_readiness_checks_deferred_by_budget: pollTeams ? Math.max(0, participantTeamKeys.size - MAX_TEAM_READINESS_CHECKS_PER_RUN) : 0,
       team_readiness_failed: teamReadinessFailed,
+      team_refreshes_deferred_by_budget: pollTeams ? Math.max(0, readinessDeferredTeamCount) : 0,
       team_refreshes_attempted: teamRefreshesAttempted,
       team_refreshes_succeeded: teamRefreshesSucceeded,
       team_refreshes_failed: teamRefreshesFailed,
