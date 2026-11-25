@@ -99,7 +99,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     if (!validEventKey(eventKey) ||
         !(affected === null || (Array.isArray(affected) &&
           affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) ||
-        !Number.isSafeInteger(requestedAt)) {
+        (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt))) {
       throw new Error("Invalid event analytics Workflow parameters");
     }
     if (!this.env.EVENT_RUNTIME || !this.env.TEAM_RUNTIME || !this.env.DISCOVERY_STORE) {
