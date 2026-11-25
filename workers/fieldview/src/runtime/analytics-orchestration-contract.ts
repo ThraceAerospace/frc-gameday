@@ -48,6 +48,8 @@ export interface EventAnalyticsPublicationCommand {
   contract_version: typeof EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION;
   event_key: string;
   event_source_revision: number;
+  /** Teams recalculated against this event source revision; other results are retained owner publications. */
+  recalculated_team_keys: string[];
   team_results: TeamEventAnalyticsResult[];
 }
 
@@ -102,19 +104,26 @@ export function isEventAnalyticsPublicationCommand(value: unknown): value is Eve
       typeof value.event_key !== "string" ||
       !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) ||
       !isRevision(value.event_source_revision) ||
+      !Array.isArray(value.recalculated_team_keys) ||
       !Array.isArray(value.team_results)) return false;
 
+  const recalculated = new Set<string>();
+  for (const teamKey of value.recalculated_team_keys) {
+    if (typeof teamKey !== "string" || !/^frc[0-9]+$/.test(teamKey) || recalculated.has(teamKey)) return false;
+    recalculated.add(teamKey);
+  }
   const seenTeams = new Set<string>();
   let comparisonInputUpdatedAt: number | undefined;
   for (const result of value.team_results) {
     if (!isTeamEventAnalyticsResult(result) ||
         result.event_key !== value.event_key ||
-        result.event_source_revision !== value.event_source_revision ||
+        result.event_source_revision > value.event_source_revision ||
+        (recalculated.has(result.team_key) && result.event_source_revision !== value.event_source_revision) ||
         seenTeams.has(result.team_key) ||
         (comparisonInputUpdatedAt !== undefined &&
           result.comparison_input_updated_at !== comparisonInputUpdatedAt)) return false;
     comparisonInputUpdatedAt = result.comparison_input_updated_at;
     seenTeams.add(result.team_key);
   }
-  return true;
+  return [...recalculated].every((teamKey) => seenTeams.has(teamKey));
 }
