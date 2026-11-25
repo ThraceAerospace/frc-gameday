@@ -44,6 +44,8 @@ export interface RuntimeEnvironment {
   MULTIPLEXER?: DurableObjectNamespaceLike;
   /** Shared discovery catalog persisted by a SQLite-backed Durable Object. */
   DISCOVERY_STORE?: DurableObjectNamespaceLike;
+  /** Production-only Workflow binding; omitted from branch Preview configuration. */
+  EVENT_ANALYTICS_WORKFLOW?: Workflow;
   /** In-process module interface used by the consolidated Worker entrypoint. */
   JOBS_REQUEST?: (request: Request) => Promise<Response>;
   EVENT_UPCOMING_INTERVAL_MS?: string | number;
