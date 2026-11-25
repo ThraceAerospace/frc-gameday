@@ -1,8 +1,8 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import type { RuntimeEnvironment } from "../../fieldview-runtime/src/cloudflare.ts";
-import { dispatchRuntime } from "../../fieldview-runtime/src/runtime-dispatch.ts";
-import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../../fieldview-runtime/src/runtime-refresh.ts";
+import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
+import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
+import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
