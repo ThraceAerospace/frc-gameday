@@ -450,10 +450,14 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
     resource.provider === "tba" && resource.endpoint.includes("/events/"));
   assert.ok(eventResource);
+  const eventKey = "2026test";
   storage.values.set("endpoint:" + eventResource.endpoint, {
     endpoint: eventResource.endpoint,
     status: "available",
-    data: [],
+    data: [{
+      key: eventKey, name: "Test Event", event_type: 0,
+      start_date: year + "-03-01", end_date: year + "-03-03", event_code: "test",
+    }],
     providerData: [],
     etag: null,
     lastFetchedAt: Date.now(),
@@ -463,11 +467,33 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
     lastAttemptAt: Date.now(),
     lastWebhookAt: null,
   });
+  storage.values.set("team-event-state:" + eventKey, {
+    event_key: eventKey,
+    team_key: teamKey,
+    sources: {},
+    analytics: { match_evidence: [], performance: { completed_matches: 0, matches_seen: 0 } },
+  });
+  storage.values.set("team-event-state:" + eventKey + ":inputs", {
+    event_source_revision: 4,
+    team_source_revision: 0,
+    comparison_input_updated_at: 123,
+  });
+  storage.values.set("team-event-revision:" + eventKey, 1);
   let providerCalls = 0;
-  const runtime = new TeamRuntime({ storage }, env(async () => {
-    providerCalls += 1;
-    return Response.json([]);
-  }), teamKey);
+  let eventRuntimeCalls = 0;
+  const runtime = new TeamRuntime({ storage }, {
+    ...env(async () => {
+      providerCalls += 1;
+      return Response.json([]);
+    }),
+    EVENT_RUNTIME: {
+      idFromName: (key) => key,
+      get: () => ({ fetch: async () => {
+        eventRuntimeCalls += 1;
+        throw new Error("TeamRuntime season analytics must not call EventRuntime");
+      } }),
+    },
+  }, teamKey);
   const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
@@ -490,7 +516,11 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   const result = await refreshed.json();
   assert.equal(result.team, 3461);
   assert.equal(result.year, year);
-  assert.equal(result.eventCount, 0);
+  assert.equal(result.eventCount, 1);
+  assert.equal(result.analyzedEventCount, 1,
+    "a TeamEventState with owner-local revision metadata is ready without querying EventRuntime");
+  assert.equal(result.events[0].status, "ready");
+  assert.equal(eventRuntimeCalls, 0, "season analytics must not read another runtime's state");
   assert.equal(storage.values.has("team-season-analytics:" + year), true);
 });
 
