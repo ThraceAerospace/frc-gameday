@@ -177,6 +177,7 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     }));
     return;
   }
+  await Promise.all(targets.map((target) => registerRuntimeMarker(env, target.kind, target.key)));
   if (env.EVENT_ANALYTICS_WORKFLOW) {
     const affectedTeamKeys = ["match_score", "upcoming_match"].includes(messageType) && teamKeys.size > 0
       ? [...teamKeys].sort()
