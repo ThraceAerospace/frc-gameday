@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
-const [jobs, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runtime, adminApi, adminPanel] = await Promise.all([
+const [jobs, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runtime, adminPanel] = await Promise.all([
   read("../../src/jobs/index.ts"),
   read("../../src/jobs/weekly-event-projection.ts"),
   read("../../src/jobs/weekly-projection.ts"),
@@ -11,7 +11,6 @@ const [jobs, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runt
   read("../../src/index.ts"),
   read("../../wrangler.toml"),
   read("../../src/runtime/index.ts"),
-  read("../../../../apps/web/src/app/api/admin/runtime/route.ts"),
   read("../../../../apps/web/src/app/admin/runtime/WorkflowRunsPanel.tsx"),
 ]);
 
@@ -48,7 +47,7 @@ test("Monday scheduling and the admin refresh control target the same Workflow",
   assert.match(jobs, /\/internal\/admin\/events-this-week\/refresh/);
   assert.match(jobs, /workflow\.create\(\{ id, params: \{ requestedAt, reason: "manual" \} \}\)/);
   assert.match(runtime, /\/internal\/admin\/events-this-week\/refresh/);
-  assert.match(adminApi, /workflowType === "events-this-week"/);
+  assert.match(runtime, /type==="events-this-week"/);
   assert.match(adminPanel, /Rebuild weekly event candidates/);
   assert.match(adminPanel, /weeklyProjectionRun/);
 });

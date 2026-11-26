@@ -16,7 +16,7 @@ The Worker validates the RS256 signature against the team's published JWKS and c
 
 ## Static hosting
 
-The SPA is built from the existing React dashboard components in `apps/web/src/app/admin/runtime`. Run `node apps/admin-cloudflare/build.mjs` to compile Tailwind and bundle the app into `workers/fieldview/admin-assets`. Wrangler serves the output through the static-assets binding. The `/admin` document request is worker-first and authorized before its HTML is returned. JavaScript/CSS under `/assets/*` is public application code and contains no secrets.
+The SPA is built from the existing React dashboard components in `apps/web/src/app/admin/runtime`. Run `npm run build:admin` (or `node apps/admin-cloudflare/build.mjs`) to compile Tailwind and bundle the app into `workers/fieldview/admin-assets`. Wrangler serves the output through the static-assets binding. The `/admin` document request is worker-first and authorized before its HTML is returned. JavaScript/CSS under `/assets/*` is public application code and contains no secrets.
 
 Keep worker-first routing for `/admin`, `/admin/*`, and `/internal/admin/*`. Do not apply Access to the entire Worker hostname: public runtime APIs and WebSocket upgrades must remain reachable.
 
