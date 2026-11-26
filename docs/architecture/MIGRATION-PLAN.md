@@ -15,12 +15,12 @@ The storage resources are provisioned and their bindings are declared in `worker
 
 | Binding | Production | Branch / pull-request Previews |
 | --- | --- | --- |
-| `FIELDVIEW_DB` | `fieldview-prod` — `df5168d5-5efa-4927-b732-c0ee66da5934` | `fieldview-test` — `7e7c5be6-4967-44e6-adba-86fe7b1a76cf` |
-| `KV_BINDING` | `c067dfcaa3a345b0b43f035a992b4b30` | Same namespace by explicit owner decision |
+| `DB` | `fieldview-d1-prod` — `bd7852b3-7814-4c3f-9ce8-f1c244524843` | `fieldview-d1-test` — `6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e` |
+| `KV_BINDING` | `fieldview-kv-prod` — `c067dfcaa3a345b0b43f035a992b4b30` | `fieldview-kv-test` — `19ef5d5221654ab4bac0c8118c35ad8b` |
 
-Discovery and System Records remain separate logical schemas and repository interfaces even though each environment has one physical D1 database. All branch Previews currently share the test D1 database; it is isolated from Production but not from other Preview branches.
+Discovery and System Records remain separate logical schemas and repository interfaces within each environment's physical D1 database. All branch Previews currently share the test D1 database; it is isolated from Production but not from other Preview branches.
 
-The KV namespace is intentionally shared because it holds FieldView-managed, non-authoritative projections derived from the same upstream TBA state. This is not equivalent to immutable source data: KV is mutable and eventually consistent, and Preview writes are visible to Production. Only environment-neutral, semantically equivalent, repeat-safe projection values may be written. Branch-specific fixtures and test-only data are prohibited. Any future feature requiring divergent Preview state needs a separate namespace.
+Production and Preview use separate KV namespaces. Both may independently hold FieldView-managed, non-authoritative projections derived from the same upstream TBA facts. KV remains mutable and eventually consistent, but Preview writes/deletes are isolated from Production. The two namespaces are not automatically synchronized; each environment may independently refresh its own projection.
 
 Bindings do not imply that application repositories, schemas, or migrations are implemented. No D1 schema migrations have been applied, and no Worker deployment has occurred. The clean-slate approval means existing DiscoveryStore records do not need preservation or import; the ownership/call-path audit and safe replacement plan are still required before implementing the D1 repositories.
 
