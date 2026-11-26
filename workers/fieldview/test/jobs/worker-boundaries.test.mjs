@@ -27,3 +27,19 @@ test("consolidated Worker source does not import retired sibling projects", asyn
   }
   assert.deepEqual(offenders, []);
 });
+
+
+test("event analytics acknowledges team results only after EventRuntime publication", async () => {
+  const source = await readFile(path.join(sourceRoot, "jobs", "event-analytics.ts"), "utf8");
+  const publication = source.indexOf('step.do("publish-event-analytics-aggregate"');
+  const publicationCheck = source.indexOf("if (!publicationResult.ok)", publication);
+  const acknowledgement = source.indexOf('step.do("acknowledge-published-team-analytics"', publicationCheck);
+  assert.ok(publication >= 0, "the Workflow must publish the EventRuntime aggregate");
+  assert.ok(publicationCheck > publication, "the Workflow must check the aggregate publication result");
+  assert.ok(acknowledgement > publicationCheck,
+    "the Workflow must acknowledge TeamRuntime results only after successful EventRuntime publication");
+  assert.ok(source.includes('scheduleRetry("team-publication-acknowledgement-failure", null)'),
+    "failed acknowledgements must be retried through a new durable Workflow");
+  assert.ok(source.includes('scheduleRetry("team-publication-acknowledgement-conflict", null)'),
+    "stale acknowledgements must trigger a full revision-consistent recompute");
+});
