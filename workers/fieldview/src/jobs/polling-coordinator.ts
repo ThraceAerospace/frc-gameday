@@ -301,7 +301,8 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     }
 
     let teamReadinessFailed = 0;
-    let teamRefreshesAttempted = 0;    let teamRefreshesSucceeded = 0;
+    let teamRefreshesAttempted = 0;
+    let teamRefreshesSucceeded = 0;
     let teamRefreshesFailed = 0;
     let readinessDeferredTeamCount = 0;
     let teamRegistryChecksProcessed = 0;
