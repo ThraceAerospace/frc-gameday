@@ -171,3 +171,45 @@ The initial schema is introduced in `workers/fieldview/migrations/0001_initial.s
 3. Confirm every operational key family routes to `system_records` and every catalog/projection key family routes to `discovery_records`.
 4. Separately fix TeamRuntime season-analytics GET cache writes and EventRuntime read-time identity binding.
 5. Compare actual Cloudflare usage after an explicitly approved test-environment migration; do not apply the migration or deploy without separate approval.
+
+
+## 2026-11-26 follow-up: current runtime and D1 implementation
+
+This section supersedes pre-cutover descriptions above where they refer to live code.
+
+### DiscoveryStore retirement and D1 ownership
+
+- The former `DiscoveryStore` Durable Object class, binding, SQLite migration declaration, and RPC routes have been removed. Its former mixed catalog/operational responsibilities now use the in-process `DiscoveryService` and `D1RecordStore`.
+- `discovery_records` owns current-season metadata, event/team directories, discovery staging/chunks, and lightweight discovery projections.
+- `system_records` owns runtime registration markers, admin jobs, Workflow run/history records, and coverage-audit records.
+- The initial schema is `workers/fieldview/migrations/0001_initial.sql`. CI now applies it to a fresh local D1 database and verifies that exactly `discovery_records` and `system_records` exist. This is local-only; no remote migration was applied.
+- D1 upserts skip unchanged JSON/type values. Related discovery publication uses `DB.batch()`; tests cover publication rollback and now cover a failed batch spanning both logical tables.
+
+### Multiplexer lifecycle cleanup
+
+- `webSocketClose()` and `webSocketError()` both call `cleanupSocket()`.
+- Cleanup reads the socket attachment, then removes each subscription through the same transactional `removeSubscription()` path used by explicit unsubscribe.
+- A changed removal updates/deletes the client and topic indexes and increments the subscription generation before synchronizing the EventRuntime registration. Repeated cleanup after the first removal is a no-op because the client no longer owns that subscription.
+- A failed runtime synchronization after subscribe is compensated by removing the newly added subscription. This bounds stale client/topic index retention to cleanup failures rather than silently retaining normal closed sockets.
+
+### Runtime registration semantics
+
+- Runtime markers are stored under `registry/runtime-events/` and `registry/runtime-teams/`, and D1 key routing places those prefixes in `system_records`.
+- Event markers are written after explicit successful registration, successful event participant acquisition/refresh/publication/recalculation, and successful accepted TBA webhook dispatch. Team markers are written after successful seed/refresh operations.
+- Public event/team reads and the EventRuntime/TeamRuntime readiness inspection commands do not create runtime markers. The obsolete `/internal/admin/event-readiness` route, which activated one EventRuntime and wrote a marker as a side effect of a per-event readiness request, has been removed. Daily Event/Team readiness Workflows inspect only already-registered runtimes.
+- Markers are currently existence flags with an empty JSON object. They do not carry registration timestamps, generation, provenance, or an explicit lifecycle status. There is no automatic reconstruction/repair path for a missing marker when an object still contains durable state, and no explicit time-based marker retention. These remain open policy/operational questions under Issue #30.
+
+### Telemetry limitations
+
+- Cloudflare's Durable Object GraphQL datasets expose invocation aggregates and storage size; the introspected storage groups expose `max.storedBytes`, not billable per-operation row-read/row-write counters. GraphQL analytics are not themselves a billing ledger.
+- The Cloudflare account billable-usage information endpoint was queried through the connected account integration but returned HTTP 403 due to missing API permission. No account-specific billable usage export was available to this audit.
+- D1 analytics expose `rowsRead` and `rowsWritten` in Cloudflare's documented dataset, but the new D1 bindings/migration have not been deployed remotely, so there is no production D1 workload to measure.
+- Do not infer physical SQLite row writes or a daily billable budget from logical source operations. A billing-authorized usage export or dashboard review is still required before establishing a numeric budget.
+
+### Remaining audit work
+
+1. Define runtime-marker repair/reconstruction behavior and retention, including the case where durable object state exists but its System Records marker is missing.
+2. Inventory retention and user-facing consumers for legacy readiness summaries, admin job history, and coverage-audit chunks; implement retention only after an explicit policy is accepted.
+3. Verify no external Worker, dashboard, or automation invokes removed internal routes.
+4. Reconcile observed usage after an approved test-environment migration when the required billing/analytics access is available.
+

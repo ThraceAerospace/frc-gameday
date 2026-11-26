@@ -118,17 +118,17 @@ test("D1 record store atomically publishes multiple records and deletes", async 
   assert.equal(await store.get("discovery/partial-teams/2026/1.json"), undefined);
 });
 
-test("D1 record store rolls back a failed multi-record batch", async () => {
+test("D1 record store rolls back a failed cross-table batch", async () => {
   const db = createD1();
   const store = new D1RecordStore(db);
-  await store.put("discovery/teams/2026.json", '{"generation":1}');
+  await store.put("admin/runtime-jobs/job-1.json", '{"status":"running"}');
   db.setBatchFailureAt(1);
   await assert.rejects(() => store.putMany([
-    ["registry/teams/2026.json", '["frc3461"]'],
     ["discovery/teams/2026.json", '{"generation":2}'],
+    ["admin/runtime-jobs/job-1.json", '{"status":"completed"}'],
   ]), /Injected D1 batch failure/);
-  assert.equal(await store.get("registry/teams/2026.json"), undefined);
-  assert.equal(await store.get("discovery/teams/2026.json"), '{"generation":1}');
+  assert.equal(await store.get("discovery/teams/2026.json"), undefined);
+  assert.equal(await store.get("admin/runtime-jobs/job-1.json"), '{"status":"running"}');
 });
 
 
@@ -162,4 +162,20 @@ test("D1 record store routes every documented key family to its owning table", a
 
   assert.deepEqual([...db.tables.discovery_records.keys()].sort(), discoveryKeys.sort());
   assert.deepEqual([...db.tables.system_records.keys()].sort(), systemKeys.sort());
+});
+
+test("D1 record store reads durable records through a newly constructed repository facade", async () => {
+  const db = createD1();
+  const writer = new D1RecordStore(db);
+  await writer.put("discovery/current-season.json", '{"year":2026}');
+  await writer.put("admin/runtime-jobs/job-1.json", '{"status":"running"}');
+
+  // A new facade models a Worker restart: only the D1 binding survives.
+  const afterRestart = new D1RecordStore(db);
+  assert.equal(await afterRestart.get("discovery/current-season.json"), '{"year":2026}');
+  assert.equal(await afterRestart.get("admin/runtime-jobs/job-1.json"), '{"status":"running"}');
+  assert.deepEqual(
+    [...(await afterRestart.list({ prefix: "admin/runtime-jobs/" })).keys()],
+    ["admin/runtime-jobs/job-1.json"],
+  );
 });
