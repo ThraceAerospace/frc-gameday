@@ -48,6 +48,14 @@ async function createEventAnalyticsWorkflow(
       },
     });
   } catch (error) {
+    try {
+      const existing = await workflow.get(input.workflowId).then((instance) => instance.status());
+      if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) {
+        return;
+      }
+    } catch {
+      // The Workflow was not created, or its status is temporarily unavailable.
+    }
     await repository.fail(executionId, error, input.workflowId);
     throw error;
   }
@@ -219,16 +227,31 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     let workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
     let attempt = 0;
     try {
-      try {
-        const existing = await env.EVENT_ANALYTICS_WORKFLOW.get(workflowId).then((instance) => instance.status());
-        if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) {
-          workflowId = "";
-        } else {
-          attempt = 1;
-          workflowId = "event-analytics-" + eventKey + "-" + retryKey + "-retry-1";
+      const activeStatuses = ["queued", "running", "waiting", "waitingForPause", "paused", "complete"];
+      const readWorkflowStatus = async (id: string): Promise<string | null> => {
+        try {
+          return (await env.EVENT_ANALYTICS_WORKFLOW!.get(id).then((instance) => instance.status())).status;
+        } catch {
+          return null;
         }
-      } catch {
-        // No workflow exists for this webhook identity.
+      };
+      const rootStatus = await readWorkflowStatus(workflowId);
+      if (rootStatus && activeStatuses.includes(rootStatus)) {
+        workflowId = "";
+      } else if (rootStatus === "terminated") {
+        workflowId = "";
+      } else if (rootStatus === "errored") {
+        workflowId = "";
+        for (let nextAttempt = 1; nextAttempt <= 2; nextAttempt += 1) {
+          const candidateId = "event-analytics-" + eventKey + "-" + retryKey + "-retry-" + nextAttempt;
+          const candidateStatus = await readWorkflowStatus(candidateId);
+          if (candidateStatus && activeStatuses.includes(candidateStatus)) break;
+          if (candidateStatus === "terminated") break;
+          if (candidateStatus === "errored") continue;
+          workflowId = candidateId;
+          attempt = nextAttempt;
+          break;
+        }
       }
       if (workflowId) {
         await createEventAnalyticsWorkflow(env, {
