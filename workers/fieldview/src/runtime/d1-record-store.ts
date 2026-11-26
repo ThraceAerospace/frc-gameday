@@ -5,6 +5,8 @@ export interface D1RecordStorage {
   delete(key: string): Promise<boolean>;
 }
 
+import type { D1DatabaseLike } from "./cloudflare.ts";
+
 type RecordTable = "discovery_records" | "system_records";
 
 function tableForKey(key: string): RecordTable {
@@ -19,10 +21,10 @@ function recordTypeForKey(key: string): string {
 
 /** Shared implementation for one of the two logical record repositories. */
 class D1RecordRepository implements D1RecordStorage {
-  private readonly db: D1Database;
+  private readonly db: D1DatabaseLike;
   private readonly table: RecordTable;
 
-  constructor(db: D1Database, table: RecordTable) {
+  constructor(db: D1DatabaseLike, table: RecordTable) {
     this.db = db;
     this.table = table;
   }
@@ -55,7 +57,7 @@ class D1RecordRepository implements D1RecordStorage {
       WHERE substr(record_key, 1, ?) = ? AND record_key > ?
       ORDER BY record_key LIMIT ?`)
       .bind(prefix.length, prefix, cursor, limit).all<{ record_key: string; value_json: string }>();
-    return new Map<string, T>((result.results ?? []).map((row): [string, T] => [row.record_key, row.value_json as unknown as T]));
+    return new Map<string, T>((result.results ?? []).map((row: { record_key: string; value_json: string }): [string, T] => [row.record_key, row.value_json as unknown as T]));
   }
 
   async delete(key: string): Promise<boolean> {
@@ -66,12 +68,12 @@ class D1RecordRepository implements D1RecordStorage {
 
 /** Discovery-owned records, backed by the discovery_records table. */
 export class DiscoveryRecordsRepository extends D1RecordRepository {
-  constructor(db: D1Database) { super(db, "discovery_records"); }
+  constructor(db: D1DatabaseLike) { super(db, "discovery_records"); }
 }
 
 /** Workflow and operational records, backed by the system_records table. */
 export class SystemRecordsRepository extends D1RecordRepository {
-  constructor(db: D1Database) { super(db, "system_records"); }
+  constructor(db: D1DatabaseLike) { super(db, "system_records"); }
 }
 
 /**
@@ -82,7 +84,7 @@ export class D1RecordStore implements D1RecordStorage {
   private readonly discovery: DiscoveryRecordsRepository;
   private readonly system: SystemRecordsRepository;
 
-  constructor(db: D1Database) {
+  constructor(db: D1DatabaseLike) {
     this.discovery = new DiscoveryRecordsRepository(db);
     this.system = new SystemRecordsRepository(db);
   }
