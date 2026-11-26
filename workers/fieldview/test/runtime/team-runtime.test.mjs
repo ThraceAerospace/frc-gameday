@@ -487,7 +487,7 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
     resource.provider === "tba" && resource.endpoint.includes("/events/"));
   assert.ok(eventResource);
-  const eventKey = "2026test";
+  const eventKey = year + "test";
   storage.values.set("endpoint:" + eventResource.endpoint, {
     endpoint: eventResource.endpoint,
     status: "available",
