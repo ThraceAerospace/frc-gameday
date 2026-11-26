@@ -30,7 +30,6 @@ type EventViewProps = {
   event: string;
   config: EventViewConfig;
   controller: TileSurfaceController;
-  isDivisional?: boolean;
   slotPresentation?: {
     teamTracker: "visible" | "hidden";
     matchInfo: "visible" | "hidden";
@@ -49,7 +48,6 @@ export default function EventView({
   event,
   config,
   controller,
-  isDivisional = false,
   slotPresentation,
   priorityEditing = false,
   activeHighlighted = false,
@@ -307,7 +305,7 @@ export default function EventView({
         mode={footerMode}
         eventName={eventData.short_name || eventData.name}
         eventTimezone={eventData.timezone}
-        isDivisional={isDivisional}
+        isDivisional={Boolean(eventData.division_keys?.length)}
         wssConnected={wssConnected}
         wssStale={webSocketStale}
         multiviewHidden={footerHidden}

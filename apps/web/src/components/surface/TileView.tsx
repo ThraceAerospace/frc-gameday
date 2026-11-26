@@ -85,7 +85,6 @@ function SurfaceUpcomingMatchAlertSource({
 
 type TileViewProps = {
   controller: TileSurfaceController;
-  isDivisional?: boolean;
   className?: string;
   renderEventView?: (args: {
     eventKey: string;
@@ -108,7 +107,6 @@ function getSlotPresentation(
 
 export default function TileView({
   controller,
-  isDivisional = false,
   className = "",
   renderEventView,
 }: TileViewProps) {
@@ -262,7 +260,6 @@ export default function TileView({
                 activeHighlighted={state.activeKey === tileId}
                 imminentMatch={Boolean(state.imminentMatchKeys?.[eventKey])}
                 upcomingMatchKey={state.upcomingMatchKeys?.[eventKey] ?? null}
-                isDivisional={isDivisional}
                 controller={controller}
                 onToggleActive={() => controller.actions.toggleActive(tileId)}
                 slotNumber={state.streams.indexOf(tileId) + 1}
