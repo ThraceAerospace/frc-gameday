@@ -145,7 +145,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             minimumIntervalMs,
           }, discovery.year);
           if (readiness.status === 204) {
-            return { event_key: eventKey, lifecycle: candidate.lifecycle, event_refresh: "unavailable" };
+            return { event_key: eventKey, lifecycle: candidate.lifecycle, event_refresh: "unavailable", analytics_state_failed: true };
           }
           if (!readiness.ok) throw new Error("Event readiness returned HTTP " + readiness.status);
           const readinessBody = await readiness.json() as { refresh_required?: boolean; stale_sources?: unknown };
@@ -226,6 +226,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             event_key: eventKey,
             lifecycle: candidate.lifecycle,
             event_refresh: "failed",
+            analytics_state_failed: true,
             error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
           };
         }
