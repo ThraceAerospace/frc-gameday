@@ -1,4 +1,5 @@
 import type { RuntimeEnvironment } from "./cloudflare.ts";
+import { D1RecordStore } from "./d1-record-store.ts";
 
 export type RuntimeKind = "event" | "team";
 
@@ -96,34 +97,19 @@ export async function dispatchRuntime(
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind, key: string): Promise<void> {
-  if (!env.DISCOVERY_STORE) return;
-  const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
+  if (!env.DB) throw new Error("D1 database binding is unavailable");
+  const store = new D1RecordStore(env.DB);
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const markerKey = prefix + key + ".json";
-  const existing = await stub.fetch(new Request(
-    "https://discovery-store/get?key=" + encodeURIComponent(markerKey),
-  ));
-  if (existing.ok) return;
-  if (existing.status !== 404) {
-    throw new Error("Unable to inspect runtime marker: HTTP " + existing.status);
-  }
-  const response = await stub.fetch(new Request("https://discovery-store/put", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: markerKey, value: "{}" }),
-  }));
-  if (!response.ok) throw new Error("Unable to register runtime marker: HTTP " + response.status);
+  if (await store.get(markerKey) !== undefined) return;
+  await store.put(markerKey, "{}");
 }
 
-
 async function readCurrentSeason(env: RuntimeEnvironment): Promise<number | null> {
-  if (!env.DISCOVERY_STORE) return null;
-  const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
-  const response = await stub.fetch(new Request(
-    "https://discovery-store/get?key=" + encodeURIComponent("discovery/current-season.json"),
-  ));
-  if (!response.ok) return null;
-  const current = await response.json().catch(() => null) as { year?: unknown } | null;
+  if (!env.DB) return null;
+  const raw = await new D1RecordStore(env.DB).get<string>("discovery/current-season.json");
+  if (typeof raw !== "string") return null;
+  const current = JSON.parse(raw) as { year?: unknown };
   return current && Number.isInteger(current.year) &&
     Number(current.year) >= 1992 && Number(current.year) <= 2200
     ? Number(current.year)
