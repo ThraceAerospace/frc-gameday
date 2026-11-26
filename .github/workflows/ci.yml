@@ -37,6 +37,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Exercise the committed D1 migration against a fresh local database.
+      # This is intentionally local-only; it must never touch Production or Preview databases.
+      - name: Apply and verify local D1 schema
+        run: |
+          npx --yes wrangler@^4.135.0 d1 migrations apply fieldview-d1-prod --local --config workers/fieldview/wrangler.toml
+          schema="$(npx --yes wrangler@^4.135.0 d1 execute fieldview-d1-prod --local --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('discovery_records', 'system_records') ORDER BY name;" --json --config workers/fieldview/wrangler.toml)"
+          printf '%s\\n' "$schema"
+          node -e 'const value = JSON.parse(process.argv[1]); const batches = Array.isArray(value) ? value : [value]; const rows = batches.flatMap((batch) => batch.results ?? batch.result?.results ?? []); const names = rows.map((row) => row.name).sort(); const expected = ["discovery_records", "system_records"]; if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error("Unexpected D1 schema tables: " + JSON.stringify(names));' "$schema"
+
       - name: Generate Next.js types
         run: npx next typegen
         working-directory: apps/web
