@@ -148,8 +148,8 @@ export async function isCloudflareAccessAdmin(
     const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
     if (claims.iss !== issuer || !audiences.includes(audience) ||
         typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp <= nowSeconds ||
-        (typeof claims.nbf === "number" && claims.nbf > nowSeconds) ||
-        (typeof claims.iat === "number" && claims.iat > nowSeconds + 60) ||
+        (claims.nbf !== undefined && (typeof claims.nbf !== "number" || !Number.isFinite(claims.nbf) || claims.nbf > nowSeconds)) ||
+        typeof claims.iat !== "number" || !Number.isFinite(claims.iat) || claims.iat > nowSeconds + 60 ||
         !allowlist.has(email)) return false;
 
     return await verifySignature(parts, issuer, env.fetcher ?? fetch);
