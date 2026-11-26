@@ -1,9 +1,7 @@
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 type Role = "controller" | "display";
-type Lease = { token: string; expiresAt: number };
 type Attachment = { role: Role; token: string };
-const LEASE_MS = 120_000;
 const PROTOCOL = "fieldview.remote.v1";
 const isRole = (value: string): value is Role => value === "controller" || value === "display";
 const otherRole = (role: Role): Role => role === "controller" ? "display" : "controller";
@@ -21,7 +19,14 @@ function validPayload(value: unknown): boolean {
     (typeof value.candidate.candidate === "string" || value.candidate.candidate === null);
 }
 
-/** Pair-isolated WebRTC signaling with expiring controller/display role leases. */
+/**
+ * Pair-isolated WebRTC signaling.
+ *
+ * Presence is represented only by accepted, hibernatable WebSockets. No
+ * durable lease, heartbeat, alarm, or periodic storage write is necessary:
+ * Cloudflare removes closed sockets from getWebSockets(), including after
+ * hibernation, and attachments survive hibernation.
+ */
 export class RemoteSessionRuntime {
   private readonly state: DurableObjectStateLike;
   private readonly env: RuntimeEnvironment;
@@ -51,30 +56,31 @@ export class RemoteSessionRuntime {
         !/^[a-zA-Z0-9_-]{16,128}$/.test(token)) {
       return Response.json({ error: "Invalid remote session credentials" }, { status: 401 });
     }
+    if (!this.state.acceptWebSocket || !this.state.getWebSockets) {
+      return Response.json({ error: "Hibernatable WebSockets are unavailable" }, { status: 501 });
+    }
 
-    const key = "role:" + role;
-    const existing = await this.state.storage.get<Lease>(key);
-    if (existing && existing.expiresAt > Date.now()) {
+    // A DO processes these fetch events serially. Checking its accepted socket
+    // set is therefore sufficient to enforce one live connection per role.
+    if (this.state.getWebSockets().some((socket) => this.attachment(socket)?.role === role)) {
       return Response.json({ error: "This remote role is already connected" }, { status: 409 });
     }
-    if (existing) await this.state.storage.delete(key);
-    if (!this.state.acceptWebSocket) {
-      return Response.json({ error: "WebSocket sessions are unavailable" }, { status: 501 });
-    }
+
     const pair = this.env.webSocketPairFactory
       ? this.env.webSocketPairFactory()
       : new (globalThis as typeof globalThis & {
           WebSocketPair: new () => { 0: WebSocket; 1: WebSocket };
         }).WebSocketPair();
     const server = pair[1] as WebSocket & { serializeAttachment?: (value: unknown) => void };
-    server.serializeAttachment?.({ role, token } satisfies Attachment);
-    await this.state.storage.put<Lease>(key, { token, expiresAt: Date.now() + LEASE_MS });
+    if (!server.serializeAttachment) {
+      return Response.json({ error: "WebSocket attachments are unavailable" }, { status: 501 });
+    }
+    server.serializeAttachment({ role, token } satisfies Attachment);
     this.state.acceptWebSocket(server);
-    await this.scheduleExpiry();
     server.send(JSON.stringify({ type: "connected", role }));
+
     const other = otherRole(role);
-    const otherLease = await this.state.storage.get<Lease>("role:" + other);
-    if (otherLease && otherLease.expiresAt > Date.now()) {
+    if (this.hasRole(other)) {
       server.send(JSON.stringify({ type: "peer-ready" }));
       this.sendToRole(other, { type: "peer-ready" });
     }
@@ -87,6 +93,10 @@ export class RemoteSessionRuntime {
     const value = (socket as WebSocket & { deserializeAttachment?: () => unknown }).deserializeAttachment?.();
     return isRecord(value) && isRole(String(value.role)) && typeof value.token === "string"
       ? { role: value.role as Role, token: value.token } : null;
+  }
+
+  private hasRole(role: Role): boolean {
+    return (this.state.getWebSockets?.() ?? []).some((socket) => this.attachment(socket)?.role === role);
   }
 
   private sendToRole(role: Role, message: unknown): void {
@@ -114,16 +124,12 @@ export class RemoteSessionRuntime {
       try { socket.close(1009, "Invalid or oversized message"); } catch { /* closed */ }
       return;
     }
-    const key = "role:" + attachment.role;
-    const lease = await this.state.storage.get<Lease>(key);
-    if (!lease || lease.token !== attachment.token || lease.expiresAt <= Date.now()) {
-      try { socket.close(1008, "Session lease expired"); } catch { /* closed */ }
-      return;
-    }
-    if (isRecord(body) && body.type === "heartbeat") {
-      await this.state.storage.put<Lease>(key, { token: lease.token, expiresAt: Date.now() + LEASE_MS });
-      await this.scheduleExpiry();
-      try { socket.send(JSON.stringify({ type: "heartbeat-ack" })); } catch { /* closed */ }
+    // A hibernated/closed socket may still deliver a queued event in edge
+    // cases; confirm it remains an accepted participant before forwarding.
+    if (!this.hasRole(attachment.role) ||
+        !this.state.getWebSockets?.().some((candidate) =>
+          candidate === socket && this.attachment(candidate)?.token === attachment.token)) {
+      try { socket.close(1008, "Session is no longer active"); } catch { /* closed */ }
       return;
     }
     if (!isRecord(body) || body.type !== "signal" ||
@@ -134,42 +140,7 @@ export class RemoteSessionRuntime {
     this.sendToRole(otherRole(attachment.role), { type: "signal", payload: body.payload });
   }
 
-  async webSocketClose(socket: WebSocket): Promise<void> { await this.release(socket); }
-  async webSocketError(socket: WebSocket): Promise<void> { await this.release(socket); }
-  private async release(socket: WebSocket): Promise<void> {
-    const attachment = this.attachment(socket);
-    if (!attachment) return;
-    const key = "role:" + attachment.role;
-    const lease = await this.state.storage.get<Lease>(key);
-    if (lease?.token === attachment.token) await this.state.storage.delete(key);
-    await this.scheduleExpiry();
-  }
-
-  async alarm(): Promise<void> {
-    const now = Date.now();
-    for (const role of ["controller", "display"] as const) {
-      const key = "role:" + role;
-      const lease = await this.state.storage.get<Lease>(key);
-      if (!lease || lease.expiresAt > now) continue;
-      await this.state.storage.delete(key);
-      for (const socket of this.state.getWebSockets?.() ?? []) {
-        const attachment = this.attachment(socket);
-        if (attachment?.role === role && attachment.token === lease.token) {
-          try { socket.close(1001, "Session expired"); } catch { /* closed */ }
-        }
-      }
-    }
-    await this.scheduleExpiry();
-  }
-
-  private async scheduleExpiry(): Promise<void> {
-    const leases = await Promise.all([
-      this.state.storage.get<Lease>("role:controller"),
-      this.state.storage.get<Lease>("role:display"),
-    ]);
-    const next = leases.filter((lease): lease is Lease => Boolean(lease))
-      .reduce((earliest, lease) => Math.min(earliest, lease.expiresAt), Number.POSITIVE_INFINITY);
-    if (Number.isFinite(next)) await this.state.storage.setAlarm(next);
-    else await this.state.storage.deleteAlarm();
-  }
+  // Hibernation API lifecycle callbacks are intentionally storage-free.
+  async webSocketClose(_socket: WebSocket): Promise<void> {}
+  async webSocketError(_socket: WebSocket): Promise<void> {}
 }
