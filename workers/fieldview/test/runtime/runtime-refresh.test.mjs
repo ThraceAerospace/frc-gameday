@@ -169,13 +169,18 @@ test("pending analytics recovery uses stable revision identities and a bounded r
       },
     },
   };
+  const { webcrypto } = await import("node:crypto");
   const requestedAt = 1_800_000_000_000;
-  const windowStart = Math.floor(requestedAt / (30 * 60_000)) * (30 * 60_000);
+  const window = Math.floor(requestedAt / (30 * 60_000));
   const request = {
     affected_team_keys: ["frc3461"],
     revision_parts: ["pending:frc3461:7:8:3:1234"],
     recovery: true,
   };
+  const digest = await webcrypto.subtle.digest("SHA-256", new TextEncoder().encode(request.revision_parts.join("|")));
+  const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
+  const baseRetryKey = hash + "-" + window + "-base";
+  const recoveryRetryKey = hash + "-" + window + "-recovery";
   const dispatch = (at) => dispatchRuntimeRefreshBatch(env, [], 4, {
     requestedAt: at, additionalAffectedEvents: new Map([["2027rikin", request]]),
   });
@@ -183,27 +188,27 @@ test("pending analytics recovery uses stable revision identities and a bounded r
   await dispatch(requestedAt);
   assert.equal(workflows.length, 1);
   const baseId = workflows[0].id;
-  assert.equal(workflows[0].params.requested_at, windowStart);
+  assert.equal(workflows[0].params.retry_key, baseRetryKey);
   statuses.set(baseId, "complete");
-  const firstChild = "event-analytics-2027rikin-" + windowStart + "-retry-1";
+  const firstChild = "event-analytics-2027rikin-" + baseRetryKey + "-retry-1";
   statuses.set(firstChild, "queued");
   await dispatch(requestedAt + 5 * 60_000);
   assert.equal(workflows.length, 1, "an active child retry prevents duplicate recovery dispatch");
 
   statuses.set(firstChild, "errored");
-  statuses.set("event-analytics-2027rikin-" + windowStart + "-retry-2", "errored");
+  statuses.set("event-analytics-2027rikin-" + baseRetryKey + "-retry-2", "errored");
   await dispatch(requestedAt + 10 * 60_000);
   assert.equal(workflows.length, 2, "a terminal failed chain gets one recovery Workflow in the same window");
   const recoveryId = workflows[1].id;
   assert.match(recoveryId, /-recovery-/);
-  assert.equal(workflows[1].params.requested_at, windowStart + 1);
+  assert.equal(workflows[1].params.retry_key, recoveryRetryKey);
   statuses.set(recoveryId, "complete");
-  statuses.set("event-analytics-2027rikin-" + (windowStart + 1) + "-retry-1", "queued");
+  statuses.set("event-analytics-2027rikin-" + recoveryRetryKey + "-retry-1", "queued");
   await dispatch(requestedAt + 15 * 60_000);
   assert.equal(workflows.length, 2, "the recovery child chain is not duplicated within its window");
 
   await dispatch(requestedAt + 30 * 60_000);
   assert.equal(workflows.length, 2, "a still-active prior-window child retry blocks a new recovery window");
-});
+});;
 
 
