@@ -380,10 +380,13 @@ export class EventRuntime {
       (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
     const publicSubscriptionRead = request.method === "POST" && url.pathname === "/subscriptions";
     const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
+    const adminInspectionRead = request.method === "GET" &&
+      (url.pathname === "/state" || url.pathname === "/analytics-state" ||
+        url.pathname === "/analytics-orchestration-input");
     if (!adminAuthorized && !publicRead) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (publicRead || publicSubscriptionRead || readinessRequest) {
+    if (publicRead || publicSubscriptionRead || readinessRequest || adminInspectionRead) {
       if (!(await this.restoreEventKey(request))) {
         const storedEventKey = await this.storage.get<string>("event-key");
         if (!storedEventKey) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
