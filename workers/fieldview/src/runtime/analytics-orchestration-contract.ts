@@ -45,6 +45,10 @@ export interface TeamEventAnalyticsResult {
   state: FieldViewTeamEventState;
 }
 
+export interface TeamEventAnalyticsAcknowledgement extends Omit<TeamEventAnalyticsResult, "state"> {
+  /** Exact result identity acknowledged after EventRuntime commits its aggregate. */
+}
+
 export interface EventAnalyticsPublicationCommand {
   contract_version: typeof EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION;
   event_key: string;
@@ -99,6 +103,16 @@ export function isTeamEventAnalyticsResult(value: unknown): value is TeamEventAn
     value.state.team_key === value.team_key;
 }
 
+
+export function isTeamEventAnalyticsAcknowledgement(value: unknown): value is TeamEventAnalyticsAcknowledgement {
+  if (!isRecord(value) ||
+      value.contract_version !== EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION ||
+      typeof value.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(value.event_key) ||
+      typeof value.team_key !== "string" || !/^frc[0-9]+$/.test(value.team_key) ||
+      !isRevision(value.event_source_revision) || !isRevision(value.team_source_revision) ||
+      !isRevision(value.comparison_input_updated_at) || !isRevision(value.team_event_revision)) return false;
+  return true;
+}
 
 export function isEventAnalyticsPublicationCommand(value: unknown): value is EventAnalyticsPublicationCommand {
   if (!isRecord(value) ||
