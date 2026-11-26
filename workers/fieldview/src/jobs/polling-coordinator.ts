@@ -31,7 +31,6 @@ interface PollingEventResult {
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
   affected_team_keys?: string[] | null;
-  analytics_workflow_id?: string;
   error?: string;
 }
 
