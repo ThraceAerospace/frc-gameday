@@ -345,7 +345,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
             body: JSON.stringify(acknowledgement),
           }),
         );
-        if (response.status >= 500) {
+        if (response.status >= 500 || response.status === 408 || response.status === 425 || response.status === 429) {
           throw new Error("TeamRuntime " + result.team_key +
             " publication acknowledgement returned HTTP " + response.status);
         }
