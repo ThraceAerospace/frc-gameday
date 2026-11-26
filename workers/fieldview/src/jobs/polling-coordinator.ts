@@ -176,14 +176,14 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           const analyticsStateResponse = await dispatchRuntime(this.env, "event", eventKey, "analytics-state", {}, discovery.year);
           let analyticsRecovery = false;
           let analyticsRevisionPart: string | undefined;
-          let analyticsStateFailed = !analyticsStateResponse.ok;
-          if (analyticsStateResponse.ok) {
-            const analyticsState = await analyticsStateResponse.json() as {
+          let analyticsStateFailed = !analyticsStateResponse.ok || analyticsStateResponse.status === 204;
+          if (analyticsStateResponse.ok && analyticsStateResponse.status !== 204) {
+            const analyticsState = await analyticsStateResponse.json().catch(() => null) as {
               event_state_published?: unknown;
               source_revision?: unknown;
               analytics?: { status?: unknown; revision?: unknown; due_at?: unknown; pending_invalidation?: { requested_at?: unknown } | null };
-            };
-            if (!analyticsState.analytics || typeof analyticsState.analytics.status !== "string") {
+            } | null;
+            if (!analyticsState?.analytics || typeof analyticsState.analytics.status !== "string") {
               analyticsStateFailed = true;
             } else {
               analyticsRecovery = analyticsState.event_state_published === true &&
