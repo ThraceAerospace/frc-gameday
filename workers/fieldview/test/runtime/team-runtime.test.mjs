@@ -315,7 +315,9 @@ test("TeamRuntime dispatches each team resource through its declared provider", 
 
   const state = await runtime.fetch(new Request("https://team/state", { headers }));
   const diagnostics = await state.json();
-  assert.equal(diagnostics.polling.length, 0, "direct refresh does not create a durable per-runtime polling queue");
+  assert.equal(diagnostics.polling.length, 0, "TeamRuntime owns no polling tasks");
+  assert.equal(diagnostics.readiness.polling_owner, "PollingCoordinatorWorkflow");
+  assert.equal(diagnostics.readiness.local_poll_tasks, 0);
 
   assert.ok(calls.some((url) => url.includes("thebluealliance.com") && url.endsWith("/team/frc2485")));
   assert.ok(calls.some((url) => url.includes("statbotics") && url.includes("/team_year/2485/2026")));
