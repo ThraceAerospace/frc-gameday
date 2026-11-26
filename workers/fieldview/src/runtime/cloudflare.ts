@@ -73,7 +73,6 @@ export interface RuntimeEnvironment {
   EVENT_ANALYTICS_WORKFLOW?: Workflow;
   /** In-process module interface used by the consolidated Worker entrypoint. */
   JOBS_REQUEST?: (request: Request) => Promise<Response>;
-  EVENT_UPCOMING_INTERVAL_MS?: string | number;
   EVENT_ACTIVE_INTERVAL_MS?: string | number;
   EVENT_COMPLETED_RETENTION_MS?: string | number;
   /** Test seam; production uses the Workers global fetch implementation. */
