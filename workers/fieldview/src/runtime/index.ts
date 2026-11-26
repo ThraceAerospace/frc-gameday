@@ -20,10 +20,11 @@ interface DiscoveryServiceClient {
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
 function discoveryServiceClient(env: RuntimeEnvironment): DiscoveryServiceClient {
-  if (!env.DB) return {
+  const storage = env.DISCOVERY_STORAGE ?? env.DB;
+  if (!storage) return {
     async get() { return null; }, async put() {}, async list() { return { objects: [], truncated: false }; },
   };
-  const service = new DiscoveryService(env.DB, env);
+  const service = new DiscoveryService(storage, env);
   return {
     async get(key) {
       const response = await service.fetch(new Request("https://discovery-service/get?key=" + encodeURIComponent(key)));
@@ -58,7 +59,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!env.DB) return;
+  if (!env.DB && !env.DISCOVERY_STORAGE) return;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   await discoveryServiceClient(env).put(prefix + key + ".json", "{}", {
     httpMetadata: { contentType: "application/json" },
@@ -283,7 +284,7 @@ export default {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const action = url.pathname.slice("/internal/discovery/".length);
-      return new DiscoveryService(env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
+      return new DiscoveryService(env.DISCOVERY_STORAGE ?? env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
         method: request.method, headers: request.headers,
         ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.clone().arrayBuffer() }),
       }));
