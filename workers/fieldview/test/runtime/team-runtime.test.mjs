@@ -890,5 +890,19 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   assert.equal(input.team_state.team_key, teamKey);
   assert.deepEqual([...storage.values], [...beforePublishedRead],
     "reading a current analytics input must not write to Durable Object storage");
+
+  const resource = teamResourceEndpoints(teamKey, year)[0];
+  storage.values.set("endpoint:" + resource.endpoint, {
+    endpoint: resource.endpoint, status: "available", revision: 1,
+    lastFetchedAt: Date.now(), expiresAt: null, etag: '"team-v1"',
+  });
+  const beforeStaleRead = new Map(storage.values);
+  const staleRead = await runtime.fetch(new Request(
+    "https://team-runtime/analytics-season-input?year=" + year, { headers },
+  ));
+  assert.equal(staleRead.status, 409,
+    "a stale publication must not be supplied as if it represented the current source revisions");
+  assert.deepEqual([...storage.values], [...beforeStaleRead],
+    "a stale analytics input GET must report the conflict without repairing or rewriting storage");
   assert.equal(providerCalls, 0);
 });
