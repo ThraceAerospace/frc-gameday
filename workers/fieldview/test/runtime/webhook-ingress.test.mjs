@@ -20,10 +20,23 @@ async function sign(secret, body) {
 }
 
 function environment(onForward) {
+  const records = new Map();
   return {
+    records,
     TBA_API_KEY: "api-key",
     TBA_WEBHOOK_SECRET: "webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
+    DISCOVERY_STORAGE: {
+      async get(key) { return records.get(key); },
+      async put(key, value) { records.set(key, String(value)); },
+      async list({ prefix = "", startAfter = "", limit = 1000 } = {}) {
+        return new Map([...records.entries()]
+          .filter(([key]) => key.startsWith(prefix) && key > startAfter)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(0, limit));
+      },
+      async delete(key) { return records.delete(key); },
+    },
     EVENT_RUNTIME: {
       idFromName: (name) => name,
       get: (id) => ({ fetch: onForward(id) }),
