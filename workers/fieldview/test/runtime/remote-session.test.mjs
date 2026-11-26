@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RemoteSessionRuntime } from "../../src/runtime/remote-session.ts";
+import worker from "../../src/runtime/index.ts";
 class MemoryStorage {
   async get() { return undefined; }
   async put() { throw new Error("RemoteSessionRuntime must not persist session state"); }
@@ -111,4 +112,37 @@ test("separate pairing-code Durable Objects keep role ownership isolated", async
   assert.equal((await secondPair.runtime.fetch(request("controller", "second-controller-token-123", "654321"))).status, 200);
   assert.equal(firstPair.pairs.length, 1);
   assert.equal(secondPair.pairs.length, 1);
+});
+
+test("Runtime Worker routes the WebSocket upgrade to the pairing-code object", async () => {
+  let selectedName = null;
+  let forwardedRequest = null;
+  const response = await worker.fetch(
+    new Request("https://runtime/remote/ws?code=482913&role=controller", {
+      headers: {
+        Upgrade: "websocket",
+        "Sec-WebSocket-Protocol": "fieldview.remote.v1, role.controller, token.controller-token-123456",
+      },
+    }),
+    {
+      REMOTE_SESSION: {
+        idFromName(name) { selectedName = name; return { name }; },
+        get(id) {
+          return {
+            async fetch(request) {
+              forwardedRequest = request;
+              return new Response("upgrade forwarded", { status: 200 });
+            },
+          };
+        },
+      },
+    },
+    { waitUntil() {} },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(selectedName, "482913");
+  assert.equal(new URL(forwardedRequest.url).pathname, "/connect");
+  assert.equal(new URL(forwardedRequest.url).searchParams.get("role"), "controller");
+  assert.equal(forwardedRequest.headers.get("Sec-WebSocket-Protocol"),
+    "fieldview.remote.v1, role.controller, token.controller-token-123456");
 });
