@@ -20,6 +20,11 @@ export async function dispatchRuntime(
   if (!Number.isInteger(season) || season < 1992 || season > 2200) {
     return Response.json({ error: "Invalid season year" }, { status: 400 });
   }
+  if (kind === "event" && action === "register") {
+    return await registerRuntimeMarker(env, "event", key)
+      ? new Response(null, { status: 204 })
+      : Response.json({ error: "Runtime registry storage is unavailable" }, { status: 503 });
+  }
 
   const headers = new Headers({
     Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
@@ -70,8 +75,6 @@ export async function dispatchRuntime(
     readiness: "readiness",
     state: "state",
     refresh: "refresh",
-    lifecycle: "lifecycle",
-    schedule: "schedule",
     publish: "publish-state",
     analytics: "analytics",
   };
@@ -81,13 +84,6 @@ export async function dispatchRuntime(
   const payload = { ...body };
   delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
 
-  // EventRuntime requires polling intervals when its lifecycle is initialized.
-  // Keep these aligned with the legacy dispatch route and Wrangler environment.
-  if (action === "lifecycle") {
-    payload.upcomingIntervalMs = Number(env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000);
-    payload.activeIntervalMs = Number(env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
-  }
-
   const response = await stub.fetch(new Request("https://event-runtime/" + path, {
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
@@ -96,14 +92,14 @@ export async function dispatchRuntime(
   return response;
 }
 
-async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind, key: string): Promise<void> {
+async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind, key: string): Promise<boolean> {
   const store = env.DISCOVERY_STORAGE ?? (env.DB ? new D1RecordStore(env.DB) : null);
   // Unit tests and isolated local adapters may omit D1; production always binds DB.
-  if (!store) return;
+  if (!store) return false;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const markerKey = prefix + key + ".json";
-  if (await store.get(markerKey) !== undefined) return;
-  await store.put(markerKey, "{}");
+  if (await store.get(markerKey) === undefined) await store.put(markerKey, "{}");
+  return true;
 }
 
 async function readCurrentSeason(env: RuntimeEnvironment): Promise<number | null> {
