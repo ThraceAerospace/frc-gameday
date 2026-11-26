@@ -760,6 +760,11 @@ export default {
       }));
     }
 
+    if (url.pathname === "/internal/admin/auth" && request.method === "GET") {
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const object = await discoveryServiceClient(env)?.get("discovery/current-season.json");
