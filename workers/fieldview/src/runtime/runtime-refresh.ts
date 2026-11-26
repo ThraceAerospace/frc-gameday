@@ -21,6 +21,12 @@ export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
 export interface EventAnalyticsRefreshRequest {
   /** null is conservative: the match set could not be compared safely. */
   affected_team_keys: string[] | null;
+  /** Stable source/revision identities for recovery requests; avoids a new Workflow on every poll tick. */
+  revision_parts?: string[];
+  /** Recovery requests may restart a terminal failed Workflow on a bounded time window. */
+  recovery?: boolean;
+  /** Ordinary event refreshes retain their per-cycle identity when coalesced with recovery. */
+  poll_cycle_token?: number;
 }
 
 async function startEventAnalyticsWorkflows(
@@ -33,7 +39,7 @@ async function startEventAnalyticsWorkflows(
 ): Promise<void> {
   const binding = env.EVENT_ANALYTICS_WORKFLOW;
   if (!binding) return;
-  const grouped = new Map<string, { revisionParts: string[]; teamKeys: Set<string>; fullRecompute: boolean }>();
+  const grouped = new Map<string, { revisionParts: string[]; teamKeys: Set<string>; fullRecompute: boolean; recovery: boolean }>();
   for (const outcome of outcomes) {
     if (!outcome.ok || outcome.kind !== "team" || !outcome.response ||
         typeof outcome.response !== "object" || Array.isArray(outcome.response)) continue;
@@ -45,7 +51,7 @@ async function startEventAnalyticsWorkflows(
       const item = affected as Record<string, unknown>;
       if (typeof item.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(item.event_key) ||
           typeof item.team_event_revision !== "number" || !Number.isSafeInteger(item.team_event_revision)) continue;
-      const group = grouped.get(item.event_key) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false };
+      const group = grouped.get(item.event_key) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false, recovery: false };
       group.revisionParts.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
       group.teamKeys.add(outcome.key);
       grouped.set(item.event_key, group);
@@ -54,7 +60,7 @@ async function startEventAnalyticsWorkflows(
 
   for (const [eventKey, request] of options.additionalAffectedEvents ?? []) {
     if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
-    const group = grouped.get(eventKey) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false };
+    const group = grouped.get(eventKey) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false, recovery: false };
     if (request.affected_team_keys === null) {
       group.fullRecompute = true;
     } else {
@@ -62,8 +68,12 @@ async function startEventAnalyticsWorkflows(
         if (/^frc[0-9]+$/.test(teamKey)) group.teamKeys.add(teamKey);
       }
     }
-    group.revisionParts.push("poll-cycle:" + (options.requestedAt ?? 0) + ":" +
-      (request.affected_team_keys === null ? "full" : [...request.affected_team_keys].sort().join(",")));
+    if (request.revision_parts?.length) group.revisionParts.push(...request.revision_parts);
+    if (request.poll_cycle_token !== undefined || !request.revision_parts?.length) {
+      group.revisionParts.push("poll-cycle:" + (request.poll_cycle_token ?? options.requestedAt ?? 0) + ":" +
+        (request.affected_team_keys === null ? "full" : [...request.affected_team_keys].sort().join(",")));
+    }
+    group.recovery ||= request.recovery === true;
     grouped.set(eventKey, group);
   }
 
@@ -74,22 +84,59 @@ async function startEventAnalyticsWorkflows(
     const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
     const baseId = "team-event-analytics-" + eventKey + "-" + hash;
     let workflowId = baseId;
+    const requestedAt = options.requestedAt ?? Date.now();
+    const recoveryWindow = Math.floor(requestedAt / (30 * 60_000));
     try {
       const existing = await binding.get(baseId).then((instance) => instance.status());
-      if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) continue;
-      workflowId += "-retry-" + Date.now();
+      if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(existing.status)) continue;
+      if (existing.status === "complete" && !group.recovery) continue;
+      if (group.recovery && ["complete", "errored", "terminated"].includes(existing.status)) {
+        workflowId = baseId + "-recovery-" + recoveryWindow;
+      } else if (existing.status !== "complete") {
+        workflowId += "-retry-" + Date.now();
+      }
     } catch {
       // No Workflow instance exists for this team/event revision set.
+    }
+    if (group.recovery && workflowId !== baseId) {
+      let retryAlreadyExists = false;
+      try {
+        const status = await binding.get(workflowId).then((instance) => instance.status());
+        retryAlreadyExists = ["queued", "running", "waiting", "waitingForPause", "paused", "complete", "errored", "terminated"].includes(status.status);
+      } catch {
+        // This recovery window has not been used yet.
+      }
+      if (retryAlreadyExists) continue;
+      // The parent may have completed after scheduling one of its own retries.
+      const retryRequestedAt = recoveryWindow * 30 * 60_000;
+      let childRetryActive = false;
+      for (const attempt of [1, 2]) {
+        try {
+          const status = await binding.get("event-analytics-" + eventKey + "-" + retryRequestedAt + "-retry-" + attempt)
+            .then((instance) => instance.status());
+          if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
+            childRetryActive = true;
+            break;
+          }
+        } catch {
+          // No child retry for this attempt.
+        }
+      }
+      if (childRetryActive) continue;
     }
     try {
       await binding.create({
         id: workflowId,
-        params: { event_key: eventKey, affected_team_keys: affectedTeamKeys, requested_at: options.requestedAt ?? Date.now() },
+        params: {
+          event_key: eventKey,
+          affected_team_keys: affectedTeamKeys,
+          requested_at: group.recovery ? recoveryWindow * 30 * 60_000 : requestedAt,
+        },
       });
     } catch (error) {
       try {
-        const existing = await binding.get(baseId).then((instance) => instance.status());
-        if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) continue;
+        const existing = await binding.get(workflowId).then((instance) => instance.status());
+        if (["queued", "running", "waiting", "waitingForPause", "paused", "complete", "errored", "terminated"].includes(existing.status)) continue;
       } catch {
         // Preserve the original creation failure.
       }
