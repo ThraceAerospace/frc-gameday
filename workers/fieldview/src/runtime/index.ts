@@ -7,7 +7,7 @@ import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 
-export { EventRuntime, Multiplexer, TeamRuntime, DiscoveryStore };
+export { EventRuntime, Multiplexer, TeamRuntime };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
