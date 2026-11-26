@@ -34,6 +34,7 @@ TEAM_ACTIVE_REFRESH_INTERVAL_MS = "60000"
 binding = "DB"
 database_name = "fieldview-d1-prod"
 database_id = "bd7852b3-7814-4c3f-9ce8-f1c244524843"
+migrations_dir = "migrations"
 
 # Production KV namespace for lightweight, non-authoritative projections.
 [[kv_namespaces]]
@@ -111,6 +112,7 @@ concurrency = { limit = 3 }
 binding = "DB"
 database_name = "fieldview-d1-test"
 database_id = "6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e"
+migrations_dir = "migrations"
 
 # Separate test KV namespace: Preview projections and mutations cannot affect Production.
 [[previews.kv_namespaces]]
