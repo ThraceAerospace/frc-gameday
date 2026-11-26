@@ -10,6 +10,7 @@ The remote-session Durable Object does not use alarms, durable leases, heartbeat
 - Role and per-connection token are stored as WebSocket attachments, which survive WebSocket hibernation.
 - Signaling is validated and forwarded directly to the opposite role.
 - A reconnect using the same in-memory `RemotePeer` token replaces that peer's previous socket. A different token cannot take over an occupied role.
+- The controller coalesces concurrent `peer-ready` notifications so simultaneous reconnects do not start overlapping WebRTC offers.
 - The Worker explicitly selects `fieldview.remote.v1` as the negotiated WebSocket subprotocol; the role and token remain in the offered protocol list, not the URL.
 - The browser converts the configured runtime HTTP(S) base URL to WS(S) before opening the socket.
 - There is no session-state persistence, alarm scheduling, alarm cleanup, or browser heartbeat traffic.
