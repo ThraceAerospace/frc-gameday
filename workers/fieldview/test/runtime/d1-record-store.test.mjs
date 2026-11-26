@@ -4,8 +4,10 @@ import { D1RecordStore } from "../../src/runtime/d1-record-store.ts";
 
 function createD1() {
   const tables = { discovery_records: new Map(), system_records: new Map() };
-  return {
+  let failBatchAt = -1;
+  const db = {
     tables,
+    setBatchFailureAt(index) { failBatchAt = index; },
     prepare(sql) {
       return {
         bind(...values) {
@@ -48,7 +50,26 @@ function createD1() {
         },
       };
     },
+    async batch(statements) {
+      const snapshot = Object.fromEntries(Object.entries(tables).map(([name, table]) =>
+        [name, new Map([...table.entries()].map(([key, value]) => [key, { ...value }]))]));
+      const results = [];
+      try {
+        for (let index = 0; index < statements.length; index += 1) {
+          results.push(await statements[index].run());
+          if (index === failBatchAt) throw new Error("Injected D1 batch failure");
+        }
+        return results;
+      } catch (error) {
+        for (const name of Object.keys(tables)) {
+          tables[name].clear();
+          for (const [key, value] of snapshot[name]) tables[name].set(key, value);
+        }
+        throw error;
+      }
+    },
   };
+  return db;
 }
 
 test("D1 record store separates Discovery and System Records", async () => {
@@ -81,4 +102,31 @@ test("D1 record store skips identical writes and rejects invalid JSON", async ()
   await store.put("admin/jobs/one.json", JSON.stringify({ status: "queued" }));
   assert.equal(db.tables.system_records.get("admin/jobs/one.json").updated_at, before);
   await assert.rejects(() => store.put("admin/jobs/bad.json", "not-json"));
+});
+
+
+test("D1 record store atomically publishes multiple records and deletes", async () => {
+  const db = createD1();
+  const store = new D1RecordStore(db);
+  await store.put("discovery/partial-teams/2026/1.json", "{}");
+  await store.putMany([
+    ["registry/teams/2026.json", '["frc3461"]'],
+    ["discovery/teams/2026.json", '{"complete":true}'],
+  ], ["discovery/partial-teams/2026/1.json"]);
+  assert.equal(await store.get("registry/teams/2026.json"), '["frc3461"]');
+  assert.equal(await store.get("discovery/teams/2026.json"), '{"complete":true}');
+  assert.equal(await store.get("discovery/partial-teams/2026/1.json"), undefined);
+});
+
+test("D1 record store rolls back a failed multi-record batch", async () => {
+  const db = createD1();
+  const store = new D1RecordStore(db);
+  await store.put("discovery/teams/2026.json", '{"generation":1}');
+  db.setBatchFailureAt(1);
+  await assert.rejects(() => store.putMany([
+    ["registry/teams/2026.json", '["frc3461"]'],
+    ["discovery/teams/2026.json", '{"generation":2}'],
+  ]), /Injected D1 batch failure/);
+  assert.equal(await store.get("registry/teams/2026.json"), undefined);
+  assert.equal(await store.get("discovery/teams/2026.json"), '{"generation":1}');
 });
