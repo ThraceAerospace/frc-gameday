@@ -135,7 +135,7 @@ A defensible daily budget still requires: actual invocation counts per DO class;
 
 ## Prioritized findings
 
-1. **High — TeamRuntime season analytics GET writes cache metadata.** Remove unconditional cache writes from the GET path or make them occur only on explicit refresh/mutation.
+1. **Medium — TeamRuntime season analytics GET populates cache on a miss/rebuild.** Cache hits are read-only. Consider moving cache population to explicit analytics publication if strict read purity is required.
 2. **High — DiscoveryStore generic put has no equality guard.** Add byte/signature equality checks before writes; avoid updating `checkedAt` when the source representation is unchanged unless freshness metadata is intentionally part of the record contract.
 3. **High — operational records are stored in DiscoveryStore.** Move registrations, workflow progress/results, admin jobs/history/actions, coverage audit records/items, and operational events to System Records D1.
 4. **Medium — EventRuntime first public read can bind identity.** Ensure all public runtime exposure follows explicit initialization, then remove read-time binding.
