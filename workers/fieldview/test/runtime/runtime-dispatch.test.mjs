@@ -145,12 +145,16 @@ test("team runtime dispatch does not directly orchestrate EventRuntime analytics
 });
 
 test("pending analytics dispatch is an authenticated read of the registered TeamRuntime", async () => {
-  let captured;
+  let captured, discoveryCalls = 0;
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
     TEAM_RUNTIME: namespace(async (request, id) => {
       captured = { method: request.method, url: new URL(request.url), id, headers: request.headers };
       return Response.json({ team_key: id, year: 2027, pending: [] });
+    }),
+    DISCOVERY_STORE: namespace(async () => {
+      discoveryCalls += 1;
+      return new Response(null, { status: 404 });
     }),
   };
   const response = await dispatchRuntime(env, "team", "frc3461", "pending-analytics", {}, 2027);
@@ -160,6 +164,7 @@ test("pending analytics dispatch is an authenticated read of the registered Team
   assert.equal(captured.url.searchParams.get("year"), "2027");
   assert.equal(captured.headers.get("Authorization"), "Bearer test-token");
   assert.equal(captured.headers.get("X-FieldView-Team-Key"), "frc3461");
+  assert.equal(discoveryCalls, 0, "inspection must not register or initialize a runtime");
 });
 test("dispatch rejects unsupported actions and invalid entity keys", async () => {
   const env = { RUNTIME_ADMIN_TOKEN: "test-token" };
