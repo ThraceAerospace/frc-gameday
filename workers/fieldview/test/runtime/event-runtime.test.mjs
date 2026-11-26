@@ -509,25 +509,6 @@ test("EventRuntime serves event-scoped Statbotics matches from its durable provi
 
 
 
-test("recurring schedules reject Statbotics endpoints even when called below the HTTP route", async () => {
-  const storage = new MemoryStorage();
-  const eventKey = "2026test";
-  const runtime = new EventRuntime({ storage }, {
-    TBA_API_KEY: "test-api-key",
-    TBA_WEBHOOK_SECRET: "test-webhook-secret",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => new Response("unused"),
-  }, eventKey);
-  const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
-  await assert.rejects(
-    runtime.schedulePolls([statboticsEndpoint], 60_000),
-    /Only TBA event endpoints can be scheduled for recurring polling/,
-  );
-  assert.equal(storage.values.has("task:" + statboticsEndpoint), false);
-});
-
-
 test("public snapshot and stream reads need no user credential while state inspection remains private", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
@@ -576,14 +557,15 @@ test("public snapshot and stream reads need no user credential while state inspe
   assert.equal(diagnostics.readiness.polling_owner, "PollingCoordinatorWorkflow");
   assert.equal(diagnostics.readiness.local_poll_tasks, 0);
   assert.equal("alarmAt" in storage, false, "public reads do not interact with alarm storage");
-  assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
-
-  const schedule = await runtime.fetch(new Request("https://event-runtime/schedule", {
-    method: "POST",
-    headers: { "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoints: [], intervalMs: 60_000 }),
-  }));
-  assert.equal(schedule.status, 401);
+  const retiredRoutes = await Promise.all(["/lifecycle", "/schedule"].map((path) =>
+    runtime.fetch(new Request("https://event-runtime" + path, {
+      method: "POST",
+      headers: { "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })),
+  ));
+  assert.deepEqual(retiredRoutes.map((response) => response.status), [404, 404]);
+  assert.equal(EventRuntime.prototype.schedulePolls, undefined);
 });
 
 
