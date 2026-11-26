@@ -27,7 +27,7 @@ Responsibilities:
 
 **Storage:** Cloudflare D1 is the authoritative discovery store. Workers KV may hold lightweight, read-heavy projections, such as `events-this-week`, where its consistency model is sufficient.
 
-DiscoveryStore (or its successor repository) is exclusively for discovery. It is not a general-purpose operational database.
+The `discovery_records` table and Discovery repository are exclusively for discovery. They are not a general-purpose operational database.
 
 ### 2. System Records
 
@@ -40,7 +40,7 @@ Responsibilities:
 - Structured system events and operational history.
 - Other durable records describing what the system has done.
 
-**Storage:** Cloudflare D1, through a System Records repository and schema logically separate from Discovery.
+**Storage:** Cloudflare D1, through the `system_records` table and a System Records repository logically separate from Discovery. Both repositories share one physical D1 database but do not share record ownership.
 
 System Records must have independent retention policies appropriate to each record type.
 
@@ -107,7 +107,7 @@ Event readiness and Team readiness remain independently scoped Workflows where t
 
 ## Rationale
 
-The previous implementation placed unrelated responsibilities inside DiscoveryStore. This coupled discovery with workflow and runtime operations and caused unrelated operational writes to consume the same Durable Object storage quotas as runtime state.
+The initial branch implementation placed unrelated responsibilities inside one DiscoveryStore Durable Object. The migration replaces it with an in-process DiscoveryService and two simple D1 record tables. Discovery and System Records now have separate repository ownership, while EventRuntime and TeamRuntime retain their own canonical Durable Object storage.
 
 Separating the domains:
 - Isolates storage workloads and their respective quotas.
@@ -119,15 +119,14 @@ Separating the domains:
 
 ## Migration consequences
 
-Before implementation:
-- Inventory every existing DiscoveryStore key, record type, route, and caller.
-- Classify each record as Discovery or System Records; do not migrate records based solely on their current key prefix or storage location.
-- Identify any records that are actually runtime canonical state and keep them with the owning runtime.
-- Design separate D1 schemas and repository interfaces for Discovery and System Records.
-- Define retention policies for operational records and diagnostic logging.
-- Define safe migration, cutover, rollback, and recovery behavior across D1, KV, and Durable Objects.
-- Recalculate daily operation and storage budgets using the new ownership model.
-- Remove obsolete DiscoveryStore responsibilities only after their replacements are verified.
+Implementation status:
+- The former DiscoveryStore key families and callers have been inventoried in the source audit.
+- Discovery and System Records are stored in separate generic D1 tables through separate repositories; key families are classified by ownership.
+- EventRuntime and TeamRuntime canonical state remains in the owning Durable Objects.
+- The old DiscoveryStore Durable Object and its Worker/Preview bindings have been removed from the migration branch.
+- The former Durable Object was never deployed or populated, so no record import or data-preserving rollback is required.
+- Retention policy, Cloudflare telemetry, and observed storage budgets remain follow-up work.
+- The D1 migration still requires local validation and explicit approval before any remote application.
 
 This is an architecture decision, not authorization to deploy resources, change Cloudflare settings, or perform the data migration.
 
