@@ -108,7 +108,8 @@ async function startEventAnalyticsWorkflows(
       }
       if (retryAlreadyExists) continue;
       // The parent may have completed after scheduling one of its own retries.
-      const retryRequestedAtValues = [0, 1].map((offset) => recoveryWindow * 30 * 60_000 + offset);
+      const retryRequestedAtValues = [Math.max(0, recoveryWindow - 1), recoveryWindow]
+        .flatMap((window) => [0, 1].map((offset) => window * 30 * 60_000 + offset));
       let childRetryActive = false;
       for (const retryRequestedAt of retryRequestedAtValues) {
         for (const attempt of [1, 2]) {
