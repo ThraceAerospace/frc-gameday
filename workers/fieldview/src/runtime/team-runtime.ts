@@ -164,17 +164,12 @@ export class TeamRuntime {
     return interval;
   }
   private async currentSeasonYear(): Promise<number | null> {
-    if (!this.env.DISCOVERY_STORE) return null;
-    const stub = this.env.DISCOVERY_STORE.get(this.env.DISCOVERY_STORE.idFromName("shared"));
-    const response = await stub.fetch(new Request(
-      "https://discovery-store/get?key=" + encodeURIComponent("discovery/current-season.json"),
-    ));
-    if (!response.ok) return null;
-    const current = await response.json().catch(() => null) as { year?: unknown } | null;
-    return current && Number.isInteger(current.year) &&
-      Number(current.year) >= 1992 && Number(current.year) <= 2200
-      ? Number(current.year)
-      : null;
+    if (!this.env.DB) return null;
+    const raw = await new D1RecordStore(this.env.DB).get<string>("discovery/current-season.json");
+    if (typeof raw !== "string") return null;
+    const current = JSON.parse(raw) as { year?: unknown };
+    return current && Number.isInteger(current.year) && Number(current.year) >= 1992 && Number(current.year) <= 2200
+      ? Number(current.year) : null;
   }
 
   private endpoints(year: number): TeamResource[] {
