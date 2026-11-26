@@ -108,19 +108,22 @@ async function startEventAnalyticsWorkflows(
       }
       if (retryAlreadyExists) continue;
       // The parent may have completed after scheduling one of its own retries.
-      const retryRequestedAt = recoveryWindow * 30 * 60_000;
+      const retryRequestedAtValues = [0, 1].map((offset) => recoveryWindow * 30 * 60_000 + offset);
       let childRetryActive = false;
-      for (const attempt of [1, 2]) {
-        try {
-          const status = await binding.get("event-analytics-" + eventKey + "-" + retryRequestedAt + "-retry-" + attempt)
-            .then((instance) => instance.status());
-          if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
-            childRetryActive = true;
-            break;
+      for (const retryRequestedAt of retryRequestedAtValues) {
+        for (const attempt of [1, 2]) {
+          try {
+            const status = await binding.get("event-analytics-" + eventKey + "-" + retryRequestedAt + "-retry-" + attempt)
+              .then((instance) => instance.status());
+            if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
+              childRetryActive = true;
+              break;
+            }
+          } catch {
+            // No child retry for this attempt.
           }
-        } catch {
-          // No child retry for this attempt.
         }
+        if (childRetryActive) break;
       }
       if (childRetryActive) continue;
     }
@@ -130,7 +133,9 @@ async function startEventAnalyticsWorkflows(
         params: {
           event_key: eventKey,
           affected_team_keys: affectedTeamKeys,
-          requested_at: group.recovery ? recoveryWindow * 30 * 60_000 : requestedAt,
+          requested_at: group.recovery
+            ? recoveryWindow * 30 * 60_000 + (workflowId === baseId ? 0 : 1)
+            : requestedAt,
         },
       });
     } catch (error) {
