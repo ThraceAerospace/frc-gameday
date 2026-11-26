@@ -201,7 +201,7 @@ Never commit secrets or real environment values. Document variable names, purpos
 
 Cloudflare environment selection is branch-determined and documented in `docs/development/CLOUDFLARE-ENVIRONMENTS.md`:
 - **Worker topology:** exactly one environment-neutral Worker named `runtime`; production uses top-level Wrangler settings and branch/pull-request testing uses the `previews` block in the same `workers/fieldview/wrangler.toml`. Do not create named Wrangler environments or separate Worker identities for preview, preproduction, staging, or production.
-- **Production D1:** `DB` binds to `fieldview-d1-prod` (`bd7852b3-7814-4c3f-9ce8-f1c244524843`). Discovery and System Records remain logically separate schemas and repository interfaces within this physical database.
+- **Production D1:** `DB` binds to `fieldview-d1-prod` (`bd7852b3-7814-4c3f-9ce8-f1c244524843`). Discovery and System Records remain separate logical ownership domains and repository interfaces, backed by exactly two generic JSON record tables (`discovery_records` and `system_records`) within this physical database.
 - **Preview D1:** `DB` binds to `fieldview-d1-test` (`6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e`). All branch Previews currently share this test database; it is isolated from production, not isolated from other Preview branches.
 - **Production KV:** `KV_BINDING` binds to `fieldview-kv-prod` (`c067dfcaa3a345b0b43f035a992b4b30`).
 - **Preview KV:** `KV_BINDING` binds to `fieldview-kv-test` (`19ef5d5221654ab4bac0c8118c35ad8b`). The separate namespaces prevent Preview writes, deletes, and test projections from affecting Production. Both may independently cache/projection the same upstream TBA facts; neither KV namespace is the authoritative source.
@@ -277,7 +277,7 @@ See ADR-0015 for the read-first persistence-equals-readiness decision.
 
 ## Workflow execution history
 
-- System Records (D1) is the authoritative persistence owner for durable Workflow execution records, progress summaries, outcomes, administrative actions, and operational history. It is logically separate from Discovery even if both initially share a D1 database. Do not put operational records in DiscoveryStore or runtime canonical state.
+- System Records (`system_records` in D1) is the authoritative persistence owner for durable Workflow execution records, progress summaries, outcomes, administrative actions, and operational history. Discovery (`discovery_records`) is the separate logical ownership domain. Both use simple typed JSON records in the same D1 database. Do not put operational records in DiscoveryStore or runtime canonical state.
 - Each event/team readiness execution has a stable Workflow ID, a durable run record, a history index entry, a final summary, and bounded per-entity results. Keep entity results in bounded chunks rather than one unbounded JSON object.
 - The admin API exposes run history and detail by Workflow ID. The dashboard may poll execution status, but it does not require incremental per-entity progress updates.
 - Persist final execution status only after the summary and all result chunks are durable. If a Workflow terminates before finalization, reconcile its persisted running record against the Cloudflare Workflow instance status and expose failed/cancelled state.
