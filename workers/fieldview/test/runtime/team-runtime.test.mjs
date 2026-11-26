@@ -514,6 +514,7 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
     event_source_revision: 4,
     team_source_revision: 0,
     comparison_input_updated_at: 123,
+    publication_status: "pending",
   });
   storage.values.set("team-event-revision:" + eventKey, 1);
   let providerCalls = 0;
@@ -554,9 +555,40 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   assert.equal(result.team, 3461);
   assert.equal(result.year, year);
   assert.equal(result.eventCount, 1);
-  assert.equal(result.analyzedEventCount, 1,
-    "a TeamEventState with owner-local revision metadata is ready without querying EventRuntime");
-  assert.equal(result.events[0].status, "ready");
+  assert.equal(result.analyzedEventCount, 0,
+    "a pending TeamEventState must not enter the season aggregate before EventRuntime publication");
+  assert.equal(result.events[0].status, "pending");
+
+  const acknowledgement = await runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge?year=" + year, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contract_version: 1,
+      event_key: eventKey,
+      team_key: teamKey,
+      event_source_revision: 4,
+      team_source_revision: 0,
+      comparison_input_updated_at: 123,
+      team_event_revision: 1,
+    }),
+  }));
+  assert.equal(acknowledgement.status, 200);
+  const refreshAfterAcknowledgement = await runtime.fetch(new Request("https://team-runtime/season-analytics/refresh?year=" + year, {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(refreshAfterAcknowledgement.status, 200);
+  const publishedSeason = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(publishedSeason.status, 200);
+  const publishedResult = await publishedSeason.json();
+  assert.equal(publishedResult.analyzedEventCount, 1);
+  assert.equal(publishedResult.events[0].status, "ready");
   assert.equal(eventRuntimeCalls, 0, "season analytics must not read another runtime's state");
   assert.equal(storage.values.has("team-season-analytics:" + year), true);
 });
