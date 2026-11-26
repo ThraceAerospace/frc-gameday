@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EventRuntime, eventResourceEndpoints } from "../../src/runtime/event-runtime.ts";
+import { EventRuntime, eventResourceEndpoints, hasStaleTeamAnalyticsPublication } from "../../src/runtime/event-runtime.ts";
 import { STATBOTICS_ENDPOINTS } from "../../../../packages/providers/statbotics/src/endpoints.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 
@@ -24,6 +24,28 @@ class MemoryStorage {
     finally { release(); }
   }
 }
+
+test("EventRuntime rejects analytics publications that regress team or comparison revisions", () => {
+  const result = {
+    team_key: "frc3461",
+    team_source_revision: 8,
+    team_event_revision: 12,
+    comparison_input_updated_at: 500,
+  };
+  assert.equal(hasStaleTeamAnalyticsPublication(
+    [result], new Map([["team-state-revision:frc3461", 9]]), new Map(), 400,
+  ), true, "a newer TeamState revision makes the result stale");
+  assert.equal(hasStaleTeamAnalyticsPublication(
+    [result], new Map(), new Map([["team-event-revision:frc3461", 13]]), 400,
+  ), true, "a newer TeamEventState revision makes the result stale");
+  assert.equal(hasStaleTeamAnalyticsPublication(
+    [result], new Map(), new Map(), 501,
+  ), true, "an older comparison input timestamp must not replace a newer publication");
+  assert.equal(hasStaleTeamAnalyticsPublication(
+    [result], new Map([["team-state-revision:frc3461", 8]]),
+    new Map([["team-event-revision:frc3461", 12]]), 500,
+  ), false, "matching revisions and timestamps remain publishable");
+});
 
 function seedEventPublication(storage, eventKey) {
   storage.values.set("event-key", eventKey);
