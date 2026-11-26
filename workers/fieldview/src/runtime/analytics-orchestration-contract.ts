@@ -45,9 +45,8 @@ export interface TeamEventAnalyticsResult {
   state: FieldViewTeamEventState;
 }
 
-export interface TeamEventAnalyticsAcknowledgement extends Omit<TeamEventAnalyticsResult, "state"> {
-  /** Exact result identity acknowledged after EventRuntime commits its aggregate. */
-}
+/** Exact result identity acknowledged after EventRuntime commits its aggregate. */
+export type TeamEventAnalyticsAcknowledgement = Omit<TeamEventAnalyticsResult, "state">;
 
 export interface EventAnalyticsPublicationCommand {
   contract_version: typeof EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION;
