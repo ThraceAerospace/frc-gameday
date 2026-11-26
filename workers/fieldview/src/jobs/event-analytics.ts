@@ -108,7 +108,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
         (typeof requestedAt !== "number" || !Number.isSafeInteger(requestedAt))) {
       throw new Error("Invalid event analytics Workflow parameters");
     }
-    if (!this.env.EVENT_RUNTIME || !this.env.TEAM_RUNTIME || !this.env.DISCOVERY_STORE) {
+    if (!this.env.EVENT_RUNTIME || !this.env.TEAM_RUNTIME || (!this.env.DB && !this.env.DISCOVERY_STORAGE)) {
       throw new Error("Event analytics Workflow runtime bindings are unavailable");
     }
     const year = Number(eventKey.slice(0, 4));
