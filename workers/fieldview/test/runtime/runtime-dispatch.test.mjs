@@ -36,12 +36,15 @@ test("event dispatch calls EventRuntime directly and records its runtime marker"
   assert.equal(markers.get("registry/runtime-events/2026test.json"), "{}");
 });
 
-test("event registration writes a coordinator marker without creating a Durable Object", async () => {
+test("event registration binds the runtime identity without scheduling provider work", async () => {
   const markers = new Map();
-  let namespaceCalls = 0;
+  let captured;
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
-    EVENT_RUNTIME: namespace(async () => { namespaceCalls += 1; return new Response(); }),
+    EVENT_RUNTIME: namespace(async (request, id) => {
+      captured = { path: new URL(request.url).pathname, method: request.method, id, headers: request.headers };
+      return Response.json({ event_key: id, registered: true });
+    }),
     DISCOVERY_STORAGE: {
       async get(key) { return markers.get(key); },
       async put(key, value) { markers.set(key, value); },
@@ -50,9 +53,12 @@ test("event registration writes a coordinator marker without creating a Durable 
     },
   };
   const response = await dispatchRuntime(env, "event", "2027rikin", "register", {}, 2027);
-  assert.equal(response.status, 204);
+  assert.equal(response.status, 200);
+  assert.deepEqual({ path: captured.path, method: captured.method, id: captured.id }, {
+    path: "/register", method: "POST", id: "2027rikin",
+  });
+  assert.equal(captured.headers.get("X-FieldView-Event-Key"), "2027rikin");
   assert.equal(markers.get("registry/runtime-events/2027rikin.json"), "{}");
-  assert.equal(namespaceCalls, 0);
 });
 
 test("team seed dispatch calls TeamRuntime directly with the requested season", async () => {
