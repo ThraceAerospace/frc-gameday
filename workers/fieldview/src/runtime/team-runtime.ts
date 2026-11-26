@@ -394,7 +394,7 @@ export class TeamRuntime {
         matches?: import("../../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
       }>(stateKey);
       if (!storedState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
-      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+      const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
       // Lazy, owner-local migration of old records that embedded foreign
       // EventRuntime data. This preserves the logical revision while replacing
       // copied event/team/match records with stable references.
@@ -507,7 +507,7 @@ export class TeamRuntime {
       const result = calculated ?? teamEventState;
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
       const revisionKey = TEAM_EVENT_REVISION_PREFIX + eventKey;
-      const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+      const priorInputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
       if (priorInputs && ((eventSourceRevision as number) < priorInputs.event_source_revision ||
           teamSourceRevision < priorInputs.team_source_revision || comparisonInput.updated_at < priorInputs.comparison_input_updated_at)) {
         return Response.json({ error: "Stale event analytics input" }, { status: 409 });
@@ -520,7 +520,7 @@ export class TeamRuntime {
         const revision = await this.storage.transaction(async (tx) => {
           if ((await tx.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) return null;
           const current = await tx.get<FieldViewTeamEventState>(stateKey);
-          const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+          const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
           if (!current || JSON.stringify(current) !== JSON.stringify(result) ||
               (currentInputs && ((eventSourceRevision as number) < currentInputs.event_source_revision ||
                 teamSourceRevision < currentInputs.team_source_revision ||
@@ -565,7 +565,7 @@ export class TeamRuntime {
       }
       const revision = await this.storage.transaction(async (tx) => {
         if ((await tx.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) return null;
-        const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+        const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
         if (currentInputs && ((eventSourceRevision as number) < currentInputs.event_source_revision ||
             teamSourceRevision < currentInputs.team_source_revision ||
             comparisonInput.updated_at < currentInputs.comparison_input_updated_at)) return null;
@@ -947,6 +947,7 @@ export class TeamRuntime {
         team_source_revision: number;
         event_source_revision: number;
         comparison_input_updated_at: number;
+        publication_status?: "pending" | "published";
       }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
       const current = Boolean(eventState?.analytics &&
         inputs?.publication_status !== "pending" &&
