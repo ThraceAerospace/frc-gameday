@@ -171,7 +171,8 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     }, async () => mapLimit(registeredTeams, 8, async (team) => {
       try {
         const response = await teamNamespace.get(teamNamespace.idFromName(team.team_key)).fetch(
-          new Request("https://team-runtime/analytics-season-input?year=" + year, {
+          new Request("https://team-runtime/analytics-season-input/prepare?year=" + year, {
+            method: "POST",
             headers: headers(this.env, "X-FieldView-Team-Key", team.team_key),
           }),
         );
