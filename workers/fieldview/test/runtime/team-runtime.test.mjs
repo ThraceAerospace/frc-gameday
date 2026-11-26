@@ -407,7 +407,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
     "new TeamEventState is not considered published until EventRuntime acknowledges it");
 
   const { state: _state, ...acknowledgement } = published;
-  const acknowledge = () => runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge", {
+  const acknowledge = () => runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge?year=2026", {
     method: "POST",
     headers: {
       Authorization: "Bearer admin",
@@ -423,7 +423,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   assert.equal(repeatedAcknowledgement.status, 200);
   assert.equal((await repeatedAcknowledgement.json()).idempotent, true,
     "repeated acknowledgements are safe and do not change the TeamEventState revision");
-  const staleAcknowledgement = await runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge", {
+  const staleAcknowledgement = await runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge?year=2026", {
     method: "POST",
     headers: {
       Authorization: "Bearer admin",
