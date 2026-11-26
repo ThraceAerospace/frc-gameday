@@ -520,7 +520,11 @@ export class TeamRuntime {
         const revision = await this.storage.transaction(async (tx) => {
           if ((await tx.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) return null;
           const current = await tx.get<FieldViewTeamEventState>(stateKey);
-          if (!current || JSON.stringify(current) !== JSON.stringify(result)) return null;
+          const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+          if (!current || JSON.stringify(current) !== JSON.stringify(result) ||
+              (currentInputs && ((eventSourceRevision as number) < currentInputs.event_source_revision ||
+                teamSourceRevision < currentInputs.team_source_revision ||
+                comparisonInput.updated_at < currentInputs.comparison_input_updated_at))) return null;
           const currentRevision = await tx.get<number>(revisionKey) ?? 0;
           // Even when calculated metrics are unchanged, advance the input
           // envelope so owner-local readers and future Workflows see the
@@ -560,6 +564,11 @@ export class TeamRuntime {
         } });
       }
       const revision = await this.storage.transaction(async (tx) => {
+        if ((await tx.get<number>("snapshot-revision") ?? 0) !== teamSourceRevision) return null;
+        const currentInputs = await tx.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number }>(stateKey + ":inputs");
+        if (currentInputs && ((eventSourceRevision as number) < currentInputs.event_source_revision ||
+            teamSourceRevision < currentInputs.team_source_revision ||
+            comparisonInput.updated_at < currentInputs.comparison_input_updated_at)) return null;
         const next = (await tx.get<number>(revisionKey) ?? 0) + 1;
         await tx.put(stateKey, result);
         await tx.put(revisionKey, next);
@@ -573,6 +582,9 @@ export class TeamRuntime {
         await tx.delete("team-season-analytics:" + year);
         return next;
       });
+      if (revision === null) {
+        return Response.json({ error: "Team analytics inputs changed during publication" }, { status: 409 });
+      }
       const response: TeamEventAnalyticsResult = {
         contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
         event_key: eventKey,
@@ -614,7 +626,8 @@ export class TeamRuntime {
           }>(inputsKey),
           tx.get<number>(revisionKey),
         ]);
-        if (!state || !inputs || revision !== body.team_event_revision ||
+        if (!state || state.event_key !== body.event_key || state.team_key !== body.team_key ||
+            !inputs || revision !== body.team_event_revision ||
             inputs.event_source_revision !== body.event_source_revision ||
             inputs.team_source_revision !== body.team_source_revision ||
             inputs.comparison_input_updated_at !== body.comparison_input_updated_at) return "stale" as const;
