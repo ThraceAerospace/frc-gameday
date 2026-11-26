@@ -19,7 +19,7 @@ import { calculateCanonicalTeamEventAnalytics } from "../../../../packages/analy
 import { buildSeasonDiagnostics } from "../../../../packages/analytics/src/season-diagnostics.ts";
 import type { SeasonMatchEvidence } from "../../../../packages/analytics/src/season-diagnostics.ts";
 import type { FieldViewTeamEventAnalytics } from "../../../../packages/domain/src/analytics.ts";
-import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isTeamEventAnalyticsCommand, type TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
+import { EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION, isTeamEventAnalyticsCommand, isTeamEventAnalyticsAcknowledgement, type TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 
 type TeamProvider = "tba" | "statbotics" | "frc-colors";
 interface ActiveEventMembership { year: number; updatedAt: number; }
@@ -413,6 +413,7 @@ export class TeamRuntime {
       return Response.json(state, {
         headers: {
           "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
+          "X-FieldView-Analytics-Publication-Status": inputs?.publication_status ?? "published",
           ...(inputs ? {
             "X-FieldView-Event-Source-Revision": String(inputs.event_source_revision),
             "X-FieldView-Team-Source-Revision": String(inputs.team_source_revision),
@@ -529,7 +530,9 @@ export class TeamRuntime {
             team_source_revision: teamSourceRevision,
             comparison_input_updated_at: comparisonInput.updated_at,
             calculated_at: Date.now(),
+            publication_status: "pending",
           });
+          await tx.delete("team-season-analytics:" + year);
           return currentRevision;
         });
         if (revision === null) {
@@ -565,7 +568,9 @@ export class TeamRuntime {
           team_source_revision: teamSourceRevision,
           comparison_input_updated_at: comparisonInput.updated_at,
           calculated_at: Date.now(),
+          publication_status: "pending",
         });
+        await tx.delete("team-season-analytics:" + year);
         return next;
       });
       const response: TeamEventAnalyticsResult = {
@@ -588,6 +593,53 @@ export class TeamRuntime {
         "X-FieldView-Comparison-Input-Updated-At": String(comparisonInput.updated_at),
         "Cache-Control": "no-store",
       } });
+    }
+    if (request.method === "POST" && url.pathname === "/event-analytics/acknowledge") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!isTeamEventAnalyticsAcknowledgement(body) || body.team_key !== this.teamKey) {
+        return Response.json({ error: "Invalid team analytics publication acknowledgement" }, { status: 400 });
+      }
+      const stateKey = TEAM_EVENT_STATE_PREFIX + body.event_key;
+      const inputsKey = stateKey + ":inputs";
+      const revisionKey = TEAM_EVENT_REVISION_PREFIX + body.event_key;
+      const year = Number(body.event_key.slice(0, 4));
+      const outcome = await this.storage.transaction(async (tx) => {
+        const [state, inputs, revision] = await Promise.all([
+          tx.get<FieldViewTeamEventState>(stateKey),
+          tx.get<{
+            event_source_revision: number;
+            team_source_revision: number;
+            comparison_input_updated_at: number;
+            publication_status?: "pending" | "published";
+          }>(inputsKey),
+          tx.get<number>(revisionKey),
+        ]);
+        if (!state || !inputs || revision !== body.team_event_revision ||
+            inputs.event_source_revision !== body.event_source_revision ||
+            inputs.team_source_revision !== body.team_source_revision ||
+            inputs.comparison_input_updated_at !== body.comparison_input_updated_at) return "stale" as const;
+        if (inputs.publication_status === "published") return "already_published" as const;
+        await tx.put(inputsKey, {
+          ...inputs,
+          publication_status: "published",
+          published_at: Date.now(),
+        });
+        // Publication status is independently versioned by invalidating the
+        // cached season aggregate; canonical TeamEventState revision is stable.
+        await tx.delete("team-season-analytics:" + year);
+        return "acknowledged" as const;
+      });
+      if (outcome === "stale") {
+        return Response.json({ error: "Analytics acknowledgement does not match the current TeamEventState revision" }, { status: 409 });
+      }
+      return Response.json({
+        event_key: body.event_key,
+        team_key: body.team_key,
+        team_event_revision: body.team_event_revision,
+        publication_status: "published",
+        acknowledged: outcome === "acknowledged",
+        idempotent: outcome === "already_published",
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/activity") {
       const body: unknown = await request.json().catch(() => null);
@@ -884,6 +936,7 @@ export class TeamRuntime {
         comparison_input_updated_at: number;
       }>(TEAM_EVENT_STATE_PREFIX + event.key + ":inputs");
       const current = Boolean(eventState?.analytics &&
+        inputs?.publication_status !== "pending" &&
         inputs?.team_source_revision === teamSourceRevision &&
         Number.isSafeInteger(inputs?.event_source_revision) && (inputs?.event_source_revision ?? -1) >= 0 &&
         Number.isSafeInteger(inputs?.comparison_input_updated_at) && (inputs?.comparison_input_updated_at ?? -1) >= 0);
