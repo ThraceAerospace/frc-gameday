@@ -1,6 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import worker from "../../src/runtime/index.ts";
+import runtime from "../../src/runtime/index.ts";
+
+// Adapt namespace-shaped fixtures to the in-process record-store test seam.
+function adaptDiscoveryFixture(namespace) {
+  const stub = namespace.get(namespace.idFromName("shared"));
+  return {
+    async get(key) {
+      const response = await stub.fetch(new Request("https://discovery-store/get?key=" + encodeURIComponent(key)));
+      return response.ok ? response.text() : undefined;
+    },
+    async put(key, value) {
+      const response = await stub.fetch(new Request("https://discovery-store/put", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      }));
+      if (!response.ok) throw new Error("Fixture record write failed");
+    },
+    async list() { return new Map(); },
+    async delete() { return false; },
+  };
+}
+const worker = {
+  fetch(request, env) {
+    if (env.DISCOVERY_STORE && !env.DISCOVERY_STORAGE) {
+      env.DISCOVERY_STORAGE = adaptDiscoveryFixture(env.DISCOVERY_STORE);
+    }
+    return runtime.fetch(request, env);
+  },
+};
 
 function makeEnvironment() {
   const calls = [];
