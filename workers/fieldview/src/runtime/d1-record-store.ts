@@ -3,6 +3,8 @@ export interface D1RecordStorage {
   put<T = unknown>(key: string, value: T): Promise<void>;
   list<T = unknown>(options?: { prefix?: string; startAfter?: string; limit?: number }): Promise<Map<string, T>>;
   delete(key: string): Promise<boolean>;
+  /** Atomically upsert and delete records in one D1 batch when supported. */
+  putMany?(entries: ReadonlyArray<readonly [string, string]>, deletes?: ReadonlyArray<string>): Promise<void>;
 }
 
 import type { D1DatabaseLike } from "./cloudflare.ts";
@@ -95,6 +97,28 @@ export class D1RecordStore implements D1RecordStorage {
 
   get<T = unknown>(key: string): Promise<T | undefined> { return this.repository(key).get<T>(key); }
   put<T = unknown>(key: string, value: T): Promise<void> { return this.repository(key).put(key, value); }
+
+  async putMany(entries: ReadonlyArray<readonly [string, string]>, deletes: ReadonlyArray<string> = []): Promise<void> {
+    const statements = entries.map(([key, value]) => {
+      JSON.parse(value);
+      const table = tableForKey(key);
+      const now = Date.now();
+      return this.db.prepare(`INSERT INTO ${table} (record_key, record_type, value_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(record_key) DO UPDATE SET
+          record_type = excluded.record_type,
+          value_json = excluded.value_json,
+          updated_at = excluded.updated_at
+        WHERE value_json <> excluded.value_json OR record_type <> excluded.record_type`)
+        .bind(key, recordTypeForKey(key), value, now, now);
+    });
+    for (const key of deletes) {
+      const table = tableForKey(key);
+      statements.push(this.db.prepare(`DELETE FROM ${table} WHERE record_key = ?`).bind(key));
+    }
+    if (statements.length) await this.db.batch(statements);
+  }
+
   delete(key: string): Promise<boolean> { return this.repository(key).delete(key); }
 
   async list<T = unknown>(options: { prefix?: string; startAfter?: string; limit?: number } = {}): Promise<Map<string, T>> {
