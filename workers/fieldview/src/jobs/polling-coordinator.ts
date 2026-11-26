@@ -363,7 +363,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         store().list({ prefix: "registry/runtime-events/" + discovery.year, limit: 1000 }),
       );
       const registeredEventKeys = [...new Set(eventRegistry.objects.map((item) =>
-        item.key.slice("registry/runtime-events/".length).replace(/\\.json$/, ""),
+        item.key.slice("registry/runtime-events/".length).replace(/\.json$/, ""),
       ).filter((key) => new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(key)))];
       const uncheckedEventKeys = registeredEventKeys.filter((key) => !analyticsStateCheckedEventKeys.has(key));
       const selectedEventKeys = selectBudgetedKeys(
