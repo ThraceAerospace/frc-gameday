@@ -58,12 +58,15 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
     request.headers.get("Authorization") === `Bearer ${env.RUNTIME_ADMIN_TOKEN}`;
 }
 
-async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!env.DB && !env.DISCOVERY_STORAGE) return;
+async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<boolean> {
+  if (!env.DB && !env.DISCOVERY_STORAGE) return false;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-  await discoveryServiceClient(env).put(prefix + key + ".json", "{}", {
+  const markerKey = prefix + key + ".json";
+  if (await discoveryServiceClient(env).get(markerKey)) return true;
+  await discoveryServiceClient(env).put(markerKey, "{}", {
     httpMetadata: { contentType: "application/json" },
   });
+  return true;
 }
 
 async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment): Promise<void> {
@@ -432,32 +435,6 @@ export default {
       }));
     }
 
-    if (url.pathname === "/internal/workflows/initialize-event" && request.method === "POST") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.event_key !== "string" ||
-          !/^[a-zA-Z0-9_-]+$/.test(body.event_key) ||
-          !["upcoming", "active", "completed", "expired"].includes(String(body.lifecycle))) {
-        return Response.json({ error: "Expected a valid event_key and lifecycle" }, { status: 400 });
-      }
-      const eventKey = body.event_key;
-      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
-      return stub.fetch(new Request("https://event-runtime/lifecycle", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": eventKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lifecycle: body.lifecycle,
-          upcomingIntervalMs: Number(env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000),
-          activeIntervalMs: Number(env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000),
-          ...(typeof body.completedUntil === "number" ? { completedUntil: body.completedUntil } : {}),
-        }),
-      }));
-    }
-
     if (url.pathname === "/season/current" && request.method === "GET") {
       if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
@@ -717,6 +694,11 @@ export default {
         ...(kind === "team" ? { "X-FieldView-Team-Key": key } : { "X-FieldView-Event-Key": key }),
         "Content-Type": "application/json",
       };
+      if (kind === "event" && action === "register") {
+        return await registerRuntimeMarker(env, "event", key)
+          ? new Response(null, { status: 204 })
+          : Response.json({ error: "Runtime registry storage is unavailable" }, { status: 503 });
+      }
       if (kind === "team") {
         if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime is unavailable" }, { status: 503 });
         const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(key));
@@ -733,8 +715,8 @@ export default {
       if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
       const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
       const allowed: Record<string, string> = {
-        participants: "participants", state: "state", refresh: "refresh", lifecycle: "lifecycle",
-        schedule: "schedule", publish: "publish-state", recalculate: "recalculate", analytics: "analytics",
+        participants: "participants", state: "state", refresh: "refresh",
+        publish: "publish-state", recalculate: "recalculate", analytics: "analytics",
       };
       const path = allowed[action];
       if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
@@ -1072,7 +1054,7 @@ export default {
     const action = parts[4];
     const validRoute = parts.length === 5 && parts[1] === "internal" &&
       parts[2] === "events" && /^[a-zA-Z0-9_-]+$/.test(eventKey ?? "") &&
-      ["schedule", "state", "snapshot", "stream", "lifecycle", "refresh", "recalculate", "statbotics-refresh"].includes(action ?? "");
+      ["state", "snapshot", "stream", "refresh", "recalculate", "statbotics-refresh"].includes(action ?? "");
     if (!validRoute || !authorized(request, env)) {
       return Response.json({ error: "Not found" }, { status: validRoute ? 401 : 404 });
     }
