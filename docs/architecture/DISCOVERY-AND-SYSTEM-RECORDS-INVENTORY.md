@@ -16,9 +16,9 @@ This section describes the live branch implementation and supersedes any present
 - `D1RecordStore` routes discovery/catalog keys to `DiscoveryRecordsRepository` and operational/admin/workflow/runtime-registration keys to `SystemRecordsRepository`. The in-process `DiscoveryService` owns TBA current-season and directory acquisition/publication.
 - D1 upserts skip byte-identical JSON/type values. Related directory publication mutations use D1 `batch()`; superseded-generation pruning occurs after publication commits.
 - D1 repository tests cover table separation, prefix/cursor listing, JSON validation, no-op writes, atomic batch publication, and rollback on batch failure.
-- The D1 migration smoke test is part of `.github/workflows/ci.yml` before typechecking and workspace tests. The migration plan records 299 repository tests passing on 2026-11-26; verify the latest branch CI result again after subsequent changes.
+- The D1 migration smoke test is part of `.github/workflows/ci.yml` before typechecking and workspace tests. Latest branch CI run `45862827049` passed local D1 schema verification, Next type generation, admin asset build, Wrangler deployment-bundle dry run, workspace typecheck, and all workspace tests.
 - No remote D1 migration has been applied. CI now applies the committed Wrangler D1 migration against a fresh local-only database and verifies that exactly `discovery_records` and `system_records` exist. This is a clean-start schema smoke test; it does not validate remote credentials, production data, or Cloudflare billing behavior.
-- The D1 System Records repository is present, but durable EventAnalyticsWorkflow execution/recovery records are not yet implemented. That work is tracked separately in Issue #32 and remains gated by Issue #30.
+- A typed analytics execution repository, pre-dispatch Workflow record creation, terminal outcome recording, and bounded PollingCoordinator reconciliation/retry are implemented on `fieldview-architecture-migration`. Issue #30's audit gate is closed; Issue #32's implementation is ready for test-environment validation.
 - Account-specific Cloudflare physical-row usage and daily write-budget reconciliation remain unverified; source-level operation counts must not be represented as billable-row telemetry.
 
 ## 1. Pre-cutover implementation baseline (historical)
@@ -273,3 +273,17 @@ The former DiscoveryStore was never deployed or populated. No historical records
 The source-level mutation/caller inventory and the Multiplexer lifecycle paths are documented. The general Durable Object billing semantics are documented, but account-specific billable usage remains unavailable through the connected Cloudflare credential (the billable-usage endpoint returned 403). This is an explicit telemetry limitation, not a reason to block the clean-slate D1 implementation or invent a row-write budget. Validate actual D1/DO usage after an explicitly authorized test deployment and dashboard/usage access.
 
 External consumers of removed internal routes and legacy summary copies cannot be proven absent from repository inspection alone. Because the former store was never deployed and there are no records to preserve, these are treated as retired internal contracts: any future consumer must use the current Runtime Worker admin API rather than restore the removed storage routes or duplicate summary keys.
+## 11. Analytics Workflow execution recovery implementation (2026-11-26)
+
+The clean-slate EventAnalyticsWorkflow recovery slice is implemented on `fieldview-architecture-migration`:
+
+- `workers/fieldview/src/jobs/analytics-executions.ts` provides a typed repository for `system/analytics-executions/{execution_id}.json`, routed by `D1RecordStore` into the System Records D1 table. It records stable logical identity (`event_key` + `retry_key`), Workflow instance/retry identity, affected teams, requested/start/update/completion timestamps, attempt, status, source revision, bounded result counts, retry eligibility, and sanitized error class.
+- `workers/fieldview/src/runtime/index.ts` writes the execution record **before** creating a Workflow for both TBA webhook and manual refresh dispatch. If creation fails, the record is marked failed. A duplicate deterministic Workflow ID is treated idempotently when its existing instance is queued/running/paused/complete.
+- `workers/fieldview/src/jobs/event-analytics.ts` records running state before input acquisition and records completed, retry-scheduled, or failed outcomes. Attempt ownership checks prevent a late parent Workflow from overwriting a newer child attempt.
+- `workers/fieldview/src/jobs/polling-coordinator.ts` scans a bounded set of System Records, reconciles stale running records with Cloudflare Workflow instance status after 15 minutes, dispatches at most five recoveries per coordinator run, uses deterministic retry IDs, and caps retries at two attempts with 5-minute/15-minute failure backoff.
+- Existing TeamRuntime pending-publication recovery remains separate and unchanged; it continues to repair publication acknowledgements after team results have been persisted.
+- Tests cover repository lifecycle, stable retry identity, stale-attempt protection, terminal behavior, pre-dispatch record creation, coordinator recovery contracts, and duplicate webhook/retry idempotency.
+
+CI run `45862827049` completed successfully. Its D1 migration application was local-only; Wrangler deployment packaging was a dry run. No remote D1 migration, Cloudflare resource mutation, Worker deployment, secret change, or traffic cutover occurred.
+
+Test-environment deployment and runtime validation remain the next step. Production remains untouched.
