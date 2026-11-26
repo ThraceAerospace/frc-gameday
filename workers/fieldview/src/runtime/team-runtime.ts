@@ -868,10 +868,16 @@ export class TeamRuntime {
           states: await Promise.all(this.endpoints(year).map(({ endpoint }) =>
             tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
         }));
+        const now = Date.now();
+        const inputSignature = JSON.stringify(current.states.map((state) => state ? [
+          state.revision, state.status, state.lastFetchedAt, state.expiresAt, state.etag,
+          state.expiresAt !== null && state.expiresAt < now,
+        ] : null));
         const representationSignature = JSON.stringify(current.states.map((state) => state ? [
           state.revision, state.lastFetchedAt, state.etag,
         ] : null));
-        if (typeof publication.representation_signature !== "string" ||
+        if (typeof publication.input_signature !== "string" || publication.input_signature !== inputSignature ||
+            typeof publication.representation_signature !== "string" ||
             publication.representation_signature !== representationSignature) {
           return Response.json({ error: "Published TeamState is stale; explicitly prepare the analytics input" }, {
             status: 409, headers: { "Cache-Control": "no-store" },
