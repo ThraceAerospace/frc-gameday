@@ -164,8 +164,9 @@ export class TeamRuntime {
     return interval;
   }
   private async currentSeasonYear(): Promise<number | null> {
-    if (!this.env.DB) return null;
-    const raw = await new D1RecordStore(this.env.DB).get<string>("discovery/current-season.json");
+    const store = this.env.DISCOVERY_STORAGE ?? (this.env.DB ? new D1RecordStore(this.env.DB) : null);
+    if (!store) return null;
+    const raw = await store.get<string>("discovery/current-season.json");
     if (typeof raw !== "string") return null;
     const current = JSON.parse(raw) as { year?: unknown };
     return current && Number.isInteger(current.year) && Number(current.year) >= 1992 && Number(current.year) <= 2200
