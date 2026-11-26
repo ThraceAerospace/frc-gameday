@@ -262,7 +262,6 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       );
       pendingAnalyticsRecoveryChecksFailed += pendingReads.filter((item) => item.failed).length;
       const pendingByEvent = new Map<string, { teamKeys: Set<string>; revisionParts: Set<string> }>();
-      const pendingTeamKeys = new Set<string>();
       for (const result of pendingReads) {
         for (const item of result.pending) {
           const group = pendingByEvent.get(item.event_key) ?? { teamKeys: new Set<string>(), revisionParts: new Set<string>() };
@@ -270,7 +269,6 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           group.revisionParts.add("pending:" + result.teamKey + ":" + item.team_event_revision + ":" +
             item.event_source_revision + ":" + item.team_source_revision + ":" + item.comparison_input_updated_at);
           pendingByEvent.set(item.event_key, group);
-          pendingTeamKeys.add(result.teamKey);
         }
       }
       const selectedPendingEventKeys = selectBudgetedKeys(
