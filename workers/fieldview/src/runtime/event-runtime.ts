@@ -478,56 +478,6 @@ export class EventRuntime {
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    if (request.method === "POST" && url.pathname === "/lifecycle") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || !["upcoming", "active", "completed", "expired"].includes(String(body.lifecycle))) {
-        return Response.json({ error: "Invalid event lifecycle" }, { status: 400 });
-      }
-      const upcomingIntervalMs = body.upcomingIntervalMs;
-      const activeIntervalMs = body.activeIntervalMs;
-      if (body.analyticsEnabled === false) await this.storage.put(ANALYTICS_ENABLED_KEY, false);
-      else if (body.analyticsEnabled === true) await this.storage.put(ANALYTICS_ENABLED_KEY, true);
-      const completedUntil = body.completedUntil;
-      if (![upcomingIntervalMs, activeIntervalMs].every((value) =>
-        typeof value === "number" && Number.isSafeInteger(value) && value >= 1_000) ||
-        (completedUntil !== undefined && (typeof completedUntil !== "number" || !Number.isSafeInteger(completedUntil)))) {
-        return Response.json({ error: "Invalid lifecycle polling configuration" }, { status: 400 });
-      }
-      const liveEndpoints = [
-        TBA_ENDPOINTS.eventTeamStatuses(this.eventKey),
-        TBA_ENDPOINTS.eventMatches(this.eventKey),
-        TBA_ENDPOINTS.eventAlliances(this.eventKey),
-        TBA_ENDPOINTS.eventOPRs(this.eventKey),
-        TBA_ENDPOINTS.eventPredictions(this.eventKey),
-      ];
-      const lifecycle = body.lifecycle;
-      await this.storage.put("lifecycle:state", lifecycle);
-      if (lifecycle === "expired") {
-        await this.cancelRecurringPolls(true);
-        return Response.json({ lifecycle, queued: true, scheduled: 0, event_key: this.eventKey }, { status: 202 });
-      }
-      if (lifecycle === "upcoming") {
-        await this.schedulePolls([...this.allowedEndpoints], upcomingIntervalMs as number);
-        await this.storage.transaction(async (transaction) => {
-          await transaction.delete("lifecycle:completed-until");
-          await this.rearm(transaction);
-        });
-      } else {
-        const metadataEndpoints = [...this.allowedEndpoints].filter((endpoint) => !liveEndpoints.includes(endpoint));
-        await this.schedulePolls(metadataEndpoints, upcomingIntervalMs as number);
-        await this.schedulePolls(liveEndpoints, activeIntervalMs as number);
-        await this.storage.transaction(async (transaction) => {
-          if (lifecycle === "completed" && typeof completedUntil === "number") {
-            await transaction.put("lifecycle:completed-until", completedUntil);
-          } else {
-            await transaction.delete("lifecycle:completed-until");
-          }
-          await this.rearm(transaction);
-        });
-      }
-      return Response.json({ lifecycle, queued: true, event_key: this.eventKey }, { status: 202 });
-    }
-
     if (request.method === "POST" && url.pathname === "/refresh") {
       const body: unknown = await request.json().catch(() => ({}));
       const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
@@ -652,26 +602,6 @@ export class EventRuntime {
         fetched_at: state?.lastFetchedAt ?? null,
         analytics_status: await this.storage.get<string>("analytics:status") ?? "succeeded",
       }, { headers: { "Cache-Control": "no-store" } });
-    }
-
-    if (request.method === "POST" && url.pathname === "/schedule") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || !Array.isArray(body.endpoints) ||
-          !body.endpoints.every((endpoint) => typeof endpoint === "string")) {
-        return Response.json({ error: "Expected an endpoints array" }, { status: 400 });
-      }
-      const intervalMs = body.intervalMs;
-      if (typeof intervalMs !== "number" || !Number.isSafeInteger(intervalMs) || intervalMs < 1_000) {
-        return Response.json({ error: "intervalMs must be an integer of at least 1000" }, { status: 400 });
-      }
-      if (body.analyticsEnabled === false) await this.storage.put(ANALYTICS_ENABLED_KEY, false);
-      else if (body.analyticsEnabled === true) await this.storage.put(ANALYTICS_ENABLED_KEY, true);
-      const endpoints = body.endpoints as string[];
-      if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
-        return Response.json({ error: "Endpoint is not part of this event" }, { status: 400 });
-      }
-      await this.schedulePolls(endpoints, intervalMs);
-      return Response.json({ scheduled: endpoints.length, queued: true, event_key: this.eventKey }, { status: 202 });
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
@@ -1028,9 +958,6 @@ export class EventRuntime {
           team_state_coverage: { status: teamStateCoverageStatus, expected: expectedTeamCount, materialized: null },
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
-        lifecycle: {
-          completed_until: await this.storage.get<number>("lifecycle:completed-until") ?? null,
-        },
         resources: expectedEndpoints.map((endpoint) => {
           const source = entries.get(endpointStorageKey(endpoint));
           return {
@@ -1299,26 +1226,6 @@ export class EventRuntime {
     };
   }
 
-  // Polling cadence is owned by the Worker-level coordinator, never this DO.
-  // Retain endpoint validation for internal callers, but never persist a DO task
-  // or arm an alarm here.
-  async schedulePolls(endpoints: string[], intervalMs: number, _now = Date.now(), _forceImmediate = false): Promise<void> {
-    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1_000) {
-      throw new Error("intervalMs must be an integer of at least 1000");
-    }
-    if (endpoints.some((endpoint) => !this.allowedEndpoints.has(endpoint))) {
-      throw new Error("Only TBA event endpoints can be scheduled for recurring polling");
-    }
-  }
-
-  private async enqueueManualPolls(_endpoints: string[], _immediate = true, _scheduledAt?: number): Promise<void> {
-    return;
-  }
-
-  private async ensureRecurringPolls(_endpoints: string[], _intervalMs: number): Promise<void> {
-    return;
-  }
-
   private async restoreEventIdentity(): Promise<boolean> {
     const storedEventKey = await this.storage.get<string>("event-key");
     const eventKey = storedEventKey ?? this.eventKey;
@@ -1438,7 +1345,6 @@ export class EventRuntime {
         await transaction.put("analytics:status", "failed");
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 30_000);
         await transaction.put("analytics:last-error", detail.slice(0, 300));
-        await this.rearm(transaction);
       });
       return false;
     }
@@ -1460,7 +1366,6 @@ export class EventRuntime {
       if (currentRevision !== calculated.version) {
         await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
         await transaction.put("analytics:status", "pending");
-        await this.rearm(transaction);
         return null;
       }
       if (orchestratedTeamResults !== undefined) {
@@ -1477,8 +1382,7 @@ export class EventRuntime {
         if (staleTeamInput) {
           await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
           await transaction.put("analytics:status", "pending");
-          await this.rearm(transaction);
-          return null;
+            return null;
         }
         if (orchestratedTeamResults.length > 0) {
           await transaction.put(
@@ -1583,15 +1487,6 @@ export class EventRuntime {
         etag,
       }),
     })).catch(() => undefined);
-  }
-
-  private async cancelRecurringPolls(_clearCompletedUntil = false): Promise<void> {
-    return;
-  }
-
-  private async rearm(_transaction: DurableObjectTransactionLike): Promise<void> {
-    // Durable Objects never arm polling or analytics alarms.
-    return;
   }
 
   private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean> {
@@ -1708,27 +1603,11 @@ export class EventRuntime {
 
     if (result.snapshotChanged) await this.publishSnapshotRevision(result.snapshotVersion);
 
-    if (!options.suppressStatboticsRefresh && result.representationChanged && this.isStatboticsTriggerEndpoint(endpoint)) {
-      await this.scheduleStatboticsRefresh(Date.now());
-    }
     // A 304 without a retained representation is not a successful refresh.
     // A Statbotics 304 means its representation has not caught up to the TBA
     // change that triggered this bounded refresh. Retry without discarding data.
     return responseState.status !== "failed" && responseState.status !== "unavailable" &&
       result.status !== "failed" && result.status !== "unavailable" && result.acquired;
-  }
-
-  private isStatboticsTriggerEndpoint(endpoint: string): boolean {
-    return [
-      TBA_ENDPOINTS.event(this.eventKey),
-      TBA_ENDPOINTS.eventTeams(this.eventKey),
-      TBA_ENDPOINTS.eventTeamStatuses(this.eventKey),
-      TBA_ENDPOINTS.eventMatches(this.eventKey),
-    ].includes(endpoint);
-  }
-
-  private async scheduleStatboticsRefresh(_now: number, _overrideDelayMs?: number): Promise<void> {
-    return;
   }
 
   private authoritativeRefetchDelayMs(): number {
@@ -1740,14 +1619,6 @@ export class EventRuntime {
     return delay;
   }
 
-  private async scheduleImmediatePoll(
-    _transaction: DurableObjectTransactionLike,
-    _endpoint: string,
-    _now: number,
-  ): Promise<void> {
-    return;
-  }
-
   private async applyTbaWebhook(
     webhookId: string,
     messageType: string,
@@ -1756,7 +1627,6 @@ export class EventRuntime {
   ): Promise<boolean> {
     const eventKey = this.eventKey;
     const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
-    const eventEndpoint = TBA_ENDPOINTS.event(eventKey);
     const now = Date.now();
 
     const result = await this.storage.transaction(async (transaction) => {
@@ -1788,7 +1658,6 @@ export class EventRuntime {
             }
             const snapshotRevision = await transaction.get<number>("snapshot-revision") ?? 0;
             await transaction.put("snapshot-revision", snapshotRevision + 1);
-            await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
           }
         }
       } else if (
@@ -1796,19 +1665,8 @@ export class EventRuntime {
         messageType === "schedule_updated" ||
         messageType === "starting_comp_level"
       ) {
-        await this.scheduleImmediatePoll(transaction, matchesEndpoint, now);
       } else if (messageType === "alliance_selection") {
-        await this.scheduleImmediatePoll(transaction, eventEndpoint, now);
-        await this.scheduleImmediatePoll(
-          transaction, TBA_ENDPOINTS.eventAlliances(eventKey), now,
-        );
-        await this.scheduleImmediatePoll(
-          transaction, TBA_ENDPOINTS.eventTeamStatuses(eventKey), now,
-        );
       } else if (messageType === "awards_posted") {
-        await this.scheduleImmediatePoll(
-          transaction, TBA_ENDPOINTS.eventAwards(eventKey), now,
-        );
       }
 
       if (["upcoming_match", "schedule_updated", "starting_comp_level"].includes(messageType)) {
@@ -1819,10 +1677,6 @@ export class EventRuntime {
         await recordAnalyticsInvalidation(transaction, "tba-team-event-statuses", now);
       }
       const snapshotRevisionAfter = await transaction.get<number>("snapshot-revision") ?? snapshotRevisionBefore;
-      if (snapshotRevisionAfter !== snapshotRevisionBefore ||
-          !["match_score", "match_video"].includes(messageType)) {
-        await this.rearm(transaction);
-      }
       return {
         accepted: true,
         snapshotVersion: snapshotRevisionAfter !== snapshotRevisionBefore &&
