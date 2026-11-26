@@ -113,7 +113,7 @@ test("retired per-event readiness route is unavailable and never activates a run
   const response = await worker.fetch(
     new Request("https://runtime.example/internal/admin/event-readiness", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event_key: "2026historic", year: 2026 }),
     }),
     env,
@@ -200,7 +200,7 @@ test("manual discovery and coverage audits are dispatched to the local Jobs modu
   const discovery = await worker.fetch(
     new Request("https://runtime.example/internal/admin/operations", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
+      headers: { "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "system", action: "discover-year", year: 2026 }),
     }),
     env,
@@ -214,7 +214,7 @@ test("manual discovery and coverage audits are dispatched to the local Jobs modu
   const audit = await worker.fetch(
     new Request("https://runtime.example/internal/admin/operations", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
+      headers: { "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "system", action: "coverage-audit-start", year: 2026 }),
     }),
     env,
@@ -650,7 +650,7 @@ test("daily team readiness starts its independent Workflow through the local Job
   const { env, calls } = makeEnvironment();
   const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
     method: "POST",
-    headers: { Authorization: "Bearer server-only-token" },
+    headers: { "Cf-Access-Jwt-Assertion": accessToken },
   }), env);
 
   assert.equal(response.status, 202);
