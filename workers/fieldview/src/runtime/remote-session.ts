@@ -52,15 +52,7 @@ export class RemoteSessionRuntime {
     if (existing && existing.expiresAt > Date.now()) {
       return Response.json({ error: "This remote role is already connected" }, { status: 409 });
     }
-    if (existing) {
-      await this.state.storage.delete(key);
-      for (const socket of this.state.getWebSockets?.() ?? []) {
-        const attachment = this.attachment(socket);
-        if (attachment?.role === role && attachment.token === existing.token) {
-          try { socket.close(1001, "Session lease expired"); } catch { /* closed */ }
-        }
-      }
-    }
+    if (existing) await this.state.storage.delete(key);
     if (!this.state.acceptWebSocket) {
       return Response.json({ error: "WebSocket sessions are unavailable" }, { status: 501 });
     }
@@ -83,11 +75,7 @@ export class RemoteSessionRuntime {
     }
     return this.env.webSocketResponseFactory
       ? this.env.webSocketResponseFactory(pair[0])
-      : new Response(null, {
-          status: 101,
-          webSocket: pair[0],
-          headers: { "Sec-WebSocket-Protocol": PROTOCOL },
-        } as ResponseInit & { webSocket: WebSocket });
+      : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
   }
 
   private attachment(socket: WebSocket): Attachment | null {

@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending; administrator UI migration to Cloudflare Static Assets implemented
+**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending; administrator UI migration to Cloudflare Static Assets implemented; remote-session Durable Object transport implemented in code, pending validation and endpoint configuration
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Owner-approved retire-first, rebuild-cleanly migration
 **Last updated:** 2026-11-26
@@ -42,6 +42,12 @@ Direct refresh uses one shared EventRuntime/TeamRuntime command contract. EventR
 4. The D1-backed Discovery and System Records repositories and direct `DiscoveryService` cutover passed local typecheck and all 299 repository tests on 2026-11-26. The source-level DO audit in `docs/architecture/DO-WRITE-AUDIT-2026-11-25.md` remains a pre-cutover baseline; telemetry-backed physical write counts, billing semantics, and observed daily budgets remain open. No DiscoveryStore records need importing.
 5. **Completed on this branch:** EventRuntime and TeamRuntime diagnostics identify `PollingCoordinatorWorkflow` as the polling owner and report zero local tasks. EventRuntime's legacy lifecycle/schedule routes and all no-op local scheduling/enqueue/cancel/rearm hooks are removed. RuntimeAdmin registers event identities as registry records; the coordinator alone decides whether an event is currently eligible for polling. Do not restore a runtime-local scheduler.
 6. Validate the explicit read-only boundaries and coordinator-owned analytics recovery scans, complete strict 304 no-op and restart/recovery tests, and obtain Cloudflare telemetry for a real account-wide workload budget. Run repository typecheck and tests before any deployment.
+
+## 2026-11-26 remote-session signaling runtime
+
+A dedicated `RemoteSessionRuntime` Durable Object has been added as the target signaling/presence owner. Each six-digit pairing code maps to its own DO identity, keeping remote session lifecycle independent of EventRuntime, TeamRuntime, and the event-state Multiplexer. The DO enforces one active controller and one active display per code, forwards only validated WebRTC descriptions/candidates to the opposite role, sends peer-ready notifications, and maintains 120-second role leases with 30-second client heartbeats and alarm-based expiry recovery. Connection credentials are carried in WebSocket subprotocols rather than query parameters.
+
+The browser WebRTC client now selects this Worker endpoint when `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL` is configured; otherwise it retains the existing Vercel/Redis endpoint as a compatibility fallback. The old Redis signaling route and shared Redis dependency are intentionally not removed yet. Before retiring that fallback, configure the public runtime URL in the appropriate web build environment, validate controller/display pairing, role exclusivity, reconnect, lease expiry, and session isolation against a non-production Preview, and verify the route is reachable from browsers. The new DO binding and class migration are code/config only at this stage; no Cloudflare namespace has been deployed or provisioned remotely.
 
 ## 1. Confirmed decisions
 
