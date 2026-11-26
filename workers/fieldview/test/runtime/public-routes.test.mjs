@@ -342,7 +342,7 @@ test("internal Workflow runtime-state route authenticates and reads the canonica
     new Request("https://runtime.example/internal/workflows/runtime-state?kind=event&key=2026test"),
     env,
   );
-  assert.equal(denied.status, 404);
+  assert.equal(denied.status, 401);
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
 
   const allowed = await worker.fetch(
@@ -543,33 +543,19 @@ test("public team discovery rejects malformed published team-key pages", async (
 test("retired internal lifecycle route is unavailable and never dispatches to a runtime", async () => {
   const { env, calls } = makeEnvironment();
   const body = { lifecycle: "active", upcomingIntervalMs: 1800000, activeIntervalMs: 300000 };
-  const denied = await worker.fetch(
-    new Request("https://runtime.example/internal/events/2026probe/lifecycle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-    env,
-  );
-  assert.equal(denied.status, 401);
+  for (const headers of [
+    { "Content-Type": "application/json" },
+    { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+  ]) {
+    const response = await worker.fetch(
+      new Request("https://runtime.example/internal/events/2026probe/lifecycle", {
+        method: "POST", headers, body: JSON.stringify(body),
+      }),
+      env,
+    );
+    assert.equal(response.status, 404);
+  }
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
-
-  const allowed = await worker.fetch(
-    new Request("https://runtime.example/internal/events/2026probe/lifecycle", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer server-only-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    }),
-    env,
-  );
-  assert.equal(allowed.status, 404);
-  assert.equal(calls.some((call) => call.operation === "fetch"), false);
-  assert.equal(forwarded.url, "/lifecycle");
-  assert.equal(forwarded.method, "POST");
-  assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
 });
 
 
