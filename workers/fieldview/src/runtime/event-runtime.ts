@@ -1040,17 +1040,8 @@ export class EventRuntime {
             expires_at: source?.expiresAt ?? null,
           };
         }),
-        polling: [...tasks.values()].map((task) => ({
-          endpoint: task.endpoint,
-          due_at: task.dueAt,
-          interval_ms: task.intervalMs,
-          generation: task.generation,
-          attempts: task.attempts,
-          retry_on_failure: task.retryOnFailure,
-          ...(task.authoritativeRefetchAt === undefined
-            ? {}
-            : { authoritative_refetch_at: task.authoritativeRefetchAt }),
-        })).sort((left, right) => left.endpoint.localeCompare(right.endpoint)),
+        // Polling is coordinator-owned; this runtime has no local task registry.
+        polling: [],
         endpoints: Object.fromEntries([...entries.entries()].map(([key, state]) => {
           const value = state.providerData ?? state.data;
           const records = Array.isArray(value) ? value : value == null ? [] : [value];
