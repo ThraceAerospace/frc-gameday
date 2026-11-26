@@ -353,17 +353,23 @@ test("TeamRuntime records active events for the coordinator without creating pol
 
 test("TeamRuntime diagnostics do not initialize a missing TeamState publication", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
-  const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
+  let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    return Response.json([]);
+  }), teamKey);
+  const beforeRead = new Map(storage.values);
   const response = await runtime.fetch(new Request("https://team/state?year=2026", {
     headers: {
       Authorization: "Bearer admin",
       "X-FieldView-Team-Key": teamKey,
     },
   }));
-  assert.equal(response.status, 404, "diagnostics do not create an identity or TeamState publication");
-  assert.equal(storage.values.has("team-key"), false);
+  assert.equal(response.status, 200, "an already-identified runtime can report diagnostics without a TeamState publication");
+  assert.equal((await response.json()).team_key, teamKey);
+  assert.deepEqual([...storage.values], [...beforeRead], "diagnostics must not materialize a TeamState publication");
   assert.equal(storage.values.has("team-state:2026:publication"), false);
-  assert.equal(storage.values.has("team-state:2026"), false);
+  assert.equal(providerCalls, 0);
   assert.equal(storage.alarmAt, null);
 });
 
