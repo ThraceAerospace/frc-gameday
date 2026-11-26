@@ -7,6 +7,7 @@ import {
   isTeamAnalyticsSeasonInput,
   isTeamEventAnalyticsCommand,
   isTeamEventAnalyticsResult,
+  isTeamEventAnalyticsAcknowledgement,
 } from "../../src/runtime/analytics-orchestration-contract.ts";
 
 const command = {
@@ -181,4 +182,21 @@ test("rejects mixed-revision, mismatched, and duplicate team results", () => {
   assert.equal(isEventAnalyticsPublicationCommand({
     ...publication, team_results: [result, result],
   }), false);
+});
+
+
+test("accepts exact TeamRuntime publication acknowledgements and rejects invalid revision identities", () => {
+  const acknowledgement = {
+    contract_version: 1,
+    event_key: "2026test",
+    team_key: "frc3461",
+    event_source_revision: 12,
+    team_source_revision: 8,
+    comparison_input_updated_at: 1700000000000,
+    team_event_revision: 4,
+  };
+  assert.equal(isTeamEventAnalyticsAcknowledgement(acknowledgement), true);
+  assert.equal(isTeamEventAnalyticsAcknowledgement({ ...acknowledgement, team_event_revision: -1 }), false);
+  assert.equal(isTeamEventAnalyticsAcknowledgement({ ...acknowledgement, team_key: "frcX" }), false);
+  assert.equal(isTeamEventAnalyticsAcknowledgement({ ...acknowledgement, contract_version: 2 }), false);
 });
