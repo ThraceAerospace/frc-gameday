@@ -1061,3 +1061,18 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   assert.equal(storage.values.get("analytics:due-at"), 123456);
   assert.deepEqual(storage.values.get("analytics:invalidation"), invalidation);
 });
+
+
+test("EventRuntime inspection GETs do not bind an uninitialized identity", async () => {
+  const storage = new MemoryStorage();
+  const runtime = new EventRuntime({ storage }, { RUNTIME_ADMIN_TOKEN: "admin" });
+  const response = await runtime.fetch(new Request("https://event-runtime/analytics-state", {
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Event-Key": "2027rikin",
+    },
+  }));
+  assert.equal(response.status, 204);
+  assert.equal(storage.values.has("event-key"), false,
+    "an inspection GET must not initialize persistent runtime identity");
+});
