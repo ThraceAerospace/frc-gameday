@@ -4,6 +4,7 @@ import { TeamRuntime } from "./team-runtime.ts";
 import { DiscoveryService } from "./discovery-service.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
+import { isCloudflareAccessAdmin } from "./access-auth.ts";
 import { dispatchRuntime } from "./runtime-dispatch.ts";
 import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
@@ -322,7 +323,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/discover-year" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/discover-year" + url.search, {
         method: "GET",
@@ -331,7 +332,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/workflow-runs" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/workflow-runs" + url.search, {
         method: "GET", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
@@ -340,7 +341,7 @@ export default {
 
     if (url.pathname === "/internal/admin/events-this-week/refresh" &&
         (request.method === "GET" || request.method === "POST")) {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/events-this-week/refresh" + url.search, {
         method: request.method,
@@ -349,7 +350,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-event-readiness", {
         method: "POST",
@@ -358,7 +359,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-team-readiness", {
         method: "POST",
@@ -528,7 +529,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/operations" && request.method === "POST") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || typeof body.kind !== "string" || typeof body.action !== "string") {
         return Response.json({ error: "Expected kind and action" }, { status: 400 });
@@ -642,7 +643,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/coverage-audit" && (request.method === "GET" || request.method === "POST")) {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/coverage-audit" + url.search, {
         method: request.method,
@@ -655,7 +656,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/discovery-job" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/discovery-job" + url.search, {
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
@@ -663,7 +664,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/inventory" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind");
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
       const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
@@ -704,7 +705,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/entity" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind"), requestedKey = url.searchParams.get("key") ?? "";
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
@@ -737,7 +738,7 @@ export default {
 
     if (["/internal/admin/season-ingest", "/internal/admin/event-team-seed", "/internal/admin/team-seed"].includes(url.pathname) &&
         (request.method === "GET" || request.method === "POST")) {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
       const operation = url.pathname.endsWith("season-ingest") ? "season-ingest"
         : url.pathname.endsWith("event-team-seed") ? "event-team-seed" : "team-seed";
@@ -760,7 +761,7 @@ export default {
     }
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const object = await discoveryServiceClient(env)?.get("discovery/current-season.json");
       const current = object ? await object.json<{ year: number }>().catch(() => null) : null;
       const year = current?.year ?? null;
