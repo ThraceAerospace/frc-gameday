@@ -384,11 +384,6 @@ export class TeamRuntime {
       : year === currentYear && initializedCurrentState
         ? initializedCurrentState
         : await this.snapshot(year);
-    if (publicRead && initializedState?.status === 304) return initializedState;
-    if (publicRead && initializedState) return initializedState;
-    if (publicSeasonAnalyticsRead) {
-      return this.buildSeasonAnalyticsResponse(year);
-    }
     if (publicEventStateRead) {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
