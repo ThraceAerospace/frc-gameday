@@ -36,7 +36,13 @@ yarn-error.log*
 # Environment files and secrets
 .env*
 !.env.example
-\n# Local Cloudflare Worker secrets (Wrangler loads this automatically).\nworkers/fieldview/.dev.vars
+
+# Local Cloudflare Worker secrets (Wrangler loads this automatically).
+workers/fieldview/.dev.vars
+
+# Generated Cloudflare administrator assets and Tailwind output
+workers/fieldview/admin-assets/
+apps/admin-cloudflare/src/generated.css
 
 # vercel
 .vercel
