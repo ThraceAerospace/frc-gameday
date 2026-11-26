@@ -66,3 +66,15 @@ test("event and daily team refresh analytics triggers are coalesced after both r
   assert.doesNotMatch(coordinator, /EVENT_ANALYTICS_WORKFLOW!?\.create\(/,
     "the polling coordinator must not independently create an event workflow inside its event loop");
 });
+
+test("the coordinator scans registered teams for pending analytics and coalesces recovery dispatch", () => {
+  assert.match(coordinator, /registry\/teams\//);
+  assert.match(coordinator, /MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN/);
+  assert.match(coordinator, /"pending-analytics"/);
+  assert.match(coordinator, /pendingAnalyticsRecoveryChecksFailed/);
+  assert.match(coordinator, /revision_parts:/);
+  assert.match(coordinator, /recovery:\s*true/);
+  assert.match(coordinator, /additionalAffectedEvents:\s*eventAnalyticsRequests/);
+  assert.match(teamRuntime, /pending-event-analytics/);
+  assert.match(teamRuntime, /publication_status\s*!==\s*"pending"/);
+});
