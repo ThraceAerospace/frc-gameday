@@ -64,6 +64,7 @@ export class RemotePeer {
   private closed = false;
   private readonly token = crypto.randomUUID();
   private reconnectingPeer = false;
+  private creatingOffer = false;
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
 
   constructor(options: PeerOptions) {
@@ -304,6 +305,7 @@ export class RemotePeer {
     this.peer = null;
     this.pendingCandidates = [];
     this.remoteDescriptionSet = false;
+    this.creatingOffer = false;
     this.queuedActions = [];
 
     if (this.socket) {
@@ -316,20 +318,28 @@ export class RemotePeer {
   }
 
   private async createControllerOffer() {
+    if (this.creatingOffer) return;
     const peer = this.createPeerConnection();
 
     if (peer.connectionState === "connected" || peer.signalingState !== "stable") return;
 
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
+    this.creatingOffer = true;
+    try {
+      const offer = await peer.createOffer();
+      if (this.closed || this.peer !== peer || peer.signalingState !== "stable") return;
+      await peer.setLocalDescription(offer);
+      if (this.closed || this.peer !== peer) return;
 
-    this.sendSignal({
-      type: "signal",
-      payload: {
-        kind: "description",
-        description: offer,
-      },
-    });
+      this.sendSignal({
+        type: "signal",
+        payload: {
+          kind: "description",
+          description: offer,
+        },
+      });
+    } finally {
+      this.creatingOffer = false;
+    }
   }
 
   private async handlePeerSignal(signal: WebRTCSignalPayload) {
