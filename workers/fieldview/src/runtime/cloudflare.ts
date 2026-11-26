@@ -63,7 +63,13 @@ export interface RuntimeEnvironment {
   /** Debounced one-shot Statbotics refresh after accepted TBA representation changes. */
   STATBOTICS_REFRESH_DELAY_MS?: string | number;
   TBA_WEBHOOK_SECRET: string;
+  /** Service-to-service credential; never expose this to browser clients. */
   RUNTIME_ADMIN_TOKEN: string;
+  /** Cloudflare Access team issuer and this application's audience tag. */
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  CF_ACCESS_AUD?: string;
+  /** Comma-, semicolon-, or whitespace-separated exact administrator email allowlist. */
+  RUNTIME_ADMIN_EMAILS?: string;
   EVENT_RUNTIME: DurableObjectNamespaceLike;
   TEAM_REFRESH_INTERVAL_MS?: string | number;
   TEAM_ACTIVE_REFRESH_INTERVAL_MS?: string | number;
