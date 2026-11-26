@@ -1,4 +1,16 @@
 /** Minimal structural Cloudflare runtime contracts used by this worker. */
+export interface D1PreparedStatementLike {
+  bind(...values: unknown[]): D1PreparedStatementLike;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results?: T[] }>;
+  run(): Promise<{ meta?: { changes?: number } }>;
+}
+export interface D1DatabaseLike { prepare(query: string): D1PreparedStatementLike; }
+export interface KVNamespaceLike {
+  get(key: string, type?: "text"): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number; expiration?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
 export interface DurableObjectTransactionLike {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
@@ -29,9 +41,9 @@ export interface DurableObjectNamespaceLike {
 
 export interface RuntimeEnvironment {
   /** Environment-specific D1 database (production or Preview test database). */
-  DB?: D1Database;
+  DB?: D1DatabaseLike;
   /** Environment-specific KV namespace for non-authoritative projections. */
-  KV_BINDING?: KVNamespace;
+  KV_BINDING?: KVNamespaceLike;
   TBA_API_KEY: string;
   /** Official Statbotics API when available; currently the configured testing mirror is retained while official service is unavailable. */
   STATBOTICS_API_BASE_URL?: string;
