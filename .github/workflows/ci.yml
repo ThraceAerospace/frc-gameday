@@ -53,6 +53,11 @@ jobs:
       - name: Build Cloudflare administrator assets
         run: node apps/admin-cloudflare/build.mjs
 
+      # Bundle the complete Worker and Static Assets using the production
+      # Wrangler configuration without uploading or changing Cloudflare resources.
+      - name: Validate Cloudflare deployment bundle (dry run)
+        run: npx --yes wrangler@^4.135.0 deploy --dry-run --outdir .wrangler/deploy-dry-run --config workers/fieldview/wrangler.toml
+
       - name: Typecheck workspaces
         run: npm run typecheck
 
