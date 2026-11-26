@@ -557,7 +557,9 @@ export default {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
-      if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
+        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      }
       const manifestObject = await discoveryServiceClient(env).get(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
