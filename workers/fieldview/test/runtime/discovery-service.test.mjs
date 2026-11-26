@@ -42,7 +42,7 @@ test("DiscoveryService paginates prefix listings with an exclusive cursor", asyn
   for (const key of ["registry/events/2026.json", "registry/events/2027.json", "registry/teams/2026.json"]) {
     await state.storage.put("" + key, "{}");
   }
-  const store = new DiscoveryService(state);
+  const store = new DiscoveryService(state.storage);
   const first = await (await store.fetch(new Request("https://store/list?prefix=registry%2Fevents%2F&limit=1"))).json();
   assert.deepEqual(first.objects, [{ key: "registry/events/2026.json" }]);
   assert.equal(first.truncated, true);
@@ -56,7 +56,7 @@ test("publishing a new team generation removes superseded team pages", async () 
   await state.storage.put("discovery/team-pages/2026/100/0.json", "[]");
   await state.storage.put("discovery/team-pages/2026/200/0.json", "[]");
   await state.storage.put("discovery/teams/2026.json", JSON.stringify({ year: 2026, generation: 100 }));
-  const store = new DiscoveryService(state);
+  const store = new DiscoveryService(state.storage);
   await store.fetch(new Request("https://store/put", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key: "discovery/teams/2026.json", value: JSON.stringify({ year: 2026, generation: 200 }) }) }));
   assert.equal(state.values.has("discovery/team-pages/2026/100/0.json"), false);
@@ -70,7 +70,7 @@ test("weekly event candidates are persisted as one canonical projection record",
     runDate: "2026-11-23", weekStart: "2026-11-23", weekEnd: "2026-11-29",
     checkedAt: 1795450000000, events: [{ key: "2026test" }],
   };
-  const store = new DiscoveryService(state);
+  const store = new DiscoveryService(state.storage);
   const put = await store.fetch(new Request("https://store/put", { method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key: "projections/events-this-week/current.json", value: JSON.stringify(projection) }) }));
