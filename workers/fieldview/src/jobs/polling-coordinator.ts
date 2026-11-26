@@ -179,15 +179,17 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           let analyticsStateFailed = !analyticsStateResponse.ok;
           if (analyticsStateResponse.ok) {
             const analyticsState = await analyticsStateResponse.json() as {
+              event_state_published?: unknown;
               source_revision?: unknown;
               analytics?: { status?: unknown; revision?: unknown; due_at?: unknown; pending_invalidation?: { requested_at?: unknown } | null };
             };
             if (!analyticsState.analytics || typeof analyticsState.analytics.status !== "string") {
               analyticsStateFailed = true;
             } else {
-              analyticsRecovery = isEventAnalyticsRecoveryDue(
-                analyticsState.analytics.status, analyticsState.analytics.due_at, Date.now(),
-              );
+              analyticsRecovery = analyticsState.event_state_published === true &&
+                isEventAnalyticsRecoveryDue(
+                  analyticsState.analytics.status, analyticsState.analytics.due_at, Date.now(),
+                );
               analyticsRevisionPart = "event-analytics:" + eventKey + ":" +
                 String(analyticsState.source_revision ?? "unknown") + ":" +
                 String(analyticsState.analytics.revision ?? 0) + ":" +
@@ -378,13 +380,15 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             const response = await dispatchRuntime(this.env, "event", eventKey, "analytics-state", {}, discovery.year);
             if (!response.ok) return { eventKey, due: false, failed: true, revisionPart: "" };
             const value = await response.json() as {
+              event_state_published?: unknown;
               source_revision?: unknown;
               analytics?: { status?: unknown; revision?: unknown; due_at?: unknown; pending_invalidation?: { requested_at?: unknown } | null };
             };
             if (!value.analytics || typeof value.analytics.status !== "string") {
               return { eventKey, due: false, failed: true, revisionPart: "" };
             }
-            const due = isEventAnalyticsRecoveryDue(value.analytics.status, value.analytics.due_at, Date.now());
+            const due = value.event_state_published === true &&
+              isEventAnalyticsRecoveryDue(value.analytics.status, value.analytics.due_at, Date.now());
             return {
               eventKey, due, failed: false,
               revisionPart: "event-analytics:" + eventKey + ":" +
