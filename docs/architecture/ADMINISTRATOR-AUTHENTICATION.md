@@ -1,133 +1,37 @@
 # FieldView administrator authentication
 
-**Status:** Worker-side Cloudflare Access verification and the Vercel
-Command Center proxy integration are implemented on
-`fieldview-architecture-migration`. The Vercel project currently has only
-`frc-gameday.vercel.app` attached; that hostname is not a Cloudflare-managed
-zone hostname and cannot be protected by a normal self-hosted Access public
-hostname application. A custom domain on an active Cloudflare zone must be
-attached to the Vercel project before the Access application can be provisioned.
-Runtime environment values also remain to be configured. Until then,
-administrator endpoints fail closed.
+**Status:** The existing React administrator dashboard is built as a standalone SPA in Workers Static Assets and served by the existing `runtime` Worker. The Vercel administrator page and API proxy are removed. Cloudflare Access policies and Worker environment values remain provisioning steps.
 
 ## Request and authorization flow
 
-The administrative panels live in the Next.js application deployed on Vercel.
-The browser must reach that application through a Cloudflare-proxied custom
-hostname protected by Cloudflare Access.
+1. Cloudflare Access protects `/admin*` and `/internal/admin/*` on `runtime.frc-fieldview.workers.dev`.
+2. Access authenticates the administrator and injects `Cf-Access-Jwt-Assertion`.
+3. The Runtime Worker independently verifies the JWT and checks the exact administrator email allowlist before serving the dashboard or any admin API operation.
+4. The dashboard calls the same Worker's `/internal/admin/proxy`; this maps its existing request contract to internal admin routes without involving Vercel.
+5. `RUNTIME_ADMIN_TOKEN` remains exclusively for private Worker, Durable Object, and Workflow calls.
 
-1. Cloudflare Access protects both `/admin/runtime*` and
-   `/api/admin/runtime*` on the Vercel application's public custom hostname.
-2. After successful identity authentication, Cloudflare injects the
-   `Cf-Access-Jwt-Assertion` header on requests to the protected origin paths.
-3. The Next.js API route requires that header and forwards it to the Runtime
-   Worker. It no longer accepts a manually entered dashboard bearer token and
-   does not forward the old service bearer token.
-4. The Runtime Worker independently verifies the signed JWT and administrator
-   allowlist before serving any `/internal/admin/*` operation.
-5. The Worker's internal `RUNTIME_ADMIN_TOKEN` remains available only for
-   private Worker-to-Worker, Durable Object, and Workflow calls.
+## Worker-side verification
 
-The Next.js API route does not treat the presence of the header as proof of
-identity. The Runtime Worker performs cryptographic verification, so requests
-that bypass Cloudflare and reach the Vercel deployment directly cannot perform
-administrative operations without a valid Access JWT.
+The Worker validates the RS256 signature against the team's published JWKS and checks the exact issuer, audience, expiry, not-before, issued-at timestamps, and exact case-insensitive email allowlist. It does not trust unsigned identity headers or browser bearer tokens.
 
-## Worker-side JWT verification
+## Static hosting
 
-Human administrator requests to `/internal/admin/*` must carry the
-`Cf-Access-Jwt-Assertion` header. The Runtime Worker validates the JWT
-signature against the team's published JWKS and checks:
+The SPA is built from the existing React dashboard components in `apps/web/src/app/admin/runtime`. Run `node apps/admin-cloudflare/build.mjs` to compile Tailwind and bundle the app into `workers/fieldview/admin-assets`. Wrangler serves the output through the static-assets binding. The `/admin` document request is worker-first and authorized before its HTML is returned. JavaScript/CSS under `/assets/*` is public application code and contains no secrets.
 
-- RS256 signature and signing-key ID
-- Exact Access team issuer
-- This application's Access audience tag
-- Expiration, not-before, and issued-at timestamps
-- An exact, case-insensitive email match in `RUNTIME_ADMIN_EMAILS`
+Keep worker-first routing for `/admin`, `/admin/*`, and `/internal/admin/*`. Do not apply Access to the entire Worker hostname: public runtime APIs and WebSocket upgrades must remain reachable.
 
-The Worker does not trust `Cf-Access-Authenticated-User-Email`, an
-`Authorization: Bearer` header, or an unsigned browser-supplied identity
-header as human administrator authentication.
+## Required Cloudflare configuration
 
-## Cloudflare Access application and Vercel
+Create a Self-hosted Access application for `runtime.frc-fieldview.workers.dev` with path coverage `/admin*` and `/internal/admin/*`. Use an Allow policy restricted to exact administrator email addresses. Configure Production and Preview Worker variables as appropriate: `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `RUNTIME_ADMIN_EMAILS`.
 
-Create a **Self-hosted** Access application for the custom hostname assigned to
-the Vercel project. The hostname must be an active Cloudflare zone hostname
-and HTTP traffic must pass through Cloudflare. Protect these paths:
-
-- `/admin/runtime*` — the Command Center UI
-- `/api/admin/runtime*` — all Command Center reads and operations
-
-Use an Allow policy with the exact administrator email address(es). Do not use
-a broad email-domain policy for this administrator surface. The Access
-application policy is the edge gate; `RUNTIME_ADMIN_EMAILS` is the independent
-Worker-side authorization allowlist.
-
-Because the origin is Vercel, configure the hostname as a supported Cloudflare
-reverse-proxy path: keep the hostname assigned to the Vercel project, proxy
-traffic through Cloudflare, use **Full (strict)** TLS, and preserve the
-`CF-Connecting-IP` header required for Vercel Verified Proxy Lite. Disable
-external caching for the Vercel origin unless separately designed and tested;
-never cache admin API responses or `/.well-known/vercel/*`. Vercel documents
-Cloudflare as a supported Verified Proxy Lite provider but warns that a proxy
-reduces some security visibility and introduces an additional network/cache
-layer.
-
-Do not protect the entire FieldView hostname. Public FieldView pages and APIs
-must remain publicly accessible. Access matching is limited to the two admin
-paths above.
-
-The direct `*.vercel.app` deployment hostname is not protected by this
-custom-hostname Access application. The Runtime Worker still rejects admin
-requests there unless the caller supplies a correctly signed, audience-bound
-Access JWT for an allowlisted administrator. Consider Vercel Deployment
-Protection for deployment URLs if hiding even the admin page shell is
-required; do not assume the custom-domain Access policy protects Vercel's
-deployment URLs.
-
-## Runtime configuration
-
-Configure these Worker environment variables in both Production and any
-Preview environment that should support administrator operations:
-
-| Variable | Value |
-| --- | --- |
-| `CF_ACCESS_TEAM_DOMAIN` | `https://<team-name>.cloudflareaccess.com` |
-| `CF_ACCESS_AUD` | Application Audience (AUD) tag from the Access application |
-| `RUNTIME_ADMIN_EMAILS` | Comma-separated exact administrator email addresses |
-
-Set these values as Worker environment variables through the Cloudflare
-dashboard. They are intentionally not committed to Wrangler configuration.
-Use a local-only `.dev.vars` file for local development and never commit it.
-
-Keep `RUNTIME_ADMIN_TOKEN` configured as a Worker secret for internal
-service-to-service calls. It is not a substitute for any of the three Access
-settings above. Remove the obsolete `FIELDVIEW_ADMIN_ACCESS_TOKEN` from the
-Vercel project once the Access-protected custom hostname and API proxy are
-configured and validated.
+Keep `RUNTIME_ADMIN_TOKEN` as an internal Worker secret only. No token belongs in Vercel or browser code.
 
 ## Validation and rollout
 
-1. Register or identify a custom domain under the user's control, add it to the Cloudflare zone, and attach it to the Vercel project. The current production-only `frc-gameday.vercel.app` domain is not eligible for a standard public-hostname Access app.
-2. Configure the Cloudflare-proxied hostname and verify Vercel Verified Proxy
-   Lite prerequisites.
-3. Create the path-scoped Access application for the two admin paths and its
-   exact-email Allow policy.
-4. Set the three Access variables in the Runtime Worker environment.
-5. Confirm an allowlisted administrator can open the Command Center and use
-   read and write operations.
-6. Confirm a non-allowlisted authenticated user receives HTTP 401 from the
-   Runtime Worker.
-7. Confirm requests without `Cf-Access-Jwt-Assertion`, including requests
-   carrying only the former dashboard bearer token, receive HTTP 401.
-8. Confirm public event/team snapshots, analytics, streams, health, and TBA
-   webhook behavior is unchanged.
-9. Confirm direct Vercel deployment URLs cannot perform administrator
-   operations and that Preview URLs are either protected separately or have
-   no administrative access.
-
-Worker tests cover signature, issuer, audience, expiry, not-before, future
-issued-at, malformed tokens, algorithm restrictions, email allowlisting, and
-the lightweight auth-check endpoint. No production Access application,
-secret, Worker deployment, or traffic routing is changed by the code-only
-implementation.
+- Build the SPA with `node apps/admin-cloudflare/build.mjs`.
+- Run Worker typecheck and the full workspace test suite.
+- Verify unauthenticated `/admin` and `/internal/admin/*` requests are denied.
+- Verify an allowed Access identity can load the dashboard and perform read/write operations.
+- Verify public runtime routes and WebSocket upgrades are unaffected.
+- Confirm the Vercel deployment no longer contains the admin page or API proxy.
+- Deploy only after explicit production rollout approval.

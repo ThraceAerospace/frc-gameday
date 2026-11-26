@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending
+**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending; administrator UI migration to Cloudflare Static Assets implemented
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Owner-approved retire-first, rebuild-cleanly migration
 **Last updated:** 2026-11-26
@@ -506,3 +506,8 @@ EventRuntime and TeamRuntime readiness are separate sequential Workflows:
 - EventRuntime analytics must not dispatch to TeamRuntimes directly. The coordinator or a dedicated Workflow selects registered TeamRuntime targets and sends explicit, versioned analytics inputs/commands. Missing registry entries are reported as unavailable inputs; event readiness must not create TeamRuntimes.
 - The GitHub Actions scheduled workflow starts both authenticated preproduction endpoints. Configure the repository secret `FIELDVIEW_PREPROD_ADMIN_TOKEN` with the preproduction Worker admin token. GitHub scheduled workflows run from the default branch, so the scheduler becomes active after this workflow file reaches that branch. The shared scheduler does not couple the two Workflows; scheduled activation is not configured through Cloudflare Workflow cron schedules.
 - Event participant lists remain EventRuntime-owned data and do not imply TeamRuntime initialization.
+
+
+## 2026-11-26 administrator hosting migration
+
+The administrator dashboard is built as a standalone SPA from the existing React components into Workers Static Assets on the existing `runtime` Worker. The Vercel administrator page and API proxy are removed. Worker-first routes protect `/admin` and `/internal/admin/*` with Cloudflare Access JWT verification and the exact email allowlist; the dashboard's same-origin proxy is handled inside the Worker. Public runtime endpoints and WebSocket paths remain outside Access protection. Static JS/CSS bundles contain no credentials. CI builds the SPA. Access policies and Production/Preview environment values remain operator provisioning steps; no deployment or production configuration was changed by this source migration.

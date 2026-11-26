@@ -141,7 +141,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     if (!quiet) setLoading(true);
     try {
-      const response = await fetch("/api/admin/runtime", { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy", { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load operations overview");
       setOverview(body as Overview);
@@ -159,7 +159,7 @@ export default function AdminOperationsDashboard() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void fetch("/api/admin/runtime?auth=1", { cache: "no-store" })
+    void fetch("/internal/admin/proxy?auth=1", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json().catch(() => ({ error: "Invalid authentication response" }));
         if (!response.ok) throw new Error(body.error ?? "Cloudflare Access administrator authorization required");
@@ -177,7 +177,7 @@ export default function AdminOperationsDashboard() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ inventory: kind, q: query, cursor: String(nextCursor), limit: "50", year: String(year) });
-      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to search inventory");
       setPage(body as InventoryPage); setCursor(nextCursor); setError("");
@@ -188,7 +188,7 @@ export default function AdminOperationsDashboard() {
   const loadCoverageAudit = useCallback(async () => {
     if (!authenticated) return;
     try {
-      const response = await fetch("/api/admin/runtime?coverageAudit=" + year, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?coverageAudit=" + year, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setCoverageAudit(body as CoverageAudit);
     } catch { /* Keep the last known audit result visible. */ }
@@ -197,7 +197,7 @@ export default function AdminOperationsDashboard() {
   const loadSeasonIngest = useCallback(async () => {
     if (!authenticated) return;
     try {
-      const response = await fetch("/api/admin/runtime?seasonIngest=" + year, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?seasonIngest=" + year, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setSeasonIngest(body as SeasonIngest);
     } catch { /* Preserve the last known durable job state. */ }
@@ -207,7 +207,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "system", action: "season-ingest-preview", year }),
       });
@@ -224,7 +224,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "system", action: "season-ingest-" + action, year, ...(action === "start" ? { confirm: true } : {}) }),
       });
@@ -241,7 +241,7 @@ export default function AdminOperationsDashboard() {
     setBusy(true); setError(""); setMessage("");
     try {
       const action = coverageAudit?.year === year && (coverageAudit.status === "running" || coverageAudit.status === "paused") ? "coverage-audit-continue" : "coverage-audit-start";
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "system", action, year }),
       });
@@ -259,7 +259,7 @@ export default function AdminOperationsDashboard() {
     window.history.pushState(null, "", "/admin/runtime?" + entityKind + "=" + encodeURIComponent(key) + "&year=" + entityYear);
     try {
       const params = new URLSearchParams({ kind: entityKind, key, year: String(entityYear) });
-      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load command center");
       setEntity({ key, status: response.status, state: body as EntityState });
@@ -270,7 +270,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     try {
       const params = new URLSearchParams({ eventSeed: eventKey, year: String(eventYear) });
-      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setEventTeamSeed(body as EventTeamSeed);
     } catch { /* The next dashboard refresh will retry the status read. */ }
@@ -280,7 +280,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     try {
       const params = new URLSearchParams({ teamSeed: teamKey, year: String(teamYear) });
-      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setTeamSeedJob(body as TeamSeedJob);
     } catch { /* Keep the most recent durable job state visible. */ }
@@ -290,7 +290,7 @@ export default function AdminOperationsDashboard() {
     if (!authenticated) return;
     try {
       const params = new URLSearchParams({ discoveryJob: String(targetYear) });
-      const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+      const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setDiscoveryJob(body as DiscoveryJob);
     } catch { /* Keep the most recent durable job state visible. */ }
@@ -299,7 +299,7 @@ export default function AdminOperationsDashboard() {
   const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string, operationYear?: number) => {
     setBusy(true); setMessage(""); setError("");
     try {
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ kind: entityKind, action, ...(key ? { key } : {}), ...(endpoint ? { endpoint } : {}), ...(operationYear ? { year: operationYear } : {}) }),
       });
@@ -333,7 +333,7 @@ export default function AdminOperationsDashboard() {
       inFlight = true;
       try {
         const params = new URLSearchParams({ kind: selected.kind, key: selected.key, year: String(selected.year) });
-        const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
+        const response = await fetch("/internal/admin/proxy?" + params, { headers: requestHeaders, cache: "no-store" });
         const body = await response.json();
         if (active && response.ok) setEntity({ key: selected.key, status: response.status, state: body as EntityState });
       } catch {

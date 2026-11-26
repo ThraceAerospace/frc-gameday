@@ -207,9 +207,50 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
   }));
 }
 
-export default {
-  async fetch(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
+async function adminProxy(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
+ if (!(await isCloudflareAccessAdmin(request,env))) return Response.json({error:"Unauthorized"},{status:401});
+ const url=new URL(request.url);
+ if(request.method==="GET"){
+  const q=url.searchParams;
+  if(q.get("auth")==="1") return runtimeFetch(new Request(new URL("/internal/admin/auth",url.origin),{headers:request.headers}),env,context);
+  const kind=q.get("kind"),key=q.get("key"),inventory=q.get("inventory");
+  const coverage=q.get("coverageAudit"),ingest=q.get("seasonIngest"),eventSeed=q.get("eventSeed"),teamSeed=q.get("teamSeed"),discovery=q.get("discoveryJob"),runs=q.get("workflowRuns"),weekly=q.get("weeklyProjectionRun"),runId=q.get("runId");
+  const needsYear=Boolean(teamSeed||(kind&&key)||inventory);let year=q.get("year");
+  if(!year&&needsYear){const record=await discoveryServiceClient(env).get("discovery/current-season.json");if(record){const current=await record.json<{year?:unknown}>().catch(()=>null);if(current&&Number.isInteger(current.year))year=String(current.year);}if(!year)return Response.json({error:"TBA current season is unavailable"},{status:503});}
+  const target=weekly?"/internal/admin/events-this-week/refresh?id="+encodeURIComponent(weekly)
+   :runs?"/internal/admin/workflow-runs?"+new URLSearchParams({type:runs,...(runId?{id:runId}:{}),...(q.get("limit")?{limit:q.get("limit")!}:{})})
+   :teamSeed?"/internal/admin/team-seed?"+new URLSearchParams({team_key:teamSeed,year:year!})
+   :discovery?"/internal/admin/discovery-job?"+new URLSearchParams({year:discovery})
+   :eventSeed?"/internal/admin/event-team-seed?"+new URLSearchParams({event_key:eventSeed,...(q.get("year")?{year:q.get("year")!}:{})})
+   :ingest?"/internal/admin/season-ingest?year="+encodeURIComponent(ingest)
+   :coverage?"/internal/admin/coverage-audit?year="+encodeURIComponent(coverage)
+   :kind&&key?"/internal/admin/entity?kind="+encodeURIComponent(kind)+"&key="+encodeURIComponent(key)+"&year="+encodeURIComponent(year!)
+   :inventory?"/internal/admin/inventory?"+new URLSearchParams({kind:inventory,q:q.get("q")??"",cursor:q.get("cursor")??"0",limit:q.get("limit")??"50",year:year!})
+   :"/internal/admin/overview";
+  return runtimeFetch(new Request(new URL(target,url.origin),{headers:request.headers}),env,context);
+ }
+ if(request.method==="POST"){
+  const body:unknown=await request.json().catch(()=>null);if(!isRecord(body))return Response.json({error:"Invalid operation payload"},{status:400});
+  const type=body.workflowType;
+  const target=type==="events-this-week"?"/internal/admin/events-this-week/refresh":type==="event-readiness"?"/internal/admin/daily-event-readiness":type==="team-readiness"?"/internal/admin/daily-team-readiness":"/internal/admin/operations";
+  const headers=new Headers(request.headers);if(target.endsWith("/operations"))headers.set("Content-Type","application/json");
+  return runtimeFetch(new Request(new URL(target,url.origin),{method:"POST",headers,...(target.endsWith("/operations")?{body:JSON.stringify(body)}:{})}),env,context);
+ }
+ return new Response("Method Not Allowed",{status:405,headers:{Allow:"GET, POST"}});
+}
+
+async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
+  if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) {
+    if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405 });
+    if (!(await isCloudflareAccessAdmin(request, env))) return new Response("Unauthorized", { status: 401 });
+    if (!env.ASSETS) return Response.json({ error: "Administrator assets are not configured" }, { status: 503 });
+    const assetUrl = new URL(request.url); assetUrl.pathname = "/index.html";
+    const response = await env.ASSETS.fetch(new Request(assetUrl, { method: request.method, headers: request.headers }));
+    const headers = new Headers(response.headers); headers.set("Cache-Control", "no-store");
+    return new Response(response.body, { status: response.status, headers });
+  }
+  if (url.pathname === "/internal/admin/proxy") return adminProxy(request, env, context);
     if (url.pathname === "/internal/polling/refresh" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
@@ -987,6 +1028,6 @@ export default {
         : { body: await request.clone().arrayBuffer() }),
     });
     return stub.fetch(forwarded);
-  },
+}
 
-};
+export default { fetch: runtimeFetch };

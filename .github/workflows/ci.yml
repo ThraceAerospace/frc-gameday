@@ -50,6 +50,9 @@ jobs:
         run: npx next typegen
         working-directory: apps/web
 
+      - name: Build Cloudflare administrator assets
+        run: node apps/admin-cloudflare/build.mjs
+
       - name: Typecheck workspaces
         run: npm run typecheck
 

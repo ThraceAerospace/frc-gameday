@@ -55,7 +55,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
 
   const loadRuns = useCallback(async () => {
     if (!authenticated) return;
-    const response = await fetch("/api/admin/runtime?workflowRuns=" + type + "&limit=30", { cache: "no-store" });
+    const response = await fetch("/internal/admin/proxy?workflowRuns=" + type + "&limit=30", { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to load workflow history");
     setRuns(body as RunList);
@@ -63,7 +63,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
 
   const loadRun = useCallback(async (id: string) => {
     const params = new URLSearchParams({ workflowRuns: type, runId: id });
-    const response = await fetch("/api/admin/runtime?" + params, { cache: "no-store" });
+    const response = await fetch("/internal/admin/proxy?" + params, { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to load workflow result");
     setSelected(body as WorkflowRun);
@@ -81,7 +81,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   async function dispatch() {
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflowType: type }),
       });
@@ -99,7 +99,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   async function refreshWeeklyProjection() {
     setWeeklyBusy(true); setWeeklyMessage(""); setError("");
     try {
-      const response = await fetch("/api/admin/runtime", {
+      const response = await fetch("/internal/admin/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflowType: "events-this-week" }),
@@ -117,7 +117,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   const loadWeeklyProjectionStatus = useCallback(async () => {
     if (!authenticated || !weeklyWorkflowId) return;
     const params = new URLSearchParams({ weeklyProjectionRun: weeklyWorkflowId });
-    const response = await fetch("/api/admin/runtime?" + params, {
+    const response = await fetch("/internal/admin/proxy?" + params, {
       cache: "no-store",
     });
     const body = await response.json();

@@ -1,0 +1,1 @@
+import{spawnSync}from"node:child_process";for(const[cmd,args]of[["npx",["--yes","@tailwindcss/cli@4.1.14","-i","apps/admin-cloudflare/src/style.css","-o","apps/admin-cloudflare/src/generated.css"]],["npx",["--yes","vite@7.1.12","build","--config","apps/admin-cloudflare/vite.config.ts"]]]){const r=spawnSync(cmd,args,{stdio:"inherit"});if(r.status!==0)process.exit(r.status??1)}

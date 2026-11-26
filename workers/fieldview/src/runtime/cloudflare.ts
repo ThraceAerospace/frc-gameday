@@ -44,6 +44,8 @@ export interface DurableObjectNamespaceLike {
 }
 
 export interface RuntimeEnvironment {
+  /** Static administrator SPA assets, served only after Worker-side Access verification. */
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   /** Environment-specific D1 database (production or Preview test database). */
   DB?: D1DatabaseLike;
   /** Injectable record adapter for isolated runtime tests; production uses DB. */

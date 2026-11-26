@@ -4,6 +4,11 @@ main = "src/index.ts"
 compatibility_date = "2026-11-22"
 
 # Production Worker URL: runtime.frc-fieldview.workers.dev
+
+[assets]
+directory = "./admin-assets"
+binding = "ASSETS"
+run_worker_first = ["/admin", "/admin/*", "/internal/admin/*"]
 workers_dev = true
 
 # Enable branch Preview URLs on the same Worker.
