@@ -52,6 +52,19 @@ Keep Worker and frontend environment configuration separate.
 
 Runtime and Jobs are separated as `workers/fieldview/src/runtime` and `workers/fieldview/src/jobs`, with corresponding tests under `workers/fieldview/test`. They are modules in one Worker project, composed by `workers/fieldview/src/index.ts`, the single deployment entrypoint. Jobs dispatch uses an in-process callback; no Runtime-to-Jobs, Jobs-to-Runtime, or self-service Worker service bindings are used.
 
+## Bound storage resources
+
+The current `workers/fieldview/wrangler.toml` resource mapping is intentional:
+
+| Binding | Production | Branch / pull-request Previews | Ownership and isolation |
+|---|---|---|---|
+| `FIELDVIEW_DB` | `fieldview-prod` (`df5168d5-5efa-4927-b732-c0ee66da5934`) | `fieldview-test` (`7e7c5be6-4967-44e6-adba-86fe7b1a76cf`) | Separate physical databases. All Preview branches currently share the test database. Discovery and System Records are separate logical schemas/repositories in each database. |
+| `KV_BINDING` | Namespace `c067dfcaa3a345b0b43f035a992b4b30` | Same namespace | Intentionally shared to expose the same environment-neutral TBA-derived projections. KV is still mutable and eventually consistent; Preview writes can affect Production reads. |
+
+The shared KV namespace is not an authoritative TBA database. TBA remains the upstream source; KV contains FieldView-managed projections/cached data. Shared writes are permitted only when they are environment-neutral, semantically equivalent, and safe to repeat. Do not write branch-specific fixtures, test-only values, or Preview-specific projection formats into this namespace. Any future use that requires divergent Preview values or independent mutation must move to a separate Preview namespace.
+
+The Preview D1 database is a shared test target across branches, not a database per Preview. Do not apply migrations to either database until the migration set, schema ownership, and target database have been reviewed. No schema migrations are currently applied by this configuration.
+
 The single Wrangler configuration declares the four Durable Object classes (EventRuntime, TeamRuntime, Multiplexer, and transitional DiscoveryStore) and the four production Workflows (DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, and RuntimeAdminWorkflow). Durable Object classes and migrations are shared in configuration but Cloudflare provisions isolated namespace/storage for each Preview. Preview Workflow bindings are intentionally omitted for the isolation reason above.
 
 The current DiscoveryStore Durable Object remains transitional until Discovery and System Records D1 repositories are implemented and cut over. Do not remove its binding until every key/caller has been classified, D1 repositories and migrations are implemented, cutover/rollback is verified, and old operational responsibilities are removed. Production and Preview data must never be shared accidentally.
