@@ -8,7 +8,7 @@ export interface D1RecordStorage {
 type RecordTable = "discovery_records" | "system_records";
 
 function tableForKey(key: string): RecordTable {
-  return key.startsWith("admin/") || key.startsWith("registry/runtime-")
+  return key.startsWith("admin/") || key.startsWith("system/") || key.startsWith("workflow/") || key.startsWith("registry/runtime-")
     ? "system_records"
     : "discovery_records";
 }
