@@ -1,5 +1,6 @@
 import { EventRuntime } from "./event-runtime.ts";
 import { Multiplexer } from "./multiplexer.ts";
+import { RemoteSessionRuntime } from "./remote-session.ts";
 import { TeamRuntime } from "./team-runtime.ts";
 import { DiscoveryService } from "./discovery-service.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
@@ -10,7 +11,7 @@ import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normali
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 import { AnalyticsExecutionRepository } from "../jobs/analytics-executions.ts";
 
-export { EventRuntime, Multiplexer, TeamRuntime };
+export { EventRuntime, Multiplexer, RemoteSessionRuntime, TeamRuntime };
 
 async function createEventAnalyticsWorkflow(
   env: RuntimeEnvironment,
@@ -1004,6 +1005,16 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       return stub.fetch(new Request("https://team-runtime/" + internalTeamAction + url.search, {
         method: request.method, headers,
         ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.clone().arrayBuffer() }),
+      }));
+    }
+
+    if (url.pathname === "/remote/ws" && request.method === "GET") {
+      if (!env.REMOTE_SESSION) return Response.json({ error: "Remote session runtime is not bound" }, { status: 503 });
+      const code = url.searchParams.get("code") ?? "";
+      if (!/^\\d{6}$/.test(code)) return Response.json({ error: "Invalid pairing code" }, { status: 400 });
+      const stub = env.REMOTE_SESSION.get(env.REMOTE_SESSION.idFromName(code));
+      return stub.fetch(new Request("https://remote-session/connect" + url.search, {
+        method: "GET", headers: request.headers,
       }));
     }
 
