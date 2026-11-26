@@ -113,7 +113,6 @@ function statusTone(status?: string) {
 }
 
 export default function AdminOperationsDashboard() {
-  const [token, setToken] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [kind, setKind] = useState<Kind>("event");
@@ -137,9 +136,9 @@ export default function AdminOperationsDashboard() {
   const [message, setMessage] = useState("");
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
-  const requestHeaders = useMemo(() => ({ Authorization: "Bearer " + token }), [token]);
+  const requestHeaders = useMemo(() => ({}), []);
   const refresh = useCallback(async (quiet = false) => {
-    if (!token) return;
+    if (!authenticated) return;
     if (!quiet) setLoading(true);
     try {
       const response = await fetch("/api/admin/runtime", { headers: requestHeaders, cache: "no-store" });
@@ -155,10 +154,26 @@ export default function AdminOperationsDashboard() {
       setError(cause instanceof Error ? cause.message : "Unable to load runtime state");
       // Keep an authenticated operator in the panel when runtime health is degraded.
     } finally { if (!quiet) setLoading(false); }
-  }, [token, requestHeaders, yearInitialized]);
+  }, [authenticated, requestHeaders, yearInitialized]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void fetch("/api/admin/runtime?auth=1", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({ error: "Invalid authentication response" }));
+        if (!response.ok) throw new Error(body.error ?? "Cloudflare Access administrator authorization required");
+        if (active) { setAuthenticated(true); setError(""); }
+      })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Cloudflare Access authentication failed");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const loadInventory = useCallback(async (nextCursor = 0) => {
-    if (!token) return;
+    if (!authenticated) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ inventory: kind, q: query, cursor: String(nextCursor), limit: "50", year: String(year) });
@@ -168,28 +183,28 @@ export default function AdminOperationsDashboard() {
       setPage(body as InventoryPage); setCursor(nextCursor); setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Inventory search failed"); }
     finally { setLoading(false); }
-  }, [token, kind, query, year, requestHeaders]);
+  }, [authenticated, kind, query, year, requestHeaders]);
 
   const loadCoverageAudit = useCallback(async () => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
       const response = await fetch("/api/admin/runtime?coverageAudit=" + year, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setCoverageAudit(body as CoverageAudit);
     } catch { /* Keep the last known audit result visible. */ }
-  }, [token, year, requestHeaders]);
+  }, [authenticated, year, requestHeaders]);
 
   const loadSeasonIngest = useCallback(async () => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
       const response = await fetch("/api/admin/runtime?seasonIngest=" + year, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setSeasonIngest(body as SeasonIngest);
     } catch { /* Preserve the last known durable job state. */ }
-  }, [token, year, requestHeaders]);
+  }, [authenticated, year, requestHeaders]);
 
   const previewSeasonIngest = useCallback(async () => {
-    if (!token) return;
+    if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/api/admin/runtime", {
@@ -203,10 +218,10 @@ export default function AdminOperationsDashboard() {
       setMessage("Season inventory preview loaded. Review the counts before starting.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season preview failed"); }
     finally { setBusy(false); }
-  }, [token, requestHeaders, year]);
+  }, [authenticated, requestHeaders, year]);
 
   const controlSeasonIngest = useCallback(async (action: "start" | "pause" | "resume" | "cancel") => {
-    if (!token) return;
+    if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/api/admin/runtime", {
@@ -219,10 +234,10 @@ export default function AdminOperationsDashboard() {
       setMessage(action === "start" ? "Season ingestion started and will continue through durable Workflow steps." : "Season ingestion " + action + " requested.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
     finally { setBusy(false); }
-  }, [token, requestHeaders, year]);
+  }, [authenticated, requestHeaders, year]);
 
   const runCoverageAudit = useCallback(async () => {
-    if (!token) return;
+    if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const action = coverageAudit?.year === year && (coverageAudit.status === "running" || coverageAudit.status === "paused") ? "coverage-audit-continue" : "coverage-audit-start";
@@ -236,7 +251,7 @@ export default function AdminOperationsDashboard() {
       setMessage("Coverage audit Workflow accepted. It will inspect the full season in durable batches while you continue using the dashboard.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Coverage audit failed"); }
     finally { setBusy(false); }
-  }, [token, requestHeaders, year, coverageAudit]);
+  }, [authenticated, requestHeaders, year, coverageAudit]);
 
   const openEntity = useCallback(async (entityKind: Kind, key: string, entityYear = year) => {
     setSelected({ kind: entityKind, key, year: entityYear });
@@ -252,34 +267,34 @@ export default function AdminOperationsDashboard() {
   }, [requestHeaders, year]);
 
   const loadEventTeamSeed = useCallback(async (eventKey: string, eventYear: number) => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
       const params = new URLSearchParams({ eventSeed: eventKey, year: String(eventYear) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setEventTeamSeed(body as EventTeamSeed);
     } catch { /* The next dashboard refresh will retry the status read. */ }
-  }, [token, requestHeaders]);
+  }, [authenticated, requestHeaders]);
 
   const loadTeamSeedJob = useCallback(async (teamKey: string, teamYear: number) => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
       const params = new URLSearchParams({ teamSeed: teamKey, year: String(teamYear) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setTeamSeedJob(body as TeamSeedJob);
     } catch { /* Keep the most recent durable job state visible. */ }
-  }, [token, requestHeaders]);
+  }, [authenticated, requestHeaders]);
 
   const loadDiscoveryJob = useCallback(async (targetYear = year) => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
       const params = new URLSearchParams({ discoveryJob: String(targetYear) });
       const response = await fetch("/api/admin/runtime?" + params, { headers: requestHeaders, cache: "no-store" });
       const body = await response.json();
       if (response.ok) setDiscoveryJob(body as DiscoveryJob);
     } catch { /* Keep the most recent durable job state visible. */ }
-  }, [token, year, requestHeaders]);
+  }, [authenticated, year, requestHeaders]);
 
   const dispatch = useCallback(async (entityKind: Kind | "system", action: string, key?: string, endpoint?: string, operationYear?: number) => {
     setBusy(true); setMessage(""); setError("");
@@ -365,10 +380,10 @@ export default function AdminOperationsDashboard() {
   }, [authenticated, selected?.kind, selected?.key, selected?.year, eventTeamSeed?.status, loadEventTeamSeed]);
 
   useEffect(() => {
-    if (!authenticated || !token || selected) return;
+    if (!authenticated || selected) return;
     const timer = window.setInterval(() => void refresh(true), 60_000);
     return () => window.clearInterval(timer);
-  }, [authenticated, token, refresh, selected]);
+  }, [authenticated, refresh, selected]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -430,38 +445,15 @@ export default function AdminOperationsDashboard() {
   if (!authenticated) return <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-12">
     <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</p>
     <h1 className="mt-1 text-3xl font-bold">Command center</h1>
-    <p className="mt-2 text-sm text-[var(--fv-muted)]">Authenticate to inspect event and team runtimes and manage controlled ingestion.</p>
-    <form className="mt-7 space-y-3" onSubmit={async (event) => {
-      event.preventDefault();
-      if (!token) return;
-      setLoading(true);
-      setError("");
-      try {
-        const response = await fetch("/api/admin/runtime?auth=1", { headers: requestHeaders, cache: "no-store" });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? "Unauthorized");
-        setAuthenticated(true);
-        setLoading(false);
-        // Load runtime status separately; an unavailable runtime must not reject
-        // valid dashboard credentials or trap the operator on the login screen.
-        void refresh(true);
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Authentication failed");
-        setLoading(false);
-      }
-    }}>
-      <label htmlFor="admin-token" className="block text-sm font-semibold">Dashboard access token</label>
-      <input id="admin-token" type="password" autoComplete="current-password" value={token} onChange={(event) => setToken(event.target.value)} className="w-full rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-4 py-3 text-sm" placeholder="Enter admin access token" />
-      {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
-      <button disabled={!token || loading} className="w-full rounded-xl bg-[var(--fv-brand)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{loading ? "Connecting…" : "Open command center"}</button>
-    </form>
-    <p className="mt-5 text-xs text-[var(--fv-muted)]">The dashboard access token is separate from the server-only Worker token.</p>
+    <p className="mt-2 text-sm text-[var(--fv-muted)]">Checking your Cloudflare Access administrator session…</p>
+    {error && <p role="alert" className="mt-4 text-sm text-rose-600">{error}</p>}
+    <button onClick={() => window.location.reload()} className="mt-5 w-full rounded-xl border border-[var(--fv-border)] px-4 py-3 text-sm font-semibold">Retry authentication</button>
   </main>;
 
   return <main className="custom-scrollbar mx-auto h-dvh w-full max-w-[1500px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-7 sm:px-6 lg:px-8">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Command center</h1><p className="mt-1 text-sm text-[var(--fv-muted)]">A focused view of runtime health, canonical data coverage, and ingestion work.</p></div>
-      <div className="flex items-center gap-2"><span className="text-xs text-[var(--fv-muted)]">Updated {ago(updatedAt)}</span><button onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Refresh</button><button onClick={() => { setAuthenticated(false); setOverview(null); setToken(""); setSelected(null); }} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Sign out</button></div>
+      <div className="flex items-center gap-2"><span className="text-xs text-[var(--fv-muted)]">Updated {ago(updatedAt)}</span><button onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold">Refresh</button></div>
     </header>
     {(error || message) && <div role={error ? "alert" : "status"} className={"mt-4 rounded-xl border px-4 py-3 text-sm " + (error ? "border-rose-300 text-rose-700" : "border-[var(--fv-border)]")}>{error || message}</div>}
     <nav className="mt-6 flex gap-1 overflow-x-auto border-b border-[var(--fv-border)]" aria-label="Operations sections">
@@ -564,7 +556,7 @@ export default function AdminOperationsDashboard() {
       </>}
     </section>}
 
-    {tab === "system" && !selected && <><div className="mt-6"><WorkflowRunsPanel token={token} year={overview?.current_season?.year ?? 0} /></div><section className="mt-6 grid gap-4 lg:grid-cols-2"><Panel><h2 className="font-bold">Current-season discovery</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">TBA /status selects the canonical season. Discovery publishes the event and team directories; event and team runtime readiness are operated separately above.</p><div className="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Season</p>{overview?.current_season?.year ?? "Unavailable"}</div><div><p className="text-xs text-[var(--fv-muted)]">Directory status</p><strong className={statusTone(overview?.current_season?.status)}>{overview?.current_season?.status ?? "Unavailable"}</strong></div><div><p className="text-xs text-[var(--fv-muted)]">Events discovered</p>{overview?.current_season?.event_count ?? "—"}</div></div>{discoveryJob && discoveryJob.status !== "not_started" && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="flex items-center justify-between gap-2"><strong>Manual season discovery</strong><span className={statusTone(discoveryJob.status === "completed" ? "succeeded" : discoveryJob.status === "failed" ? "failed" : "running")}>{discoveryJob.status.replaceAll("_", " ")}</span></div><p className="mt-1 text-[var(--fv-muted)]">Year {discoveryJob.year} · Stage: {discoveryJob.stage} · {discoveryJob.events ?? 0} events · {discoveryJob.teams ?? 0} teams · {discoveryJob.steps ?? 0} steps</p>{discoveryJob.error && <p className="mt-1 text-rose-600">{discoveryJob.error}</p>}</div>}</Panel><Panel><h2 className="font-bold">Realtime multiplexer</h2><p className="mt-2 text-sm">{overview?.multiplexer?.connected_sockets ?? "Unavailable"} sockets · {overview?.multiplexer?.clients ?? 0} clients</p><div className="mt-3 space-y-1 text-xs text-[var(--fv-muted)]">{overview?.multiplexer?.subscriptions?.map((item) => <p key={item.topic}>{item.topic}: {item.clients} clients</p>)}</div></Panel></section></>}
+    {tab === "system" && !selected && <><div className="mt-6"><WorkflowRunsPanel authenticated={authenticated} year={overview?.current_season?.year ?? 0} /></div><section className="mt-6 grid gap-4 lg:grid-cols-2"><Panel><h2 className="font-bold">Current-season discovery</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">TBA /status selects the canonical season. Discovery publishes the event and team directories; event and team runtime readiness are operated separately above.</p><div className="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Season</p>{overview?.current_season?.year ?? "Unavailable"}</div><div><p className="text-xs text-[var(--fv-muted)]">Directory status</p><strong className={statusTone(overview?.current_season?.status)}>{overview?.current_season?.status ?? "Unavailable"}</strong></div><div><p className="text-xs text-[var(--fv-muted)]">Events discovered</p>{overview?.current_season?.event_count ?? "—"}</div></div>{discoveryJob && discoveryJob.status !== "not_started" && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-xs"><div className="flex items-center justify-between gap-2"><strong>Manual season discovery</strong><span className={statusTone(discoveryJob.status === "completed" ? "succeeded" : discoveryJob.status === "failed" ? "failed" : "running")}>{discoveryJob.status.replaceAll("_", " ")}</span></div><p className="mt-1 text-[var(--fv-muted)]">Year {discoveryJob.year} · Stage: {discoveryJob.stage} · {discoveryJob.events ?? 0} events · {discoveryJob.teams ?? 0} teams · {discoveryJob.steps ?? 0} steps</p>{discoveryJob.error && <p className="mt-1 text-rose-600">{discoveryJob.error}</p>}</div>}</Panel><Panel><h2 className="font-bold">Realtime multiplexer</h2><p className="mt-2 text-sm">{overview?.multiplexer?.connected_sockets ?? "Unavailable"} sockets · {overview?.multiplexer?.clients ?? 0} clients</p><div className="mt-3 space-y-1 text-xs text-[var(--fv-muted)]">{overview?.multiplexer?.subscriptions?.map((item) => <p key={item.topic}>{item.topic}: {item.clients} clients</p>)}</div></Panel></section></>}
 
     <footer className="mt-8 text-xs text-[var(--fv-muted)]">Inventory covers the selected year's discovered event/team snapshot, plus registered runtime objects in the searchable directories. Full-season ingestion is an explicit, previewed operation with durable progress; it does not merge, deploy, or change production routing.</footer>
   </main>;
