@@ -29,15 +29,13 @@ EVENT_COMPLETED_RETENTION_MS = "86400000"
 TEAM_REFRESH_INTERVAL_MS = "86400000"
 TEAM_ACTIVE_REFRESH_INTERVAL_MS = "60000"
 
-# Shared physical D1 database for the logically separate Discovery and System Records schemas.
-# Keep domain ownership and repository interfaces separate in application code.
+# Production D1 database. Discovery and System Records remain separate logical schemas/repositories.
 [[d1_databases]]
-binding = "FIELDVIEW_DB"
-database_name = "fieldview-prod"
-database_id = "df5168d5-5efa-4927-b732-c0ee66da5934"
+binding = "DB"
+database_name = "fieldview-d1-prod"
+database_id = "bd7852b3-7814-4c3f-9ce8-f1c244524843"
 
-# Production KV namespace for lightweight, non-authoritative read projections.
-# Previews must use a separate namespace; never share production KV with branch Previews.
+# Production KV namespace for lightweight, non-authoritative projections.
 [[kv_namespaces]]
 binding = "KV_BINDING"
 id = "c067dfcaa3a345b0b43f035a992b4b30"
@@ -110,16 +108,14 @@ concurrency = { limit = 3 }
 # Durable Object namespaces/storage are provisioned independently for each Preview.
 # Preview D1 is isolated from production canonical and operational records.
 [[previews.d1_databases]]
-binding = "FIELDVIEW_DB"
-database_name = "fieldview-test"
-database_id = "7e7c5be6-4967-44e6-adba-86fe7b1a76cf"
+binding = "DB"
+database_name = "fieldview-d1-test"
+database_id = "6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e"
 
-# Intentionally shared with production: KV contains lightweight projections of
-# the same authoritative external TBA state, not canonical records or execution history.
-# Preview code must not write environment-specific or test-only values into this namespace.
+# Separate test KV namespace: Preview projections and mutations cannot affect Production.
 [[previews.kv_namespaces]]
 binding = "KV_BINDING"
-id = "c067dfcaa3a345b0b43f035a992b4b30"
+id = "19ef5d5221654ab4bac0c8118c35ad8b"
 
 [previews.vars]
 TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
