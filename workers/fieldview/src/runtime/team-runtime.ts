@@ -200,12 +200,13 @@ export class TeamRuntime {
     const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
     const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
     const pendingAnalyticsRead = request.method === "GET" && url.pathname === "/pending-event-analytics";
+    const analyticsSeasonInputRead = request.method === "GET" && url.pathname === "/analytics-season-input";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
     const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
-    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest || pendingAnalyticsRead) {
+    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead) {
       if (diagnosticsRead && !isRuntimeAdminAuthorized(request, this.env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
@@ -839,16 +840,50 @@ export class TeamRuntime {
         affected_events: affectedEvents, snapshot,
       }, { headers: { "Cache-Control": "no-store" } });
     }
-    if (request.method === "GET" && url.pathname === "/analytics-season-input") {
+    if ((request.method === "GET" || request.method === "POST") &&
+        (url.pathname === "/analytics-season-input" || url.pathname === "/analytics-season-input/prepare")) {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "A valid season year is required" }, { status: 400 });
       }
-      const snapshot = await this.snapshot(year);
-      if (!snapshot.ok) return snapshot;
-      const teamState = await snapshot.json() as FieldViewTeamState;
-      const revision = Number(snapshot.headers.get("X-FieldView-Snapshot-Version"));
-      if (!Number.isSafeInteger(revision) || revision < 0 || teamState.team_key !== this.teamKey) {
+      let teamState: FieldViewTeamState;
+      let revision: number;
+      if (request.method === "POST" && url.pathname === "/analytics-season-input/prepare") {
+        // Preparing a canonical analytics input is an explicit Workflow command.
+        // It may publish a normalized TeamState from already-owned endpoint data.
+        const snapshot = await this.snapshot(year);
+        if (!snapshot.ok) return snapshot;
+        teamState = await snapshot.json() as FieldViewTeamState;
+        revision = Number(snapshot.headers.get("X-FieldView-Snapshot-Version"));
+      } else {
+        // GET is inspection-only: it never materializes or rewrites TeamState.
+        const publication = await this.storage.get<{
+          input_signature?: string;
+          representation_signature?: string;
+          state?: FieldViewTeamState;
+        }>("team-state:" + year + ":publication");
+        if (!publication?.state) {
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        }
+        const current = await this.storage.transaction(async (tx) => ({
+          revision: await tx.get<number>("snapshot-revision") ?? 0,
+          states: await Promise.all(this.endpoints(year).map(({ endpoint }) =>
+            tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
+        }));
+        const representationSignature = JSON.stringify(current.states.map((state) => state ? [
+          state.revision, state.lastFetchedAt, state.etag,
+        ] : null));
+        if (typeof publication.representation_signature !== "string" ||
+            publication.representation_signature !== representationSignature) {
+          return Response.json({ error: "Published TeamState is stale; explicitly prepare the analytics input" }, {
+            status: 409, headers: { "Cache-Control": "no-store" },
+          });
+        }
+        teamState = publication.state;
+        revision = current.revision;
+      }
+      if (!Number.isSafeInteger(revision) || revision < 0 || teamState.team_key !== this.teamKey ||
+          teamState.year !== year) {
         return Response.json({ error: "Team analytics input is not revisioned or has mismatched identity" }, { status: 409 });
       }
       return Response.json({
