@@ -148,12 +148,12 @@ A defensible daily budget still requires: actual invocation counts per DO class;
 
 The initial schema is introduced in `workers/fieldview/migrations/0001_initial.sql`. It creates exactly two tables: `discovery_records` and `system_records`. Both are simple typed JSON record stores with a primary key, record type, JSON value, creation/update timestamps, and optional expiry. Separate repository interfaces and key/type contracts enforce logical ownership; the database does not mirror every domain record as a dedicated table. Production and Preview bind different physical D1 databases, so the same migration applies independently to each.
 
-- Discovery tables own season metadata, team/event directory generations and members, staged pages/chunks, and the canonical weekly projection.
-- System tables own runtime registration, workflow runs/progress/results, admin jobs/index/history/actions, discovery job status, coverage audits/items, and structured operational events.
-- `system_records` is a temporary typed-JSON escape hatch for records not yet mapped. New code should use typed tables; never store EventRuntime/TeamRuntime canonical state here.
-- Foreign keys are limited to System Records relationships within D1. Durable Object-owned records remain separate and are referenced by kind/key/revision only.
-- Provider payload JSON is retained unchanged in directory rows; timestamps are Unix milliseconds.
-- Retention is represented with `retention_until` / `expires_at` fields but no automatic deletion policy is enabled by this migration.
+- `discovery_records` stores season metadata, team/event directory generations and members, staged pages/chunks, and the canonical weekly projection.
+- `system_records` stores runtime registration, workflow runs/progress/results, admin jobs/history/actions, discovery job status, coverage audits/items, and structured operational events.
+- These are the complete initial D1 tables. Typed repository contracts validate record types and payloads; key conventions distinguish record families. Do not add per-record-type tables or indexes without a demonstrated query or transactional need.
+- Durable Object-owned records remain in their respective DO SQLite storage and are referenced by kind/key/revision only.
+- Provider payload JSON is retained unchanged inside `value_json`; timestamps are Unix milliseconds.
+- Optional `expires_at` is metadata only; this migration does not enable automatic deletion.
 
 **Not yet implemented:** D1 repository adapters, dual-read/write, data migration, or replacement/removal of DiscoveryStore. The owner approved a clean-slate storage implementation, so no existing DiscoveryStore records need importing. The cutover still needs typed repository code, tests, and an explicit switch from the DO binding. No schema migration has been applied to either Cloudflare database.
 
