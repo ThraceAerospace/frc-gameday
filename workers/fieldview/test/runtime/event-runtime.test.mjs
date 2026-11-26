@@ -1142,3 +1142,135 @@ test("EventRuntime inspection GETs do not bind an uninitialized identity", async
   assert.equal(storage.values.has("event-key"), false,
     "an unregistered inspection GET must return 404 without initializing persistent runtime identity");
 });
+
+
+test("EventRuntime treats a provider 304 as a strict no-op while retaining the last-good representation", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026notmodified";
+  const endpoint = TBA_ENDPOINTS.event(eventKey);
+  const now = Date.now();
+  const lastGoodData = {
+    key: eventKey, name: "Unchanged Event", year: 2026,
+    start_date: "2026-04-01", end_date: "2026-04-03",
+    timezone: "America/New_York", event_type: 0,
+  };
+  const endpointState = {
+    endpoint, status: "stale", data: lastGoodData, providerData: lastGoodData,
+    etag: '"last-good-v4"', lastFetchedAt: now - 120_000, expiresAt: now - 1,
+    revision: 4, validatorRevision: 4, lastAttemptAt: now - 120_000, lastWebhookAt: null,
+  };
+  const publication = {
+    sourceRevision: 4, snapshotVersion: 4, generatedAt: now - 120_000, status: "partial",
+    state: { event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {} },
+  };
+  storage.values.set("event-key", eventKey);
+  storage.values.set("endpoint:" + endpoint, endpointState);
+  storage.values.set("event-state:publication", publication);
+  storage.values.set("snapshot-revision", 4);
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async (_input, init) => {
+      providerCalls += 1;
+      assert.equal(new Headers(init?.headers).get("If-None-Match"), '"last-good-v4"');
+      return new Response(null, {
+        status: 304,
+        headers: { "Cache-Control": "max-age=60", ETag: '"last-good-v4"' },
+      });
+    },
+  }, eventKey);
+
+  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoints: [endpoint] }),
+  }));
+
+  assert.equal(refresh.status, 200);
+  const result = await refresh.json();
+  assert.deepEqual(result.results, [{ endpoint, success: true }]);
+  assert.equal(providerCalls, 1);
+  assert.deepEqual(storage.values.get("endpoint:" + endpoint), endpointState,
+    "304 must not change freshness metadata, validators, diagnostics, or revisions");
+  assert.equal(storage.values.get("event-state:publication"), publication,
+    "304 must not rebuild or replace the canonical publication");
+  assert.equal(storage.values.get("snapshot-revision"), 4);
+});
+
+test("EventRuntime recovers its last-good representation after a failed provider request", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026recovery";
+  const endpoint = TBA_ENDPOINTS.event(eventKey);
+  const now = Date.now();
+  const lastGoodData = {
+    key: eventKey, name: "Previous Event Name", year: 2026,
+    start_date: "2026-04-01", end_date: "2026-04-03",
+    timezone: "America/New_York", event_type: 0,
+  };
+  const updatedData = { ...lastGoodData, name: "Recovered Event Name" };
+  storage.values.set("event-key", eventKey);
+  storage.values.set("endpoint:" + endpoint, {
+    endpoint, status: "available", data: lastGoodData, providerData: lastGoodData,
+    etag: '"recovery-v1"', lastFetchedAt: now - 120_000, expiresAt: now - 1,
+    revision: 2, validatorRevision: 2, lastAttemptAt: now - 120_000, lastWebhookAt: null,
+  });
+  storage.values.set("event-state:publication", {
+    sourceRevision: 2, snapshotVersion: 2, generatedAt: now - 120_000, status: "partial",
+    state: { event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {} },
+  });
+  storage.values.set("snapshot-revision", 2);
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async (_input, init) => {
+      providerCalls += 1;
+      assert.equal(new Headers(init?.headers).get("If-None-Match"), '"recovery-v1"',
+        "recovery must continue using the retained upstream validator");
+      if (providerCalls === 1) return new Response("provider unavailable", { status: 503 });
+      return Response.json(updatedData, {
+        headers: { ETag: '"recovery-v2"', "Cache-Control": "max-age=60" },
+      });
+    },
+  }, eventKey);
+  const refresh = () => runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoints: [endpoint] }),
+  }));
+
+  const failedRefresh = await refresh();
+  assert.equal(failedRefresh.status, 200);
+  assert.deepEqual((await failedRefresh.json()).results, [{ endpoint, success: false }]);
+  const afterFailure = storage.values.get("endpoint:" + endpoint);
+  assert.equal(afterFailure.status, "stale");
+  assert.deepEqual(afterFailure.data, lastGoodData);
+  assert.equal(afterFailure.etag, '"recovery-v1"');
+  assert.equal(afterFailure.revision, 2);
+
+  const recoveredRefresh = await refresh();
+  assert.equal(recoveredRefresh.status, 200);
+  assert.deepEqual((await recoveredRefresh.json()).results, [{ endpoint, success: true }]);
+  assert.equal(providerCalls, 2);
+  const recovered = storage.values.get("endpoint:" + endpoint);
+  assert.equal(recovered.status, "available");
+  assert.deepEqual(recovered.data, updatedData);
+  assert.deepEqual(recovered.providerData, updatedData);
+  assert.equal(recovered.etag, '"recovery-v2"');
+  assert.equal(recovered.revision, 3);
+  assert.equal(recovered.validatorRevision, 3);
+  assert.equal(recovered.lastError, null);
+  assert.equal(recovered.lastHttpStatus, 200);
+  const publication = storage.values.get("event-state:publication");
+  assert.equal(publication.state.event.name, "Recovered Event Name",
+    "the canonical EventState publication must advance after successful recovery");
+});
