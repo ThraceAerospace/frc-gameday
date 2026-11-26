@@ -81,7 +81,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       ? event.payload.scheduledAt
       : event.schedule?.scheduledTime ?? Date.now();
     const pollTeams = event.payload?.pollTeams === true;
-    const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const store = () => createDiscoveryServiceClient(this.env);
 
     const discovery = await step.do("load-current-season-and-week-projection", async () => {
       const current = await readJson<CurrentSeason>(store(), "discovery/current-season.json");
