@@ -371,7 +371,7 @@ export default {
           body.year < 1992 || body.year > 2200) {
         return Response.json({ error: "Expected a valid event_key and explicit season year" }, { status: 400 });
       }
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const year = body.year;
@@ -459,7 +459,7 @@ export default {
     }
 
     if (url.pathname === "/season/current" && request.method === "GET") {
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryServiceClient(env).get("discovery/current-season.json");
@@ -475,7 +475,7 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryServiceClient(env).get("projections/events-this-week/current.json");
@@ -518,7 +518,7 @@ export default {
       if (!Number.isSafeInteger(requestedYear) || requestedYear < 1992 || requestedYear > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryServiceClient(env).get("discovery/events/" + requestedYear + ".json");
