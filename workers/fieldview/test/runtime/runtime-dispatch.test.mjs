@@ -146,10 +146,16 @@ test("pending analytics dispatch is an authenticated read of the registered Team
   assert.equal(captured.headers.get("X-FieldView-Team-Key"), "frc3461");
   assert.equal(discoveryCalls, 0, "inspection must not register or initialize a runtime");
 });
-test("dispatch rejects unsupported actions and invalid entity keys", async () => {
-  const env = { RUNTIME_ADMIN_TOKEN: "test-token" };
+test("dispatch rejects retired scheduling actions and invalid entity keys", async () => {
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    EVENT_RUNTIME: namespace(async () => new Response()),
+    TEAM_RUNTIME: namespace(async () => new Response()),
+  };
   assert.equal((await dispatchRuntime(env, "event", "bad key", "state", {}, 2026)).status, 400);
-  assert.equal((await dispatchRuntime(env, "team", "frc3461", "unknown", {}, 2026)).status, 503);
+  assert.equal((await dispatchRuntime(env, "team", "frc3461", "unknown", {}, 2026)).status, 400);
+  assert.equal((await dispatchRuntime(env, "event", "2026rikin", "lifecycle", {}, 2026)).status, 400);
+  assert.equal((await dispatchRuntime(env, "event", "2026rikin", "schedule", {}, 2026)).status, 400);
 });
 
 
