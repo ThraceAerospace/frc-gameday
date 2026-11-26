@@ -42,7 +42,7 @@ function statusClass(status?: string) {
   return "text-[var(--fv-muted)]";
 }
 
-export default function WorkflowRunsPanel({ token, year }: { token: string; year: number }) {
+export default function WorkflowRunsPanel({ authenticated, year }: { authenticated: boolean; year: number }) {
   const [type, setType] = useState<WorkflowType>("event-readiness");
   const [runs, setRuns] = useState<RunList>({ runs: [], total: 0 });
   const [selected, setSelected] = useState<WorkflowRun | null>(null);
@@ -54,20 +54,20 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   const [weeklyWorkflowStatus, setWeeklyWorkflowStatus] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
-    if (!token) return;
-    const response = await fetch("/api/admin/runtime?workflowRuns=" + type + "&limit=30", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    if (!authenticated) return;
+    const response = await fetch("/api/admin/runtime?workflowRuns=" + type + "&limit=30", { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to load workflow history");
     setRuns(body as RunList);
-  }, [token, type]);
+  }, [authenticated, type]);
 
   const loadRun = useCallback(async (id: string) => {
     const params = new URLSearchParams({ workflowRuns: type, runId: id });
-    const response = await fetch("/api/admin/runtime?" + params, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    const response = await fetch("/api/admin/runtime?" + params, { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to load workflow result");
     setSelected(body as WorkflowRun);
-  }, [token, type]);
+  }, [authenticated, type]);
 
   useEffect(() => { void loadRuns().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause))); }, [loadRuns]);
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/admin/runtime", {
-        method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflowType: type }),
       });
       const body = await response.json();
@@ -101,7 +101,7 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
     try {
       const response = await fetch("/api/admin/runtime", {
         method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflowType: "events-this-week" }),
       });
       const body = await response.json();
@@ -115,15 +115,15 @@ export default function WorkflowRunsPanel({ token, year }: { token: string; year
   }
 
   const loadWeeklyProjectionStatus = useCallback(async () => {
-    if (!token || !weeklyWorkflowId) return;
+    if (!authenticated || !weeklyWorkflowId) return;
     const params = new URLSearchParams({ weeklyProjectionRun: weeklyWorkflowId });
     const response = await fetch("/api/admin/runtime?" + params, {
-      headers: { Authorization: "Bearer " + token }, cache: "no-store",
+      cache: "no-store",
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Unable to read weekly projection status");
     setWeeklyWorkflowStatus(String(body.workflow_status ?? "unknown"));
-  }, [token, weeklyWorkflowId]);
+  }, [authenticated, weeklyWorkflowId]);
 
   useEffect(() => {
     if (!weeklyWorkflowId || ["complete", "completed", "errored", "terminated"].includes(weeklyWorkflowStatus ?? "")) return;
