@@ -160,13 +160,11 @@ test("TeamRuntime public snapshots remain read-only until an explicit refresh pu
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
   const first = await read();
-  assert.equal(first.status, 204);
-  assert.equal(await first.text(), "", "an existing TeamRuntime without TeamState returns no content");
+  assert.equal(first.status, 404, "an existing TeamRuntime without TeamState returns not found");
   const eventState = await runtime.fetch(new Request("https://team/event-state?event_key=2026demand&year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(eventState.status, 204, "an existing TeamRuntime without TeamEventState returns no content");
-  assert.equal(await eventState.text(), "");
+  assert.equal(eventState.status, 404, "an existing TeamRuntime without TeamEventState returns not found");
   assert.equal(calls.length, 0, "public reads never initiate provider acquisition");
   assert.equal(storage.alarmAt, null, "public reads do not arm background work");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
@@ -184,7 +182,7 @@ test("TeamRuntime public snapshots remain read-only until an explicit refresh pu
   assert.equal(calls.length, 0, "readiness inspects coverage without provider I/O");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 
-  assert.equal((await read()).status, 204, "an existing TeamRuntime without TeamState returns no content");
+  assert.equal((await read()).status, 404, "an existing TeamRuntime without TeamState returns not found");
   const refresh = await runtime.fetch(new Request("https://team/refresh?year=" + year, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
@@ -584,7 +582,7 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   const response = await runtime.fetch(new Request("https://team-runtime/season-analytics?year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 204, "missing season analytics returns no content without implicit work");
+  assert.equal(response.status, 404, "missing season analytics returns not found without implicit work");
   assert.equal(await response.text(), "");
   assert.equal(storage.values.has("team-season-analytics:" + year), false);
   assert.equal(providerCalls, 0, "the analytics GET does not acquire provider data or calculate inline");
@@ -698,7 +696,7 @@ test("TeamRuntime readiness inspects only; explicit refresh materializes the req
   const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + historicalYear, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 204, "an existing TeamRuntime without historical TeamState returns no content");
+  assert.equal(response.status, 404, "an existing TeamRuntime without historical TeamState returns not found");
   assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
   assert.equal(storage.values.has("team-state:" + historicalYear + ":publication"), false);
   const readiness = await runtime.fetch(new Request("https://team-runtime/readiness?year=" + historicalYear, {
@@ -856,7 +854,7 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   const missing = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input?year=" + year, { headers },
   ));
-  assert.equal(missing.status, 204);
+  assert.equal(missing.status, 404);
   assert.deepEqual([...storage.values], [...beforeRead],
     "a missing analytics input GET must not bind, materialize, or publish TeamState");
 
