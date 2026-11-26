@@ -30,7 +30,7 @@ function fixture() {
   return { runtime, storage, sockets, pairs };
 }
 function request(role, token, code = "123456") {
-  return new Request("https://runtime/remote/ws?code=" + code + "&role=" + role, {
+  return new Request("https://runtime/connect?code=" + code + "&role=" + role, {
     headers: { Upgrade: "websocket", "Sec-WebSocket-Protocol": [
       "fieldview.remote.v1", "role." + role, "token." + token,
     ].join(", ") },
