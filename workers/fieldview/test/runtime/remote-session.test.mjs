@@ -18,16 +18,23 @@ class FakeSocket {
   deserializeAttachment() { return this.attachment; }
 }
 function fixture() {
-  const storage = new MemoryStorage(), sockets = [], pairs = [];
+  const storage = new MemoryStorage(), sockets = [], pairs = [], responses = [];
   const runtime = new RemoteSessionRuntime({
     storage,
     acceptWebSocket(socket) { sockets.push(socket); },
     getWebSockets() { return sockets.filter((item) => !item.closed); },
   }, {
     webSocketPairFactory: () => { const pair = [new FakeSocket(), new FakeSocket()]; pairs.push(pair); return pair; },
-    webSocketResponseFactory: () => new Response(null, { status: 200 }),
+    webSocketResponseFactory: () => {
+      const response = new Response(null, {
+        status: 200,
+        headers: { "Sec-WebSocket-Protocol": "fieldview.remote.v1" },
+      });
+      responses.push(response);
+      return response;
+    },
   });
-  return { runtime, storage, sockets, pairs };
+  return { runtime, storage, sockets, pairs, responses };
 }
 function request(role, token, code = "123456") {
   return new Request("https://runtime/connect?code=" + code + "&role=" + role, {
@@ -37,8 +44,9 @@ function request(role, token, code = "123456") {
   });
 }
 test("remote sessions isolate signaling by pairing code and enforce role exclusivity", async () => {
-  const { runtime, pairs } = fixture();
-  await runtime.fetch(request("controller", "controller-token-123456"));
+  const { runtime, pairs, responses } = fixture();
+  const controllerResponse = await runtime.fetch(request("controller", "controller-token-123456"));
+  assert.equal(controllerResponse.headers.get("Sec-WebSocket-Protocol"), "fieldview.remote.v1");
   const controller = pairs[0][1];
   assert.deepEqual(JSON.parse(controller.sent[0]), { type: "connected", role: "controller" });
   assert.equal((await runtime.fetch(request("controller", "other-controller-token"))).status, 409);
@@ -64,7 +72,7 @@ test("closed sockets release a role without alarms, leases, or storage writes", 
 test("remote sessions reject malformed credentials and signaling payloads", async () => {
   const { runtime, pairs } = fixture();
   assert.equal((await runtime.fetch(request("controller", "short", "bad"))).status, 400);
-  assert.equal((await runtime.fetch(new Request("https://runtime/remote/ws?code=123456&role=controller", {
+  assert.equal((await runtime.fetch(new Request("https://runtime/connect?code=123456&role=controller", {
     headers: { Upgrade: "websocket" },
   }))).status, 401);
   await runtime.fetch(request("controller", "controller-token-123456"));
@@ -85,4 +93,16 @@ test("only accepted live sockets may send signaling messages", async () => {
     payload: { kind: "candidate", candidate: { candidate: "candidate:1" } },
   }));
   assert.equal(controller.closeCode, 1008);
+});
+
+test("same-token reconnect replaces its own stale socket without a lease or alarm", async () => {
+  const { runtime, pairs } = fixture();
+  const token = "controller-token-123456";
+  assert.equal((await runtime.fetch(request("controller", token))).status, 200);
+  const previous = pairs[0][1];
+  assert.equal((await runtime.fetch(request("controller", token))).status, 200);
+  assert.equal(previous.closed, true);
+  assert.equal(previous.closeCode, 1000);
+  assert.equal(pairs.length, 2);
+  assert.equal((await runtime.fetch(request("controller", "different-controller-token"))).status, 409);
 });
