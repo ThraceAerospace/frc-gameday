@@ -194,3 +194,32 @@ test("team dispatch refuses to infer a season when the TBA current-season pointe
   assert.equal(response.status, 503);
   assert.equal(activated, false);
 });
+
+
+test("event inspection dispatches do not create runtime registry records", async () => {
+  const markers = new Map();
+  const calls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    EVENT_RUNTIME: namespace(async (request, id) => {
+      calls.push({ method: request.method, path: new URL(request.url).pathname, id });
+      return Response.json({ event_key: id, analytics: { status: "pending" } });
+    }),
+    DISCOVERY_STORAGE: {
+      async get(key) { return markers.get(key); },
+      async put(key, value) { markers.set(key, value); },
+      async list() { return new Map(); },
+      async delete(key) { return markers.delete(key); },
+    },
+  };
+  for (const action of ["state", "analytics", "analytics-state"]) {
+    const response = await dispatchRuntime(env, "event", "2027rikin", action, {}, 2027);
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(calls, [
+    { method: "GET", path: "/state", id: "2027rikin" },
+    { method: "GET", path: "/analytics", id: "2027rikin" },
+    { method: "GET", path: "/analytics-state", id: "2027rikin" },
+  ]);
+  assert.equal(markers.size, 0, "inspection-only reads must not mutate the runtime registry");
+});
