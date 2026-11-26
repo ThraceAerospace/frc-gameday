@@ -5,7 +5,7 @@ import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
@@ -212,6 +212,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     let pendingAnalyticsRecoveryChecksFailed = 0;
     let pendingAnalyticsRecoveryTeams = 0;
     let pendingAnalyticsRecoveryEvents = 0;
+    let pendingAnalyticsRecoveryEventsDeferred = 0;
     let pendingAnalyticsRecoveryUnregisteredEvents = 0;
     if (this.env.TEAM_RUNTIME) {
       const directory = await step.do("load-pending-analytics-recovery-team-directory", async () =>
@@ -272,8 +273,12 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           pendingTeamKeys.add(result.teamKey);
         }
       }
+      const selectedPendingEventKeys = selectBudgetedKeys(
+        [...pendingByEvent.keys()], MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN, recoverySlot,
+      );
+      pendingAnalyticsRecoveryEventsDeferred = pendingByEvent.size - selectedPendingEventKeys.length;
       const eventRegistration = await step.do("check-pending-analytics-event-runtime-registration", async () =>
-        mapLimit([...pendingByEvent.keys()], 4, async (eventKey) => {
+        mapLimit(selectedPendingEventKeys, 4, async (eventKey) => {
           try {
             return { eventKey, registered: await isRuntimeRegistered(store(), "event", eventKey) };
           } catch {
@@ -284,6 +289,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const registeredPendingEvents = new Set(eventRegistration.filter((item) => item.registered).map((item) => item.eventKey));
       pendingAnalyticsRecoveryUnregisteredEvents = eventRegistration.length - registeredPendingEvents.size;
       for (const [eventKey, pending] of pendingByEvent) {
+        if (!selectedPendingEventKeys.includes(eventKey)) continue;
         if (!registeredPendingEvents.has(eventKey)) continue;
         const previous = eventAnalyticsRequests.get(eventKey);
         const affected = previous?.affected_team_keys === null
@@ -296,7 +302,8 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           recovery: true,
         });
       }
-      pendingAnalyticsRecoveryTeams = pendingTeamKeys.size;
+      pendingAnalyticsRecoveryTeams = new Set([...registeredPendingEvents].flatMap((eventKey) =>
+        [...(pendingByEvent.get(eventKey)?.teamKeys ?? [])])).size;
       pendingAnalyticsRecoveryEvents = registeredPendingEvents.size;
     }
 
@@ -393,6 +400,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       pending_analytics_recovery_checks_failed: pendingAnalyticsRecoveryChecksFailed,
       pending_analytics_recovery_teams: pendingAnalyticsRecoveryTeams,
       pending_analytics_recovery_events: pendingAnalyticsRecoveryEvents,
+      pending_analytics_recovery_events_deferred_by_budget: pendingAnalyticsRecoveryEventsDeferred,
       pending_analytics_recovery_unregistered_events: pendingAnalyticsRecoveryUnregisteredEvents,
       team_registry_checks_processed: teamRegistryChecksProcessed,
       team_registry_checks_deferred_by_budget: teamRegistryChecksDeferredByBudget,
