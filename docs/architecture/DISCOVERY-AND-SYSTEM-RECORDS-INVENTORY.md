@@ -1,13 +1,27 @@
 # Discovery and System Records Storage Inventory
 
-- **Status:** Initial source-backed classification; implementation migration not started
+- **Status:** D1 implementation cutover landed; historical pre-cutover classification retained below
 - **Branch:** `fieldview-architecture-migration`
-- **Updated:** 2026-11-25
+- **Updated:** 2026-11-26
 - **Decision:** `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md`
 
 This document records the current storage ownership discovered in the Worker source before introducing the separate D1 repositories. It is deliberately not a claim that the full Issue #30 mutation/call-path audit is complete. Unknown or unverified call paths remain explicit follow-up work.
 
-## 1. Current implementation
+## Current implementation snapshot (2026-11-26)
+
+This section describes the live branch implementation and supersedes any present-tense wording in the historical pre-cutover inventory below.
+
+- The former `DiscoveryStore` Durable Object class, binding, SQLite migration declaration, and RPC path have been removed.
+- The consolidated Worker uses the environment-specific `DB` binding. `workers/fieldview/migrations/0001_initial.sql` defines exactly two generic JSON tables: `discovery_records` and `system_records`.
+- `D1RecordStore` routes discovery/catalog keys to `DiscoveryRecordsRepository` and operational/admin/workflow/runtime-registration keys to `SystemRecordsRepository`. The in-process `DiscoveryService` owns TBA current-season and directory acquisition/publication.
+- D1 upserts skip byte-identical JSON/type values. Related directory publication mutations use D1 `batch()`; superseded-generation pruning occurs after publication commits.
+- D1 repository tests cover table separation, prefix/cursor listing, JSON validation, no-op writes, atomic batch publication, and rollback on batch failure.
+- The latest branch CI run, commit `96613180b04d017fba5ed6eb8d6e432a4f5c5a83`, passed workspace typechecking and the full workspace test command. The migration plan records 299 repository tests passing on 2026-11-26.
+- No remote D1 migration has been applied. The branch still needs an explicit clean-start local D1 migration smoke test; the current CI workflow does not apply the Wrangler D1 migration.
+- The D1 System Records repository is present, but durable EventAnalyticsWorkflow execution/recovery records are not yet implemented. That work is tracked separately in Issue #32 and remains gated by Issue #30.
+- Account-specific Cloudflare physical-row usage and daily write-budget reconciliation remain unverified; source-level operation counts must not be represented as billable-row telemetry.
+
+## 1. Pre-cutover implementation baseline (historical)
 
 There is currently one `DISCOVERY_STORE` Durable Object binding, implemented by `workers/fieldview/src/runtime/discovery-store.ts`. It is a SQLite-backed Durable Object KV-style catalog with generic `get`, `put`, and prefix `list` operations plus TBA catalog actions.
 
