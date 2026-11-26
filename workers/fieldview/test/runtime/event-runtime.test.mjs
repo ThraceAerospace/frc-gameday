@@ -572,7 +572,9 @@ test("public snapshot and stream reads need no user credential while state inspe
   }));
   assert.equal(authorizedState.status, 200);
   const diagnostics = await authorizedState.json();
-  assert.equal(diagnostics.polling.length, 0, "public reads do not register recurring tasks");
+  assert.equal(diagnostics.polling.length, 0, "EventRuntime owns no polling tasks");
+  assert.equal(diagnostics.readiness.polling_owner, "PollingCoordinatorWorkflow");
+  assert.equal(diagnostics.readiness.local_poll_tasks, 0);
   assert.equal("alarmAt" in storage, false, "public reads do not interact with alarm storage");
   assert.deepEqual(diagnostics.lifecycle, { completed_until: null });
 
