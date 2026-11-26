@@ -62,7 +62,7 @@ export class RemoteSessionRuntime {
 
     // A DO processes these fetch events serially. Checking its accepted socket
     // set is therefore sufficient to enforce one live connection per role.
-    const existing = this.state.getWebSockets().find((socket) => this.attachment(socket)?.role === role);
+    const existing = this.activeSockets().find((socket) => this.attachment(socket)?.role === role);
     if (existing) {
       // A reconnect from the same RemotePeer retains its token. Let it replace
       // its previous transport, but never let a different client take over an
@@ -106,13 +106,17 @@ export class RemoteSessionRuntime {
       ? { role: value.role as Role, token: value.token } : null;
   }
 
+  private activeSockets(): WebSocket[] {
+    return (this.state.getWebSockets?.() ?? []).filter((socket) => socket.readyState === 1);
+  }
+
   private hasRole(role: Role): boolean {
-    return (this.state.getWebSockets?.() ?? []).some((socket) => this.attachment(socket)?.role === role);
+    return this.activeSockets().some((socket) => this.attachment(socket)?.role === role);
   }
 
   private sendToRole(role: Role, message: unknown): void {
     const serialized = JSON.stringify(message);
-    for (const socket of this.state.getWebSockets?.() ?? []) {
+    for (const socket of this.activeSockets()) {
       if (this.attachment(socket)?.role !== role) continue;
       try { socket.send(serialized); } catch {
         try { socket.close(1011, "Delivery failed"); } catch { /* already closed */ }
@@ -138,7 +142,7 @@ export class RemoteSessionRuntime {
     // A hibernated/closed socket may still deliver a queued event in edge
     // cases; confirm it remains an accepted participant before forwarding.
     if (!this.hasRole(attachment.role) ||
-        !this.state.getWebSockets?.().some((candidate) =>
+        !this.activeSockets().some((candidate) =>
           candidate === socket && this.attachment(candidate)?.token === attachment.token)) {
       try { socket.close(1008, "Session is no longer active"); } catch { /* closed */ }
       return;
