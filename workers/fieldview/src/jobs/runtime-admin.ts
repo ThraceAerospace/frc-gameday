@@ -177,9 +177,9 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       await update({ processed, queued_teams: processed });
     }
 
-    // Seeding is not complete merely because the requests were queued. Wait for
-    // each participant's authoritative event-history resource before scheduling
-    // the historical events associated with that team.
+    // Seeding is not complete merely because the requests were accepted. Wait
+    // for each participant's authoritative event-history resource before registering
+    // the historical event identities associated with that team.
     processed = 0;
     const failedTeams = new Set<string>();
     const jobErrors: Array<{ key: string; detail: string; at: number }> = [];
