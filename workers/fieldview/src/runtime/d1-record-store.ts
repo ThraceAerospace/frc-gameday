@@ -83,10 +83,12 @@ export class SystemRecordsRepository extends D1RecordRepository {
  * It routes discovery and operational key families to their separate repositories.
  */
 export class D1RecordStore implements D1RecordStorage {
+  private readonly db: D1DatabaseLike;
   private readonly discovery: DiscoveryRecordsRepository;
   private readonly system: SystemRecordsRepository;
 
   constructor(db: D1DatabaseLike) {
+    this.db = db;
     this.discovery = new DiscoveryRecordsRepository(db);
     this.system = new SystemRecordsRepository(db);
   }
