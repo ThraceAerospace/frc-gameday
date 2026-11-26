@@ -3,8 +3,9 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
+import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
@@ -127,7 +128,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
-    const eventAnalyticsRequests = new Map<string, { affected_team_keys: string[] | null }>();
+    const eventAnalyticsRequests = new Map<string, EventAnalyticsRefreshRequest>();
     for (const candidate of candidates) {
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
@@ -198,15 +199,109 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       if (result.event_refresh === "succeeded" &&
           result.affected_team_keys !== undefined &&
           (result.affected_team_keys === null || result.affected_team_keys.length > 0)) {
-        eventAnalyticsRequests.set(result.event_key, { affected_team_keys: result.affected_team_keys });
+        eventAnalyticsRequests.set(result.event_key, { affected_team_keys: result.affected_team_keys, poll_cycle_token: scheduledAt });
       }
       results.push(result);
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
     }
 
+    // Reconcile TeamRuntime results that were calculated but never acknowledged
+    // after EventRuntime publication. This scan is bounded and rotates across the
+    // canonical team directory, independent of whether any provider data changed.
+    let pendingAnalyticsRecoveryChecksProcessed = 0;
+    let pendingAnalyticsRecoveryChecksFailed = 0;
+    let pendingAnalyticsRecoveryTeams = 0;
+    let pendingAnalyticsRecoveryEvents = 0;
+    let pendingAnalyticsRecoveryUnregisteredEvents = 0;
+    if (this.env.TEAM_RUNTIME) {
+      const directory = await step.do("load-pending-analytics-recovery-team-directory", async () =>
+        readJson<unknown>(store(), "registry/teams/" + discovery.year + ".json"),
+      );
+      const allTeamKeys = Array.isArray(directory)
+        ? [...new Set(directory.filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))]
+        : [];
+      const recoverySlot = Math.floor(scheduledAt / (5 * 60_000));
+      const recoveryCandidates = selectBudgetedKeys(
+        allTeamKeys, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, recoverySlot,
+      );
+      const registration = await step.do("check-pending-analytics-team-runtime-registration", async () =>
+        mapLimit(recoveryCandidates, 4, async (teamKey) => {
+          try {
+            return { teamKey, registered: await isRuntimeRegistered(store(), "team", teamKey), failed: false };
+          } catch {
+            return { teamKey, registered: false, failed: true };
+          }
+        }),
+      );
+      pendingAnalyticsRecoveryChecksFailed += registration.filter((item) => item.failed).length;
+      const registeredTeamKeys = registration.filter((item) => item.registered).map((item) => item.teamKey);
+      pendingAnalyticsRecoveryChecksProcessed = registeredTeamKeys.length;
+      const pendingReads = await step.do("read-pending-team-event-analytics", async () =>
+        mapLimit(registeredTeamKeys, 4, async (teamKey) => {
+          try {
+            const response = await dispatchRuntime(this.env, "team", teamKey, "pending-analytics", {}, discovery.year);
+            if (!response.ok) return { teamKey, pending: [], failed: true };
+            const body = await response.json() as { team_key?: unknown; year?: unknown; pending?: unknown };
+            if (body.team_key !== teamKey || body.year !== discovery.year || !Array.isArray(body.pending)) {
+              return { teamKey, pending: [], failed: true };
+            }
+            const pending = body.pending.filter((item): item is {
+              event_key: string; team_event_revision: number; event_source_revision: number;
+              team_source_revision: number; comparison_input_updated_at: number;
+            } => Boolean(item && typeof item === "object" && !Array.isArray(item) &&
+              typeof (item as Record<string, unknown>).event_key === "string" &&
+              new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(String((item as Record<string, unknown>).event_key)) &&
+              ["team_event_revision", "event_source_revision", "team_source_revision", "comparison_input_updated_at"]
+                .every((field) => Number.isSafeInteger((item as Record<string, unknown>)[field])));
+            return { teamKey, pending, failed: false };
+          } catch {
+            return { teamKey, pending: [], failed: true };
+          }
+        }),
+      );
+      pendingAnalyticsRecoveryChecksFailed += pendingReads.filter((item) => item.failed).length;
+      const pendingByEvent = new Map<string, { teamKeys: Set<string>; revisionParts: Set<string> }>();
+      const pendingTeamKeys = new Set<string>();
+      for (const result of pendingReads) {
+        for (const item of result.pending) {
+          const group = pendingByEvent.get(item.event_key) ?? { teamKeys: new Set<string>(), revisionParts: new Set<string>() };
+          group.teamKeys.add(result.teamKey);
+          group.revisionParts.add("pending:" + result.teamKey + ":" + item.team_event_revision + ":" +
+            item.event_source_revision + ":" + item.team_source_revision + ":" + item.comparison_input_updated_at);
+          pendingByEvent.set(item.event_key, group);
+          pendingTeamKeys.add(result.teamKey);
+        }
+      }
+      const eventRegistration = await step.do("check-pending-analytics-event-runtime-registration", async () =>
+        mapLimit([...pendingByEvent.keys()], 4, async (eventKey) => {
+          try {
+            return { eventKey, registered: await isRuntimeRegistered(store(), "event", eventKey) };
+          } catch {
+            return { eventKey, registered: false };
+          }
+        }),
+      );
+      const registeredPendingEvents = new Set(eventRegistration.filter((item) => item.registered).map((item) => item.eventKey));
+      pendingAnalyticsRecoveryUnregisteredEvents = eventRegistration.length - registeredPendingEvents.size;
+      for (const [eventKey, pending] of pendingByEvent) {
+        if (!registeredPendingEvents.has(eventKey)) continue;
+        const previous = eventAnalyticsRequests.get(eventKey);
+        const affected = previous?.affected_team_keys === null
+          ? null
+          : [...new Set([...(previous?.affected_team_keys ?? []), ...pending.teamKeys])].sort();
+        eventAnalyticsRequests.set(eventKey, {
+          affected_team_keys: affected,
+          ...(previous?.poll_cycle_token === undefined ? {} : { poll_cycle_token: previous.poll_cycle_token }),
+          revision_parts: [...new Set([...(previous?.revision_parts ?? []), ...pending.revisionParts])].sort(),
+          recovery: true,
+        });
+      }
+      pendingAnalyticsRecoveryTeams = pendingTeamKeys.size;
+      pendingAnalyticsRecoveryEvents = registeredPendingEvents.size;
+    }
+
     let teamReadinessFailed = 0;
-    let teamRefreshesAttempted = 0;
-    let teamRefreshesSucceeded = 0;
+    let teamRefreshesAttempted = 0;    let teamRefreshesSucceeded = 0;
     let teamRefreshesFailed = 0;
     let readinessDeferredTeamCount = 0;
     let teamRegistryChecksProcessed = 0;
@@ -293,6 +388,11 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       daily_team_poll: pollTeams,
       participant_teams_discovered: participantTeamKeys.size,
       affected_teams_discovered: new Set(results.flatMap((item) => item.affected_team_keys ?? [])).size,
+      pending_analytics_recovery_checks_processed: pendingAnalyticsRecoveryChecksProcessed,
+      pending_analytics_recovery_checks_failed: pendingAnalyticsRecoveryChecksFailed,
+      pending_analytics_recovery_teams: pendingAnalyticsRecoveryTeams,
+      pending_analytics_recovery_events: pendingAnalyticsRecoveryEvents,
+      pending_analytics_recovery_unregistered_events: pendingAnalyticsRecoveryUnregisteredEvents,
       team_registry_checks_processed: teamRegistryChecksProcessed,
       team_registry_checks_deferred_by_budget: teamRegistryChecksDeferredByBudget,
       team_readiness_checks_processed: teamReadinessChecksProcessed,
