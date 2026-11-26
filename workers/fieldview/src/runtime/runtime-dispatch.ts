@@ -84,6 +84,7 @@ export async function dispatchRuntime(
     publish: "publish-state",
     analytics: "analytics",
     "analytics-state": "analytics-state",
+    recalculate: "recalculate",
   };
   const path = paths[action];
   if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
