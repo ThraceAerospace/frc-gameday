@@ -94,3 +94,54 @@ This inventory is source-backed but not exhaustive. Before closing GitHub issue 
 - Physical row-write accounting for Durable Object SQLite and future D1 adapters.
 
 Until those items are completed and tested, the storage migration and full mutation audit remain open.
+
+
+## 7. 2026-11-25 execution-history and analytics-recovery audit extension
+
+This extension records additional concrete call paths inspected while tracing analytics Workflow recovery. It expands the initial inventory; it does **not** close the full Issue #30 audit or authorize D1 provisioning.
+
+### Additional System Records families found
+
+| Key family | Read/query pattern | Write pattern | Target owner / notes |
+| --- | --- | --- | --- |
+| `admin/workflow-runs/{event-readiness|team-readiness}/{workflowId}/record.json` | Admin workflow-runs detail route; workflow status is reconciled against the matching Cloudflare Workflow binding | Readiness Workflow start, terminal success/failure, and admin route reconciliation | System Records. One current record per Workflow ID. |
+| `admin/workflow-runs/{event-readiness|team-readiness}/{workflowId}/summary.json` | Admin detail route | Readiness Workflow finalization | System Records. Final summary is separate from run status. |
+| `admin/workflow-runs/{event-readiness|team-readiness}/{workflowId}/results/{chunk}.json` | Admin detail route by requested chunk | Readiness Workflow writes bounded chunks of per-entity results (25 items per chunk) | System Records. Preserve bounded result pagination; do not collapse into one unbounded JSON record. |
+| `admin/workflow-runs/index/{event-readiness|team-readiness}/{timestamp}-{workflowId}.json` | Admin history route lists by prefix, then resolves record and Cloudflare Workflow status | Readiness Workflow start/finalization and admin route reconciliation | System Records. Time-ordered history index. |
+| `workflows/daily-{event-readiness|team-readiness}/{timestamp}/summary.json` | No read call found in inspected source | Readiness Workflow finalization | System Records candidate legacy summary copy; confirm whether any external consumer relies on it before retirement. |
+| `admin/runtime-job-index/{operation}/{subject}.json` | Runtime-admin GET route resolves current job for an operation/subject | Runtime-admin POST route when accepting a job | System Records. Current-job pointer, not the history record itself. |
+| `admin/runtime-job-history/{operation}/{subject}/{workflowId}.json` | Runtime-admin GET route lists history by operation/subject | Runtime-admin GET reconciliation and superseded-running-job handling | System Records. History snapshots; exact retention is not yet defined. |
+| `admin/runtime-jobs/{workflowId}.json` | Runtime-admin GET route and RuntimeAdminWorkflow progress updates | Runtime-admin HTTP acceptance, Workflow progress, terminal success/failure | System Records. Existing per-job progress document. |
+| `admin/coverage-audit-history/{year}/{workflowId}.json` | No read call found in inspected source | Coverage-audit POST when superseding a prior execution | System Records. Historical snapshot; retention is not yet defined. |
+| `admin/coverage-audits/{year}.json` | Coverage-audit GET route and Workflow resume/reconciliation | CoverageAuditWorkflow progress/finalization and admin POST acceptance | System Records. Current audit pointer/summary. |
+| `admin/coverage-audit-items/{year}/{workflowId}/all.json` and numbered chunk records | CoverageAuditWorkflow reads the all-items manifest and bounded chunks | CoverageAuditWorkflow writes the all-items record and chunk records | System Records. The current source writes chunks of coverage items; exact maximum and retention need a dedicated audit. |
+| `registry/runtime-events/{event}.json`, `registry/runtime-teams/{team}.json` | Polling coordinator, analytics Workflow, admin inventory/entity/overview routes, and admin seeding paths | Runtime Worker registers a marker after successful event webhook acceptance or explicit runtime seeding/registration | System Records. Registration markers are operational, not discovery directories. Their authoritative/reconstructible status remains open. |
+
+### Additional observed call paths
+
+- Runtime Worker admin routes proxy workflow-run, discovery-job, coverage-audit, runtime-job, daily-readiness, and weekly-projection operations into the Jobs module. The corresponding read/write logic is in `workers/fieldview/src/jobs/index.ts`; route ingress is in `workers/fieldview/src/runtime/index.ts`.
+- `RuntimeAdminWorkflow` in `workers/fieldview/src/jobs/runtime-admin.ts` reads and updates `admin/runtime-jobs/{workflowId}.json`; the Jobs HTTP handler creates the initial record and operation/subject index, then consults Cloudflare Workflow instance status to reconcile running jobs.
+- Event/team readiness Workflows in `workers/fieldview/src/jobs/index.ts` write a running record and history index, then bounded result chunks, a final summary, a terminal record, and a final index update. The admin detail route reads the record, summary, and requested result chunk. The history route lists index entries and reconciles record status against Cloudflare Workflow status.
+- Coverage audit execution writes a current record, per-item data under a workflow-specific prefix, and history snapshots when an execution is superseded. The current record's `items_prefix` is used to locate the per-item set; `DiscoveryStore.pruneSupersededRecord` currently deletes the previous prefix when the current record's pointer changes.
+- Runtime registration is written in `workers/fieldview/src/runtime/index.ts` through a second, inline DiscoveryStore client implementation. It is read by the Jobs coordinator and admin routes. This is a separate call path from the Jobs-side client in `workers/fieldview/src/jobs/discovery-store.ts`.
+- Discovery directory reads in runtime admin routes are mixed with System Records reads because both currently share the same generic DiscoveryStore client. Their target repository ownership must be split at the caller/interface boundary, not inferred from which helper currently performs the read.
+
+### Analytics Workflow execution gap
+
+The EventAnalyticsWorkflow currently has no durable System Records execution record. Its execution identity exists in the Cloudflare Workflow instance ID; bounded child retries use a stable retry key/attempt; EventAnalyticsWorkflow reads EventRuntime and TeamRuntime inputs, calculates team results, publishes the EventRuntime aggregate, and acknowledges TeamRuntime results. TeamRuntime's `publication_status=pending` records provide recovery evidence only after a team calculation has persisted. They do not cover failures before the first TeamRuntime write, including event-input/season-input acquisition failures, registration lookup failures, or a Workflow that terminates before dispatching team calculations.
+
+The polling coordinator's existing pending-TeamRuntime scan is therefore a **publication-consistency recovery mechanism**, not a complete analytics Workflow execution recovery mechanism. A separate System Records execution ledger is required to discover failed/abandoned orchestration attempts with no pending TeamRuntime result.
+
+The eventual analytics execution record must be attributable to a stable logical execution/recovery identity and include, at minimum, event identity, Workflow instance ID, source/revision identity once known, requested/start/update/finish timestamps, attempt/recovery identity, status, bounded retry eligibility, and a sanitized terminal outcome/error classification. Do not persist credentials, authorization headers, provider secrets, raw request headers, or high-volume diagnostic logs. The record must distinguish an active Workflow from a failed/abandoned one by reconciling its durable record with Cloudflare Workflow instance status. Recovery selection must be bounded, idempotent, and rate-limited; terminal records must remain visible for administrative intervention rather than retry forever.
+
+No schema or D1 binding is selected in this extension. Before implementation, complete the remaining call-path/retention checks below and define whether analytics execution records share the generic Workflow execution schema or require a typed subtype. Preserve the distinction between a Workflow execution record and TeamRuntime's pending publication records.
+
+### Remaining audit work after this extension
+
+- Inspect every remaining DiscoveryStore generic `get`, `put`, `list`, and `delete` caller, including the full catalog action switch and every admin endpoint; verify whether reads mutate storage and whether writes are no-op aware.
+- Enumerate all keys and deletion paths inside DiscoveryStore, including partial-team resume, event/team staging, weekly projection generations, and coverage-audit cleanup. Confirm exact row/chunk cardinalities and retention.
+- Verify every external consumer (including any admin UI/client) of the legacy `workflows/daily-*/summary.json` copies and runtime registration markers before removing or changing those records.
+- Finish the authoritative-versus-reconstructible decision for runtime registration, and document how registration is created, repaired, and retired.
+- Define System Records indexes, pagination, retention, and status-reconciliation semantics across readiness, runtime-admin, coverage-audit, and analytics Workflow executions.
+- Complete the mutation audit for the DiscoveryStore catalog's 304 paths, unchanged-value writes, cleanup writes, and all error/retry branches.
+- Only after these items are complete: select typed D1 schemas/repositories, add local D1 migrations/tests without inventing a production `database_id`, and plan an explicitly authorized infrastructure provisioning/cutover separately.
