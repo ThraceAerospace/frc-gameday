@@ -82,22 +82,19 @@ test("Workflow dispatch sends team seed and state commands to the owning TeamRun
   assert.deepEqual(markers, ["registry/runtime-teams/frc3461.json", "registry/runtime-teams/frc3461.json"]);
 });
 
-test("Workflow dispatch sends participant acquisition and lifecycle commands to EventRuntime", async () => {
+test("Workflow dispatch sends participant acquisition and explicit refresh commands to EventRuntime", async () => {
   const { env, calls, markers } = environment();
   const participants = await dispatch(env, { kind: "event", key: "2026rikin", action: "participants", year: 2026 });
   assert.equal(participants.status, 202);
-  const lifecycle = await dispatch(env, {
-    kind: "event", key: "2026rikin", action: "lifecycle", year: 2026,
-    lifecycle: "active", upcomingIntervalMs: 1_800_000, activeIntervalMs: 300_000,
+  const refresh = await dispatch(env, {
+    kind: "event", key: "2026rikin", action: "refresh", year: 2026,
   });
-  assert.equal(lifecycle.status, 202);
+  assert.equal(refresh.status, 202);
   assert.deepEqual(calls.map((call) => [call.kind, call.id, call.path, call.method]), [
     ["event", "2026rikin", "/participants", "POST"],
-    ["event", "2026rikin", "/lifecycle", "POST"],
+    ["event", "2026rikin", "/refresh", "POST"],
   ]);
-  assert.deepEqual(JSON.parse(calls[1].body), {
-    lifecycle: "active", upcomingIntervalMs: 1_800_000, activeIntervalMs: 300_000,
-  });
+  assert.deepEqual(JSON.parse(calls[1].body), {});
   assert.deepEqual(markers, ["registry/runtime-events/2026rikin.json", "registry/runtime-events/2026rikin.json"]);
 });
 
