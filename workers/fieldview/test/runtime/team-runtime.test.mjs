@@ -868,6 +868,7 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
     lastAttemptAt: fetchedAt, lastWebhookAt: null, expiresAt: fetchedAt + 60_000,
     etag: '"team-v1"',
   });
+  storage.values.set("snapshot-revision", 1);
   const prepared = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input/prepare?year=" + year,
     { method: "POST", headers },
