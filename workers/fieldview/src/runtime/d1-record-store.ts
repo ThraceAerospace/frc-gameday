@@ -1,5 +1,3 @@
-import type { D1Database } from "@cloudflare/workers-types";
-
 export interface D1RecordStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
@@ -25,7 +23,7 @@ export class D1RecordStore implements D1RecordStorage {
     const table = tableForKey(key);
     const row = await this.db.prepare(`SELECT value_json FROM ${table} WHERE record_key = ?`)
       .bind(key).first<{ value_json: string }>();
-    return row ? row.value_json as T : undefined;
+    return row ? row.value_json as unknown as T : undefined;
   }
 
   async put<T = unknown>(key: string, value: T): Promise<void> {
@@ -60,7 +58,7 @@ export class D1RecordStore implements D1RecordStorage {
       rows.push(...(result.results ?? []));
     }
     rows.sort((a, b) => a.record_key.localeCompare(b.record_key));
-    return new Map(rows.slice(0, limit).map((row) => [row.record_key, row.value_json as T]));
+    return new Map(rows.slice(0, limit).map((row) => [row.record_key, row.value_json as unknown as T]));
   }
 
   async delete(key: string): Promise<boolean> {
