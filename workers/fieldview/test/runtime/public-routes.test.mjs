@@ -200,7 +200,7 @@ test("manual discovery and coverage audits are dispatched to the local Jobs modu
   const discovery = await worker.fetch(
     new Request("https://runtime.example/internal/admin/operations", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "system", action: "discover-year", year: 2026 }),
     }),
     env,
@@ -214,7 +214,7 @@ test("manual discovery and coverage audits are dispatched to the local Jobs modu
   const audit = await worker.fetch(
     new Request("https://runtime.example/internal/admin/operations", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "system", action: "coverage-audit-start", year: 2026 }),
     }),
     env,
@@ -233,6 +233,14 @@ test("discovery job status is authenticated and forwarded to the local Jobs modu
   );
   assert.equal(denied.status, 401);
   assert.equal(calls.some((call) => call.operation === "jobs"), false);
+
+  const bearerOnly = await worker.fetch(
+    new Request("https://runtime.example/internal/admin/discover-year?year=2027", {
+      headers: { Authorization: "Bearer server-only-token" },
+    }),
+    env,
+  );
+  assert.equal(bearerOnly.status, 401, "the internal service credential must not authorize a human administrator");
 
   const allowed = await worker.fetch(
     new Request("https://runtime.example/internal/admin/discover-year?year=2027", {
