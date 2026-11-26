@@ -14,7 +14,13 @@ type Props = {
 };
 
 function createPairingCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  const range = 900_000;
+  const limit = Math.floor(0x1_0000_0000 / range) * range;
+  const values = new Uint32Array(1);
+  do {
+    crypto.getRandomValues(values);
+  } while (values[0] >= limit);
+  return String(100_000 + (values[0] % range));
 }
 
 export default function RemoteDisplaySession({
