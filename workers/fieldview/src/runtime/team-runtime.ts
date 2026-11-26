@@ -212,7 +212,9 @@ export class TeamRuntime {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       if (!(await this.restoreIdentity())) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "Team runtime is not registered" }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
+        });
       }
       if (request.headers.get("X-FieldView-Team-Key") !== this.teamKey) {
         return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
