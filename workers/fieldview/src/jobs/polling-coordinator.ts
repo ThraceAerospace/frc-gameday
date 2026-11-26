@@ -5,7 +5,7 @@ import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
@@ -32,6 +32,9 @@ interface PollingEventResult {
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
   affected_team_keys?: string[] | null;
+  analytics_recovery?: boolean;
+  analytics_revision_part?: string;
+  analytics_state_failed?: boolean;
   error?: string;
 }
 
@@ -129,6 +132,10 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
     const eventAnalyticsRequests = new Map<string, EventAnalyticsRefreshRequest>();
+    const analyticsStateCheckedEventKeys = new Set<string>();
+    let eventAnalyticsRecoveryChecksProcessed = 0;
+    let eventAnalyticsRecoveryChecksFailed = 0;
+    let eventAnalyticsRecoveryRequests = 0;
     for (const candidate of candidates) {
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
@@ -166,6 +173,30 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
               : affectedValue === null ? null : undefined;
           }
 
+          const analyticsStateResponse = await dispatchRuntime(this.env, "event", eventKey, "analytics-state", {}, discovery.year);
+          let analyticsRecovery = false;
+          let analyticsRevisionPart: string | undefined;
+          let analyticsStateFailed = !analyticsStateResponse.ok;
+          if (analyticsStateResponse.ok) {
+            const analyticsState = await analyticsStateResponse.json() as {
+              source_revision?: unknown;
+              analytics?: { status?: unknown; revision?: unknown; due_at?: unknown; pending_invalidation?: { requested_at?: unknown } | null };
+            };
+            if (!analyticsState.analytics || typeof analyticsState.analytics.status !== "string") {
+              analyticsStateFailed = true;
+            } else {
+              analyticsRecovery = isEventAnalyticsRecoveryDue(
+                analyticsState.analytics.status, analyticsState.analytics.due_at, Date.now(),
+              );
+              analyticsRevisionPart = "event-analytics:" + eventKey + ":" +
+                String(analyticsState.source_revision ?? "unknown") + ":" +
+                String(analyticsState.analytics.revision ?? 0) + ":" +
+                analyticsState.analytics.status + ":" +
+                String(analyticsState.analytics.due_at ?? "none") + ":" +
+                String(analyticsState.analytics.pending_invalidation?.requested_at ?? "none");
+            }
+          }
+
           let participantKeys: string[] = [];
           if (pollTeams) {
             // EventRuntime owns the participant resource. The daily team pass
@@ -185,6 +216,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             event_refresh: eventRefresh,
             ...(participantKeys.length ? { participant_team_keys: participantKeys } : {}),
             ...(affectedTeamKeys !== undefined ? { affected_team_keys: affectedTeamKeys } : {}),
+            ...(analyticsRecovery ? { analytics_recovery: true } : {}),
+            ...(analyticsRevisionPart ? { analytics_revision_part: analyticsRevisionPart } : {}),
+            ...(analyticsStateFailed ? { analytics_state_failed: true } : {}),
             ...(error ? { error } : {}),
           };
         } catch (error) {
@@ -196,10 +230,23 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           };
         }
       });
+      if (!result.analytics_state_failed) analyticsStateCheckedEventKeys.add(result.event_key);
+      eventAnalyticsRecoveryChecksProcessed += result.analytics_state_failed ? 0 : 1;
+      if (result.analytics_state_failed) eventAnalyticsRecoveryChecksFailed += 1;
       if (result.event_refresh === "succeeded" &&
           result.affected_team_keys !== undefined &&
           (result.affected_team_keys === null || result.affected_team_keys.length > 0)) {
         eventAnalyticsRequests.set(result.event_key, { affected_team_keys: result.affected_team_keys, poll_cycle_token: scheduledAt });
+      }
+      if (result.analytics_recovery && result.analytics_revision_part) {
+        const previous = eventAnalyticsRequests.get(result.event_key);
+        eventAnalyticsRequests.set(result.event_key, {
+          affected_team_keys: null,
+          revision_parts: [...new Set([...(previous?.revision_parts ?? []), result.analytics_revision_part])],
+          ...(previous?.poll_cycle_token === undefined ? {} : { poll_cycle_token: previous.poll_cycle_token }),
+          recovery: true,
+        });
+        eventAnalyticsRecoveryRequests += 1;
       }
       results.push(result);
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
@@ -305,6 +352,67 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       pendingAnalyticsRecoveryEvents = registeredPendingEvents.size;
     }
 
+    // EventRuntime analytics publications can remain pending even when the
+    // Workflow failed before any TeamRuntime result was written. Scan the
+    // registered current-season event owners independently of event lifecycle.
+    // This bounded registry pass also recovers completed events after they leave
+    // the weekly active-event projection.
+    let eventAnalyticsRecoveryEventsDeferred = 0;
+    if (this.env.EVENT_RUNTIME) {
+      const eventRegistry = await step.do("load-event-analytics-recovery-registry", async () =>
+        store().list({ prefix: "registry/runtime-events/" + discovery.year, limit: 1000 }),
+      );
+      const registeredEventKeys = [...new Set(eventRegistry.objects.map((item) =>
+        item.key.slice("registry/runtime-events/".length).replace(/\\.json$/, ""),
+      ).filter((key) => new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(key)))];
+      const uncheckedEventKeys = registeredEventKeys.filter((key) => !analyticsStateCheckedEventKeys.has(key));
+      const selectedEventKeys = selectBudgetedKeys(
+        uncheckedEventKeys, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN,
+        Math.floor(scheduledAt / (5 * 60_000)),
+      );
+      eventAnalyticsRecoveryEventsDeferred = uncheckedEventKeys.length - selectedEventKeys.length;
+      const analyticsStates = await step.do("read-registered-event-analytics-recovery-state", async () =>
+        mapLimit(selectedEventKeys, 4, async (eventKey) => {
+          try {
+            const response = await dispatchRuntime(this.env, "event", eventKey, "analytics-state", {}, discovery.year);
+            if (!response.ok) return { eventKey, due: false, failed: true, revisionPart: "" };
+            const value = await response.json() as {
+              source_revision?: unknown;
+              analytics?: { status?: unknown; revision?: unknown; due_at?: unknown; pending_invalidation?: { requested_at?: unknown } | null };
+            };
+            if (!value.analytics || typeof value.analytics.status !== "string") {
+              return { eventKey, due: false, failed: true, revisionPart: "" };
+            }
+            const due = isEventAnalyticsRecoveryDue(value.analytics.status, value.analytics.due_at, Date.now());
+            return {
+              eventKey, due, failed: false,
+              revisionPart: "event-analytics:" + eventKey + ":" +
+                String(value.source_revision ?? "unknown") + ":" +
+                String(value.analytics.revision ?? 0) + ":" +
+                value.analytics.status + ":" +
+                String(value.analytics.due_at ?? "none") + ":" +
+                String(value.analytics.pending_invalidation?.requested_at ?? "none"),
+            };
+          } catch {
+            return { eventKey, due: false, failed: true, revisionPart: "" };
+          }
+        }),
+      );
+      eventAnalyticsRecoveryChecksProcessed += analyticsStates.filter((item) => !item.failed).length;
+      eventAnalyticsRecoveryChecksFailed += analyticsStates.filter((item) => item.failed).length;
+      for (const item of analyticsStates) {
+        if (!item.due || !item.revisionPart) continue;
+        const previous = eventAnalyticsRequests.get(item.eventKey);
+        eventAnalyticsRequests.set(item.eventKey, {
+          affected_team_keys: null,
+          revision_parts: [...new Set([...(previous?.revision_parts ?? []), item.revisionPart])],
+          ...(previous?.poll_cycle_token === undefined ? {} : { poll_cycle_token: previous.poll_cycle_token }),
+          recovery: true,
+        });
+        eventAnalyticsRecoveryRequests += 1;
+      }
+    }
+
     let teamReadinessFailed = 0;
     let teamRefreshesAttempted = 0;
     let teamRefreshesSucceeded = 0;
@@ -400,6 +508,10 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       pending_analytics_recovery_events: pendingAnalyticsRecoveryEvents,
       pending_analytics_recovery_events_deferred_by_budget: pendingAnalyticsRecoveryEventsDeferred,
       pending_analytics_recovery_unregistered_events: pendingAnalyticsRecoveryUnregisteredEvents,
+      event_analytics_recovery_checks_processed: eventAnalyticsRecoveryChecksProcessed,
+      event_analytics_recovery_checks_failed: eventAnalyticsRecoveryChecksFailed,
+      event_analytics_recovery_requests: eventAnalyticsRecoveryRequests,
+      event_analytics_recovery_events_deferred_by_budget: eventAnalyticsRecoveryEventsDeferred,
       team_registry_checks_processed: teamRegistryChecksProcessed,
       team_registry_checks_deferred_by_budget: teamRegistryChecksDeferredByBudget,
       team_readiness_checks_processed: teamReadinessChecksProcessed,
