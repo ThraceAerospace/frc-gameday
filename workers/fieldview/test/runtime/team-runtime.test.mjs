@@ -896,3 +896,25 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
     "a stale analytics input GET must report the conflict without repairing or rewriting storage");
   assert.equal(providerCalls, 0);
 });
+
+
+test("TeamRuntime diagnostics GET does not implicitly materialize TeamState", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461";
+  storage.values.set("team-key", teamKey);
+  let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    throw new Error("diagnostics must not acquire provider data");
+  }), teamKey);
+  const beforeRead = new Map(storage.values);
+  const response = await runtime.fetch(new Request("https://team-runtime/state?year=2026", {
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+    },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual([...storage.values], [...beforeRead],
+    "admin diagnostics are inspection-only and must not publish an empty TeamState");
+  assert.equal(providerCalls, 0);
+});
