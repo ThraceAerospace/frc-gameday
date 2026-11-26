@@ -70,6 +70,8 @@ test("event and daily team refresh analytics triggers are coalesced after both r
 test("the coordinator scans registered teams for pending analytics and coalesces recovery dispatch", () => {
   assert.match(coordinator, /registry\/teams\//);
   assert.match(coordinator, /MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN/);
+  assert.match(coordinator, /MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN/);
+  assert.match(coordinator, /pending_analytics_recovery_events_deferred_by_budget/);
   assert.match(coordinator, /"pending-analytics"/);
   assert.match(coordinator, /pendingAnalyticsRecoveryChecksFailed/);
   assert.match(coordinator, /revision_parts:/);
