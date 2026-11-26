@@ -97,8 +97,8 @@ export async function dispatchRuntime(
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind, key: string): Promise<void> {
-  if (!env.DB) throw new Error("D1 database binding is unavailable");
-  const store = new D1RecordStore(env.DB);
+  const store = env.DISCOVERY_STORAGE ?? (env.DB ? new D1RecordStore(env.DB) : null);
+  if (!store) throw new Error("D1 database binding is unavailable");
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const markerKey = prefix + key + ".json";
   if (await store.get(markerKey) !== undefined) return;
@@ -106,8 +106,9 @@ async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind,
 }
 
 async function readCurrentSeason(env: RuntimeEnvironment): Promise<number | null> {
-  if (!env.DB) return null;
-  const raw = await new D1RecordStore(env.DB).get<string>("discovery/current-season.json");
+  const store = env.DISCOVERY_STORAGE ?? (env.DB ? new D1RecordStore(env.DB) : null);
+  if (!store) return null;
+  const raw = await store.get<string>("discovery/current-season.json");
   if (typeof raw !== "string") return null;
   const current = JSON.parse(raw) as { year?: unknown };
   return current && Number.isInteger(current.year) &&
