@@ -329,7 +329,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     }, async () => mapLimit(teamResults, 6, async (result) => {
       const { state: _state, ...acknowledgement } = result;
       const response = await teamNamespace.get(teamNamespace.idFromName(result.team_key)).fetch(
-        new Request("https://team-runtime/event-analytics/acknowledge", {
+        new Request("https://team-runtime/event-analytics/acknowledge?year=" + year, {
           method: "POST",
           headers: headers(this.env, "X-FieldView-Team-Key", result.team_key),
           body: JSON.stringify(acknowledgement),
