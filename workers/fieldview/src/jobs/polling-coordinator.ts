@@ -253,7 +253,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
               typeof (item as Record<string, unknown>).event_key === "string" &&
               new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(String((item as Record<string, unknown>).event_key)) &&
               ["team_event_revision", "event_source_revision", "team_source_revision", "comparison_input_updated_at"]
-                .every((field) => Number.isSafeInteger((item as Record<string, unknown>)[field])));
+                .every((field) => Number.isSafeInteger((item as Record<string, unknown>)[field]))));
             return { teamKey, pending, failed: false };
           } catch {
             return { teamKey, pending: [], failed: true };
