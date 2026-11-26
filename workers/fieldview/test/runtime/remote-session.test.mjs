@@ -18,7 +18,7 @@ class FakeSocket {
   deserializeAttachment() { return this.attachment; }
 }
 function fixture() {
-  const storage = new MemoryStorage(), sockets = [], pairs = [], responses = [];
+  const storage = new MemoryStorage(), sockets = [], pairs = [];
   const runtime = new RemoteSessionRuntime({
     storage,
     acceptWebSocket(socket) { sockets.push(socket); },
@@ -30,11 +30,10 @@ function fixture() {
         status: 200,
         headers: { "Sec-WebSocket-Protocol": "fieldview.remote.v1" },
       });
-      responses.push(response);
       return response;
     },
   });
-  return { runtime, storage, sockets, pairs, responses };
+  return { runtime, storage, sockets, pairs };
 }
 function request(role, token, code = "123456") {
   return new Request("https://runtime/connect?code=" + code + "&role=" + role, {
@@ -44,7 +43,7 @@ function request(role, token, code = "123456") {
   });
 }
 test("remote sessions isolate signaling by pairing code and enforce role exclusivity", async () => {
-  const { runtime, pairs, responses } = fixture();
+  const { runtime, pairs } = fixture();
   const controllerResponse = await runtime.fetch(request("controller", "controller-token-123456"));
   assert.equal(controllerResponse.headers.get("Sec-WebSocket-Protocol"), "fieldview.remote.v1");
   const controller = pairs[0][1];
@@ -57,8 +56,6 @@ test("remote sessions isolate signaling by pairing code and enforce role exclusi
   const payload = { kind: "candidate", candidate: { candidate: "candidate:1" } };
   await runtime.webSocketMessage(controller, JSON.stringify({ type: "signal", target: "display", payload }));
   assert.deepEqual(JSON.parse(display.sent.at(-1)), { type: "signal", payload });
-  assert.equal((await runtime.fetch(request("display", "another-display-token", "654321"))).status, 200);
-  assert.equal(pairs[2][1].sent.length, 1);
 });
 test("closed sockets release a role without alarms, leases, or storage writes", async () => {
   const { runtime, sockets, pairs } = fixture();
@@ -105,4 +102,13 @@ test("same-token reconnect replaces its own stale socket without a lease or alar
   assert.equal(previous.closeCode, 1000);
   assert.equal(pairs.length, 2);
   assert.equal((await runtime.fetch(request("controller", "different-controller-token"))).status, 409);
+});
+
+test("separate pairing-code Durable Objects keep role ownership isolated", async () => {
+  const firstPair = fixture();
+  const secondPair = fixture();
+  assert.equal((await firstPair.runtime.fetch(request("controller", "first-controller-token-123", "123456"))).status, 200);
+  assert.equal((await secondPair.runtime.fetch(request("controller", "second-controller-token-123", "654321"))).status, 200);
+  assert.equal(firstPair.pairs.length, 1);
+  assert.equal(secondPair.pairs.length, 1);
 });
