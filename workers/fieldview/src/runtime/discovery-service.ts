@@ -58,10 +58,23 @@ export class DiscoveryService {
       // A malformed prior record must not prevent publishing its replacement.
     }
   }
+  private async putValues(
+    entries: ReadonlyArray<readonly [string, string]>,
+    deletes: ReadonlyArray<string> = [],
+  ): Promise<void> {
+    const previous = await Promise.all(entries.map(([key]) => this.storage.get<string>(key)));
+    if (this.storage.putMany) {
+      await this.storage.putMany(entries, deletes);
+    } else {
+      for (const [key, value] of entries) await this.storage.put(key, value);
+      for (const key of deletes) await this.storage.delete(key);
+    }
+    await Promise.all(entries.map(([key, value], index) =>
+      this.pruneSupersededRecord(key, previous[index], value)));
+  }
+
   private async putValue(key: string, value: string): Promise<void> {
-    const previous = await this.storage.get<string>(key);
-    await this.storage.put(key, value);
-    await this.pruneSupersededRecord(key, previous, value);
+    await this.putValues([[key, value]]);
   }
 
   private requireApi(): TBAApiClient {
@@ -213,13 +226,14 @@ export class DiscoveryService {
       });
     }
     if (!unique.length) return Response.json({ error: "TBA returned an empty team directory" }, { status: 502 });
-    await this.putValue(`registry/teams/${year}.json`, JSON.stringify(unique));
-    await this.putValue(`discovery/teams/${year}.json`, JSON.stringify({
-      year, generation, pageCount, expectedPageCount: pageCount, successfulPageCount: pageCount,
-      failedPages: [], status: "completed", complete: true,
-      teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
-    }));
-    await this.deleteKey(`discovery/partial-teams/${year}/${generation}.json`);
+    await this.putValues([
+      [`registry/teams/${year}.json`, JSON.stringify(unique)],
+      [`discovery/teams/${year}.json`, JSON.stringify({
+        year, generation, pageCount, expectedPageCount: pageCount, successfulPageCount: pageCount,
+        failedPages: [], status: "completed", complete: true,
+        teamCount: unique.length, updatedAt: generation, checkedAt: Date.now(),
+      })],
+    ], [`discovery/partial-teams/${year}/${generation}.json`]);
     return Response.json({ year, status: "completed", complete: true, pages: pageCount, teams: unique.length });
   }
 
@@ -243,8 +257,10 @@ export class DiscoveryService {
     if (response.status === 304 && previous && Array.isArray(previous.events)) {
       const chunkCount = previous.chunkCount ?? Math.ceil(previous.events.length / chunkSize);
       const refreshed = { ...previous, chunkCount, checkedAt };
-      await this.putValue(`registry/events/${year}.json`, JSON.stringify(previous.events.map((item) => item.key)));
-      await this.putValue(key, JSON.stringify(refreshed));
+      await this.putValues([
+        [`registry/events/${year}.json`, JSON.stringify(previous.events.map((item) => item.key))],
+        [key, JSON.stringify(refreshed)],
+      ]);
       return Response.json({
         year, count: previous.events.length, checkedAt,
         generation: previous.updatedAt, chunkCount, needsChunking: false,
@@ -324,8 +340,10 @@ export class DiscoveryService {
         return Response.json({ error: `Event discovery chunk ${index} is invalid` }, { status: 409 });
       }
     }
-    await this.putValue(`registry/events/${year}.json`, stagedKeys);
-    await this.putValue(`discovery/events/${year}.json`, stagedDocument);
+    await this.putValues([
+      [`registry/events/${year}.json`, stagedKeys],
+      [`discovery/events/${year}.json`, stagedDocument],
+    ]);
     return Response.json({ year, published: true });
   }
 
