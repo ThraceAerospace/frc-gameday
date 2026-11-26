@@ -351,7 +351,7 @@ test("TeamRuntime records active events for the coordinator without creating pol
 
 
 
-test("TeamRuntime initializes a persisted partial TeamState on its first non-snapshot request", async () => {
+test("TeamRuntime diagnostics do not initialize a missing TeamState publication", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
   const response = await runtime.fetch(new Request("https://team/state?year=2026", {
@@ -360,13 +360,11 @@ test("TeamRuntime initializes a persisted partial TeamState on its first non-sna
       "X-FieldView-Team-Key": teamKey,
     },
   }));
-  assert.equal(response.status, 200);
-  assert.deepEqual(storage.values.get("team-state:2026:publication")?.state, {
-    team_key: teamKey,
-    year: 2026,
-    sources: {},
-  });
-  assert.equal(storage.values.has("team-state:2026"), false, "TeamState is stored only inside its canonical publication");
+  assert.equal(response.status, 404, "diagnostics do not create an identity or TeamState publication");
+  assert.equal(storage.values.has("team-key"), false);
+  assert.equal(storage.values.has("team-state:2026:publication"), false);
+  assert.equal(storage.values.has("team-state:2026"), false);
+  assert.equal(storage.alarmAt, null);
 });
 
 
@@ -583,7 +581,7 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
   assert.equal(response.status, 404, "missing season analytics returns not found without implicit work");
-  assert.equal(await response.text(), "");
+  assert.deepEqual(await response.json(), { error: "Team season analytics publication not found" });
   assert.equal(storage.values.has("team-season-analytics:" + year), false);
   assert.equal(providerCalls, 0, "the analytics GET does not acquire provider data or calculate inline");
   assert.equal(storage.values.has("season-analytics:due:" + year), false);
