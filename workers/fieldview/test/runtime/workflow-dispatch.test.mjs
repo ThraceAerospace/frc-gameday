@@ -49,6 +49,7 @@ function environment() {
         get: () => ({
           fetch: async (request) => {
             const url = new URL(request.url);
+            if (url.pathname === "/get") return new Response(null, { status: 404 });
             assert.equal(url.pathname, "/put");
             const body = await request.json();
             markers.push(body.key);
