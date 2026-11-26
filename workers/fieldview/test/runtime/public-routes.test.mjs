@@ -81,52 +81,8 @@ function makeEnvironment() {
   };
 }
 
-test("single-event readiness requires membership in the explicitly matching season directory", async () => {
-  const calls = [];
-  const directories = new Map([
-    ["discovery/events/2026.json", { year: 2026, events: [{ key: "2026historic" }] }],
-    ["discovery/events/2027.json", { year: 2027, events: [{ key: "2027current" }] }],
-  ]);
-  const env = {
-    RUNTIME_ADMIN_TOKEN: "server-only-token",
-    DISCOVERY_STORE: {
-      idFromName(name) { assert.equal(name, "shared"); return name; },
-      get() {
-        return { async fetch(request) {
-          const url = new URL(request.url);
-          if (url.pathname === "/get") {
-            const value = directories.get(url.searchParams.get("key"));
-            return value ? Response.json(value) : new Response(null, { status: 404 });
-          }
-          if (url.pathname === "/put" && request.method === "POST") {
-            calls.push({ operation: "registry", ...(await request.json()) });
-            return Response.json({ stored: true });
-          }
-          throw new Error("Unexpected DiscoveryStore request");
-        } };
-      },
-    },
-    EVENT_RUNTIME: {
-      idFromName(name) { calls.push({ operation: "id", name }); return name; },
-      get(id) {
-        return { async fetch(request) {
-          const body = await request.json();
-          calls.push({
-            operation: "readiness",
-            id,
-            path: new URL(request.url).pathname,
-            method: request.method,
-            eventKey: request.headers.get("X-FieldView-Event-Key"),
-            authorization: request.headers.get("Authorization"),
-            body,
-          });
-          return Response.json({ event_key: id, refresh_at: body.refreshAt, refresh_queued: true });
-        } };
-      },
-    },
-  };
-
-  const startedAt = Date.now();
+test("retired per-event readiness route is unavailable and never activates a runtime", async () => {
+  const { env, calls } = makeEnvironment();
   const response = await worker.fetch(
     new Request("https://runtime.example/internal/admin/event-readiness", {
       method: "POST",
@@ -135,80 +91,8 @@ test("single-event readiness requires membership in the explicitly matching seas
     }),
     env,
   );
-  const finishedAt = Date.now();
-  assert.equal(response.status, 200);
-  const result = await response.json();
-  assert.equal(result.event_key, "2026historic");
-  assert.equal(result.refresh_queued, true);
-  assert.ok(result.refresh_at >= startedAt);
-  assert.ok(result.refresh_at <= finishedAt + 5 * 60_000);
-  assert.deepEqual(calls.map((call) => call.operation), ["id", "readiness", "registry"]);
-  assert.equal(calls[1].path, "/readiness");
-  assert.equal(calls[1].method, "POST");
-  assert.equal(calls[1].eventKey, "2026historic");
-  assert.equal(calls[1].authorization, "Bearer server-only-token");
-  assert.deepEqual(calls[2], {
-    operation: "registry",
-    key: "registry/runtime-events/2026historic.json",
-    value: "{}",
-  });
-});
 
-test("single-event readiness rejects an event found only in a different season directory", async () => {
-  const runtimeCalls = [];
-  const env = {
-    RUNTIME_ADMIN_TOKEN: "server-only-token",
-    DISCOVERY_STORE: {
-      idFromName(name) { return name; },
-      get() {
-        return { async fetch(request) {
-          const key = new URL(request.url).searchParams.get("key");
-          return key === "discovery/events/2027.json"
-            ? Response.json({ year: 2027, events: [{ key: "2027current" }] })
-            : new Response(null, { status: 404 });
-        } };
-      },
-    },
-    EVENT_RUNTIME: {
-      idFromName(name) { runtimeCalls.push(name); return name; },
-      get() { throw new Error("an event outside the requested year's directory must not be activated"); },
-    },
-  };
-  const response = await worker.fetch(
-    new Request("https://runtime.example/internal/admin/event-readiness", {
-      method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ event_key: "2026historic", year: 2027 }),
-    }),
-    env,
-  );
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), {
-    error: "Event is not present in the published directory for the requested year",
-  });
-  assert.deepEqual(runtimeCalls, []);
-});
-
-test("single-event readiness requires admin authorization and an explicit year", async () => {
-  const { env, calls } = makeEnvironment();
-  const denied = await worker.fetch(
-    new Request("https://runtime.example/internal/admin/event-readiness", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_key: "2027current", year: 2027 }),
-    }),
-    env,
-  );
-  assert.equal(denied.status, 401);
-  const missingYear = await worker.fetch(
-    new Request("https://runtime.example/internal/admin/event-readiness", {
-      method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ event_key: "2027current" }),
-    }),
-    env,
-  );
-  assert.equal(missingYear.status, 400);
   assert.deepEqual(calls, []);
 });
 
