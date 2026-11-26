@@ -478,6 +478,12 @@ export class EventRuntime {
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    if (request.method === "POST" && url.pathname === "/register") {
+      return Response.json({ event_key: this.eventKey, registered: true }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/refresh") {
       const body: unknown = await request.json().catch(() => ({}));
       const statboticsEndpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
