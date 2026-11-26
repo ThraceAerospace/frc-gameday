@@ -20,27 +20,27 @@ interface DiscoveryStoreClient {
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
 function discoveryStore(env: RuntimeEnvironment): DiscoveryStoreClient {
-  if (!env.DISCOVERY_STORE) return {
+  if (!env.DB) return {
     async get() { return null; }, async put() {}, async list() { return { objects: [], truncated: false }; },
   };
-  const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
+  const service = new DiscoveryStore(env.DB, env);
   return {
     async get(key) {
-      const response = await stub.fetch(new Request("https://discovery-store/get?key=" + encodeURIComponent(key)));
+      const response = await service.fetch(new Request("https://discovery-service/get?key=" + encodeURIComponent(key)));
       if (response.status === 404) return null;
       if (!response.ok) throw new Error("Discovery read returned HTTP " + response.status);
       const value = await response.text();
       return { async text() { return value; }, async json<T>() { return JSON.parse(value) as T; } };
     },
     async put(key, value) {
-      const response = await stub.fetch(new Request("https://discovery-store/put", { method: "POST",
+      const response = await service.fetch(new Request("https://discovery-service/put", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }) }));
       if (!response.ok) throw new Error("Discovery write returned HTTP " + response.status);
     },
     async list(options = {}) {
       const query = new URLSearchParams({ prefix: options.prefix ?? "", limit: String(options.limit ?? 1000) });
       if (options.cursor) query.set("cursor", options.cursor);
-      const response = await stub.fetch(new Request("https://discovery-store/list?" + query));
+      const response = await service.fetch(new Request("https://discovery-service/list?" + query));
       if (!response.ok) throw new Error("Discovery list returned HTTP " + response.status);
       return await response.json() as { objects: Array<{ key: string }>; truncated: boolean; cursor?: string };
     },
@@ -58,7 +58,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
-  if (!env.DISCOVERY_STORE) return;
+  if (!env.DB) return;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   await discoveryStore(env).put(prefix + key + ".json", "{}", {
     httpMetadata: { contentType: "application/json" },
@@ -281,10 +281,9 @@ export default {
 
     if (url.pathname.startsWith("/internal/discovery/")) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.DISCOVERY_STORE) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
-      const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
+      if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const action = url.pathname.slice("/internal/discovery/".length);
-      return stub.fetch(new Request("https://discovery-store/" + action + url.search, {
+      return new DiscoveryStore(env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
         method: request.method, headers: request.headers,
         ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.clone().arrayBuffer() }),
       }));
@@ -371,7 +370,7 @@ export default {
           body.year < 1992 || body.year > 2200) {
         return Response.json({ error: "Expected a valid event_key and explicit season year" }, { status: 400 });
       }
-      if (!env.DISCOVERY_STORE) {
+      if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const year = body.year;
@@ -459,7 +458,7 @@ export default {
     }
 
     if (url.pathname === "/season/current" && request.method === "GET") {
-      if (!env.DISCOVERY_STORE) {
+      if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryStore(env).get("discovery/current-season.json");
@@ -475,7 +474,7 @@ export default {
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (!env.DISCOVERY_STORE) {
+      if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryStore(env).get("projections/events-this-week/current.json");
@@ -518,7 +517,7 @@ export default {
       if (!Number.isSafeInteger(requestedYear) || requestedYear < 1992 || requestedYear > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      if (!env.DISCOVERY_STORE) {
+      if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
@@ -557,7 +556,7 @@ export default {
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
-      if (!env.DISCOVERY_STORE) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const manifestObject = await discoveryStore(env).get(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
@@ -792,7 +791,7 @@ export default {
       }
       const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
       const runtimeKeys: string[] = [];
-      if (env.DISCOVERY_STORE) {
+      if (env.DB) {
         let cursorToken: string | undefined;
         do {
           const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
@@ -885,7 +884,7 @@ export default {
         } catch (error) { multiplexer = { error: error instanceof Error ? error.message : String(error) }; }
       }
       const runtimeKeys = async (kind: "event" | "team") => {
-        if (!env.DISCOVERY_STORE) return [] as string[];
+        if (!env.DB) return [] as string[];
         const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
         const keys: string[] = [];
         let cursor: string | undefined;
