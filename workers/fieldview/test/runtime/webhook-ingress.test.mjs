@@ -248,3 +248,34 @@ test("TBA preserves the established missing-signature authentication response", 
   } });
   assert.equal(response.status, 418);
 });
+
+test("duplicate TBA webhook does not create a second analytics Workflow when its deterministic retry is active", async () => {
+  const raw = new TextEncoder().encode(JSON.stringify({
+    message_type: "match_score",
+    message_data: {
+      event_key: "2026test",
+      match: { alliances: { red: { teams: ["frc1"] }, blue: { teams: ["frc2"] } } },
+    },
+  })).buffer;
+  const signature = await sign("webhook-secret", raw);
+  const eventTargets = [];
+  const workflows = [];
+  const env = environment((id) => async (request) => {
+    eventTargets.push({ id, request });
+    return new Response("accepted", { status: 200 });
+  });
+  env.EVENT_ANALYTICS_WORKFLOW = {
+    get: async (id) => ({
+      status: async () => ({
+        status: id.includes("-retry-1") ? "running" : "errored",
+      }),
+    }),
+    create: async (workflow) => { workflows.push(workflow); },
+  };
+  const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
+    method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(eventTargets.length, 1);
+  assert.equal(workflows.length, 0, "an already-running deterministic retry must not be duplicated");
+});
