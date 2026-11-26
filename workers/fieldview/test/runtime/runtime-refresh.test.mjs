@@ -127,3 +127,28 @@ test("an unsafe event match comparison forces full recompute when coalesced with
   assert.equal(workflows[0].params.affected_team_keys, null,
     "an unsafe event comparison must not be narrowed by the team refresh's known changed team");
 });
+
+
+test("event-only poll refresh dispatches analytics after the collection phase", async () => {
+  const workflows = [];
+  const env = {
+    EVENT_ANALYTICS_WORKFLOW: {
+      get: async () => { throw new Error("Workflow instance does not exist"); },
+      create: async (input) => { workflows.push(input); return {}; },
+    },
+  };
+
+  await dispatchRuntimeRefreshBatch(env, [], 4, {
+    requestedAt: 1_800_000_000_000,
+    additionalAffectedEvents: new Map([
+      ["2027rikin", { affected_team_keys: ["frc3461", "frc2"] }],
+    ]),
+  });
+
+  assert.equal(workflows.length, 1);
+  assert.deepEqual(workflows[0].params, {
+    event_key: "2027rikin",
+    affected_team_keys: ["frc2", "frc3461"],
+    requested_at: 1_800_000_000_000,
+  });
+});
