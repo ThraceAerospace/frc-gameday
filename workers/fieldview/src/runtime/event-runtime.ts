@@ -276,8 +276,8 @@ export function eventResourceEndpoints(eventKey: string): string[] {
 
 /**
  * One EventRuntime instance owns one event's provider endpoint state and
- * TBA polling schedule. Statbotics enrichment is one-shot and TBA-change-driven.
- * Network I/O always occurs outside storage transactions.
+ * canonical publications. The Worker-level coordinator owns recurring refresh
+ * eligibility and dispatch. Network I/O stays outside storage transactions.
  */
 export class EventRuntime {
   private readonly state: DurableObjectStateLike;
@@ -941,7 +941,7 @@ export class EventRuntime {
           },
           polling_owner: "PollingCoordinatorWorkflow",
           local_poll_tasks: 0,
-          last_error: await this.storage.get<string>("analytics:last-error") ?? await this.storage.get<string>("scheduler:last-error") ?? null,
+          last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         event_state: {
           status: eventStateStatus,
