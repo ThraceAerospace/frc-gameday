@@ -75,6 +75,10 @@ test("event analytics recovery only dispatches pending, failed, or stale work wh
   assert.equal(isEventAnalyticsRecoveryDue("pending", null, now), true);
   assert.equal(isEventAnalyticsRecoveryDue("failed", now - 1, now), true);
   assert.equal(isEventAnalyticsRecoveryDue("stale", now, now), true);
+  assert.equal(isEventAnalyticsRecoveryDue("running", now - 1, now), true,
+    "an interrupted running publication with an expired due time is recoverable");
+  assert.equal(isEventAnalyticsRecoveryDue("running", null, now), false,
+    "a running state without a durable due marker is not assumed abandoned");
   assert.equal(isEventAnalyticsRecoveryDue("pending", now + 1, now), false);
   assert.equal(isEventAnalyticsRecoveryDue("succeeded", null, now), false);
   assert.equal(isEventAnalyticsRecoveryDue("partial", null, now), false);
