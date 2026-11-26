@@ -136,7 +136,4 @@ class_name = "TeamRuntime"
 name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
-[[previews.durable_objects.bindings]]
-name = "DISCOVERY_STORE"
-class_name = "DiscoveryStore"
 
