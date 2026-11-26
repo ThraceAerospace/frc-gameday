@@ -105,6 +105,21 @@ function cacheMaxAgeSeconds(value: string | null): number | null {
   return Number.isSafeInteger(seconds) && seconds >= 0 ? seconds : null;
 }
 
+export function hasStaleTeamAnalyticsPublication(
+  results: TeamEventAnalyticsResult[],
+  latestTeamRevisions: Map<string, number>,
+  latestTeamEventRevisions: Map<string, number>,
+  currentComparisonInputUpdatedAt: number,
+): boolean {
+  return results.some((result) => {
+    const latestTeamRevision = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + result.team_key);
+    const latestTeamEventRevision = latestTeamEventRevisions.get(TEAM_EVENT_REVISION_PREFIX + result.team_key);
+    return (latestTeamRevision !== undefined && latestTeamRevision > result.team_source_revision) ||
+      (latestTeamEventRevision !== undefined && latestTeamEventRevision > result.team_event_revision) ||
+      result.comparison_input_updated_at < currentComparisonInputUpdatedAt;
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1484,10 +1499,15 @@ export class EventRuntime {
       }
       if (orchestratedTeamResults !== undefined) {
         const latestTeamRevisions = await transaction.list<number>({ prefix: TEAM_STATE_REVISION_PREFIX });
-        const staleTeamInput = orchestratedTeamResults.some((result) => {
-          const latest = latestTeamRevisions.get(TEAM_STATE_REVISION_PREFIX + result.team_key);
-          return latest !== undefined && latest > result.team_source_revision;
-        });
+        const latestTeamEventRevisions = await transaction.list<number>({ prefix: TEAM_EVENT_REVISION_PREFIX });
+        const currentComparisonInputUpdatedAt =
+          await transaction.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? 0;
+        const staleTeamInput = hasStaleTeamAnalyticsPublication(
+          orchestratedTeamResults,
+          latestTeamRevisions,
+          latestTeamEventRevisions,
+          currentComparisonInputUpdatedAt,
+        );
         if (staleTeamInput) {
           await transaction.put(ANALYTICS_DUE_KEY, Date.now() + 1_000);
           await transaction.put("analytics:status", "pending");
