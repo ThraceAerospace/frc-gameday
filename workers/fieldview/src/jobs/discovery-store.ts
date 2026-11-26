@@ -1,8 +1,8 @@
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
-import { DiscoveryStore } from "../runtime/discovery-store.ts";
+import { DiscoveryService } from "../runtime/discovery-service.ts";
 
 export interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
-export interface DiscoveryStoreClient {
+export interface DiscoveryServiceClient {
   get(key: string): Promise<DiscoveryRecord | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
@@ -10,9 +10,9 @@ export interface DiscoveryStoreClient {
 }
 
 /** In-process D1 client; discovery logic runs in the Worker, not a Durable Object. */
-export function createDiscoveryStoreClient(env: RuntimeEnvironment): DiscoveryStoreClient {
+export function createDiscoveryServiceClient(env: RuntimeEnvironment): DiscoveryServiceClient {
   if (!env.DB) throw new Error("D1 database binding is unavailable");
-  const service = new DiscoveryStore(env.DB, env);
+  const service = new DiscoveryService(env.DB, env);
   const send = async (path: string, init?: RequestInit) => {
     const response = await service.fetch(new Request("https://discovery-service/" + path, init));
     if (!response.ok) throw new Error("Discovery storage returned HTTP " + response.status + ": " + await response.text());
