@@ -1,4 +1,5 @@
-import type { DurableObjectNamespaceLike } from "../runtime/cloudflare.ts";
+import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
+import { DiscoveryStore } from "../runtime/discovery-store.ts";
 
 export interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
 export interface DiscoveryStoreClient {
@@ -8,20 +9,18 @@ export interface DiscoveryStoreClient {
   catalog(action: string, input?: Record<string, unknown>): Promise<Response>;
 }
 
-/** Direct namespace client; DiscoveryStore is bound to the same Worker as its callers. */
-export function createDiscoveryStoreClient(
-  namespace: DurableObjectNamespaceLike | undefined,
-): DiscoveryStoreClient {
-  if (!namespace) throw new Error("DiscoveryStore namespace is unavailable");
-  const stub = namespace.get(namespace.idFromName("shared"));
+/** In-process D1 client; discovery logic runs in the Worker, not a Durable Object. */
+export function createDiscoveryStoreClient(env: RuntimeEnvironment): DiscoveryStoreClient {
+  if (!env.DB) throw new Error("D1 database binding is unavailable");
+  const service = new DiscoveryStore(env.DB, env);
   const send = async (path: string, init?: RequestInit) => {
-    const response = await stub.fetch(new Request("https://discovery-store/" + path, init));
+    const response = await service.fetch(new Request("https://discovery-service/" + path, init));
     if (!response.ok) throw new Error("Discovery storage returned HTTP " + response.status + ": " + await response.text());
     return response;
   };
   return {
     async get(key) {
-      const response = await stub.fetch(new Request("https://discovery-store/get?key=" + encodeURIComponent(key)));
+      const response = await service.fetch(new Request("https://discovery-service/get?key=" + encodeURIComponent(key)));
       if (response.status === 404) return null;
       if (!response.ok) throw new Error("Discovery read returned HTTP " + response.status + ": " + await response.text());
       const value = await response.text();
@@ -42,7 +41,7 @@ export function createDiscoveryStoreClient(
       };
     },
     async catalog(action, input = {}) {
-      return stub.fetch(new Request("https://discovery-store/catalog/" + action, {
+      return service.fetch(new Request("https://discovery-service/catalog/" + action, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
