@@ -1364,7 +1364,11 @@ export class EventRuntime {
       });
       return false;
     }
-    await this.storage.put("analytics:status", "running");
+    await this.storage.transaction(async (transaction) => {
+      const dueAt = await transaction.get<number>(ANALYTICS_DUE_KEY);
+      if (!Number.isSafeInteger(dueAt)) await transaction.put(ANALYTICS_DUE_KEY, Date.now());
+      await transaction.put("analytics:status", "running");
+    });
     const state = calculated.state;
     const publication: AnalyticsPublication = {
       sourceRevision: calculated.sourceRevision,
