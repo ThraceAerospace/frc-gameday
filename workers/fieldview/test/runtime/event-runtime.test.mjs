@@ -294,13 +294,11 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   });
 
   const firstRead = await runtime.fetch(request());
-  assert.equal(firstRead.status, 204, "an existing EventRuntime without EventState returns no content");
-  assert.equal(await firstRead.text(), "");
+  assert.equal(firstRead.status, 404, "an existing EventRuntime without EventState returns not found");
   const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
-  assert.equal(analyticsRead.status, 204, "an existing EventRuntime without EventAnalytics returns no content");
-  assert.equal(await analyticsRead.text(), "");
+  assert.equal(analyticsRead.status, 404, "analytics is unavailable until EventState exists");
 
   assert.equal(providerCalls, 0, "public reads never initiate provider acquisition");
   assert.equal("alarmAt" in storage, false, "public reads do not interact with alarm storage");
@@ -322,7 +320,7 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal("alarmAt" in storage, false, "readiness does not interact with alarm storage");
   assert.equal(providerCalls, 0, "readiness inspects coverage and never fetches providers");
-  assert.equal((await runtime.fetch(request())).status, 204, "an existing EventRuntime without EventState returns no content");
+  assert.equal((await runtime.fetch(request())).status, 404, "an existing EventRuntime without EventState returns not found");
 
   const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
     method: "POST",
