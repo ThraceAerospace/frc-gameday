@@ -36,6 +36,12 @@ binding = "FIELDVIEW_DB"
 database_name = "fieldview-prod"
 database_id = "df5168d5-5efa-4927-b732-c0ee66da5934"
 
+# Production KV namespace for lightweight, non-authoritative read projections.
+# Previews must use a separate namespace; never share production KV with branch Previews.
+[[kv_namespaces]]
+binding = "KV_BINDING"
+id = "c067dfcaa3a345b0b43f035a992b4b30"
+
 [[durable_objects.bindings]]
 name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
