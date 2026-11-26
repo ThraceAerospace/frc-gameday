@@ -366,54 +366,6 @@ export default {
       }));
     }
 
-    if (url.pathname === "/internal/admin/event-readiness" && request.method === "POST") {
-      if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      const body: unknown = await request.json().catch(() => null);
-      if (!isRecord(body) || typeof body.event_key !== "string" ||
-          !/^[a-zA-Z0-9_-]+$/.test(body.event_key) ||
-          typeof body.year !== "number" || !Number.isSafeInteger(body.year) ||
-          body.year < 1992 || body.year > 2200) {
-        return Response.json({ error: "Expected a valid event_key and explicit season year" }, { status: 400 });
-      }
-      if (!env.DB && !env.DISCOVERY_STORAGE) {
-        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
-      }
-      const year = body.year;
-      const eventKey = body.event_key;
-      const directoryObject = await discoveryServiceClient(env).get(`discovery/events/${year}.json`);
-      if (!directoryObject) {
-        return Response.json({ error: "No published event directory exists for the requested year" }, { status: 404 });
-      }
-      const directory = await directoryObject.json<unknown>().catch(() => null);
-      if (!isRecord(directory) || directory.year !== year || !Array.isArray(directory.events)) {
-        return Response.json({ error: "Published event directory is invalid" }, { status: 500 });
-      }
-      const discovered = directory.events.some((event) => isRecord(event) && event.key === eventKey);
-      if (!discovered) {
-        return Response.json({ error: "Event is not present in the published directory for the requested year" }, { status: 404 });
-      }
-      if (!env.EVENT_RUNTIME) {
-        return Response.json({ error: "EventRuntime binding is unavailable" }, { status: 503 });
-      }
-
-      // Keep this operation deliberately narrow: one directory-verified event,
-      // with its refresh alarm randomized inside the same five-minute window
-      // used by the sequential daily readiness sweep.
-      const refreshAt = Date.now() + Math.floor(Math.random() * 5 * 60_000);
-      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(eventKey));
-      const response = await stub.fetch(new Request("https://event-runtime/readiness", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
-          "X-FieldView-Event-Key": eventKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ refreshAt }),
-      }));
-      if (response.ok) await registerRuntimeMarker(env, "event", eventKey);
-      return response;
-    }
-
     if (url.pathname === "/internal/workflows/runtime-state" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind");
