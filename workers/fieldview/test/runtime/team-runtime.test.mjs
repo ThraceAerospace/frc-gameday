@@ -35,6 +35,57 @@ test("TeamRuntime does not register a Durable Object alarm handler", () => {
   assert.equal(TeamRuntime.prototype.alarm, undefined);
 });
 
+test("TeamRuntime exposes only pending event analytics to the central recovery coordinator", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461";
+  storage.values.set("team-key", teamKey);
+  const pendingState = { event_key: "2026pending", team_key: teamKey, sources: {}, analytics: { metrics: [] } };
+  storage.values.set("team-event-state:2026pending", pendingState);
+  storage.values.set("team-event-state:2026pending:inputs", {
+    event_source_revision: 8, team_source_revision: 3, comparison_input_updated_at: 1234,
+    calculated_at: 5678, publication_status: "pending",
+  });
+  storage.values.set("team-event-revision:2026pending", 6);
+  storage.values.set("team-event-state:2026published", {
+    event_key: "2026published", team_key: teamKey, sources: {}, analytics: { metrics: [] },
+  });
+  storage.values.set("team-event-state:2026published:inputs", {
+    event_source_revision: 4, team_source_revision: 3, comparison_input_updated_at: 1000,
+    publication_status: "published",
+  });
+  storage.values.set("team-event-state:2025pending", {
+    event_key: "2025pending", team_key: teamKey, sources: {}, analytics: { metrics: [] },
+  });
+  storage.values.set("team-event-state:2025pending:inputs", {
+    event_source_revision: 2, team_source_revision: 1, comparison_input_updated_at: 900,
+    publication_status: "pending",
+  });
+  let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    throw new Error("pending analytics inspection must not fetch providers");
+  }), teamKey);
+  const response = await runtime.fetch(new Request("https://team-runtime/pending-event-analytics?year=2026", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    team_key: teamKey,
+    year: 2026,
+    pending: [{
+      event_key: "2026pending",
+      team_event_revision: 6,
+      event_source_revision: 8,
+      team_source_revision: 3,
+      comparison_input_updated_at: 1234,
+      calculated_at: 5678,
+    }],
+  });
+  assert.equal(providerCalls, 0);
+  const unauthorized = await runtime.fetch(new Request("https://team-runtime/pending-event-analytics?year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(unauthorized.status, 401);
+});
 test("TeamRuntime does not replace a last-good publication after a failed provider refresh", async () => {
   const storage = new MemoryStorage();
   const teamKey = "frc3461", year = 2026;
