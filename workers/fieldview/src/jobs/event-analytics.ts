@@ -324,6 +324,36 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       throw new Error("EventRuntime analytics publication returned HTTP " + publicationResult.status);
     }
 
+    const acknowledgementOutcomes = await step.do("acknowledge-published-team-analytics", {
+      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+    }, async () => mapLimit(teamResults, 6, async (result) => {
+      const { state: _state, ...acknowledgement } = result;
+      const response = await teamNamespace.get(teamNamespace.idFromName(result.team_key)).fetch(
+        new Request("https://team-runtime/event-analytics/acknowledge", {
+          method: "POST",
+          headers: headers(this.env, "X-FieldView-Team-Key", result.team_key),
+          body: JSON.stringify(acknowledgement),
+        }),
+      );
+      return { team_key: result.team_key, status: response.status, body: await response.json().catch(() => null) };
+    }));
+    const staleAcknowledgement = acknowledgementOutcomes.find((item) => item.status === 409);
+    if (staleAcknowledgement) {
+      const retryId = await scheduleRetry("team-publication-acknowledgement-conflict", null);
+      if (retryId) return {
+        event_key: eventKey,
+        status: "retry_scheduled",
+        retry_workflow_id: retryId,
+        reason: "team_publication_acknowledgement_conflict",
+      };
+      throw new Error("TeamRuntime " + staleAcknowledgement.team_key + " publication acknowledgement was stale");
+    }
+    const failedAcknowledgement = acknowledgementOutcomes.find((item) => item.status < 200 || item.status >= 300);
+    if (failedAcknowledgement) {
+      throw new Error("TeamRuntime " + failedAcknowledgement.team_key +
+        " publication acknowledgement returned HTTP " + failedAcknowledgement.status);
+    }
+
     return {
       event_key: eventKey,
       event_source_revision: eventInput.event_source_revision,
@@ -331,6 +361,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       recalculated_team_count: recalculated.length,
       retained_team_result_count: teamResults.length - recalculated.length,
       published_team_result_count: teamResults.length,
+      acknowledged_team_result_count: acknowledgementOutcomes.length,
       event_publication: publicationResult.body,
     };
   }
