@@ -189,7 +189,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         const response = await createDiscoveryServiceClient(this.env).catalog("discover-event-directory", {
           year: season, generation, chunkSize: eventChunkSize,
         });
-        if (!response.ok) throw new Error("DiscoveryStore event directory acquisition returned HTTP " + response.status);
+        if (!response.ok) throw new Error("Discovery service event directory acquisition returned HTTP " + response.status);
         return response.json() as Promise<{
           year: number; count: number; checkedAt: number; generation: number;
           chunkCount: number; needsChunking: boolean;
@@ -207,7 +207,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
               year: season, generation: eventDirectory.generation,
               firstChunk, endChunk, chunkSize: eventChunkSize,
             });
-            if (!response.ok) throw new Error("DiscoveryStore event chunk write returned HTTP " + response.status);
+            if (!response.ok) throw new Error("Discovery service event chunk write returned HTTP " + response.status);
             return response.json();
           });
         }
@@ -215,7 +215,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           const response = await createDiscoveryServiceClient(this.env).catalog("publish-event-directory", {
             year: season, generation: eventDirectory.generation,
           });
-          if (!response.ok) throw new Error("DiscoveryStore event directory publication returned HTTP " + response.status);
+          if (!response.ok) throw new Error("Discovery service event directory publication returned HTTP " + response.status);
           return response.json();
         });
       }
@@ -225,7 +225,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         const response = await createDiscoveryServiceClient(this.env).catalog("resume-partial-team-directory", {
           year: season, expectedPageCount: expectedTeamPages,
         });
-        if (!response.ok) throw new Error("DiscoveryStore partial directory lookup returned HTTP " + response.status);
+        if (!response.ok) throw new Error("Discovery service partial directory lookup returned HTTP " + response.status);
         return response.json() as Promise<{
           resumable: boolean; generation?: number; teamKeys?: string[]; failedPages?: number[]; warnings?: string[];
         }>;
@@ -247,7 +247,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
             const response = await createDiscoveryServiceClient(this.env).catalog("discover-team-page", {
               year: season, generation: teamGeneration, page,
             });
-            if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
+            if (!response.ok) throw new Error("Discovery service team page acquisition returned HTTP " + response.status);
             return response.json() as Promise<{ teamKeys: string[]; count: number }>;
           });
           teamKeys.push(...result.teamKeys);
@@ -274,7 +274,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           year: season, generation: teamGeneration, pageCount: expectedTeamPages,
           teamKeys: uniqueTeamKeys, failedPages: failedTeamPages, warnings,
         });
-        if (!response.ok) throw new Error("DiscoveryStore team directory publication returned HTTP " + response.status);
+        if (!response.ok) throw new Error("Discovery service team directory publication returned HTTP " + response.status);
         return response.json() as Promise<{ status: "completed" | "partial"; complete: boolean }>;
       });
       const partial = publication.status === "partial";
