@@ -848,3 +848,47 @@ test("TeamRuntime does not accept EventRuntime-owned webhook updates", async () 
   assert.deepEqual(storage.values.get("team-event-state:" + eventKey), before);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), undefined);
 });
+
+
+test("TeamRuntime analytics season input GET is read-only and preparation is explicit", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", year = 2026;
+  storage.values.set("team-key", teamKey);
+  let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    throw new Error("analytics input preparation must not fetch providers");
+  }), teamKey);
+  const headers = {
+    Authorization: "Bearer admin",
+    "X-FieldView-Team-Key": teamKey,
+  };
+  const beforeRead = new Map(storage.values);
+  const missing = await runtime.fetch(new Request(
+    "https://team-runtime/analytics-season-input?year=" + year, { headers },
+  ));
+  assert.equal(missing.status, 204);
+  assert.deepEqual([...storage.values], [...beforeRead],
+    "a missing analytics input GET must not bind, materialize, or publish TeamState");
+
+  const prepared = await runtime.fetch(new Request(
+    "https://team-runtime/analytics-season-input/prepare?year=" + year,
+    { method: "POST", headers },
+  ));
+  assert.equal(prepared.status, 200);
+  assert.equal(storage.values.has("team-state:" + year + ":publication"), true,
+    "the explicit preparation command publishes the normalized TeamState input");
+  assert.equal(providerCalls, 0);
+
+  const beforePublishedRead = new Map(storage.values);
+  const read = await runtime.fetch(new Request(
+    "https://team-runtime/analytics-season-input?year=" + year, { headers },
+  ));
+  assert.equal(read.status, 200);
+  const input = await read.json();
+  assert.equal(input.team_key, teamKey);
+  assert.equal(input.team_source_revision, 0);
+  assert.equal(input.team_state.team_key, teamKey);
+  assert.deepEqual([...storage.values], [...beforePublishedRead],
+    "reading a current analytics input must not write to Durable Object storage");
+  assert.equal(providerCalls, 0);
+});
