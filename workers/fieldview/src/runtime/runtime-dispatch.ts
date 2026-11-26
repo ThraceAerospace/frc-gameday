@@ -58,7 +58,7 @@ export async function dispatchRuntime(
 
       }
     }
-    if (response.ok && action !== "readiness") await registerRuntimeMarker(env, "team", key);
+    if (response.ok && action !== "readiness" && action !== "pending-analytics") await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
