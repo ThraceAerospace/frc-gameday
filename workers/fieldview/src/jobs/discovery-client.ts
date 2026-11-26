@@ -11,8 +11,9 @@ export interface DiscoveryServiceClient {
 
 /** In-process D1 client; discovery logic runs in the Worker, not a Durable Object. */
 export function createDiscoveryServiceClient(env: RuntimeEnvironment): DiscoveryServiceClient {
-  if (!env.DB) throw new Error("D1 database binding is unavailable");
-  const service = new DiscoveryService(env.DB, env);
+  const storage = env.DISCOVERY_STORAGE ?? env.DB;
+  if (!storage) throw new Error("D1 database binding is unavailable");
+  const service = new DiscoveryService(storage, env);
   const send = async (path: string, init?: RequestInit) => {
     const response = await service.fetch(new Request("https://discovery-service/" + path, init));
     if (!response.ok) throw new Error("Discovery storage returned HTTP " + response.status + ": " + await response.text());
