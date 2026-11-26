@@ -1,34 +1,31 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getCanonicalCurrentSeason } from "@/lib/events/serverSnapshot";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function validAdminToken(request: Request): boolean {
-  const expected = process.env.FIELDVIEW_ADMIN_ACCESS_TOKEN;
-  const supplied = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !supplied) return false;
-  const expectedBuffer = Buffer.from(expected);
-  const suppliedBuffer = Buffer.from(supplied);
-  return expectedBuffer.length === suppliedBuffer.length && timingSafeEqual(expectedBuffer, suppliedBuffer);
+function accessAssertion(request: Request): string | null {
+  const assertion = request.headers.get("Cf-Access-Jwt-Assertion");
+  return assertion && assertion.length <= 16_384 ? assertion : null;
 }
-
 export async function GET(request: Request) {
-  if (!validAdminToken(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  // Authentication is a local credential check. Do not make login depend on
-  // TaskScheduler availability or Durable Object health.
-  if (new URL(request.url).searchParams.get("auth") === "1") {
-    return NextResponse.json({ authenticated: true }, { headers: { "Cache-Control": "no-store" } });
-  }
+  const accessJwt = accessAssertion(request);
+  if (!accessJwt) return NextResponse.json({ error: "Cloudflare Access authentication required" }, { status: 401 });
   const runtimeUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  const runtimeToken = process.env.RUNTIME_ADMIN_TOKEN;
-  if (!runtimeUrl || !runtimeToken) {
-    return NextResponse.json({
-      error: "Admin runtime configuration is incomplete. Configure NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL and the server-only RUNTIME_ADMIN_TOKEN.",
-    }, { status: 503 });
+  if (!runtimeUrl) return NextResponse.json({ error: "Admin runtime configuration is incomplete. Configure NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL." }, { status: 503 });
+  // Verify the browser's Access identity without depending on scheduler or DO health.
+  if (new URL(request.url).searchParams.get("auth") === "1") {
+    try {
+      const response = await fetch(new URL("/internal/admin/auth", runtimeUrl), {
+        headers: { "Cf-Access-Jwt-Assertion": accessJwt },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const body = await response.json().catch(() => ({ error: "Runtime returned invalid JSON" }));
+      return NextResponse.json(body, { status: response.status, headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to verify Cloudflare Access session" }, { status: 502 });
+    }
   }
   const query = new URL(request.url).searchParams;
   const kind = query.get("kind");
@@ -78,7 +75,7 @@ export async function GET(request: Request) {
     : "/internal/admin/overview";
   try {
     const response = await fetch(new URL(target, runtimeUrl), {
-      headers: { Authorization: "Bearer " + runtimeToken },
+      headers: { "Cf-Access-Jwt-Assertion": accessJwt },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
@@ -92,14 +89,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!validAdminToken(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const accessJwt = accessAssertion(request);
+  if (!accessJwt) return NextResponse.json({ error: "Cloudflare Access authentication required" }, { status: 401 });
   const runtimeUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  const runtimeToken = process.env.RUNTIME_ADMIN_TOKEN;
-  if (!runtimeUrl || !runtimeToken) {
-    return NextResponse.json({ error: "Admin runtime configuration is incomplete." }, { status: 503 });
-  }
+  if (!runtimeUrl) return NextResponse.json({ error: "Admin runtime configuration is incomplete." }, { status: 503 });
   const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid operation payload" }, { status: 400 });
@@ -109,7 +102,7 @@ export async function POST(request: Request) {
     try {
       const response = await fetch(new URL("/internal/admin/events-this-week/refresh", runtimeUrl), {
         method: "POST",
-        headers: { Authorization: "Bearer " + runtimeToken },
+        headers: { "Cf-Access-Jwt-Assertion": accessJwt },
         cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });
@@ -126,7 +119,7 @@ export async function POST(request: Request) {
         : "/internal/admin/daily-team-readiness";
       const response = await fetch(new URL(path, runtimeUrl), {
         method: "POST",
-        headers: { Authorization: "Bearer " + runtimeToken },
+        headers: { "Cf-Access-Jwt-Assertion": accessJwt },
         cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });
@@ -139,7 +132,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch(new URL("/internal/admin/operations", runtimeUrl), {
       method: "POST",
-      headers: { Authorization: "Bearer " + runtimeToken, "Content-Type": "application/json" },
+      headers: { "Cf-Access-Jwt-Assertion": accessJwt, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
