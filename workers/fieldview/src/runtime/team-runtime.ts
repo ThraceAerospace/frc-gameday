@@ -887,6 +887,7 @@ export class TeamRuntime {
 
     if (request.method === "GET" && url.pathname === "/state") {
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      const providerByEndpoint = new Map(this.endpoints(year).map((resource) => [resource.endpoint, resource.provider] as const));
       const snapshotRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       return Response.json({ team_key: this.teamKey, snapshot_revision: snapshotRevision,
         readiness: {
