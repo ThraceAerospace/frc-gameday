@@ -19,7 +19,13 @@ function recordTypeForKey(key: string): string {
 
 /** Shared implementation for one of the two logical record repositories. */
 class D1RecordRepository implements D1RecordStorage {
-  constructor(private readonly db: D1Database, private readonly table: RecordTable) {}
+  private readonly db: D1Database;
+  private readonly table: RecordTable;
+
+  constructor(db: D1Database, table: RecordTable) {
+    this.db = db;
+    this.table = table;
+  }
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
     const row = await this.db.prepare(`SELECT value_json FROM ${this.table} WHERE record_key = ?`)
