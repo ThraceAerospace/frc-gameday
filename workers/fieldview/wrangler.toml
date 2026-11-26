@@ -108,6 +108,19 @@ concurrency = { limit = 3 }
 
 # Preview settings are explicit: they do not inherit production variables.
 # Durable Object namespaces/storage are provisioned independently for each Preview.
+# Preview D1 is isolated from production canonical and operational records.
+[[previews.d1_databases]]
+binding = "FIELDVIEW_DB"
+database_name = "fieldview-test"
+database_id = "7e7c5be6-4967-44e6-adba-86fe7b1a76cf"
+
+# Intentionally shared with production: KV contains lightweight projections of
+# the same authoritative external TBA state, not canonical records or execution history.
+# Preview code must not write environment-specific or test-only values into this namespace.
+[[previews.kv_namespaces]]
+binding = "KV_BINDING"
+id = "c067dfcaa3a345b0b43f035a992b4b30"
+
 [previews.vars]
 TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
 STATBOTICS_API_BASE_URL = "https://api-statbotics.iterativerefinement.com/"
