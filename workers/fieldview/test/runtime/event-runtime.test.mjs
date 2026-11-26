@@ -1075,7 +1075,7 @@ test("EventRuntime inspection GETs do not bind an uninitialized identity", async
       "X-FieldView-Event-Key": "2027rikin",
     },
   }));
-  assert.equal(response.status, 204);
+  assert.equal(response.status, 404);
   assert.equal(storage.values.has("event-key"), false,
-    "an inspection GET must not initialize persistent runtime identity");
+    "an unregistered inspection GET must return 404 without initializing persistent runtime identity");
 });
