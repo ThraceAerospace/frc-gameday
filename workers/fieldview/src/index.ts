@@ -11,7 +11,7 @@ type RuntimeWorkerEnvironment = RuntimeEnvironment & JobsEnvironment;
  *
  * Jobs is invoked through a local module callback. No Worker service binding
  * or self-service binding is involved; Workflows use the shared DO namespaces
- * directly through runtime-dispatch.ts and discovery-store.ts.
+ * directly through runtime-dispatch.ts and discovery-service.ts.
  */
 export default {
   scheduled(controller: { scheduledTime: number; cron?: string }, env: RuntimeWorkerEnvironment, context: { waitUntil(promise: Promise<unknown>): void }): void {
