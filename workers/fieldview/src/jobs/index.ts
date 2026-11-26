@@ -146,7 +146,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
     const jobKey = `admin/discovery-jobs/${season}.json`;
     const updateJob = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) =>
       step.do(name, async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), jobKey);
+        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env), jobKey);
         const defaults: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
           events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [], warnings: [],
@@ -157,7 +157,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           ...defaults, ...(current ?? {}), ...patch,
           ...{ workflow_id: jobId, year: season, updated_at: Date.now() },
         };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(jobKey, JSON.stringify(next), {
+        await createDiscoveryStoreClient(this.env).put(jobKey, JSON.stringify(next), {
           httpMetadata: { contentType: "application/json" },
         });
         return next;
@@ -169,7 +169,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       // explicit (historical discovery is supported), but it never changes
       // the canonical current-season pointer.
       const tbaStatus = await step.do("resolve-and-publish-current-season", async () => {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resolve-current-season");
+        const response = await createDiscoveryStoreClient(this.env).catalog("resolve-current-season");
         if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
         const resolved = await response.json() as { year?: unknown; maxTeamPage?: unknown };
         if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200) {
@@ -186,7 +186,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       const eventDirectory = await step.do("discover-manual-season-events", {
         retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
       }, async () => {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-event-directory", {
+        const response = await createDiscoveryStoreClient(this.env).catalog("discover-event-directory", {
           year: season, generation, chunkSize: eventChunkSize,
         });
         if (!response.ok) throw new Error("DiscoveryStore event directory acquisition returned HTTP " + response.status);
@@ -203,7 +203,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         for (let firstChunk = 0; firstChunk < eventDirectory.chunkCount; firstChunk += 10) {
           const endChunk = Math.min(eventDirectory.chunkCount, firstChunk + 10);
           await step.do(`write-manual-event-chunks-${firstChunk}`, async () => {
-            const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("write-event-chunks", {
+            const response = await createDiscoveryStoreClient(this.env).catalog("write-event-chunks", {
               year: season, generation: eventDirectory.generation,
               firstChunk, endChunk, chunkSize: eventChunkSize,
             });
@@ -212,7 +212,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           });
         }
         await step.do("publish-manual-event-directory", async () => {
-          const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("publish-event-directory", {
+          const response = await createDiscoveryStoreClient(this.env).catalog("publish-event-directory", {
             year: season, generation: eventDirectory.generation,
           });
           if (!response.ok) throw new Error("DiscoveryStore event directory publication returned HTTP " + response.status);
@@ -222,7 +222,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
 
       const expectedTeamPages = tbaStatus.maxTeamPage + 1;
       const resume = await step.do("find-resumable-team-directory", async () => {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("resume-partial-team-directory", {
+        const response = await createDiscoveryStoreClient(this.env).catalog("resume-partial-team-directory", {
           year: season, expectedPageCount: expectedTeamPages,
         });
         if (!response.ok) throw new Error("DiscoveryStore partial directory lookup returned HTTP " + response.status);
@@ -244,7 +244,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           const result = await step.do(`discover-manual-team-page-${page}`, {
             retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
           }, async () => {
-            const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("discover-team-page", {
+            const response = await createDiscoveryStoreClient(this.env).catalog("discover-team-page", {
               year: season, generation: teamGeneration, page,
             });
             if (!response.ok) throw new Error("DiscoveryStore team page acquisition returned HTTP " + response.status);
@@ -270,7 +270,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         steps: 3 + expectedTeamPages,
       });
       const publication = await step.do("publish-manual-team-directory", async () => {
-        const response = await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).catalog("publish-team-directory", {
+        const response = await createDiscoveryStoreClient(this.env).catalog("publish-team-directory", {
           year: season, generation: teamGeneration, pageCount: expectedTeamPages,
           teamKeys: uniqueTeamKeys, failedPages: failedTeamPages, warnings,
         });
@@ -288,7 +288,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         error: null, started_at: requestedAt, updated_at: Date.now(),
       };
       await step.do("publish-manual-discovery-summary", async () => {
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(jobKey, JSON.stringify(summary), {
+        await createDiscoveryStoreClient(this.env).put(jobKey, JSON.stringify(summary), {
           httpMetadata: { contentType: "application/json" },
         });
         return summary;
@@ -297,7 +297,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await step.do("record-manual-discovery-failure", async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), jobKey);
+        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(this.env), jobKey);
         const failed: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
           events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
@@ -306,7 +306,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           team_generation: current?.team_generation, steps: current?.steps ?? 0, error: detail.slice(0, 500),
           started_at: requestedAt, updated_at: Date.now(),
         };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(jobKey, JSON.stringify(failed), {
+        await createDiscoveryStoreClient(this.env).put(jobKey, JSON.stringify(failed), {
           httpMetadata: { contentType: "application/json" },
         });
         return failed;
@@ -333,7 +333,7 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
     const runId = event.instanceId;
-    const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const store = () => createDiscoveryStoreClient(this.env);
     const runPrefix = `admin/workflow-runs/event-readiness/${runId}`;
     const runRecordKey = `${runPrefix}/record.json`;
     const runRecord = {
@@ -516,7 +516,7 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
     const runAt = event.payload?.scheduledAt ?? event.schedule?.scheduledTime ?? Date.now();
     const runDate = new Date(runAt).toISOString().slice(0, 10);
     const runId = event.instanceId;
-    const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const store = () => createDiscoveryStoreClient(this.env);
     const runPrefix = `admin/workflow-runs/team-readiness/${runId}`;
     const runRecordKey = `${runPrefix}/record.json`;
     const runRecord = {
@@ -677,11 +677,11 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
     const itemsPrefix = `admin/coverage-audit-items/${year}/${workflowId}/`;
     try {
       const prepared = await step.do("prepare-coverage-audit", async () => {
-        const directory = await readPublishedSeason(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), year);
+        const directory = await readPublishedSeason(createDiscoveryStoreClient(this.env), year);
         if (!directory) throw new Error("Complete event and paginated team discovery is required before starting the coverage audit");
         const now = Date.now();
-        const runtimeEvents = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), "event"));
-        const runtimeTeams = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), "team"));
+        const runtimeEvents = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env), "event"));
+        const runtimeTeams = new Set(await listRuntimeRegistry(createDiscoveryStoreClient(this.env), "team"));
         const items: CoverageAuditItem[] = [
           ...directory.events
             .filter((item) => {
@@ -716,7 +716,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           else if (lifecycle === "upcoming") counts.events_upcoming += 1;
         }
         const allItemsKey = itemsPrefix + "all.json";
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(allItemsKey, JSON.stringify(items), {
+        await createDiscoveryStoreClient(this.env).put(allItemsKey, JSON.stringify(items), {
           httpMetadata: { contentType: "application/json" },
         });
         const record: CoverageAuditRecord = {
@@ -724,7 +724,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           cursor: 0, total: items.length, event_discovery_updated_at: directory.eventUpdatedAt,
           team_discovery_updated_at: directory.teamUpdatedAt, items_prefix: itemsPrefix, counts, error: null,
         };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(auditKey, JSON.stringify(record), {
+        await createDiscoveryStoreClient(this.env).put(auditKey, JSON.stringify(record), {
           httpMetadata: { contentType: "application/json" },
         });
         return { total: items.length, chunkCount: Math.ceil(items.length / 100), counts, itemsPrefix, record };
@@ -733,10 +733,10 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
       for (let firstChunk = 0; firstChunk < prepared.chunkCount; firstChunk += 10) {
         const endChunk = Math.min(prepared.chunkCount, firstChunk + 10);
         await step.do(`write-coverage-audit-items-${firstChunk}`, async () => {
-          const allItems = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), prepared.itemsPrefix + "all.json");
+          const allItems = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env), prepared.itemsPrefix + "all.json");
           if (!allItems || allItems.length !== prepared.total) throw new Error("Coverage audit item manifest is missing or incomplete");
           for (let chunk = firstChunk; chunk < endChunk; chunk += 1) {
-            await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(
+            await createDiscoveryStoreClient(this.env).put(
               prepared.itemsPrefix + `${chunk}.json`,
               JSON.stringify(allItems.slice(chunk * 100, (chunk + 1) * 100)),
               { httpMetadata: { contentType: "application/json" } },
@@ -753,7 +753,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
         }, async () => {
           const chunkIndex = Math.floor(cursor / 100);
-          const chunk = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), prepared.itemsPrefix + `${chunkIndex}.json`);
+          const chunk = await readJson<CoverageAuditItem[]>(createDiscoveryStoreClient(this.env), prepared.itemsPrefix + `${chunkIndex}.json`);
           if (!chunk) throw new Error(`Coverage audit item chunk ${chunkIndex} is missing`);
           const batch = chunk.slice(cursor % 100, cursor % 100 + 5);
           const nextCounts = { ...counts };
@@ -835,7 +835,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
             ...prepared.record, cursor: nextCursor, counts: nextCounts,
             status: "running", updated_at: Date.now(),
           };
-          await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(auditKey, JSON.stringify(record), {
+          await createDiscoveryStoreClient(this.env).put(auditKey, JSON.stringify(record), {
             httpMetadata: { contentType: "application/json" },
           });
           return { cursor: nextCursor, counts: nextCounts };
@@ -845,7 +845,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
       }
 
       const completed = await step.do("complete-coverage-audit", async () => {
-        const current = await readPublishedSeason(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), year);
+        const current = await readPublishedSeason(createDiscoveryStoreClient(this.env), year);
         const stale = !current ||
           current.eventUpdatedAt !== prepared.record.event_discovery_updated_at ||
           current.teamUpdatedAt !== prepared.record.team_discovery_updated_at;
@@ -853,7 +853,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           ...prepared.record, cursor, counts, status: stale ? "stale" : "completed",
           updated_at: Date.now(), error: null,
         };
-        await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(auditKey, JSON.stringify(record), {
+        await createDiscoveryStoreClient(this.env).put(auditKey, JSON.stringify(record), {
           httpMetadata: { contentType: "application/json" },
         });
         return record;
@@ -862,8 +862,8 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await step.do("record-coverage-audit-failure", async () => {
-        const current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(this.env.DISCOVERY_STORE), auditKey);
-        if (current) await createDiscoveryStoreClient(this.env.DISCOVERY_STORE).put(auditKey, JSON.stringify({
+        const current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(this.env), auditKey);
+        if (current) await createDiscoveryStoreClient(this.env).put(auditKey, JSON.stringify({
           ...current, status: "failed", error: detail.slice(0, 500), updated_at: Date.now(),
         }), { httpMetadata: { contentType: "application/json" } });
         return { status: "failed", error: detail };
@@ -894,10 +894,10 @@ export default {
       if (operation === "event-team-seed" && (!/^[a-zA-Z0-9_-]+$/.test(eventKey) || !eventKey.startsWith(String(year)))) return Response.json({ error: "A valid event_key and matching year are required" }, { status: 400 });
       const subject = operation === "team-seed" ? teamKey : operation === "event-team-seed" ? eventKey : String(year);
       const indexKey = `admin/runtime-job-index/${operation}/${subject}.json`;
-      let pointer = await readJson<{ workflow_id: string }>(createDiscoveryStoreClient(env.DISCOVERY_STORE), indexKey);
+      let pointer = await readJson<{ workflow_id: string }>(createDiscoveryStoreClient(env), indexKey);
       if (request.method === "GET") {
         if (!pointer) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
-        const record = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        const record = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env), `admin/runtime-jobs/${pointer.workflow_id}.json`);
         if (!record) return Response.json({ year, operation, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
         let workflowStatus: string | null = null;
         try { workflowStatus = (await (await env.RUNTIME_ADMIN.get(pointer.workflow_id)).status()).status; } catch { workflowStatus = null; }
@@ -905,7 +905,7 @@ export default {
           : workflowStatus === "terminated" ? "cancelled"
           : workflowStatus === "errored" ? "failed"
           : workflowStatus === "complete" ? record.status : record.status;
-        const history = await createDiscoveryStoreClient(env.DISCOVERY_STORE).list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
+        const history = await createDiscoveryStoreClient(env).list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
         return Response.json({ ...record, status: mappedStatus, workflow_status: workflowStatus, history_count: history.objects.length }, {
           headers: { "Cache-Control": "no-store" },
         });
@@ -914,7 +914,7 @@ export default {
       let retryingPartial = false;
       if (!["start", "pause", "resume", "cancel", "preview"].includes(action)) return Response.json({ error: "Invalid runtime job action" }, { status: 400 });
       if (action === "resume" && pointer) {
-        const prior = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        const prior = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env), `admin/runtime-jobs/${pointer.workflow_id}.json`);
         const priorStatus = await env.RUNTIME_ADMIN.get(pointer.workflow_id).then((instance) => instance.status()).catch(() => null);
         if (prior?.status === "completed_with_errors" && priorStatus?.status === "complete") {
           action = "start";
@@ -922,8 +922,8 @@ export default {
         }
       }
       if (action === "preview") {
-        const events = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `discovery/events/${year}.json`);
-        const teams = await readJson<string[]>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `registry/teams/${year}.json`);
+        const events = await readJson<DiscoveryDocument>(createDiscoveryStoreClient(env), `discovery/events/${year}.json`);
+        const teams = await readJson<string[]>(createDiscoveryStoreClient(env), `registry/teams/${year}.json`);
         return Response.json({ year, ready: Boolean(events?.events?.length && teams?.length),
           events: events?.events?.length ?? 0, teams: teams?.length ?? 0,
           planned_runtime_initializations: (events?.events?.length ?? 0) + (teams?.length ?? 0),
@@ -955,8 +955,8 @@ export default {
         } catch { /* Previous Workflow instance is no longer available. */ }
       }
       if (pointer) {
-        const previous = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `admin/runtime-jobs/${pointer.workflow_id}.json`);
-        if (previous) await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(
+        const previous = await readJson<Record<string, unknown>>(createDiscoveryStoreClient(env), `admin/runtime-jobs/${pointer.workflow_id}.json`);
+        if (previous) await createDiscoveryStoreClient(env).put(
           `admin/runtime-job-history/${operation}/${subject}/${pointer.workflow_id}.json`,
           JSON.stringify(previous), { httpMetadata: { contentType: "application/json" } },
         );
@@ -975,12 +975,12 @@ export default {
           seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0,
         } : {}),
       };
-      await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
-      await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
+      await createDiscoveryStoreClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
+      await createDiscoveryStoreClient(env).put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
       try { await env.RUNTIME_ADMIN.create({ id: workflowId, params }); }
       catch (error) {
         const failed = { ...initial, status: "failed", phase: "failed", errors: [{ key: subject, detail: error instanceof Error ? error.message : String(error), at: Date.now() }] };
-        await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
+        await createDiscoveryStoreClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
         return Response.json(failed, { status: 409 });
       }
       return Response.json(initial, { status: 202, headers: { "Cache-Control": "no-store" } });
@@ -994,8 +994,8 @@ export default {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid audit year" }, { status: 400 });
       }
-      const record = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `admin/coverage-audits/${year}.json`);
-      const discoveryReady = (await readPublishedSeason(createDiscoveryStoreClient(env.DISCOVERY_STORE), year)) !== null;
+      const record = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env), `admin/coverage-audits/${year}.json`);
+      const discoveryReady = (await readPublishedSeason(createDiscoveryStoreClient(env), year)) !== null;
       if (!record) return Response.json({ year, status: "not_started", discovery_ready: discoveryReady }, {
         headers: { "Cache-Control": "no-store" },
       });
@@ -1031,9 +1031,9 @@ export default {
         return Response.json({ error: "Expected a valid year and start, continue, or pause action" }, { status: 400 });
       }
       const key = `admin/coverage-audits/${year}.json`;
-      let current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env.DISCOVERY_STORE), key);
+      let current = await readJson<CoverageAuditRecord>(createDiscoveryStoreClient(env), key);
       if (action === "start") {
-        const directory = await readPublishedSeason(createDiscoveryStoreClient(env.DISCOVERY_STORE), year);
+        const directory = await readPublishedSeason(createDiscoveryStoreClient(env), year);
         if (!directory) return Response.json({
           error: "Run complete event and paginated team discovery before starting the full coverage audit.",
         }, { status: 409 });
@@ -1049,7 +1049,7 @@ export default {
           } catch { /* Missing or terminal instance can be replaced by a new audit. */ }
         }
         if (current) {
-          await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(
+          await createDiscoveryStoreClient(env).put(
             `admin/coverage-audit-history/${year}/${current.workflow_id}.json`,
             JSON.stringify(current),
             { httpMetadata: { contentType: "application/json" } },
@@ -1073,7 +1073,7 @@ export default {
           event_discovery_updated_at: directory.eventUpdatedAt, team_discovery_updated_at: directory.teamUpdatedAt,
           items_prefix: `admin/coverage-audit-items/${year}/${workflowId}/`, counts: zeroCounts, error: null,
         };
-        await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(key, JSON.stringify(current), {
+        await createDiscoveryStoreClient(env).put(key, JSON.stringify(current), {
           httpMetadata: { contentType: "application/json" },
         });
         try {
@@ -1083,7 +1083,7 @@ export default {
         } catch (error) {
           const failed = { ...current, status: "failed" as const,
             error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-          await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(key, JSON.stringify(failed), {
+          await createDiscoveryStoreClient(env).put(key, JSON.stringify(failed), {
             httpMetadata: { contentType: "application/json" },
           });
           return Response.json(failed, { status: 409 });
@@ -1116,7 +1116,7 @@ export default {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      const job = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env.DISCOVERY_STORE), `admin/discovery-jobs/${year}.json`);
+      const job = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env), `admin/discovery-jobs/${year}.json`);
       if (!job) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
       let workflowStatus: string | null = null;
       try {
@@ -1143,7 +1143,7 @@ export default {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
       const key = `admin/discovery-jobs/${year}.json`;
-      const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env.DISCOVERY_STORE), key);
+      const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryStoreClient(env), key);
       if (current?.status === "running") {
         try {
           const instance = await env.DAILY_EVENT_READINESS.get(current.workflow_id);
@@ -1162,7 +1162,7 @@ export default {
         events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
         started_at: requestedAt, updated_at: requestedAt,
       };
-      await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(key, JSON.stringify(job), {
+      await createDiscoveryStoreClient(env).put(key, JSON.stringify(job), {
         httpMetadata: { contentType: "application/json" },
       });
       try {
@@ -1173,7 +1173,7 @@ export default {
       } catch (error) {
         const failed = { ...job, status: "failed" as const, stage: "failed",
           error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-        await createDiscoveryStoreClient(env.DISCOVERY_STORE).put(key, JSON.stringify(failed), {
+        await createDiscoveryStoreClient(env).put(key, JSON.stringify(failed), {
           httpMetadata: { contentType: "application/json" },
         });
         return Response.json(failed, { status: 409 });
@@ -1188,7 +1188,7 @@ export default {
       if (type !== "event-readiness" && type !== "team-readiness") {
         return Response.json({ error: "A valid workflow type is required" }, { status: 400 });
       }
-      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const store = createDiscoveryStoreClient(env);
       const workflowId = url.searchParams.get("id");
       if (workflowId) {
         if (!/^[a-zA-Z0-9_-]{1,160}$/.test(workflowId)) return Response.json({ error: "Invalid workflow ID" }, { status: 400 });
@@ -1300,7 +1300,7 @@ export default {
       }
       const scheduledAt = Date.now();
       const id = `daily-event-readiness-${scheduledAt}`;
-      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const store = createDiscoveryStoreClient(env);
       const initial = {
         workflow_id: id, workflow_type: "event-readiness", status: "queued",
         started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
@@ -1332,7 +1332,7 @@ export default {
       }
       const scheduledAt = Date.now();
       const id = `daily-team-readiness-${scheduledAt}`;
-      const store = createDiscoveryStoreClient(env.DISCOVERY_STORE);
+      const store = createDiscoveryStoreClient(env);
       const initial = {
         workflow_id: id, workflow_type: "team-readiness", status: "queued",
         started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
