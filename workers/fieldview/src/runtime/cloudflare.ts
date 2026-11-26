@@ -42,6 +42,13 @@ export interface DurableObjectNamespaceLike {
 export interface RuntimeEnvironment {
   /** Environment-specific D1 database (production or Preview test database). */
   DB?: D1DatabaseLike;
+  /** Injectable record adapter for isolated runtime tests; production uses DB. */
+  DISCOVERY_STORAGE?: {
+    get<T = unknown>(key: string): Promise<T | undefined>;
+    put<T = unknown>(key: string, value: T): Promise<void>;
+    list<T = unknown>(options?: { prefix?: string; startAfter?: string; limit?: number }): Promise<Map<string, T>>;
+    delete(key: string): Promise<boolean>;
+  };
   /** Environment-specific KV namespace for non-authoritative projections. */
   KV_BINDING?: KVNamespaceLike;
   TBA_API_KEY: string;
