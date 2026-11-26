@@ -66,7 +66,7 @@ test("event and daily team refresh analytics triggers are coalesced after both r
   const eventLoopStart = coordinator.indexOf("for (const candidate of candidates)");
   const teamRecoveryStart = coordinator.indexOf("// Reconcile TeamRuntime results that were calculated");
   const eventLoop = coordinator.slice(eventLoopStart, teamRecoveryStart);
-  assert.doesNotMatch(eventLoop, /EVENT_ANALYTICS_WORKFLOW!?\\.create\\(/,
+  assert.equal(eventLoop.includes("EVENT_ANALYTICS_WORKFLOW.create("), false,
     "the polling coordinator must not independently create an event workflow inside its event loop");
 });
 
