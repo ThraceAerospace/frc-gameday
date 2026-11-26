@@ -8,6 +8,13 @@ export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
 export const MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN = 50;
 export const MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN = 20;
 
+/** Whether a persisted EventRuntime analytics state is eligible for coordinator recovery. */
+export function isEventAnalyticsRecoveryDue(status: unknown, dueAt: unknown, now: number): boolean {
+  if (status !== "pending" && status !== "failed" && status !== "stale") return false;
+  return dueAt === null || dueAt === undefined ||
+    !Number.isSafeInteger(dueAt) || (dueAt as number) <= now;
+}
+
 /** Return valid events that are active according to their own IANA timezone. */
 export function selectActiveEvents(events: TbaEvent[], now: number): TbaEvent[] {
   return events
