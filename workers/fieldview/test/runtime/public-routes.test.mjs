@@ -1,6 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { webcrypto } from "node:crypto";
 import runtime from "../../src/runtime/index.ts";
+
+const accessIssuer = "https://fieldview.cloudflareaccess.com";
+const accessAudience = "fieldview-runtime-admin-audience";
+const accessKeys = await webcrypto.subtle.generateKey(
+  { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+  true,
+  ["sign", "verify"],
+);
+const accessPublicJwk = { ...(await webcrypto.subtle.exportKey("jwk", accessKeys.publicKey)), kid: "fieldview-test-key", alg: "RS256", use: "sig" };
+const accessEncode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const accessHeader = accessEncode({ alg: "RS256", typ: "JWT", kid: "fieldview-test-key" });
+const accessPayload = accessEncode({
+  iss: accessIssuer, aud: [accessAudience], sub: "test-admin",
+  email: "admin@example.com", iat: Math.floor(Date.now() / 1000),
+  exp: Math.floor(Date.now() / 1000) + 3600,
+});
+const accessInput = accessHeader + "." + accessPayload;
+const accessSignature = await webcrypto.subtle.sign(
+  { name: "RSASSA-PKCS1-v1_5" }, accessKeys.privateKey, new TextEncoder().encode(accessInput),
+);
+const accessToken = accessInput + "." + Buffer.from(accessSignature).toString("base64url");
+
 
 // Adapt namespace-shaped fixtures to the in-process record-store test seam.
 function adaptDiscoveryFixture(namespace) {
@@ -36,6 +59,10 @@ function makeEnvironment() {
     calls,
     env: {
       RUNTIME_ADMIN_TOKEN: "server-only-token",
+      CF_ACCESS_TEAM_DOMAIN: accessIssuer,
+      CF_ACCESS_AUD: accessAudience,
+      RUNTIME_ADMIN_EMAILS: "admin@example.com",
+      fetcher: async () => Response.json({ keys: [accessPublicJwk] }, { headers: { "Cache-Control": "public, max-age=300" } }),
       DISCOVERY_STORE: {
         idFromName(name) { return name; },
         get() {
@@ -86,7 +113,7 @@ test("retired per-event readiness route is unavailable and never activates a run
   const response = await worker.fetch(
     new Request("https://runtime.example/internal/admin/event-readiness", {
       method: "POST",
-      headers: { Authorization: "Bearer server-only-token", "Content-Type": "application/json" },
+      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ event_key: "2026historic", year: 2026 }),
     }),
     env,
@@ -209,7 +236,7 @@ test("discovery job status is authenticated and forwarded to the local Jobs modu
 
   const allowed = await worker.fetch(
     new Request("https://runtime.example/internal/admin/discover-year?year=2027", {
-      headers: { Authorization: "Bearer server-only-token" },
+      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken },
     }),
     env,
   );
@@ -231,7 +258,7 @@ test("internal Workflow runtime-state route authenticates and reads the canonica
 
   const allowed = await worker.fetch(
     new Request("https://runtime.example/internal/workflows/runtime-state?kind=event&key=2026test", {
-      headers: { Authorization: "Bearer server-only-token" },
+      headers: { Authorization: "Bearer server-only-token", "Cf-Access-Jwt-Assertion": accessToken },
     }),
     env,
   );
