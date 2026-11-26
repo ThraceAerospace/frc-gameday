@@ -577,6 +577,8 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
     }),
   }));
   assert.equal(acknowledgement.status, 200);
+  assert.equal(storage.values.has("team-season-analytics:" + year), false,
+    "acknowledgement invalidates the previously cached partial aggregate");
   const refreshAfterAcknowledgement = await runtime.fetch(new Request("https://team-runtime/season-analytics/refresh?year=" + year, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
