@@ -369,21 +369,23 @@ export class TeamRuntime {
       return Response.json(publication.state, { headers });
     }
 
-    // Internal/admin operations may materialize the requested season. Public
-    // reads above are deliberately isolated from this write-capable path.
-    // Every TeamRuntime starts with the current season state, even when first
-    // reached through an older event. The requested season is also materialized.
+    // Only explicit mutation commands may materialize TeamState. All GET
+    // inspection paths, readiness, and analytics-input reads/preparation stay
+    // outside this implicit initialization path.
+    const skipAutomaticInitialization = publicRead || publicSeasonAnalyticsRead || publicEventStateRead ||
+      diagnosticsRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare;
     const currentYear = pendingAnalyticsRead ? null : await this.currentSeasonYear();
-    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare || currentYear === null
-      ? null
-      : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
-        ? null
-        : await this.snapshot(currentYear);
-    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare
-      ? null
-      : year === currentYear && initializedCurrentState
-        ? initializedCurrentState
-        : await this.snapshot(year);
+    if (!skipAutomaticInitialization) {
+      let requestedYearInitialized = false;
+      if (currentYear !== null) {
+        const currentPublication = await this.storage.get<unknown>("team-state:" + currentYear + ":publication");
+        if (!currentPublication) {
+          await this.snapshot(currentYear);
+          requestedYearInitialized = currentYear === year;
+        }
+      }
+      if (!requestedYearInitialized) await this.snapshot(year);
+    }
     if (publicEventStateRead) {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
