@@ -15,7 +15,6 @@ export type RemoteSignalingStatus =
 
 type SignalMessage =
   | { type: "connected"; role: RemoteRole }
-  | { type: "heartbeat-ack" }
   | { type: "peer-ready" }
   | { type: "signal"; payload: WebRTCSignalPayload }
   | { type: "error"; message: string };
@@ -50,7 +49,6 @@ export class RemotePeer {
   private closed = false;
   private readonly token = crypto.randomUUID();
   private reconnectingPeer = false;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
 
   constructor(options: PeerOptions) {
@@ -80,10 +78,6 @@ export class RemotePeer {
   close() {
     this.closed = true;
 
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
     if (this.signalingReconnectTimer) {
       clearTimeout(this.signalingReconnectTimer);
       this.signalingReconnectTimer = null;
@@ -120,11 +114,6 @@ export class RemotePeer {
     socket.onopen = () => {
       if (this.socket !== socket || this.closed) return;
       this.options.onSignalingStatus?.("connected");
-      if (this.runtimeBaseUrl) {
-        this.heartbeatTimer = setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "heartbeat" }));
-        }, 30_000);
-      }
     };
 
     socket.onmessage = (event) => {
@@ -150,8 +139,6 @@ export class RemotePeer {
       if (this.socket !== socket || this.closed) return;
 
       this.socket = null;
-      if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
       this.options.onSignalingStatus?.("disconnected");
 
       if (this.shouldReconnectSignaling()) {
@@ -184,7 +171,6 @@ export class RemotePeer {
       return;
     }
 
-    if (message.type === "heartbeat-ack") return;
     if (message.type === "connected") {
       return;
     }
