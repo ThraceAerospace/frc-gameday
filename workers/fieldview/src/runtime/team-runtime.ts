@@ -223,12 +223,13 @@ export class TeamRuntime {
     const publicEventStateRead = request.method === "GET" && url.pathname === "/event-state";
     const publicSeasonAnalyticsRead = request.method === "GET" && url.pathname === "/season-analytics";
     const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
+    const pendingAnalyticsRead = request.method === "GET" && url.pathname === "/pending-event-analytics";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     // Public reads must not bind identity or perform migration cleanup writes.
     // Entity identity is established by scheduler/admin initialization before a
     // runtime is exposed to public readers.
     const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
-    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest) {
+    if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest || pendingAnalyticsRead) {
       if (diagnosticsRead && !isRuntimeAdminAuthorized(request, this.env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
@@ -250,6 +251,37 @@ export class TeamRuntime {
     const year = yearText === null ? await this.currentSeasonYear() : Number(yearText);
     if (year === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
     if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
+
+    if (pendingAnalyticsRead) {
+      const records = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
+      const pending = [];
+      for (const [key, state] of records) {
+        const eventKey = key.slice(TEAM_EVENT_STATE_PREFIX.length);
+        if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey) ||
+            Number(eventKey.slice(0, 4)) !== year ||
+            state?.event_key !== eventKey || state?.team_key !== this.teamKey) continue;
+        const inputs = await this.storage.get<{
+          event_source_revision: number;
+          team_source_revision: number;
+          comparison_input_updated_at: number;
+          calculated_at?: number;
+          publication_status?: "pending" | "published";
+        }>(key + ":inputs");
+        if (inputs?.publication_status !== "pending") continue;
+        pending.push({
+          event_key: eventKey,
+          team_event_revision: await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0,
+          event_source_revision: inputs.event_source_revision,
+          team_source_revision: inputs.team_source_revision,
+          comparison_input_updated_at: inputs.comparison_input_updated_at,
+          calculated_at: Number.isSafeInteger(inputs.calculated_at) ? inputs.calculated_at : null,
+        });
+      }
+      pending.sort((a, b) => a.event_key.localeCompare(b.event_key));
+      return Response.json({ team_key: this.teamKey, year, pending }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
 
     if (publicSeasonAnalyticsRead) {
       const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
@@ -369,12 +401,12 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = await this.currentSeasonYear();
-    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || currentYear === null
+    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || currentYear === null
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
         ? null
         : await this.snapshot(currentYear);
-    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest
+    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead
       ? null
       : year === currentYear && initializedCurrentState
         ? initializedCurrentState
