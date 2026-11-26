@@ -84,7 +84,9 @@ export default function RemoteSession({
       peerRef.current?.sendMessage({ type: "stateSnapshot", state: snapshot });
       if (includeEventSnapshots && !peerUsesLocalCanonicalSnapshotsRef.current) {
         for (const [eventKey, value] of Object.entries(eventSnapshotsRef.current)) {
+          if (!peerUsesLocalCanonicalSnapshotsRef.current) {
           peerRef.current?.sendMessage({ type: "eventSnapshot", eventKey, ...value });
+        }
         }
       }
     },
