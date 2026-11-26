@@ -21,16 +21,6 @@ class MemoryStorage {
 }
 const env = (fetcher) => ({ TBA_API_KEY: "test-key", RUNTIME_ADMIN_TOKEN: "admin", TBA_WEBHOOK_SECRET: "unused", EVENT_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => new Response() }) }, DISCOVERY_STORAGE: { async get(key) { return key === "discovery/current-season.json" ? JSON.stringify({ year: 2026, checkedAt: Date.now() }) : undefined; }, async put() {}, async list() { return new Map(); }, async delete() { return false; } }, fetcher });
 
-async function drainManualQueue(runtime, storage, max = 20) {
-  for (let index = 0; index < max; index += 1) {
-    const queue = storage.values.get("manual:poll-queue") ?? [];
-    if (queue.length === 0) return;
-    storage.values.set("manual:poll-queue", queue.map((item) => ({ ...item, dueAt: Date.now() - 1 })));
-    await runtime.alarm();
-  }
-  assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0, "manual provider queue should drain within the test bound");
-}
-
 test("TeamRuntime does not register a Durable Object alarm handler", () => {
   assert.equal(TeamRuntime.prototype.alarm, undefined);
 });
