@@ -838,8 +838,8 @@ export class TeamRuntime {
         affected_events: affectedEvents, snapshot,
       }, { headers: { "Cache-Control": "no-store" } });
     }
-    if ((request.method === "GET" || request.method === "POST") &&
-        (url.pathname === "/analytics-season-input" || url.pathname === "/analytics-season-input/prepare")) {
+    if ((request.method === "GET" && url.pathname === "/analytics-season-input") ||
+        (request.method === "POST" && url.pathname === "/analytics-season-input/prepare")) {
       const year = Number(url.searchParams.get("year"));
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "A valid season year is required" }, { status: 400 });
