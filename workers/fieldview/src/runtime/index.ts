@@ -60,7 +60,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<void> {
   if (!env.DB) return;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-  await discoveryStore(env).put(prefix + key + ".json", "{}", {
+  await discoveryServiceClient(env).put(prefix + key + ".json", "{}", {
     httpMetadata: { contentType: "application/json" },
   });
 }
@@ -375,7 +375,7 @@ export default {
       }
       const year = body.year;
       const eventKey = body.event_key;
-      const directoryObject = await discoveryStore(env).get(`discovery/events/${year}.json`);
+      const directoryObject = await discoveryServiceClient(env).get(`discovery/events/${year}.json`);
       if (!directoryObject) {
         return Response.json({ error: "No published event directory exists for the requested year" }, { status: 404 });
       }
@@ -461,7 +461,7 @@ export default {
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const object = await discoveryStore(env).get("discovery/current-season.json");
+      const object = await discoveryServiceClient(env).get("discovery/current-season.json");
       if (!object) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       const current = await object.json<{ year?: unknown; checkedAt?: unknown }>().catch(() => null);
       if (!current || !Number.isInteger(current.year) || Number(current.year) < 1992 ||
@@ -477,7 +477,7 @@ export default {
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const object = await discoveryStore(env).get("projections/events-this-week/current.json");
+      const object = await discoveryServiceClient(env).get("projections/events-this-week/current.json");
       if (object) {
         const projection = await object.json<{
           schemaVersion: number; year: number; evaluatedAt: number; runDate: string;
@@ -520,7 +520,7 @@ export default {
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const object = await discoveryStore(env).get("discovery/events/" + requestedYear + ".json");
+      const object = await discoveryServiceClient(env).get("discovery/events/" + requestedYear + ".json");
         if (object) {
           const discovery = await object.json<{
             year: number; events: Array<Record<string, unknown>>;
@@ -557,7 +557,7 @@ export default {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
       if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
-      const manifestObject = await discoveryStore(env).get(`discovery/teams/${year}.json`);
+      const manifestObject = await discoveryServiceClient(env).get(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
           status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
@@ -571,7 +571,7 @@ export default {
       }
       const teamKeys: string[] = [];
       for (let page = 0; page < manifest.pageCount; page += 1) {
-        const pageObject = await discoveryStore(env).get(
+        const pageObject = await discoveryServiceClient(env).get(
           `discovery/team-pages/${year}/${manifest.generation}/${page}.json`,
         );
         if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
@@ -779,7 +779,7 @@ export default {
         return Response.json({ error: "Invalid inventory query" }, { status: 400 });
       }
       const discoveryKey = kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`;
-      const discoveryObject = await discoveryStore(env)?.get(discoveryKey);
+      const discoveryObject = await discoveryServiceClient(env)?.get(discoveryKey);
       let discovered: string[] = [];
       if (discoveryObject) {
         try {
@@ -794,7 +794,7 @@ export default {
       if (env.DB) {
         let cursorToken: string | undefined;
         do {
-          const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
+          const page = await discoveryServiceClient(env).list({ prefix, limit: 1000, ...(cursorToken ? { cursor: cursorToken } : {}) });
           for (const object of page.objects) {
             const key = object.key.slice(prefix.length).replace(/\.json$/, "");
             if (key && (kind === "team" || key.startsWith(String(year)))) runtimeKeys.push(key);
@@ -815,7 +815,7 @@ export default {
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
           !Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
-      const directoryObject = await discoveryStore(env)?.get(
+      const directoryObject = await discoveryServiceClient(env)?.get(
         kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`,
       );
       let discovered = false;
@@ -827,7 +827,7 @@ export default {
             : Array.isArray(directory) && directory.includes(key);
         } catch { discovered = false; }
       }
-      const marker = await discoveryStore(env)?.get(
+      const marker = await discoveryServiceClient(env)?.get(
         (kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/") + key + ".json",
       );
       if (!discovered && !marker) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
@@ -866,11 +866,11 @@ export default {
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      const object = await discoveryStore(env)?.get("discovery/current-season.json");
+      const object = await discoveryServiceClient(env)?.get("discovery/current-season.json");
       const current = object ? await object.json<{ year: number }>().catch(() => null) : null;
       const year = current?.year ?? null;
-      const eventObject = year === null ? null : await discoveryStore(env)?.get(`discovery/events/${year}.json`);
-      const teamObject = year === null ? null : await discoveryStore(env)?.get(`discovery/teams/${year}.json`);
+      const eventObject = year === null ? null : await discoveryServiceClient(env)?.get(`discovery/events/${year}.json`);
+      const teamObject = year === null ? null : await discoveryServiceClient(env)?.get(`discovery/teams/${year}.json`);
       const events = eventObject ? await eventObject.json<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>().catch(() => null) : null;
       const teams = teamObject ? await teamObject.json<{ teamCount?: number; updatedAt?: number }>().catch(() => null) : null;
       let multiplexer: unknown = null;
@@ -889,7 +889,7 @@ export default {
         const keys: string[] = [];
         let cursor: string | undefined;
         do {
-          const page = await discoveryStore(env).list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+          const page = await discoveryServiceClient(env).list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
           for (const item of page.objects) {
             const key = item.key.slice(prefix.length).replace(/\.json$/, "");
             if (key && (kind === "team" || key.startsWith(String(year)))) keys.push(key);
@@ -898,8 +898,8 @@ export default {
         } while (cursor);
         return keys;
       };
-      const eventRegistryObject = year === null ? null : await discoveryStore(env)?.get(`registry/events/${year}.json`);
-      const teamRegistryObject = year === null ? null : await discoveryStore(env)?.get(`registry/teams/${year}.json`);
+      const eventRegistryObject = year === null ? null : await discoveryServiceClient(env)?.get(`registry/events/${year}.json`);
+      const teamRegistryObject = year === null ? null : await discoveryServiceClient(env)?.get(`registry/teams/${year}.json`);
       const eventRegistry = eventRegistryObject ? await eventRegistryObject.json<string[]>().catch(() => []) : [];
       const teamRegistry = teamRegistryObject ? await teamRegistryObject.json<string[]>().catch(() => []) : [];
       const eventRuntimeKeys = await runtimeKeys("event");
@@ -942,7 +942,7 @@ export default {
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
         }
-        const discovery = discoveryStore(env);
+        const discovery = discoveryServiceClient(env);
         const runtimeMarker = discovery ? await discovery.get(`registry/runtime-teams/${canonicalTeamKey}.json`) : null;
         if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
         if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
@@ -956,7 +956,7 @@ export default {
         headers.set("Cache-Control", "no-store");
         return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
       }
-      const discovery = discoveryStore(env);
+      const discovery = discoveryServiceClient(env);
       const runtimeMarker = discovery ? await discovery.get(`registry/runtime-teams/${canonicalTeamKey}.json`) : null;
       if (!runtimeMarker) return Response.json({ error: "Team state is not ready" }, { status: 404 });
       if (!env.TEAM_RUNTIME) return Response.json({ error: "Team runtime is not bound" }, { status: 503 });
@@ -1034,7 +1034,7 @@ export default {
     if (validPublicRoute && request.method === "GET") {
       // A missing runtime marker means readiness has not created this entity.
       // Do not activate a Durable Object merely to answer a cold public read.
-      const discovery = discoveryStore(env);
+      const discovery = discoveryServiceClient(env);
       const runtimeMarker = discovery ? await discovery.get(`registry/runtime-events/${publicEventKey}.json`) : null;
       if (!runtimeMarker) return Response.json({ error: "Event state is not ready" }, { status: 404 });
       if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
