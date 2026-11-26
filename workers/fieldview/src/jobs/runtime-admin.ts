@@ -362,8 +362,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
       await update({ processed: counts.teams_queued + counts.events_queued, counts, errors: errors.slice(-100) });
     }
 
-    // Event resources, EventState, analytics, and lifecycle are checked in
-    // bounded passes. A runtime is not marked complete merely because refresh
+    // Event resources, EventState, and analytics are checked in bounded
+    // passes. A runtime is not marked complete merely because refresh
     // was accepted; all its required sources and analytics must reach a terminal
     // state first.
     const readyEvents = new Set<string>();
