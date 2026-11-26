@@ -16,8 +16,8 @@ This section describes the live branch implementation and supersedes any present
 - `D1RecordStore` routes discovery/catalog keys to `DiscoveryRecordsRepository` and operational/admin/workflow/runtime-registration keys to `SystemRecordsRepository`. The in-process `DiscoveryService` owns TBA current-season and directory acquisition/publication.
 - D1 upserts skip byte-identical JSON/type values. Related directory publication mutations use D1 `batch()`; superseded-generation pruning occurs after publication commits.
 - D1 repository tests cover table separation, prefix/cursor listing, JSON validation, no-op writes, atomic batch publication, and rollback on batch failure.
-- The latest branch CI run, commit `96613180b04d017fba5ed6eb8d6e432a4f5c5a83`, passed workspace typechecking and the full workspace test command. The migration plan records 299 repository tests passing on 2026-11-26.
-- No remote D1 migration has been applied. The branch still needs an explicit clean-start local D1 migration smoke test; the current CI workflow does not apply the Wrangler D1 migration.
+- The D1 migration smoke test is part of `.github/workflows/ci.yml` before typechecking and workspace tests. The migration plan records 299 repository tests passing on 2026-11-26; verify the latest branch CI result again after subsequent changes.
+- No remote D1 migration has been applied. CI now applies the committed Wrangler D1 migration against a fresh local-only database and verifies that exactly `discovery_records` and `system_records` exist. This is a clean-start schema smoke test; it does not validate remote credentials, production data, or Cloudflare billing behavior.
 - The D1 System Records repository is present, but durable EventAnalyticsWorkflow execution/recovery records are not yet implemented. That work is tracked separately in Issue #32 and remains gated by Issue #30.
 - Account-specific Cloudflare physical-row usage and daily write-budget reconciliation remain unverified; source-level operation counts must not be represented as billable-row telemetry.
 
