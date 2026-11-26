@@ -860,6 +860,7 @@ export class EventRuntime {
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       return Response.json({
         event_key: this.eventKey,
+        event_state_published: Boolean(eventStatePublication),
         source_revision: currentSourceRevision,
         comparison_input_updated_at: await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null,
         analytics: {
