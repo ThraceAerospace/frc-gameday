@@ -19,7 +19,7 @@ interface DiscoveryServiceClient {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
-function discoveryStore(env: RuntimeEnvironment): DiscoveryServiceClient {
+function discoveryServiceClient(env: RuntimeEnvironment): DiscoveryServiceClient {
   if (!env.DB) return {
     async get() { return null; }, async put() {}, async list() { return { objects: [], truncated: false }; },
   };
