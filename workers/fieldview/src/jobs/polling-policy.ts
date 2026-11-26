@@ -6,6 +6,7 @@ export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
 export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
 export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
 export const MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN = 50;
+export const MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN = 20;
 
 /** Return valid events that are active according to their own IANA timezone. */
 export function selectActiveEvents(events: TbaEvent[], now: number): TbaEvent[] {
