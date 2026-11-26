@@ -65,9 +65,9 @@ test("TeamRuntime exposes only pending event analytics to the central recovery c
       providerCalls += 1;
       throw new Error("pending analytics inspection must not fetch providers");
     }),
-    DISCOVERY_STORE: {
-      idFromName: () => "shared",
-      get: () => ({ fetch: async () => { throw new Error("pending analytics inspection must not read DiscoveryStore"); } }),
+    DISCOVERY_STORAGE: {
+      async get() { throw new Error("pending analytics inspection must not read DiscoveryService"); },
+      async put() {}, async list() { return new Map(); }, async delete() { return false; },
     },
   }, teamKey);
   const response = await runtime.fetch(new Request("https://team-runtime/pending-event-analytics?year=2026", {
