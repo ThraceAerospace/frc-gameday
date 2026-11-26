@@ -53,13 +53,9 @@ class_name = "TeamRuntime"
 name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
-[[durable_objects.bindings]]
-name = "DISCOVERY_STORE"
-class_name = "DiscoveryStore"
-
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["EventRuntime", "TeamRuntime", "Multiplexer", "DiscoveryStore"]
+new_sqlite_classes = ["EventRuntime", "TeamRuntime", "Multiplexer"]
 
 [[workflows]]
 name = "daily-event-readiness"
