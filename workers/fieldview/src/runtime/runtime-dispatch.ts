@@ -70,7 +70,7 @@ export async function dispatchRuntime(
 
       }
     }
-    if (response.ok && action !== "readiness" && action !== "pending-analytics") await registerRuntimeMarker(env, "team", key);
+    if (response.ok && ["refresh", "seed"].includes(action)) await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
@@ -83,10 +83,11 @@ export async function dispatchRuntime(
     refresh: "refresh",
     publish: "publish-state",
     analytics: "analytics",
+    "analytics-state": "analytics-state",
   };
   const path = paths[action];
   if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
-  const method = action === "state" || action === "analytics" ? "GET" : "POST";
+  const method = action === "state" || action === "analytics" || action === "analytics-state" ? "GET" : "POST";
   const payload = { ...body };
   delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
 
@@ -94,7 +95,9 @@ export async function dispatchRuntime(
     method, headers,
     ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
   }));
-  if (response.ok && action !== "readiness") await registerRuntimeMarker(env, "event", key);
+  if (response.ok && !["readiness", "state", "analytics", "analytics-state"].includes(action)) {
+    await registerRuntimeMarker(env, "event", key);
+  }
   return response;
 }
 
