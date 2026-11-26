@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TeamRuntime, teamResourceEndpoints } from "../../src/runtime/team-runtime.ts";
-import { D1RecordStore } from "../../src/runtime/d1-record-store.ts";
 
 class MemoryStorage {
   values = new Map(); alarmAt = null;
