@@ -6,22 +6,24 @@
 
 The remote-session Durable Object does not use alarms, durable leases, heartbeat messages, or periodic storage writes. It has at most two participants (controller and display), so accepted hibernatable WebSockets are the presence registry.
 
-- The Durable Object checks its accepted WebSocket set to enforce one active socket per role.
+- The Durable Object checks its accepted WebSocket set and filters to `readyState === OPEN` to enforce one active socket per role; closed sockets are not treated as participants.
 - Role and per-connection token are stored as WebSocket attachments, which survive WebSocket hibernation.
 - Signaling is validated and forwarded directly to the opposite role.
-- Normal and abnormal socket closure remove the socket from the accepted socket set; a later connection can claim that role.
+- A reconnect using the same in-memory `RemotePeer` token replaces that peer's previous socket. A different token cannot take over an occupied role.
+- The Worker explicitly selects `fieldview.remote.v1` as the negotiated WebSocket subprotocol; the role and token remain in the offered protocol list, not the URL.
+- The browser converts the configured runtime HTTP(S) base URL to WS(S) before opening the socket.
 - There is no session-state persistence, alarm scheduling, alarm cleanup, or browser heartbeat traffic.
 - The DO can hibernate while connections remain open; incoming WebSocket events reactivate it.
 
 ## Resource rationale
 
-Cloudflare D1 `row_written` usage is a scarce budget for FieldView. This object has no need for D1 writes at all. Durable Object storage writes and alarm invocations are separate platform meters, but the same conservation principle applies: do not add scheduled work or persistent writes without a demonstrated requirement.
+FieldView's `row_written` allowance is scarce. This object has no reason to schedule alarms, maintain durable leases, or periodically write session metadata. Those operations would spend budget without adding useful correctness for a two-participant transient signaling room.
 
-The remote-session runtime therefore must not call `storage.put`, `storage.delete`, `storage.setAlarm`, or `storage.deleteAlarm`. Tests make those methods fail if called. Application-level heartbeats are also removed because they existed only to renew durable leases.
+The remote-session runtime therefore must not call `storage.put`, `storage.delete`, `storage.setAlarm`, or `storage.deleteAlarm`. Tests make those methods fail if called. Application-level heartbeats are also removed because they existed only to renew durable leases. This is a hard default for future FieldView Durable Objects too: no alarm or periodic write without a demonstrated requirement and explicit design review.
 
 ## Tradeoff
 
-An abandoned pairing code has no persistent record to clean up. Once both sockets close, the object has no session state to retain. A live but network-partitioned WebSocket remains present until the platform closes it; reconnection behavior is handled by the client and WebSocket lifecycle, not a periodic lease. If future evidence shows stale live connections cause a real correctness issue, evaluate an explicit protocol-level solution before introducing alarms or persistence.
+An abandoned pairing code has no persistent record to clean up. Once both sockets close, the object has no session state to retain. A live but network-partitioned WebSocket remains present until the platform closes it. A reconnect from the same peer token can replace that stale connection; a new client with a different token receives a conflict while the previous connection is still considered open. This avoids heartbeat traffic but means a browser reload that loses its token may need to wait for the old connection to close. If real usage demonstrates that this is a problem, evaluate a protocol-level recovery mechanism before introducing alarms or persistence.
 
 ## Validation boundary
 
