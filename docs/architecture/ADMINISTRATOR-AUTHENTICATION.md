@@ -2,9 +2,13 @@
 
 **Status:** Worker-side Cloudflare Access verification and the Vercel
 Command Center proxy integration are implemented on
-`fieldview-architecture-migration`. The Cloudflare Access application,
-custom-domain proxy configuration, and runtime environment values still need
-to be provisioned. Until then, administrator endpoints fail closed.
+`fieldview-architecture-migration`. The Vercel project currently has only
+`frc-gameday.vercel.app` attached; that hostname is not a Cloudflare-managed
+zone hostname and cannot be protected by a normal self-hosted Access public
+hostname application. A custom domain on an active Cloudflare zone must be
+attached to the Vercel project before the Access application can be provisioned.
+Runtime environment values also remain to be configured. Until then,
+administrator endpoints fail closed.
 
 ## Request and authorization flow
 
@@ -104,7 +108,7 @@ configured and validated.
 
 ## Validation and rollout
 
-1. Identify the exact Vercel custom hostname used by FieldView.
+1. Register or identify a custom domain under the user's control, add it to the Cloudflare zone, and attach it to the Vercel project. The current production-only `frc-gameday.vercel.app` domain is not eligible for a standard public-hostname Access app.
 2. Configure the Cloudflare-proxied hostname and verify Vercel Verified Proxy
    Lite prerequisites.
 3. Create the path-scoped Access application for the two admin paths and its
