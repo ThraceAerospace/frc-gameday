@@ -1036,6 +1036,71 @@ test("EventRuntime accepts analytics publication only for the current event sour
 
 
 
+test("EventRuntime preserves its last-good publication when provider revalidation fails", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2026lastgood";
+  const endpoint = TBA_ENDPOINTS.event(eventKey);
+  const now = Date.now();
+  const lastGoodData = {
+    key: eventKey, name: "Last Good Event", year: 2026,
+    start_date: "2026-04-01", end_date: "2026-04-03",
+    timezone: "America/New_York", event_type: 0,
+  };
+  const endpointState = {
+    endpoint, status: "available", data: lastGoodData, providerData: lastGoodData,
+    etag: '"last-good-v1"', lastFetchedAt: now - 120_000, expiresAt: now - 1,
+    revision: 3, validatorRevision: 3, lastAttemptAt: now - 120_000, lastWebhookAt: null,
+  };
+  storage.values.set("event-key", eventKey);
+  storage.values.set("endpoint:" + endpoint, endpointState);
+  const publication = {
+    sourceRevision: 3, snapshotVersion: 3, generatedAt: now - 120_000, status: "partial",
+    state: {
+      event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {},
+    },
+  };
+  storage.values.set("event-state:publication", publication);
+  storage.values.set("snapshot-revision", 3);
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async (_input, init) => {
+      providerCalls += 1;
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("If-None-Match"), '"last-good-v1"',
+        "revalidation must use the retained upstream validator");
+      return new Response("provider unavailable", { status: 503 });
+    },
+  }, eventKey);
+
+  const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoints: [endpoint] }),
+  }));
+  assert.equal(refresh.status, 200);
+  assert.equal(providerCalls, 1);
+  const afterFailure = storage.values.get("endpoint:" + endpoint);
+  assert.equal(afterFailure.status, "stale");
+  assert.deepEqual(afterFailure.data, lastGoodData);
+  assert.deepEqual(afterFailure.providerData, lastGoodData);
+  assert.equal(afterFailure.etag, '"last-good-v1"');
+  assert.equal(afterFailure.revision, 3);
+  assert.equal(storage.values.get("event-state:publication"), publication,
+    "a failed refresh must not replace the last-good canonical publication");
+
+  const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(snapshot.status, 200);
+  assert.equal((await snapshot.json()).event.name, "Last Good Event");
+});
+
 test("EventRuntime exposes durable analytics due state for coordinator recovery", async () => {
   const storage = new MemoryStorage(), eventKey = "2027rikin";
   storage.values.set("event-key", eventKey);
