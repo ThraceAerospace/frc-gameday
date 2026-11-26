@@ -683,20 +683,21 @@ test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime r
     "public reads normalize the legacy copy but never rewrite durable storage");
 });
 
-test("TeamRuntime does not copy upcoming-match timing into team-owned state", async () => {
+test("TeamRuntime does not accept EventRuntime-owned webhook updates", async () => {
   const storage = new MemoryStorage();
-  const teamKey = "frc3461", eventKey = "2026test", matchKey = "2026test_qm1";
-  const match = {
-    key: matchKey, event_key: eventKey, time: 100, predicted_time: null,
-    alliances: { red: { team_keys: [teamKey, "frc1", "frc2"] }, blue: { team_keys: ["frc3", "frc4", "frc5"] } },
-    predictions: {}, teams: { red: [], blue: [] }, sources: {},
+  const teamKey = "frc3461", eventKey = "2026test";
+  const before = {
+    event_key: eventKey,
+    team_key: teamKey,
+    sources: { team: {}, event_team: {}, matches: {} },
+    match_refs: [{
+      owner: "event-runtime", owner_id: eventKey, record_type: "match",
+      record_id: "2026test_qm1", revision: 0,
+    }],
   };
-  storage.values.set("team-event-state:" + eventKey, {
-    event_key: eventKey, team_key: teamKey, sources: { team: {}, event_team: {}, matches: {} },
-    match_refs: [{ owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0 }],
-  });
+  storage.values.set("team-event-state:" + eventKey, structuredClone(before));
   const runtime = new TeamRuntime({ storage }, env(async () => {
-    throw new Error("upcoming-match handling must not perform provider fetches");
+    throw new Error("webhook handling must not perform provider fetches");
   }), teamKey);
   const response = await runtime.fetch(new Request("https://team/webhook", {
     method: "POST",
@@ -707,16 +708,13 @@ test("TeamRuntime does not copy upcoming-match timing into team-owned state", as
     },
     body: JSON.stringify({
       message_type: "upcoming_match",
-      message_data: { event_key: eventKey, match_key: matchKey, team_keys: [teamKey], scheduled_time: 200, predicted_time: 250 },
+      message_data: {
+        event_key: eventKey, match_key: "2026test_qm1",
+        team_keys: [teamKey], scheduled_time: 200, predicted_time: 250,
+      },
     }),
   }));
-  assert.equal(response.status, 200);
-  const result = await response.json();
-  assert.equal(result.changed, false);
-  assert.equal(result.canonical_owner, "event-runtime");
-  assert.deepEqual(storage.values.get("team-event-state:" + eventKey).match_refs, [{
-    owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: matchKey, revision: 0,
-  }]);
-  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), false);
+  assert.equal(response.status, 404);
+  assert.deepEqual(storage.values.get("team-event-state:" + eventKey), before);
   assert.equal(storage.values.get("team-event-revision:" + eventKey), undefined);
 });
