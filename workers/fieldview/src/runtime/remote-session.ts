@@ -23,7 +23,12 @@ function validPayload(value: unknown): boolean {
 
 /** Pair-isolated WebRTC signaling with expiring controller/display role leases. */
 export class RemoteSessionRuntime {
-  constructor(private readonly state: DurableObjectStateLike, private readonly env: RuntimeEnvironment) {}
+  private readonly state: DurableObjectStateLike;
+  private readonly env: RuntimeEnvironment;
+  constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
+    this.state = state;
+    this.env = env;
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -126,7 +131,7 @@ export class RemoteSessionRuntime {
       try { socket.close(1008, "Invalid signaling message"); } catch { /* closed */ }
       return;
     }
-    this.sendToRole(body.target, { type: "signal", payload: body.payload });
+    this.sendToRole(otherRole(attachment.role), { type: "signal", payload: body.payload });
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> { await this.release(socket); }
