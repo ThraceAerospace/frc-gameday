@@ -41,7 +41,7 @@ test("daily team work is separately gated and bounded", () => {
   assert.match(coordinator, /if\s*\(pollTeams\s*&&\s*participantTeamKeys\.size\s*>\s*0\)/);
   assert.match(coordinator, /MAX_TEAM_READINESS_CHECKS_PER_RUN/);
   assert.match(coordinator, /MAX_TEAM_REFRESH_COMMANDS_PER_RUN/);
-  assert.match(coordinator, /dispatchRuntimeRefreshBatch\(this\.env,\s*boundedDueTeams,\s*4\)/);
+  assert.match(coordinator, /dispatchRuntimeRefreshBatch\(this\.env,\s*boundedDueTeams,\s*4,\s*\{/);
   assert.match(coordinator, /mapLimit\([^\n]*,\s*4,/);
 });
 
@@ -51,4 +51,18 @@ test("Durable Object runtimes contain no alarm handlers or alarm scheduling APIs
     assert.doesNotMatch(source, /\bsetAlarm\s*\(/, name + " must not schedule an alarm");
     assert.doesNotMatch(source, /\bdeleteAlarm\s*\(/, name + " must not delete an alarm");
   }
+});
+
+
+test("event and daily team refresh analytics triggers are coalesced after both refresh phases", () => {
+  const collectIndex = coordinator.indexOf("eventAnalyticsRequests.set(");
+  const teamBatchIndex = coordinator.indexOf("dispatchRuntimeRefreshBatch(this.env, boundedDueTeams, 4");
+  const deferredDispatchIndex = coordinator.indexOf("start-event-analytics-for-refreshed-events");
+  assert.ok(collectIndex >= 0, "event refreshes must collect affected-team information");
+  assert.ok(teamBatchIndex > collectIndex, "team refreshes must join the event refresh collection");
+  assert.ok(deferredDispatchIndex > teamBatchIndex,
+    "event-only dispatch is deferred until the team refresh phase is known");
+  assert.match(coordinator, /additionalAffectedEvents:\s*eventAnalyticsRequests/);
+  assert.doesNotMatch(coordinator, /EVENT_ANALYTICS_WORKFLOW!?\.create\(/,
+    "the polling coordinator must not independently create an event workflow inside its event loop");
 });
