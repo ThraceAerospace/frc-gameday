@@ -695,9 +695,15 @@ export default {
         "Content-Type": "application/json",
       };
       if (kind === "event" && action === "register") {
-        return await registerRuntimeMarker(env, "event", key)
-          ? new Response(null, { status: 204 })
-          : Response.json({ error: "Runtime registry storage is unavailable" }, { status: 503 });
+        if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
+        const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
+        const response = await stub.fetch(new Request("https://event-runtime/register", {
+          method: "POST", headers,
+        }));
+        if (response.ok && !(await registerRuntimeMarker(env, "event", key))) {
+          return Response.json({ error: "Runtime registry storage is unavailable" }, { status: 503 });
+        }
+        return response;
       }
       if (kind === "team") {
         if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime is unavailable" }, { status: 503 });
