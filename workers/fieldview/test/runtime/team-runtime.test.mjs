@@ -924,3 +924,19 @@ test("TeamRuntime diagnostics GET does not implicitly materialize TeamState", as
     "admin diagnostics are inspection-only and must not publish an empty TeamState");
   assert.equal(providerCalls, 0);
 });
+
+
+test("TeamRuntime returns 404 for unregistered public reads without binding identity", async () => {
+  const storage = new MemoryStorage();
+  let providerCalls = 0;
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    providerCalls += 1;
+    throw new Error("an unregistered public read must not fetch providers");
+  }));
+  const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=2026", {
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(response.status, 404);
+  assert.equal(storage.values.has("team-key"), false);
+  assert.equal(providerCalls, 0);
+});
