@@ -5,7 +5,11 @@ export interface D1PreparedStatementLike {
   all<T = Record<string, unknown>>(): Promise<{ results?: T[] }>;
   run(): Promise<{ meta?: { changes?: number } }>;
 }
-export interface D1DatabaseLike { prepare(query: string): D1PreparedStatementLike; }
+export interface D1DatabaseLike {
+  prepare(query: string): D1PreparedStatementLike;
+  /** Executes the supplied statements as one atomic D1 batch transaction. */
+  batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<T[]>;
+}
 export interface KVNamespaceLike {
   get(key: string, type?: "text"): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number; expiration?: number }): Promise<void>;
