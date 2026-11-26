@@ -58,10 +58,10 @@ The current `workers/fieldview/wrangler.toml` resource mapping is intentional:
 
 | Binding | Production | Branch / pull-request Previews | Ownership and isolation |
 |---|---|---|---|
-| `FIELDVIEW_DB` | `fieldview-prod` (`df5168d5-5efa-4927-b732-c0ee66da5934`) | `fieldview-test` (`7e7c5be6-4967-44e6-adba-86fe7b1a76cf`) | Separate physical databases. All Preview branches currently share the test database. Discovery and System Records are separate logical schemas/repositories in each database. |
-| `KV_BINDING` | Namespace `c067dfcaa3a345b0b43f035a992b4b30` | Same namespace | Intentionally shared to expose the same environment-neutral TBA-derived projections. KV is still mutable and eventually consistent; Preview writes can affect Production reads. |
+| `DB` | `fieldview-d1-prod` (`bd7852b3-7814-4c3f-9ce8-f1c244524843`) | `fieldview-d1-test` (`6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e`) | Separate physical databases. All Preview branches currently share the test database. Discovery and System Records are separate logical schemas/repositories in each database. |
+| `KV_BINDING` | `fieldview-kv-prod` (`c067dfcaa3a345b0b43f035a992b4b30`) | `fieldview-kv-test` (`19ef5d5221654ab4bac0c8118c35ad8b`) | Separate namespaces. Both may contain projections derived from the same upstream TBA facts, but Preview mutations cannot affect Production. |
 
-The shared KV namespace is not an authoritative TBA database. TBA remains the upstream source; KV contains FieldView-managed projections/cached data. Shared writes are permitted only when they are environment-neutral, semantically equivalent, and safe to repeat. Do not write branch-specific fixtures, test-only values, or Preview-specific projection formats into this namespace. Any future use that requires divergent Preview values or independent mutation must move to a separate Preview namespace.
+TBA remains the upstream source of truth; neither KV namespace is authoritative. KV contains FieldView-managed projections/cached data and remains mutable/eventually consistent. Production and Preview may independently build equivalent projections from TBA. Do not assume the two namespaces are transactionally synchronized or copy test-only values into Production.
 
 The Preview D1 database is a shared test target across branches, not a database per Preview. Do not apply migrations to either database until the migration set, schema ownership, and target database have been reviewed. No schema migrations are currently applied by this configuration.
 
