@@ -62,6 +62,27 @@ test("EventRuntime does not register a Durable Object alarm handler", () => {
   assert.equal(EventRuntime.prototype.alarm, undefined);
 });
 
+test("explicit registration binds event identity without provider acquisition", async () => {
+  const storage = new MemoryStorage();
+  let providerCalls = 0;
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { providerCalls += 1; return new Response("unused"); },
+  });
+  const response = await runtime.fetch(new Request("https://event-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": "2027rikin",
+    },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { event_key: "2027rikin", registered: true });
+  assert.equal(storage.values.get("event-key"), "2027rikin");
+  assert.equal(providerCalls, 0, "registration binds identity but never polls providers");
+});
+
 test("EventRuntime normalizes legacy publication in memory without writing during reads", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026hydrated";
