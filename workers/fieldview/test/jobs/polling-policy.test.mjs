@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems } from "../../src/jobs/polling-policy.ts";
+import { selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, isEventAnalyticsRecoveryDue } from "../../src/jobs/polling-policy.ts";
 
 const now = Date.parse("2026-11-24T18:00:00Z");
 const events = [
@@ -67,4 +67,18 @@ test("rotates event candidates without losing lifecycle priority order", () => {
   ];
   assert.deepEqual(selectBudgetedItems(candidates, 2, 0).map((item) => item.key), ["first", "second"]);
   assert.deepEqual(selectBudgetedItems(candidates, 2, 1).map((item) => item.key), ["third", "fourth"]);
+});
+
+
+test("event analytics recovery only dispatches pending, failed, or stale work when due", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  assert.equal(isEventAnalyticsRecoveryDue("pending", null, now), true);
+  assert.equal(isEventAnalyticsRecoveryDue("failed", now - 1, now), true);
+  assert.equal(isEventAnalyticsRecoveryDue("stale", now, now), true);
+  assert.equal(isEventAnalyticsRecoveryDue("pending", now + 1, now), false);
+  assert.equal(isEventAnalyticsRecoveryDue("succeeded", null, now), false);
+  assert.equal(isEventAnalyticsRecoveryDue("partial", null, now), false);
+  assert.equal(isEventAnalyticsRecoveryDue("running", null, now), false);
+  assert.equal(isEventAnalyticsRecoveryDue("pending", "invalid", now), true,
+    "malformed due metadata must not strand explicitly pending work");
 });
