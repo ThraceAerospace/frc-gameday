@@ -36,24 +36,6 @@ import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contrac
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 import type { FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
 
-interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
-
-interface PollTask {
-  endpoint: string;
-  dueAt: number;
-  intervalMs: number | null;
-  generation: number;
-  attempts: number;
-  /** False means at-most-once execution with no retry after provider failure. */
-  retryOnFailure: boolean;
-  /** Optional finite attempt budget for causally-triggered one-shot work. */
-  maxAttempts?: number;
-  /** One-shot REST reconciliation after a webhook's immediate refresh. */
-  authoritativeRefetchAt?: number;
-}
-
-const TASK_PREFIX = "task:"
-const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
@@ -87,10 +69,6 @@ interface AnalyticsPublication {
 
 function endpointStorageKey(endpoint: string): string {
   return `${ENDPOINT_PREFIX}${endpoint}`;
-}
-
-function taskStorageKey(endpoint: string): string {
-  return `${TASK_PREFIX}${endpoint}`;
 }
 
 function sourceStorageKey(endpoint: string, revision: number): string {
@@ -996,8 +974,6 @@ export class EventRuntime {
 
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      const tasks = await this.storage.list<PollTask>({ prefix: TASK_PREFIX });
-      const manualQueue = await this.storage.get<ManualPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const rosterAvailable = Array.isArray(eventStatePublication?.state.teams);
@@ -1033,10 +1009,8 @@ export class EventRuntime {
             source_revision: eventStatePublication?.sourceRevision ?? null,
             generated_at: eventStatePublication?.generatedAt ?? null,
           },
-          pending_revalidation_count: tasks.size + manualQueue.length,
-          pending_manual_revalidation_count: manualQueue.length,
-          next_revalidation_at: [...tasks.values()].reduce<number | null>((earliest, task) =>
-            earliest === null || task.dueAt < earliest ? task.dueAt : earliest, null),
+          polling_owner: "PollingCoordinatorWorkflow",
+          local_poll_tasks: 0,
           last_error: await this.storage.get<string>("analytics:last-error") ?? await this.storage.get<string>("scheduler:last-error") ?? null,
         },
         event_state: {
@@ -1622,11 +1596,6 @@ export class EventRuntime {
 
   private async cancelRecurringPolls(_clearCompletedUntil = false): Promise<void> {
     return;
-  }
-
-  private retryDelay(task: PollTask): number {
-    const baseDelay = task.maxAttempts !== undefined ? 30_000 : 2_000;
-    return Math.min(5 * 60_000, baseDelay * (2 ** Math.min(Math.max(0, task.attempts - 1), 7)));
   }
 
   private async rearm(_transaction: DurableObjectTransactionLike): Promise<void> {
