@@ -69,7 +69,6 @@ test("team seed dispatch calls TeamRuntime directly with the requested season", 
       captured = { url: new URL(request.url), id, headers: request.headers };
       return new Response(null, { status: 202 });
     }),
-    DISCOVERY_STORE: namespace(async () => Response.json({ ok: true })),
   };
 
   const response = await dispatchRuntime(env, "team", "frc3461", "seed", {}, 2026);
@@ -92,11 +91,6 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
     TEAM_RUNTIME: namespace(async (request, id) => {
       captured.push({ kind: "team", id, url: new URL(request.url), method: request.method, body: await request.json() });
       return Response.json({ state_valid: false, refresh_queued: true });
-    }),
-    DISCOVERY_STORE: namespace(async (request) => {
-      if (request.method === "GET") return new Response(null, { status: 404 });
-      markerWrites += 1;
-      return Response.json({ ok: true });
     }),
   };
   const event = await dispatchRuntime(env, "event", "2027rikin", "readiness", {}, 2027);
@@ -148,10 +142,6 @@ test("pending analytics dispatch is an authenticated read of the registered Team
       captured = { method: request.method, url: new URL(request.url), id, headers: request.headers };
       return Response.json({ team_key: id, year: 2027, pending: [] });
     }),
-    DISCOVERY_STORE: namespace(async () => {
-      discoveryCalls += 1;
-      return new Response(null, { status: 404 });
-    }),
   };
   const response = await dispatchRuntime(env, "team", "frc3461", "pending-analytics", {}, 2027);
   assert.equal(response.status, 200);
@@ -177,11 +167,10 @@ test("team dispatch defaults to persisted TBA current season instead of the syst
       captured = new URL(request.url);
       return new Response(null, { status: 202 });
     }),
-    DISCOVERY_STORE: namespace(async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname === "/get") return Response.json({ year: 2027, checkedAt: Date.now() });
-      return Response.json({ ok: true });
-    }),
+    DISCOVERY_STORAGE: {
+      async get(key) { return key === "discovery/current-season.json" ? JSON.stringify({ year: 2027, checkedAt: Date.now() }) : undefined; },
+      async put() {}, async list() { return new Map(); }, async delete() { return false; },
+    },
   };
   const response = await dispatchRuntime(env, "team", "frc3461", "seed");
   assert.equal(response.status, 202);
