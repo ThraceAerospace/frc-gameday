@@ -17,13 +17,21 @@ export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
 }
 
 
+export interface EventAnalyticsRefreshRequest {
+  affected_team_keys: string[] | null;
+}
+
 async function startTeamAnalyticsWorkflows(
   env: RuntimeEnvironment,
   outcomes: RuntimeRefreshOutcome[],
+  options: {
+    additionalAffectedEvents?: Map<string, EventAnalyticsRefreshRequest>;
+    requestedAt?: number;
+  } = {},
 ): Promise<void> {
   const binding = env.EVENT_ANALYTICS_WORKFLOW;
   if (!binding) return;
-  const grouped = new Map<string, { revisionParts: string[]; teamKeys: Set<string> }>();
+  const grouped = new Map<string, { revisionParts: string[]; teamKeys: Set<string>; fullRecompute: boolean }>();
   for (const outcome of outcomes) {
     if (!outcome.ok || outcome.kind !== "team" || !outcome.response ||
         typeof outcome.response !== "object" || Array.isArray(outcome.response)) continue;
@@ -35,16 +43,32 @@ async function startTeamAnalyticsWorkflows(
       const item = affected as Record<string, unknown>;
       if (typeof item.event_key !== "string" || !/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(item.event_key) ||
           typeof item.team_event_revision !== "number" || !Number.isSafeInteger(item.team_event_revision)) continue;
-      const group = grouped.get(item.event_key) ?? { revisionParts: [], teamKeys: new Set<string>() };
+      const group = grouped.get(item.event_key) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false };
       group.revisionParts.push(outcome.key + ":" + body.team_state_revision + ":" + item.team_event_revision);
       group.teamKeys.add(outcome.key);
       grouped.set(item.event_key, group);
     }
   }
 
+  for (const [eventKey, request] of options.additionalAffectedEvents ?? []) {
+    if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) continue;
+    const group = grouped.get(eventKey) ?? { revisionParts: [], teamKeys: new Set<string>(), fullRecompute: false };
+    if (request.affected_team_keys === null) {
+      group.fullRecompute = true;
+    } else {
+      for (const teamKey of request.affected_team_keys) {
+        if (/^frc[0-9]+$/.test(teamKey)) group.teamKeys.add(teamKey);
+      }
+    }
+    group.revisionParts.push("poll-cycle:" + (options.requestedAt ?? 0) + ":" +
+      (request.affected_team_keys === null ? "full" : [...request.affected_team_keys].sort().join(",")));
+    grouped.set(eventKey, group);
+  }
+
   for (const [eventKey, group] of grouped) {
+    if (!group.fullRecompute && group.teamKeys.size === 0) continue;
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(group.revisionParts.sort().join("|")));
-    const affectedTeamKeys = [...group.teamKeys].sort();
+    const affectedTeamKeys = group.fullRecompute ? null : [...group.teamKeys].sort();
     const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
     const baseId = "team-event-analytics-" + eventKey + "-" + hash;
     let workflowId = baseId;
@@ -58,7 +82,7 @@ async function startTeamAnalyticsWorkflows(
     try {
       await binding.create({
         id: workflowId,
-        params: { event_key: eventKey, affected_team_keys: affectedTeamKeys, requested_at: Date.now() },
+        params: { event_key: eventKey, affected_team_keys: affectedTeamKeys, requested_at: options.requestedAt ?? Date.now() },
       });
     } catch (error) {
       try {
@@ -117,6 +141,7 @@ export async function dispatchRuntimeRefreshBatch(
   env: RuntimeEnvironment,
   targets: RuntimeRefreshTarget[],
   concurrency = 4,
+  options: { additionalAffectedEvents?: Map<string, EventAnalyticsRefreshRequest>; requestedAt?: number } = {},
 ): Promise<RuntimeRefreshOutcome[]> {
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 6) {
     throw new Error("Runtime refresh concurrency must be an integer between 1 and 6");
@@ -141,6 +166,6 @@ export async function dispatchRuntimeRefreshBatch(
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => run()));
-  await startTeamAnalyticsWorkflows(env, outcomes);
+  await startTeamAnalyticsWorkflows(env, outcomes, options);
   return outcomes;
 }
