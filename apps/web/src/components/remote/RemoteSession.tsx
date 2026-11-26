@@ -49,6 +49,7 @@ export default function RemoteSession({
   const [eventSnapshots, setEventSnapshots] = useState<Record<string, CanonicalEventSnapshotValue>>({});
   const eventSnapshotsRef = useRef<Record<string, CanonicalEventSnapshotValue>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
+  const controllerStateInitializedRef = useRef(false);
   const sendControllerState = useMemo(
     () => (includeEventSnapshots = false) => {
       if (role !== "controller") return;
@@ -97,7 +98,11 @@ export default function RemoteSession({
     setPeerStatus(status);
     onStatus?.(status);
     if (status === "connected" && role === "controller") {
-      sendControllerState(true);
+      if (controllerStateInitializedRef.current) {
+        sendControllerState(true);
+      } else {
+        peerRef.current?.sendMessage({ type: "requestInitialState" });
+      }
     }
   };
 
@@ -112,6 +117,58 @@ export default function RemoteSession({
           applyRemoteSessionAction(localControllerRef.current, action);
         },
         onMessage: (message: RemoteSessionMessage) => {
+          if (message.type === "requestInitialState" && role === "display") {
+            const state = localControllerRef.current.getState();
+            const {
+              eventPickerOpen,
+              eventSearch,
+              availableEvents,
+              eventsLoading,
+              controlsVisible,
+              priorityEditKey,
+              ...surfaceState
+            } = state;
+            void eventPickerOpen;
+            void eventSearch;
+            void availableEvents;
+            void eventsLoading;
+            void controlsVisible;
+            void priorityEditKey;
+            peerRef.current?.sendMessage({
+              type: "initialState",
+              state: {
+                ...surfaceState,
+                eventConfigs: Object.fromEntries(
+                  Object.entries(surfaceState.eventConfigs).map(([eventKey, config]) => [
+                    eventKey,
+                    { ...config, command: null },
+                  ]),
+                ),
+              },
+            });
+            return;
+          }
+
+          if (message.type === "initialState" && role === "controller") {
+            if (!controllerStateInitializedRef.current) {
+              const current = localControllerRef.current.getState();
+              if (current.streams.length === 0 && current.priority.length === 0) {
+                localControllerRef.current.replaceState({
+                  ...message.state,
+                  eventPickerOpen: current.eventPickerOpen,
+                  eventSearch: current.eventSearch,
+                  availableEvents: current.availableEvents,
+                  eventsLoading: current.eventsLoading,
+                  controlsVisible: current.controlsVisible,
+                  priorityEditKey: current.priorityEditKey,
+                });
+              }
+              controllerStateInitializedRef.current = true;
+            }
+            sendControllerState(true);
+            return;
+          }
+
           if (message.type === "eventSnapshot" && role === "display") {
             setEventSnapshots((current) => {
               const next = {
@@ -199,7 +256,10 @@ export default function RemoteSession({
 
   useEffect(() => {
     if (role !== "controller") return;
-    return localController.subscribe(() => sendControllerState());
+    return localController.subscribe(() => {
+      controllerStateInitializedRef.current = true;
+      sendControllerState();
+    });
   }, [localController, role, sendControllerState]);
 
   const controller = useMemo<TileSurfaceController>(() => ({

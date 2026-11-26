@@ -20,7 +20,9 @@ export type RemoteSurfaceState = Omit<
 export type RemoteSessionMessage =
   | { type: "action"; action: RemoteSessionAction }
   | { type: "eventSnapshot"; eventKey: string; version: number; snapshot: CanonicalEventSnapshotData }
-  | { type: "stateSnapshot"; state: RemoteSurfaceState };
+  | { type: "stateSnapshot"; state: RemoteSurfaceState }
+  | { type: "requestInitialState" }
+  | { type: "initialState"; state: RemoteSurfaceState };
 
 export type RemoteSessionAction =
   | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
