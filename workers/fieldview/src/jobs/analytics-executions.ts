@@ -49,7 +49,11 @@ function validRecord(value: unknown): value is AnalyticsExecutionRecord {
 
 /** Typed, bounded execution ledger over the System Records D1 table. */
 export class AnalyticsExecutionRepository {
-  constructor(private readonly storage: D1RecordStorage) {}
+  private readonly storage: D1RecordStorage;
+
+  constructor(storage: D1RecordStorage) {
+    this.storage = storage;
+  }
 
   static fromEnvironment(env: RuntimeEnvironment): AnalyticsExecutionRepository {
     const storage = env.DISCOVERY_STORAGE ?? (env.DB ? new D1RecordStore(env.DB) : null);
