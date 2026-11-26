@@ -858,9 +858,13 @@ export class EventRuntime {
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
         total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
+      const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const eventStatePublished = Boolean(eventStatePublication && eventStatePublication.status !== "failed" &&
+        Number.isSafeInteger(eventStatePublication.snapshotVersion) && isRecord(eventStatePublication.state) &&
+        eventStatePublication.state.event_key === this.eventKey && isRecord(eventStatePublication.state.sources));
       return Response.json({
         event_key: this.eventKey,
-        event_state_published: Boolean(eventStatePublication),
+        event_state_published: eventStatePublished,
         source_revision: currentSourceRevision,
         comparison_input_updated_at: await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY) ?? null,
         analytics: {
