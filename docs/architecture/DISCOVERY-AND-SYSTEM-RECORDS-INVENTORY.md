@@ -215,3 +215,21 @@ This pass updates the 2026-11-25 inventory against the current branch head. It i
 6. Only after these items are complete, finalize the typed D1 schemas and local migrations.
 
 The approved implementation follow-up is tracked in [Issue #32](https://github.com/ThraceAerospace/frc-gameday/issues/32). Issue #32 is explicitly blocked on Issue #30's schema-selection prerequisites. No schema, migration, runtime code, Wrangler configuration, or deployment was changed in this audit pass.
+
+
+## 9. 2026-11-26 Cloudflare Durable Object billing semantics
+
+Verified against Cloudflare's current official documentation (Durable Objects Pricing, last updated 2026-11-13; SQLite-backed Durable Object Storage API, last updated 2026-09-21):
+
+- SQLite-backed Durable Object storage exposes row-based billing: Free includes 5 million rows read/day and 100,000 rows written/day; daily limits reset at 00:00 UTC.
+- The SQLite-backed Durable Object KV methods `get()`, `put()`, `delete()`, and `list()` use a hidden SQLite table and are billed as rows read and rows written.
+- Each `setAlarm()` is billed as one row written. Alarm invocations are separately included in the Durable Object request count.
+- Deletes count as rows written. The storage API's `delete()` returns whether the key existed, but the pricing page does not explicitly say whether a delete of an absent key incurs a row write. Do not assume either outcome; retain this as an open billing question.
+- Each storage API method is implicitly wrapped in a transaction. Transactions provide atomicity/isolation; they do not make a multi-key operation a single billable row. The pricing documentation says multi-key KV operations are billed as if each key were an individual operation.
+- For direct SQL, Cloudflare exposes `SqlStorageCursor.rowsWritten` for the final SQL billing count, and documents that every row update of an index counts as an additional row written. The current EventRuntime, TeamRuntime, Multiplexer, and DiscoveryStore persistence paths primarily use the KV-compatible API, not direct SQL.
+
+Official references:
+- [Durable Objects Pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) — storage rows, alarms, deletes, request counts.
+- [SQLite-backed Durable Object Storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) — hidden KV table, implicit transactions, delete return value, SQL row counters, index write amplification.
+
+This resolves the documentation question for the general billing model and invalidates any estimate that excludes `setAlarm()` or delete operations from the SQLite row-write budget. It does **not** establish account-specific observed usage, the billable behavior of deleting an absent key, or the actual per-operation row count in the user's account. No account telemetry is available through the connected repository tools, so the telemetry comparison remains open under Issue #30.
