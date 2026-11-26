@@ -672,3 +672,38 @@ test("daily team readiness starts its independent Workflow through the local Job
     call.url === "/internal/admin/daily-team-readiness" &&
     call.method === "POST"));
 });
+
+
+test("administrator SPA is served only after Worker-side Access verification", async () => {
+  const { env } = makeEnvironment();
+  const assetRequests = [];
+  env.ASSETS = {
+    async fetch(request) {
+      assetRequests.push(new URL(request.url).pathname);
+      return new Response("<html>admin</html>", { headers: { "Content-Type": "text/html" } });
+    },
+  };
+  const denied = await worker.fetch(new Request("https://runtime.example/admin"), env);
+  assert.equal(denied.status, 401);
+  assert.deepEqual(assetRequests, []);
+
+  const allowed = await worker.fetch(new Request("https://runtime.example/admin", {
+    headers: { "Cf-Access-Jwt-Assertion": accessToken },
+  }), env);
+  assert.equal(allowed.status, 200);
+  assert.equal(await allowed.text(), "<html>admin</html>");
+  assert.deepEqual(assetRequests, ["/index.html"]);
+  assert.equal(allowed.headers.get("Cache-Control"), "no-store");
+});
+
+test("same-origin admin proxy requires Access before dispatching dashboard requests", async () => {
+  const { env } = makeEnvironment();
+  const denied = await worker.fetch(new Request("https://runtime.example/internal/admin/proxy?auth=1"), env);
+  assert.equal(denied.status, 401);
+
+  const allowed = await worker.fetch(new Request("https://runtime.example/internal/admin/proxy?auth=1", {
+    headers: { "Cf-Access-Jwt-Assertion": accessToken },
+  }), env);
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), { authenticated: true });
+});

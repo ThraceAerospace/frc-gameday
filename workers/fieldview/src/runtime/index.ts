@@ -251,6 +251,10 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     return new Response(response.body, { status: response.status, headers });
   }
   if (url.pathname === "/internal/admin/proxy") return adminProxy(request, env, context);
+  if (url.pathname === "/internal/admin/auth" && request.method === "GET") {
+    if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+  }
     if (url.pathname === "/internal/polling/refresh" && request.method === "POST") {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const body: unknown = await request.json().catch(() => null);
