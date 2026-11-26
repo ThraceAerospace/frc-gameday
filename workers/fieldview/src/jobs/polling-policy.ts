@@ -10,6 +10,12 @@ export const MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN = 20;
 
 /** Whether a persisted EventRuntime analytics state is eligible for coordinator recovery. */
 export function isEventAnalyticsRecoveryDue(status: unknown, dueAt: unknown, now: number): boolean {
+  if (status === "running") {
+    // A running marker with an expired durable due time can be stranded after
+    // an interrupted runtime command. A live Workflow still suppresses duplicate
+    // dispatch in startEventAnalyticsWorkflows.
+    return Number.isSafeInteger(dueAt) && (dueAt as number) <= now;
+  }
   if (status !== "pending" && status !== "failed" && status !== "stale") return false;
   return dueAt === null || dueAt === undefined ||
     !Number.isSafeInteger(dueAt) || (dueAt as number) <= now;
