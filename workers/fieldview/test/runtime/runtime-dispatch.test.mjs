@@ -197,7 +197,7 @@ test("team dispatch refuses to infer a season when the TBA current-season pointe
   const env = {
     RUNTIME_ADMIN_TOKEN: "test-token",
     TEAM_RUNTIME: namespace(async () => { activated = true; return new Response(null, { status: 202 }); }),
-    DISCOVERY_STORE: namespace(async () => new Response(null, { status: 404 })),
+    DISCOVERY_STORAGE: { async get() { return undefined; }, async put() {}, async list() { return new Map(); }, async delete() { return false; } },
   };
   const response = await dispatchRuntime(env, "team", "frc3461", "seed");
   assert.equal(response.status, 503);
