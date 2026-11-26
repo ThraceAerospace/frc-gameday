@@ -144,6 +144,23 @@ test("team runtime dispatch does not directly orchestrate EventRuntime analytics
     "cross-runtime orchestration is deferred to the refresh coordinator");
 });
 
+test("pending analytics dispatch is an authenticated read of the registered TeamRuntime", async () => {
+  let captured;
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    TEAM_RUNTIME: namespace(async (request, id) => {
+      captured = { method: request.method, url: new URL(request.url), id, headers: request.headers };
+      return Response.json({ team_key: id, year: 2027, pending: [] });
+    }),
+  };
+  const response = await dispatchRuntime(env, "team", "frc3461", "pending-analytics", {}, 2027);
+  assert.equal(response.status, 200);
+  assert.equal(captured.method, "GET");
+  assert.equal(captured.url.pathname, "/pending-event-analytics");
+  assert.equal(captured.url.searchParams.get("year"), "2027");
+  assert.equal(captured.headers.get("Authorization"), "Bearer test-token");
+  assert.equal(captured.headers.get("X-FieldView-Team-Key"), "frc3461");
+});
 test("dispatch rejects unsupported actions and invalid entity keys", async () => {
   const env = { RUNTIME_ADMIN_TOKEN: "test-token" };
   assert.equal((await dispatchRuntime(env, "event", "bad key", "state", {}, 2026)).status, 400);
