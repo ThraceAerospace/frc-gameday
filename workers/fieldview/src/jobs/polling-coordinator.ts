@@ -8,8 +8,115 @@ import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
+import { AnalyticsExecutionRepository } from "./analytics-executions.ts";
 
 type PollingEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW?: Workflow };
+
+const MAX_ANALYTICS_EXECUTION_RECOVERIES_PER_RUN = 5;
+const STALE_ANALYTICS_WORKFLOW_MS = 15 * 60_000;
+
+async function recoverAnalyticsExecutions(
+  env: PollingEnvironment,
+  now: number,
+): Promise<{ scanned: number; dispatched: number; reconciled: number; deferred: number }> {
+  if (!env.EVENT_ANALYTICS_WORKFLOW || (!env.DB && !env.DISCOVERY_STORAGE)) {
+    return { scanned: 0, dispatched: 0, reconciled: 0, deferred: 0 };
+  }
+  const repository = AnalyticsExecutionRepository.fromEnvironment(env);
+  const records = await repository.list(1000);
+  let dispatched = 0;
+  let reconciled = 0;
+  let deferred = 0;
+
+  const readStatus = async (workflowId: string): Promise<string | null> => {
+    try {
+      return (await env.EVENT_ANALYTICS_WORKFLOW!.get(workflowId).then((instance) => instance.status())).status;
+    } catch {
+      return null;
+    }
+  };
+
+  const dispatchRetry = async (
+    record: Awaited<ReturnType<typeof repository.list>>[number],
+    retryId: string,
+    attempt: number,
+  ): Promise<void> => {
+    await repository.retryScheduled(record.execution_id, retryId, record.workflow_id, now);
+    try {
+      await env.EVENT_ANALYTICS_WORKFLOW!.create({
+        id: retryId,
+        params: {
+          event_key: record.event_key,
+          affected_team_keys: record.affected_team_keys,
+          requested_at: record.requested_at,
+          retry_key: record.retry_key,
+          attempt,
+        },
+      });
+      dispatched += 1;
+    } catch {
+      // A deterministic Workflow ID makes concurrent coordinator attempts idempotent.
+      // If it already exists, its instance status is the source of truth.
+      const status = await readStatus(retryId);
+      if (status === null) deferred += 1;
+    }
+  };
+
+  for (const record of records) {
+    if (dispatched >= MAX_ANALYTICS_EXECUTION_RECOVERIES_PER_RUN) {
+      if (record.status === "failed" || record.status === "retry_scheduled") deferred += 1;
+      continue;
+    }
+
+    if (record.status === "running" && now - record.updated_at >= STALE_ANALYTICS_WORKFLOW_MS) {
+      const status = await readStatus(record.workflow_id);
+      if (status === "errored" || status === "terminated") {
+        await repository.fail(record.execution_id, new Error("Workflow " + status), record.workflow_id, now);
+        reconciled += 1;
+      } else if (status === "complete") {
+        await repository.complete(record.execution_id, undefined, undefined, record.workflow_id, now);
+        reconciled += 1;
+      }
+      continue;
+    }
+
+    if (record.status === "retry_scheduled") {
+      const retryId = record.retry_workflow_id;
+      if (!retryId) continue;
+      const status = await readStatus(retryId);
+      const nextAttempt = Math.min(2, record.attempt + 1);
+      if (status === null) {
+        await dispatchRetry(record, retryId, nextAttempt);
+      } else if (status === "errored" || status === "terminated") {
+        await repository.start({
+          executionId: record.execution_id, eventKey: record.event_key, retryKey: record.retry_key,
+          workflowId: retryId, affectedTeamKeys: record.affected_team_keys,
+          requestedAt: record.requested_at, attempt: nextAttempt, now,
+        });
+        await repository.fail(record.execution_id, new Error("Workflow " + status), retryId, now);
+        reconciled += 1;
+      } else if (status === "complete") {
+        await repository.start({
+          executionId: record.execution_id, eventKey: record.event_key, retryKey: record.retry_key,
+          workflowId: retryId, affectedTeamKeys: record.affected_team_keys,
+          requestedAt: record.requested_at, attempt: nextAttempt, now,
+        });
+        await repository.complete(record.execution_id, undefined, undefined, retryId, now);
+        reconciled += 1;
+      }
+      continue;
+    }
+
+    if (record.status === "failed" && record.attempt < 2 &&
+        typeof record.next_retry_at === "number" && record.next_retry_at <= now) {
+      const nextAttempt = record.attempt + 1;
+      const retryId = "event-analytics-" + record.event_key + "-" + record.retry_key + "-retry-" + nextAttempt;
+      await dispatchRetry(record, retryId, nextAttempt);
+    }
+  }
+
+  return { scanned: records.length, dispatched, reconciled, deferred };
+}
 export interface PollingCoordinatorParameters {
   scheduledAt: number;
   pollTeams?: boolean;
@@ -85,6 +192,10 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       : event.schedule?.scheduledTime ?? Date.now();
     const pollTeams = event.payload?.pollTeams === true;
     const store = () => createDiscoveryServiceClient(this.env);
+
+    const analyticsExecutionRecovery = await step.do("recover-durable-event-analytics-executions", async () =>
+      recoverAnalyticsExecutions(this.env, scheduledAt),
+    );
 
     const discovery = await step.do("load-current-season-and-week-projection", async () => {
       const current = await readJson<CurrentSeason>(store(), "discovery/current-season.json");
@@ -526,6 +637,10 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       pending_analytics_recovery_events: pendingAnalyticsRecoveryEvents,
       pending_analytics_recovery_events_deferred_by_budget: pendingAnalyticsRecoveryEventsDeferred,
       pending_analytics_recovery_unregistered_events: pendingAnalyticsRecoveryUnregisteredEvents,
+      analytics_execution_recovery_scanned: analyticsExecutionRecovery.scanned,
+      analytics_execution_recovery_dispatched: analyticsExecutionRecovery.dispatched,
+      analytics_execution_recovery_reconciled: analyticsExecutionRecovery.reconciled,
+      analytics_execution_recovery_deferred: analyticsExecutionRecovery.deferred,
       event_analytics_recovery_checks_processed: eventAnalyticsRecoveryChecksProcessed,
       event_analytics_recovery_checks_failed: eventAnalyticsRecoveryChecksFailed,
       event_analytics_recovery_requests: eventAnalyticsRecoveryRequests,
