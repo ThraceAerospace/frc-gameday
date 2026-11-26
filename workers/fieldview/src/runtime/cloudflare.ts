@@ -28,6 +28,10 @@ export interface DurableObjectNamespaceLike {
 }
 
 export interface RuntimeEnvironment {
+  /** Environment-specific D1 database (production or Preview test database). */
+  DB?: D1Database;
+  /** Environment-specific KV namespace for non-authoritative projections. */
+  KV_BINDING?: KVNamespace;
   TBA_API_KEY: string;
   /** Official Statbotics API when available; currently the configured testing mirror is retained while official service is unavailable. */
   STATBOTICS_API_BASE_URL?: string;
