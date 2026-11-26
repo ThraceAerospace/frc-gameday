@@ -19,7 +19,7 @@ async function sign(secret, body) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function environment(onForward, onTeamForward) {
+function environment(onForward) {
   return {
     TBA_API_KEY: "api-key",
     TBA_WEBHOOK_SECRET: "webhook-secret",
@@ -28,12 +28,6 @@ function environment(onForward, onTeamForward) {
       idFromName: (name) => name,
       get: (id) => ({ fetch: onForward(id) }),
     },
-    ...(onTeamForward ? {
-      TEAM_RUNTIME: {
-        idFromName: (name) => name,
-        get: (id) => ({ fetch: onTeamForward(id) }),
-      },
-    } : {}),
   };
 }
 
@@ -123,7 +117,7 @@ test("TBA ping and verification notifications are acknowledged without event rou
   assert.equal(called, false);
 });
 
-test("match_score webhook fans out once to the event and each unique participating team", async () => {
+test("match_score webhook dispatches to EventRuntime and starts analytics Workflow for unique teams", async () => {
   const raw = new TextEncoder().encode(JSON.stringify({
     message_type: "match_score",
     message_data: {
@@ -139,27 +133,30 @@ test("match_score webhook fans out once to the event and each unique participati
     },
   })).buffer;
   const signature = await sign("webhook-secret", raw);
-  const eventTargets = [], teamTargets = [];
+  const eventTargets = [], workflows = [];
   const env = environment((id) => async (request) => {
     eventTargets.push({ id, request });
     return new Response("accepted", { status: 200 });
-  }, (id) => async (request) => {
-    teamTargets.push({ id, request });
-    return new Response("accepted", { status: 200 });
   });
+  env.EVENT_ANALYTICS_WORKFLOW = {
+    get: async () => { throw new Error("workflow does not exist yet"); },
+    create: async (workflow) => { workflows.push(workflow); },
+  };
   const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env);
   assert.equal(response.status, 200);
   assert.deepEqual(eventTargets.map((item) => item.id), ["2026test"]);
-  assert.deepEqual(teamTargets.map((item) => item.id).sort(), ["frc1", "frc2", "frc3", "frc4", "frc5"]);
-  for (const target of [...eventTargets, ...teamTargets]) {
-    assert.equal(target.request.headers.get("X-FieldView-Webhook-Id")?.length, 64);
-    assert.equal(await target.request.text(), new TextDecoder().decode(raw));
-  }
+  assert.equal(eventTargets[0].request.headers.get("X-FieldView-Webhook-Id")?.length, 64);
+  assert.equal(await eventTargets[0].request.text(), new TextDecoder().decode(raw));
+  assert.equal(workflows.length, 1);
+  assert.equal(workflows[0].params.event_key, "2026test");
+  assert.deepEqual(workflows[0].params.affected_team_keys, [
+    "frc1", "frc2", "frc3", "frc4", "frc5",
+  ]);
 });
 
-test("event-scoped TBA notifications do not guess TeamRuntime recipients", async () => {
+test("event-scoped TBA notifications route only to EventRuntime", async () => {
   const payloads = [
     { message_type: "schedule_updated", message_data: { event_key: "2026test" } },
     { message_type: "starting_comp_level", message_data: { event_key: "2026test", comp_level: "qf" } },
@@ -169,12 +166,9 @@ test("event-scoped TBA notifications do not guess TeamRuntime recipients", async
   for (const payload of payloads) {
     const raw = new TextEncoder().encode(JSON.stringify(payload)).buffer;
     const signature = await sign("webhook-secret", raw);
-    const eventTargets = [], teamTargets = [];
+    const eventTargets = [];
     const env = environment((id) => async () => {
       eventTargets.push(id);
-      return new Response("accepted", { status: 200 });
-    }, (id) => async () => {
-      teamTargets.push(id);
       return new Response("accepted", { status: 200 });
     });
     const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
@@ -182,11 +176,10 @@ test("event-scoped TBA notifications do not guess TeamRuntime recipients", async
     }), env);
     assert.equal(response.status, 200, payload.message_type);
     assert.deepEqual(eventTargets, ["2026test"], payload.message_type);
-    assert.deepEqual(teamTargets, [], payload.message_type);
   }
 });
 
-test("TBA webhook ingress logs partial fan-out failures while preserving the 200 acknowledgement", async () => {
+test("TBA webhook preserves its 200 acknowledgement when analytics Workflow dispatch fails", async () => {
   const raw = new TextEncoder().encode(JSON.stringify({
     message_type: "match_score",
     message_data: {
@@ -195,25 +188,24 @@ test("TBA webhook ingress logs partial fan-out failures while preserving the 200
     },
   })).buffer;
   const signature = await sign("webhook-secret", raw);
-  const calls = [];
+  const eventCalls = [];
   const env = environment((id) => async () => {
-    calls.push(["event", id]);
+    eventCalls.push(id);
     return new Response("accepted", { status: 200 });
-  }, (id) => async () => {
-    calls.push(["team", id]);
-    return new Response("unavailable", { status: id === "frc2" ? 503 : 200 });
   });
+  env.EVENT_ANALYTICS_WORKFLOW = {
+    get: async () => { throw new Error("workflow does not exist yet"); },
+    create: async () => { throw new Error("Workflow service unavailable"); },
+  };
   const response = await invokeWebhook(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env);
   assert.equal(response.status, 200);
-  assert.deepEqual(calls.sort((a, b) => a.join(":").localeCompare(b.join(":"))), [
-    ["event", "2026test"], ["team", "frc1"], ["team", "frc2"],
-  ]);
+  assert.deepEqual(eventCalls, ["2026test"]);
 });
 
 
-test("TBA acknowledges an authenticated webhook and registers runtime fan-out with waitUntil", async () => {
+test("TBA acknowledges an authenticated webhook and registers EventRuntime processing with waitUntil", async () => {
   const raw = new TextEncoder().encode(JSON.stringify({
     message_type: "match_score",
     message_data: { event_key: "2026test", match: { alliances: { red: { teams: ["frc1"] }, blue: { teams: [] } } } },
@@ -224,7 +216,7 @@ test("TBA acknowledges an authenticated webhook and registers runtime fan-out wi
   const env = environment(() => async () => {
     dispatched = true;
     return new Response("accepted", { status: 200 });
-  }, () => async () => new Response("accepted", { status: 200 }));
+  });
   const response = await worker.fetch(new Request("https://runtime.test/webhooks/tba", {
     method: "POST", headers: { "X-TBA-HMAC": signature }, body: raw,
   }), env, { waitUntil: (promise) => { background = promise; } });
