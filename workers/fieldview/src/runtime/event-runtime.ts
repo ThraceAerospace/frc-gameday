@@ -498,7 +498,7 @@ export class EventRuntime {
         : undefined;
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       for (const endpoint of refreshEndpoints) {
-        results.push({ endpoint, success: await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true }) });
+        results.push({ endpoint, success: await this.pollEndpoint(endpoint) });
       }
       const matchRefresh = results.find((item) => item.endpoint === matchesEndpoint);
       const latestMatches = refreshEndpoints.includes(matchesEndpoint)
@@ -587,7 +587,7 @@ export class EventRuntime {
     if (request.method === "POST" && url.pathname === "/statbotics-refresh") {
       const endpoint = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const success = await this.pollEndpoint(endpoint, { suppressStatboticsRefresh: true });
+      const success = await this.pollEndpoint(endpoint);
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
       const publication = currentRevision !== previousRevision || !currentPublication
@@ -1420,7 +1420,6 @@ export class EventRuntime {
       await transaction.delete("analytics:last-error");
       const nextRevision = currentRevision + 1;
       await transaction.put("snapshot-revision", nextRevision);
-      await this.rearm(transaction);
       return nextRevision;
     });
     if (publishedVersion !== null) {
@@ -1489,7 +1488,7 @@ export class EventRuntime {
     })).catch(() => undefined);
   }
 
-  private async pollEndpoint(endpoint: string, options: { suppressStatboticsRefresh?: boolean } = {}): Promise<boolean> {
+  private async pollEndpoint(endpoint: string): Promise<boolean> {
     const isStatboticsEndpoint = endpoint === STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
     const stored = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
     const initial = stored ?? createEndpointState<unknown>(endpoint);
