@@ -19,12 +19,18 @@ interface AccessClaims {
   email?: unknown;
 }
 
+interface AccessJwk extends JsonWebKey {
+  kid?: string;
+  alg?: string;
+  use?: string;
+}
+
 interface AccessJwkSet {
-  keys?: JsonWebKey[];
+  keys?: AccessJwk[];
 }
 
 interface CachedJwks {
-  keys: JsonWebKey[];
+  keys: AccessJwk[];
   expiresAt: number;
 }
 
@@ -66,7 +72,7 @@ async function loadJwks(
   issuer: string,
   fetcher: typeof fetch,
   forceRefresh = false,
-): Promise<JsonWebKey[]> {
+): Promise<AccessJwk[]> {
   const now = Date.now();
   const cached = jwksCache.get(issuer);
   if (!forceRefresh && cached && cached.expiresAt > now) return cached.keys;
@@ -99,8 +105,12 @@ async function verifySignature(
   const [encodedHeader, encodedPayload, encodedSignature] = tokenParts;
   const header = decodeJsonPart<{ alg?: unknown; kid?: unknown }>(encodedHeader);
   if (header.alg !== "RS256" || typeof header.kid !== "string" || !header.kid) return false;
-  const signature = decodeBase64Url(encodedSignature);
-  const signingInput = new TextEncoder().encode(encodedHeader + "." + encodedPayload);
+  const signatureBytes = decodeBase64Url(encodedSignature);
+  const signature = new ArrayBuffer(signatureBytes.byteLength);
+  new Uint8Array(signature).set(signatureBytes);
+  const signingInputBytes = new TextEncoder().encode(encodedHeader + "." + encodedPayload);
+  const signingInput = new ArrayBuffer(signingInputBytes.byteLength);
+  new Uint8Array(signingInput).set(signingInputBytes);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const keys = await loadJwks(issuer, fetcher, attempt === 1);
