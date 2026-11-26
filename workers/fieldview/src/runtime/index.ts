@@ -1,7 +1,7 @@
 import { EventRuntime } from "./event-runtime.ts";
 import { Multiplexer } from "./multiplexer.ts";
 import { TeamRuntime } from "./team-runtime.ts";
-import { DiscoveryStore } from "./discovery-store.ts";
+import { DiscoveryService } from "./discovery-service.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
 import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
@@ -14,16 +14,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 interface DiscoveryRecord { json<T>(): Promise<T>; text(): Promise<string>; }
-interface DiscoveryStoreClient {
+interface DiscoveryServiceClient {
   get(key: string): Promise<DiscoveryRecord | null>;
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
-function discoveryStore(env: RuntimeEnvironment): DiscoveryStoreClient {
+function discoveryStore(env: RuntimeEnvironment): DiscoveryServiceClient {
   if (!env.DB) return {
     async get() { return null; }, async put() {}, async list() { return { objects: [], truncated: false }; },
   };
-  const service = new DiscoveryStore(env.DB, env);
+  const service = new DiscoveryService(env.DB, env);
   return {
     async get(key) {
       const response = await service.fetch(new Request("https://discovery-service/get?key=" + encodeURIComponent(key)));
@@ -283,7 +283,7 @@ export default {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const action = url.pathname.slice("/internal/discovery/".length);
-      return new DiscoveryStore(env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
+      return new DiscoveryService(env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
         method: request.method, headers: request.headers,
         ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.clone().arrayBuffer() }),
       }));
