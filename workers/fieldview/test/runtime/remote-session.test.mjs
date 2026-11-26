@@ -11,9 +11,9 @@ class MemoryStorage {
   async deleteAlarm() { throw new Error("RemoteSessionRuntime must not schedule alarms"); }
 }
 class FakeSocket {
-  sent = []; closed = false; attachment = null;
+  sent = []; closed = false; readyState = 1; attachment = null;
   send(value) { this.sent.push(value); }
-  close(code, reason) { this.closed = true; this.closeCode = code; this.closeReason = reason; }
+  close(code, reason) { this.closed = true; this.readyState = 3; this.closeCode = code; this.closeReason = reason; }
   serializeAttachment(value) { this.attachment = structuredClone(value); }
   deserializeAttachment() { return this.attachment; }
 }
