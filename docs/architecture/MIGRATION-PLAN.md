@@ -1,6 +1,6 @@
 # FieldView Architecture Migration Plan
 
-**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending; administrator UI migration to Cloudflare Static Assets implemented; remote-session Durable Object transport implemented in code, pending validation and endpoint configuration
+**Status:** M1 source inventory complete; M2 repository foundation complete; M3 domain foundation complete; M4 provider/runtime boundary in progress; M5 runtime prototype transitioning to the unified direct-refresh model; M6 analytics migration in progress; M7 canonical frontend migration in progress; M8 cutover validation pending; administrator UI migration to Cloudflare Static Assets implemented; remote-session Durable Object transport implemented in code, with source-level handshake/reconnect tests expanded; Preview validation and endpoint configuration pending
 **Target branch:** `fieldview-architecture-migration`
 **Strategy:** Owner-approved retire-first, rebuild-cleanly migration
 **Last updated:** 2026-11-26
@@ -517,3 +517,18 @@ EventRuntime and TeamRuntime readiness are separate sequential Workflows:
 ## 2026-11-26 administrator hosting migration
 
 The administrator dashboard is built as a standalone SPA from the existing React components into Workers Static Assets on the existing `runtime` Worker. The Vercel administrator page and API proxy are removed. Worker-first routes protect `/admin` and `/internal/admin/*` with Cloudflare Access JWT verification and the exact email allowlist; the dashboard's same-origin proxy is handled inside the Worker. Public runtime endpoints and WebSocket paths remain outside Access protection. Static JS/CSS bundles contain no credentials. CI builds the SPA. Access policies and Production/Preview environment values remain operator provisioning steps; no deployment or production configuration was changed by this source migration.
+
+
+## 2026-11-26 remote-session transport hardening
+
+The initial RemoteSessionRuntime implementation has been revised to follow FieldView's no-alarm/no-periodic-write policy. It uses hibernatable WebSockets as the only live participant registry, with role/token metadata in WebSocket attachments. It does not persist session state, schedule alarms, or send application heartbeats.
+
+Follow-up hardening on `fieldview-architecture-migration`:
+- Ignore accepted sockets whose `readyState` is no longer OPEN when checking role occupancy, forwarding messages, or determining peer presence.
+- Allow a reconnect using the same peer token to replace that peer's prior socket; a different token cannot take over an occupied role.
+- Explicitly negotiate the `fieldview.remote.v1` WebSocket subprotocol.
+- Convert `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL` from HTTP(S) to WS(S) before constructing the browser WebSocket URL.
+- Correct the malformed-credential test to exercise the Durable Object's actual `/connect` path and cover same-token reconnect and independent pairing-code object identities.
+- Preserve the legacy Vercel/Redis route only as a temporary fallback until Preview pairing/reconnection and hibernation behavior are validated.
+
+The source changes and tests are not a substitute for Cloudflare runtime validation. Do not configure an endpoint, deploy, apply D1 migrations, or mutate Cloudflare resources as part of this source-only step. See `docs/architecture/REMOTE-SESSION-LIFECYCLE.md`.
