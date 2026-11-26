@@ -28,14 +28,10 @@ const ACTIVE_EVENTS_KEY = "activity:active-events";
 const TEAM_EVENT_STATE_PREFIX = "team-event-state:";
 const TEAM_EVENT_REVISION_PREFIX = "team-event-revision:";
 export interface TeamResource { provider: TeamProvider; endpoint: string; }
-interface ManualTeamPollRequest { endpoint: string; year: number; dueAt: number; attempts: number; }
-interface TeamPollTask extends TeamResource { dueAt: number; intervalMs: number; attempts: number; }
 interface TeamEndpointState<T> extends EndpointState<T> {
   lastHttpStatus?: number | null;
   lastError?: string | null;
 }
-const TASK_PREFIX = "task:";
-const MANUAL_QUEUE_KEY = "manual:poll-queue";
 const ENDPOINT_PREFIX = "endpoint:";
 const DAY_MS = 86_400_000;
 function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
@@ -56,7 +52,6 @@ function isRuntimeAdminAuthorized(request: Request, env: RuntimeEnvironment): bo
 }
 
 const endpointKey = (endpoint: string) => ENDPOINT_PREFIX + endpoint;
-const taskKey = (endpoint: string) => TASK_PREFIX + endpoint;
 const validKey = (value: string) => /^[a-zA-Z0-9_-]+$/.test(value);
 
 function isStatboticsRefreshTrigger(resource: TeamResource): boolean {
@@ -891,10 +886,7 @@ export class TeamRuntime {
     }
 
     if (request.method === "GET" && url.pathname === "/state") {
-      const tasks = await this.storage.list<TeamPollTask>({ prefix: TASK_PREFIX });
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      const manualQueue = await this.storage.get<ManualTeamPollRequest[]>(MANUAL_QUEUE_KEY) ?? [];
-      const providerByEndpoint = new Map([...tasks.values()].map((task) => [task.endpoint, task.provider]));
       const snapshotRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       return Response.json({ team_key: this.teamKey, snapshot_revision: snapshotRevision,
         readiness: {
@@ -904,16 +896,12 @@ export class TeamRuntime {
             year, exists: true, input_signature: publication.input_signature,
             snapshot_revision: snapshotRevision,
           })),
-          pending_revalidation: {
-            recurring_tasks: tasks.size,
-            manual_requests: manualQueue.length,
-            next_due_at: [...tasks.values()].reduce<number | null>((earliest, task) =>
-              earliest === null || task.dueAt < earliest ? task.dueAt : earliest, null),
-          },
+          polling_owner: "PollingCoordinatorWorkflow",
+          local_poll_tasks: 0,
           last_error: [...states.values()].find((state) => state.lastError)?.lastError ?? null,
         },
         active_events: Object.keys(await this.storage.get<Record<string, ActiveEventMembership>>(ACTIVE_EVENTS_KEY) ?? {}).sort(),
-        polling: [...tasks.values()].map((task) => ({ provider: task.provider, endpoint: task.endpoint, due_at: task.dueAt, interval_ms: task.intervalMs, attempts: task.attempts })),
+        polling: [],
         resources: this.endpoints(year).map((resource) => {
           const state = [...states.values()].find((item) => item.endpoint === resource.endpoint);
           return {
