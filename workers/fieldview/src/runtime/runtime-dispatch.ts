@@ -33,9 +33,10 @@ export async function dispatchRuntime(
       : action === "state" ? "state?year=" + season
       : action === "snapshot" ? "snapshot?year=" + season + "&noSchedule=1"
       : action === "refresh" ? "refresh?year=" + season
-      : action === "readiness" ? "readiness?year=" + season : null;
+      : action === "readiness" ? "readiness?year=" + season
+      : action === "pending-analytics" ? "pending-event-analytics?year=" + season : null;
     if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
-    const method = action === "state" || action === "snapshot" ? "GET" : "POST";
+    const method = action === "state" || action === "snapshot" || action === "pending-analytics" ? "GET" : "POST";
     const response = await stub.fetch(new Request("https://team-runtime/" + path, {
       method, headers,
       ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
