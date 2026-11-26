@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
-import { createDiscoveryStoreClient } from "./discovery-store.ts";
+import { createDiscoveryServiceClient } from "./discovery-client.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { buildEventsThisWeekProjection } from "./weekly-projection.ts";
 
@@ -15,7 +15,7 @@ export class WeeklyEventProjectionWorkflow extends WorkflowEntrypoint<Env, Weekl
   async run(event: WorkflowEvent<WeeklyEventProjectionParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     const evaluatedAt = Number.isSafeInteger(event.payload?.requestedAt)
       ? Number(event.payload?.requestedAt) : event.schedule?.scheduledTime ?? Date.now();
-    const store = () => createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const store = () => createDiscoveryServiceClient(this.env);
     const current = await step.do("read-current-season", async () => {
       const object = await store().get("discovery/current-season.json");
       return object ? object.json<CurrentSeason>() : null;
