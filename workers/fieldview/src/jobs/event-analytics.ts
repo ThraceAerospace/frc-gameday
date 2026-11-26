@@ -14,7 +14,7 @@ import type {
 import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packages/analytics/src/event-team-season-comparison.ts";
 import type { FieldViewTeamState } from "../../../../packages/domain/src/team.ts";
 import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
-import { createDiscoveryStoreClient } from "./discovery-store.ts";
+import { createDiscoveryServiceClient } from "./discovery-client.ts";
 import { isRetryableWorkflowHttpStatus } from "./retry-policy.ts";
 
 export interface EventAnalyticsWorkflowParameters {
@@ -156,7 +156,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
         ? [{ team_key: team.key, team_number: team.team_number }]
         : [],
     );
-    const discovery = createDiscoveryStoreClient(this.env.DISCOVERY_STORE);
+    const discovery = createDiscoveryServiceClient(this.env);
     const registered = await step.do("resolve-registered-team-runtime-owners", async () =>
       mapLimit(participants, 8, async (team) => ({
         ...team,
