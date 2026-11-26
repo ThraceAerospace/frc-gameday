@@ -224,7 +224,7 @@ test("partial team publication records failures and supports retrying only faile
 
 test("DiscoveryService validates catalog requests and fails closed without a TBA key", async () => {
   let called = false;
-  const configured = new DiscoveryService(createState(), {
+  const configured = new DiscoveryService(createState().storage, {
     TBA_API_KEY: "test-key",
     fetcher: async () => { called = true; return Response.json([]); },
   });
