@@ -374,12 +374,12 @@ export class TeamRuntime {
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
     const currentYear = pendingAnalyticsRead ? null : await this.currentSeasonYear();
-    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputPrepare || currentYear === null
+    const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare || currentYear === null
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
         ? null
         : await this.snapshot(currentYear);
-    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputPrepare
+    const initializedState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare
       ? null
       : year === currentYear && initializedCurrentState
         ? initializedCurrentState
