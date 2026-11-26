@@ -1,4 +1,4 @@
-import type { RuntimeEnvironment } from "./cloudflare.ts";
+import type { D1DatabaseLike, RuntimeEnvironment } from "./cloudflare.ts";
 import { D1RecordStore, type D1RecordStorage } from "./d1-record-store.ts";
 import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
@@ -8,7 +8,7 @@ const MAX_LIST_LIMIT = 1000;
 export class DiscoveryService {
   private readonly storage: D1RecordStorage;
   private readonly api: TBAApiClient | null;
-  constructor(db: D1Database | D1RecordStorage, env?: RuntimeEnvironment) {
+  constructor(db: D1DatabaseLike | D1RecordStorage, env?: RuntimeEnvironment) {
     this.storage = "prepare" in db ? new D1RecordStore(db) : db;
     this.api = env?.TBA_API_KEY
       ? new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) })
