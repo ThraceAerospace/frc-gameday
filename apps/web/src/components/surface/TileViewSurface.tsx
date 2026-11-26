@@ -1,5 +1,6 @@
 "use client";
 
+import type { FieldViewEvent } from "@fieldview/domain";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import TileSurfaceSettingsView from "./TileSurfaceSettingsView";
 import type { TileSurfaceController } from "./TileSurfaceActions";
@@ -11,15 +12,20 @@ import { useTileSurfaceController, useTileSurfaceKeyboard } from "./TileSurfaceC
 import {
   HomeIcon,
 } from "@heroicons/react/24/outline";
+import EventLocalTime from "@/components/event/EventLocalTime";
 import TileView from "./TileView";
 
 type TileViewSurfaceProps = {
   events?: string[];
+  isDivisional?: boolean;
+  parentEvent?: FieldViewEvent | null;
   controller?: TileSurfaceController;
 };
 
 export default function TileViewSurface({
   events = [],
+  isDivisional = false,
+  parentEvent = null,
   controller,
 }: TileViewSurfaceProps) {
   const router = useRouter();
@@ -66,7 +72,11 @@ export default function TileViewSurface({
             <HomeIcon className="h-[18px] w-[18px]" />
           </button>
           <div className="min-w-0 px-2 leading-tight">
-            <><div className="tile-brand-accent text-xs font-bold sm:text-sm">FieldView</div><div className="text-[9px] text-neutral-500 sm:text-[10px]">Powered by The Blue Alliance</div></>
+            {isDivisional && parentEvent ? (
+              <><div className="max-w-52 truncate text-xs font-bold text-white sm:max-w-72 sm:text-sm">{parentEvent.name}</div><div className="text-[9px] text-neutral-500 sm:text-[10px]"><EventLocalTime timezone={parentEvent.timezone} /></div></>
+            ) : (
+              <><div className="tile-brand-accent text-xs font-bold sm:text-sm">FieldView</div><div className="text-[9px] text-neutral-500 sm:text-[10px]">Powered by The Blue Alliance</div></>
+            )}
           </div>
         </div>
         <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-950/55 p-1.5 shadow-[0_8px_30px_var(--fv-tile-shadow),inset_0_1px_0_var(--fv-tile-inset-highlight)] backdrop-blur-xl">
@@ -77,6 +87,7 @@ export default function TileViewSurface({
       <div className="relative min-h-0 flex-1">
         <TileView
           controller={tileSurfaceController}
+          isDivisional={isDivisional}
         />
       </div>
     </div>

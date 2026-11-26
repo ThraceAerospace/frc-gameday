@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import TileViewSurface from "@/components/surface/TileViewSurface";
+import RemoteDisplaySession from "@/components/remote/RemoteDisplaySession";
 
 function normalizeParams(param: string | string[] | undefined): string[] {
   if (!param) return [];
@@ -14,5 +14,5 @@ export default function GamedayPage({ searchParams }: { searchParams: Promise<{ 
 
   // An empty event list is a valid starting state. TileViewSurface renders a
   // single empty slot, while retaining the normal controller/settings flow.
-  return <TileViewSurface events={eventKeys} isDivisional={false} />;
+  return <RemoteDisplaySession events={eventKeys} compact />;
 }
