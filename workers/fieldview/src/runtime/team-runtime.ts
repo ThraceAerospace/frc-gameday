@@ -7,7 +7,7 @@ import { FRC_COLORS_ENDPOINTS } from "../../../../packages/providers/frc-colors/
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../../packages/providers/statbotics/src/types.ts";
 import type { FRCColorsTeam } from "../../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
-import type { DurableObjectStateLike, DurableObjectTransactionLike, RuntimeEnvironment } from "./cloudflare.ts";
+import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 import { D1RecordStore } from "./d1-record-store.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
 import type { FieldViewSourceRecordMetadata } from "../../../../packages/domain/src/source-metadata.ts";
@@ -191,22 +191,6 @@ export class TeamRuntime {
     if (this.teamKey && this.teamKey !== key) throw new Error("Durable Object team identity mismatch");
     this.teamKey = key; return true;
   }
-  private async clearRecurringStatboticsTasks(): Promise<void> {
-    return;
-  }
-  private async rearm(_tx: DurableObjectTransactionLike): Promise<void> {
-    // Durable Objects never arm polling or analytics alarms.
-    return;
-  }
-  private async enqueueManualPolls(
-    _resources: TeamResource[], _year: number, _immediate = true, _scheduledAt?: number,
-  ): Promise<void> {
-    return;
-  }
-  private async schedule(_year: number, _immediate: boolean): Promise<void> {
-    // Active-event membership is data for the coordinator, not a DO schedule.
-    return;
-  }
   async fetch(request: Request): Promise<Response> {
     await this.activation;
     const url = new URL(request.url);
@@ -233,11 +217,6 @@ export class TeamRuntime {
       }
     } else {
       if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
-      if (request.method !== "GET") {
-        // Retire legacy recurring Statbotics tasks only on explicit mutations,
-        // never as a side effect of any read.
-        await this.clearRecurringStatboticsTasks();
-      }
     }
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? await this.currentSeasonYear() : Number(yearText);
