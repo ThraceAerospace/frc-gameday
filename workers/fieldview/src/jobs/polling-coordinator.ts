@@ -128,6 +128,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
+    const eventAnalyticsRequests = new Map<string, { affected_team_keys: string[] | null }>();
     for (const candidate of candidates) {
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
@@ -195,33 +196,12 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           };
         }
       });
-      let completedResult = result;
       if (result.event_refresh === "succeeded" &&
           result.affected_team_keys !== undefined &&
-          (result.affected_team_keys === null || result.affected_team_keys.length > 0) &&
-          this.env.EVENT_ANALYTICS_WORKFLOW) {
-        const workflowId = "event-analytics-" + result.event_key + "-" + scheduledAt;
-        try {
-          await step.do("start-event-analytics-" + result.event_key, async () => {
-            await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
-              id: workflowId,
-              params: {
-                event_key: result.event_key,
-                affected_team_keys: result.affected_team_keys!,
-                requested_at: scheduledAt,
-              },
-            });
-            return workflowId;
-          });
-          completedResult = { ...result, analytics_workflow_id: workflowId };
-        } catch (error) {
-          completedResult = {
-            ...result,
-            error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-          };
-        }
+          (result.affected_team_keys === null || result.affected_team_keys.length > 0)) {
+        eventAnalyticsRequests.set(result.event_key, { affected_team_keys: result.affected_team_keys });
       }
-      results.push(completedResult);
+      results.push(result);
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
     }
 
@@ -233,6 +213,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     let teamRegistryChecksProcessed = 0;
     let teamRegistryChecksDeferredByBudget = 0;
     let teamReadinessChecksProcessed = 0;
+    let analyticsDispatchHandled = false;
     if (pollTeams && participantTeamKeys.size > 0) {
       const rosterKeys = [...participantTeamKeys];
       const teamRotationSlot = Math.floor(scheduledAt / (24 * 60 * 60_000));
@@ -276,11 +257,25 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const boundedDueTeams = dueTeams.filter((item) => selectedTeamKeys.has(item.key));
       readinessDeferredTeamCount = dueTeams.length - boundedDueTeams.length;
       const teamOutcomes = await step.do("refresh-due-team-runtimes", async () =>
-        dispatchRuntimeRefreshBatch(this.env, boundedDueTeams, 4),
+        dispatchRuntimeRefreshBatch(this.env, boundedDueTeams, 4, {
+          additionalAffectedEvents: eventAnalyticsRequests,
+          requestedAt: scheduledAt,
+        }),
       );
+      analyticsDispatchHandled = true;
       teamRefreshesAttempted = teamOutcomes.length;
       teamRefreshesSucceeded = teamOutcomes.filter((item) => item.ok).length;
       teamRefreshesFailed = teamOutcomes.filter((item) => !item.ok).length;
+    }
+
+    if (!analyticsDispatchHandled && eventAnalyticsRequests.size > 0) {
+      await step.do("start-event-analytics-for-refreshed-events", async () => {
+        await dispatchRuntimeRefreshBatch(this.env, [], 4, {
+          additionalAffectedEvents: eventAnalyticsRequests,
+          requestedAt: scheduledAt,
+        });
+        return { events: [...eventAnalyticsRequests.keys()].sort() };
+      });
     }
 
     return {
