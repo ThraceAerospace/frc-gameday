@@ -46,8 +46,6 @@ export interface RuntimeEnvironment {
   TEAM_ACTIVE_REFRESH_INTERVAL_MS?: string | number;
   TEAM_RUNTIME?: DurableObjectNamespaceLike;
   MULTIPLEXER?: DurableObjectNamespaceLike;
-  /** Shared discovery catalog persisted by a SQLite-backed Durable Object. */
-  DISCOVERY_STORE?: DurableObjectNamespaceLike;
   /** Production-only Workflow binding; omitted from branch Preview configuration. */
   EVENT_ANALYTICS_WORKFLOW?: Workflow;
   /** In-process module interface used by the consolidated Worker entrypoint. */
