@@ -29,6 +29,13 @@ EVENT_COMPLETED_RETENTION_MS = "86400000"
 TEAM_REFRESH_INTERVAL_MS = "86400000"
 TEAM_ACTIVE_REFRESH_INTERVAL_MS = "60000"
 
+# Shared physical D1 database for the logically separate Discovery and System Records schemas.
+# Keep domain ownership and repository interfaces separate in application code.
+[[d1_databases]]
+binding = "FIELDVIEW_DB"
+database_name = "fieldview-prod"
+database_id = "df5168d5-5efa-4927-b732-c0ee66da5934"
+
 [[durable_objects.bindings]]
 name = "EVENT_RUNTIME"
 class_name = "EventRuntime"
