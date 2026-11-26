@@ -145,3 +145,27 @@ No schema or D1 binding is selected in this extension. Before implementation, co
 - Define System Records indexes, pagination, retention, and status-reconciliation semantics across readiness, runtime-admin, coverage-audit, and analytics Workflow executions.
 - Complete the mutation audit for the DiscoveryStore catalog's 304 paths, unchanged-value writes, cleanup writes, and all error/retry branches.
 - Only after these items are complete: select typed D1 schemas/repositories, add local D1 migrations/tests without inventing a production `database_id`, and plan an explicitly authorized infrastructure provisioning/cutover separately.
+
+
+### DiscoveryStore catalog and generic API audit findings
+
+The full catalog dispatch in `workers/fieldview/src/runtime/discovery-store.ts` currently exposes exactly seven actions:
+
+- `resolve-current-season`: provider-backed TBA status read; persists `discovery/current-season.json` on every successful resolution, including when the season value is unchanged (the `checkedAt` timestamp changes).
+- `discover-team-page`: provider-backed page read; persists one generation-scoped team-page record.
+- `resume-partial-team-directory`: reads partial-directory metadata and staged team pages; no mutation on the inspected successful resume-read path.
+- `publish-team-directory`: reads generation-scoped pages, writes the team registry and directory manifest, optionally writes partial-directory metadata, and deletes the completed partial record.
+- `discover-event-directory`: provider-backed event-directory read; writes staging documents/key manifests on a changed response. Its HTTP 304 path still rewrites the event registry and directory record to advance check metadata, so it is not a strict storage no-op.
+- `write-event-chunks`: reads staged event data and writes bounded event-directory chunks.
+- `publish-event-directory`: reads staged data/chunks, writes the event registry and published directory, then relies on later superseded-generation cleanup for old staging/chunks.
+
+The generic API exposes only `GET /get`, `POST /put`, and `GET /list`; there is no generic delete endpoint. The runtime Worker has a second inline implementation of this same API. `get` and `list` are read-only in the inspected implementation. Every generic `put` reads the previous string, writes the new string even when byte-for-byte unchanged, then calls superseded-record cleanup. The catalog's internal `putValue` has the same unconditional write behavior. Prefix cleanup deletes keys in batches of at most 1,000; coverage-audit pointer replacement can therefore trigger a potentially large cleanup operation in the same Durable Object request.
+
+This confirms three separate mutation concerns to preserve during the future split:
+1. Provider-backed discovery operations and their staged publication lifecycle belong to Discovery.
+2. Workflow/admin/runtime-registration records belong to System Records even though they currently use the same generic `put/get/list` transport.
+3. No-op semantics and cleanup must be redesigned explicitly in typed repository operations; mechanically moving the current generic API to D1 would preserve the existing hidden-write and unbounded-cleanup risks.
+
+The runtime registration and workflow history/admin routes listed above are read through the same generic API today. The current runtime admin overview/inventory/entity handlers also combine Discovery directory reads with System Records registration-marker reads; their future adapters must query the correct repository for each record family rather than retain a single mixed client.
+
+The analytics execution-recovery ledger must not be added as another ad hoc `admin/...` JSON key. It belongs in the typed System Records execution model, after the outstanding audit defines shared Workflow identity, status reconciliation, recovery scheduling, and retention behavior.
