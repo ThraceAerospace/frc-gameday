@@ -247,3 +247,29 @@ Official references:
 - [SQLite-backed Durable Object Storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) — hidden KV table, implicit transactions, delete return value, SQL row counters, index write amplification.
 
 This resolves the documentation question for the general billing model and invalidates any estimate that excludes `setAlarm()` or delete operations from the SQLite row-write budget. It does **not** establish account-specific observed usage, the billable behavior of deleting an absent key, or the actual per-operation row count in the user's account. No account telemetry is available through the connected repository tools, so the telemetry comparison remains open under Issue #30.
+## 10. Clean-slate operational-record policy (2026-11-26)
+
+The former DiscoveryStore was never deployed or populated. No historical records, compatibility reads, import, backfill, or data-preserving rollback are required. The D1 repositories start empty; the policy below governs only records created by the new implementation.
+
+### Runtime registration markers
+
+- `registry/runtime-events/{event}.json` and `registry/runtime-teams/{team}.json` are durable existence markers, not canonical state and not discovery directories.
+- A marker is created only after an explicit successful runtime initialization, seed, refresh, or accepted webhook operation has established that the corresponding runtime is usable.
+- Markers do not expire automatically while the runtime is part of the current supported dataset. They are small, low-churn gates used by public reads and bounded coordinator scans.
+- A missing marker is not repaired by a public GET, readiness inspection, or a speculative DO activation. Repair is explicit: an authenticated seed/refresh/registration operation must successfully initialize the runtime and then write the marker. This avoids turning reads into writes and avoids marking an uninitialized runtime as ready.
+- If an operator intentionally retires an entity from FieldView, its marker may be explicitly deleted as part of that retirement operation. No automatic deletion based solely on age is permitted.
+
+### Workflow execution and administrative history
+
+- New analytics execution records are authoritative System Records and are retained while queued/running/recoverable.
+- Terminal analytics execution records, readiness Workflow records/results, runtime-admin job history, and coverage-audit history/item chunks have a **30-day retention period after terminal completion**. Active or retry-eligible records are never expired.
+- A current coverage-audit summary/pointer per season is retained until replaced by a newer audit; superseded item chunks and history snapshots follow the 30-day terminal retention period.
+- Retention is implemented as explicit bounded cleanup, not read-time expiry or hidden TTL refresh. Every cleanup operation must be idempotent, bounded per coordinator run, and delete only terminal records whose `expires_at` is due.
+- The legacy `workflows/daily-event-readiness/*/summary.json` and `workflows/daily-team-readiness/*/summary.json` duplicate summaries are not part of the new contract. They may be omitted from the clean-slate implementation; the current admin UI reads the `admin/workflow-runs/...` record/summary/results family instead.
+- No old admin/job/history/coverage records need to be copied or retained for compatibility.
+
+### Audit disposition
+
+The source-level mutation/caller inventory and the Multiplexer lifecycle paths are documented. The general Durable Object billing semantics are documented, but account-specific billable usage remains unavailable through the connected Cloudflare credential (the billable-usage endpoint returned 403). This is an explicit telemetry limitation, not a reason to block the clean-slate D1 implementation or invent a row-write budget. Validate actual D1/DO usage after an explicitly authorized test deployment and dashboard/usage access.
+
+External consumers of removed internal routes and legacy summary copies cannot be proven absent from repository inspection alone. Because the former store was never deployed and there are no records to preserve, these are treated as retired internal contracts: any future consumer must use the current Runtime Worker admin API rather than restore the removed storage routes or duplicate summary keys.
