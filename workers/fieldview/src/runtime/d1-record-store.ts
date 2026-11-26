@@ -49,7 +49,7 @@ class D1RecordRepository implements D1RecordStorage {
       WHERE substr(record_key, 1, ?) = ? AND record_key > ?
       ORDER BY record_key LIMIT ?`)
       .bind(prefix.length, prefix, cursor, limit).all<{ record_key: string; value_json: string }>();
-    return new Map((result.results ?? []).map((row) => [row.record_key, row.value_json as unknown as T]));
+    return new Map<string, T>((result.results ?? []).map((row): [string, T] => [row.record_key, row.value_json as unknown as T]));
   }
 
   async delete(key: string): Promise<boolean> {
@@ -95,7 +95,8 @@ export class D1RecordStore implements D1RecordStorage {
     const [discovery, system] = await Promise.all([
       this.discovery.list<T>(options), this.system.list<T>(options),
     ]);
-    const merged = [...discovery, ...system].sort(([a], [b]) => a.localeCompare(b));
-    return new Map(merged.slice(0, Math.max(1, options.limit ?? 1000)));
+    const merged: Array<[string, T]> = [...discovery.entries(), ...system.entries()]
+      .sort(([a], [b]) => a.localeCompare(b));
+    return new Map<string, T>(merged.slice(0, Math.max(1, options.limit ?? 1000)));
   }
 }
