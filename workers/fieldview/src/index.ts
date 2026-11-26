@@ -59,5 +59,5 @@ export default {
   },
 };
 
-export { EventRuntime, TeamRuntime, Multiplexer, DiscoveryStore } from "./runtime/index.ts";
+export { EventRuntime, TeamRuntime, Multiplexer } from "./runtime/index.ts";
 export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow } from "./jobs/index.ts";
