@@ -324,19 +324,43 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
       throw new Error("EventRuntime analytics publication returned HTTP " + publicationResult.status);
     }
 
-    const acknowledgementOutcomes = await step.do("acknowledge-published-team-analytics", {
-      retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
-    }, async () => mapLimit(teamResults, 6, async (result) => {
-      const { state: _state, ...acknowledgement } = result;
-      const response = await teamNamespace.get(teamNamespace.idFromName(result.team_key)).fetch(
-        new Request("https://team-runtime/event-analytics/acknowledge?year=" + year, {
-          method: "POST",
-          headers: headers(this.env, "X-FieldView-Team-Key", result.team_key),
-          body: JSON.stringify(acknowledgement),
-        }),
-      );
-      return { team_key: result.team_key, status: response.status, body: await response.json().catch(() => null) };
-    }));
+    let acknowledgementOutcomes: Array<{ team_key: string; status: number; body: unknown }>;
+    try {
+      acknowledgementOutcomes = await step.do("acknowledge-published-team-analytics", {
+        retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+      }, async () => mapLimit(teamResults, 6, async (result) => {
+        const acknowledgement = {
+          contract_version: result.contract_version,
+          event_key: result.event_key,
+          team_key: result.team_key,
+          event_source_revision: result.event_source_revision,
+          team_source_revision: result.team_source_revision,
+          comparison_input_updated_at: result.comparison_input_updated_at,
+          team_event_revision: result.team_event_revision,
+        };
+        const response = await teamNamespace.get(teamNamespace.idFromName(result.team_key)).fetch(
+          new Request("https://team-runtime/event-analytics/acknowledge?year=" + year, {
+            method: "POST",
+            headers: headers(this.env, "X-FieldView-Team-Key", result.team_key),
+            body: JSON.stringify(acknowledgement),
+          }),
+        );
+        if (response.status >= 500) {
+          throw new Error("TeamRuntime " + result.team_key +
+            " publication acknowledgement returned HTTP " + response.status);
+        }
+        return { team_key: result.team_key, status: response.status, body: await response.json().catch(() => null) };
+      }));
+    } catch (error) {
+      const retryId = await scheduleRetry("team-publication-acknowledgement-failure", null);
+      if (retryId) return {
+        event_key: eventKey,
+        status: "retry_scheduled",
+        retry_workflow_id: retryId,
+        reason: "team_publication_acknowledgement_failure",
+      };
+      throw error;
+    }
     const staleAcknowledgement = acknowledgementOutcomes.find((item) => item.status === 409);
     if (staleAcknowledgement) {
       const retryId = await scheduleRetry("team-publication-acknowledgement-conflict", null);
