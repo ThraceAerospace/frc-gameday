@@ -37,6 +37,21 @@ function getSignalingUrl(code: string, role: RemoteRole, token: string) {
   return `${protocol}//${window.location.host}/api/remote/ws?code=${encodeURIComponent(code)}&role=${role}&token=${encodeURIComponent(token)}`;
 }
 
+function getRuntimeSignalingUrl(baseUrl: string, code: string, role: RemoteRole): string {
+  const url = new URL(baseUrl);
+  if (url.protocol === "https:") url.protocol = "wss:";
+  else if (url.protocol === "http:") url.protocol = "ws:";
+  else if (url.protocol !== "wss:" && url.protocol !== "ws:") {
+    throw new Error("NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL must use HTTP or WebSocket transport");
+  }
+  url.pathname = "/remote/ws";
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("code", code);
+  url.searchParams.set("role", role);
+  return url.toString();
+}
+
 export class RemotePeer {
   private readonly options: PeerOptions;
   private socket: WebSocket | null = null;
@@ -103,8 +118,7 @@ export class RemotePeer {
 
     const socket = this.runtimeBaseUrl
       ? new WebSocket(
-          this.runtimeBaseUrl + "/remote/ws?code=" + encodeURIComponent(this.options.code) +
-            "&role=" + this.options.role,
+          getRuntimeSignalingUrl(this.runtimeBaseUrl, this.options.code, this.options.role),
           ["fieldview.remote.v1", "role." + this.options.role, "token." + this.token],
         )
       : new WebSocket(getSignalingUrl(this.options.code, this.options.role, this.token));
