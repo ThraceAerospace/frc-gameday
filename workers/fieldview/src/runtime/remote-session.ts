@@ -62,8 +62,15 @@ export class RemoteSessionRuntime {
 
     // A DO processes these fetch events serially. Checking its accepted socket
     // set is therefore sufficient to enforce one live connection per role.
-    if (this.state.getWebSockets().some((socket) => this.attachment(socket)?.role === role)) {
-      return Response.json({ error: "This remote role is already connected" }, { status: 409 });
+    const existing = this.state.getWebSockets().find((socket) => this.attachment(socket)?.role === role);
+    if (existing) {
+      // A reconnect from the same RemotePeer retains its token. Let it replace
+      // its previous transport, but never let a different client take over an
+      // occupied role using only knowledge of the pairing code.
+      if (this.attachment(existing)?.token !== token) {
+        return Response.json({ error: "This remote role is already connected" }, { status: 409 });
+      }
+      try { existing.close(1000, "Replaced by reconnect"); } catch { /* already closed */ }
     }
 
     const pair = this.env.webSocketPairFactory
@@ -86,7 +93,11 @@ export class RemoteSessionRuntime {
     }
     return this.env.webSocketResponseFactory
       ? this.env.webSocketResponseFactory(pair[0])
-      : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
+      : new Response(null, {
+          status: 101,
+          headers: { "Sec-WebSocket-Protocol": PROTOCOL },
+          webSocket: pair[0],
+        } as ResponseInit & { webSocket: WebSocket });
   }
 
   private attachment(socket: WebSocket): Attachment | null {
