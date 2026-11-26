@@ -3,7 +3,6 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
-import { lifecycleFor } from "./calendar.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 
 type RuntimeAdminEnvironment = RuntimeEnvironment;
@@ -20,8 +19,8 @@ interface RuntimeAdminRecord {
   status: "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
   phase: string; processed: number; total: number; started_at: number; updated_at: number;
   counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
-  team_key?: string; event_key?: string; stage?: string; scheduled_events?: number;
-  seeded_teams?: number; failed_teams?: number; historical_events_scheduled?: number;
+  team_key?: string; event_key?: string; stage?: string; registered_events?: number;
+  seeded_teams?: number; failed_teams?: number; historical_events_registered?: number;
   team_keys?: string[]; cursor?: number; active_team_key?: string | null; queued_teams?: number;
 }
 interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
@@ -57,7 +56,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         ...(current.operation === "event-team-seed" && patch.processed !== undefined
           ? { cursor: patch.processed } : {}),
         ...(current.operation === "team-seed" && patch.processed !== undefined
-          ? { scheduled_events: patch.processed } : {}),
+          ? { registered_events: patch.processed } : {}),
         updated_at: Date.now(),
       };
       await write(createDiscoveryServiceClient(this.env), key, next);
@@ -117,38 +116,28 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     }
     if (!snapshot || !Array.isArray(snapshot.events)) throw new Error("Timed out waiting for TeamRuntime event history");
     const events = snapshot.events.filter((item) => validEvent(item.key));
-    await update({ phase: "scheduling-team-events", total: events.length });
-    const byKey = new Map(events.filter((item) =>
-      typeof item.start_date === "string" && typeof item.end_date === "string" &&
-      typeof item.timezone === "string").map((item) => [String(item.key), item]));
-    let scheduled = 0;
+    await update({ phase: "registering-team-events", total: events.length });
+    let registered = 0;
     for (let offset = 0; offset < events.length; offset += 10) {
       const batch = events.slice(offset, offset + 10);
-      const scheduledInBatch = await step.do("schedule-team-events-" + offset, async () => {
+      const registeredInBatch = await step.do("register-team-events-" + offset, async () => {
         let count = 0;
         for (const item of batch) {
-          const event = byKey.get(String(item.key));
-          if (!event) continue;
-          const lifecycle = lifecycleFor({
-            key: String(item.key), start_date: String(event.start_date),
-            end_date: String(event.end_date), timezone: String(event.timezone),
-          }, Date.now());
-          if (lifecycle.lifecycle === "expired") continue;
-          const response = await dispatch(this.env, "event", String(item.key), "lifecycle", {
-            lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
-            ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
-          }, p.year);
-          if (!response.ok) throw new Error("EventRuntime lifecycle returned HTTP " + response.status);
+          const eventKey = String(item.key);
+          const eventYear = Number(eventKey.slice(0, 4));
+          if (!Number.isInteger(eventYear) || eventYear < 1992 || eventYear > 2200) continue;
+          const response = await dispatch(this.env, "event", eventKey, "register", {}, eventYear);
+          if (!response.ok) throw new Error("Event registration returned HTTP " + response.status);
           count += 1;
         }
         return count;
       });
-      scheduled += scheduledInBatch;
-      await update({ processed: scheduled });
+      registered += registeredInBatch;
+      await update({ processed: registered });
     }
     const current = await read<RuntimeAdminRecord>(createDiscoveryServiceClient(this.env), recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)), status: "completed" as const, phase: "complete",
-      stage: "complete", team_key: teamKey, scheduled_events: scheduled, processed: scheduled, updated_at: Date.now() };
+      stage: "complete", team_key: teamKey, registered_events: registered, processed: registered, updated_at: Date.now() };
     await write(createDiscoveryServiceClient(this.env), recordKey(p.workflowId), completed);
     return completed;
   }
@@ -227,7 +216,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         await step.sleep("wait-participant-history-" + offset + "-" + attempt, "5 seconds");
       }
     }
-    const historicalEvents = new Map<string, { start_date: string; end_date: string; timezone: string }>();
+    const historicalEvents = new Set<string>();
     const successfulTeamKeys = teamKeys.filter((teamKey) => !failedTeams.has(teamKey));
     for (let offset = 0; offset < successfulTeamKeys.length; offset += 100) {
       const batch = successfulTeamKeys.slice(offset, offset + 100);
@@ -236,46 +225,35 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
           const response = await dispatch(this.env, "team", teamKey, "snapshot", {}, p.year);
           if (!response.ok) throw new Error("TeamRuntime snapshot failed for " + teamKey);
           const snapshot = await response.json() as { events?: Array<Record<string, unknown>> | null };
-          return (snapshot.events ?? []).flatMap((item) =>
-            validEvent(item.key) && typeof item.start_date === "string" &&
-            typeof item.end_date === "string" && typeof item.timezone === "string"
-              ? [{ key: item.key, start_date: item.start_date, end_date: item.end_date, timezone: item.timezone }]
-              : []);
+          return (snapshot.events ?? []).flatMap((item) => validEvent(item.key) ? [item.key] : []);
         }));
         return results.flat();
       });
-      for (const item of history) historicalEvents.set(item.key, {
-        start_date: item.start_date, end_date: item.end_date, timezone: item.timezone,
-      });
+      for (const eventKey of history) historicalEvents.add(eventKey);
     }
-    const historical = [...historicalEvents.entries()];
-    let historicalScheduled = 0;
+    const historical = [...historicalEvents];
+    let historicalRegistered = 0;
     for (let offset = 0; offset < historical.length; offset += 10) {
       const batch = historical.slice(offset, offset + 10);
-      const scheduledInBatch = await step.do("schedule-participant-history-" + offset, async () => {
+      const registeredInBatch = await step.do("register-participant-history-" + offset, async () => {
         let count = 0;
-        for (const [key, event] of batch) {
-          const lifecycle = lifecycleFor({ key, ...event }, Date.now());
-          if (lifecycle.lifecycle === "expired") continue;
+        for (const key of batch) {
           const eventYear = Number(key.slice(0, 4));
           if (!Number.isInteger(eventYear) || eventYear < 1992 || eventYear > 2200) continue;
-          const response = await dispatch(this.env, "event", key, "lifecycle", {
-            lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
-            ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
-          }, eventYear);
-          if (!response.ok) throw new Error("Unable to schedule historical event " + key);
+          const response = await dispatch(this.env, "event", key, "register", {}, eventYear);
+          if (!response.ok) throw new Error("Unable to register historical event " + key);
           count += 1;
         }
         return count;
       });
-      historicalScheduled += scheduledInBatch;
+      historicalRegistered += registeredInBatch;
     }
     const current = await read<RuntimeAdminRecord>(createDiscoveryServiceClient(this.env), recordKey(p.workflowId));
     const completed = { ...(current ?? initialRecord(p)),
       status: failedTeams.size > 0 ? "completed_with_errors" as const : "completed" as const,
       phase: "complete", stage: "complete", event_key: eventKey, team_keys: teamKeys, cursor: processed,
       seeded_teams: processed - failedTeams.size, failed_teams: failedTeams.size,
-      historical_events_scheduled: historicalScheduled, errors: jobErrors.slice(-100),
+      historical_events_registered: historicalRegistered, errors: jobErrors.slice(-100),
       processed, updated_at: Date.now() };
     await write(createDiscoveryServiceClient(this.env), recordKey(p.workflowId), completed);
     return completed;
@@ -301,8 +279,8 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     const errors: Array<{ key: string; detail: string; at: number }> = [];
     await update({ phase: "queueing-team-resources", total: teamKeys.length + eventKeys.length, counts });
 
-    // Queue work in bounded batches. Runtime alarms—not this Workflow—perform
-    // every provider request and retain retry/backoff state.
+    // Dispatch bounded seed commands. Each TeamRuntime owns its provider acquisition
+    // and canonical persistence; the Workflow tracks durable progress only.
     for (let offset = 0; offset < teamKeys.length; offset += batchSize) {
       const batch = teamKeys.slice(offset, offset + batchSize);
       const result = await step.do("queue-season-team-batch-" + offset, async () => Promise.all(batch.map(async (teamKey) => {
@@ -423,15 +401,6 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
             if (!["succeeded", "partial", "failed"].includes(analytics)) {
               return { key: eventKey, ready: false, requested: true, analytics, partial };
             }
-            const event = events.events.find((item) => item.key === eventKey);
-            if (event) {
-              const lifecycle = lifecycleFor(event, Date.now());
-              const lifecycleResponse = await dispatch(this.env, "event", eventKey, "lifecycle", {
-                lifecycle: lifecycle.lifecycle, upcomingIntervalMs: 30 * 60_000, activeIntervalMs: 5 * 60_000,
-                ...(lifecycle.completedUntil === undefined ? {} : { completedUntil: lifecycle.completedUntil }),
-              }, p.year);
-              if (!lifecycleResponse.ok) throw new Error("Event lifecycle update failed for " + eventKey);
-            }
             return { key: eventKey, ready: true, requested: true, analytics, partial };
           }));
           return outcomes;
@@ -477,6 +446,6 @@ function initialRecord(p: RuntimeAdminParameters): RuntimeAdminRecord {
   return { workflow_id: p.workflowId, operation: p.operation, year: p.year, status: "running",
     phase: "queued", stage: "queued", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
     ...(p.teamKey ? { team_key: p.teamKey } : {}),
-    ...(p.eventKey ? { event_key: p.eventKey, seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0 } : {}),
+    ...(p.eventKey ? { event_key: p.eventKey, seeded_teams: 0, failed_teams: 0, historical_events_registered: 0 } : {}),
     counts: {}, errors: [] };
 }
