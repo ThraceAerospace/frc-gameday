@@ -4,6 +4,7 @@ import { TeamRuntime } from "./team-runtime.ts";
 import { DiscoveryService } from "./discovery-service.ts";
 import type { RuntimeEnvironment } from "./cloudflare.ts";
 import { verifyTbaWebhookHmac } from "./webhook-auth.ts";
+import { dispatchRuntime } from "./runtime-dispatch.ts";
 import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
 
@@ -684,57 +685,8 @@ export default {
           typeof body.key !== "string" || typeof body.action !== "string") {
         return Response.json({ error: "Invalid runtime dispatch request" }, { status: 400 });
       }
-      const { kind, key, action } = body;
-      if (kind === "team" && !/^frc\d+$/.test(key)) return Response.json({ error: "Invalid team key" }, { status: 400 });
-      if (kind === "event" && !/^[a-zA-Z0-9_-]+$/.test(key)) return Response.json({ error: "Invalid event key" }, { status: 400 });
-      const year = Number(body.year);
-      if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
-      const headers = {
-        Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
-        ...(kind === "team" ? { "X-FieldView-Team-Key": key } : { "X-FieldView-Event-Key": key }),
-        "Content-Type": "application/json",
-      };
-      if (kind === "event" && action === "register") {
-        if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
-        const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
-        const response = await stub.fetch(new Request("https://event-runtime/register", {
-          method: "POST", headers,
-        }));
-        if (response.ok && !(await registerRuntimeMarker(env, "event", key))) {
-          return Response.json({ error: "Runtime registry storage is unavailable" }, { status: 503 });
-        }
-        return response;
-      }
-      if (kind === "team") {
-        if (!env.TEAM_RUNTIME) return Response.json({ error: "TeamRuntime is unavailable" }, { status: 503 });
-        const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(key));
-        const path = action === "seed" ? "seed?year=" + year
-          : action === "state" ? "state?year=" + year
-          : action === "snapshot" ? "snapshot?year=" + year + "&noSchedule=1" : null;
-        if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
-        const response = await stub.fetch(new Request("https://team-runtime/" + path, {
-          method: action === "state" || action === "snapshot" ? "GET" : "POST", headers,
-        }));
-        if (response.ok) await registerRuntimeMarker(env, "team", key);
-        return response;
-      }
-      if (!env.EVENT_RUNTIME) return Response.json({ error: "EventRuntime is unavailable" }, { status: 503 });
-      const stub = env.EVENT_RUNTIME.get(env.EVENT_RUNTIME.idFromName(key));
-      const allowed: Record<string, string> = {
-        participants: "participants", state: "state", refresh: "refresh",
-        publish: "publish-state", recalculate: "recalculate", analytics: "analytics",
-      };
-      const path = allowed[action];
-      if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
-      const method = action === "state" || action === "analytics" ? "GET" : "POST";
-      const payload = { ...body };
-      delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
-      const response = await stub.fetch(new Request("https://event-runtime/" + path, {
-        method, headers,
-        ...(method === "GET" ? {} : { body: JSON.stringify(payload) }),
-      }));
-      if (response.ok) await registerRuntimeMarker(env, "event", key);
-      return response;
+      const year = body.year === undefined ? undefined : Number(body.year);
+      return dispatchRuntime(env, body.kind, body.key, body.action, body, year);
     }
 
     if (url.pathname === "/internal/admin/coverage-audit" && (request.method === "GET" || request.method === "POST")) {
