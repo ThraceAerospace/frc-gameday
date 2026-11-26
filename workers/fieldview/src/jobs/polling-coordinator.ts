@@ -362,10 +362,23 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     // the weekly active-event projection.
     let eventAnalyticsRecoveryEventsDeferred = 0;
     if (this.env.EVENT_RUNTIME) {
-      const eventRegistry = await step.do("load-event-analytics-recovery-registry", async () =>
-        store().list({ prefix: "registry/runtime-events/" + discovery.year, limit: 1000 }),
-      );
-      const registeredEventKeys = [...new Set(eventRegistry.objects.map((item) =>
+      const eventRegistryObjects = await step.do("load-event-analytics-recovery-registry", async () => {
+        const objects: Array<{ key: string }> = [];
+        let cursor: string | undefined;
+        for (let page = 0; page < 10; page += 1) {
+          const result = await store().list({
+            prefix: "registry/runtime-events/" + discovery.year,
+            limit: 1000,
+            ...(cursor ? { cursor } : {}),
+          });
+          objects.push(...result.objects);
+          if (!result.truncated) return objects;
+          if (!result.cursor) throw new Error("Event analytics recovery registry pagination lost its cursor");
+          cursor = result.cursor;
+        }
+        throw new Error("Event analytics recovery registry exceeds the bounded 10,000-record scan");
+      });
+      const registeredEventKeys = [...new Set(eventRegistryObjects.map((item) =>
         item.key.slice("registry/runtime-events/".length).replace(/\.json$/, ""),
       ).filter((key) => new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(key)))];
       const uncheckedEventKeys = registeredEventKeys.filter((key) => !analyticsStateCheckedEventKeys.has(key));
