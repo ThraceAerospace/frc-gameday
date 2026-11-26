@@ -1,1 +1,1 @@
-import {defineConfig} from "vite";import{fileURLToPath}from"node:url";import{resolve}from"node:path";const root=fileURLToPath(new URL(".",import.meta.url));export default defineConfig({root,base:"/",build:{outDir:resolve(root,"../../workers/fieldview/admin-assets"),emptyOutDir:true,assetsDir:"assets"}});
+import{fileURLToPath}from"node:url";import{resolve}from"node:path";const root=fileURLToPath(new URL(".",import.meta.url));export default {root,base:"/",build:{outDir:resolve(root,"../../workers/fieldview/admin-assets"),emptyOutDir:true,assetsDir:"assets"}};
