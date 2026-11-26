@@ -79,6 +79,7 @@ export default function RemoteDisplaySession({
         <RemoteSession
           role="display"
           events={events}
+          useLocalCanonicalSnapshots={compact}
           code={code}
           onStatus={(status: RemotePeerStatus) => {
             setPeerStatus(status);

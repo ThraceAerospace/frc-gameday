@@ -22,7 +22,7 @@ export type RemoteSessionMessage =
   | { type: "eventSnapshot"; eventKey: string; version: number; snapshot: CanonicalEventSnapshotData }
   | { type: "stateSnapshot"; state: RemoteSurfaceState }
   | { type: "requestInitialState" }
-  | { type: "initialState"; state: RemoteSurfaceState };
+  | { type: "initialState"; state: RemoteSurfaceState; usesLocalCanonicalSnapshots?: boolean };
 
 export type RemoteSessionAction =
   | { type: "setUpcomingMatchAlert"; signal: UpcomingMatchAlert }
