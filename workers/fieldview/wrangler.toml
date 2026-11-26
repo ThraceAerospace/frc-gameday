@@ -21,6 +21,8 @@ enabled = true
 head_sampling_rate = 0.1
 
 [vars]
+# Administrator Access variables are configured per environment in the dashboard:
+# CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, RUNTIME_ADMIN_EMAILS.
 TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
 STATBOTICS_API_BASE_URL = "https://api-statbotics.iterativerefinement.com/"
 STATBOTICS_REFRESH_DELAY_MS = "300000"
