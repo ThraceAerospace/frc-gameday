@@ -223,3 +223,30 @@ test("event inspection dispatches do not create runtime registry records", async
   ]);
   assert.equal(markers.size, 0, "inspection-only reads must not mutate the runtime registry");
 });
+
+
+test("team snapshot and diagnostics dispatches do not register runtimes", async () => {
+  const markers = new Map(), calls = [];
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    TEAM_RUNTIME: namespace(async (request, id) => {
+      calls.push({ method: request.method, path: new URL(request.url).pathname, id });
+      return Response.json({ team_key: id });
+    }),
+    DISCOVERY_STORAGE: {
+      async get(key) { return markers.get(key); },
+      async put(key, value) { markers.set(key, value); },
+      async list() { return new Map(); },
+      async delete(key) { return markers.delete(key); },
+    },
+  };
+  for (const action of ["state", "snapshot"]) {
+    const response = await dispatchRuntime(env, "team", "frc3461", action, {}, 2027);
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(calls, [
+    { method: "GET", path: "/state", id: "frc3461" },
+    { method: "GET", path: "/snapshot", id: "frc3461" },
+  ]);
+  assert.equal(markers.size, 0, "read-only TeamRuntime dispatch must not create registry records");
+});
