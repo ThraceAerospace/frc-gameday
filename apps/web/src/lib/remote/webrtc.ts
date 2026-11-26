@@ -15,6 +15,7 @@ export type RemoteSignalingStatus =
 
 type SignalMessage =
   | { type: "connected"; role: RemoteRole }
+  | { type: "heartbeat-ack" }
   | { type: "peer-ready" }
   | { type: "signal"; payload: WebRTCSignalPayload }
   | { type: "error"; message: string };
