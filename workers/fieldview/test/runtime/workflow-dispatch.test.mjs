@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import worker from "../../src/runtime/index.ts";
+import runtime from "../../src/runtime/index.ts";
+const worker = {
+  fetch(request, env) {
+    if (env.DISCOVERY_STORE && !env.DISCOVERY_STORAGE) {
+      const stub = env.DISCOVERY_STORE.get(env.DISCOVERY_STORE.idFromName("shared"));
+      env.DISCOVERY_STORAGE = {
+        async get(key) {
+          const response = await stub.fetch(new Request("https://discovery-store/get?key=" + encodeURIComponent(key)));
+          return response.ok ? response.text() : undefined;
+        },
+        async put(key, value) {
+          await stub.fetch(new Request("https://discovery-store/put", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, value }),
+          }));
+        },
+        async list() { return new Map(); },
+        async delete() { return false; },
+      };
+    }
+    return runtime.fetch(request, env);
+  },
+};
 
 function environment() {
   const calls = [];
