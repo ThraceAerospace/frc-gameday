@@ -17,7 +17,7 @@ The repository is undergoing an owner-approved **retire-first, rebuild-cleanly a
 - Provider-independent FieldView domain contracts are the only data contracts the frontend should consume.
 - The migration branch has Vercel preview deployments intentionally skipped through the project's Ignored Build Step. Do not remove or override this branch-specific setting in repository work.
 
-See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, ADR-0019 for the single-Worker-with-branch-Previews deployment decision, ADR-0018 for publication-gated reads, `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` for runtime/polling/storage ownership, and `docs/architecture/decisions/2026-11-24-alarm-usage-policy.md` for the last-resort-only alarm policy. ADR-0014 is historical and superseded.
+See `docs/architecture/MIGRATION-PLAN.md` and `docs/architecture/MIGRATION-INVENTORY.md` for phase sequencing and known legacy mappings, `docs/architecture/DO-WRITE-AUDIT-2026-11-25.md` for the current source-level DO mutation/call-path audit, and `workers/fieldview/migrations/0001_initial.sql` for the initial D1 Discovery/System Records schema. The schema is defined but must not be applied until an explicit deployment/cutover approval. See ADR-0019 for the single-Worker-with-branch-Previews deployment decision, ADR-0018 for publication-gated reads, `docs/architecture/decisions/2026-11-24-storage-and-polling-ownership.md` for runtime/polling/storage ownership, and `docs/architecture/decisions/2026-11-24-alarm-usage-policy.md` for the last-resort-only alarm policy. ADR-0014 is historical and superseded.
 
 ## Non-negotiable product and data principles
 
