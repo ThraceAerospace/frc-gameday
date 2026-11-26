@@ -140,13 +140,13 @@ A defensible daily budget still requires: actual invocation counts per DO class;
 3. **High — operational records are stored in DiscoveryStore.** Move registrations, workflow progress/results, admin jobs/history/actions, coverage audit records/items, and operational events to System Records D1.
 4. **Medium — EventRuntime first public read can bind identity.** Ensure all public runtime exposure follows explicit initialization, then remove read-time binding.
 5. **Medium — EventRuntime lifecycle state is written unconditionally.** Add equality checks; retain only the metadata that is consumed by coordinator policy.
-6. **Medium — directory publication and generation cleanup are multi-step and non-atomic.** D1 transactions should publish manifests and row sets atomically; staging cleanup should be bounded and retryable.
+6. **Medium — directory publication and generation cleanup are multi-step and non-atomic.** D1 transactions should group related record writes atomically; staging cleanup should be bounded and retryable.
 7. **Low — Multiplexer subscription writes are expected, bounded, and equality-guarded.** Measure actual connection churn before redesign.
 8. **No active alarm/Queue issue in current source.** Do not add alarms or Queues to solve the original quota symptom.
 
 ## D1 schema and cutover decision
 
-The initial schema is introduced in `workers/fieldview/migrations/0001_initial.sql`. It creates separate `discovery_*` and `system_*` table families in the same physical D1 database. This is logical schema separation, not separate SQLite attached databases. Production and Preview bind different physical D1 databases, so the same migration applies independently to each.
+The initial schema is introduced in `workers/fieldview/migrations/0001_initial.sql`. It creates exactly two tables: `discovery_records` and `system_records`. Both are simple typed JSON record stores with a primary key, record type, JSON value, creation/update timestamps, and optional expiry. Separate repository interfaces and key/type contracts enforce logical ownership; the database does not mirror every domain record as a dedicated table. Production and Preview bind different physical D1 databases, so the same migration applies independently to each.
 
 - Discovery tables own season metadata, team/event directory generations and members, staged pages/chunks, and the canonical weekly projection.
 - System tables own runtime registration, workflow runs/progress/results, admin jobs/index/history/actions, discovery job status, coverage audits/items, and structured operational events.
@@ -167,7 +167,7 @@ The initial schema is introduced in `workers/fieldview/migrations/0001_initial.s
 ## Recommended implementation order
 
 1. Add D1 repositories for Discovery and System Records against the schema migration.
-2. Move operational records and runtime registration markers first; keep DiscoveryStore temporarily for catalog data.
+2. Move operational records and runtime registration markers first; keep DiscoveryStore temporarily for catalog data. Both domains use their own generic D1 record table and repository interface.
 3. Move discovery directory/projection records; use transactions for publication boundaries and equality guards.
 4. Remove the DiscoveryStore binding/class only after all callers are migrated and tests prove no remaining use.
 5. Separately fix TeamRuntime season analytics GET cache writes and EventRuntime read-time identity binding.
