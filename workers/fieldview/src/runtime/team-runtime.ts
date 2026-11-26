@@ -262,7 +262,7 @@ export class TeamRuntime {
       const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const teamState = teamPublication?.state;
       if (!teamPublication || !teamState) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "TeamState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       if (typeof teamPublication.input_signature !== "string" || typeof teamState !== "object" || Array.isArray(teamState) ||
           (teamState as Record<string, unknown>).team_key !== this.teamKey ||
@@ -308,7 +308,7 @@ export class TeamRuntime {
           (state.expiresAt !== null && state.expiresAt <= now);
       });
       if (!cached) {
-        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        return Response.json({ error: "Team season analytics publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       }
       return Response.json(cached.response, {
         headers: {
@@ -339,7 +339,7 @@ export class TeamRuntime {
           state: ReturnType<typeof normalizeFieldViewTeamState>;
         }>(stateKey + ":publication");
       const publishedState = publication?.state as Record<string, unknown> | undefined;
-      if (!publication) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (!publication) return Response.json({ error: "TeamState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (typeof publication.input_signature !== "string" || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
           !publishedState.sources || typeof publishedState.sources !== "object" || Array.isArray(publishedState.sources)) {
         return Response.json({ error: "Invalid TeamState publication", team_key: this.teamKey, year }, {
@@ -397,7 +397,7 @@ export class TeamRuntime {
         event_team?: import("../../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
         matches?: import("../../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
       }>(stateKey);
-      if (!storedState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      if (!storedState) return Response.json({ error: "TeamEventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
       // Lazy, owner-local migration of old records that embedded foreign
       // EventRuntime data. This preserves the logical revision while replacing
@@ -863,7 +863,7 @@ export class TeamRuntime {
           state?: FieldViewTeamState;
         }>("team-state:" + year + ":publication");
         if (!publication?.state) {
-          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+          return Response.json({ error: "TeamState analytics input not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
         }
         const current = await this.storage.transaction(async (tx) => ({
           revision: await tx.get<number>("snapshot-revision") ?? 0,
