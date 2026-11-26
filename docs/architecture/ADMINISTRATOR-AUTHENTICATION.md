@@ -66,6 +66,7 @@ The single Wrangler configuration declares the production and Preview D1/KV bind
 ## Validation and rollout
 
 - Build the SPA with `npm run build:admin`.
+- CI applies the Wrangler D1 migration to a fresh local-only database, verifies the two expected tables, and runs `wrangler deploy --dry-run` against the production configuration to validate Worker/Static Assets packaging without uploading anything.
 - Run Worker typecheck and the full workspace test suite.
 - Verify unauthenticated `/admin` and `/internal/admin/*` requests are denied.
 - Verify an allowed Access identity can load the dashboard and perform read/write operations.
