@@ -1,12 +1,12 @@
-# Durable Object write and call-path audit
+# Durable Object write and call-path audit (pre-D1 cutover baseline)
 
-- **Status:** Source-level audit complete for the current consolidated Worker; live telemetry and Cloudflare billing reconciliation remain open.
+- **Status:** Historical source-level baseline completed before the D1 cutover. The former DiscoveryStore Durable Object described below has since been removed from `fieldview-architecture-migration`; live telemetry and Cloudflare billing reconciliation remain open.
 - **Inspected branch:** `fieldview-architecture-migration`
 - **Audit date:** 2026-11-25
 - **Primary issue:** [#30](https://github.com/ThraceAerospace/frc-gameday/issues/30)
 - **Scope:** `workers/fieldview/src/runtime`, `workers/fieldview/src/jobs`, `workers/fieldview/src/index.ts`, and `workers/fieldview/wrangler.toml`.
 
-This is a source-level ledger, not a claim that logical storage calls equal billable SQLite row writes. Cloudflare usage telemetry was not available to this audit. The repository's former split paths named in the original issue have been consolidated under `workers/fieldview`; the findings below describe the current paths.
+This is a source-level ledger, not a claim that logical storage calls equal billable SQLite row writes. Cloudflare usage telemetry was not available to this audit. The findings below describe the pre-cutover implementation inspected on 2026-11-25; they are retained as the baseline for comparing the new D1-backed design, not as a description of the current branch.
 
 ## Executive findings
 
@@ -14,9 +14,9 @@ This is a source-level ledger, not a claim that logical storage calls equal bill
 2. **No Cloudflare Queue binding or Queue producer/consumer was found.** The old `task:` and `manual:poll-queue` key names remain in EventRuntime/TeamRuntime status/diagnostic readers, but current scheduling/enqueue methods do not persist tasks. They are inert compatibility remnants, not an active DO task queue.
 3. **EventRuntime still has two read-path mutation exceptions:** first-use event identity binding through `restoreEventKey()`, and one-time legacy publication sanitization in the snapshot/view publication path. The latter is conditional on a legacy-shaped record. Public reads should ultimately be read-only after initialization.
 4. **TeamRuntime season analytics writes its cache on a GET even when the computed response is unchanged** (`team-runtime.ts`, around line 1033). This is the clearest repeatable read-path write amplifier.
-5. **DiscoveryStore writes every generic `put`, including byte-identical values** (`discovery-store.ts`, lines 61–66 and 361–375). Current-season resolution rewrites `checkedAt` on every successful TBA status request; event-directory 304 handling rewrites both the registry list and directory metadata.
+5. **The former DiscoveryStore wrote every generic `put`, including byte-identical values.** The replacement D1 adapter now skips byte-identical JSON values. Current-season freshness metadata can still intentionally change when a successful TBA status check occurs.
 6. **Multiplexer subscription mutations are bounded and equality-guarded.** Adding a new subscription performs up to three logical puts; removing one performs up to two logical puts/deletes plus a generation update. Duplicate adds and absent removals exit without writes.
-7. **Runtime admin, readiness, coverage-audit, and discovery job progress is persisted through DiscoveryStore today.** This is the main ownership violation System Records D1 is intended to remove. Workflow platform execution state is separate from these explicit application records.
+7. **The former implementation mixed runtime admin, readiness, coverage-audit, and discovery job progress in DiscoveryStore.** These records now route to `system_records`; discovery catalog records route to `discovery_records`. Workflow platform execution state remains separate from these explicit application records.
 8. **No telemetry-backed daily physical-row budget can be responsibly stated.** The previous 14-event scenario can be modeled after runtime traffic/DO invocation telemetry is captured, but source-only operation counts must not be presented as Cloudflare billing counts.
 
 ## Durable Object inventory
@@ -73,7 +73,7 @@ The following counts are **logical storage API operations visible in source**, n
 | Remove subscription | Unsubscribe, socket close/error cleanup, compensating rollback | Up to two puts/deletes for client/topic lists plus generation update | Missing subscription returns without writes. |
 | Connect, ping, notify, state read | WebSocket lifecycle or internal notify/read route | No durable write identified | Routing state is read; notifications are sent over sockets. |
 
-### DiscoveryStore — `workers/fieldview/src/runtime/discovery-store.ts`
+### Former DiscoveryStore — pre-cutover implementation
 
 | Mutation | Trigger | Logical operations / keys | Guard / amplification |
 |---|---|---|---|
@@ -87,7 +87,7 @@ The following counts are **logical storage API operations visible in source**, n
 | Generic delete/prune | Superseded manifest or explicit delete route | One delete per key; prefix prune paginates up to 1,000 records per list and deletes each | Number of deletes depends on prior generation size; not transactionally atomic with new publication. |
 | Generic get/list | Runtime read/admin dashboards/coordinator | No writes | Read-only. |
 
-DiscoveryStore currently stores both discovery and operational data. Discovery-owned records are current season, event/team directory generations/pages/chunks, team/event registries, and the weekly event projection. System-owned records currently mixed into it include runtime registration markers, workflow run records/indexes/results, runtime admin job records/index/history, discovery job status, coverage audit records/items, and admin operation outcomes.
+The pre-cutover DiscoveryStore stored both discovery and operational data. Discovery-owned records were current season, event/team directory generations/pages/chunks, team/event registries, and the weekly event projection. System-owned records mixed into it included runtime registration markers, workflow run records/indexes/results, runtime admin job records/index/history, discovery job status, coverage audit records/items, and admin operation outcomes. The current branch routes these same logical key families through separate D1 repositories.
 
 ## Route and trigger matrix
 
@@ -155,7 +155,7 @@ The initial schema is introduced in `workers/fieldview/migrations/0001_initial.s
 - Provider payload JSON is retained unchanged inside `value_json`; timestamps are Unix milliseconds.
 - Optional `expires_at` is metadata only; this migration does not enable automatic deletion.
 
-**Not yet implemented:** D1 repository adapters, dual-read/write, data migration, or replacement/removal of DiscoveryStore. The owner approved a clean-slate storage implementation, so no existing DiscoveryStore records need importing. The cutover still needs typed repository code, tests, and an explicit switch from the DO binding. No schema migration has been applied to either Cloudflare database.
+**Current cutover state:** The initial D1 repositories and in-process DiscoveryService are implemented on the migration branch. The former DiscoveryStore Durable Object class, production/Preview bindings, and RPC client hop have been removed. Worker routes and Workflows call the service directly; operational keys route to `system_records`, and discovery keys route to `discovery_records`. Service and D1 record-store tests have been added/moved, but local test execution and typecheck have not yet been verified. No dual-read/write or data import is needed: the former Durable Object was never deployed or populated. No schema migration has been applied to either Cloudflare database.
 
 ## Telemetry / external verification still required
 
@@ -166,9 +166,8 @@ The initial schema is introduced in `workers/fieldview/migrations/0001_initial.s
 
 ## Recommended implementation order
 
-1. Add D1 repositories for Discovery and System Records against the schema migration.
-2. Move operational records and runtime registration markers first; keep DiscoveryStore temporarily for catalog data. Both domains use their own generic D1 record table and repository interface.
-3. Move discovery directory/projection records; use transactions for publication boundaries and equality guards.
-4. Remove the DiscoveryStore binding/class only after all callers are migrated and tests prove no remaining use.
-5. Separately fix TeamRuntime season analytics GET cache writes and EventRuntime read-time identity binding.
-6. Compare actual Cloudflare usage before and after cutover; do not deploy or apply migrations without explicit approval.
+1. Run the full local test suite and Worker typecheck; fix any failures before calling the D1 cutover validated.
+2. Review D1 multi-record publication boundaries and add `DB.batch()` transactions where the catalog manifest and related records must become visible together.
+3. Confirm every operational key family routes to `system_records` and every catalog/projection key family routes to `discovery_records`.
+4. Separately fix TeamRuntime season-analytics GET cache writes and EventRuntime read-time identity binding.
+5. Compare actual Cloudflare usage after an explicitly approved test-environment migration; do not apply the migration or deploy without separate approval.
