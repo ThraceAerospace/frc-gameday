@@ -17,11 +17,13 @@ export interface RuntimeRefreshOutcome extends RuntimeRefreshTarget {
 }
 
 
+/** Additional event-owned changes collected during the same polling cycle. */
 export interface EventAnalyticsRefreshRequest {
+  /** null is conservative: the match set could not be compared safely. */
   affected_team_keys: string[] | null;
 }
 
-async function startTeamAnalyticsWorkflows(
+async function startEventAnalyticsWorkflows(
   env: RuntimeEnvironment,
   outcomes: RuntimeRefreshOutcome[],
   options: {
@@ -128,7 +130,7 @@ export async function dispatchRuntimeRefresh(
     ...(body === undefined ? {} : { response: body }),
   };
   if (target.kind === "team" && options.orchestrateAnalytics !== false) {
-    await startTeamAnalyticsWorkflows(env, [outcome]);
+    await startEventAnalyticsWorkflows(env, [outcome]);
   }
   return outcome;
 }
@@ -166,6 +168,6 @@ export async function dispatchRuntimeRefreshBatch(
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => run()));
-  await startTeamAnalyticsWorkflows(env, outcomes, options);
+  await startEventAnalyticsWorkflows(env, outcomes, options);
   return outcomes;
 }
