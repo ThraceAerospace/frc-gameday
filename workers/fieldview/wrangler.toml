@@ -149,4 +149,8 @@ class_name = "TeamRuntime"
 name = "MULTIPLEXER"
 class_name = "Multiplexer"
 
+[[previews.durable_objects.bindings]]
+name = "REMOTE_SESSION"
+class_name = "RemoteSessionRuntime"
+
 
