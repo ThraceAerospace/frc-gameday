@@ -15,6 +15,7 @@ import { buildFieldViewEventTeamSeasonComparisonInput } from "../../../../packag
 import type { FieldViewTeamState } from "../../../../packages/domain/src/team.ts";
 import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
 import { createDiscoveryStoreClient } from "./discovery-store.ts";
+import { isRetryableWorkflowHttpStatus } from "./retry-policy.ts";
 
 export interface EventAnalyticsWorkflowParameters {
   event_key: string;
@@ -168,21 +169,39 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
             headers: headers(this.env, "X-FieldView-Team-Key", team.team_key),
           }),
         );
-        if (!response.ok) return { team_key: team.team_key, input: null, state: null, revision: null };
+        if (!response.ok) return {
+          team_key: team.team_key, input: null, state: null, revision: null, status: response.status,
+        };
         const value: unknown = await response.json();
         if (!isTeamAnalyticsSeasonInput(value) || value.team_key !== team.team_key) {
-          return { team_key: team.team_key, input: null, state: null, revision: null };
+          return { team_key: team.team_key, input: null, state: null, revision: null, status: 502 };
         }
         return {
           team_key: team.team_key,
           input: value,
           state: value.team_state as FieldViewTeamState,
           revision: value.team_source_revision,
+          status: 200,
         };
       } catch {
-        return { team_key: team.team_key, input: null, state: null, revision: null };
+        return { team_key: team.team_key, input: null, state: null, revision: null, status: 503 };
       }
     }));
+
+    const failedSeasonInput = seasonInputs.find((item) => item.status !== 200 && item.status !== 404);
+    if (failedSeasonInput) {
+      if (isRetryableWorkflowHttpStatus(failedSeasonInput.status)) {
+        const retryId = await scheduleRetry("team-season-input-failure", null);
+        if (retryId) return {
+          event_key: eventKey,
+          status: "retry_scheduled",
+          retry_workflow_id: retryId,
+          reason: "team_season_input_failure",
+        };
+      }
+      throw new Error("TeamRuntime " + failedSeasonInput.team_key +
+        " season analytics input returned HTTP " + failedSeasonInput.status);
+    }
 
     const existingStates = await step.do("read-current-team-event-publications", {
       retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
@@ -269,7 +288,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     }
     const failedTeam = recalculationOutcomes.find((item) => item.result === null);
     if (failedTeam) {
-      if (failedTeam.status >= 500) {
+      if (isRetryableWorkflowHttpStatus(failedTeam.status)) {
         const retryId = await scheduleRetry("team-analytics-failure");
         if (retryId) return {
           event_key: eventKey, status: "retry_scheduled", retry_workflow_id: retryId,
