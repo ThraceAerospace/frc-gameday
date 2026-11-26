@@ -1042,6 +1042,7 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   const storage = new MemoryStorage(), eventKey = "2027rikin";
   storage.values.set("event-key", eventKey);
   storage.values.set("snapshot-revision", 4);
+  seedEventPublication(storage, eventKey);
   storage.values.set("analytics:due-at", 123456);
   const invalidation = { requested_at: 123000, sources: ["tba-event-matches"], match_keys: ["2027rikin_qm1"] };
   storage.values.set("analytics:invalidation", invalidation);
@@ -1054,6 +1055,7 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   }));
   assert.equal(response.status, 200);
   const body = await response.json();
+  assert.equal(body.event_state_published, true);
   assert.equal(body.analytics.due_at, 123456);
   assert.deepEqual(body.analytics.pending_invalidation, invalidation);
   assert.equal(storage.values.get("analytics:due-at"), 123456);
