@@ -579,7 +579,7 @@ test("public snapshot and stream reads need no user credential while state inspe
   const retiredRoutes = await Promise.all(["/lifecycle", "/schedule"].map((path) =>
     runtime.fetch(new Request("https://event-runtime" + path, {
       method: "POST",
-      headers: { "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
+      headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey, "Content-Type": "application/json" },
       body: JSON.stringify({}),
     })),
   ));
