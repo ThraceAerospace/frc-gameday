@@ -1050,6 +1050,7 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
     RUNTIME_ADMIN_TOKEN: "admin",
     TBA_API_KEY: "unused",
   }, eventKey);
+  const beforeRead = new Map(storage.values);
   const response = await runtime.fetch(new Request("https://event-runtime/analytics-state", {
     headers: { Authorization: "Bearer admin", "X-FieldView-Event-Key": eventKey },
   }));
@@ -1060,6 +1061,8 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   assert.deepEqual(body.analytics.pending_invalidation, invalidation);
   assert.equal(storage.values.get("analytics:due-at"), 123456);
   assert.deepEqual(storage.values.get("analytics:invalidation"), invalidation);
+  assert.deepEqual([...storage.values], [...beforeRead],
+    "analytics-state inspection must not mutate Durable Object storage");
 });
 
 
