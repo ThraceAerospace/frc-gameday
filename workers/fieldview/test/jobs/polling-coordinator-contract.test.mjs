@@ -96,7 +96,7 @@ test("polling coordinator reconciles and retries analytics Workflow executions w
   assert.match(coordinator, /recoverAnalyticsExecutions\(this\.env, scheduledAt\)/);
   assert.match(coordinator, /MAX_ANALYTICS_EXECUTION_RECOVERIES_PER_RUN = 5/);
   assert.match(coordinator, /STALE_ANALYTICS_WORKFLOW_MS = 15 \* 60_000/);
-  assert.match(coordinator, /event-analytics-.*-retry-/);
+  assert.match(coordinator, /"-retry-"/);
   assert.match(coordinator, /status === "errored" \|\| status === "terminated"/);
   assert.match(coordinator, /record\.attempt < 2/);
   assert.match(coordinator, /analytics_execution_recovery_dispatched/);
