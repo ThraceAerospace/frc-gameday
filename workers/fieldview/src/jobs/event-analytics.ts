@@ -16,6 +16,7 @@ import type { FieldViewTeamState } from "../../../../packages/domain/src/team.ts
 import type { FieldViewEventState } from "../../../../packages/domain/src/event.ts";
 import { createDiscoveryServiceClient } from "./discovery-client.ts";
 import { isRetryableWorkflowHttpStatus } from "./retry-policy.ts";
+import { AnalyticsExecutionRepository } from "./analytics-executions.ts";
 
 export interface EventAnalyticsWorkflowParameters {
   event_key: string;
@@ -95,6 +96,50 @@ type EventAnalyticsEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW
 
 export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnvironment, EventAnalyticsWorkflowParameters> {
   async run(event: WorkflowEvent<EventAnalyticsWorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
+    const payload = event.payload;
+    const eventKey = typeof payload?.event_key === "string" ? payload.event_key : "invalid";
+    const requestedAt = Number.isSafeInteger(payload?.requested_at) ? Number(payload.requested_at) : Date.now();
+    const retryKey = typeof payload?.retry_key === "string" && /^[a-zA-Z0-9_-]{1,96}$/.test(payload.retry_key)
+      ? payload.retry_key
+      : String(requestedAt);
+    const attempt = Number.isSafeInteger(payload?.attempt) ? Math.max(0, Math.min(2, Number(payload.attempt))) : 0;
+    const executionId = eventKey + "-" + retryKey;
+    const repository = AnalyticsExecutionRepository.fromEnvironment(this.env);
+
+    await repository.start({
+      executionId,
+      eventKey,
+      retryKey,
+      workflowId: event.instanceId,
+      affectedTeamKeys: Array.isArray(payload?.affected_team_keys) ? payload.affected_team_keys : null,
+      requestedAt,
+      attempt,
+    });
+
+    try {
+      const result = await this.runExecution(event, step);
+      if (result.status === "retry_scheduled" && typeof result.retry_workflow_id === "string") {
+        await repository.retryScheduled(executionId, result.retry_workflow_id, event.instanceId);
+      } else {
+        await repository.complete(executionId, {
+          registered_team_count: typeof result.registered_team_count === "number" ? result.registered_team_count : undefined,
+          recalculated_team_count: typeof result.recalculated_team_count === "number" ? result.recalculated_team_count : undefined,
+          retained_team_result_count: typeof result.retained_team_result_count === "number" ? result.retained_team_result_count : undefined,
+          published_team_result_count: typeof result.published_team_result_count === "number" ? result.published_team_result_count : undefined,
+          acknowledged_team_result_count: typeof result.acknowledged_team_result_count === "number" ? result.acknowledged_team_result_count : undefined,
+        }, typeof result.event_source_revision === "number" ? result.event_source_revision : undefined, event.instanceId);
+      }
+      return result;
+    } catch (error) {
+      await repository.fail(executionId, error, event.instanceId);
+      throw error;
+    }
+  }
+
+  private async runExecution(
+    event: WorkflowEvent<EventAnalyticsWorkflowParameters>,
+    step: WorkflowStep,
+  ): Promise<Record<string, unknown>> {
     const eventKey = event.payload?.event_key;
     const affected = event.payload?.affected_team_keys;
     const requestedAt = event.payload?.requested_at;
