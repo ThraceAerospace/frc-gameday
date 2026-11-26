@@ -400,7 +400,7 @@ export class TeamRuntime {
     // reads above are deliberately isolated from this write-capable path.
     // Every TeamRuntime starts with the current season state, even when first
     // reached through an older event. The requested season is also materialized.
-    const currentYear = await this.currentSeasonYear();
+    const currentYear = pendingAnalyticsRead ? null : await this.currentSeasonYear();
     const initializedCurrentState = publicRead || publicSeasonAnalyticsRead || publicEventStateRead || readinessRequest || pendingAnalyticsRead || currentYear === null
       ? null
       : await this.storage.get<unknown>("team-state:" + currentYear + ":publication")
