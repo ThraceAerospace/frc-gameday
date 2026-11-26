@@ -8,8 +8,8 @@ const MAX_LIST_LIMIT = 1000;
 export class DiscoveryService {
   private readonly storage: D1RecordStorage;
   private readonly api: TBAApiClient | null;
-  constructor(db: D1Database, env?: RuntimeEnvironment) {
-    this.storage = new D1RecordStore(db);
+  constructor(db: D1Database | D1RecordStorage, env?: RuntimeEnvironment) {
+    this.storage = "prepare" in db ? new D1RecordStore(db) : db;
     this.api = env?.TBA_API_KEY
       ? new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) })
       : null;
