@@ -403,6 +403,43 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
   }));
   assert.equal(read.status, 200);
   assert.equal((await read.json()).analytics.team_key, teamKey);
+  assert.equal(read.headers.get("X-FieldView-Analytics-Publication-Status"), "pending",
+    "new TeamEventState is not considered published until EventRuntime acknowledges it");
+
+  const { state: _state, ...acknowledgement } = published;
+  const acknowledge = () => runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(acknowledgement),
+  }));
+  const acknowledged = await acknowledge();
+  assert.equal(acknowledged.status, 200);
+  assert.equal((await acknowledged.json()).acknowledged, true);
+  const repeatedAcknowledgement = await acknowledge();
+  assert.equal(repeatedAcknowledgement.status, 200);
+  assert.equal((await repeatedAcknowledgement.json()).idempotent, true,
+    "repeated acknowledgements are safe and do not change the TeamEventState revision");
+  const staleAcknowledgement = await runtime.fetch(new Request("https://team-runtime/event-analytics/acknowledge", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...acknowledgement, team_event_revision: acknowledgement.team_event_revision + 1 }),
+  }));
+  assert.equal(staleAcknowledgement.status, 409);
+  assert.equal(storage.values.get("team-event-revision:" + eventKey), 1);
+  assert.equal(storage.values.has("team-season-analytics:2026"), false,
+    "acknowledgement invalidates any cached season aggregate without bumping canonical revision");
+  const publishedRead = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(publishedRead.headers.get("X-FieldView-Analytics-Publication-Status"), "published");
 
   await storage.put("snapshot-revision", 1);
   const stale = await runtime.fetch(new Request("https://team-runtime/event-analytics?year=2026", {
