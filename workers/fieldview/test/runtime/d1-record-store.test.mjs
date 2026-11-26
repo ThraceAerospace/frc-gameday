@@ -130,3 +130,36 @@ test("D1 record store rolls back a failed multi-record batch", async () => {
   assert.equal(await store.get("registry/teams/2026.json"), undefined);
   assert.equal(await store.get("discovery/teams/2026.json"), '{"generation":1}');
 });
+
+
+test("D1 record store routes every documented key family to its owning table", async () => {
+  const db = createD1();
+  const store = new D1RecordStore(db);
+  const discoveryKeys = [
+    "discovery/current-season.json",
+    "discovery/events/2026.json",
+    "discovery/teams/2026.json",
+    "discovery/team-pages/2026/1/0.json",
+    "discovery/partial-teams/2026/1.json",
+    "discovery/staging/2026/1.json",
+    "discovery/event-chunks/2026/1/0.json",
+    "registry/events/2026.json",
+    "registry/teams/2026.json",
+    "projections/events-this-week/current.json",
+  ];
+  const systemKeys = [
+    "registry/runtime-events/2026cthar.json",
+    "registry/runtime-teams/frc3461.json",
+    "admin/discovery-jobs/2026.json",
+    "admin/runtime-jobs/job-1.json",
+    "admin/coverage-audits/2026.json",
+    "workflow/event-analytics/2026cthar/run-1.json",
+    "system/operational-history/entry-1.json",
+  ];
+
+  for (const key of discoveryKeys) await store.put(key, "{}");
+  for (const key of systemKeys) await store.put(key, "{}");
+
+  assert.deepEqual([...db.tables.discovery_records.keys()].sort(), discoveryKeys.sort());
+  assert.deepEqual([...db.tables.system_records.keys()].sort(), systemKeys.sort());
+});
