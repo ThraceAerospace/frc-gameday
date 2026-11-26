@@ -118,10 +118,11 @@ export class AnalyticsExecutionRepository {
     executionId: string,
     outcome: AnalyticsExecutionRecord["outcome"],
     sourceRevision?: number,
+    expectedWorkflowId?: string,
     now = Date.now(),
   ): Promise<void> {
     const current = await this.get(executionId);
-    if (!current) return;
+    if (!current || (expectedWorkflowId && current.workflow_id !== expectedWorkflowId)) return;
     await this.write({
       ...current,
       status: "completed",
@@ -144,8 +145,7 @@ export class AnalyticsExecutionRepository {
       status: "failed",
       updated_at: now,
       completed_at: delay === undefined ? now : null,
-      ...(delay === undefined ? {} : { next_retry_at: now + delay }),
-      ...(delay === undefined ? { next_retry_at: undefined } : {}),
+      ...(delay === undefined ? { next_retry_at: undefined } : { next_retry_at: now + delay }),
       error_class: error instanceof Error && error.name ? error.name.slice(0, 80) : "Error",
     });
   }
