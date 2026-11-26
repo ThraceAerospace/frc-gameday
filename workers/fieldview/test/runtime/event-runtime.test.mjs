@@ -1036,3 +1036,26 @@ test("EventRuntime accepts analytics publication only for the current event sour
     "a stale publication command is a conflict, not a failed analytics calculation");
 });
 
+
+
+test("EventRuntime exposes durable analytics due state for coordinator recovery", async () => {
+  const storage = new MemoryStorage(), eventKey = "2027rikin";
+  storage.values.set("event-key", eventKey);
+  storage.values.set("snapshot-revision", 4);
+  storage.values.set("analytics:due-at", 123456);
+  const invalidation = { requested_at: 123000, sources: ["tba-event-matches"], match_keys: ["2027rikin_qm1"] };
+  storage.values.set("analytics:invalidation", invalidation);
+  const runtime = new EventRuntime({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "admin",
+    TBA_API_KEY: "unused",
+  }, eventKey);
+  const response = await runtime.fetch(new Request("https://event-runtime/analytics-state", {
+    headers: { Authorization: "Bearer admin", "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.analytics.due_at, 123456);
+  assert.deepEqual(body.analytics.pending_invalidation, invalidation);
+  assert.equal(storage.values.get("analytics:due-at"), 123456);
+  assert.deepEqual(storage.values.get("analytics:invalidation"), invalidation);
+});
