@@ -860,6 +860,14 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   assert.deepEqual([...storage.values], [...beforeRead],
     "a missing analytics input GET must not bind, materialize, or publish TeamState");
 
+  const resource = teamResourceEndpoints(teamKey, year)[0];
+  const fetchedAt = Date.now();
+  storage.values.set("endpoint:" + resource.endpoint, {
+    endpoint: resource.endpoint, status: "available", data: null, providerData: null,
+    revision: 1, validatorRevision: 1, lastFetchedAt: fetchedAt,
+    lastAttemptAt: fetchedAt, lastWebhookAt: null, expiresAt: fetchedAt + 60_000,
+    etag: '"team-v1"',
+  });
   const prepared = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input/prepare?year=" + year,
     { method: "POST", headers },
@@ -876,16 +884,13 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   assert.equal(read.status, 200);
   const input = await read.json();
   assert.equal(input.team_key, teamKey);
-  assert.equal(input.team_source_revision, 0);
+  assert.equal(input.team_source_revision, 1);
   assert.equal(input.team_state.team_key, teamKey);
   assert.deepEqual([...storage.values], [...beforePublishedRead],
     "reading a current analytics input must not write to Durable Object storage");
 
-  const resource = teamResourceEndpoints(teamKey, year)[0];
-  storage.values.set("endpoint:" + resource.endpoint, {
-    endpoint: resource.endpoint, status: "available", revision: 1,
-    lastFetchedAt: Date.now(), expiresAt: null, etag: '"team-v1"',
-  });
+  const currentEndpoint = storage.values.get("endpoint:" + resource.endpoint);
+  storage.values.set("endpoint:" + resource.endpoint, { ...currentEndpoint, status: "failed" });
   const beforeStaleRead = new Map(storage.values);
   const staleRead = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input?year=" + year, { headers },
