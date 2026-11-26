@@ -18,16 +18,12 @@ test("event dispatch calls EventRuntime directly and records its runtime marker"
       calls.push({ url: new URL(request.url), id, headers: request.headers });
       return Response.json({ ready: true, team_keys: ["frc1"] });
     }),
-    DISCOVERY_STORE: namespace(async (request) => {
-      const url = new URL(request.url);
-      if (request.method === "GET" && url.pathname === "/get") {
-        const key = url.searchParams.get("key");
-        return markers.has(key) ? Response.json({ value: markers.get(key) }) : new Response(null, { status: 404 });
-      }
-      const body = await request.json();
-      markers.set(body.key, body.value);
-      return Response.json({ ok: true });
-    }),
+    DISCOVERY_STORAGE: {
+      async get(key) { return markers.get(key); },
+      async put(key, value) { markers.set(key, value); },
+      async list() { return new Map(); },
+      async delete(key) { return markers.delete(key); },
+    },
   };
 
   const response = await dispatchRuntime(env, "event", "2026test", "participants", {}, 2026);
