@@ -867,6 +867,8 @@ export class EventRuntime {
           revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,
           status: publication && publication.sourceRevision !== currentSourceRevision
             ? "stale" : await this.storage.get<string>("analytics:status") ?? (publication ? "succeeded" : "pending"),
+          due_at: await this.storage.get<number>(ANALYTICS_DUE_KEY) ?? null,
+          pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
         },
       }, { headers: { "Cache-Control": "no-store" } });
     }
