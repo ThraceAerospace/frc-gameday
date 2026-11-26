@@ -389,7 +389,9 @@ export class EventRuntime {
     if (publicRead || publicSubscriptionRead || readinessRequest || adminInspectionRead) {
       if (!(await this.restoreEventKey(request))) {
         const storedEventKey = await this.storage.get<string>("event-key");
-        if (!storedEventKey) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        if (!storedEventKey) return Response.json({ error: "Event runtime is not registered" }, {
+          status: 404, headers: { "Cache-Control": "no-store" },
+        });
         return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
       }
     } else if (!(await this.bindEventKey(request))) {
