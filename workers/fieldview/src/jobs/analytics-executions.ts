@@ -101,9 +101,9 @@ export class AnalyticsExecutionRepository {
     return record;
   }
 
-  async retryScheduled(executionId: string, workflowId: string, now = Date.now()): Promise<void> {
+  async retryScheduled(executionId: string, workflowId: string, expectedWorkflowId?: string, now = Date.now()): Promise<void> {
     const current = await this.get(executionId);
-    if (!current || current.status === "completed") return;
+    if (!current || current.status === "completed" || (expectedWorkflowId && current.workflow_id !== expectedWorkflowId)) return;
     await this.write({
       ...current,
       status: "retry_scheduled",
@@ -135,9 +135,9 @@ export class AnalyticsExecutionRepository {
     });
   }
 
-  async fail(executionId: string, error: unknown, now = Date.now()): Promise<void> {
+  async fail(executionId: string, error: unknown, expectedWorkflowId?: string, now = Date.now()): Promise<void> {
     const current = await this.get(executionId);
-    if (!current || current.status === "completed") return;
+    if (!current || current.status === "completed" || (expectedWorkflowId && current.workflow_id !== expectedWorkflowId)) return;
     const delay = current.attempt === 0 ? 5 * 60_000 : current.attempt === 1 ? 15 * 60_000 : undefined;
     await this.write({
       ...current,
