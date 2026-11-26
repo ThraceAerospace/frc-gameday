@@ -342,7 +342,7 @@ test("internal Workflow runtime-state route authenticates and reads the canonica
     new Request("https://runtime.example/internal/workflows/runtime-state?kind=event&key=2026test"),
     env,
   );
-  assert.equal(denied.status, 401);
+  assert.equal(denied.status, 404);
   assert.equal(calls.some((call) => call.operation === "fetch"), false);
 
   const allowed = await worker.fetch(
@@ -540,7 +540,7 @@ test("public team discovery rejects malformed published team-key pages", async (
   assert.deepEqual(await response.json(), { error: "Team discovery page 0 is invalid" });
 });
 
-test("internal lifecycle mutation route requires admin auth and forwards the request body", async () => {
+test("retired internal lifecycle route is unavailable and never dispatches to a runtime", async () => {
   const { env, calls } = makeEnvironment();
   const body = { lifecycle: "active", upcomingIntervalMs: 1800000, activeIntervalMs: 300000 };
   const denied = await worker.fetch(
@@ -565,9 +565,8 @@ test("internal lifecycle mutation route requires admin auth and forwards the req
     }),
     env,
   );
-  assert.equal(allowed.status, 200);
-  const forwarded = calls.find((call) => call.operation === "fetch");
-  assert.equal(forwarded.id, "2026probe");
+  assert.equal(allowed.status, 404);
+  assert.equal(calls.some((call) => call.operation === "fetch"), false);
   assert.equal(forwarded.url, "/lifecycle");
   assert.equal(forwarded.method, "POST");
   assert.equal(forwarded.headers.get("Authorization"), "Bearer server-only-token");
