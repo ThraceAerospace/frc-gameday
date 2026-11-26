@@ -8,8 +8,50 @@ import { isCloudflareAccessAdmin } from "./access-auth.ts";
 import { dispatchRuntime } from "./runtime-dispatch.ts";
 import { normalizeFieldViewEvent } from "../../../../packages/domain/src/normalization/event.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch, type RuntimeRefreshTarget } from "./runtime-refresh.ts";
+import { AnalyticsExecutionRepository } from "../jobs/analytics-executions.ts";
 
 export { EventRuntime, Multiplexer, TeamRuntime };
+
+async function createEventAnalyticsWorkflow(
+  env: RuntimeEnvironment,
+  input: {
+    workflowId: string;
+    eventKey: string;
+    affectedTeamKeys: string[] | null;
+    requestedAt: number;
+    retryKey: string;
+    attempt?: number;
+  },
+): Promise<void> {
+  const workflow = env.EVENT_ANALYTICS_WORKFLOW;
+  if (!workflow) throw new Error("Event analytics Workflow is unavailable");
+  const repository = AnalyticsExecutionRepository.fromEnvironment(env);
+  const executionId = input.eventKey + "-" + input.retryKey;
+  await repository.start({
+    executionId,
+    eventKey: input.eventKey,
+    retryKey: input.retryKey,
+    workflowId: input.workflowId,
+    affectedTeamKeys: input.affectedTeamKeys,
+    requestedAt: input.requestedAt,
+    attempt: input.attempt ?? 0,
+  });
+  try {
+    await workflow.create({
+      id: input.workflowId,
+      params: {
+        event_key: input.eventKey,
+        affected_team_keys: input.affectedTeamKeys,
+        requested_at: input.requestedAt,
+        retry_key: input.retryKey,
+        attempt: input.attempt ?? 0,
+      },
+    });
+  } catch (error) {
+    await repository.fail(executionId, error, input.workflowId);
+    throw error;
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -173,27 +215,24 @@ async function processTbaWebhook(rawBody: ArrayBuffer, env: RuntimeEnvironment):
     const affectedTeamKeys = ["match_score", "upcoming_match"].includes(messageType) && teamKeys.size > 0
       ? [...teamKeys].sort()
       : null;
+    const retryKey = "webhook-" + webhookId.slice(0, 80);
     let workflowId = "tba-webhook-analytics-" + eventKey + "-" + webhookId.slice(0, 24);
+    let attempt = 0;
     try {
-      let shouldCreate = true;
       try {
         const existing = await env.EVENT_ANALYTICS_WORKFLOW.get(workflowId).then((instance) => instance.status());
         if (["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(existing.status)) {
-          shouldCreate = false;
+          workflowId = "";
         } else {
-          workflowId += "-retry-" + Date.now();
+          attempt = 1;
+          workflowId = "event-analytics-" + eventKey + "-" + retryKey + "-retry-1";
         }
       } catch {
         // No workflow exists for this webhook identity.
       }
-      if (shouldCreate) {
-        await env.EVENT_ANALYTICS_WORKFLOW.create({
-          id: workflowId,
-          params: {
-            event_key: eventKey,
-            affected_team_keys: affectedTeamKeys,
-            requested_at: Date.now(),
-          },
+      if (workflowId) {
+        await createEventAnalyticsWorkflow(env, {
+          workflowId, eventKey, affectedTeamKeys, requestedAt: Date.now(), retryKey, attempt,
         });
       }
     } catch (error) {
@@ -307,14 +346,14 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
         const affected = eventOutcome.response.affected_team_keys;
         if (affected === null || (Array.isArray(affected) && affected.length > 0 &&
             affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) {
-          analyticsWorkflowId = "manual-event-analytics-" + eventKey + "-" + Date.now();
-          await env.EVENT_ANALYTICS_WORKFLOW.create({
-            id: analyticsWorkflowId,
-            params: {
-              event_key: eventKey,
-              affected_team_keys: affected as string[] | null,
-              requested_at: Date.now(),
-            },
+          const requestedAt = Date.now();
+          analyticsWorkflowId = "manual-event-analytics-" + eventKey + "-" + requestedAt;
+          await createEventAnalyticsWorkflow(env, {
+            workflowId: analyticsWorkflowId,
+            eventKey,
+            affectedTeamKeys: affected as string[] | null,
+            requestedAt,
+            retryKey: "manual-" + requestedAt,
           });
         }
       }
