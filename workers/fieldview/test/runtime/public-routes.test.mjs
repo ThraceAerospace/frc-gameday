@@ -108,6 +108,19 @@ function makeEnvironment() {
   };
 }
 
+test("admin session endpoint verifies Access JWT without requiring runtime health", async () => {
+  const { env } = makeEnvironment();
+  const denied = await worker.fetch(new Request("https://runtime.example/internal/admin/auth"), env);
+  assert.equal(denied.status, 401);
+
+  const allowed = await worker.fetch(new Request("https://runtime.example/internal/admin/auth", {
+    headers: { "Cf-Access-Jwt-Assertion": accessToken },
+  }), env);
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), { authenticated: true });
+  assert.equal(allowed.headers.get("Cache-Control"), "no-store");
+});
+
 test("retired per-event readiness route is unavailable and never activates a runtime", async () => {
   const { env, calls } = makeEnvironment();
   const response = await worker.fetch(
