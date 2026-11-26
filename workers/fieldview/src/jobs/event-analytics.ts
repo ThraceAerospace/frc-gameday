@@ -22,6 +22,8 @@ export interface EventAnalyticsWorkflowParameters {
   /** null means the match collection was not safely comparable and the full roster must be recalculated. */
   affected_team_keys: string[] | null;
   requested_at: number;
+  /** Stable recovery identity carried through bounded child retries. */
+  retry_key?: string;
   attempt?: number;
 }
 
@@ -97,6 +99,9 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     const affected = event.payload?.affected_team_keys;
     const requestedAt = event.payload?.requested_at;
     const attempt = Number.isSafeInteger(event.payload?.attempt) ? Number(event.payload?.attempt) : 0;
+    const retryKey = typeof event.payload?.retry_key === "string" && /^[a-zA-Z0-9_-]{1,96}$/.test(event.payload.retry_key)
+      ? event.payload.retry_key
+      : String(requestedAt);
     if (!validEventKey(eventKey) ||
         !(affected === null || (Array.isArray(affected) &&
           affected.every((key) => typeof key === "string" && /^frc[0-9]+$/.test(key)))) ||
@@ -111,7 +116,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
     const eventHeaders = headers(this.env, "X-FieldView-Event-Key", eventKey);
     const scheduleRetry = async (reason: string, retryAffected: string[] | null = affected): Promise<string | null> => {
       if (attempt >= 2 || !this.env.EVENT_ANALYTICS_WORKFLOW) return null;
-      const retryId = "event-analytics-" + eventKey + "-" + requestedAt + "-retry-" + (attempt + 1);
+      const retryId = "event-analytics-" + eventKey + "-" + retryKey + "-retry-" + (attempt + 1);
       await step.do("schedule-" + reason + "-retry-" + (attempt + 1), async () => {
         await this.env.EVENT_ANALYTICS_WORKFLOW!.create({
           id: retryId,
@@ -119,6 +124,7 @@ export class EventAnalyticsWorkflow extends WorkflowEntrypoint<EventAnalyticsEnv
             event_key: eventKey,
             affected_team_keys: retryAffected,
             requested_at: requestedAt,
+            retry_key: retryKey,
             attempt: attempt + 1,
           },
         });
