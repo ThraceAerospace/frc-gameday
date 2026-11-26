@@ -23,3 +23,15 @@ test("event analytics retries failed season inputs rather than silently publishi
   assert.match(source, /isRetryableWorkflowHttpStatus\(failedTeam\.status\)/);
   assert.match(source, /item\.status !== 200 && item\.status !== 404/);
 });
+
+test("recovery retry identity is stable and is propagated to bounded child Workflows", async () => {
+  const [workflow, refresh] = await Promise.all([
+    readFile(new URL("../../src/jobs/event-analytics.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../src/runtime/runtime-refresh.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workflow, /retry_key:\s*retryKey/);
+  assert.match(workflow, /"event-analytics-" \+ eventKey \+ "-" \+ retryKey \+ "-retry-"/);
+  assert.match(refresh, /retry_key:\s*workflowId === baseId \? baseRetryKey : recoveryRetryKey/);
+  assert.match(refresh, /hash \+ "-" \+ window \+ "-base"/);
+  assert.match(refresh, /hash \+ "-" \+ window \+ "-recovery"/);
+});
