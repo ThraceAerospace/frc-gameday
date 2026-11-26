@@ -9,9 +9,9 @@ This document records the current storage ownership discovered in the Worker sou
 
 ## 1. Current implementation
 
-There is currently one `DISCOVERY_STORE` Durable Object binding, implemented by `workers/fieldview-runtime/src/discovery-store.ts`. It is a SQLite-backed Durable Object KV-style catalog with generic `get`, `put`, and prefix `list` operations plus TBA catalog actions.
+There is currently one `DISCOVERY_STORE` Durable Object binding, implemented by `workers/fieldview/src/runtime/discovery-store.ts`. It is a SQLite-backed Durable Object KV-style catalog with generic `get`, `put`, and prefix `list` operations plus TBA catalog actions.
 
-The Worker entrypoint exports this class and the jobs module receives the same namespace through the consolidated Worker environment. There is no configured D1 binding, no Discovery D1 repository, no System Records D1 repository, and no separate System Records storage boundary in the current Wrangler configuration.
+The Worker entrypoint exports this class and the jobs module receives the same namespace through the consolidated Worker environment. Wrangler now declares `DB` and `KV_BINDING`: production uses `fieldview-d1-prod` and `fieldview-kv-prod`, while branch Previews use the isolated `fieldview-d1-test` and `fieldview-kv-test` resources. These bindings are configured but are not yet used by a Discovery or System Records repository. No D1 migration/schema or typed repository has been implemented, and there is still no separate System Records storage boundary.
 
 The jobs-side `createDiscoveryStoreClient` is a namespace client, not a repository abstraction: it exposes generic string-key operations and a catalog RPC. The runtime-side Worker module also has a second inline client implementation for registry writes and reads.
 
@@ -169,3 +169,49 @@ This confirms three separate mutation concerns to preserve during the future spl
 The runtime registration and workflow history/admin routes listed above are read through the same generic API today. The current runtime admin overview/inventory/entity handlers also combine Discovery directory reads with System Records registration-marker reads; their future adapters must query the correct repository for each record family rather than retain a single mixed client.
 
 The analytics execution-recovery ledger must not be added as another ad hoc `admin/...` JSON key. It belongs in the typed System Records execution model, after the outstanding audit defines shared Workflow identity, status reconciliation, recovery scheduling, and retention behavior.
+
+
+## 8. 2026-11-26 source-path and execution-recovery verification
+
+This pass updates the 2026-11-25 inventory against the current branch head. It is source-level evidence only; it does not close Issue #30 or establish physical Cloudflare row-write counts.
+
+### Runtime registration markers
+
+- The writer is the Runtime Worker's `registerRuntimeMarker()` helper in `workers/fieldview/src/runtime/index.ts`. It writes `registry/runtime-events/{event}.json` or `registry/runtime-teams/{team}.json` through an inline DiscoveryStore client.
+- Current call sites include successful event webhook acceptance, explicit event/team seed or refresh paths, and internal event/team initialization paths. The helper performs a generic put even when the marker already exists; the DiscoveryStore generic put is not no-op aware.
+- Readers include the public event/team read gates, admin entity/inventory/overview routes, `PollingCoordinatorWorkflow`, `EventAnalyticsWorkflow`, readiness Workflows, and coverage audit preparation.
+- These markers currently act as operational registration/initialization gates. They are not the discovery directory and they are not canonical EventRuntime/TeamRuntime state. The System Records target owner is confirmed, but whether markers are authoritative or reconstructible, their repair semantics, and their retirement policy remain open. No in-repository external consumer of their raw key shape was found beyond the Runtime Worker/Jobs modules and admin API surface.
+
+### Workflow and coverage record consumers
+
+- The admin web UI consumes the same-origin `/api/admin/runtime` adapter. `WorkflowRunsPanel` requests workflow history/detail and weekly projection status; `AdminOperationsDashboard` requests discovery, runtime-job, coverage-audit, inventory, and entity views. Neither component reads DiscoveryStore directly or embeds the storage key prefixes.
+- `apps/web/src/app/api/admin/runtime/route.ts` maps UI query/actions to authenticated Runtime Worker admin routes. The Runtime Worker proxies Workflow and operational-record operations to `workers/fieldview/src/jobs/index.ts`; the Jobs module owns the current generic DiscoveryStore reads/writes.
+- The legacy `workflows/daily-event-readiness/{timestamp}/summary.json` and `workflows/daily-team-readiness/{timestamp}/summary.json` copies have no read call in the checked-in repository tree. This is an in-repository result only; it cannot establish that no external operator tooling consumes them. Treat them as retirement candidates, not proven dead records.
+- Runtime-admin GET reads the current job record and Cloudflare Workflow status. Its GET path maps status in the response but does not write the status back. Runtime-admin GET may list history records; starting/replacing jobs writes current record, subject index, and prior history snapshots.
+- Readiness `GET /internal/admin/workflow-runs` is not strictly read-only: when Cloudflare Workflow status is `errored` or `terminated` while the stored record is still `running`/`queued`, the handler writes a terminal status into the record. This is a confirmed GET-side mutation in `workers/fieldview/src/jobs/index.ts`. Detail and list routes both reconcile status; the list route can write one record per affected entry. This must be redesigned as an explicit reconciliation mutation or a separately authorized/owned background operation before a pure read repository is introduced.
+- Discovery-job GET and runtime-admin GET inspect Workflow status and return a mapped status without persisting the mapping in the inspected current source. Coverage-audit GET similarly reads the current record and Workflow status; pause/resume mutations occur only on POST.
+
+### Coverage audit record shape and cleanup
+
+- The current coverage audit creates `admin/coverage-audits/{year}.json` as the per-year current pointer/summary, plus `admin/coverage-audit-items/{year}/{workflowId}/all.json` containing the full entity-item array.
+- It then writes numbered JSON chunks of up to 100 items each. The Workflow reads one chunk and dispatches at most five runtime state inspections per durable step; after each batch it rewrites the per-year audit record with cursor/count/status progress.
+- When a new audit supersedes a prior `items_prefix`, `DiscoveryStore.pruneSupersededRecord()` deletes the old workflow-specific item prefix. The current record is overwritten as progress advances; no explicit time-based retention policy is present in the inspected code. Coverage-audit history snapshots are written when a prior execution is superseded, but their retention is not defined.
+- This item shape and cleanup behavior are confirmed source observations. Physical row counts for chunk puts, prefix deletes, absent-key deletes, and SQLite transactions still require Cloudflare billing/telemetry verification.
+
+### Analytics Workflow execution gap (current source verification)
+
+- `EventAnalyticsWorkflow` uses its Cloudflare Workflow instance ID as the execution identity, reads registered team markers, acquires versioned EventRuntime/TeamRuntime inputs, publishes the event aggregate, and acknowledges TeamRuntime results. It does not create or update a durable System Records execution record.
+- TeamRuntime's `publication_status=pending` records exist only after a TeamRuntime analytics calculation has persisted. They do not cover failures before that point.
+- `PollingCoordinatorWorkflow` scans bounded TeamRuntime pending-publication state. That is publication-consistency recovery only; it cannot discover a failed/abandoned EventAnalyticsWorkflow that produced no pending TeamRuntime record.
+- A System Records execution ledger must therefore be a separate typed record family, not an EventRuntime analytics status field, a TeamRuntime pending publication, or another ad hoc DiscoveryStore key.
+
+### Remaining blockers before schema selection
+
+1. Complete the remaining Issue #30 route/trigger and mutation ledger across all Durable Object classes, including Multiplexer socket close/error cleanup, all DiscoveryStore catalog failure/retry/cleanup branches, and every Workflow-to-runtime call path.
+2. Resolve runtime registration marker authority/reconstruction/repair/retirement semantics.
+3. Confirm all consumers or explicitly deprecate the legacy daily readiness summary copies.
+4. Define retention, pagination, and status-reconciliation behavior for Workflow executions, readiness history, runtime-admin history, and coverage-audit items.
+5. Verify Cloudflare's applicable physical row-write accounting and compare it with account/runtime telemetry. The available repository connection exposes source and configuration but no account usage telemetry; this item remains unverified.
+6. Only after these items are complete, finalize the typed D1 schemas and local migrations.
+
+The approved implementation follow-up is tracked in [Issue #32](https://github.com/ThraceAerospace/frc-gameday/issues/32). Issue #32 is explicitly blocked on Issue #30's schema-selection prerequisites. No schema, migration, runtime code, Wrangler configuration, or deployment was changed in this audit pass.
