@@ -34,6 +34,7 @@ import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparison
 import { isEventAnalyticsPublicationCommand } from "./analytics-orchestration-contract.ts";
 import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
 import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
+import type { FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
 
 interface ManualPollRequest { endpoint: string; dueAt: number; attempts: number; }
 
