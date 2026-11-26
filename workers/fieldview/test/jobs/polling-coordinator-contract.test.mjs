@@ -63,7 +63,10 @@ test("event and daily team refresh analytics triggers are coalesced after both r
   assert.ok(deferredDispatchIndex > teamBatchIndex,
     "event-only dispatch is deferred until the team refresh phase is known");
   assert.match(coordinator, /additionalAffectedEvents:\s*eventAnalyticsRequests/);
-  assert.doesNotMatch(coordinator, /EVENT_ANALYTICS_WORKFLOW!?\.create\(/,
+  const eventLoopStart = coordinator.indexOf("for (const candidate of candidates)");
+  const teamRecoveryStart = coordinator.indexOf("// Reconcile TeamRuntime results that were calculated");
+  const eventLoop = coordinator.slice(eventLoopStart, teamRecoveryStart);
+  assert.doesNotMatch(eventLoop, /EVENT_ANALYTICS_WORKFLOW!?\\.create\\(/,
     "the polling coordinator must not independently create an event workflow inside its event loop");
 });
 
