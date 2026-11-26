@@ -6,7 +6,7 @@ import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
-import { createDiscoveryStoreClient, type DiscoveryStoreClient } from "./discovery-store.ts";
+import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 
 type PollingEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW?: Workflow };
@@ -35,13 +35,13 @@ interface PollingEventResult {
   error?: string;
 }
 
-async function readJson<T>(store: DiscoveryStoreClient, key: string): Promise<T | null> {
+async function readJson<T>(store: DiscoveryServiceClient, key: string): Promise<T | null> {
   const object = await store.get(key);
   return object ? object.json<T>() : null;
 }
 
 async function isRuntimeRegistered(
-  store: DiscoveryStoreClient,
+  store: DiscoveryServiceClient,
   kind: "event" | "team",
   key: string,
 ): Promise<boolean> {
