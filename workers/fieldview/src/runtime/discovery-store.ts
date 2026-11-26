@@ -1,29 +1,29 @@
-import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
+import type { RuntimeEnvironment } from "./cloudflare.ts";
+import { D1RecordStore, type D1RecordStorage } from "./d1-record-store.ts";
 import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
-const PREFIX = "discovery-object:";
 const MAX_LIST_LIMIT = 1000;
 
 /** System-wide TBA discovery and catalog owner; entity-scoped canonical state remains runtime-owned. */
 export class DiscoveryStore {
-  private readonly storage: DurableObjectStateLike["storage"];
+  private readonly storage: D1RecordStorage;
   private readonly api: TBAApiClient | null;
-  constructor(state: DurableObjectStateLike, env?: RuntimeEnvironment) {
-    this.storage = state.storage;
+  constructor(db: D1Database, env?: RuntimeEnvironment) {
+    this.storage = new D1RecordStore(db);
     this.api = env?.TBA_API_KEY
       ? new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) })
       : null;
   }
 
   private async deleteKey(key: string): Promise<void> {
-    await this.storage.delete(PREFIX + key);
+    await this.storage.delete(key);
   }
 
   private async deletePrefix(prefix: string): Promise<void> {
     let cursor: string | undefined;
     for (;;) {
       const entries = await this.storage.list<string>({
-        prefix: PREFIX + prefix,
+        prefix: prefix,
         ...(cursor ? { startAfter: cursor } : {}),
         limit: 1000,
       });
@@ -59,9 +59,8 @@ export class DiscoveryStore {
     }
   }
   private async putValue(key: string, value: string): Promise<void> {
-    const storageKey = PREFIX + key;
-    const previous = await this.storage.get<string>(storageKey);
-    await this.storage.put(storageKey, value);
+    const previous = await this.storage.get<string>(key);
+    await this.storage.put(key, value);
     await this.pruneSupersededRecord(key, previous, value);
   }
 
@@ -72,7 +71,7 @@ export class DiscoveryStore {
 
   private async resolveCurrentSeason(): Promise<Response> {
     const key = "discovery/current-season.json";
-    const knownRaw = await this.storage.get<string>(PREFIX + key);
+    const knownRaw = await this.storage.get<string>(key);
     let known: { year?: unknown; maxTeamPage?: unknown; checkedAt?: unknown } | null = null;
     try { known = knownRaw ? JSON.parse(knownRaw) as { year?: unknown; maxTeamPage?: unknown; checkedAt?: unknown } : null; } catch { known = null; }
     try {
@@ -127,7 +126,7 @@ export class DiscoveryStore {
         !Number.isInteger(expectedPageCount) || expectedPageCount < 1) {
       return Response.json({ error: "Invalid partial team directory lookup" }, { status: 400 });
     }
-    const prefix = PREFIX + `discovery/partial-teams/${year}/`;
+    const prefix = `discovery/partial-teams/${year}/`;
     const entries = await this.storage.list<string>({ prefix });
     const candidates = [...entries.entries()]
       .map(([key, value]) => ({ key, value, generation: Number(key.slice(prefix.length, -5)) }))
@@ -147,7 +146,7 @@ export class DiscoveryStore {
         let pagesValid = true;
         for (let page = 0; page < expectedPageCount; page += 1) {
           if (failedPages.includes(page)) continue;
-          const stored = await this.storage.get<string>(PREFIX + `discovery/team-pages/${year}/${candidate.generation}/${page}.json`);
+          const stored = await this.storage.get<string>(`discovery/team-pages/${year}/${candidate.generation}/${page}.json`);
           if (!stored) { pagesValid = false; break; }
         }
         if (!pagesValid) continue;
@@ -182,7 +181,7 @@ export class DiscoveryStore {
     const unique = [...new Set(teamKeys as string[])].sort();
     const observed = new Set<string>();
     for (let page = 0; page < pageCount; page += 1) {
-      const raw = await this.storage.get<string>(PREFIX + `discovery/team-pages/${year}/${generation}/${page}.json`);
+      const raw = await this.storage.get<string>(`discovery/team-pages/${year}/${generation}/${page}.json`);
       if (failedPageSet.has(page)) {
         if (raw !== undefined) return Response.json({ error: `Failed team page ${page} unexpectedly has a successful result` }, { status: 409 });
         continue;
@@ -234,7 +233,7 @@ export class DiscoveryStore {
       return Response.json({ error: "Invalid event directory discovery request" }, { status: 400 });
     }
     const key = `discovery/events/${year}.json`;
-    const previousRaw = await this.storage.get<string>(PREFIX + key);
+    const previousRaw = await this.storage.get<string>(key);
     let previous: { events?: Array<{ key: string }>; chunkCount?: number; etag?: string | null; updatedAt?: number } | null = null;
     try { previous = previousRaw ? JSON.parse(previousRaw) : null; } catch { previous = null; }
     const headers = new Headers();
@@ -275,7 +274,7 @@ export class DiscoveryStore {
         !Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 100) {
       return Response.json({ error: "Invalid event chunk write request" }, { status: 400 });
     }
-    const raw = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
+    const raw = await this.storage.get<string>(`discovery/staging/${year}/${generation}.json`);
     if (!raw) return Response.json({ error: "Staged event directory is missing" }, { status: 404 });
     const document = JSON.parse(raw) as { events?: unknown[]; chunkCount?: number; chunkSize?: number };
     if (!Array.isArray(document.events) || !Number.isInteger(document.chunkCount) ||
@@ -296,8 +295,8 @@ export class DiscoveryStore {
     if (!Number.isInteger(year) || year < 1992 || year > 2200 || !Number.isSafeInteger(generation) || generation < 0) {
       return Response.json({ error: "Invalid event directory publication" }, { status: 400 });
     }
-    const stagedDocument = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}.json`);
-    const stagedKeys = await this.storage.get<string>(PREFIX + `discovery/staging/${year}/${generation}-keys.json`);
+    const stagedDocument = await this.storage.get<string>(`discovery/staging/${year}/${generation}.json`);
+    const stagedKeys = await this.storage.get<string>(`discovery/staging/${year}/${generation}-keys.json`);
     if (!stagedDocument || !stagedKeys) return Response.json({ error: "Event discovery staging is incomplete" }, { status: 409 });
     let document: { events?: Array<{ key?: unknown }>; chunkCount?: number; chunkSize?: number };
     let keys: unknown;
@@ -315,7 +314,7 @@ export class DiscoveryStore {
       return Response.json({ error: "Event discovery staging manifest is invalid" }, { status: 409 });
     }
     for (let index = 0; index < Number(document.chunkCount); index += 1) {
-      const chunk = await this.storage.get<string>(PREFIX + `discovery/event-chunks/${year}/${generation}/${index}.json`);
+      const chunk = await this.storage.get<string>(`discovery/event-chunks/${year}/${generation}/${index}.json`);
       if (!chunk) return Response.json({ error: `Event discovery chunk ${index} is missing` }, { status: 409 });
       try {
         const parsed = JSON.parse(chunk);
@@ -353,7 +352,7 @@ export class DiscoveryStore {
     if (request.method === "GET" && url.pathname === "/get") {
       const key = url.searchParams.get("key");
       if (!key || key.length > 1024) return Response.json({ error: "Invalid key" }, { status: 400 });
-      const value = await this.storage.get<string>(PREFIX + key);
+      const value = await this.storage.get<string>(key);
       return value === undefined ? new Response(null, { status: 404 }) : new Response(value, {
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
@@ -368,9 +367,8 @@ export class DiscoveryStore {
       if (new TextEncoder().encode(input.value).byteLength > 7_000_000) {
         return Response.json({ error: "Catalog record exceeds the 7 MB safety limit" }, { status: 413 });
       }
-      const storageKey = PREFIX + input.key;
-      const previous = await this.storage.get<string>(storageKey);
-      await this.storage.put(storageKey, input.value);
+      const previous = await this.storage.get<string>(input.key);
+      await this.storage.put(input.key, input.value);
       await this.pruneSupersededRecord(input.key, previous, input.value);
       return Response.json({ ok: true });
     }
@@ -382,9 +380,9 @@ export class DiscoveryStore {
         return Response.json({ error: "Invalid list query" }, { status: 400 });
       }
       const entries = await this.storage.list<string>({
-        prefix: PREFIX + prefix, ...(cursor ? { startAfter: PREFIX + cursor } : {}), limit: limit + 1,
+        prefix: prefix, ...(cursor ? { startAfter: cursor } : {}), limit: limit + 1,
       });
-      const keys = [...entries.keys()].map((key) => key.slice(PREFIX.length)).filter((key) => key.startsWith(prefix));
+      const keys = [...entries.keys()].filter((key) => key.startsWith(prefix));
       const truncated = keys.length > limit;
       const page = keys.slice(0, limit);
       return Response.json({ objects: page.map((key) => ({ key })), truncated,
