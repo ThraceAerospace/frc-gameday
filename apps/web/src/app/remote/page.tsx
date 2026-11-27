@@ -53,7 +53,7 @@ export default function RemotePage() {
   const activeDisplay = displays.find((display) => display.id === activeId) ?? null;
 
   return (
-    <main className="h-[100dvh] overflow-y-auto overscroll-y-contain bg-black text-white [touch-action:pan-y]">
+    <main className="fixed inset-0 z-0 h-[100dvh] overflow-y-auto overscroll-y-contain bg-black text-white [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
       <header className="border-b border-white/10 bg-neutral-950 px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
