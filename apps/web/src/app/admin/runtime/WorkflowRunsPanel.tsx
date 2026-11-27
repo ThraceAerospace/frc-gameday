@@ -42,7 +42,7 @@ function statusClass(status?: string) {
   return "text-[var(--fv-muted)]";
 }
 
-export default function WorkflowRunsPanel({ authenticated, year }: { authenticated: boolean; year: number }) {
+export default function WorkflowRunsPanel({ authenticated, year, requestedType }: { authenticated: boolean; year: number; requestedType?: WorkflowType }) {
   const [type, setType] = useState<WorkflowType>("event-readiness");
   const [runs, setRuns] = useState<RunList>({ runs: [], total: 0 });
   const [selected, setSelected] = useState<WorkflowRun | null>(null);
@@ -52,6 +52,13 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   const [weeklyMessage, setWeeklyMessage] = useState("");
   const [weeklyWorkflowId, setWeeklyWorkflowId] = useState<string | null>(null);
   const [weeklyWorkflowStatus, setWeeklyWorkflowStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (requestedType && requestedType !== type) {
+      setType(requestedType);
+      setSelected(null);
+    }
+  }, [requestedType, type]);
 
   const loadRuns = useCallback(async () => {
     if (!authenticated) return;
