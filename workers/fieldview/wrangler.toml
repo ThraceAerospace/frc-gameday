@@ -73,6 +73,12 @@ tag = "v2"
 new_sqlite_classes = ["RemoteSessionRuntime"]
 
 [[workflows]]
+name = "season-discovery"
+binding = "SEASON_DISCOVERY"
+class_name = "SeasonDiscoveryWorkflow"
+concurrency = { limit = 1 }
+
+[[workflows]]
 name = "event-season-readiness"
 binding = "EVENT_SEASON_READINESS"
 class_name = "EventSeasonReadinessWorkflow"
