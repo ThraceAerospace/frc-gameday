@@ -1084,17 +1084,9 @@ export class TeamRuntime extends DurableObjectBase {
         headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },
       });
     }
-    const failedInput = inputs.states.some((state) => state?.status === "failed");
-    if (cached && failedInput &&
-        (cached.representation_signature === undefined ||
-          cached.representation_signature === representationSignature)) {
-      // Provider failure is not a new publication. Keep serving the previous
-      // last-good snapshot; public reads expose it as stale and retry locally.
-      this.publishedSnapshots.set(year, cached);
-      return Response.json(cached.state, {
-        headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },
-      });
-    }
+    // A failed refresh retains the last-good endpoint data in storage. Rebuild
+    // the projection so its source metadata reflects the current failed/stale
+    // status while still including that retained representation.
 
     const [team, districts, events, media, statboticsYear, statboticsEvents, frcColors] = inputs.states;
     const teamSource = metadata(team, now), districtSource = metadata(districts, now);
