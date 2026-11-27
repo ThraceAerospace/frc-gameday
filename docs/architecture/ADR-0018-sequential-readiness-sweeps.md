@@ -1,6 +1,6 @@
 # ADR-0018: Sequential readiness sweeps
 
-> **Status: Superseded by [ADR-0020](../decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md) on 2026-11-27.** Its publication-gated read model and persisted-projection requirements are no longer valid. This file is retained only as decision history.
+> **Status: Superseded by [ADR-0020](decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md) on 2026-11-27.** Its publication-gated read model and persisted-projection requirements are no longer valid. This file is retained only as decision history.
 
 - **Original status:** Partially superseded
 - **Original date:** 2026-11-22
