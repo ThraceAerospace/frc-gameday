@@ -19,7 +19,7 @@ The following operations must not call Durable Object storage `put` or `delete`,
 - Analytics orchestration input reads.
 - Published analytics reads.
 - Runtime state/diagnostic reads.
-- Multiplexer subscription reads and canonical snapshot recovery.
+- Multiplexer subscription reads after the initial canonical HTTP snapshot fetch.
 
 Projection construction may read endpoint records and build objects in memory. A cache miss or DO eviction must not create a persistent projection.
 
