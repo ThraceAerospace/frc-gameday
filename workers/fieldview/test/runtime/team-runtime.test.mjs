@@ -218,6 +218,15 @@ test("TeamRuntime derives snapshots on read without persisting them", async () =
   assert.equal(snapshot.team.sources.tba_team.status, "available");
   assert.equal("tba_team_media" in snapshot.team.sources, false);
   assert.equal(snapshot.media.length, 0);
+  const evictedRuntime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("cache eviction must not trigger provider acquisition");
+  }), teamKey);
+  const afterEviction = await evictedRuntime.fetch(new Request("https://team/snapshot?year=" + year, {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(afterEviction.status, 200);
+  assert.equal((await afterEviction.json()).team.team_number, 3461);
+  assert.equal(writes, writesAfterRefresh, "rebuilding TeamState after DO eviction must not write");
 });
 
 test("TeamRuntime seed performs its own provider refresh before returning", async () => {
@@ -544,7 +553,7 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
 });
 
 
-test("TeamRuntime season analytics GET is read-only and explicit refresh publishes the aggregate", async () => {
+test("TeamRuntime season analytics GET is read-only and explicit refresh caches the aggregate in memory", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = new Date().getUTCFullYear();
   storage.values.set("team-key", teamKey);
   storage.values.set("team-state:" + year + ":publication", {
@@ -659,7 +668,8 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh publish
   assert.equal(publishedResult.analyzedEventCount, 1);
   assert.equal(publishedResult.events[0].status, "ready");
   assert.equal(eventRuntimeCalls, 0, "season analytics must not read another runtime's state");
-  assert.equal(storage.values.has("team-season-analytics:" + year), true);
+  assert.equal(storage.values.has("team-season-analytics:" + year), false,
+    "the derived season aggregate is kept in memory, not written during a read");
 });
 
 

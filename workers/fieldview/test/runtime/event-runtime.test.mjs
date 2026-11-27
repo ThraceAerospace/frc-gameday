@@ -343,6 +343,15 @@ test("EventRuntime returns incomplete read-time projections before provider acqu
   const published = await runtime.fetch(request());
   assert.equal(published.status, 200, "the normalized EventState is composed from newly acquired endpoint records");
   assert.equal(writes, writesAfterRefresh, "the subsequent client read adds no persistent writes");
+  const evictedRuntime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key", TBA_WEBHOOK_SECRET: "unused", RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { throw new Error("cache eviction must not trigger provider acquisition"); },
+  }, eventKey);
+  const afterEviction = await evictedRuntime.fetch(request());
+  assert.equal(afterEviction.status, 200);
+  assert.equal((await afterEviction.json()).event.name, "2026 Demand");
+  assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
+  assert.equal(writes, writesAfterRefresh, "rebuilding after DO eviction must remain write-free");
 });
 
 test("explicit EventState publication composes canonical event-team domain objects with source metadata", async () => {
