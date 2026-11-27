@@ -219,19 +219,15 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       });
 
     try {
-      // Always refresh and persist TBA's authoritative current_season before
-      // running a manual directory discovery. The requested year remains
-      // explicit (historical discovery is supported), but it never changes
-      // the canonical current-season pointer.
-      const tbaStatus = await step.do("resolve-and-publish-current-season", async () => {
-        const response = await createDiscoveryServiceClient(this.env).catalog("resolve-current-season");
-        if (!response.ok) throw new Error("Current-season resolution returned HTTP " + response.status);
-        const resolved = await response.json() as { year?: unknown; maxTeamPage?: unknown };
-        if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200) {
-          throw new Error("TBA returned an invalid current_season");
-        }
-        if (!Number.isInteger(resolved.maxTeamPage) || Number(resolved.maxTeamPage) < 0) {
-          throw new Error("TBA status did not provide a valid max_team_page; team discovery cannot determine its page range");
+      // Canonical season status is resolved by its own Workflow and persisted
+      // in KV. Discovery only consumes the last resolved max_team_page bound.
+      const tbaStatus = await step.do("read-canonical-season-status", async () => {
+        const raw = await this.env.KV_BINDING?.get("system/canonical-season.json");
+        if (!raw) throw new Error("Canonical season status is missing; run the season status resolver first");
+        const resolved = JSON.parse(raw) as { year?: unknown; maxTeamPage?: unknown };
+        if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200 ||
+            !Number.isInteger(resolved.maxTeamPage) || Number(resolved.maxTeamPage) < 0) {
+          throw new Error("Persisted canonical season status is invalid or missing max_team_page");
         }
         return { year: Number(resolved.year), maxTeamPage: Number(resolved.maxTeamPage) };
       });
