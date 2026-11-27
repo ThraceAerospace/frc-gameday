@@ -1,6 +1,7 @@
 import runtimeWorker from "./runtime/index.ts";
 import jobsWorker from "./jobs/index.ts";
 import type { RuntimeEnvironment } from "./runtime/cloudflare.ts";
+import { consumeSeasonRefreshQueue } from "./jobs/season-readiness.ts";
 
 type RuntimeContext = Parameters<typeof runtimeWorker.fetch>[2];
 type JobsEnvironment = Parameters<typeof jobsWorker.fetch>[1];
@@ -50,6 +51,9 @@ export default {
       }));
     }));
   },
+  queue(batch: Parameters<typeof consumeSeasonRefreshQueue>[0], env: RuntimeWorkerEnvironment): Promise<void> {
+    return consumeSeasonRefreshQueue(batch, env);
+  },
   fetch(request: Request, env: RuntimeWorkerEnvironment, context: RuntimeContext): Promise<Response> {
     const runtimeEnv: RuntimeEnvironment = {
       ...env,
@@ -60,4 +64,4 @@ export default {
 };
 
 export { EventRuntime, TeamRuntime, Multiplexer, RemoteSessionRuntime } from "./runtime/index.ts";
-export { DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow } from "./jobs/index.ts";
+export { EventSeasonReadinessWorkflow, TeamSeasonReadinessWorkflow, SeasonStatusResolverWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow } from "./jobs/index.ts";
