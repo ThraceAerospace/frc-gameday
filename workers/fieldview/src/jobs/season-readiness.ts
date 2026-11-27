@@ -140,7 +140,7 @@ async function runSeasonReadiness(
   const registered = keys.filter((key) => registry.has(key));
   if (registered.length !== keys.length) throw new Error("Not all discovered " + kind + " runtimes were registered");
   const results: Array<{
-    key: string; state_valid: boolean; refresh_required: boolean; queued: boolean;
+    key: string; state_valid: boolean;
     bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
   }> = [];
   for (let offset = 0; offset < registered.length; offset += 25) {
@@ -153,7 +153,7 @@ async function runSeasonReadiness(
           const readinessResult = await readiness.json() as { state_valid?: boolean };
           if (readinessResult.state_valid === true) {
             return {
-              key, state_valid: true, refresh_required: false, queued: false,
+              key, state_valid: true,
               bootstrapped: false, already_initialized: true, resource_status: "existing",
             };
           }
@@ -168,12 +168,12 @@ async function runSeasonReadiness(
           if (receipt.accepted !== true) throw new Error("Runtime did not confirm bootstrap acceptance");
           const resourceStatus = receipt.resource_status ?? "unknown";
           return {
-            key, state_valid: resourceStatus !== "failed", refresh_required: false, queued: false,
+            key, state_valid: resourceStatus !== "failed",
             bootstrapped: true, already_initialized: false, resource_status: resourceStatus,
           };
         } catch (error) {
           return {
-            key, state_valid: false, refresh_required: false, queued: false, bootstrapped: false, already_initialized: false,
+            key, state_valid: false, bootstrapped: false, already_initialized: false,
             error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
           };
         }
