@@ -1,96 +1,71 @@
 # ADR-0012: Scope-based TBA webhook routing
 
-- **Status:** Accepted
+- **Status:** Accepted, clarified for the current Worker runtime
 - **Date:** 2026-11-21
 - **Scope:** Cloudflare Worker webhook ingress, EventRuntime, TeamRuntime
 
 ## Context
 
-The current ingress validates a TBA webhook, registers the EventRuntime with TaskScheduler, and forwards the payload only to EventRuntime. EventRuntime persists/deduplicates the notification, applies event-scoped changes, and later coordinates team-scoped recalculation. Live-event logs show this creates a multi-hop path for one source notification.
-
-TBA webhook payloads contain enough scope information for many message types to identify affected resources at ingress. The payload's `message_type` determines which fields are authoritative for routing. TBA documents `upcoming_match`, `match_score`, `match_video`, `starting_comp_level`, `alliance_selection`, `awards_posted`, `schedule_updated`, `ping`, `broadcast`, and `verification`. Some notification fields are optional and some payloads are event-wide rather than team-specific.
+TBA webhook payloads contain scope information for many message types. The Worker's webhook ingress is the routing boundary: it authenticates and validates the provider envelope, identifies the event and any explicitly named teams, and dispatches the unchanged payload to the owners of the affected data.
 
 ## Decision
 
 ### 1. Ingress is the routing boundary
 
-The Worker webhook route is responsible for:
-1. Enforcing the payload-size limit.
-2. Verifying `X-TBA-HMAC` against the exact raw request body.
-3. Parsing and validating the envelope.
-4. Resolving the event key and affected team keys from the message type's documented payload shape.
-5. Deduplicating target keys within the routing plan.
-6. Dispatching the original unchanged payload directly to every affected runtime.
+The Worker webhook route:
+1. Enforces the payload-size limit.
+2. Verifies `X-TBA-HMAC` against the exact raw request body.
+3. Parses and validates the envelope.
+4. Resolves the event key and affected team keys from the documented message-type payload shape.
+5. Deduplicates target keys within the routing plan.
+6. Dispatches the original unchanged payload to every affected runtime.
 
-The route does not normalize provider payloads or own canonical state. It uses an explicit, exhaustively tested message-type routing table. Unknown message types are acknowledged only when they can be safely classified as non-mutating; otherwise they return a client error so unsupported routing is visible.
+Ingress does not normalize provider payloads or own canonical state. It uses an explicit, tested message-type routing table. Unknown message types are acknowledged only when safely classifiable as non-mutating; otherwise they return a client error.
 
 ### 2. Runtime ownership remains disjoint
 
 - EventRuntime receives event-scoped notifications and applies only event-owned state changes.
-- Each affected TeamRuntime receives the same notification directly and applies only its own team-scoped projection/state.
+- Each affected TeamRuntime receives the notification directly and applies only its own team-scoped state.
 - No runtime forwards the webhook to another runtime as part of ordinary webhook handling.
-- EventRuntime must not be the dispatcher for TeamRuntime webhook delivery.
-- TeamRuntime must not persist a second authoritative copy of the event's canonical provider resource. For example, EventRuntime owns the canonical event match collection; a TeamRuntime may update only its own `FieldViewTeamEventState` projection for matches involving that team.
-- TeamRuntime analytics continues to use the shared versioned comparison input, but ordinary webhook delivery must not require EventRuntime to fan out a second notification or recalculate every team's state serially.
+- EventRuntime does not dispatch TeamRuntime webhook delivery.
+- TeamRuntime does not persist a second authoritative copy of canonical event provider resources.
+- Analytics orchestration remains a separate Workflow operation using versioned comparison inputs; ordinary webhook delivery does not synchronously recalculate every team's state.
 
 ### 3. Routing matrix
 
 | Message type | EventRuntime | TeamRuntime targets |
 | --- | --- | --- |
-| `match_score` | Event match collection and event analytics invalidation | Unique teams in `match.alliances.red.teams` and `match.alliances.blue.teams`; optional `team_key` is also included |
-| `match_video` | Event match collection | Optional `team_key` and any team identities present in the match alliance payload; the documented example omits alliances, so do not infer participants |
-| `upcoming_match` | Event upcoming-match/schedule state | Unique `team_keys`; optional `team_key` is also included |
+| `match_score` | Event match collection and event analytics invalidation | Unique teams in `match.alliances.red.teams` and `match.alliances.blue.teams`; optional `team_key` |
+| `match_video` | Event match collection | Optional `team_key` and identities explicitly present in the match payload; do not infer absent participants |
+| `upcoming_match` | Event schedule state | Unique `team_keys`; optional `team_key` |
 | `starting_comp_level` | Event competition-level state | None unless a team-specific projection explicitly consumes it |
-| `alliance_selection` | Event metadata and alliance/status resources | Optional team-targeted `team_key`; event-wide payload does not include the selected team list |
-| `awards_posted` | Event awards collection | Teams identified by each award's `recipient_list[].team_number`; optional `team_key` is also included |
-| `schedule_updated` | Event schedule/match collection | Event roster only when supplied by an already-available routing index; do not perform a hidden provider fetch or ask EventRuntime to proxy the dispatch |
+| `alliance_selection` | Event metadata and alliance/status resources | Optional team-targeted `team_key`; do not infer a selected-team list |
+| `awards_posted` | Event awards collection | Teams identified by each award's `recipient_list[].team_number`; optional `team_key` |
+| `schedule_updated` | Event schedule/match collection | Event roster only when supplied by an already-available routing index; no hidden provider fetch |
 | `ping`, `broadcast`, `verification` | No runtime state mutation | None |
 
-An absent team target list means no TeamRuntime dispatch. Do not guess or synthesize recipients. A future event-to-team routing index may support event-wide notifications, but its ownership, consistency, and update lifecycle must be separately specified.
+An absent team target list means no TeamRuntime dispatch. Do not guess recipients or fetch provider data from ingress to discover them.
 
-### 4. Delivery, idempotency, and failure behavior
+### 4. Delivery, idempotency, and failures
 
-- Derive one stable webhook ID from SHA-256 of the exact raw body and pass it to every target.
-- Each runtime deduplicates independently. A successful delivery to one target does not suppress delivery to another.
-- Dispatch targets concurrently. One target's failure must not prevent attempts to other targets.
-- Return success only when every required target has accepted the notification. Partial delivery must be observable and retryable; a retry is safe because each target deduplicates.
-- Do not register each webhook target with TaskScheduler as a side effect of ingress. Runtime lifecycle/discovery is separate from webhook delivery.
-- A target persists only a real change to its authoritative state. Duplicate or semantically unchanged notifications must not cause redundant state writes.
-- The webhook route must remain within TBA's 10-second response timeout. If direct bounded dispatch cannot reliably complete within that deadline, introduce an explicitly durable delivery mechanism rather than silently acknowledging dropped work.
+- Derive one stable webhook ID from SHA-256 of the exact raw body and pass it to each target.
+- Each runtime deduplicates independently.
+- Dispatch targets concurrently. One target failure must not prevent attempts to other targets.
+- Return success only when every required target accepts the notification. Partial delivery is observable and retryable; retries are safe because each target deduplicates.
+- Runtime registration is separate from webhook delivery. Ingress must not register targets as a side effect.
+- Duplicate or semantically unchanged notifications must not cause redundant state writes.
+- Keep the route within TBA's response timeout. Any future durable delivery mechanism requires a separately justified design; there is no Queue compatibility path.
 
-### 5. Source data and freshness
+### 5. Provider data and freshness
 
-Pass the original TBA `message_data` unchanged to runtimes. Do not manufacture ETags, HTTP fetch timestamps, or provider revisions from webhook receipt time. A webhook may update locally reconciled data while retaining the provider HTTP representation and validator unchanged. A later conditional fetch remains responsible for refreshing the provider representation.
-
-### 6. Explicit non-goals
-
-- No WebSocket mesh between Durable Objects.
-- No EventRuntime-to-TeamRuntime webhook relay.
-- No global provider request lock or serialized queue.
-- No duplicate canonical event match storage in TeamRuntime.
-- No provider fetch from ingress merely to discover team recipients.
-- No blanket event-roster fan-out when the payload does not identify recipients.
+Pass the original TBA `message_data` unchanged to runtimes. Do not manufacture ETags, HTTP fetch timestamps, or provider revisions from webhook receipt time. A webhook may update locally reconciled data while retaining the provider HTTP representation and validator. A later conditional provider request remains responsible for refreshing that representation.
 
 ## Consequences
 
-- A match webhook has one ingress routing decision and direct delivery to EventRuntime plus only the participating TeamRuntimes.
-- EventRuntime no longer acts as the webhook coordinator for team-scoped state.
-- TeamRuntime can update its team-specific event projection independently.
-- Event-wide messages without team identities remain event-scoped until a separately maintained roster index exists.
-- Delivery must be idempotent and partial failures must be visible; a plain `Promise.all` that rejects early is insufficient.
-- Tests must cover every documented TBA message type, optional fields, malformed identities, duplicate team keys, partial target failure, duplicate delivery, and unchanged-state write suppression.
+Webhook routing is explicit and scope-aware. EventRuntime and TeamRuntime remain independent owners, partial delivery can be retried idempotently, and webhook handling does not become a provider proxy or global scheduler.
 
-## Initial implementation
+## Implementation boundary
 
-The migration branch now implements:
-- Raw-body HMAC validation and SHA-256 webhook identity at Worker ingress.
-- Direct concurrent dispatch to EventRuntime and the deduplicated set of TeamRuntime targets; TaskScheduler registration is not part of webhook ingestion.
-- Direct TeamRuntime handling for already-materialized team-event match projections. Match-score updates clear score-derived analysis/flags only when score inputs change, while retaining predictions, team associations, and source provenance. Match-video updates preserve those enrichments. Upcoming-match notifications patch scheduled/predicted timestamps on an existing team match projection. A webhook arriving before a projection or match exists is acknowledged without forcing a snapshot/provider fetch; the subsequent canonical event/analytics composition supplies the missing projection.
-- Normalization of the webhook Match alliance `teams` field to the canonical TBA API `team_keys` field, including merge behavior that preserves alliance fields omitted by partial webhook payloads.
-- Partial dispatch failures return 502 after all targets have been attempted; retries are idempotent for already-updated projections.
+The Worker ingress verifies raw-body HMAC and derives a stable webhook identity. It dispatches to EventRuntime and deduplicated TeamRuntime targets according to the routing table. Any new message type or routing behavior must update the table and its contract tests.
 
-Event-wide `schedule_updated` and `starting_comp_level` notifications currently target EventRuntime only. `match_video` targets TeamRuntimes only when participant identities are present in the payload or a team-specific `team_key` is supplied. Event-wide fan-out for messages without recipients remains intentionally unimplemented until a durable event-to-team routing index exists.
-
-## References
-
-- The Blue Alliance webhook documentation: https://www.thebluealliance.com/apidocs/webhooks
+See [the runtime lifecycle](../../development/FIELDVIEW-RUNTIME.md) and [ADR-0020](ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md).
