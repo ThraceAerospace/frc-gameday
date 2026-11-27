@@ -499,12 +499,9 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const object = await createDiscoveryServiceClient(env).get("projections/events-this-week/current.json");
+      const object = await createDiscoveryServiceClient(env).get<{ schemaVersion: number; year: number; evaluatedAt: number; runDate: string; weekStart: string; checkedAt: number; events: Array<Record<string, unknown>> }>("projections/events-this-week/current.json");
       if (object) {
-        const projection = await object.json<{
-          schemaVersion: number; year: number; evaluatedAt: number; runDate: string;
-          weekStart: string; checkedAt: number; events: Array<Record<string, unknown>>;
-        }>();
+        const projection = object;
         if (projection.schemaVersion === 1 && Number.isInteger(projection.year) &&
             Number.isFinite(projection.evaluatedAt) && Number.isFinite(projection.checkedAt) &&
             Array.isArray(projection.events)) {
@@ -542,12 +539,9 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const object = await createDiscoveryServiceClient(env).get("discovery/events/" + requestedYear + ".json");
+      const object = await createDiscoveryServiceClient(env).get<{ year: number; events: Array<Record<string, unknown>>; updatedAt: number; checkedAt: number; etag: string | null }>("discovery/events/" + requestedYear + ".json");
         if (object) {
-          const discovery = await object.json<{
-            year: number; events: Array<Record<string, unknown>>;
-            updatedAt: number; checkedAt: number; etag: string | null;
-          }>();
+          const discovery = object;
           const stale = Date.now() - discovery.checkedAt > 36 * 60 * 60_000;
           const retrievedAt = new Date(discovery.updatedAt).toISOString();
           return Response.json({
@@ -581,25 +575,23 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!env.DB) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
-      const manifestObject = await createDiscoveryServiceClient(env).get(`discovery/teams/${year}.json`);
+      const manifestObject = await createDiscoveryServiceClient(env).get<{ year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number; checkedAt: number }>(`discovery/teams/${year}.json`);
       if (!manifestObject) {
         return Response.json({ error: "Team discovery is not published for the requested season" }, {
           status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" },
         });
       }
-      const manifest = await manifestObject.json<{
-        year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number; checkedAt: number;
-      }>();
+      const manifest = manifestObject;
       if (manifest.year !== year || !Number.isSafeInteger(manifest.pageCount) || manifest.pageCount < 1) {
         return Response.json({ error: "Published team discovery manifest is invalid" }, { status: 503 });
       }
       const teamKeys: string[] = [];
       for (let page = 0; page < manifest.pageCount; page += 1) {
-        const pageObject = await createDiscoveryServiceClient(env).get(
+        const pageObject = await createDiscoveryServiceClient(env).get<unknown>(
           `discovery/team-pages/${year}/${manifest.generation}/${page}.json`,
         );
         if (!pageObject) return Response.json({ error: `Team discovery page ${page} is missing` }, { status: 503 });
-        const pageTeamKeys = await pageObject.json<unknown>();
+        const pageTeamKeys = pageObject;
         if (!Array.isArray(pageTeamKeys) ||
             pageTeamKeys.some((key) => typeof key !== "string" || !/^frc[0-9]+$/.test(key))) {
           return Response.json({ error: `Team discovery page ${page} is invalid` }, { status: 503 });
@@ -754,6 +746,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/inventory" && request.method === "GET") {
+      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind");
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
@@ -765,11 +758,11 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
         return Response.json({ error: "Invalid inventory query" }, { status: 400 });
       }
       const discoveryKey = kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`;
-      const discoveryObject = await createDiscoveryServiceClient(env)?.get(discoveryKey);
+      const discoveryObject = await createDiscoveryServiceClient(env).get<unknown>(discoveryKey);
       let discovered: string[] = [];
       if (discoveryObject) {
         try {
-          const data = await discoveryObject.json<unknown>();
+          const data = discoveryObject;
           discovered = kind === "event" && isRecord(data) && Array.isArray(data.events)
             ? data.events.map((item) => isRecord(item) ? item.key : null).filter((key): key is string => typeof key === "string")
             : Array.isArray(data) ? data.filter((key): key is string => typeof key === "string") : [];
@@ -795,25 +788,26 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/entity" && request.method === "GET") {
+      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind"), requestedKey = url.searchParams.get("key") ?? "";
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
       if ((kind !== "event" && kind !== "team") || !/^[a-zA-Z0-9_-]+$/.test(requestedKey) ||
           !Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid entity lookup" }, { status: 400 });
       const key = kind === "team" && /^\d+$/.test(requestedKey) ? "frc" + requestedKey : requestedKey;
-      const directoryObject = await createDiscoveryServiceClient(env)?.get(
+      const directoryObject = await createDiscoveryServiceClient(env).get<unknown>(
         kind === "event" ? `discovery/events/${year}.json` : `registry/teams/${year}.json`,
       );
       let discovered = false;
       if (directoryObject) {
         try {
-          const directory = await directoryObject.json<unknown>();
+          const directory = directoryObject;
           discovered = kind === "event"
             ? isRecord(directory) && Array.isArray(directory.events) && directory.events.some((item) => isRecord(item) && item.key === key)
             : Array.isArray(directory) && directory.includes(key);
         } catch { discovered = false; }
       }
-      const marker = await createDiscoveryServiceClient(env)?.get(
+      const marker = await createDiscoveryServiceClient(env).get<unknown>(
         (kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/") + key + ".json",
       );
       if (!discovered && !marker) return Response.json({ error: "Entity is not registered or discovered for this season" }, { status: 404 });
@@ -856,15 +850,16 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
+      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const canonicalRaw = await env.KV_BINDING?.get("system/canonical-season.json");
       let canonical: { year?: unknown; checkedAt?: unknown; source?: unknown; resolved_at?: unknown } | null = null;
       try { canonical = canonicalRaw ? JSON.parse(canonicalRaw) : null; } catch { canonical = null; }
       const year = canonical && Number.isInteger(canonical.year) ? Number(canonical.year) : null;
-      const eventObject = year === null ? null : await createDiscoveryServiceClient(env)?.get(`discovery/events/${year}.json`);
-      const teamObject = year === null ? null : await createDiscoveryServiceClient(env)?.get(`discovery/teams/${year}.json`);
-      const events = eventObject ? await eventObject.json<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>().catch(() => null) : null;
-      const teams = teamObject ? await teamObject.json<{ teamCount?: number; updatedAt?: number }>().catch(() => null) : null;
+      const eventObject = year === null ? null : await createDiscoveryServiceClient(env).get<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>(`discovery/events/${year}.json`);
+      const teamObject = year === null ? null : await createDiscoveryServiceClient(env).get<{ teamCount?: number; updatedAt?: number }>(`discovery/teams/${year}.json`);
+      const events = eventObject;
+      const teams = teamObject;
       let multiplexer: unknown = null;
       if (env.MULTIPLEXER) {
         try {
@@ -890,10 +885,10 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
         } while (cursor);
         return keys;
       };
-      const eventRegistryObject = year === null ? null : await createDiscoveryServiceClient(env)?.get(`registry/events/${year}.json`);
-      const teamRegistryObject = year === null ? null : await createDiscoveryServiceClient(env)?.get(`registry/teams/${year}.json`);
-      const eventRegistry = eventRegistryObject ? await eventRegistryObject.json<string[]>().catch(() => []) : [];
-      const teamRegistry = teamRegistryObject ? await teamRegistryObject.json<string[]>().catch(() => []) : [];
+      const eventRegistryObject = year === null ? null : await createDiscoveryServiceClient(env).get<string[]>(`registry/events/${year}.json`);
+      const teamRegistryObject = year === null ? null : await createDiscoveryServiceClient(env).get<string[]>(`registry/teams/${year}.json`);
+      const eventRegistry = eventRegistryObject ?? [];
+      const teamRegistry = teamRegistryObject ?? [];
       const eventRuntimeKeys = await runtimeKeys("event");
       const teamRuntimeKeys = await runtimeKeys("team");
       return Response.json({
@@ -928,6 +923,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       } });
     }
     if (validTeamRoute && request.method === "GET") {
+      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       const canonicalTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
       if (teamAction === "analytics") {
         const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
@@ -1034,6 +1030,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (validPublicRoute && request.method === "GET") {
+      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       // A missing runtime marker means readiness has not created this entity.
       // Do not activate a Durable Object merely to answer a cold public read.
       const discovery = createDiscoveryServiceClient(env);
