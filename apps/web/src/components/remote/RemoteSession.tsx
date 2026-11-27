@@ -29,7 +29,6 @@ type Props = {
   onSignalingStatus?: (status: RemoteSignalingStatus) => void;
   hidden?: boolean;
   controller?: TileSurfaceController;
-  useLocalCanonicalSnapshots?: boolean;
 };
 
 export default function RemoteSession({
@@ -40,7 +39,6 @@ export default function RemoteSession({
   onSignalingStatus,
   hidden = false,
   controller: sharedController,
-  useLocalCanonicalSnapshots = false,
 }: Props) {
   const localController = useTileSurfaceController({ events, controller: sharedController });
   const localControllerRef = useRef(localController);
@@ -53,9 +51,8 @@ export default function RemoteSession({
   const eventSnapshotsRef = useRef<Record<string, CanonicalEventSnapshotValue>>({});
   const eventSubscriptionsRef = useRef(new Map<string, () => void>());
   const controllerStateInitializedRef = useRef(false);
-  const peerUsesLocalCanonicalSnapshotsRef = useRef(false);
   const sendControllerState = useMemo(
-    () => (includeEventSnapshots = false) => {
+    () => () => {
       if (role !== "controller") return;
       const state = localControllerRef.current.getState();
       const {
@@ -83,11 +80,6 @@ export default function RemoteSession({
         ),
       };
       peerRef.current?.sendMessage({ type: "stateSnapshot", state: snapshot });
-      if (includeEventSnapshots && !peerUsesLocalCanonicalSnapshotsRef.current) {
-        for (const [eventKey, value] of Object.entries(eventSnapshotsRef.current)) {
-          peerRef.current?.sendMessage({ type: "eventSnapshot", eventKey, ...value });
-        }
-      }
     },
     [role],
   );
@@ -103,7 +95,7 @@ export default function RemoteSession({
     onStatus?.(status);
     if (status === "connected" && role === "controller") {
       if (controllerStateInitializedRef.current) {
-        sendControllerState(true);
+        sendControllerState();
       } else {
         peerRef.current?.sendMessage({ type: "requestInitialState" });
       }
@@ -140,7 +132,6 @@ export default function RemoteSession({
             void priorityEditKey;
             peerRef.current?.sendMessage({
               type: "initialState",
-              usesLocalCanonicalSnapshots: useLocalCanonicalSnapshots,
               state: {
                 ...surfaceState,
                 eventConfigs: Object.fromEntries(
@@ -155,7 +146,6 @@ export default function RemoteSession({
           }
 
           if (message.type === "initialState" && role === "controller") {
-            peerUsesLocalCanonicalSnapshotsRef.current = message.usesLocalCanonicalSnapshots === true;
             if (!controllerStateInitializedRef.current) {
               const current = localControllerRef.current.getState();
               if (current.streams.length === 0 && current.priority.length === 0) {
@@ -172,18 +162,6 @@ export default function RemoteSession({
               controllerStateInitializedRef.current = true;
             }
             sendControllerState(true);
-            return;
-          }
-
-          if (message.type === "eventSnapshot" && role === "display") {
-            setEventSnapshots((current) => {
-              const next = {
-                ...current,
-                [message.eventKey]: { version: message.version, snapshot: message.snapshot },
-              };
-              eventSnapshotsRef.current = next;
-              return next;
-            });
             return;
           }
 
