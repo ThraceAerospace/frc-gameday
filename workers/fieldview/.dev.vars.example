@@ -1,3 +1,0 @@
-# Local Wrangler development only. Copy this file to .dev.vars.
-# Never deploy this flag or add it to wrangler.toml [vars].
-LOCAL_ADMIN_AUTH=true
