@@ -7,7 +7,7 @@ import type {
   FieldViewMatchAnalysis,
   FieldViewMatchFlags,
 } from "@fieldview/domain";
-type EventWebSocketStatus = "connecting" | "connected" | "disconnected";
+export type EventWebSocketStatus = "connecting" | "connected" | "disconnected";
 type StatusHandler = (status: EventWebSocketStatus) => void;
 export type CanonicalEventSnapshotData = {
   /** Event-owned state remains distinct from independently owned team-event states. */
