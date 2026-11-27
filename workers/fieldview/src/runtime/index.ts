@@ -296,8 +296,8 @@ async function adminProxy(request: Request, env: RuntimeEnvironment, context: { 
   const body:unknown=await request.json().catch(()=>null);if(!isRecord(body))return Response.json({error:"Invalid operation payload"},{status:400});
   const type=body.workflowType;
   const target=type==="events-this-week"?"/internal/admin/events-this-week/refresh":type==="event-readiness"?"/internal/admin/event-season-readiness":type==="team-readiness"?"/internal/admin/team-season-readiness":type==="season-status-resolver"?"/internal/admin/season-status-resolver":"/internal/admin/operations";
-  const headers=new Headers(request.headers);if(target.endsWith("/operations"))headers.set("Content-Type","application/json");
-  return runtimeFetch(new Request(new URL(target,url.origin),{method:"POST",headers,...(target.endsWith("/operations")?{body:JSON.stringify(body)}:{})}),env,context);
+  const headers=new Headers(request.headers);headers.set("Content-Type","application/json");
+  return runtimeFetch(new Request(new URL(target,url.origin),{method:"POST",headers,body:JSON.stringify(body)}),env,context);
  }
  return new Response("Method Not Allowed",{status:405,headers:{Allow:"GET, POST"}});
 }
@@ -460,9 +460,14 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     if (url.pathname === "/internal/admin/event-season-readiness" && request.method === "POST") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || !Number.isInteger(body.year) || Number(body.year) < 1992 || Number(body.year) > 2200) {
+        return Response.json({ error: "A four-digit season year is required" }, { status: 400 });
+      }
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/event-season-readiness", {
         method: "POST",
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ year: Number(body.year) }),
       }));
     }
 
@@ -477,9 +482,14 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     if (url.pathname === "/internal/admin/team-season-readiness" && request.method === "POST") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      const body: unknown = await request.json().catch(() => null);
+      if (!isRecord(body) || !Number.isInteger(body.year) || Number(body.year) < 1992 || Number(body.year) > 2200) {
+        return Response.json({ error: "A four-digit season year is required" }, { status: 400 });
+      }
       return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/team-season-readiness", {
         method: "POST",
-        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+        headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ year: Number(body.year) }),
       }));
     }
 
