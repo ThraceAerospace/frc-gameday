@@ -148,8 +148,7 @@ interface PollingEventResult {
 }
 
 async function readJson<T>(store: DiscoveryServiceClient, key: string): Promise<T | null> {
-  const object = await store.get(key);
-  return object ? object.json<T>() : null;
+  return store.get<T>(key);
 }
 
 async function isRuntimeRegistered(
@@ -244,7 +243,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     // First-time acquisition is separate from active-event cadence. It scans
     // the canonical season directory but only dispatches a tiny rotating slice
-    // whose EventState publication is still missing.
+    // whose EventState projection is not currently available.
     const initialEventDirectory = await step.do("load-initial-event-acquisition-directory", async () => {
       const directory = await readJson<{ year?: number; events?: TbaEvent[] }>(
         store(), "discovery/events/" + discovery.year + ".json",
@@ -561,7 +560,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     let eventAnalyticsRecoveryEventsDeferred = 0;
     if (this.env.EVENT_RUNTIME) {
       const eventRegistryObjects = await step.do("load-event-analytics-recovery-registry", async () => {
-        const objects: Array<{ key: string }> = [];
+        const keys: string[] = [];
         let cursor: string | undefined;
         for (let page = 0; page < 10; page += 1) {
           const result = await store().list({
@@ -569,8 +568,8 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
             limit: 1000,
             ...(cursor ? { cursor } : {}),
           });
-          objects.push(...result.objects);
-          if (!result.truncated) return objects;
+          keys.push(...result.keys);
+          if (!result.truncated) return keys;
           if (!result.cursor) throw new Error("Event analytics recovery registry pagination lost its cursor");
           cursor = result.cursor;
         }
