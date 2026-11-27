@@ -418,8 +418,10 @@ export class EventRuntime extends DurableObjectBase {
         if (previous?.bootstrap_id === body.bootstrap_id) return { ...previous, duplicate: true };
         if (previous && previous.acquired_at > body.acquired_at) return null;
         const existing = await Promise.all(body.resources.map((resource) => tx.get<EndpointState<unknown>>(endpointStorageKey(resource.endpoint))));
-        if (existing.some((resource) => resource?.lastFetchedAt !== null && resource?.lastFetchedAt !== undefined &&
-            (resource.lastFetchedAt > body.acquired_at || (resource.lastWebhookAt !== null && resource.lastWebhookAt !== undefined && resource.lastWebhookAt > body.acquired_at)))) return null;
+        if (existing.some((resource) => Boolean(resource && (
+            (resource.lastFetchedAt !== null && resource.lastFetchedAt > body.acquired_at) ||
+            (resource.lastWebhookAt !== null && resource.lastWebhookAt > body.acquired_at)
+          )))) return null;
         for (const resource of body.resources) await tx.put(endpointStorageKey(resource.endpoint), resource);
         const snapshotRevision = (await tx.get<number>("snapshot-revision") ?? 0) + 1;
         await tx.put("snapshot-revision", snapshotRevision);
