@@ -156,10 +156,10 @@ test("public event snapshot route forwards without user credentials and exposes 
   assert.equal(forwarded.headers.get("Authorization"), null);
 });
 
-test("public event stream route forwards WebSocket upgrade and since revision", async () => {
+test("the shared public stream route forwards WebSocket upgrade and since revision", async () => {
   const { env, calls } = makeEnvironment();
   await worker.fetch(
-    new Request("https://runtime.example/events/2026test/stream?since=11", {
+    new Request("https://runtime.example/stream?since=11", {
       headers: { Upgrade: "websocket" },
     }),
     env,
@@ -609,7 +609,7 @@ test("public team season analytics forwards to the canonical TeamRuntime endpoin
     },
   };
   const response = await worker.fetch(
-    new Request("https://runtime.example/teams/frc3461/analytics?year=2026"),
+    new Request("https://runtime.example/teams/frc3461/season-analytics?year=2026"),
     env,
   );
   assert.equal(response.status, 200);
@@ -623,7 +623,7 @@ test("public team season analytics forwards to the canonical TeamRuntime endpoin
 });
 test("public team analytics rejects invalid seasons before accessing runtimes", async () => {
   const response = await worker.fetch(
-    new Request("https://runtime.example/teams/frc3461/analytics?year=1800"),
+    new Request("https://runtime.example/teams/frc3461/season-analytics?year=1800"),
     { RUNTIME_ADMIN_TOKEN: "server-only-token" },
   );
   assert.equal(response.status, 400);

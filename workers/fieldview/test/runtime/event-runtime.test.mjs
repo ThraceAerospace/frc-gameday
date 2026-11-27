@@ -476,13 +476,9 @@ test("EventRuntime serves event-scoped Statbotics matches from its durable provi
 
 
 
-test("public snapshot and stream reads need no user credential while state inspection remains private", async () => {
+test("public snapshot reads need no user credential while state inspection remains private", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
-  const acceptedSockets = [];
-  class FakeSocket { sent = []; send(message) { this.sent.push(message); } close() {} }
-  const clientSocket = new FakeSocket();
-  const serverSocket = new FakeSocket();
   const runtime = new EventRuntime({
     storage,
     acceptWebSocket(socket) { acceptedSockets.push(socket); },
@@ -492,8 +488,6 @@ test("public snapshot and stream reads need no user credential while state inspe
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
     RUNTIME_ADMIN_TOKEN: "runtime-token",
     EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    webSocketPairFactory: () => [clientSocket, serverSocket],
-    webSocketResponseFactory: () => new Response(null, { status: 200 }),
     fetcher: async () => new Response("unused"),
   }, eventKey);
 
@@ -504,12 +498,6 @@ test("public snapshot and stream reads need no user credential while state inspe
   assert.equal(snapshot.status, 200);
   assert.equal(snapshot.headers.get("X-FieldView-Snapshot-Version"), "0");
 
-  const stream = await runtime.fetch(new Request("https://event-runtime/stream", {
-    headers: { "X-FieldView-Event-Key": eventKey, Upgrade: "websocket" },
-  }));
-  assert.equal(stream.status, 200);
-  assert.equal(acceptedSockets.length, 1);
-  assert.equal(JSON.parse(serverSocket.sent[0]).snapshot_required, true);
 
   const state = await runtime.fetch(new Request("https://event-runtime/state", {
     headers: { "X-FieldView-Event-Key": eventKey },
@@ -802,7 +790,7 @@ test("EventRuntime admin state diagnostics do not fan out to TeamRuntime", async
   assert.deepEqual(state.analytics.team_state_coverage, {
     status: "not_inspected",
     expected: 1,
-    materialized: null,
+    observed: null,
   });
 });
 
@@ -970,7 +958,7 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   }));
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.event_state_published, true);
+  assert.equal(body.event_state_published, false, "event and roster resources have not both been acquired");
   assert.equal(body.analytics.due_at, 123456);
   assert.deepEqual(body.analytics.pending_invalidation, invalidation);
   assert.equal(storage.values.get("analytics:due-at"), 123456);
