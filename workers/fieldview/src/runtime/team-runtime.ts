@@ -1066,7 +1066,7 @@ export class TeamRuntime extends DurableObjectBase {
     }
     // A persisted materialized TeamState remains a useful stale fallback when
     // endpoint records have not been migrated yet. It is never required.
-    if (cached && inputs.states.every((state) => state === undefined)) {
+    if (cached && inputs.states.every((state) => !state)) {
       this.publishedSnapshots.set(year, cached);
       return Response.json(cached.state, {
         headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },

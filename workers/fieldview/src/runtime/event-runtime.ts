@@ -1381,7 +1381,7 @@ export class EventRuntime extends DurableObjectBase {
     }
     // Backward compatibility for an older materialized projection: it may be
     // served as a stale fallback only when no endpoint records exist at all.
-    if (previous && resources.every((resource) => resource === undefined) &&
+    if (previous && resources.every((resource) => !resource) &&
         previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
       this.hydratedPublication = previous;
       return previous;
