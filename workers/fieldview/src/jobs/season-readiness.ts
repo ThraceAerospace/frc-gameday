@@ -196,6 +196,15 @@ async function runSeasonReadiness(
     const outcomes = await step.do("bootstrap-" + kind + "-chunk-" + offset, async () =>
       mapWithConcurrency(chunk, 4, async (key) => {
         try {
+          const readiness = await dispatchRuntime(env, kind, key, "readiness", {}, year);
+          if (!readiness.ok) throw new Error("Readiness inspection returned HTTP " + readiness.status);
+          const readinessResult = await readiness.json() as { state_valid?: boolean };
+          if (readinessResult.state_valid === true) {
+            return {
+              key, state_valid: true, refresh_required: false, queued: false,
+              bootstrapped: true, already_initialized: true, publication_status: "existing",
+            };
+          }
           const bootstrapId = "season:" + workflowId + ":" + kind + ":" + year + ":" + key;
           const bundle = await acquireRuntimeBootstrap(env, kind, key, year, bootstrapId);
           const response = await dispatchRuntime(env, kind, key, "bootstrap", bundle as unknown as Record<string, unknown>, year);
@@ -208,11 +217,11 @@ async function runSeasonReadiness(
           const publicationStatus = receipt.publication_status ?? "unknown";
           return {
             key, state_valid: publicationStatus !== "failed", refresh_required: false, queued: false,
-            bootstrapped: true, publication_status: publicationStatus,
+            bootstrapped: true, already_initialized: false, publication_status: publicationStatus,
           };
         } catch (error) {
           return {
-            key, state_valid: false, refresh_required: false, queued: false, bootstrapped: false,
+            key, state_valid: false, refresh_required: false, queued: false, bootstrapped: false, already_initialized: false,
             error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
           };
         }
@@ -224,6 +233,7 @@ async function runSeasonReadiness(
     year, kind, entities_total: keys.length, entities_registered: registered.length,
     states_valid: results.filter((item) => item.state_valid).length,
     bootstrapped: results.filter((item) => item.bootstrapped).length,
+    already_initialized: results.filter((item) => item.already_initialized).length,
     bootstrap_failed: results.filter((item) => !item.bootstrapped).length,
     partial_publications: results.filter((item) => item.publication_status === "partial").length,
     failed_publications: results.filter((item) => item.publication_status === "failed").length,
