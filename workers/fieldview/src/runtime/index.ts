@@ -359,7 +359,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
 
     if (url.pathname.startsWith("/internal/discovery/")) {
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const action = url.pathname.slice("/internal/discovery/".length);
       return new DiscoveryService(env.DISCOVERY_STORAGE ?? env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
         method: request.method, headers: request.headers,
