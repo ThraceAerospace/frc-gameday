@@ -833,7 +833,7 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
-      const publication = this.hydratedPublication ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = await this.publishEventState();
       if (!publication) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
@@ -1344,84 +1344,31 @@ export class EventRuntime extends DurableObjectBase {
   }
 
   private async publishEventState(): Promise<EventStatePublication> {
-    const eventResources = eventResourceEndpoints(this.eventKey);
-    const statboticsResource = STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0);
-    const allResources = [...eventResources, statboticsResource];
-
-    // Fast path: when no source or published-snapshot revision has changed,
-    // reuse the durable normalized publication. Read endpoint metadata only to
-    // keep completeness/freshness status accurate as resources expire.
-    const cached = await this.storage.transaction(async (transaction) => {
-      const previous = await transaction.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      if (!previous) return null;
-      const version = await transaction.get<number>("snapshot-revision") ?? 0;
-      const resources = await Promise.all(allResources.map((endpoint) =>
-        transaction.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
-      const sourceRevision = resources.reduce((total, resource) => total + (resource?.revision ?? 0), 0);
-      if (previous.snapshotVersion !== version || previous.sourceRevision !== sourceRevision) return null;
-      const now = Date.now();
-      const acquiredCount = resources.filter((resource) =>
-        resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
-      const hasIncompleteResource = resources.some((resource) =>
-        !resource || resource.status === "unknown" || resource.status === "stale" ||
-        resource.status === "failed" || resource.status === "unavailable" ||
-        (resource.expiresAt !== null && resource.expiresAt < now));
-      // The cached normalized DTO embeds source freshness metadata. Rebuild
-      // after expiry unless a provider attempt failed: a failed attempt must
-      // not replace the last-good publication, even when it is now stale.
-      const hasFailedSource = resources.some((resource) => resource?.status === "failed");
-      if (resources.some((resource) => resource?.expiresAt !== null && resource?.expiresAt !== undefined && resource.expiresAt < now)) {
-        if (hasFailedSource) return previous;
-        return null;
-      }
-      const status = acquiredCount === allResources.length && !hasIncompleteResource
-        ? "complete" as const : acquiredCount > 0 ? "partial" as const : "failed" as const;
-      if (previous.status !== status) {
-        // A failed provider attempt changes diagnostics, not the last-good
-        // publication. Keep the prior publication intact until a successful
-        // representation change can produce a coherent replacement.
-        if (resources.some((resource) => resource?.status === "failed")) return previous;
-        const updated = { ...previous, status };
-        await transaction.put(EVENT_STATE_PUBLICATION_KEY, updated);
-        return updated;
-      }
-      return previous;
-    });
-    if (cached) {
-      this.hydratedPublication = cached;
-      const cachedState = cached.state as typeof cached.state & { team_states?: FieldViewTeamEventState[] | null };
-      const { team_states: _legacyTeamStates, analytics: _legacyAnalytics, ...eventOwnedState } = cachedState;
-      if (_legacyTeamStates !== undefined || _legacyAnalytics !== undefined) {
-        const sanitized = { ...cached, state: eventOwnedState };
-        await this.storage.put(EVENT_STATE_PUBLICATION_KEY, sanitized);
-        this.hydratedPublication = sanitized;
-        return sanitized;
-      }
-      return cached;
-    }
-
+    // EventState is a derived read model. Keep it only in this DO instance's
+    // memory; provider endpoint records remain the durable source of truth.
+    // This method is intentionally storage-read-only.
     const result = await this.buildEventState();
-    const resourceStates = await Promise.all(allResources.map((endpoint) =>
+    const endpoints = [
+      ...eventResourceEndpoints(this.eventKey),
+      STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
+    ];
+    const resources = await Promise.all(endpoints.map((endpoint) =>
       this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
-    const acquiredCount = resourceStates.filter((resource) =>
+    const now = Date.now();
+    const acquiredCount = resources.filter((resource) =>
       resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
-    const hasIncompleteResource = resourceStates.some((resource) =>
+    const hasIncompleteResource = resources.some((resource) =>
       !resource || resource.status === "unknown" || resource.status === "stale" ||
       resource.status === "failed" || resource.status === "unavailable" ||
-      (resource.expiresAt !== null && resource.expiresAt < Date.now()));
+      (resource.expiresAt !== null && resource.expiresAt < now));
     const publication: EventStatePublication = {
       sourceRevision: result.sourceRevision,
       snapshotVersion: result.version,
-      generatedAt: Date.now(),
-      status: acquiredCount === allResources.length && !hasIncompleteResource
+      generatedAt: now,
+      status: acquiredCount === endpoints.length && !hasIncompleteResource
         ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
     };
-    const previous = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-    if (!previous || previous.sourceRevision !== publication.sourceRevision ||
-        previous.snapshotVersion !== publication.snapshotVersion || previous.status !== publication.status) {
-      await this.storage.put(EVENT_STATE_PUBLICATION_KEY, publication);
-    }
     this.hydratedPublication = publication;
     return publication;
   }
