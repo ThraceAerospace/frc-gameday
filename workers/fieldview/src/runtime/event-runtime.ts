@@ -56,6 +56,7 @@ interface EventStatePublication {
   snapshotVersion: number;
   generatedAt: number;
   status: "complete" | "partial" | "failed";
+  sourceSignature?: string;
   state: ReturnType<typeof normalizeFieldViewEventState>;
 }
 
@@ -121,6 +122,7 @@ function eventSnapshotEtag(
   // is rebuilt after a team-only revision or a client reconnects.
   return 'W/"fv-event-snapshot-v1-' + publication.snapshotVersion + '-' +
     publication.sourceRevision + '-' + publication.status + '-' +
+    hashEventSourceSignature(publication.sourceSignature ?? "legacy") + '-' +
     (comparisonInputUpdatedAt ?? "none") + '"';
 }
 
@@ -1366,14 +1368,27 @@ export class EventRuntime extends DurableObjectBase {
       Promise.all(endpoints.map((endpoint) =>
         this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint)))),
     ]);
+    const now = Date.now();
+    const sourceSignature = JSON.stringify(resources.map((resource) => resource ? [
+      resource.revision, resource.status, resource.lastFetchedAt, resource.lastWebhookAt,
+      resource.expiresAt, resource.etag,
+      resource.expiresAt !== null && resource.expiresAt <= now,
+    ] : null));
     const sourceRevision = resources.reduce((total, resource) => total + (resource?.revision ?? 0), 0);
     if (previous && previous.snapshotVersion === version && previous.sourceRevision === sourceRevision &&
+        previous.sourceSignature === sourceSignature &&
+        previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
+      this.hydratedPublication = previous;
+      return previous;
+    }
+    // Backward compatibility for an older materialized projection: it may be
+    // served as a stale fallback only when no endpoint records exist at all.
+    if (previous && resources.every((resource) => resource === undefined) &&
         previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
       this.hydratedPublication = previous;
       return previous;
     }
     const result = await this.buildEventState();
-    const now = Date.now();
     const acquiredCount = resources.filter((resource) =>
       resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
     const hasIncompleteResource = resources.some((resource) =>
@@ -1384,6 +1399,7 @@ export class EventRuntime extends DurableObjectBase {
       sourceRevision: result.sourceRevision,
       snapshotVersion: result.version,
       generatedAt: now,
+      sourceSignature,
       status: acquiredCount === endpoints.length && !hasIncompleteResource
         ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,

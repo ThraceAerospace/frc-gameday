@@ -118,6 +118,7 @@ export class TeamRuntime extends DurableObjectBase {
   private readonly seasonAnalyticsCache = new Map<string, {
     team_source_revision: number;
     event_revisions: Record<string, number>;
+    checkedAt?: number;
     response: Record<string, unknown>;
   }>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
@@ -322,23 +323,16 @@ export class TeamRuntime extends DurableObjectBase {
     }
 
     if (publicSeasonAnalyticsRead) {
-      const teamPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
-      const teamState = teamPublication?.state;
-      if (!teamPublication || !teamState) {
-        return Response.json({ error: "TeamState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-      }
-      if (typeof teamPublication.input_signature !== "string" || typeof teamState !== "object" || Array.isArray(teamState) ||
-          (teamState as Record<string, unknown>).team_key !== this.teamKey ||
-          (teamState as Record<string, unknown>).year !== year ||
-          !(teamState as Record<string, unknown>).sources ||
-          typeof (teamState as Record<string, unknown>).sources !== "object" ||
-          Array.isArray((teamState as Record<string, unknown>).sources)) {
-        return Response.json({ error: "Invalid TeamState publication", team_key: this.teamKey, year }, {
+      const teamSnapshot = await this.snapshot(year);
+      if (!teamSnapshot.ok) return teamSnapshot;
+      const teamState = await teamSnapshot.json() as ReturnType<typeof normalizeFieldViewTeamState>;
+      if (teamState.team_key !== this.teamKey || teamState.year !== year) {
+        return Response.json({ error: "Invalid TeamState projection", team_key: this.teamKey, year }, {
           status: 500, headers: { "Cache-Control": "no-store" },
         });
       }
       const cacheKey = "team-season-analytics:" + year;
-      const cached = await this.storage.get<{
+      const cached = this.seasonAnalyticsCache.get(cacheKey) ?? await this.storage.get<{
         team_source_revision: number;
         event_revisions: Record<string, number>;
         checkedAt?: number;
@@ -870,51 +864,15 @@ export class TeamRuntime extends DurableObjectBase {
       if (!Number.isInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "A valid season year is required" }, { status: 400 });
       }
-      let teamState: FieldViewTeamState;
-      let revision: number;
-      if (request.method === "POST" && url.pathname === "/analytics-season-input/prepare") {
-        // Preparing a canonical analytics input is an explicit Workflow command.
-        // It may publish a normalized TeamState from already-owned endpoint data.
-        const snapshot = await this.snapshot(year);
-        if (!snapshot.ok) return snapshot;
-        teamState = await snapshot.json() as FieldViewTeamState;
-        revision = Number(snapshot.headers.get("X-FieldView-Snapshot-Version"));
-      } else {
-        // GET is inspection-only: it never materializes or rewrites TeamState.
-        const publication = await this.storage.get<{
-          input_signature?: string;
-          representation_signature?: string;
-          state?: FieldViewTeamState;
-        }>("team-state:" + year + ":publication");
-        if (!publication?.state) {
-          return Response.json({ error: "TeamState analytics input not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-        }
-        const current = await this.storage.transaction(async (tx) => ({
-          revision: await tx.get<number>("snapshot-revision") ?? 0,
-          states: await Promise.all(this.endpoints(year).map(({ endpoint }) =>
-            tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
-        }));
-        const now = Date.now();
-        const inputSignature = JSON.stringify(current.states.map((state) => state ? [
-          state.revision, state.status, state.lastFetchedAt, state.expiresAt, state.etag,
-          state.expiresAt !== null && state.expiresAt < now,
-        ] : null));
-        const representationSignature = JSON.stringify(current.states.map((state) => state ? [
-          state.revision, state.lastFetchedAt, state.etag,
-        ] : null));
-        if (typeof publication.input_signature !== "string" || publication.input_signature !== inputSignature ||
-            typeof publication.representation_signature !== "string" ||
-            publication.representation_signature !== representationSignature) {
-          return Response.json({ error: "Published TeamState is stale; explicitly prepare the analytics input" }, {
-            status: 409, headers: { "Cache-Control": "no-store" },
-          });
-        }
-        teamState = publication.state;
-        revision = current.revision;
-      }
-      if (!Number.isSafeInteger(revision) || revision < 0 || teamState.team_key !== this.teamKey ||
-          teamState.year !== year) {
-        return Response.json({ error: "Team analytics input is not revisioned or has mismatched identity" }, { status: 409 });
+      // Both inspection and explicit preparation derive from provider resources.
+      // Neither requires nor writes a persisted TeamState publication.
+      const snapshot = await this.snapshot(year);
+      if (!snapshot.ok) return snapshot;
+      const teamState = await snapshot.json() as FieldViewTeamState;
+      const revision = Number(snapshot.headers.get("X-FieldView-Snapshot-Version"));
+      if (!Number.isSafeInteger(revision) || revision < 0 ||
+          teamState.team_key !== this.teamKey || teamState.year !== year) {
+        return Response.json({ error: "Team analytics input has mismatched identity or revision" }, { status: 409 });
       }
       return Response.json({
         contract_version: 1,
@@ -990,6 +948,7 @@ export class TeamRuntime extends DurableObjectBase {
     const cached = this.seasonAnalyticsCache.get(cacheKey) ?? await this.storage.get<{
       team_source_revision: number;
       event_revisions: Record<string, number>;
+      checkedAt?: number;
       response: Record<string, unknown>;
     }>(cacheKey);
     if (cached && cached.team_source_revision === teamSourceRevision &&
@@ -1063,6 +1022,7 @@ export class TeamRuntime extends DurableObjectBase {
     this.seasonAnalyticsCache.set(cacheKey, {
       team_source_revision: teamSourceRevision,
       event_revisions: eventRevisions,
+      checkedAt: Date.now(),
       response: result,
     });
     return Response.json(result, {
@@ -1116,6 +1076,14 @@ export class TeamRuntime extends DurableObjectBase {
       this.publishedSnapshots.set(year, cached);
       return Response.json(cached.state, { headers: responseHeaders });
     }
+    // A persisted materialized TeamState remains a useful stale fallback when
+    // endpoint records have not been migrated yet. It is never required.
+    if (cached && inputs.states.every((state) => state === undefined)) {
+      this.publishedSnapshots.set(year, cached);
+      return Response.json(cached.state, {
+        headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },
+      });
+    }
     const failedInput = inputs.states.some((state) => state?.status === "failed");
     if (cached && failedInput &&
         (cached.representation_signature === undefined ||
@@ -1166,7 +1134,13 @@ export class TeamRuntime extends DurableObjectBase {
 
 
     this.publishedSnapshots.set(year, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
-    return Response.json(snapshot, { headers: responseHeaders });
+    const projectionStale = inputs.states.some((state) => Boolean(state && (
+      state.status === "failed" || state.status === "stale" || state.status === "unavailable" ||
+      (state.expiresAt !== null && state.expiresAt <= now)
+    )));
+    return Response.json(snapshot, {
+      headers: { ...responseHeaders, "X-FieldView-Publication-Status": projectionStale ? "stale" : "available" },
+    });
   }
   private async pollResourceNow(resource: TeamResource): Promise<
     { success: boolean; status: string; revision: number; last_fetched_at: number | null; http_status: number | null; last_error: string | null }
