@@ -324,34 +324,15 @@ export class EventRuntime extends DurableObjectBase {
     // acquisition, analytics work, or cross-runtime calls occur during activation.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
-          const [storedKey, publication] = await Promise.all([
-            this.storage.get<string>("event-key"),
-            this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY),
-          ]);
+          const storedKey = await this.storage.get<string>("event-key");
           if (storedKey && !this.eventKey) {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
           }
-          // Older deployments embedded EventAnalytics and TeamEventState
-          // aggregates in the event publication. Their canonical owners are
-          // now separate publications, so strip those duplicate payloads once
-          // during activation before exposing the persisted snapshot.
-          if (publication?.state && typeof publication.state === "object") {
-            const legacyState = publication.state as unknown as Record<string, unknown>;
-            if ("analytics" in legacyState || "team_states" in legacyState) {
-              const { analytics: _analytics, team_states: _teamStates, ...eventState } = legacyState;
-              const migrated = { ...publication, state: eventState as unknown as EventStatePublication["state"] };
-              // Normalize the in-memory hydrated view only. Persistent migration
-              // and legacy cleanup require an explicit administrative operation.
-              this.hydratedPublication = migrated;
-            } else {
-              this.hydratedPublication = publication;
-            }
-          } else {
+          const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+          if (publication?.state?.event_key === this.eventKey && isRecord(publication.state.sources)) {
             this.hydratedPublication = publication;
           }
-          // Legacy EventView keys are left untouched here. Cleanup belongs in
-          // an explicit migration job, never in object activation/read paths.
         })
       : Promise.resolve();
   }
@@ -611,7 +592,7 @@ export class EventRuntime extends DurableObjectBase {
       });
       // A successful HTTP response from a provider is not the same as a
       // successful refresh operation. Report retryable acquisition failures
-      // to the queue consumer while retaining the last-good publication.
+      // to the next explicit coordinator dispatch while retaining the last-good publication.
       // Provider 404s remain unavailable (not retryable) because many event
       // resources legitimately do not exist until later in the season.
       const failedEndpoints = endpointResults.filter((result) => !result.success && result.status !== "unavailable");
@@ -690,7 +671,7 @@ export class EventRuntime extends DurableObjectBase {
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
-        endpoint, queued: false, attempted: true, success,
+        endpoint, attempted: true, success,
         status: state?.status ?? "pending", publication_status: publication.status,
         revision: state?.revision ?? 0, last_fetched_at: state?.lastFetchedAt ?? null,
         http_status: diagnostic?.lastHttpStatus ?? null, last_error: diagnostic?.lastError ?? null,
@@ -705,7 +686,7 @@ export class EventRuntime extends DurableObjectBase {
       const publication = await this.publishEventState();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
-        scheduled: false, queued: false, attempted: true, success,
+        scheduled: false, attempted: true, success,
         event_key: this.eventKey, endpoint, publication_status: publication.status,
         status: state?.status ?? "unknown", revision: state?.revision ?? 0,
         record_count: Array.isArray(state?.providerData) ? state.providerData.length : 0,
@@ -1046,7 +1027,7 @@ export class EventRuntime extends DurableObjectBase {
           hydrated_scope: ["event_identity", "provider_endpoint_records"],
           event_state_publication: {
             exists: true,
-            materialized: Boolean(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY)),
+            materialized: Boolean(this.hydratedPublication),
             status: eventStateStatus,
             version: eventProjection.snapshotVersion,
             source_revision: eventProjection.sourceRevision,
@@ -1120,11 +1101,6 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     return Response.json({ error: "Not found" }, { status: 404 });
-  }
-
-  private async queueSnapshotRefresh(): Promise<void> {
-    // Snapshot reads never enqueue hidden provider work.
-    return;
   }
 
   private async buildEventState(
@@ -1378,20 +1354,6 @@ export class EventRuntime extends DurableObjectBase {
         previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
       this.hydratedPublication = previous;
       return previous;
-    }
-    // Backward compatibility for an older materialized projection: it may be
-    // served as a stale fallback only when no endpoint records exist at all.
-    if (previous && resources.every((resource) => !resource) &&
-        previous.state?.event_key === this.eventKey) {
-      const legacyProjection = {
-        ...previous,
-        state: {
-          ...previous.state,
-          sources: isRecord(previous.state.sources) ? previous.state.sources : {},
-        } as typeof previous.state,
-      };
-      this.hydratedPublication = legacyProjection;
-      return legacyProjection;
     }
     const result = await this.buildEventState();
     const acquiredCount = resources.filter((resource) =>
@@ -1815,8 +1777,7 @@ export class EventRuntime extends DurableObjectBase {
     let publication: EventStatePublication | null = null;
     try {
       publication = teamProjectionOnly
-        ? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY) ??
-          await this.publishEventState()
+        ? this.hydratedPublication ?? null
         : await this.publishEventState();
     } catch {
       // An incomplete provider representation must not make polling fail.
