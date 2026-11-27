@@ -1,31 +1,27 @@
-# Remote-session lifecycle and storage budget
+# Remote-session lifecycle
 
-**Status:** Implemented in code on `fieldview-architecture-migration`; end-to-end Preview validation remains pending.
+RemoteSessionRuntime owns pairing-scoped WebRTC signaling between a controller and a display. It is a transient signaling room, not a durable application-data store.
 
-## Decision
+## Connection model
 
-The remote-session Durable Object does not use alarms, durable leases, heartbeat messages, or periodic storage writes. It has at most two participants (controller and display), so accepted hibernatable WebSockets are the presence registry.
-
-- The Durable Object checks its accepted WebSocket set and filters to `readyState === OPEN` to enforce one active socket per role; closed sockets are not treated as participants.
-- Role and per-connection token are stored as WebSocket attachments, which survive WebSocket hibernation.
-- Signaling is validated and forwarded directly to the opposite role.
+- A session has at most two participants: controller and display.
+- The Durable Object's accepted hibernatable WebSocket set is the presence registry.
+- The runtime filters sockets by `readyState === OPEN` and enforces one active socket per role.
+- Role and per-connection token are stored as WebSocket attachments and survive WebSocket hibernation.
+- Signaling messages are validated and forwarded directly to the opposite role.
 - A reconnect using the same in-memory `RemotePeer` token replaces that peer's previous socket. A different token cannot take over an occupied role.
-- The controller coalesces concurrent `peer-ready` notifications so simultaneous reconnects do not start overlapping WebRTC offers.
-- The Worker explicitly selects `fieldview.remote.v1` as the negotiated WebSocket subprotocol; the role and token remain in the offered protocol list, not the URL.
+- The controller coalesces concurrent `peer-ready` notifications so simultaneous reconnects do not create overlapping WebRTC offers.
+- The Worker explicitly selects `fieldview.remote.v1` as the negotiated WebSocket subprotocol; role and token remain in the offered protocol list, not the URL.
 - The browser converts the configured runtime HTTP(S) base URL to WS(S) before opening the socket.
-- There is no session-state persistence, alarm scheduling, alarm cleanup, or browser heartbeat traffic.
-- The DO can hibernate while connections remain open; incoming WebSocket events reactivate it.
 
-## Resource rationale
+## Persistence and lifecycle
 
-FieldView's `row_written` allowance is scarce. This object has no reason to schedule alarms, maintain durable leases, or periodically write session metadata. Those operations would spend budget without adding useful correctness for a two-participant transient signaling room.
+The runtime does not persist session state, maintain durable leases, send application heartbeats, schedule alarms, or periodically write storage. WebSocket attachments preserve the minimal connection metadata needed across hibernation. Incoming WebSocket events reactivate the object.
 
-The remote-session runtime therefore must not call `storage.put`, `storage.delete`, `storage.setAlarm`, or `storage.deleteAlarm`. Tests make those methods fail if called. Application-level heartbeats are also removed because they existed only to renew durable leases. This is a hard default for future FieldView Durable Objects too: no alarm or periodic write without a demonstrated requirement and explicit design review.
+An abandoned pairing code has no persistent record to clean up. Once both sockets close, no session state remains to retain. A network-partitioned but still-open socket remains present until the platform closes it. Reconnection with the same peer token can replace that socket; a client that loses its token may need to wait for the prior connection to close.
 
-## Tradeoff
+Do not introduce alarms, heartbeat writes, or durable presence leases without a demonstrated product requirement and a separately reviewed design. This transient session model is not a reason to add alarm polling to EventRuntime or TeamRuntime.
 
-An abandoned pairing code has no persistent record to clean up. Once both sockets close, the object has no session state to retain. A live but network-partitioned WebSocket remains present until the platform closes it. A reconnect from the same peer token can replace that stale connection; a new client with a different token receives a conflict while the previous connection is still considered open. This avoids heartbeat traffic but means a browser reload that loses its token may need to wait for the old connection to close. If real usage demonstrates that this is a problem, evaluate a protocol-level recovery mechanism before introducing alarms or persistence.
+## Operational boundary
 
-## Validation boundary
-
-This change is source-only. It does not deploy a Worker, provision a Durable Object namespace, modify Cloudflare resources, or change billing settings. Preview pairing, reconnection, simultaneous-role exclusivity, and hibernation behavior still require end-to-end validation.
+The Worker exposes remote signaling through `/remote/ws` and routes the pairing code to RemoteSessionRuntime. The session runtime owns signaling only; durable event/team data and application realtime remain separate runtime concerns.
