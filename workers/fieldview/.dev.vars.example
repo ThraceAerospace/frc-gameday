@@ -1,0 +1,15 @@
+# Copy this file to .dev.vars for local Wrangler development.
+# Keep real credentials in .dev.vars; never commit that file.
+
+TBA_API_KEY=
+TBA_WEBHOOK_SECRET=
+RUNTIME_ADMIN_TOKEN=
+STATBOTICS_API_BASE_URL=https://api-statbotics.iterativerefinement.com/
+
+# Optional local administrator bypass for local Wrangler only.
+LOCAL_ADMIN_AUTH=
+
+# Optional when exercising Cloudflare Access locally.
+CF_ACCESS_TEAM_DOMAIN=
+CF_ACCESS_AUD=
+RUNTIME_ADMIN_EMAILS=
