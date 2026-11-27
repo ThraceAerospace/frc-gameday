@@ -109,7 +109,10 @@ export default async function TeamPage({
     : null;
   const discoveredTeam = discoveredTeams?.find((candidate) => candidate.key === teamKey) ?? null;
   const team: TeamData | null = initialCanonical?.snapshot.team ?? (discoveredTeam as TeamData | null);
-  if (!team) notFound();
+  if (!team) {
+    console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "team", entity_key: teamKey, reason: "team_and_snapshot_unavailable", year: currentYear }));
+    notFound();
+  }
 
   const years = Array.from(
     { length: currentYear - (team?.rookie_year ?? currentYear) + 1 },
