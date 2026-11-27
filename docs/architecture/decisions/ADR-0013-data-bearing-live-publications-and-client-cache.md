@@ -1,8 +1,10 @@
 # ADR-0013: Data-bearing live publications and validator-backed client cache
 
-- **Status:** Accepted — incremental implementation
+- **Status:** Superseded by ADR-0020 (historical design only)
 - **Date:** 2026-11-21
 - **Supersedes:** The revision-only delivery rule in ADR-0008; it does not change the one-SharedWorker/one-Multiplexer connection model.
+
+> **2026-11-27 supersession:** This proposal's IndexedDB cache, persisted normalized-state assumptions, fetch-after-notify behavior, and conditional HTTP recovery on WebSocket gaps/reconnects are not part of the final architecture. ADR-0020 replaces them with ephemeral EventState/TeamState read projections, a memory-only SharedWorker cache, snapshot-before-stream ordering, and data-bearing notifications that never trigger HTTP refetches. Do not implement the rollout steps below.
 
 ## Context
 
