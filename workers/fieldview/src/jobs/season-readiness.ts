@@ -3,6 +3,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { createDiscoveryServiceClient } from "./discovery-client.ts";
+import { acquireRuntimeBootstrap } from "./runtime-bootstrap-acquisition.ts";
 
 type RefreshKind = "event" | "team";
 type RefreshTask = { kind: RefreshKind; key: string; year: number; workflow_id: string; workflow_type: string };
@@ -150,7 +151,6 @@ async function runSeasonReadiness(
 ): Promise<Record<string, unknown>> {
   const year = event.payload?.year;
   if (!validYear(year)) throw new Error("Season readiness requires a four-digit year between 1992 and 2200");
-  if (!env.SEASON_REFRESH_QUEUE) throw new Error("Season refresh Queue binding is unavailable");
   const store = createDiscoveryServiceClient(env);
   const workflowId = event.instanceId;
   const type = kind + "-readiness";
@@ -187,51 +187,46 @@ async function runSeasonReadiness(
   if (!keys.length) throw new Error("No " + kind + " identities were discovered for " + year);
 
   await ensureRegistered(env, kind, keys, year, step);
-  const registry = await registeredKeys(env, kind);
-  const registered = keys.filter((key) => registry.has(key));
-  const needsRefresh: RefreshTask[] = [];
-  const results: Array<{ key: string; state_valid: boolean; refresh_required: boolean; queued: boolean; error?: string }> = [];
-
-  // Readiness calls are deliberately bounded. Refresh work is queued in grouped
-  // messages so one queue message can represent many entity dispatches.
-  for (let offset = 0; offset < registered.length; offset += 25) {
-    const chunk = registered.slice(offset, offset + 25);
-    const outcomes = await step.do("inspect-" + kind + "-readiness-" + offset, async () =>
-      Promise.all(chunk.map(async (key) => {
+  const results: Array<{
+    key: string; state_valid: boolean; refresh_required: boolean; queued: boolean;
+    bootstrapped: boolean; publication_status?: string; error?: string;
+  }> = [];
+  for (let offset = 0; offset < keys.length; offset += 25) {
+    const chunk = keys.slice(offset, offset + 25);
+    const outcomes = await step.do("bootstrap-" + kind + "-chunk-" + offset, async () =>
+      mapWithConcurrency(chunk, 4, async (key) => {
         try {
-          const response = await dispatchRuntime(env, kind, key, "readiness", {}, year);
-          if (!response.ok) throw new Error("Readiness returned HTTP " + response.status);
-          const value = await response.json() as { state_valid?: boolean; refresh_required?: boolean };
-          const stateValid = value.state_valid === true;
-          const refreshRequired = value.refresh_required === true || !stateValid;
-          return { key, state_valid: stateValid, refresh_required: refreshRequired };
+          const bootstrapId = "season:" + workflowId + ":" + kind + ":" + year + ":" + key;
+          const bundle = await acquireRuntimeBootstrap(env, kind, key, year, bootstrapId);
+          const response = await dispatchRuntime(env, kind, key, "bootstrap", bundle as unknown as Record<string, unknown>, year);
+          if (!response.ok) {
+            const detail = await response.text().catch(() => "");
+            throw new Error("Bootstrap handoff returned HTTP " + response.status + (detail ? ": " + detail.slice(0, 180) : ""));
+          }
+          const receipt = await response.json() as { publication_status?: string; accepted?: boolean };
+          if (receipt.accepted !== true) throw new Error("Runtime did not confirm bootstrap acceptance");
+          const publicationStatus = receipt.publication_status ?? "unknown";
+          return {
+            key, state_valid: publicationStatus !== "failed", refresh_required: false, queued: false,
+            bootstrapped: true, publication_status: publicationStatus,
+          };
         } catch (error) {
-          return { key, state_valid: false, refresh_required: false, error: String(error).slice(0, 300) };
+          return {
+            key, state_valid: false, refresh_required: false, queued: false, bootstrapped: false,
+            error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+          };
         }
-      })));
-    for (const item of outcomes) {
-      if (item.refresh_required) needsRefresh.push({ kind, key: item.key, year, workflow_id: workflowId, workflow_type: type });
-      results.push({ ...item, queued: false });
-    }
-  }
-
-  const messages: Array<{ body: RefreshMessage }> = [];
-  for (let offset = 0; offset < needsRefresh.length; offset += 25) {
-    messages.push({ body: { version: 1, tasks: needsRefresh.slice(offset, offset + 25) } });
-  }
-  const queueBatches = packSeasonRefreshQueueBatches(messages);
-  for (let batchIndex = 0; batchIndex < queueBatches.length; batchIndex += 1) {
-    const batch = queueBatches[batchIndex]!;
-    await step.do("enqueue-" + kind + "-refresh-batch-" + batchIndex, async () => {
-      await env.SEASON_REFRESH_QUEUE!.sendBatch(batch.messages);
-      return { messages: batch.messages.length, estimated_bytes: batch.estimated_bytes };
-    });
+      }));
+    results.push(...outcomes);
   }
 
   const summary = {
     year, kind, entities_total: keys.length, entities_registered: registered.length,
     states_valid: results.filter((item) => item.state_valid).length,
-    refresh_required: needsRefresh.length, queue_messages: messages.length,
+    bootstrapped: results.filter((item) => item.bootstrapped).length,
+    bootstrap_failed: results.filter((item) => !item.bootstrapped).length,
+    partial_publications: results.filter((item) => item.publication_status === "partial").length,
+    failed_publications: results.filter((item) => item.publication_status === "failed").length,
     readiness_errors: results.filter((item) => item.error).length,
   };
   const resultChunks = Math.ceil(results.length / 100);
