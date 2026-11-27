@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
-import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
+import { isValidEventLifecycleInput } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
 import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, selectInitialEventCandidates, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
@@ -260,7 +260,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       Math.floor(scheduledAt / (5 * 60_000)),
       new Set(candidates.map((item) => item.event.key)),
     );
-    const initialEventAcquisitions = await step.do("acquire-missing-initial-event-states", async () =>
+    const initialEventAcquisitions = await step.do("acquire-missing-initial-event-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
       mapLimit(initialEventCandidates, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, async (item) => {
         if (!await isRuntimeRegistered(store(), "event", item.key)) {
           return { key: item.key, status: "unregistered" as const };
@@ -295,7 +295,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
       Math.floor(scheduledAt / (5 * 60_000)),
     );
-    const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", async () =>
+    const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
       mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
         if (!await isRuntimeRegistered(store(), "team", teamKey)) {
           return { key: teamKey, status: "unregistered" as const };

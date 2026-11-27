@@ -97,6 +97,7 @@ test("initial event acquisition selects a bounded rotating slice of non-expired 
     { key: "2026active", start_date: "2026-11-20", end_date: "2026-11-27", timezone: "UTC" },
     { key: "2026completed", start_date: "2026-11-20", end_date: "2026-11-24", timezone: "UTC" },
     { key: "2026invalid", start_date: "2026-11-25", end_date: "2026-11-26", timezone: "Not/A_Timezone" },
+    { key: "2026more", start_date: "2026-11-26", end_date: "2026-11-27", timezone: "UTC" },
   ];
   const current = Date.parse("2026-11-26T12:00:00Z");
   const first = selectInitialEventCandidates(discovered, current, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, 0);
