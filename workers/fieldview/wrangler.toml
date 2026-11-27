@@ -7,6 +7,10 @@ compatibility_date = "2026-11-22"
 workers_dev = true
 preview_urls = true
 
+# These values are injected only by `wrangler dev`; they are not deployed.
+[dev.vars]
+LOCAL_ADMIN_AUTH = "true"
+
 [assets]
 directory = "./admin-assets"
 binding = "ASSETS"
