@@ -161,7 +161,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
       {weeklyMessage && <p role="status" className="mt-3 text-sm text-[var(--fv-muted)]">{weeklyMessage}{weeklyWorkflowStatus ? " Workflow status: " + weeklyWorkflowStatus + "." : ""}</p>}
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
+      <div className="mt-4 grid grid-cols-1 gap-6">
         <div className="min-w-0">
           <h3 className="mb-2 text-sm font-semibold">Execution history ({runs.total})</h3>
           <div className="space-y-2">
