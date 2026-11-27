@@ -267,35 +267,34 @@ export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: Seas
         return { task, task_id: null, outcome: "invalid" as const };
       }
       const taskId = task.kind + ":" + task.year + ":" + task.key;
-      if (seenTaskIds.has(taskId)) {
-        duplicateTaskIds.add(taskId);
-        return { task, task_id: taskId, outcome: "duplicate" as const };
-      }
+      const duplicate = seenTaskIds.has(taskId);
+      if (duplicate) duplicateTaskIds.add(taskId);
       seenTaskIds.add(taskId);
 
       try {
         const readiness = await dispatchRuntime(env, task.kind, task.key, "readiness", {}, task.year);
         if (readiness.status === 429 || readiness.status >= 500) {
-          return { task, task_id: taskId, outcome: "retry" as const, detail: "readiness_http_" + readiness.status };
+          return { task, task_id: taskId, duplicate, outcome: "retry" as const, detail: "readiness_http_" + readiness.status };
         }
         if (!readiness.ok) {
-          return { task, task_id: taskId, outcome: "skipped" as const, detail: "readiness_http_" + readiness.status };
+          return { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "readiness_http_" + readiness.status };
         }
         const status = await readiness.json() as { state_valid?: boolean; refresh_required?: boolean };
         if (status.state_valid === true && status.refresh_required !== true) {
-          return { task, task_id: taskId, outcome: "skipped" as const, detail: "already_ready" };
+          return { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "already_ready" };
         }
         const refresh = await dispatchRuntime(env, task.kind, task.key, "refresh", {}, task.year);
         if (refresh.status === 429 || refresh.status >= 500) {
-          return { task, task_id: taskId, outcome: "retry" as const, detail: "refresh_http_" + refresh.status };
+          return { task, task_id: taskId, duplicate, outcome: "retry" as const, detail: "refresh_http_" + refresh.status };
         }
         return refresh.ok
-          ? { task, task_id: taskId, outcome: "dispatched" as const }
-          : { task, task_id: taskId, outcome: "skipped" as const, detail: "refresh_http_" + refresh.status };
+          ? { task, task_id: taskId, duplicate, outcome: "dispatched" as const }
+          : { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "refresh_http_" + refresh.status };
       } catch (error) {
         return {
           task,
           task_id: taskId,
+          duplicate,
           outcome: "retry" as const,
           detail: (error instanceof Error ? error.message : String(error)).slice(0, 240),
         };
@@ -318,6 +317,7 @@ export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: Seas
         year: item.task.year,
         workflow_id: item.task.workflow_id ?? null,
         workflow_type: item.task.workflow_type ?? null,
+        duplicate: "duplicate" in item ? item.duplicate : false,
         outcome: item.outcome,
         ...( "detail" in item ? { detail: item.detail } : {}),
       }));
@@ -331,13 +331,13 @@ export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: Seas
       kinds,
       tasks: payload.tasks.length,
       unique_task_ids_in_message: new Set(outcomes.map((item) => item.task_id).filter(Boolean)).size,
-      duplicate_tasks: count("duplicate"),
+      duplicate_tasks: duplicateTaskIds.size,
       dispatched: count("dispatched"),
       skipped: count("skipped"),
       invalid: count("invalid"),
       retry: count("retry"),
       concurrency: Math.min(4, payload.tasks.length),
-      outcomes: outcomes.map((item) => ({ task_id: item.task_id, outcome: item.outcome })),
+      outcomes: outcomes.map((item) => ({ task_id: item.task_id, duplicate: "duplicate" in item ? item.duplicate : false, outcome: item.outcome })),
     }));
     if (retry) message.retry({ delaySeconds: 30 });
     else message.ack();
