@@ -254,7 +254,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
   assert.equal(updatedPublication.state.matches[0].alliances.red.score, 20);
-  assert.equal(publicationWrites, 2);
+  assert.equal(publicationWrites, 0);
 
   const repeatedResponse = await runtime.fetch(snapshotRequest(updatedResponse.headers.get("ETag")));
   assert.equal(repeatedResponse.status, 304);
