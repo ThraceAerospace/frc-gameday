@@ -713,8 +713,6 @@ export class TeamRuntime extends DurableObjectBase {
       }
       const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const teamStateChanged = teamStateRevision !== previousTeamStateRevision;
-      const snapshotResponse = await this.snapshot(year);
-      const snapshot: unknown = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
       const persistedEventStates = teamStateChanged
         ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
         : new Map<string, FieldViewTeamEventState>();
@@ -737,7 +735,6 @@ export class TeamRuntime extends DurableObjectBase {
         year,
         team_state_revision: teamStateRevision,
         affected_events: affectedEvents,
-        snapshot,
         results,
       }, { headers: { "Cache-Control": "no-store" } });
     }
@@ -782,8 +779,6 @@ export class TeamRuntime extends DurableObjectBase {
       const result = await this.pollResourceNow(resource);
       const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const teamStateChanged = teamStateRevision !== previousRevision;
-      const snapshotResponse = await this.snapshot(year);
-      const snapshot: unknown = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
       const persistedEventStates = teamStateChanged
         ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
         : new Map<string, FieldViewTeamEventState>();
@@ -802,7 +797,7 @@ export class TeamRuntime extends DurableObjectBase {
       return Response.json({
         endpoint, attempted: true, ...result,
         team_key: this.teamKey, year, team_state_revision: teamStateRevision,
-        affected_events: affectedEvents, snapshot,
+        affected_events: affectedEvents,
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if ((request.method === "GET" && url.pathname === "/analytics-season-input") ||

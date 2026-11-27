@@ -563,7 +563,7 @@ export class EventRuntime extends DurableObjectBase {
         ? null : affectedTeamKeys;
       // Always refresh the in-memory projection after explicit provider work;
       // a persisted EventState is optional and never gates a fresh read.
-      const publication = await this.getEventStateProjection();
+
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const endpointResults = results.map((result) => {
         const state = entries.get(endpointStorageKey(result.endpoint)) as
@@ -592,7 +592,6 @@ export class EventRuntime extends DurableObjectBase {
         results: endpointResults,
         failed_endpoints: failedEndpoints.map((result) => result.endpoint),
         ...(analyticsAffectedTeamKeys === undefined ? {} : { affected_team_keys: analyticsAffectedTeamKeys }),
-        publication_status: publication.status,
         state: [...entries.values()].map((state) => ({
           endpoint: state.endpoint, status: state.status, revision: state.revision,
           fetched_at: state.lastFetchedAt, attempted_at: state.lastAttemptAt,
@@ -605,7 +604,6 @@ export class EventRuntime extends DurableObjectBase {
         succeeded: responseBody.succeeded,
         failed: responseBody.failed,
         retryable,
-        publication_status: publication.status,
       }));
       return Response.json(responseBody, {
         status: retryable ? 503 : 200,
@@ -652,12 +650,12 @@ export class EventRuntime extends DurableObjectBase {
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint);
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const publication = await this.getEventStateProjection();
+
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
         endpoint, attempted: true, success,
-        status: state?.status ?? "pending", publication_status: publication.status,
+        status: state?.status ?? "pending",
         revision: state?.revision ?? 0, last_fetched_at: state?.lastFetchedAt ?? null,
         http_status: diagnostic?.lastHttpStatus ?? null, last_error: diagnostic?.lastError ?? null,
       }, { headers: { "Cache-Control": "no-store" } });
@@ -668,11 +666,11 @@ export class EventRuntime extends DurableObjectBase {
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint);
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const publication = await this.getEventStateProjection();
+
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
         scheduled: false, attempted: true, success,
-        event_key: this.eventKey, endpoint, publication_status: publication.status,
+        event_key: this.eventKey, endpoint,
         status: state?.status ?? "unknown", revision: state?.revision ?? 0,
         record_count: Array.isArray(state?.providerData) ? state.providerData.length : 0,
         fetched_at: state?.lastFetchedAt ?? null,
@@ -1642,58 +1640,18 @@ export class EventRuntime extends DurableObjectBase {
     return result.accepted;
   }
 
-  private async publishSnapshotRevision(
-    version: number,
-    patch?: Record<string, unknown>,
-  ): Promise<void> {
-    // A TeamRuntime projection update is already a complete, scoped delta.
-    // Rebuilding the event DTO here would reread every event endpoint and
-    // fan out to every TeamRuntime just to publish one team's changed state.
-    const teamProjectionOnly = Boolean(
-      patch && isRecord(patch.team_state_ref) && !("state" in patch),
-    );
-    let publication: EventStateProjection | null = null;
-    try {
-      publication = teamProjectionOnly
-        ? this.hotProjection ?? null
-        : await this.getEventStateProjection();
-    } catch {
-      // An incomplete provider representation must not make polling fail.
-      // The revision-only notice below tells clients to recover over HTTP.
-    }
-    const publishedVersion = Math.max(version, publication?.snapshotVersion ?? version);
-    const versionedPublication = publication
-      ? { ...publication, snapshotVersion: publishedVersion }
-      : null;
-    const comparisonInputUpdatedAt = publication
-      ? await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY)
-      : undefined;
-    const etag = versionedPublication
-      ? eventSnapshotEtag(versionedPublication, comparisonInputUpdatedAt)
-      : undefined;
-    const publishedState = publication
-      ? publication.state.analytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt
-        ? publication.state
-        : publication.state.analytics
-          ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
-          : publication.state
-      : undefined;
-    const data = teamProjectionOnly
-      ? patch
-      : publication && publishedState && publication.snapshotVersion === publishedVersion
-        ? { state: publishedState, ...(patch ?? {}) }
-        : undefined;
-    const message = JSON.stringify({
-      type: "snapshot.changed",
+  private async publishSnapshotRevision(version: number): Promise<void> {
+    // Provider writes publish only a revision invalidation. The normalized
+    // EventState is assembled on demand by the subsequent /snapshot read.
+    const notice = {
       protocol: 1,
       schema_version: 1,
       topic: "event-state",
       resource: "event-snapshot",
-      change: teamProjectionOnly ? "patch" : "snapshot",
+      change: "snapshot",
       event_key: this.eventKey,
-      version: publishedVersion,
-      ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
-    });
+      version,
+    };
     if (await this.storage.get<boolean>("multiplexer:shared") !== true || !this.env.MULTIPLEXER) return;
     const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
     await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
@@ -1702,16 +1660,7 @@ export class EventRuntime extends DurableObjectBase {
         Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        protocol: 1,
-        schema_version: 1,
-        topic: "event-state",
-        resource: "event-snapshot",
-        change: teamProjectionOnly ? "patch" : "snapshot",
-        event_key: this.eventKey,
-        version: publishedVersion,
-        ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
-      }),
+      body: JSON.stringify(notice),
     })).catch(() => undefined);
 
     // Surface pending/stale analytics metadata immediately, even before the

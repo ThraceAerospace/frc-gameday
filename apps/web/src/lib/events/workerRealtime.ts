@@ -62,6 +62,8 @@ class WorkerEventWebSocket {
   private readonly analyticsPublications = new Map<string, CanonicalAnalyticsPublication>();
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly snapshots = new Map<string, CanonicalSnapshot>();
+  private readonly snapshotRecoveryInFlight = new Set<string>();
+  private readonly snapshotRecoveryVersions = new Map<string, number>();
   private readonly sentSubscriptions = new Set<string>();
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
   private status: EventWebSocketStatus = "disconnected";
@@ -299,6 +301,13 @@ class WorkerEventWebSocket {
           version !== undefined && version >= current.version &&
           data?.team_state_pending !== true,
         );
+        if (version !== undefined && !state && !canApplyTeamDelta &&
+            (!current || version > current.version)) {
+          const requestedVersion = this.snapshotRecoveryVersions.get(eventKey) ?? 0;
+          if (version > requestedVersion) this.snapshotRecoveryVersions.set(eventKey, version);
+          void this.fetchCanonicalSnapshot(eventKey);
+          return;
+        }
         if (((message.change === "snapshot" && state && version !== undefined && (!current || version > current.version)) ||
             (canApplyTeamDelta && version !== undefined))) {
           let teamStates = state ? [] : current?.snapshot.team_states ?? [];
@@ -354,14 +363,16 @@ class WorkerEventWebSocket {
   }
 
   private async fetchCanonicalSnapshot(eventKey: string) {
-    if (!this.runtimeBaseUrl) return;
+    if (!this.runtimeBaseUrl || this.snapshotRecoveryInFlight.has(eventKey)) return;
+    this.snapshotRecoveryInFlight.add(eventKey);
+    let recovered = false;
     try {
       const url = new URL(`/events/${encodeURIComponent(eventKey)}/snapshot`, this.runtimeBaseUrl);
       const current = this.snapshots.get(eventKey);
       const headers = new Headers();
       if (current?.complete && current.etag) headers.set("If-None-Match", current.etag);
       let response = await fetch(url, { cache: "no-store", headers });
-      if (response.status === 304) return;
+      if (response.status === 304) { recovered = true; return; }
       if (!response.ok) throw new Error(`Snapshot request failed: HTTP ${response.status}`);
       const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
       if (!Number.isSafeInteger(version) || version < 0) throw new Error("Snapshot response omitted a valid version");
@@ -385,8 +396,18 @@ class WorkerEventWebSocket {
       };
       this.snapshots.set(eventKey, value);
       for (const handler of this.snapshotHandlers.get(eventKey) ?? []) handler(value);
+      recovered = true;
     } catch (error) {
       console.warn("[SharedEventWorker] Canonical snapshot recovery failed", eventKey, error);
+    } finally {
+      this.snapshotRecoveryInFlight.delete(eventKey);
+      const requestedVersion = this.snapshotRecoveryVersions.get(eventKey);
+      const current = this.snapshots.get(eventKey);
+      if (recovered && requestedVersion !== undefined && (!current || current.version < requestedVersion)) {
+        void this.fetchCanonicalSnapshot(eventKey);
+      } else if (recovered || requestedVersion === undefined || (current && current.version >= requestedVersion)) {
+        this.snapshotRecoveryVersions.delete(eventKey);
+      }
     }
   }
 

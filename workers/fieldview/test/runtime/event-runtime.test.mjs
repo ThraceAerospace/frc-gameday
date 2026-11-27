@@ -76,7 +76,7 @@ test("explicit registration binds event identity without provider acquisition", 
   assert.equal(providerCalls, 0, "registration binds identity but never polls providers");
 });
 
-test("EventRuntime derives EventState after a match-score webhook without persisting the projection", async () => {
+test("EventRuntime derives EventState on demand after a match-score webhook", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026publication";
   const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
@@ -169,11 +169,11 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.equal(webhookResponse.status, 200);
   assert.deepEqual(await webhookResponse.json(), { accepted: true, duplicate: false });
 
-  // The committed webhook update invalidates the in-memory projection.
+  // Provider writes publish a revision only; EventState remains read-time.
   const webhookPublication = runtime.hotProjection;
-  assert.notEqual(webhookPublication, initialPublication);
-  assert.equal(webhookPublication.snapshotVersion, 2);
-  assert.equal(webhookPublication.state.matches[0].alliances.red.score, 20);
+  assert.equal(webhookPublication, initialPublication);
+  assert.equal(webhookPublication.snapshotVersion, 1);
+  assert.equal(webhookPublication.state.matches[0].alliances.red.score, 10);
   assert.equal(publicationWrites, 0);
   assert.equal(storage.values.get("snapshot-revision"), 2);
   assert.equal(storage.values.get("endpoint:" + matchesEndpoint).revision, 2);
@@ -187,7 +187,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.equal(updatedSnapshot.matches[0].actual_time, 123);
 
   const updatedPublication = runtime.hotProjection;
-  assert.equal(updatedPublication, webhookPublication);
+  assert.notEqual(updatedPublication, webhookPublication);
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
   assert.equal(updatedPublication.state.matches[0].alliances.red.score, 20);
@@ -1110,6 +1110,12 @@ test("EventRuntime recovers its last-good representation after a failed provider
   assert.equal(recovered.validatorRevision, 3);
   assert.equal(recovered.lastError, null);
   assert.equal(recovered.lastHttpStatus, 200);
+  assert.equal(runtime.hotProjection, undefined,
+    "provider refresh must not materialize an EventState before a read request");
+  const snapshotResponse = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": eventKey },
+  }));
+  assert.equal(snapshotResponse.status, 200);
   const projection = runtime.hotProjection;
   assert.equal(projection.state.event.name, "Recovered Event Name",
     "the read-time EventState projection must reflect the recovered endpoint data");

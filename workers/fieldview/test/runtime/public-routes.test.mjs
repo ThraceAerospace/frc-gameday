@@ -158,6 +158,14 @@ test("public event snapshot route forwards without user credentials and exposes 
 
 test("the shared public stream route forwards WebSocket upgrade and since revision", async () => {
   const { env, calls } = makeEnvironment();
+  env.MULTIPLEXER = {
+    idFromName(name) { calls.push({ operation: "multiplexer-id", name }); return name; },
+    get(id) { return { async fetch(request) {
+      calls.push({ operation: "fetch", id, url: new URL(request.url).pathname + new URL(request.url).search,
+        method: request.method, headers: new Headers(request.headers) });
+      return new Response(null, { status: 200 });
+    } }; },
+  };
   await worker.fetch(
     new Request("https://runtime.example/stream?since=11", {
       headers: { Upgrade: "websocket" },
@@ -624,7 +632,7 @@ test("public team season analytics forwards to the canonical TeamRuntime endpoin
 test("public team analytics rejects invalid seasons before accessing runtimes", async () => {
   const response = await worker.fetch(
     new Request("https://runtime.example/teams/frc3461/season-analytics?year=1800"),
-    { RUNTIME_ADMIN_TOKEN: "server-only-token" },
+    { RUNTIME_ADMIN_TOKEN: "server-only-token", DISCOVERY_STORAGE: {} },
   );
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "Invalid season year" });
