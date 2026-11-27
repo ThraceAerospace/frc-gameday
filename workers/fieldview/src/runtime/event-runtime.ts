@@ -777,7 +777,7 @@ export class EventRuntime extends DurableObjectBase {
 
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const publication = await this.getEventStateProjection();
-      if (!publication) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
+      if (!publication) return Response.json({ error: "EventState projection unavailable" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (!Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
         return Response.json({ error: "EventState projection is invalid" }, { status: 500, headers: { "Cache-Control": "no-store" } });
