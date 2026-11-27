@@ -82,7 +82,7 @@ test("TeamRuntime exposes only pending event analytics to the central recovery c
   }));
   assert.equal(unauthorized.status, 401);
 });
-test("TeamRuntime does not replace a last-good publication after a failed provider refresh", async () => {
+test("TeamRuntime reconstructs a failed-source projection from retained endpoint data", async () => {
   const storage = new MemoryStorage();
   const teamKey = "frc3461", year = 2026;
   const resources = teamResourceEndpoints(teamKey, year);
@@ -111,9 +111,13 @@ test("TeamRuntime does not replace a last-good publication after a failed provid
 
   const response = await runtime.snapshot(year);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), lastGood);
+  const projection = await response.json();
+  assert.equal(projection.team.team_number, 3461,
+    "the last-good provider representation remains available");
+  assert.equal(projection.sources.tba_team.status, "failed",
+    "the ephemeral projection reflects the current failed source status");
   assert.equal(storage.values.get("team-state:" + year + ":publication"), publication,
-    "failed revalidation must preserve the exact last-good publication record");
+    "reads never rewrite the optional legacy materialized projection");
 });
 
 test("TeamRuntime hydrates persisted season publications without deleting legacy copies", async () => {

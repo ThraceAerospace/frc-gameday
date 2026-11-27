@@ -566,6 +566,7 @@ export class TeamRuntime extends DurableObjectBase {
         if (revision === null) {
           return Response.json({ error: "Team analytics inputs changed during publication" }, { status: 409 });
         }
+        this.seasonAnalyticsCache.delete("team-season-analytics:" + year);
         const response: TeamEventAnalyticsResult = {
           contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
           event_key: eventKey,
@@ -609,6 +610,7 @@ export class TeamRuntime extends DurableObjectBase {
       if (revision === null) {
         return Response.json({ error: "Team analytics inputs changed during publication" }, { status: 409 });
       }
+      this.seasonAnalyticsCache.delete("team-season-analytics:" + year);
       const response: TeamEventAnalyticsResult = {
         contract_version: EVENT_ANALYTICS_ORCHESTRATION_CONTRACT_VERSION,
         event_key: eventKey,
@@ -669,6 +671,7 @@ export class TeamRuntime extends DurableObjectBase {
       if (outcome === "stale") {
         return Response.json({ error: "Analytics acknowledgement does not match the current TeamEventState revision" }, { status: 409 });
       }
+      this.seasonAnalyticsCache.delete("team-season-analytics:" + year);
       return Response.json({
         event_key: body.event_key,
         team_key: body.team_key,
@@ -1074,7 +1077,13 @@ export class TeamRuntime extends DurableObjectBase {
     }
     if (cached?.input_signature === signature) {
       this.publishedSnapshots.set(year, cached);
-      return Response.json(cached.state, { headers: responseHeaders });
+      const cachedProjectionStale = inputs.states.some((state) => Boolean(state && (
+        state.status === "failed" || state.status === "stale" || state.status === "unavailable" ||
+        (state.expiresAt !== null && state.expiresAt <= now)
+      )));
+      return Response.json(cached.state, {
+        headers: { ...responseHeaders, "X-FieldView-Publication-Status": cachedProjectionStale ? "stale" : "available" },
+      });
     }
     // A persisted materialized TeamState remains a useful stale fallback when
     // endpoint records have not been migrated yet. It is never required.

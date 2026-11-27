@@ -1286,7 +1286,11 @@ test("EventRuntime recovers its last-good representation after a failed provider
 
   const recoveredRefresh = await refresh();
   assert.equal(recoveredRefresh.status, 200);
-  assert.deepEqual((await recoveredRefresh.json()).results, [{ endpoint, success: true }]);
+  const recoveredResult = await recoveredRefresh.json();
+  assert.equal(recoveredResult.results[0].endpoint, endpoint);
+  assert.equal(recoveredResult.results[0].success, true);
+  assert.equal(recoveredResult.results[0].status, "available");
+  assert.equal(recoveredResult.results[0].http_status, 200);
   assert.equal(providerCalls, 2);
   const recovered = storage.values.get("endpoint:" + endpoint);
   assert.equal(recovered.status, "available");
