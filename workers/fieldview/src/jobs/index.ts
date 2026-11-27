@@ -197,7 +197,7 @@ interface CoverageAuditParameters { year: number; workflowId: string; startedAt:
 export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
     if (event.payload?.operation !== "discover-season") {
-      throw new Error("Legacy bulk readiness execution is disabled");
+      throw new Error("Unsupported season discovery operation");
     }
     return this.discoverSeason(event.payload, step);
   }
@@ -901,7 +901,7 @@ export default {
         const prefix = `admin/workflow-runs/${type}/${workflowId}`;
         const recordObject = await store.get(`${prefix}/record.json`);
         if (!recordObject) return Response.json({ error: "Workflow run not found" }, { status: 404 });
-        const record = await recordObject.json<Record<string, unknown>>();
+        const record = recordObject;
         const workflowBinding = type === "event-readiness" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
         let workflowStatus: string | null = null;
         let workflowError: string | null = null;
@@ -919,13 +919,13 @@ export default {
           await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord));
         }
         const summaryObject = await store.get(`${prefix}/summary.json`);
-        const summary = summaryObject ? await summaryObject.json<Record<string, unknown>>() : null;
+        const summary = summaryObject;
         const results: unknown[] = [];
         const chunkCount = Number(resolvedRecord.result_chunks ?? 0);
         for (let chunk = 0; chunk < chunkCount; chunk += 1) {
           const object = await store.get(`${prefix}/results/${String(chunk).padStart(4, "0")}.json`);
           if (!object) continue;
-          const value = await object.json<{ results?: unknown[] }>();
+          const value = object;
           if (Array.isArray(value.results)) results.push(...value.results);
         }
         return Response.json({ ...resolvedRecord, workflow_status: workflowStatus, summary, results }, {
@@ -936,7 +936,7 @@ export default {
       const page = await store.list({ prefix: `admin/workflow-runs/index/${type}/`, limit: 1000 });
       const entries = page.keys.slice(-limit).reverse();
       const runs = (await mapWithConcurrency(entries, 5, async (entry) => {
-        const object = await store.get(entry.key);
+        const object = await store.get<Record<string, unknown>>(entry);
         if (!object) return null;
         const indexRecord = object ?? {};
         const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
