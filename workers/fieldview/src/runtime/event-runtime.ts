@@ -905,13 +905,12 @@ export class EventRuntime extends DurableObjectBase {
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
           hydrated_scope: ["event_identity", "provider_endpoint_records"],
-          event_state_publication: {
-            exists: true,
-            materialized: Boolean(this.hydratedPublication),
+          event_state_projection: {
+            available: rosterAvailable,
+            hot_cache: Boolean(this.hydratedPublication),
             status: eventStateStatus,
             version: snapshotVersion,
             source_revision: currentSourceRevision,
-            generated_at: null,
           },
           polling_owner: "PollingCoordinatorWorkflow",
           local_poll_tasks: 0,
@@ -929,7 +928,7 @@ export class EventRuntime extends DurableObjectBase {
           last_calculated_at: analyticsPublication?.calculatedAt ?? null,
           source_revision: analyticsPublication?.sourceRevision ?? null,
           pending_invalidation: await this.storage.get<AnalyticsInvalidation>(ANALYTICS_INVALIDATION_KEY) ?? null,
-          team_state_coverage: { status: teamStateCoverageStatus, expected: expectedTeamCount, materialized: null },
+          team_state_coverage: { status: teamStateCoverageStatus, expected: expectedTeamCount, observed: null },
           last_error: await this.storage.get<string>("analytics:last-error") ?? null,
         },
         resources: expectedEndpoints.map((endpoint) => {
