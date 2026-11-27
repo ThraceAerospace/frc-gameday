@@ -849,13 +849,7 @@ export class EventRuntime extends DurableObjectBase {
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
         return new Response(null, { status: 304, headers });
       }
-      const {
-        analytics: _unownedAnalytics,
-        team_states: _legacyTeamStates,
-        ...eventOwnedState
-      } = publication.state as typeof publication.state & {
-        team_states?: unknown;
-      };
+      const { analytics: _unownedAnalytics, ...eventOwnedState } = publication.state;
       return Response.json(eventOwnedState, { headers });
     }
 
