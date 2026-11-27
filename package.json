@@ -19,7 +19,7 @@
     "predev": "npm run generate:tba-types && npm run generate:statbotics-types",
     "prebuild": "npm run generate:tba-types && npm run generate:statbotics-types",
     "generate:statbotics-types": "node packages/providers/statbotics/scripts/generate-types.mjs",
-    "dev:worker": "npm run build:admin && npx --yes wrangler@^4.135.0 dev --config workers/fieldview/wrangler.toml --env-file \"$PWD/.env\"",
+    "dev:worker": "npm run build:admin && npx --yes wrangler@^4.135.0 dev --config workers/fieldview/wrangler.toml",
     "build:admin": "node apps/admin-cloudflare/build.mjs"
   },
   "devDependencies": {
