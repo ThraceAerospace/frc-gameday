@@ -812,7 +812,7 @@ export class TeamRuntime extends DurableObjectBase {
         return Response.json({ error: "A valid season year is required" }, { status: 400 });
       }
       // Both inspection and explicit preparation derive from provider resources.
-      // Neither requires nor writes a persisted TeamState publication.
+      // Neither requires nor writes a materialized TeamState projection.
       const snapshot = await this.snapshot(year);
       if (!snapshot.ok) return snapshot;
       const teamState = await snapshot.json() as FieldViewTeamState;
