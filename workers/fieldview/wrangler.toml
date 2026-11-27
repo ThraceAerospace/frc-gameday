@@ -73,16 +73,33 @@ tag = "v2"
 new_sqlite_classes = ["RemoteSessionRuntime"]
 
 [[workflows]]
-name = "daily-event-readiness"
-binding = "DAILY_EVENT_READINESS"
-class_name = "DailyEventReadinessWorkflow"
+name = "event-season-readiness"
+binding = "EVENT_SEASON_READINESS"
+class_name = "EventSeasonReadinessWorkflow"
 concurrency = { limit = 1 }
 
 [[workflows]]
-name = "daily-team-readiness"
-binding = "DAILY_TEAM_READINESS"
-class_name = "DailyTeamReadinessWorkflow"
+name = "team-season-readiness"
+binding = "TEAM_SEASON_READINESS"
+class_name = "TeamSeasonReadinessWorkflow"
 concurrency = { limit = 1 }
+
+[[workflows]]
+name = "season-status-resolver"
+binding = "SEASON_STATUS_RESOLVER"
+class_name = "SeasonStatusResolverWorkflow"
+concurrency = { limit = 1 }
+
+[[queues.producers]]
+binding = "SEASON_REFRESH_QUEUE"
+queue = "fieldview-season-refresh"
+
+[[queues.consumers]]
+queue = "fieldview-season-refresh"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 5
+max_concurrency = 2
 
 [[workflows]]
 name = "coverage-audit"
