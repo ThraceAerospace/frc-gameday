@@ -108,25 +108,6 @@ export type CanonicalEventAnalyticsResponse = {
   publication: unknown | null;
 };
 
-/** Read the last durable EventRuntime analytics publication without triggering calculations. */
-export async function getCanonicalEventAnalytics(
-  eventKey: string,
-  fetcher: typeof fetch = fetch,
-): Promise<CanonicalEventAnalyticsResponse | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  if (!baseUrl || !eventKey) return null;
-  try {
-    const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", baseUrl);
-    const response = await fetchCanonicalRuntime("event-analytics", url, fetcher);
-    if (!response.ok) return null;
-    const value = await readCanonicalJson<CanonicalEventAnalyticsResponse>("event-analytics", response);
-    if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) return null;
-    return value;
-  } catch {
-    return null;
-  }
-}
-
 export type CanonicalEventWeekResponse = {
   runDate: string;
   evaluatedAt: number;
@@ -206,27 +187,6 @@ export async function getCanonicalTeamDiscovery(
   }
 }
 
-
-/** Read the Worker-owned season-wide team investigation result. */
-export async function getCanonicalTeamAnalytics(
-  teamKey: string,
-  year: number,
-  fetcher: typeof fetch = fetch,
-): Promise<Record<string, unknown> | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
-  if (!baseUrl || !teamKey || !Number.isSafeInteger(year)) return null;
-  try {
-    const url = new URL("/teams/" + encodeURIComponent(teamKey) + "/analytics?year=" + year, baseUrl);
-    const response = await fetchCanonicalRuntime("team-analytics", url, fetcher);
-    if (!response.ok) return null;
-    const value = await readCanonicalJson<Record<string, unknown>>("team-analytics", response);
-    if (value.team !== Number(teamKey.replace(/^frc/i, "")) || value.year !== year ||
-        !Array.isArray(value.events) || typeof value.collection !== "object" || value.collection === null) return null;
-    return value;
-  } catch {
-    return null;
-  }
-}
 
 export type CanonicalTeamSnapshotResponse = {
   version: number;
