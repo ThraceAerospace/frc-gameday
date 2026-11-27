@@ -1015,7 +1015,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     const validPublicRoute = publicParts.length === 4 &&
       publicParts[1] === "events" &&
       /^[a-zA-Z0-9_-]+$/.test(publicEventKey ?? "") &&
-      (publicAction === "snapshot" || publicAction === "analytics" || publicAction === "statbotics-match" || publicAction === "stream");
+      (publicAction === "snapshot" || publicAction === "analytics" || publicAction === "statbotics-match");
 
     if (validPublicRoute && ["snapshot", "analytics", "statbotics-match"].includes(publicAction ?? "") && request.method === "OPTIONS") {
       return new Response(null, {
@@ -1041,16 +1041,11 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       const headers = new Headers({
         "X-FieldView-Event-Key": publicEventKey,
       });
-      if (publicAction === "stream") {
-        const upgrade = request.headers.get("Upgrade");
-        if (upgrade) headers.set("Upgrade", upgrade);
-      }
       const forwarded = new Request(
         `https://event-runtime/${publicAction}${url.search}`,
         { method: "GET", headers },
       );
       const response = await stub.fetch(forwarded);
-      if (publicAction === "stream") return response;
 
       const responseHeaders = new Headers(response.headers);
       responseHeaders.set("Access-Control-Allow-Origin", "*");
@@ -1068,7 +1063,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     const action = parts[4];
     const validRoute = parts.length === 5 && parts[1] === "internal" &&
       parts[2] === "events" && /^[a-zA-Z0-9_-]+$/.test(eventKey ?? "") &&
-      ["state", "snapshot", "stream", "refresh", "recalculate", "statbotics-refresh"].includes(action ?? "");
+      ["state", "snapshot", "refresh", "recalculate", "statbotics-refresh"].includes(action ?? "");
     if (!validRoute || !authorized(request, env)) {
       return Response.json({ error: "Not found" }, { status: validRoute ? 401 : 404 });
     }
