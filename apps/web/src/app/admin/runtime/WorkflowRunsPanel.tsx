@@ -84,7 +84,7 @@ export default function WorkflowRunsPanel({ authenticated, year, requestedType }
     if (!authenticated) return;
     const timer = window.setInterval(() => {
       void loadRuns().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
-    }, 5_000);
+    }, 15_000);
     return () => window.clearInterval(timer);
   }, [authenticated, loadRuns]);
 
@@ -99,7 +99,7 @@ export default function WorkflowRunsPanel({ authenticated, year, requestedType }
     if (!selected || selected.workflow_type !== type || !["running", "queued"].includes(selected.workflow_status ?? selected.status)) return;
     const timer = window.setInterval(() => {
       void loadRun(selected.workflow_id).then(() => loadRuns()).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
-    }, 5_000);
+    }, 15_000);
     return () => window.clearInterval(timer);
   }, [selected, type, loadRun, loadRuns]);
 
@@ -160,7 +160,7 @@ export default function WorkflowRunsPanel({ authenticated, year, requestedType }
       catch (cause) { if (active) setError(cause instanceof Error ? cause.message : String(cause)); }
     };
     void poll();
-    const timer = window.setInterval(() => { void poll(); }, 5_000);
+    const timer = window.setInterval(() => { void poll(); }, 15_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [weeklyWorkflowId, weeklyWorkflowStatus, loadWeeklyProjectionStatus]);
 
