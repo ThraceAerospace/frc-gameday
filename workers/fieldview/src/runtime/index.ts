@@ -279,7 +279,7 @@ async function adminProxy(request: Request, env: RuntimeEnvironment, context: { 
   const kind=q.get("kind"),key=q.get("key"),inventory=q.get("inventory");
   const coverage=q.get("coverageAudit"),ingest=q.get("seasonIngest"),eventSeed=q.get("eventSeed"),teamSeed=q.get("teamSeed"),discovery=q.get("discoveryJob"),runs=q.get("workflowRuns"),weekly=q.get("weeklyProjectionRun"),runId=q.get("runId");
   const needsYear=Boolean(teamSeed||(kind&&key)||inventory);let year=q.get("year");
-  if(!year&&needsYear){const record=await discoveryServiceClient(env).get("discovery/current-season.json");if(record){const current=await record.json<{year?:unknown}>().catch(()=>null);if(current&&Number.isInteger(current.year))year=String(current.year);}if(!year)return Response.json({error:"TBA current season is unavailable"},{status:503});}
+  if(!year&&needsYear){const raw=await env.KV_BINDING?.get("system/canonical-season.json");if(raw){const current=JSON.parse(raw) as {year?:unknown};if(Number.isInteger(current.year))year=String(current.year);}if(!year)return Response.json({error:"Canonical TBA season is unavailable; run the season status resolver"},{status:503});}
   const target=weekly?"/internal/admin/events-this-week/refresh?id="+encodeURIComponent(weekly)
    :runs?"/internal/admin/workflow-runs?"+new URLSearchParams({type:runs,...(runId?{id:runId}:{}),...(q.get("limit")?{limit:q.get("limit")!}:{})})
    :teamSeed?"/internal/admin/team-seed?"+new URLSearchParams({team_key:teamSeed,year:year!})
@@ -506,17 +506,17 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/season/current" && request.method === "GET") {
-      if (!env.DB && !env.DISCOVERY_STORAGE) {
-        return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
+      const raw = await env.KV_BINDING?.get("system/canonical-season.json");
+      if (!raw) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      let current: { year?: unknown; checkedAt?: unknown; source?: unknown; resolved_at?: unknown };
+      try { current = JSON.parse(raw); }
+      catch { return Response.json({ error: "Canonical season record is invalid JSON" }, { status: 500 }); }
+      const checkedAt = Number(current.checkedAt ?? current.resolved_at);
+      if (!Number.isInteger(current.year) || Number(current.year) < 1992 ||
+          Number(current.year) > 2200 || !Number.isFinite(checkedAt)) {
+        return Response.json({ error: "Canonical season record is invalid" }, { status: 500 });
       }
-      const object = await discoveryServiceClient(env).get("discovery/current-season.json");
-      if (!object) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
-      const current = await object.json<{ year?: unknown; checkedAt?: unknown }>().catch(() => null);
-      if (!current || !Number.isInteger(current.year) || Number(current.year) < 1992 ||
-          Number(current.year) > 2200 || !Number.isFinite(current.checkedAt)) {
-        return Response.json({ error: "Published current-season record is invalid" }, { status: 500 });
-      }
-      return Response.json({ year: current.year, checkedAt: current.checkedAt }, {
+      return Response.json({ year: current.year, checkedAt, source: current.source ?? null }, {
         headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
       });
     }
@@ -883,9 +883,10 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
-      const object = await discoveryServiceClient(env)?.get("discovery/current-season.json");
-      const current = object ? await object.json<{ year: number }>().catch(() => null) : null;
-      const year = current?.year ?? null;
+      const canonicalRaw = await env.KV_BINDING?.get("system/canonical-season.json");
+      let canonical: { year?: unknown; checkedAt?: unknown; source?: unknown; resolved_at?: unknown } | null = null;
+      try { canonical = canonicalRaw ? JSON.parse(canonicalRaw) : null; } catch { canonical = null; }
+      const year = canonical && Number.isInteger(canonical.year) ? Number(canonical.year) : null;
       const eventObject = year === null ? null : await discoveryServiceClient(env)?.get(`discovery/events/${year}.json`);
       const teamObject = year === null ? null : await discoveryServiceClient(env)?.get(`discovery/teams/${year}.json`);
       const events = eventObject ? await eventObject.json<{ events?: unknown[]; updatedAt?: number; checkedAt?: number }>().catch(() => null) : null;
