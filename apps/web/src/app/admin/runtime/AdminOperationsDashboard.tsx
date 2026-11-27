@@ -455,7 +455,7 @@ export default function AdminOperationsDashboard() {
     <button onClick={() => window.location.reload()} className="mt-5 w-full rounded-xl border border-[var(--fv-border)] px-4 py-3 text-sm font-semibold">Retry authentication</button>
   </main>;
 
-  return <main className="custom-scrollbar mx-auto h-dvh w-full max-w-[1500px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-7 sm:px-6 lg:px-8">
+  return <main className="mx-auto min-h-dvh w-full max-w-[1500px] px-4 py-7 sm:px-6 lg:px-8">
     {(error || message) && <div role={error ? "alert" : "status"} className={"sticky top-0 z-50 mb-4 rounded-xl border bg-white px-4 py-3 text-sm shadow-md " + (error ? "border-rose-300 text-rose-700" : "border-[var(--fv-border)] text-[var(--fv-text)]")}>{error || message}</div>}
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--fv-brand)]">FieldView operations</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Command center</h1><p className="mt-1 text-sm text-[var(--fv-muted)]">A focused view of runtime health, canonical data coverage, and ingestion work.</p></div>
@@ -466,7 +466,7 @@ export default function AdminOperationsDashboard() {
     </nav>
 
     {tab === "home" && <div className="mt-6 space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[["Registered events", overview?.inventory?.events ?? "—"], ["Registered teams", overview?.inventory?.teams ?? "—"], ["Current season", overview?.current_season?.year ?? "—"], ["Multiplexer clients", overview?.multiplexer?.clients ?? "—"]].map(([label, value]) => <Panel key={String(label)}><p className="text-xs text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></Panel>)}
       </div>
       <p className="rounded-xl border border-[var(--fv-border)] px-4 py-3 text-xs leading-5 text-[var(--fv-muted)]">Overview reads the published current-season index and runtime inventory metadata only. It does not probe every EventRuntime and TeamRuntime; open an event or team below to inspect its live state and provider resources.</p>
