@@ -12,6 +12,7 @@ FieldView is a data application for FIRST Robotics Competition. It acquires comp
 - **Storage:** Durable Object SQLite owns event/team provider resources and runtime-scoped data; D1 owns discovery and operational/system records; KV is limited to lightweight projections and canonical pointers. The architecture does not use R2.
 - **Realtime:** the browser SharedWorker multiplexes canonical subscriptions to the Worker `/stream` endpoint. It does not fetch provider APIs or run a second EventState polling implementation. Snapshot recovery uses the Worker snapshot endpoints.
 - **Webhooks:** TBA posts directly to the Worker's `/webhooks/tba` endpoint. There is no Vercel relay or Redis Pub/Sub fan-out.
+- **Realtime:** The browser reads `/snapshot` before connecting to `/stream`; data-bearing WebSocket updates and reconnects do not trigger HTTP refetches.
 - **Remote display:** RemoteSessionRuntime owns WebRTC signaling over hibernatable Durable Object WebSockets; it does not use Redis leases, Vercel WebSockets, heartbeats, or alarm polling.
 
 ## Development
