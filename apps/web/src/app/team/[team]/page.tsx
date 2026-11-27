@@ -11,14 +11,14 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { notFound } from "next/navigation";
-import { getCanonicalCurrentSeason, getCanonicalEventSnapshot, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
+import { getCanonicalCurrentSeason, getCanonicalEventSnapshot, getCanonicalTeamDiscovery, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import type {
   FieldViewEventSnapshot,
+  FieldViewTeam,
   FieldViewTeamSnapshot,
 } from "@fieldview/domain";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
-import PendingSnapshotRefresh from "@/components/runtime/PendingSnapshotRefresh";
 
 
 function normalizeTeamKey(value: string): string {
@@ -104,7 +104,11 @@ export default async function TeamPage({
   const initialCanonical = await getCanonicalTeamSnapshot(teamKey, currentYear);
   const teamSource = initialCanonical?.snapshot.sources.tba_team;
   if (teamSource && initialCanonical?.snapshot.team === null) notFound();
-  const team: TeamData | null = initialCanonical?.snapshot.team ?? null;
+  const discoveredTeams = !initialCanonical?.snapshot.team
+    ? await getCanonicalTeamDiscovery(currentYear)
+    : null;
+  const discoveredTeam = discoveredTeams?.find((candidate) => candidate.key === teamKey) ?? null;
+  const team: TeamData | null = initialCanonical?.snapshot.team ?? (discoveredTeam as TeamData | null);
 
   const years = Array.from(
     { length: currentYear - (team?.rookie_year ?? currentYear) + 1 },
@@ -122,11 +126,12 @@ export default async function TeamPage({
     (item): item is TeamAvatarData => item.type === "avatar",
   ) ?? null;
   const teamEvents = teamEventsResponse === null ? [] : [...teamEventsResponse].sort(sortEvents);
+  const hasCanonicalTeamState = canonicalTeam?.snapshot.team != null;
 
   // Team/event pages consume only canonical snapshots. An unacquired or
   // unavailable event section remains unavailable instead of issuing a
   // second provider-shaped request from the page.
-  const eventSections: TeamEventSection[] = (await mapWithConcurrency(
+  const eventSections: TeamEventSection[] = hasCanonicalTeamState ? (await mapWithConcurrency(
     teamEvents,
     4,
     async (teamEvent): Promise<TeamEventSection | null> => {
@@ -158,10 +163,17 @@ export default async function TeamPage({
         rankings: snapshot.rankings ?? null,
       };
     },
-  )).filter((section): section is TeamEventSection => section !== null);
+  )).filter((section): section is TeamEventSection => section !== null) : [];
 
   const matchDataComplete = eventSections.length === teamEvents.length &&
     eventSections.every(({ matches }) => matches !== null);
+  const incompleteReasons = [
+    !hasCanonicalTeamState ? "team_state_missing" : null,
+    teamEventsResponse === null ? "team_events_missing" : null,
+    eventSections.length < teamEvents.length ? "team_event_snapshots_missing" : null,
+    !matchDataComplete ? "team_match_data_incomplete" : null,
+  ].filter((reason): reason is string => reason !== null);
+  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "team", entity_key: teamKey, reasons: incompleteReasons, year }));
   const completedMatches = eventSections.flatMap(({ event, matches }) =>
     (matches ?? [])
       .filter((match) => (match.alliances?.red?.score ?? -1) >= 0 && (match.alliances?.blue?.score ?? -1) >= 0)
@@ -173,8 +185,8 @@ export default async function TeamPage({
 
   return (
     <SiteShell>
-      {!team || !canonicalTeam || teamEventsResponse === null || eventSections.length < teamEvents.length || !matchDataComplete ? <PendingSnapshotRefresh /> : null}
       <PageContainer className="max-w-7xl">
+        {!hasCanonicalTeamState ? <div className="mb-4 rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-card)] px-4 py-3 text-sm text-[var(--fv-muted)]" role="status">FieldView team and season data is incomplete. Showing the available team profile from The Blue Alliance; event results, rankings, and match analytics may be unavailable.</div> : incompleteReasons.length > 0 ? <div className="mb-4 rounded-xl border border-[var(--fv-border)] bg-[var(--fv-surface-card)] px-4 py-3 text-sm text-[var(--fv-muted)]" role="status">Some FieldView team data is unavailable. The information shown below may be incomplete.</div> : null}
         <PageHeader
           eyebrow="Team profile"
           leading={team ? <TeamAvatar team={team} avatar={avatar} size="lg" /> : undefined}
