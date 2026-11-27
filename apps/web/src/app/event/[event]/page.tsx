@@ -118,7 +118,7 @@ export default async function EventPage({
       <div className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
         <PageContainer>
           <SurfaceCard className="overflow-hidden rounded-2xl">
-            {!eventSnapshot ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">FieldView data for this event is incomplete. Showing the available event information from The Blue Alliance; match, team, and analytics data may be unavailable.</div> : (!teamsAvailable || !matchesAvailable) ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">Some FieldView data for this event is unavailable. The information shown below may be incomplete.</div> : null}
+            {!eventSnapshot?.event ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">FieldView data for this event is incomplete. Showing the available event information from The Blue Alliance; match, team, and analytics data may be unavailable.</div> : (!teamsAvailable || !matchesAvailable) ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">Some FieldView data for this event is unavailable. The information shown below may be incomplete.</div> : null}
             <div className="p-5 sm:p-8">
               <PageHeader
                 eyebrow={event.district?.display_name || "Competition event"}
