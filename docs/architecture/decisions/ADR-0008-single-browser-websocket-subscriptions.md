@@ -1,6 +1,6 @@
 # ADR-0008: One browser WebSocket with a shared multiplexer
 
-- **Status:** Accepted for connection/subscription topology; publication payload rules superseded by ADR-0013
+- **Status:** Accepted for one-connection topology; payload and reconnect rules superseded by ADR-0020
 - **Date:** 2026-11-17
 - **Scope:** Public live event transport and frontend migration
 
@@ -26,9 +26,9 @@ The SharedWorker is the browser-side connection owner. Pages and UI surfaces usi
 4. The multiplexer registers its own identifier with the authoritative runtime for a topic only while at least one connected client subscribes to it. Multiple clients subscribing to the same topic cause only one active runtime-to-multiplexer registration. Each change to the connected-client set sends the desired registration state with a monotonically increasing generation; EventRuntime ignores delayed requests with an older generation, preventing subscribe/unsubscribe races from leaving stale upstream state.
 5. EventRuntime (or the authoritative analytics publisher) records the multiplexer identifier for each topic it owns. When that topic's revision changes, it sends one small revision/invalidation notification to the multiplexer.
 6. The multiplexer forwards a notification only to browser connections subscribed to the matching topic/resource key. Clients that did not subscribe must not receive the notification.
-7. The client applies committed data-bearing DTO publications when present, using resource revisions for ordering. Conditional HTTP reads recover initial state, revision gaps, reconnects, and incompatible payloads. See ADR-0013.
+7. The client fetches the canonical HTTP snapshot before opening `/stream`, then applies data-bearing WebSocket updates using resource revisions. WebSocket acknowledgements, notifications, and reconnects never trigger HTTP refetches. See ADR-0020.
 8. When the last client unsubscribes from a topic, the multiplexer unregisters itself from that topic's authoritative runtime. On socket close, all of that client's subscriptions are removed; upstream registrations are removed when no remaining client needs them.
-9. Reconnect creates a new browser WebSocket to the shared multiplexer. The SharedWorker resends its active subscriptions and performs revision/snapshot recovery; no event payload replay is required. The opt-in event-state SharedWorker transport implements this sequence and keeps a versioned canonical snapshot cache. The analytics topic remains reserved until its authoritative publisher and public result-read endpoint exist.
+9. Reconnect creates a new browser WebSocket to the shared multiplexer. The SharedWorker resends its active subscriptions and retains its last good in-memory snapshot; it does not issue HTTP recovery reads from WebSocket events or reconnects. Event-state and analytics subscriptions are both active topics.
 
 ### Topic ownership and filtering
 
@@ -54,8 +54,8 @@ The multiplexer owns browser connection lifecycle and logical subscription routi
 - One SharedWorker browser WebSocket serves all live subscriptions for that worker, including up to nine Gameday event tiles and live subscriptions from other pages.
 - One Multiplexer Durable Object serves multiple browser clients. Its upstream registration is deduplicated by topic, and its downstream fan-out is filtered per client.
 - Runtime notification fan-out is one delivery per changed topic/revision to the shared multiplexer, rather than one delivery per interested browser connection.
-- EventRuntime and analytics owners remain the source of truth. Revision-only notification plus canonical reads limits WebSocket bandwidth and makes reconnect recovery straightforward.
+- EventRuntime and analytics owners remain the source of truth. Data-bearing notifications avoid hidden HTTP reads after the initial canonical snapshot and keep realtime delivery on one transport.
 - Abrupt disconnect cleanup, stale registration pruning, multi-client fan-out, subscription deduplication, and reconnect recovery must be tested.
 - The single multiplexer is the initial design, not an assumption that one instance will scale indefinitely. Measure connection count, message volume, CPU/duration, and delivery latency. Introduce sharding or partitioning only when observed demand or platform limits justify it, while preserving the browser protocol.
-- The event-scoped public stream is superseded as the browser integration path by the shared multiplexed stream. EventRuntime's publication API remains revision-only.
+- The event-scoped public stream is retired. The shared Multiplexer `/stream` is the only browser WebSocket path; EventRuntime publishes data-bearing snapshots and team-event patches to it.
 - Frontend consumption and production deployment remain separate migration steps. No production cutover or deployment is authorized by this ADR.
