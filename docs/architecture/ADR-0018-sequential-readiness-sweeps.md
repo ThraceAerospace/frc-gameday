@@ -18,4 +18,4 @@ The original requirements that reads wait for persisted normalized-state publica
 
 ADR-0020 also clarifies the one-time first-registration bootstrap exception: an initialization Workflow may acquire the initial provider endpoint resources to reliably hydrate a newly created runtime. That operation is distinct from recurring provider refresh, which belongs to the owning runtime.
 
-See [ADR-0020](../decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md), [runtime lifecycle](../development/FIELDVIEW-RUNTIME.md), and [production integration gate](MIGRATION-PLAN.md) for current requirements.
+See [ADR-0020](decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md), [runtime lifecycle](../development/FIELDVIEW-RUNTIME.md), and [production integration gate](MIGRATION-PLAN.md) for current requirements.
