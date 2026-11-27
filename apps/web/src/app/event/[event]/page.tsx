@@ -64,7 +64,7 @@ export default async function EventPage({
   const alliances: FieldViewPlayoffAlliance[] | null = eventSnapshot?.playoff_alliances ?? null;
 
   if (!event) {
-    console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "event", entity_key: eventKey, reason: "event_and_snapshot_unavailable" }));
+    console.warn("[FV][EntityUnavailable]", JSON.stringify({ response_state: "unavailable", entity_kind: "event", entity_key: eventKey, reason_codes: ["event_and_snapshot_unavailable"] }));
     return (
       <SiteShell>
         <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
@@ -111,7 +111,7 @@ export default async function EventPage({
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
   const incompleteReasons = [!eventSnapshot ? "event_state_missing" : null, !eventSnapshot?.event ? "event_record_missing" : null, !teamsAvailable ? "event_teams_missing" : null, !matchesAvailable ? "event_matches_missing" : null].filter((reason): reason is string => reason !== null);
-  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "event", entity_key: eventKey, reasons: incompleteReasons }));
+  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ response_state: "partial", entity_kind: "event", entity_key: eventKey, served: true, served_source: !eventSnapshot?.event ? "tba_event_discovery" : "fieldview_event_snapshot", reason_codes: incompleteReasons }));
 
   return (
     <SiteShell>
