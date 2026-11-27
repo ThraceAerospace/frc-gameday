@@ -21,7 +21,7 @@ Multiplexer owns the single public `/stream` WebSocket and subscription coordina
 
 Provider packages acquire and return upstream payloads. The runtime stores provider endpoint responses with validators, acquisition status, freshness, and revisions. Those records are the durable inputs to FieldView.
 
-EventState and TeamState are normalized client-facing read models, not durable canonical publications. The owning runtime derives a projection when a client requests a snapshot. A disposable in-memory cache may be used when its source revision/signature matches. A cold read or cache eviction recomputes the projection and performs no Durable Object storage write.
+EventState and TeamState are normalized client-facing read models, not durable canonical records. The owning runtime derives a projection when a client requests a snapshot. A disposable in-memory cache may be used when its source revision/signature matches. A cold read or cache eviction recomputes the projection and performs no Durable Object storage write.
 
 A one-time initialization Workflow may acquire the initial endpoint resources when a runtime is first registered/created. This exception exists to reliably hydrate a new runtime. It stores provider endpoint records in the owning runtime; it does not materialize EventState/TeamState. After bootstrap, all ongoing provider acquisition belongs to EventRuntime or TeamRuntime and is initiated through explicit refresh commands.
 
@@ -57,10 +57,9 @@ R2, Redis/ioredis, Queue producer/consumer paths, IndexedDB normalized snapshot 
 ## Domain boundaries
 
 - `packages/providers/*` owns upstream schemas, transport, credentials, provider-specific retry/rate-limit behavior, and unchanged provider payloads.
-- `packages/domain` owns canonical FieldView entities, normalization, cross-provider correlation, and source precedence.
-- `packages/contracts` owns serializable client-facing DTOs that do not expose provider response envelopes.
+- `packages/domain` owns canonical FieldView entities, normalized client-facing contracts, normalization, cross-provider correlation, and source precedence. It is the only provider-independent domain data contract consumed by the frontend.
 - `packages/analytics` owns reusable analytics calculations independent of UI and runtime transport.
-- `apps/web` consumes FieldView contracts and must not fetch provider APIs directly.
+- `apps/web` consumes FieldView domain contracts and must not fetch provider APIs directly.
 
 ## Governing decisions
 
