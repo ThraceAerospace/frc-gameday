@@ -422,22 +422,24 @@ export class EventRuntime extends DurableObjectBase {
             (resource.lastFetchedAt !== null && resource.lastFetchedAt > body.acquired_at) ||
             (resource.lastWebhookAt !== null && resource.lastWebhookAt > body.acquired_at)
           )))) return null;
+        const effectiveResources: EndpointState<unknown>[] = [];
         for (let index = 0; index < body.resources.length; index += 1) {
           const resource = body.resources[index]!;
           const previous = existing[index];
           const hasLastGood = previous && (previous.lastFetchedAt !== null || previous.lastWebhookAt !== null);
           if ((resource.status === "failed" || resource.status === "unavailable") && hasLastGood) {
-            await tx.put(endpointStorageKey(resource.endpoint), {
-              ...previous, status: "stale", lastAttemptAt: resource.lastAttemptAt,
-            });
+            const retained = { ...previous, status: "stale" as const, lastAttemptAt: resource.lastAttemptAt };
+            effectiveResources.push(retained);
+            await tx.put(endpointStorageKey(resource.endpoint), retained);
           } else {
+            effectiveResources.push(resource);
             await tx.put(endpointStorageKey(resource.endpoint), resource);
           }
         }
         const snapshotRevision = (await tx.get<number>("snapshot-revision") ?? 0) + 1;
         await tx.put("snapshot-revision", snapshotRevision);
-        const status = body.resources.every((resource) => resource.status === "available") ? "complete" as const
-          : body.resources.some((resource) => resource.lastFetchedAt !== null) ? "partial" as const : "failed" as const;
+        const status = effectiveResources.every((resource) => resource.status === "available") ? "complete" as const
+          : effectiveResources.some((resource) => resource.lastFetchedAt !== null || resource.lastWebhookAt !== null) ? "partial" as const : "failed" as const;
         const next = { bootstrap_id: body.bootstrap_id, acquired_at: body.acquired_at, snapshot_revision: snapshotRevision, publication_status: status };
         await tx.put(receiptKey, next);
         return { ...next, duplicate: false };
