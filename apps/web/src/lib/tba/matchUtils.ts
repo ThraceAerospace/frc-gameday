@@ -1,6 +1,6 @@
 import { bestMatchTime, sortMatchesByTime, type TbaMatchOrderingFields } from "@fieldview/domain";
 
-/** Minimal shared match shape used by canonical and temporary legacy consumers. */
+/** Minimal shared match shape used by canonical FieldView views. */
 export interface MatchLike extends TbaMatchOrderingFields {
   actual_time?: number | null;
   predicted_time?: number | null;
@@ -28,7 +28,7 @@ export function matchTime(match: MatchLike) {
   return bestMatchTime(match) ?? Infinity;
 }
 
-/** Use TBA's stable BestTime ordering across legacy web consumers as well. */
+/** Use TBA's stable BestTime ordering for FieldView match views. */
 export function sortMatches<T extends MatchLike>(matches: T[]) {
   return sortMatchesByTime(matches);
 }
