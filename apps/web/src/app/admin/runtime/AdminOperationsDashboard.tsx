@@ -238,7 +238,7 @@ export default function AdminOperationsDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Season readiness dispatch failed");
       setSeasonIngest(body as SeasonIngest);
-      setMessage(action === "start" ? "Team and event season readiness workflows were dispatched." : "Season ingestion " + action + " requested.");
+      setMessage("Team and event season readiness workflows were dispatched.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
     finally { setBusy(false); }
   }, [authenticated, requestHeaders, year]);
