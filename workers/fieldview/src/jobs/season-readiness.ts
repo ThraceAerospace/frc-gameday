@@ -15,6 +15,7 @@ interface QueueProducerLike {
 }
 export interface SeasonEnvironment extends RuntimeEnvironment {
   SEASON_REFRESH_QUEUE?: QueueProducerLike;
+  SEASON_DISCOVERY: Workflow;
   EVENT_SEASON_READINESS: Workflow;
   TEAM_SEASON_READINESS: Workflow;
   SEASON_STATUS_RESOLVER: Workflow;
