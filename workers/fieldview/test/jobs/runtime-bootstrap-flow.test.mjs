@@ -15,6 +15,8 @@ const [readiness, polling, acquisition, eventRuntime, teamRuntime, dispatch] = a
 test("season readiness workflows acquire and hand off initial state for both entity kinds", () => {
   assert.match(readiness, /acquireRuntimeBootstrap/);
   assert.match(readiness, /dispatchRuntime\(env, kind, key, "bootstrap"/);
+  assert.match(readiness, /bootstrapped: false, already_initialized: true, publication_status: "existing"/);
+  assert.match(readiness, /!item\.bootstrapped && !item\.already_initialized/);
   assert.match(readiness, /already_initialized/);
   const workflow = readiness.slice(readiness.indexOf("async function runSeasonReadiness"), readiness.indexOf("export class EventSeasonReadinessWorkflow"));
   assert.doesNotMatch(workflow, /SEASON_REFRESH_QUEUE|sendBatch|consumeSeasonRefreshQueue/);
