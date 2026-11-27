@@ -161,7 +161,7 @@ export default function RemoteSession({
               }
               controllerStateInitializedRef.current = true;
             }
-            sendControllerState(true);
+            sendControllerState();
             return;
           }
 
@@ -229,8 +229,6 @@ export default function RemoteSession({
     }
     eventSubscriptionsRef.current.clear();
   }, []);
-
-
 
   useEffect(() => {
     peer.start();
