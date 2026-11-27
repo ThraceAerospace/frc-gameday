@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import type { FieldViewTeam, FieldViewTeamSnapshot } from "@fieldview/domain";
-type TeamAvatarData = Extract<NonNullable<FieldViewTeamSnapshot["media"]>[number], { type: "avatar" }>;
+import type { FieldViewTeam } from "@fieldview/domain";
+import type { TBAMedia } from "@fieldview/provider-tba/types";
+type TeamAvatarData = Extract<TBAMedia, { type: "avatar" }>;
 
 export default function TeamAvatar({
   team,
