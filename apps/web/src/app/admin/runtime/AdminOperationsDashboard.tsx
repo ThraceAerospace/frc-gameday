@@ -604,12 +604,12 @@ export default function AdminOperationsDashboard() {
           <label className="text-xs font-semibold">Season context
             <input type="number" min="1992" max="2200" value={seedYear || year || ""} onChange={(event) => setSeedYear(event.target.value)} className="mt-1 block w-full rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2.5 text-sm font-normal" />
           </label>
-          <button id="fieldview-seed-entity" disabled={busy || !seedKey || !(Number(seedYear || year) >= 1992)} onClick={() => {
+          <button id="fieldview-seed-entity" disabled={busy || !seedKey || !(Number(seedYear || year || (seedKind === "event" ? seedKey.slice(0, 4) : 0)) >= 1992)} onClick={() => {
             const key = seedKey.trim();
             const targetYear = Number(seedYear || year || (seedKind === "event" ? key.slice(0, 4) : 0));
             if (seedKind === "event" && !/^\d{4}[a-zA-Z0-9_-]+$/.test(key)) { setError("Enter an event key such as 2026mmr."); return; }
             if (seedKind === "team" && !/^frc\d+$/.test(key)) { setError("Enter a team key such as frc10063."); return; }
-            if (!Number.isInteger(targetYear) || targetYear < 1992 || targetYear > 2200) { setError("Select a valid season context."); return; }
+            if (!Number.isInteger(targetYear) || targetYear < 1992 || targetYear > 2200) { setError("Select a valid season context."); return; }\n            if (seedKind === "event" && Number(key.slice(0, 4)) !== targetYear) { setError("The event key year must match the selected season context."); return; }
             void dispatch(seedKind, seedKind === "event" ? "refresh" : "seed", key, undefined, targetYear);
             setSeedKey("");
           }} className="rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Seed entity</button>
