@@ -66,11 +66,7 @@ class_name = "RemoteSessionRuntime"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["EventRuntime", "TeamRuntime", "Multiplexer"]
-
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = ["RemoteSessionRuntime"]
+new_sqlite_classes = ["EventRuntime", "TeamRuntime", "Multiplexer", "RemoteSessionRuntime"]
 
 [[workflows]]
 name = "season-discovery"
