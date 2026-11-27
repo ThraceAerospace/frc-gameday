@@ -9,8 +9,7 @@ FieldView is a FIRST Robotics Competition data application. The repository is an
 - `apps/web`: Next.js frontend.
 - `apps/admin-cloudflare`: Cloudflare-hosted admin assets.
 - `workers/fieldview`: the single Cloudflare Worker project.
-- `packages/domain`: canonical FieldView domain model and normalization.
-- `packages/contracts`: serializable client-facing contracts.
+- `packages/domain`: canonical FieldView domain objects, normalized client-facing contracts, and domain rules.
 - `packages/providers/*`: isolated upstream provider clients and generated schemas.
 - `packages/analytics`: reusable analytics calculations.
 
@@ -59,10 +58,10 @@ FieldView is a FIRST Robotics Competition data application. The repository is an
 ## Domain and provider boundaries
 
 1. FieldView owns its canonical domain model. Provider APIs are inputs, not client contracts.
-2. Provider packages own generated schemas, transport, credentials, provider-specific validation, retry/rate-limit behavior, and unchanged provider payload acquisition.
+2. Provider packages own generated schemas, transport, credentials, provider-specific validation, retry/rate-limit behavior, and unchanged provider payloads.
 3. Domain normalization owns cross-provider correlation, canonical FieldView model construction, explicit transformations, and field-level source precedence.
 4. Analytics calculations belong in `packages/analytics` or the approved backend orchestration around it, not in presentation components.
-5. Client contracts must not expose provider response envelopes or provider-specific types.
+5. The `packages/domain` models are the provider-independent client data contract. Do not create a parallel DTO package or expose provider response envelopes/types to clients.
 6. Preserve source provenance and freshness. Distinguish missing/unavailable data, explicit null/clear, zero, stale values, and failed acquisition.
 7. Partial provider failures must not erase unrelated valid data. Apply explicit source precedence; do not let request completion order determine ownership.
 8. Canonical entities have one owning runtime. Cross-runtime relationships use stable references and revisions, not duplicated nested canonical objects.
