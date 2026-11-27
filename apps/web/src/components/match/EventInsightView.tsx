@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { FieldViewEventSnapshot, FieldViewMatch, FieldViewMatchTeam } from "@fieldview/domain";
+import type { FieldViewEventState, FieldViewMatch, FieldViewMatchTeam } from "@fieldview/domain";
 import { getLastMatch, getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import { formatTeamNumber, matchLongName } from "@/lib/tba/formatters";
 import MatchPredictionBar from "./StatboticsMatchPredictionBar";
@@ -60,7 +60,7 @@ function AllianceCard({
 }: {
   color: AllianceColor;
   match: FieldViewMatch;
-  snapshot: FieldViewEventSnapshot;
+  snapshot: FieldViewEventState;
   trackedTeams: string[];
 }) {
   const alliance = match.alliances[color];
@@ -148,7 +148,7 @@ export default function EventInsightView({
   matchOverride = null,
 }: {
   eventKey: string;
-  snapshot?: FieldViewEventSnapshot;
+  snapshot?: FieldViewEventState;
   trackedTeams?: string[];
   matchOverride?: FieldViewMatch | null;
 }) {
