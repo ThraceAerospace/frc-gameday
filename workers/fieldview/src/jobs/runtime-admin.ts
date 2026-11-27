@@ -24,18 +24,17 @@ interface RuntimeAdminRecord {
   counts: Record<string, number>; errors: Array<{ key: string; detail: string; at: number }>;
   team_key?: string; event_key?: string; stage?: string; registered_events?: number;
   seeded_teams?: number; failed_teams?: number; historical_events_registered?: number;
-  team_keys?: string[]; cursor?: number; active_team_key?: string | null; queued_teams?: number;
+  team_keys?: string[]; cursor?: number; active_team_key?: string | null; team_seed_requests_accepted?: number;
 }
 interface EventDirectory { year: number; events: Array<{ key: string; start_date: string; end_date: string; timezone: string }> }
 const json = (value: unknown) => JSON.stringify(value);
 const recordKey = (id: string) => "admin/runtime-jobs/" + id + ".json";
 
 async function read<T>(bucket: DiscoveryServiceClient, key: string): Promise<T | null> {
-  const object = await bucket.get(key);
-  return object ? object.json<T>() : null;
+  return bucket.get<T>(key);
 }
 async function write(bucket: DiscoveryServiceClient, key: string, value: unknown): Promise<void> {
-  await bucket.put(key, json(value), { httpMetadata: { contentType: "application/json" } });
+  await bucket.put(key, json(value));
 }
 async function dispatch(env: RuntimeAdminEnvironment, kind: "team" | "event", key: string, action: string, body: Record<string, unknown> = {}, year?: number): Promise<Response> {
   const targetYear = year ?? (typeof body.year === "number" ? body.year : undefined);
@@ -90,7 +89,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
   ): Promise<RuntimeAdminRecord> {
     const teamKey = p.teamKey!;
     if (!validTeam(teamKey)) throw new Error("Invalid team key");
-    await step.do("enqueue-team-runtime-seed", async () => {
+    await step.do("dispatch-team-runtime-seed", async () => {
       const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
       if (!response.ok && response.status !== 202) throw new Error("TeamRuntime seed returned HTTP " + response.status);
       return { queued: true };
@@ -167,7 +166,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     let processed = 0;
     for (let offset = 0; offset < teamKeys.length; offset += 100) {
       const batch = teamKeys.slice(offset, offset + 100);
-      await step.do("enqueue-event-team-batch-" + offset, async () => {
+      await step.do("dispatch-event-team-batch-" + offset, async () => {
         const results = await Promise.all(batch.map(async (teamKey) => {
           const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
           return { teamKey, ok: response.ok || response.status === 202, status: response.status };
@@ -177,7 +176,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
         return results.length;
       });
       processed += batch.length;
-      await update({ processed, queued_teams: processed });
+      await update({ processed, team_seed_requests_accepted: processed });
     }
 
     // Seeding is not complete merely because the requests were accepted. Wait
@@ -295,7 +294,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     });
 
     // Season Ingest is a convenience launcher only. The independent,
-    // year-scoped readiness Workflows inspect their own entities and enqueue
+    // year-scoped readiness Workflows inspect their own entities and dispatch
     // refreshes; this Workflow must not poll for TeamState/EventState completion.
     const outcomes = await step.do("dispatch-independent-season-readiness", async () => {
       const results = await Promise.allSettled([
@@ -348,7 +347,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
 }
 function initialRecord(p: RuntimeAdminParameters): RuntimeAdminRecord {
   return { workflow_id: p.workflowId, operation: p.operation, year: p.year, status: "running",
-    phase: "queued", stage: "queued", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
+    phase: "starting", stage: "starting", processed: 0, total: 0, started_at: p.requestedAt, updated_at: p.requestedAt,
     ...(p.teamKey ? { team_key: p.teamKey } : {}),
     ...(p.eventKey ? { event_key: p.eventKey, seeded_teams: 0, failed_teams: 0, historical_events_registered: 0 } : {}),
     counts: {}, errors: [] };
