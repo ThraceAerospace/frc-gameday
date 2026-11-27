@@ -771,7 +771,7 @@ export class EventRuntime extends DurableObjectBase {
     if (request.method === "GET" && url.pathname === "/analytics") {
       const eventState = await this.publishEventState();
       if (!eventState) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-      if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
+      if (!Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
         return Response.json({ error: "EventState projection is invalid" }, { status: 500, headers: { "Cache-Control": "no-store" } });
       }
@@ -820,12 +820,8 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
-      const eventState = await this.publishEventState();
-      if (!eventState) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-      if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
-          eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
-        return Response.json({ error: "EventState projection is invalid" }, { status: 500, headers: { "Cache-Control": "no-store" } });
-      }
+      // This endpoint reads its own provider resource; it must not depend on an
+      // aggregate EventState projection or on unrelated TBA resources.
       const matchKey = url.searchParams.get("match_key");
       if (!matchKey || !/^[a-zA-Z0-9_]+$/.test(matchKey) || !matchKey.startsWith(this.eventKey + "_")) {
         return Response.json({ error: "Invalid or mismatched Statbotics match key" }, { status: 400 });
