@@ -188,7 +188,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
             {runs.runs.length === 0 && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-3 text-sm text-[var(--fv-muted)]">No {label(type).toLowerCase()} runs recorded yet.</p>}
             {runs.runs.map((run) => (
               <button key={run.workflow_id} onClick={() => void loadRun(run.workflow_id).catch((cause) => setError(String(cause)))} className={"block w-full rounded-lg border p-3 text-left " + (selected?.workflow_id === run.workflow_id ? "border-[var(--fv-brand)] bg-[var(--fv-surface)]" : "border-[var(--fv-border)]")}>
-                <span className={"block text-sm font-semibold " + statusClass(run.status)}>{(run.workflow_status ?? run.status ?? "unknown").replaceAll("_", " ")}</span>
+                <span className={"block text-sm font-semibold " + statusClass(run.workflow_status ?? run.status)}>{(run.workflow_status ?? run.status ?? "unknown").replaceAll("_", " ")}</span>
                 <span className="mt-1 block text-xs text-[var(--fv-muted)]">{timestamp(run.started_at)} · {run.year ?? "season pending"}</span>
                 <span className="mt-1 block break-all font-mono text-[11px] text-[var(--fv-muted)]">{run.workflow_id}</span>
               </button>
@@ -200,7 +200,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
           {!selected && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-4 text-sm text-[var(--fv-muted)]">Select a run to inspect its result. New runs appear here as soon as they are accepted.</p>}
           {selected && <>
             <div className="rounded-lg border border-[var(--fv-border)] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{label(type)} · {selected.year ?? "Resolving season"}</strong><span className={"text-sm font-semibold " + statusClass(selected.status)}>{(selected.workflow_status ?? selected.status).replaceAll("_", " ")}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{label(type)} · {selected.year ?? "Resolving season"}</strong><span className={"text-sm font-semibold " + statusClass(selected.workflow_status ?? selected.status)}>{(selected.workflow_status ?? selected.status).replaceAll("_", " ")}</span></div>
               <p className="mt-1 break-all font-mono text-xs text-[var(--fv-muted)]">{selected.workflow_id}</p>
               <p className="mt-2 text-xs text-[var(--fv-muted)]">Started {timestamp(selected.started_at)} · Completed {timestamp(selected.completed_at)}</p>
               {["running", "queued"].includes(selected.workflow_status ?? selected.status) && <p className="mt-3 text-sm text-[var(--fv-muted)]">The workflow is still running. The dashboard checks its status periodically; the final report appears when execution completes.</p>}
