@@ -46,7 +46,7 @@ test("leaves non-YouTube stream URLs unchanged", () => {
 
 test("does not rewrite YouTube URLs without a valid video identifier", () => {
   assert.equal(
-    normalizeCustomWebcastUrl("https://www.youtube.com/watch?v=not-a-video"),
-    "https://www.youtube.com/watch?v=not-a-video",
+    normalizeCustomWebcastUrl("https://www.youtube.com/watch?v=short-id"),
+    "https://www.youtube.com/watch?v=short-id",
   );
 });
