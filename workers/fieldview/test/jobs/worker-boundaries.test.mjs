@@ -49,8 +49,8 @@ test("discovery initializes missing event and team Durable Objects before readin
   const eventRuntime = await readFile(path.join(sourceRoot, "runtime", "event-runtime.ts"), "utf8");
   const teamRuntime = await readFile(path.join(sourceRoot, "runtime", "team-runtime.ts"), "utf8");
   assert.match(jobs, /async function registerDiscoveredRuntimes\(/);
-  assert.match(jobs, /registry\\/runtime-events\\//);
-  assert.match(jobs, /registry\\/runtime-teams\\//);
+  assert.ok(jobs.includes("registry/runtime-events/"));
+  assert.ok(jobs.includes("registry/runtime-teams/"));
   assert.match(jobs, /manual-discovery-event-runtime-registration/);
   assert.match(jobs, /readiness-event-runtime-registration/);
   assert.match(jobs, /team-readiness-runtime-registration/);
