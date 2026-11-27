@@ -69,6 +69,8 @@ export interface RuntimeEnvironment {
   RUNTIME_ADMIN_TOKEN: string;
   /** Cloudflare Access team issuer and this application's audience tag. */
   CF_ACCESS_TEAM_DOMAIN?: string;
+  /** Wrangler [dev.vars]-only local administrator bypass; never set in deployed vars. */
+  LOCAL_ADMIN_AUTH?: string;
   CF_ACCESS_AUD?: string;
   /** Comma-, semicolon-, or whitespace-separated exact administrator email allowlist. */
   RUNTIME_ADMIN_EMAILS?: string;
