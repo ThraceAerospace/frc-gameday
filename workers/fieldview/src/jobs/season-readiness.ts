@@ -7,6 +7,46 @@ import { createDiscoveryServiceClient } from "./discovery-client.ts";
 type RefreshKind = "event" | "team";
 type RefreshTask = { kind: RefreshKind; key: string; year: number; workflow_id: string; workflow_type: string };
 export type RefreshMessage = { version: 1; tasks: RefreshTask[] };
+
+type QueueSendMessage = { body: RefreshMessage };
+type QueueSendBatch = { messages: QueueSendMessage[]; estimated_bytes: number };
+
+// Cloudflare limits sendBatch() to 100 messages and 256,000 bytes total.
+// Keep a 16 KB safety margin and account for per-message metadata (~100 bytes).
+const MAX_QUEUE_BATCH_MESSAGES = 100;
+const MAX_QUEUE_BATCH_BYTES = 240_000;
+const QUEUE_MESSAGE_METADATA_BUDGET_BYTES = 128;
+const MAX_QUEUE_MESSAGE_BYTES = 127_000;
+
+export function packSeasonRefreshQueueBatches(messages: QueueSendMessage[]): QueueSendBatch[] {
+  const encoder = new TextEncoder();
+  const batches: QueueSendBatch[] = [];
+  let current: QueueSendMessage[] = [];
+  let currentBytes = 0;
+
+  const flush = () => {
+    if (!current.length) return;
+    batches.push({ messages: current, estimated_bytes: currentBytes });
+    current = [];
+    currentBytes = 0;
+  };
+
+  for (const message of messages) {
+    const bodyBytes = encoder.encode(JSON.stringify(message.body)).byteLength;
+    const messageBytes = bodyBytes + QUEUE_MESSAGE_METADATA_BUDGET_BYTES;
+    if (messageBytes > MAX_QUEUE_MESSAGE_BYTES) {
+      throw new Error("Season refresh queue message exceeds the safe 127 KB message budget (" + messageBytes + " bytes)");
+    }
+    if (current.length &&
+        (current.length >= MAX_QUEUE_BATCH_MESSAGES || currentBytes + messageBytes > MAX_QUEUE_BATCH_BYTES)) {
+      flush();
+    }
+    current.push(message);
+    currentBytes += messageBytes;
+  }
+  flush();
+  return batches;
+}
 type SeasonWorkflowInput = { year: number; requestedAt?: number };
 type ResolverInput = { requestedAt?: number };
 
@@ -179,11 +219,12 @@ async function runSeasonReadiness(
   for (let offset = 0; offset < needsRefresh.length; offset += 25) {
     messages.push({ body: { version: 1, tasks: needsRefresh.slice(offset, offset + 25) } });
   }
-  for (let offset = 0; offset < messages.length; offset += 100) {
-    const batch = messages.slice(offset, offset + 100);
-    await step.do("enqueue-" + kind + "-refresh-batch-" + offset, async () => {
-      await env.SEASON_REFRESH_QUEUE!.sendBatch(batch);
-      return { messages: batch.length };
+  const queueBatches = packSeasonRefreshQueueBatches(messages);
+  for (let batchIndex = 0; batchIndex < queueBatches.length; batchIndex += 1) {
+    const batch = queueBatches[batchIndex]!;
+    await step.do("enqueue-" + kind + "-refresh-batch-" + batchIndex, async () => {
+      await env.SEASON_REFRESH_QUEUE!.sendBatch(batch.messages);
+      return { messages: batch.messages.length, estimated_bytes: batch.estimated_bytes };
     });
   }
 
