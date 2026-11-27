@@ -1,3 +1,4 @@
+import { DurableObjectBase } from "./durable-object-base.ts";
 import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 import { StatboticsApiClient } from "../../../../packages/providers/statbotics/src/client.ts";
@@ -99,7 +100,7 @@ function acquired(state: EndpointState<unknown> | undefined): boolean {
 }
 
 /** One lazy, independently refreshed Durable Object per TBA team key. */
-export class TeamRuntime {
+export class TeamRuntime extends DurableObjectBase {
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
   private readonly statboticsApi: StatboticsApiClient;
@@ -114,6 +115,7 @@ export class TeamRuntime {
     state: ReturnType<typeof normalizeFieldViewTeamState>;
   }>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
+    super(state, env);
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
     this.api = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
     this.statboticsApi = new StatboticsApiClient({
