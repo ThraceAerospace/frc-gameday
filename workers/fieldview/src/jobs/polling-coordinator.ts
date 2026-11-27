@@ -575,8 +575,8 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         }
         throw new Error("Event analytics recovery registry exceeds the bounded 10,000-record scan");
       });
-      const registeredEventKeys = [...new Set(eventRegistryObjects.map((item) =>
-        item.key.slice("registry/runtime-events/".length).replace(/\.json$/, ""),
+      const registeredEventKeys = [...new Set(eventRegistryObjects.map((key) =>
+        key.slice("registry/runtime-events/".length).replace(/\.json$/, ""),
       ).filter((key) => new RegExp("^" + discovery.year + "[a-zA-Z0-9_-]+$").test(key)))];
       const uncheckedEventKeys = registeredEventKeys.filter((key) => !analyticsStateCheckedEventKeys.has(key));
       const selectedEventKeys = selectBudgetedKeys(

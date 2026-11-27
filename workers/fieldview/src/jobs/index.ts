@@ -899,7 +899,7 @@ export default {
       if (workflowId) {
         if (!/^[a-zA-Z0-9_-]{1,160}$/.test(workflowId)) return Response.json({ error: "Invalid workflow ID" }, { status: 400 });
         const prefix = `admin/workflow-runs/${type}/${workflowId}`;
-        const recordObject = await store.get(`${prefix}/record.json`);
+        const recordObject = await store.get<Record<string, unknown>>(`${prefix}/record.json`);
         if (!recordObject) return Response.json({ error: "Workflow run not found" }, { status: 404 });
         const record = recordObject;
         const workflowBinding = type === "event-readiness" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
@@ -918,12 +918,12 @@ export default {
           resolvedRecord = { ...record, status: "cancelled", updated_at: Date.now(), completed_at: Date.now() };
           await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord));
         }
-        const summaryObject = await store.get(`${prefix}/summary.json`);
+        const summaryObject = await store.get<Record<string, unknown>>(`${prefix}/summary.json`);
         const summary = summaryObject;
         const results: unknown[] = [];
         const chunkCount = Number(resolvedRecord.result_chunks ?? 0);
         for (let chunk = 0; chunk < chunkCount; chunk += 1) {
-          const object = await store.get(`${prefix}/results/${String(chunk).padStart(4, "0")}.json`);
+          const object = await store.get<Record<string, unknown>>(`${prefix}/results/${String(chunk).padStart(4, "0")}.json`);
           if (!object) continue;
           const value = object;
           if (Array.isArray(value.results)) results.push(...value.results);

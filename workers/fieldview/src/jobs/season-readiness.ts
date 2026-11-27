@@ -111,10 +111,9 @@ async function runSeasonReadiness(
     total: 0, result_chunks: 0, summary: null, error: null,
   };
   await step.do("persist-season-readiness-start", async () => {
-    await store.put(prefix + "/record.json", JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
+    await store.put(prefix + "/record.json", JSON.stringify(initial));
     await store.put("admin/workflow-runs/index/" + type + "/" + String(startedAt).padStart(16, "0") + "-" + workflowId + ".json",
-      JSON.stringify({ workflow_id: workflowId, workflow_type: type, year, started_at: startedAt, status: "running" }),
-      { httpMetadata: { contentType: "application/json" } });
+      JSON.stringify({ workflow_id: workflowId, workflow_type: type, year, started_at: startedAt, status: "running" }));
     return { workflow_id: workflowId, year };
   });
 
@@ -200,14 +199,12 @@ async function runSeasonReadiness(
   await step.do("persist-season-readiness-results", async () => {
     for (let offset = 0; offset < results.length; offset += 100) {
       await store.put(prefix + "/results/" + String(Math.floor(offset / 100)).padStart(4, "0") + ".json",
-        JSON.stringify({ offset, results: results.slice(offset, offset + 100) }),
-        { httpMetadata: { contentType: "application/json" } });
+        JSON.stringify({ offset, results: results.slice(offset, offset + 100) }));
     }
-    await store.put(prefix + "/summary.json", JSON.stringify(summary), { httpMetadata: { contentType: "application/json" } });
-    await store.put(prefix + "/record.json", JSON.stringify(completed), { httpMetadata: { contentType: "application/json" } });
+    await store.put(prefix + "/summary.json", JSON.stringify(summary));
+    await store.put(prefix + "/record.json", JSON.stringify(completed));
     await store.put("admin/workflow-runs/index/" + type + "/" + String(startedAt).padStart(16, "0") + "-" + workflowId + ".json",
-      JSON.stringify({ workflow_id: workflowId, workflow_type: type, year, started_at: startedAt, completed_at: completed.completed_at, status: completed.status }),
-      { httpMetadata: { contentType: "application/json" } });
+      JSON.stringify({ workflow_id: workflowId, workflow_type: type, year, started_at: startedAt, completed_at: completed.completed_at, status: completed.status }));
     return completed;
   });
   return summary;
