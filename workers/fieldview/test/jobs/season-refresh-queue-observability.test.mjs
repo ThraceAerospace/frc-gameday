@@ -36,3 +36,17 @@ test("queue summaries distinguish dispatched, skipped, invalid, and retry outcom
   assert.match(source, /invalid: count\("invalid"\)/);
   assert.match(source, /retry: count\("retry"\)/);
 });
+
+test("season refresh producer packs sendBatch calls below Cloudflare message and byte limits", () => {
+  assert.match(source, /MAX_QUEUE_BATCH_MESSAGES = 100/);
+  assert.match(source, /MAX_QUEUE_BATCH_BYTES = 240_000/);
+  assert.match(source, /QUEUE_MESSAGE_METADATA_BUDGET_BYTES = 128/);
+  assert.match(source, /MAX_QUEUE_MESSAGE_BYTES = 127_000/);
+  assert.match(source, /new TextEncoder\(\)/);
+  assert.match(source, /encoder\.encode\(JSON\.stringify\(message\.body\)\)\.byteLength/);
+  assert.match(source, /currentBytes \+ messageBytes > MAX_QUEUE_BATCH_BYTES/);
+  assert.match(source, /current\.length >= MAX_QUEUE_BATCH_MESSAGES/);
+  assert.match(source, /packSeasonRefreshQueueBatches\(messages\)/);
+  assert.match(source, /sendBatch\(batch\.messages\)/);
+  assert.match(source, /estimated_bytes: batch\.estimated_bytes/);
+});
