@@ -49,7 +49,7 @@ test("both Durable Objects bootstrap provider resources without materializing cl
     assert.match(source, /bootstrap:accepted:/);
     assert.match(source, /lastWebhookAt > body\.acquired_at/);
     const bootstrapStart = source.indexOf('url.pathname === "/bootstrap"');
-    const bootstrapEnd = source.indexOf("\\n    if (request.method", bootstrapStart + 1);
+    const bootstrapEnd = source.indexOf("\\n    if (", bootstrapStart + 1);
     const bootstrap = source.slice(bootstrapStart, bootstrapEnd);
     assert.doesNotMatch(bootstrap, /await this\\.(publishEventState|snapshot)\\(/);
     assert.match(bootstrap, /resource_status/);
