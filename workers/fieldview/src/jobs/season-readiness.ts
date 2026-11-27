@@ -42,7 +42,7 @@ async function mapWithConcurrency<T, R>(
 
 async function readJson<T>(env: SeasonEnvironment, key: string): Promise<T | null> {
   const object = await createDiscoveryServiceClient(env).get(key);
-  return object ? object.json<T>() : null;
+  return object;
 }
 
 async function registeredKeys(env: SeasonEnvironment, kind: RefreshKind): Promise<Set<string>> {
@@ -51,7 +51,7 @@ async function registeredKeys(env: SeasonEnvironment, kind: RefreshKind): Promis
   let cursor: string | undefined;
   do {
     const page = await createDiscoveryServiceClient(env).list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
-    for (const item of page.objects) keys.add(item.key.slice(prefix.length).replace(/\.json$/, ""));
+    for (const key of page.keys) keys.add(key.slice(prefix.length).replace(/\.json$/, ""));
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
   return keys;
@@ -83,9 +83,7 @@ async function ensureRegistered(
           },
         }));
         if (!response.ok) throw new Error(kind + " runtime registration failed for " + key + " (HTTP " + response.status + ")");
-        await createDiscoveryServiceClient(env).put(prefix + key + ".json", JSON.stringify({ year, registered_at: Date.now() }), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(env).put(prefix + key + ".json", JSON.stringify({ year, registered_at: Date.now() }));
       }
       return { registered: chunk.length };
     });
@@ -223,7 +221,7 @@ export class TeamSeasonReadinessWorkflow extends WorkflowEntrypoint<SeasonEnviro
 
 export class SeasonStatusResolverWorkflow extends WorkflowEntrypoint<SeasonEnvironment, ResolverInput> {
   async run(event: WorkflowEvent<ResolverInput>, step: WorkflowStep): Promise<Record<string, unknown>> {
-    const resolved = await step.do("resolve-tba-canonical-season", { retries: { limit: 3, delay: "30 seconds", backoff: "exponential" } }, async () => {
+    const resolved = await step.do("resolve-tba-canonical-season", async () => {
       const response = await createDiscoveryServiceClient(this.env).catalog("resolve-current-season");
       if (!response.ok) throw new Error("TBA status resolution returned HTTP " + response.status);
       const value = await response.json() as { year?: unknown; maxTeamPage?: unknown; checkedAt?: unknown; fallback?: boolean };
