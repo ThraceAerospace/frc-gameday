@@ -110,8 +110,9 @@ export default async function EventPage({
   ) : null;
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
-  const incompleteReasons = [!eventSnapshot ? "event_state_missing" : null, !eventSnapshot?.event ? "event_record_missing" : null, !teamsAvailable ? "event_teams_missing" : null, !matchesAvailable ? "event_matches_missing" : null].filter((reason): reason is string => reason !== null);
-  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ response_state: "partial", entity_kind: "event", entity_key: eventKey, served: true, served_source: !eventSnapshot?.event ? "tba_event_discovery" : "fieldview_event_snapshot", reason_codes: incompleteReasons }));
+  // EventState may legitimately publish an empty or absent team/match projection.
+  // Only a missing EventState publication is an incomplete-state demand signal.
+  if (!eventSnapshot) console.info("[FV][IncompleteStateServed]", JSON.stringify({ response_state: "partial", entity_kind: "event", entity_key: eventKey, served: true, served_source: "tba_event_discovery", reason_codes: ["event_state_missing"] }));
 
   return (
     <SiteShell>
