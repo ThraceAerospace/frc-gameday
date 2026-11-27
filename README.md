@@ -1,34 +1,58 @@
 # FieldView
 
-FieldView is a data application for FIRST Robotics Competition. It acquires competition data from provider APIs, stores the provider resources, derives normalized FieldView state on demand, and serves that state to web and live clients.
+FieldView is a data application for FIRST Robotics Competition. It acquires upstream competition data, stores provider resources in Cloudflare Durable Objects, derives normalized FieldView state on demand, and serves that state to web and realtime clients.
 
-## Final architecture
+## Architecture at a glance
 
-- **Frontend:** Next.js 16 / React 19 in `apps/web`, hosted on Vercel. Vercel is a frontend host only; it does not own provider acquisition, event state, analytics orchestration, webhook processing, or realtime delivery.
-- **Runtime:** one environment-neutral Cloudflare Worker named `runtime`, composed from `workers/fieldview/src/index.ts` and configured by `workers/fieldview/wrangler.toml`. Branch and PR testing uses Cloudflare Worker Preview URLs and isolated Preview bindings, not Wrangler named environments.
-- **Canonical resources:** EventRuntime and TeamRuntime Durable Objects persist provider endpoint responses and their validators/metadata. These provider records are the durable source of truth.
-- **Read projections:** EventState and TeamState are normalized client contracts. A read builds the appropriate projection from the stored endpoint records. The current implementation keeps only a disposable in-memory hot projection; it does not persist EventState or TeamState. A cold read regenerates the projection, and a read must not write Durable Object storage.
-- **Acquisition and scheduling:** Cloudflare Workflows and the Worker-level polling coordinator perform discovery, bootstrap, provider refresh, and analytics orchestration. There is no queue-based compatibility path and no Durable Object alarm polling.
-- **Storage:** Durable Object SQLite owns event/team provider resources and runtime-scoped data; D1 owns discovery and operational/system records; KV is limited to lightweight projections and canonical pointers. The architecture does not use R2.
-- **Realtime:** the browser SharedWorker multiplexes canonical subscriptions to the Worker `/stream` endpoint. It does not fetch provider APIs or run a second EventState polling implementation. Snapshot recovery uses the Worker snapshot endpoints.
-- **Webhooks:** TBA posts directly to the Worker's `/webhooks/tba` endpoint. There is no Vercel relay or Redis Pub/Sub fan-out.
-- **Realtime:** The browser reads `/snapshot` before connecting to `/stream`; data-bearing WebSocket updates and reconnects do not trigger HTTP refetches.
-- **Remote display:** RemoteSessionRuntime owns WebRTC signaling over hibernatable Durable Object WebSockets; it does not use Redis leases, Vercel WebSockets, heartbeats, or alarm polling.
+- **Web application:** Next.js in `apps/web`, hosted on Vercel. Vercel hosts the frontend; it is not a provider-data, persistence, orchestration, webhook, or realtime backend.
+- **Runtime:** one environment-neutral Cloudflare Worker named `runtime`, implemented in `workers/fieldview` and configured by its single `wrangler.toml`. Production uses top-level configuration. Branch and pull-request validation uses Cloudflare Workers Preview URLs and Preview bindings, not Wrangler named environments.
+- **Runtime ownership:** one EventRuntime Durable Object owns each event; one TeamRuntime owns each team. Each runtime owns its provider requests, validators, endpoint records, reconciliation, persistence, freshness, and publications for its scope.
+- **Durable provider data:** provider endpoint responses and acquisition metadata are the canonical durable inputs. EventState and TeamState are normalized, client-facing projections built from those records when read; they are not persisted.
+- **Initialization:** a Workflow may perform one bounded, one-time provider acquisition when a runtime is first registered/created. This bootstrap exists to reliably hydrate a new runtime. Once initialized, ongoing provider acquisition is performed by the owning runtime in response to explicit commands dispatched by the polling coordinator or other approved operations.
+- **Reads:** public snapshot reads are read-only. They do not fetch providers, start workflows, mutate readiness, or write Durable Object storage. A cold read derives the projection from durable provider endpoint records; an optional in-memory projection cache is disposable.
+- **Orchestration:** Cloudflare Workflows own durable multi-step jobs such as discovery, first-time runtime initialization, season ingestion, analytics, and administrative operations. The Worker-level polling coordinator selects eligible runtime identities and dispatches bounded refresh commands; it does not proxy provider requests.
+- **Realtime:** clients obtain an HTTP snapshot first, then subscribe through the single Multiplexer-owned `/stream` WebSocket. Notifications carry the changed state data (or the committed analytics publication), not merely a revision/invalidation. The SharedWorker applies ordered updates in memory. Notifications, gaps, and reconnects do not trigger hidden HTTP refetches.
+- **Storage:** Durable Object SQLite owns runtime-scoped canonical provider records and runtime data. D1 owns discovery and operational/system records. KV is limited to small, non-authoritative projections and pointers. R2, Redis, and Cloudflare Queues are not part of the architecture.
+- **Webhooks:** TBA sends directly to the Worker's `/webhooks/tba` ingress. There is no Vercel relay or Redis Pub/Sub layer.
+- **Remote display:** RemoteSessionRuntime owns remote-session signaling over Durable Object WebSockets.
 
-## Development
+## Repository layout
 
-Install dependencies with `npm ci`.
+- `apps/web` — Next.js frontend and browser-side clients.
+- `apps/admin-cloudflare` — Cloudflare Worker admin asset build.
+- `workers/fieldview/src/runtime` — HTTP routing, Durable Objects, provider-resource ownership, snapshot projection, realtime multiplexing, webhook ingress, and remote sessions.
+- `workers/fieldview/src/jobs` — Workflows, discovery/season orchestration, polling coordination, analytics jobs, and runtime initialization.
+- `packages/domain` — canonical FieldView domain model and normalization.
+- `packages/contracts` — serializable client-facing contracts.
+- `packages/providers/*` — provider clients, generated schemas, and transport-specific behavior.
+- `packages/analytics` — provider- and UI-independent analytics calculations.
 
-Run the frontend and Worker separately:
+## Local development
+
+Install dependencies:
 
 ```bash
-npm run dev
+npm ci
+```
+
+Copy the Worker local variables template and start the Worker:
+
+```bash
+cp workers/fieldview/.dev.vars.example workers/fieldview/.dev.vars
 npm run dev:worker
 ```
 
-Local Worker secrets and variables belong in `workers/fieldview/.dev.vars` (copy `workers/fieldview/.dev.vars.example` there). Frontend deployment variables belong to the Vercel project configuration; do not place Worker secrets in frontend-visible variables. Do not create a root `.env` file.
+Start the web application separately:
 
-Validate the repository:
+```bash
+npm run dev
+```
+
+Worker secrets belong in `workers/fieldview/.dev.vars`. Frontend variables belong in the Vercel project configuration. Do not put Worker secrets in browser-visible variables or create an additional root environment file.
+
+## Validation
+
+Use the repository scripts as the source of truth:
 
 ```bash
 npm run typecheck
@@ -37,16 +61,13 @@ npm run lint
 npm run build
 ```
 
-TBA and Statbotics generated types are maintained by the provider packages. The root scripts regenerate them through `predev` and `prebuild`.
-
-## Integration status
-
-The `fieldview-architecture-migration` branch is the target architecture and the integration-testing candidate. The branch has not been deployed to Cloudflare, merged into `main`, or used for production data. No legacy queue messages, deployed resources, or production data are migration requirements. Final integration testing must validate clean resource creation, provider bootstrap, read-time projection, zero-write reads, polling, analytics, realtime subscriptions, webhook authentication, and remote-session signaling before merge and production deployment.
+Before production cutover, validate the clean Preview resource baseline, first-time runtime bootstrap, read-time projections and zero-write reads, polling, analytics, data-bearing realtime updates, webhook authentication, and remote-session signaling. Passing repository CI is necessary but does not replace deployed Preview integration testing.
 
 ## Architecture references
 
 - [Architecture overview](docs/ARCHITECTURE.md)
-- [Final integration plan](docs/architecture/MIGRATION-PLAN.md)
-- [Target resource inventory](docs/architecture/MIGRATION-INVENTORY.md)
-- [Retirement audit](docs/architecture/RETIREMENT-AUDIT.md)
+- [Runtime and data lifecycle](docs/development/FIELDVIEW-RUNTIME.md)
+- [Cloudflare deployment model](docs/development/CLOUDFLARE-ENVIRONMENTS.md)
+- [EventState and analytics contracts](docs/EVENT-STATE-AND-ANALYTICS.md)
 - [Architecture decisions](docs/architecture/decisions/)
+- [Production integration and cutover gate](docs/architecture/MIGRATION-PLAN.md)
