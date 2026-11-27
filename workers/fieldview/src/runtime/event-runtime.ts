@@ -300,7 +300,7 @@ export class EventRuntime extends DurableObjectBase {
   private allowedEndpoints: Set<string>;
   private readonly activation: Promise<void>;
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
-  private hydratedPublication: EventStateProjection | undefined;
+  private hotProjection: EventStateProjection | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
     super(state, env);
@@ -318,8 +318,8 @@ export class EventRuntime extends DurableObjectBase {
     this.eventKey = eventKey ?? "";
     this.allowedEndpoints = new Set(this.eventKey ? eventResourceEndpoints(this.eventKey) : []);
     this.hydrationMode = state.blockConcurrencyWhile ? "platform-barrier" : "storage-backed";
-    // Hydrate only this object's persisted identity/publication. No provider
-    // acquisition, analytics work, or cross-runtime calls occur during activation.
+    // Restore only this object's persisted identity. Provider acquisition and
+    // projection construction remain explicit operations.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
           const storedKey = await this.storage.get<string>("event-key");
@@ -386,8 +386,8 @@ export class EventRuntime extends DurableObjectBase {
     } else if (!(await this.bindEventKey(request))) {
       return Response.json({ error: "Invalid or mismatched event identity" }, { status: 400 });
     }
-    // Public reads never create or replace a publication. Explicit runtime
-    // commands own publication work.
+    // Public reads create only the requested ephemeral projection. Explicit
+    // commands own provider-resource writes.
     if (request.method === "POST" && url.pathname === "/bootstrap") {
       const body: unknown = await request.json().catch(() => null);
       const year = Number(this.eventKey.slice(0, 4));
@@ -907,7 +907,7 @@ export class EventRuntime extends DurableObjectBase {
           hydrated_scope: ["event_identity", "provider_endpoint_records"],
           event_state_projection: {
             available: rosterAvailable,
-            hot_cache: Boolean(this.hydratedPublication),
+            hot_cache: Boolean(this.hotProjection),
             status: eventStateStatus,
             version: snapshotVersion,
             source_revision: currentSourceRevision,
@@ -1215,7 +1215,7 @@ export class EventRuntime extends DurableObjectBase {
       STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
     ];
     const [previous, version, resources] = await Promise.all([
-      Promise.resolve(this.hydratedPublication),
+      Promise.resolve(this.hotProjection),
       this.storage.get<number>("snapshot-revision").then((value) => value ?? 0),
       Promise.all(endpoints.map((endpoint) =>
         this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint)))),
@@ -1230,7 +1230,7 @@ export class EventRuntime extends DurableObjectBase {
     if (previous && previous.snapshotVersion === version && previous.sourceRevision === sourceRevision &&
         previous.sourceSignature === sourceSignature &&
         previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
-      this.hydratedPublication = previous;
+      this.hotProjection = previous;
       return previous;
     }
     const result = await this.buildEventState();
@@ -1249,7 +1249,7 @@ export class EventRuntime extends DurableObjectBase {
         ? "complete" : acquiredCount > 0 ? "partial" : "failed",
       state: result.state,
     };
-    this.hydratedPublication = publication;
+    this.hotProjection = publication;
     return publication;
   }
 
@@ -1655,7 +1655,7 @@ export class EventRuntime extends DurableObjectBase {
     let publication: EventStateProjection | null = null;
     try {
       publication = teamProjectionOnly
-        ? this.hydratedPublication ?? null
+        ? this.hotProjection ?? null
         : await this.getEventStateProjection();
     } catch {
       // An incomplete provider representation must not make polling fail.
