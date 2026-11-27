@@ -6,7 +6,7 @@ export type AnalyticsMatch = {
   match: TBAMatch;
   statbotics: StatboticsMatch | null;
   statboticsStatus: "ready" | "unavailable";
-  /** Server-calculated match review flags; absent while legacy jobs are loaded. */
+  /** Server-calculated match review flags; absent until the canonical analytics publication is available. */
   flags?: FieldViewMatchFlags;
 };
 
