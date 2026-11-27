@@ -280,6 +280,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       }),
     );
 
+
     // Team profiles are acquired from the complete TBA team directory, not
     // only from teams that have appeared on an active event roster. The same
     // rotating budget makes this a gradual one-time fill rather than a burst.
@@ -291,7 +292,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
       : [];
     const initialTeamCandidates = selectBudgetedKeys(
-      allDiscoveredTeamKeys,
+      allDiscoveredTeamKeys.filter((teamKey) => !participantTeamKeys.has(teamKey)),
       MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
       Math.floor(scheduledAt / (5 * 60_000)),
     );
