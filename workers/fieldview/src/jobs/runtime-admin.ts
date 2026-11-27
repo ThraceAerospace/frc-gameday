@@ -92,7 +92,7 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
     await step.do("dispatch-team-runtime-seed", async () => {
       const response = await dispatch(this.env, "team", teamKey, "seed", { year: p.year });
       if (!response.ok && response.status !== 202) throw new Error("TeamRuntime seed returned HTTP " + response.status);
-      return { queued: true };
+      return { dispatched: true };
     });
     await update({ phase: "waiting-for-team-history" });
     const historyEndpoint = TBA_ENDPOINTS.teamEvents(teamKey, p.year);
