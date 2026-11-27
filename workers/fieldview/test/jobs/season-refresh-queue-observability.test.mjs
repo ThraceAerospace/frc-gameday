@@ -23,8 +23,8 @@ test("queue logs identify each entity-season task and its dispatch outcome", () 
 
 test("queue invocation detects duplicate entity-season tasks without persistent writes", () => {
   assert.match(source, /const seenTaskIds = new Set<string>\(\)/);
-  assert.match(source, /if \(seenTaskIds\.has\(taskId\)\)/);
-  assert.match(source, /duplicate_tasks: count\("duplicate"\)/);
+  assert.match(source, /const duplicate = seenTaskIds\.has\(taskId\)/);
+  assert.match(source, /duplicate_tasks: duplicateTaskIds\.size/);
   assert.match(source, /unique_task_ids_in_message/);
   const consumer = source.slice(source.indexOf("export async function consumeSeasonRefreshQueue"));
   assert.doesNotMatch(consumer, /\.put\(|\.delete\(|\.send\(/);
