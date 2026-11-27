@@ -1388,7 +1388,7 @@ export class EventRuntime extends DurableObjectBase {
         state: {
           ...previous.state,
           sources: isRecord(previous.state.sources) ? previous.state.sources : {},
-        },
+        } as typeof previous.state,
       };
       this.hydratedPublication = legacyProjection;
       return legacyProjection;
