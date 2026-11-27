@@ -217,7 +217,6 @@ export default function RemoteSession({
         };
         eventSnapshotsRef.current = next;
         setEventSnapshots(next);
-        peerRef.current?.sendMessage({ type: "eventSnapshot", eventKey, ...value });
       });
 
       eventSubscriptionsRef.current.set(eventKey, unsubscribe);
