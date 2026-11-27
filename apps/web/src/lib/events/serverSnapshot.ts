@@ -73,7 +73,7 @@ export type CanonicalEventSnapshotResponse = {
 
 /**
  * Read the canonical event snapshot when a server-side runtime origin is
- * configured. A null result means the caller should retain its legacy path.
+ * configured. A null result means the canonical Worker snapshot is unavailable.
  */
 export async function getCanonicalEventSnapshot(
   eventKey: string,
@@ -233,7 +233,7 @@ export type CanonicalTeamSnapshotResponse = {
   snapshot: FieldViewTeamState;
 };
 
-/** Read the canonical team aggregate; null leaves the caller's compatibility path available. */
+/** Read the canonical team aggregate; null means the canonical Worker snapshot is unavailable. */
 export async function getCanonicalTeamSnapshot(
   teamKey: string,
   year: number,
