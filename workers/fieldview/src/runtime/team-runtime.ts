@@ -115,6 +115,11 @@ export class TeamRuntime extends DurableObjectBase {
     representation_signature?: string;
     state: ReturnType<typeof normalizeFieldViewTeamState>;
   }>();
+  private readonly seasonAnalyticsCache = new Map<string, {
+    team_source_revision: number;
+    event_revisions: Record<string, number>;
+    response: Record<string, unknown>;
+  }>();
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, teamKey = "") {
     super(state, env);
     this.storage = state.storage; this.env = env; this.teamKey = teamKey;
@@ -983,7 +988,7 @@ export class TeamRuntime extends DurableObjectBase {
     // Workflow owns cross-runtime freshness and writes versioned TeamEventState
     // results here; local revisions invalidate this aggregate when those results change.
     const cacheKey = "team-season-analytics:" + year;
-    const cached = await this.storage.get<{
+    const cached = this.seasonAnalyticsCache.get(cacheKey) ?? await this.storage.get<{
       team_source_revision: number;
       event_revisions: Record<string, number>;
       response: Record<string, unknown>;
@@ -1056,10 +1061,9 @@ export class TeamRuntime extends DurableObjectBase {
         headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store", "X-FieldView-Analytics-Status": "stale" },
       });
     }
-    await this.storage.put(cacheKey, {
+    this.seasonAnalyticsCache.set(cacheKey, {
       team_source_revision: teamSourceRevision,
       event_revisions: eventRevisions,
-      checkedAt: Date.now(),
       response: result,
     });
     return Response.json(result, {
