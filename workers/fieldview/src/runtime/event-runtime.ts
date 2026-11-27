@@ -18,6 +18,7 @@ import type {
 import { reconcilePolledEndpoint, reconcileWebhookEndpoint } from "./reconciliation.ts";
 import { affectedTeamsForChangedMatches } from "./affected-match-teams.ts";
 import { createProviderSourceVersion } from "./source-record.ts";
+import { validateRuntimeBootstrapBundle } from "./bootstrap.ts";
 import type { TBAAward, TBAEliminationAlliance, TBAEvent, TBAEventAdvancementPoints, TBAEventOPRs, TBAEventPredictions, TBAEventRanking, TBAEventTeamStatuses, TBAMatch, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
 import type { StatboticsMatch } from "../../../../packages/providers/statbotics/src/types.ts";
 import type { EventKey } from "../../../../packages/domain/src/ids.ts";
@@ -401,6 +402,42 @@ export class EventRuntime extends DurableObjectBase {
     }
     // Public reads never create or replace a publication. Explicit runtime
     // commands own publication work.
+    if (request.method === "POST" && url.pathname === "/bootstrap") {
+      const body: unknown = await request.json().catch(() => null);
+      const year = Number(this.eventKey.slice(0, 4));
+      if (!validateRuntimeBootstrapBundle(body, { kind: "event", key: this.eventKey, year })) {
+        return Response.json({ error: "Invalid event bootstrap bundle" }, { status: 400 });
+      }
+      const allowed = new Set([...this.allowedEndpoints, STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)]);
+      if (body.resources.some((resource) => !allowed.has(resource.endpoint))) {
+        return Response.json({ error: "Bootstrap contains an unrecognized event resource" }, { status: 400 });
+      }
+      const receipt = await this.storage.transaction(async (tx) => {
+        const receiptKey = "bootstrap:accepted:" + year;
+        const previous = await tx.get<{ bootstrap_id: string; acquired_at: number; snapshot_revision: number; publication_status: "complete" | "partial" | "failed" }>(receiptKey);
+        if (previous?.bootstrap_id === body.bootstrap_id) return { ...previous, duplicate: true };
+        if (previous && previous.acquired_at > body.acquired_at) return null;
+        const existing = await Promise.all(body.resources.map((resource) => tx.get<EndpointState<unknown>>(endpointStorageKey(resource.endpoint))));
+        if (existing.some((resource) => resource?.lastFetchedAt !== null && resource?.lastFetchedAt !== undefined &&
+            resource.lastFetchedAt > body.acquired_at)) return null;
+        for (const resource of body.resources) await tx.put(endpointStorageKey(resource.endpoint), resource);
+        const snapshotRevision = (await tx.get<number>("snapshot-revision") ?? 0) + 1;
+        await tx.put("snapshot-revision", snapshotRevision);
+        const status = body.resources.every((resource) => resource.status === "available") ? "complete" as const
+          : body.resources.some((resource) => resource.lastFetchedAt !== null) ? "partial" as const : "failed" as const;
+        const next = { bootstrap_id: body.bootstrap_id, acquired_at: body.acquired_at, snapshot_revision: snapshotRevision, publication_status: status };
+        await tx.put(receiptKey, next);
+        return { ...next, duplicate: false };
+      });
+      if (!receipt) return Response.json({ error: "Bootstrap is older than runtime data" }, { status: 409 });
+      if (!receipt.duplicate) await this.publishEventState();
+      return Response.json({
+        bootstrap_id: receipt.bootstrap_id, accepted: true, duplicate: receipt.duplicate,
+        kind: "event", key: this.eventKey, year, snapshot_revision: receipt.snapshot_revision,
+        publication_status: receipt.publication_status,
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/subscriptions") {
       const body: unknown = await request.json().catch(() => null);
       if (!isRecord(body) || (body.action !== "subscribe" && body.action !== "unsubscribe") ||
