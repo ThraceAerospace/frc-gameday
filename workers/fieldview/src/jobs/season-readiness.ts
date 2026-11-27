@@ -32,6 +32,24 @@ const validYear = (year: unknown): year is number =>
 const validTeam = (key: unknown): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key);
 const validEvent = (key: unknown): key is string => typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key);
 
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(items.length, Math.max(1, Math.floor(concurrency)));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]!, index);
+    }
+  }));
+  return results;
+}
+
 async function readJson<T>(env: SeasonEnvironment, key: string): Promise<T | null> {
   const object = await createDiscoveryServiceClient(env).get(key);
   return object ? object.json<T>() : null;
