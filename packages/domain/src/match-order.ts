@@ -1,4 +1,12 @@
-import type { TBAMatch } from "@fieldview/provider-tba/types";
+/** Minimal TBA match fields required for canonical ordering. */
+export interface TbaMatchOrderingFields {
+  comp_level: string;
+  set_number: number;
+  match_number: number;
+  actual_time?: number | null;
+  predicted_time?: number | null;
+  time?: number | null;
+}
 
 const COMPETITION_LEVEL_ORDER: Record<string, number> = {
   qm: 0,
@@ -13,7 +21,7 @@ function competitionLevelOrder(level: string): number {
 }
 
 /** TBA's competition-order comparison: level, set, then match number. */
-export function compareMatches(a: TBAMatch, b: TBAMatch): number {
+export function compareMatches(a: TbaMatchOrderingFields, b: TbaMatchOrderingFields): number {
   const levelDifference =
     competitionLevelOrder(a.comp_level) - competitionLevelOrder(b.comp_level);
   if (levelDifference !== 0) return levelDifference;
@@ -28,7 +36,7 @@ export function compareMatches(a: TBAMatch, b: TBAMatch): number {
  * TBA's BestTime behavior: actual, then predicted, then scheduled.
  * A zero/unset epoch is absent; no other fallback is introduced.
  */
-export function bestMatchTime(match: TBAMatch): number | undefined {
+export function bestMatchTime(match: TbaMatchOrderingFields): number | undefined {
   for (const candidate of [
     match.actual_time,
     match.predicted_time,
@@ -42,7 +50,7 @@ export function bestMatchTime(match: TBAMatch): number | undefined {
 }
 
 /** Stable TBA competition ordering. Equal matches retain their input order. */
-export function sortMatches<T extends TBAMatch>(matches: readonly T[]): T[] {
+export function sortMatches<T extends TbaMatchOrderingFields>(matches: readonly T[]): T[] {
   return [...matches].sort(compareMatches);
 }
 
@@ -51,7 +59,7 @@ export function sortMatches<T extends TBAMatch>(matches: readonly T[]): T[] {
  * stably sort by BestTime. Matches without a usable timestamp sort last.
  * Modern ECMAScript Array#sort is stable (ES2019+).
  */
-export function sortMatchesByTime<T extends TBAMatch>(matches: readonly T[]): T[] {
+export function sortMatchesByTime<T extends TbaMatchOrderingFields>(matches: readonly T[]): T[] {
   return sortMatches(matches).sort((a, b) => {
     const aTime = bestMatchTime(a);
     const bTime = bestMatchTime(b);
