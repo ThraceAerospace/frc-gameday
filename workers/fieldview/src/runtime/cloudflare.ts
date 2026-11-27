@@ -20,9 +20,6 @@ export interface DurableObjectTransactionLike {
   put<T = unknown>(key: string, value: T): Promise<void>;
   list<T = unknown>(options?: { prefix?: string; startAfter?: string; limit?: number }): Promise<Map<string, T>>;
   delete(key: string): Promise<boolean>;
-  setAlarm(scheduledTime: number | Date): Promise<void>;
-  deleteAlarm(): Promise<void>;
-  getAlarm?(): Promise<number | null>;
 }
 
 export interface DurableObjectStorageLike extends DurableObjectTransactionLike {
