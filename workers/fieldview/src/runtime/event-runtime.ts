@@ -1353,16 +1353,27 @@ export class EventRuntime extends DurableObjectBase {
   }
 
   private async publishEventState(): Promise<EventStatePublication> {
-    // EventState is a derived read model. Keep it only in this DO instance's
-    // memory; provider endpoint records remain the durable source of truth.
-    // This method is intentionally storage-read-only.
-    const result = await this.buildEventState();
+    // EventState is a derived read model. A previously materialized copy is
+    // an optional cache only; provider endpoint records remain authoritative.
+    // Reads may hydrate/rebuild this projection in memory, but never persist it.
     const endpoints = [
       ...eventResourceEndpoints(this.eventKey),
       STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
     ];
-    const resources = await Promise.all(endpoints.map((endpoint) =>
-      this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint))));
+    const [previous, version, resources] = await Promise.all([
+      Promise.resolve(this.hydratedPublication).then(async (cached) =>
+        cached ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY)),
+      this.storage.get<number>("snapshot-revision").then((value) => value ?? 0),
+      Promise.all(endpoints.map((endpoint) =>
+        this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint)))),
+    ]);
+    const sourceRevision = resources.reduce((total, resource) => total + (resource?.revision ?? 0), 0);
+    if (previous && previous.snapshotVersion === version && previous.sourceRevision === sourceRevision &&
+        previous.state?.event_key === this.eventKey && isRecord(previous.state.sources)) {
+      this.hydratedPublication = previous;
+      return previous;
+    }
+    const result = await this.buildEventState();
     const now = Date.now();
     const acquiredCount = resources.filter((resource) =>
       resource?.lastFetchedAt != null || resource?.lastWebhookAt != null).length;
