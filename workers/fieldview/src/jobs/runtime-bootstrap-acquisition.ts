@@ -61,7 +61,10 @@ export async function acquireRuntimeBootstrap(
   const colors = new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {});
   const resources = kind === "event" ? eventResources(key) : teamResources(key, year);
 
-  const states = await Promise.all(resources.map(async (resource): Promise<EndpointState<unknown>> => {
+  const states: EndpointState<unknown>[] = [];
+  // Keep each entity's provider requests sequential, matching the ongoing
+  // runtime refresh path. The season workflow bounds entity-level concurrency.
+  for (const resource of resources) {
     const state = createEndpointState<unknown>(resource.endpoint);
     const now = Date.now();
     try {
@@ -69,23 +72,23 @@ export async function acquireRuntimeBootstrap(
       const response = await client.request(resource.endpoint);
       const expiresAt = cacheMaxAge(response.headers.get("Cache-Control"));
       if (response.status === 404) {
-        return { ...state, status: "unavailable", lastAttemptAt: now };
+        states.push({ ...state, status: "unavailable", lastAttemptAt: now });
+      } else if (!response.ok) {
+        states.push({ ...state, status: "failed", lastAttemptAt: now });
+      } else {
+        const data: unknown = await response.json();
+        states.push({
+          ...state, status: "available", data, providerData: data,
+          etag: response.headers.get("ETag"),
+          lastFetchedAt: now,
+          expiresAt: expiresAt === null ? null : now + expiresAt * 1000,
+          revision: 1, validatorRevision: 1, lastAttemptAt: now,
+        });
       }
-      if (!response.ok) {
-        return { ...state, status: "failed", lastAttemptAt: now };
-      }
-      const data: unknown = await response.json();
-      return {
-        ...state, status: "available", data, providerData: data,
-        etag: response.headers.get("ETag"),
-        lastFetchedAt: now,
-        expiresAt: expiresAt === null ? null : now + expiresAt * 1000,
-        revision: 1, validatorRevision: 1, lastAttemptAt: now,
-      };
     } catch {
-      return { ...state, status: "failed", lastAttemptAt: now };
+      states.push({ ...state, status: "failed", lastAttemptAt: now });
     }
-  }));
+  }
 
   return {
     version: 1, bootstrap_id: bootstrapId, kind, key, year,
