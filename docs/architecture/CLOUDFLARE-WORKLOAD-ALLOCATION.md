@@ -29,7 +29,7 @@ No R2 bucket or binding is part of the target. No Cloudflare Queue producer or c
 3. Missing endpoint resources are acquired through provider adapters and imported into EventRuntime or TeamRuntime.
 4. The polling coordinator schedules subsequent refreshes according to event/team lifecycle and provider intervals.
 5. Explicit webhook reconciliation updates affected endpoint records and publishes scoped changes.
-6. Reads construct normalized EventState/TeamState from the stored endpoint records. A matching in-memory or optional persisted projection may accelerate the read; it is never required.
+6. Reads construct normalized EventState/TeamState from the stored endpoint records. A matching in-memory projection may accelerate the read. The current implementation does not persist normalized projections.
 7. A cold read or cache miss rebuilds the projection without writing Durable Object storage or triggering provider requests.
 
 ## Scheduling and backpressure
