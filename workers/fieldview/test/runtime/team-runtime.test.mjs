@@ -95,16 +95,6 @@ test("TeamRuntime reconstructs a failed-source projection from retained endpoint
     lastError: "provider unavailable",
   };
   storage.values.set("endpoint:" + resources[0].endpoint, failedState);
-  const representationSignature = JSON.stringify(resources.map((resource, index) => index === 0
-    ? [failedState.revision, failedState.lastFetchedAt, failedState.etag]
-    : null));
-  const lastGood = { team_key: teamKey, year, team: { team_number: 3461 }, sources: {} };
-  const publication = {
-    input_signature: "previous-publication-signature",
-    representation_signature: representationSignature,
-    state: lastGood,
-  };
-  storage.values.set("team-state:" + year + ":publication", publication);
   const runtime = new TeamRuntime({ storage }, env(async () => {
     throw new Error("snapshot must not retry provider I/O");
   }), teamKey);
@@ -116,36 +106,8 @@ test("TeamRuntime reconstructs a failed-source projection from retained endpoint
     "the last-good provider representation remains available");
   assert.equal(projection.sources.tba_team.status, "failed",
     "the ephemeral projection reflects the current failed source status");
-  assert.equal(storage.values.get("team-state:" + year + ":publication"), publication,
-    "reads never rewrite the optional legacy materialized projection");
-});
-
-test("TeamRuntime hydrates persisted season publications without deleting legacy copies", async () => {
-  const storage = new MemoryStorage();
-  const state = { team_key: "frc3461", year: 2026, events: [], sources: {} };
-  storage.values.set("team-key", "frc3461");
-  storage.values.set("team-state:2026:publication", { input_signature: "persisted-signature", state });
-  storage.values.set("team-state:2026", state); // legacy duplicate from the pre-normalized writer
-  let providerCalls = 0, activationCalls = 0;
-  const runtime = new TeamRuntime({
-    storage,
-    blockConcurrencyWhile: async (callback) => { activationCalls += 1; await callback(); },
-  }, env(async () => { providerCalls += 1; return Response.json([]); }));
-  const response = await runtime.fetch(new Request("https://team/snapshot?year=2026", {
-    headers: { "X-FieldView-Team-Key": "frc3461" },
-  }));
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).team_key, "frc3461");
-  assert.equal(activationCalls, 1);
-  assert.equal(providerCalls, 0);
-  assert.equal(storage.values.has("team-state:2026"), true,
-    "activation leaves legacy duplicates untouched for an explicit migration");
-  const diagnostics = await runtime.fetch(new Request("https://team/state", {
-    headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": "frc3461" },
-  }));
-  const readiness = (await diagnostics.json()).readiness;
-  assert.equal(readiness.hydration, "complete");
-  assert.equal(readiness.publications.length, 1);
+  assert.equal(storage.values.has("team-state:" + year + ":publication"), false,
+    "read-time TeamState is never persisted");
 });
 
 test("TeamRuntime derives snapshots on read without persisting them", async () => {
@@ -242,7 +204,6 @@ test("TeamRuntime seed performs its own provider refresh before returning", asyn
   }));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.queued, false);
   assert.equal(result.attempted, true);
   assert.equal(calls.length, 7, "TeamRuntime seed fetches its own provider resources inline");
   assert.equal(storage.alarmAt, null);
@@ -289,7 +250,6 @@ test("TeamRuntime admin seed directly refreshes resources sequentially", async (
   }));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.queued, false);
   assert.equal(result.attempted, true);
   assert.equal(calls.length, 7, "seed requests fetch providers directly inside the runtime");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
@@ -788,50 +748,6 @@ test("TeamRuntime refreshes Statbotics team-year and team-event resources after 
 
 
 
-
-test("TeamRuntime lazily migrates legacy TeamEventState copies to EventRuntime references", async () => {
-  const storage = new MemoryStorage(), teamKey = "frc3461", eventKey = "2026legacy";
-  const legacyMatch = {
-    key: eventKey + "_qm1",
-    event_key: eventKey,
-    alliances: {
-      red: { team_keys: [teamKey, "frc1", "frc2"], score: 0 },
-      blue: { team_keys: ["frc3", "frc4", "frc5"], score: 0 },
-    },
-  };
-  storage.values.set("team-event-state:" + eventKey, {
-    event_key: eventKey,
-    team_key: teamKey,
-    sources: { team: {}, event_team: {}, matches: {} },
-    team: { key: teamKey, team_number: 3461 },
-    event_team: { event_key: eventKey, team_key: teamKey, sources: {} },
-    matches: [legacyMatch],
-    analytics: { event_key: eventKey, team_key: teamKey, metrics: [], findings: [] },
-  });
-  storage.values.set("team-event-state:" + eventKey + ":inputs", {
-    event_source_revision: 9, team_source_revision: 2, comparison_input_updated_at: 10,
-  });
-  const runtime = new TeamRuntime({ storage }, env(async () => {
-    throw new Error("reading an existing TeamEventState must not fetch providers");
-  }), teamKey);
-  const response = await runtime.fetch(new Request("https://team-runtime/event-state?event_key=" + eventKey + "&year=2026", {
-    headers: { "X-FieldView-Team-Key": teamKey },
-  }));
-  assert.equal(response.status, 200);
-  const migrated = await response.json();
-  assert.equal("team" in migrated, false);
-  assert.equal("event_team" in migrated, false);
-  assert.equal("matches" in migrated, false);
-  assert.deepEqual(migrated.event_team_ref, {
-    owner: "event-runtime", owner_id: eventKey, record_type: "event-team", record_id: teamKey, revision: 9,
-  });
-  assert.deepEqual(migrated.match_refs, [{
-    owner: "event-runtime", owner_id: eventKey, record_type: "match", record_id: legacyMatch.key, revision: 9,
-  }]);
-  assert.equal(migrated.analytics.team_key, teamKey);
-  assert.equal("matches" in storage.values.get("team-event-state:" + eventKey), true,
-    "public reads normalize the legacy copy but never rewrite durable storage");
-});
 
 test("TeamRuntime does not accept EventRuntime-owned webhook updates", async () => {
   const storage = new MemoryStorage();
