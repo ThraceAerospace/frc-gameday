@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DiscoveryService } from "../../src/runtime/discovery-service.ts";
+import { createDiscoveryServiceClient } from "../../src/jobs/discovery-client.ts";
 
 function createState() {
   const values = new Map();
@@ -19,35 +20,34 @@ function createState() {
   };
 }
 
-test("DiscoveryService persists records and returns parsed JSON", async () => {
-  const store = new DiscoveryService(createState().storage);
-  const put = await store.fetch(new Request("https://store/put", { method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: "discovery/events/2026.json", value: JSON.stringify({ year: 2026 }) }) }));
-  assert.equal(put.status, 200);
-  const get = await store.fetch(new Request("https://store/get?key=discovery%2Fevents%2F2026.json"));
-  assert.deepEqual(await get.json(), { year: 2026 });
-});
-
-test("DiscoveryService returns 404 for missing records and rejects invalid writes", async () => {
-  const store = new DiscoveryService(createState().storage);
-  assert.equal((await store.fetch(new Request("https://store/get?key=missing"))).status, 404);
-  const response = await store.fetch(new Request("https://store/put", { method: "POST",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "x", value: 1 }) }));
-  assert.equal(response.status, 400);
-});
-
-test("DiscoveryService paginates prefix listings with an exclusive cursor", async () => {
+test("DiscoveryServiceClient reads and writes typed D1 JSON records", async () => {
   const state = createState();
+  const store = createDiscoveryServiceClient({ DISCOVERY_STORAGE: state.storage });
+  await store.put("discovery/events/2026.json", JSON.stringify({ year: 2026 }));
+  assert.deepEqual(await store.get("discovery/events/2026.json"), { year: 2026 });
+});
+
+test("DiscoveryServiceClient returns null for missing records and rejects invalid JSON", async () => {
+  const state = createState();
+  const store = createDiscoveryServiceClient({ DISCOVERY_STORAGE: state.storage });
+  assert.equal(await store.get("missing"), null);
+  await assert.rejects(() => store.put("x", "not-json"), /JSON/);
+  const service = new DiscoveryService(state.storage);
+  assert.equal((await service.fetch(new Request("https://store/get?key=missing"))).status, 404,
+    "the old generic HTTP key/value endpoint is not part of the service contract");
+});
+
+test("DiscoveryServiceClient paginates D1 record keys with an exclusive cursor", async () => {
+  const state = createState();
+  const store = createDiscoveryServiceClient({ DISCOVERY_STORAGE: state.storage });
   for (const key of ["registry/events/2026.json", "registry/events/2027.json", "registry/teams/2026.json"]) {
-    await state.storage.put("" + key, "{}");
+    await store.put(key, "{}");
   }
-  const store = new DiscoveryService(state.storage);
-  const first = await (await store.fetch(new Request("https://store/list?prefix=registry%2Fevents%2F&limit=1"))).json();
-  assert.deepEqual(first.objects, [{ key: "registry/events/2026.json" }]);
+  const first = await store.list({ prefix: "registry/events/", limit: 1 });
+  assert.deepEqual(first.keys, ["registry/events/2026.json"]);
   assert.equal(first.truncated, true);
-  const second = await (await store.fetch(new Request("https://store/list?prefix=registry%2Fevents%2F&limit=1&cursor=" + encodeURIComponent(first.cursor)))).json();
-  assert.deepEqual(second.objects, [{ key: "registry/events/2027.json" }]);
+  const second = await store.list({ prefix: "registry/events/", limit: 1, cursor: first.cursor });
+  assert.deepEqual(second.keys, ["registry/events/2027.json"]);
   assert.equal(second.truncated, false);
 });
 
@@ -57,8 +57,7 @@ test("publishing a new team generation removes superseded team pages", async () 
   await state.storage.put("discovery/team-pages/2026/200/0.json", "[]");
   await state.storage.put("discovery/teams/2026.json", JSON.stringify({ year: 2026, generation: 100 }));
   const store = new DiscoveryService(state.storage);
-  await store.fetch(new Request("https://store/put", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: "discovery/teams/2026.json", value: JSON.stringify({ year: 2026, generation: 200 }) }) }));
+  await store.putRecord("discovery/teams/2026.json", JSON.stringify({ year: 2026, generation: 200 }));
   assert.equal(state.values.has("discovery/team-pages/2026/100/0.json"), false);
   assert.equal(state.values.has("discovery/team-pages/2026/200/0.json"), true);
 });
@@ -70,13 +69,9 @@ test("weekly event candidates are persisted as one canonical projection record",
     runDate: "2026-11-23", weekStart: "2026-11-23", weekEnd: "2026-11-29",
     checkedAt: 1795450000000, events: [{ key: "2026test" }],
   };
-  const store = new DiscoveryService(state.storage);
-  const put = await store.fetch(new Request("https://store/put", { method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: "projections/events-this-week/current.json", value: JSON.stringify(projection) }) }));
-  assert.equal(put.status, 200);
-  const get = await store.fetch(new Request("https://store/get?key=" + encodeURIComponent("projections/events-this-week/current.json")));
-  assert.deepEqual(await get.json(), projection);
+  const store = createDiscoveryServiceClient({ DISCOVERY_STORAGE: state.storage });
+  await store.put("projections/events-this-week/current.json", JSON.stringify(projection));
+  assert.deepEqual(await store.get("projections/events-this-week/current.json"), projection);
   assert.equal([...state.values.keys()].some((key) => key.includes("projections/events/this-week/")), false);
 });
 
