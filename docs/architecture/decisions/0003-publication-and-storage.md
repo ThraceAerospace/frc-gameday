@@ -1,55 +1,33 @@
 # ADR 0003: Event publication protocol and persistence boundary
 
-- **Status:** Proposed — implementation blocked pending resolution
-- **Date:** 2026-11-16
+> **Status: Superseded and resolved by ADR-0020 on 2026-11-27.** This document records the questions considered before the final publication and storage contract was accepted. It is not an open design proposal.
 
-## Context
+- **Original status:** Proposed
+- **Original date:** 2026-11-16
+- **Resolution:** [ADR-0020](ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md)
 
-The legacy realtime path sends invalidation messages through Redis Pub/Sub and a WebSocket bridge. Browser EventState instances then re-read provider-backed routes. The target moves authoritative reconciliation to backend runtimes and must publish normalized FieldView state to web and remote consumers.
+## Resolved publication contract
 
-The publication protocol and persistence choices affect ordering, reconnect behavior, recovery, storage cost, and client complexity. They should be decided together with EventRuntime ownership, not copied from the old transport.
+- The browser obtains a canonical HTTP EventState or TeamState snapshot first.
+- It then subscribes through the single Multiplexer-owned `/stream` WebSocket.
+- Event state updates carry the changed EventState snapshot data.
+- Team-event updates carry the changed team-event patch/data and its owning scope.
+- Analytics updates carry the committed analytics publication.
+- Messages include resource identity and ordering/revision metadata.
+- Revision-only invalidations are invalid.
+- Notifications, sequence gaps, disconnects, and reconnects never trigger hidden HTTP refetches. Reconnect restores subscriptions only.
 
-## Publication questions
+## Resolved persistence contract
 
-Decide whether clients receive:
-- full versioned snapshots only;
-- snapshots plus versioned change events;
-- or a snapshot on subscribe/reconnect followed by ordered changes.
+- EventRuntime and TeamRuntime persist provider endpoint responses and their validators/acquisition metadata.
+- EventState and TeamState are ephemeral normalized read projections derived from those records.
+- A projection may be cached in disposable Durable Object memory, but is not persisted as canonical state.
+- Snapshot reads do not fetch providers, schedule work, register runtimes, or write Durable Object storage.
+- First-registration initialization Workflows may perform a one-time bounded provider acquisition to hydrate a new runtime. Bootstrap stores endpoint records only; ongoing acquisition belongs to the owning runtime.
+- Analytics publications remain separately persisted, scope-owned outputs with their own revisions and provenance.
 
-Any selected protocol must define:
-- a monotonically increasing event revision/version;
-- snapshot identity and schema version;
-- how clients detect gaps and request a fresh snapshot;
-- replay/reconnect behavior and retention window;
-- subscription authorization and per-client lifecycle;
-- backpressure and slow-consumer behavior;
-- whether remote displays consume the same event contract or a session-specific projection.
+## Consequences
 
-Do not make clients treat provider webhooks as authoritative state payloads. Provider events are inputs to reconciliation; publication exposes committed FieldView state.
+The initial HTTP snapshot provides the client's starting revision. Subsequent realtime messages carry actual changed data, so the SharedWorker can apply updates without a second HTTP request. Provider endpoint records remain the durable source of truth; normalized state is derived when needed.
 
-## Persistence questions
-
-Evaluate state by lifecycle rather than copying Redis key-for-key:
-- Durable Object SQLite is a candidate for authoritative event state, version metadata, and bounded reconciliation/job records.
-- In-memory state may be used as a cache but must be reconstructable after object restart.
-- Provider response caches may remain separate from canonical domain state.
-- Completed event data may be compacted/retained according to explicit product requirements.
-- Analytics jobs require resumable progress and a clear policy for recomputable versus durable outputs.
-
-No storage backend or retention duration is accepted by this ADR yet.
-
-## Constraints
-
-- One authoritative writer per resource.
-- Failed/partial provider acquisition must not erase valid committed data.
-- Explicit clears must be distinguishable from omitted fields and request failures.
-- Stale work must not publish over a newer revision.
-- Runtime restart and reconnect must restore a consistent published view.
-- Event-timezone metadata must remain available wherever event timestamps are presented.
-
-## Acceptance criteria before implementation
-
-- A written snapshot/change protocol with revision and replay semantics.
-- A resource-by-resource persistence/retention table.
-- A concurrency model for refreshes and publication.
-- Tests for duplicate/out-of-order inputs, stale work, partial failures, restart, and reconnect.
+See ADR-0020 for the complete normative design.
