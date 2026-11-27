@@ -31,7 +31,7 @@ export function normalizeCustomWebcastUrl(value: string): string {
   const videoId = getVideoId(url);
   if (!videoId) return url.toString();
 
-  const embed = new URL(\`https://www.youtube.com/embed/\${videoId}\`);
+  const embed = new URL("https://www.youtube.com/embed/" + videoId);
   const start = url.searchParams.get("start");
   if (start && /^\d+$/.test(start)) embed.searchParams.set("start", start);
   return embed.toString();
