@@ -37,3 +37,68 @@ body {
 #root {
   min-height: 100vh;
 }
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+input,
+select {
+  max-width: 100%;
+}
+
+button,
+select,
+input {
+  min-height: 40px;
+}
+
+nav[aria-label="Operations sections"] {
+  scrollbar-width: thin;
+}
+
+nav[aria-label="Operations sections"] button {
+  white-space: nowrap;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+@media (max-width: 640px) {
+  #root > main {
+    width: 100%;
+    max-width: 100%;
+    padding: 16px 12px 24px;
+  }
+
+  #root > main > header h1 {
+    font-size: 28px;
+  }
+
+  nav[aria-label="Operations sections"] {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(64px, 1fr));
+    overflow-x: hidden;
+  }
+
+  nav[aria-label="Operations sections"] button {
+    min-height: 44px;
+    padding-inline: 8px;
+  }
+
+  #root main section,
+  #root main section > div {
+    min-width: 0;
+  }
+
+  #root main input[type="text"],
+  #root main input:not([type]) {
+    width: 100%;
+  }
+
+  #root main table {
+    min-width: 620px;
+  }
+}
