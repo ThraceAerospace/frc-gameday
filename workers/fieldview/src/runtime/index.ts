@@ -78,7 +78,7 @@ function authorized(request: Request, env: RuntimeEnvironment): boolean {
 }
 
 async function registerRuntimeMarker(env: RuntimeEnvironment, kind: "event" | "team", key: string): Promise<boolean> {
-  if (!env.DB) return false;
+  if (!env.DB && !env.DISCOVERY_STORAGE) return false;
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const markerKey = prefix + key + ".json";
   if (await createDiscoveryServiceClient(env).get(markerKey)) return true;
@@ -361,7 +361,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!authorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.DB) return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       const action = url.pathname.slice("/internal/discovery/".length);
-      return new DiscoveryService(env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
+      return new DiscoveryService(env.DISCOVERY_STORAGE ?? env.DB!, env).fetch(new Request("https://discovery-service/" + action + url.search, {
         method: request.method, headers: request.headers,
         ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.clone().arrayBuffer() }),
       }));
@@ -496,7 +496,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/events/this-week" && request.method === "GET") {
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await createDiscoveryServiceClient(env).get<{ schemaVersion: number; year: number; evaluatedAt: number; runDate: string; weekStart: string; checkedAt: number; events: Array<Record<string, unknown>> }>("projections/events-this-week/current.json");
@@ -536,7 +536,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!Number.isSafeInteger(requestedYear) || requestedYear < 1992 || requestedYear > 2200) {
         return Response.json({ error: "Invalid discovery year" }, { status: 400 });
       }
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const object = await createDiscoveryServiceClient(env).get<{ year: number; events: Array<Record<string, unknown>>; updatedAt: number; checkedAt: number; etag: string | null }>("discovery/events/" + requestedYear + ".json");
@@ -572,7 +572,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       if (!Number.isSafeInteger(year) || year < 1992 || year > 2200) {
         return Response.json({ error: "Invalid team discovery year" }, { status: 400 });
       }
-      if (!env.DB) {
+      if (!env.DB && !env.DISCOVERY_STORAGE) {
         return Response.json({ error: "Discovery storage is unavailable" }, { status: 503 });
       }
       const manifestObject = await createDiscoveryServiceClient(env).get<{ year: number; generation: number; pageCount: number; teamCount: number; updatedAt: number; checkedAt: number }>(`discovery/teams/${year}.json`);
@@ -746,7 +746,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/inventory" && request.method === "GET") {
-      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind");
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
@@ -788,7 +788,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/entity" && request.method === "GET") {
-      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const kind = url.searchParams.get("kind"), requestedKey = url.searchParams.get("key") ?? "";
       const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
@@ -850,7 +850,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (url.pathname === "/internal/admin/overview" && request.method === "GET") {
-      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const canonicalRaw = await env.KV_BINDING?.get("system/canonical-season.json");
       let canonical: { year?: unknown; checkedAt?: unknown; source?: unknown; resolved_at?: unknown } | null = null;
@@ -923,7 +923,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       } });
     }
     if (validTeamRoute && request.method === "GET") {
-      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       const canonicalTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
       if (teamAction === "analytics") {
         const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
@@ -1030,7 +1030,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     }
 
     if (validPublicRoute && request.method === "GET") {
-      if (!env.DB) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
+      if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       // A missing runtime marker means readiness has not created this entity.
       // Do not activate a Durable Object merely to answer a cold public read.
       const discovery = createDiscoveryServiceClient(env);
