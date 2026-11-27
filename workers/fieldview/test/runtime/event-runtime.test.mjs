@@ -1010,13 +1010,8 @@ test("EventRuntime treats a provider 304 as a strict no-op while retaining the l
     etag: '"last-good-v4"', lastFetchedAt: now - 120_000, expiresAt: now - 1,
     revision: 4, validatorRevision: 4, lastAttemptAt: now - 120_000, lastWebhookAt: null,
   };
-  const publication = {
-    sourceRevision: 4, snapshotVersion: 4, generatedAt: now - 120_000, status: "partial",
-    state: { event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {} },
-  };
   storage.values.set("event-key", eventKey);
   storage.values.set("endpoint:" + endpoint, endpointState);
-  storage.values.set("event-state:publication", publication);
   storage.values.set("snapshot-revision", 4);
   let providerCalls = 0;
   const runtime = new EventRuntime({ storage }, {
@@ -1050,8 +1045,8 @@ test("EventRuntime treats a provider 304 as a strict no-op while retaining the l
   assert.equal(providerCalls, 1);
   assert.deepEqual(storage.values.get("endpoint:" + endpoint), endpointState,
     "304 must not change freshness metadata, validators, diagnostics, or revisions");
-  assert.equal(storage.values.get("event-state:publication"), publication,
-    "304 must not rebuild or replace the canonical publication");
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "304 must not persist a normalized EventState projection");
   assert.equal(storage.values.get("snapshot-revision"), 4);
 });
 
