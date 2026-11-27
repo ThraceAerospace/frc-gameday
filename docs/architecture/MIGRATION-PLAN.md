@@ -25,6 +25,10 @@ This document is a release gate, not permission to deploy production. Merge and 
 11. TBA webhooks enter directly through the Worker. Remote display signaling is owned by RemoteSessionRuntime.
 12. One environment-neutral Worker and one Wrangler configuration serve production and branch Previews. Preview bindings must not reach production data or Workflow instances.
 
+## Known source-level cutover requirement
+
+The repository audit found that the current event publication path is not yet compliant with ADR-0020: `EventRuntime.publishSnapshotRevision` emits only an event key and revision, while the SharedWorker responds to that revision-only message by calling `fetchCanonicalSnapshot`. This is not an accepted fallback or alternate design. Before the realtime gate can pass, the runtime must publish the changed EventState data and the SharedWorker must apply it without an HTTP refetch. Team-event and analytics publications must follow the same data-bearing contract.
+
 ## Gate 1 — Repository and contract validation
 
 - Review the complete branch diff against `main`; verify that only intended product, runtime, configuration, test, and current documentation changes remain.
