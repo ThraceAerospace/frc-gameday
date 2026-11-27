@@ -105,8 +105,10 @@ test("initial event acquisition selects a bounded rotating slice of non-expired 
   assert.equal(first.some((item) => item.key === "2026expired"), false);
   assert.equal(first.some((item) => item.key === "2026invalid"), false);
   const second = selectInitialEventCandidates(discovered, current, 2, 1);
-  assert.equal(second.some((item) => first.some((prior) => prior.key === item.key)), false,
-    "rotation advances without repeating the previous bounded slice");
+  assert.notDeepEqual(second.map((item) => item.key), first.map((item) => item.key),
+    "rotation advances the bounded slice when the candidate count is not divisible by the limit");
+  assert.equal(new Set([...first, ...second].map((item) => item.key)).size, 3,
+    "rotation covers every eligible event across successive runs");
 });
 
 test("initial event acquisition excludes entities already handled by active polling", async () => {
