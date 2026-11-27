@@ -35,7 +35,7 @@ export default function RemoteSurface({
   useTileSurfaceKeyboard(state, controller.actions, () => setSettingsOpen((open) => !open));
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white">
       <TileSurfaceSettingsView
         state={state}
         actions={controller.actions}
@@ -92,6 +92,6 @@ export default function RemoteSurface({
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }
