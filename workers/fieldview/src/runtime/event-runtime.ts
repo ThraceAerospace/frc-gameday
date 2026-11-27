@@ -42,7 +42,6 @@ const SOURCE_PREFIX = "source:";
 const ANALYTICS_DUE_KEY = "analytics:due-at";
 const ANALYTICS_ENABLED_KEY = "analytics:enabled";
 const ANALYTICS_PUBLICATION_KEY = "analytics:publication";
-const EVENT_STATE_PUBLICATION_KEY = "event-state:publication";
 const ANALYTICS_REVISION_KEY = "analytics:revision";
 // Preserve the established invalidation key name across the runtime migration.
 const ANALYTICS_INVALIDATION_KEY = "analytics:invalidation";
@@ -327,10 +326,6 @@ export class EventRuntime extends DurableObjectBase {
           if (storedKey && !this.eventKey) {
             this.eventKey = storedKey;
             this.allowedEndpoints = new Set(eventResourceEndpoints(storedKey));
-          }
-          const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-          if (publication?.state?.event_key === this.eventKey && isRecord(publication.state.sources)) {
-            this.hydratedPublication = publication;
           }
         })
       : Promise.resolve();
@@ -1239,8 +1234,7 @@ export class EventRuntime extends DurableObjectBase {
       STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0),
     ];
     const [previous, version, resources] = await Promise.all([
-      Promise.resolve(this.hydratedPublication).then(async (cached) =>
-        cached ?? await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY)),
+      Promise.resolve(this.hydratedPublication),
       this.storage.get<number>("snapshot-revision").then((value) => value ?? 0),
       Promise.all(endpoints.map((endpoint) =>
         this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint)))),
