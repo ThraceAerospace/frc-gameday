@@ -1,4 +1,49 @@
 @import "tailwindcss";
 @source "../../web/src/app/admin/runtime";
 :root{color-scheme:light;--fv-brand:#7656C9;--fv-brand-strong:#5D3FB1;--fv-brand-soft:#F1EDFA;--fv-surface:#F7F6FA;--fv-surface-raised:#fff;--fv-text:#17152A;--fv-muted:#6F6B7D;--fv-border:#E4E0EC}
-html,body,#root{min-height:100%}body{margin:0;background:var(--fv-surface);color:var(--fv-text);font-family:Arial,Helvetica,sans-serif}
+html,body,#root{min-height:100%;height:100%}
+body{margin:0;background:var(--fv-surface);color:var(--fv-text);font-family:Arial,Helvetica,sans-serif}
+#root>main.custom-scrollbar{
+  box-sizing:border-box;width:100%;max-width:none;height:100dvh;margin:0;
+  display:grid;grid-template-columns:224px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
+  column-gap:clamp(24px,3vw,48px);row-gap:0;padding:28px clamp(20px,3vw,56px) 20px;
+  overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+}
+#root>main>header{grid-column:1/-1;grid-row:1;align-items:center;border-bottom:1px solid var(--fv-border);padding:0 0 22px}
+#root>main>header h1{font-size:clamp(1.8rem,2.4vw,2.35rem);letter-spacing:-.04em}
+#root>main>nav{grid-column:1;grid-row:2;align-self:start;display:flex;flex-direction:column;align-items:stretch;gap:5px;
+  margin:0;padding:24px 18px 24px 0;border:0;border-right:1px solid var(--fv-border);overflow:visible}
+#root>main>nav button{width:100%;text-align:left;border:0;border-left:3px solid transparent;border-radius:9px;padding:12px 14px;
+  color:var(--fv-muted);font-size:13px;transition:background .15s ease,color .15s ease}
+#root>main>nav button:hover{background:#eeebf5;color:var(--fv-text)}
+#root>main>nav button[class*="border-[var(--fv-brand)]"]{border-left-color:var(--fv-brand);background:var(--fv-brand-soft);color:var(--fv-brand-strong)}
+#root>main>nav button:first-child:before{content:"WORKSPACE";display:block;margin:0 0 10px 1px;color:#9691a3;font-size:9px;font-weight:700;letter-spacing:.14em}
+#root>main>nav button:nth-child(2){margin-top:0}
+#root>main>nav button:nth-child(2):before{content:"DATA";display:block;margin:18px 0 10px 1px;color:#9691a3;font-size:9px;font-weight:700;letter-spacing:.14em}
+#root>main>nav button:nth-child(4):before{content:"OPERATIONS";display:block;margin:18px 0 10px 1px;color:#9691a3;font-size:9px;font-weight:700;letter-spacing:.14em}
+#root>main>nav+div,#root>main>nav+section{grid-column:2;grid-row:2;min-width:0;width:100%;padding-top:24px}
+#root>main>nav+section>section{border:0;border-radius:0;background:transparent;padding:0;box-shadow:none}
+#root>main>nav+section>section>div:first-child{padding-bottom:16px;border-bottom:1px solid var(--fv-border)}
+#root>main>nav+section>section>div.divide-y{margin-top:8px;border:0}
+#root>main>nav+section>section>div.divide-y>button{min-height:64px;padding:13px 16px;border-bottom:1px solid var(--fv-border);border-radius:8px}
+#root>main>nav+section>section>div.divide-y>button:hover{background:#f0edf6}
+#root>main>nav+section>section>div:last-child{padding-top:14px}
+#root>main>footer{grid-column:1/-1;grid-row:3;margin-top:24px;padding-top:14px;border-top:1px solid var(--fv-border)}
+#root>main>div[role="alert"],#root>main>div[role="status"]{grid-column:1/-1}
+#root>main>nav+div>div:first-child{min-width:0}
+#root>main>nav+div>div:first-child>section{min-height:112px}
+#root>main>nav+div h2{letter-spacing:-.02em}
+#root>main>nav+div>section{min-width:0}
+#root>main>nav+div>section>section{min-width:0}
+#root>main>nav+div>section>section>div{min-width:0}
+#root>main>nav+div>section>section>div.divide-y>button{width:100%}
+@media(max-width:800px){
+  #root>main.custom-scrollbar{display:flex;flex-direction:column;gap:0;padding:20px 16px;height:100dvh}
+  #root>main>header{width:100%;padding-bottom:16px}
+  #root>main>nav{width:100%;flex-direction:row;align-items:center;gap:4px;padding:12px 0;margin:0;border-right:0;border-bottom:1px solid var(--fv-border);overflow-x:auto}
+  #root>main>nav button{width:auto;white-space:nowrap;border-left:0;border-bottom:2px solid transparent;border-radius:7px;padding:10px 12px}
+  #root>main>nav button:first-child:before,#root>main>nav button:nth-child(2):before,#root>main>nav button:nth-child(4):before{display:none}
+  #root>main>nav+div,#root>main>nav+section{width:100%;padding-top:18px}
+  #root>main>nav+section>section>div:first-child{border-bottom:0}
+  #root>main>footer{width:100%;margin-top:22px}
+}
