@@ -942,3 +942,73 @@ test("TeamRuntime returns 404 for unregistered public reads without binding iden
   assert.equal(storage.values.has("team-key"), false);
   assert.equal(providerCalls, 0);
 });
+
+test("explicit TeamRuntime registration binds identity once without provider acquisition", async () => {
+  const storage = new MemoryStorage();
+  let providerCalls = 0;
+  let writes = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => {
+    writes += 1;
+    return originalPut(key, value);
+  };
+  const teamKey = "frc3461";
+  const runtime = new TeamRuntime({ storage }, {
+    ...env(async () => {
+      providerCalls += 1;
+      throw new Error("registration must not acquire provider data");
+    }),
+  });
+
+  const register = () => runtime.fetch(new Request("https://team-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+    },
+  }));
+
+  const first = await register();
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), { team_key: teamKey, registered: true });
+  assert.equal(storage.values.get("team-key"), teamKey);
+  assert.equal(writes, 1, "first registration persists the canonical identity once");
+
+  const second = await register();
+  assert.equal(second.status, 200);
+  assert.deepEqual(await second.json(), { team_key: teamKey, registered: true });
+  assert.equal(writes, 1, "repeated registration is idempotent and does not rewrite identity");
+  assert.equal(providerCalls, 0, "registration never polls providers");
+});
+
+test("TeamRuntime registration rejects unauthorized and mismatched identities without rebinding", async () => {
+  const storage = new MemoryStorage();
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("registration must not fetch providers");
+  }));
+  const unauthorized = await runtime.fetch(new Request("https://team-runtime/register", {
+    method: "POST",
+    headers: { "X-FieldView-Team-Key": "frc3461" },
+  }));
+  assert.equal(unauthorized.status, 401);
+  assert.equal(storage.values.has("team-key"), false);
+
+  const authorized = await runtime.fetch(new Request("https://team-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": "frc3461",
+    },
+  }));
+  assert.equal(authorized.status, 200);
+
+  const mismatch = await runtime.fetch(new Request("https://team-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": "frc9999",
+    },
+  }));
+  assert.equal(mismatch.status, 400);
+  assert.equal(storage.values.get("team-key"), "frc3461");
+});
