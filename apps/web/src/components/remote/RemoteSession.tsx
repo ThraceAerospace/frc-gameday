@@ -5,7 +5,8 @@ import TileViewSurface from "@/components/surface/TileViewSurface";
 import { useTileSurfaceController } from "@/components/surface/TileSurfaceController";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import { getCanonicalEventSnapshot, subscribeCanonicalEventSnapshot } from "@/lib/events/sharedWorkerClient";
-import { CanonicalEventSnapshotsProvider, type CanonicalEventSnapshotValue } from "@/lib/events/CanonicalEventSnapshotsProvider";
+import type { CanonicalEventSnapshotData } from "@/lib/events/workerRealtime";
+type CanonicalEventSnapshotValue = { version: number; snapshot: CanonicalEventSnapshotData };
 import {
   createRemoteSessionActions,
   applyRemoteSessionAction,
@@ -294,11 +295,5 @@ export default function RemoteSession({
     </div>
   );
 
-  return useLocalCanonicalSnapshots
-    ? display
-    : (
-      <CanonicalEventSnapshotsProvider snapshots={eventSnapshots}>
-        {display}
-      </CanonicalEventSnapshotsProvider>
-    );
+  return display;
 }
