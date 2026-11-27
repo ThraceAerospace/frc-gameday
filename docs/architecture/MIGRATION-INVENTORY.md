@@ -29,7 +29,7 @@ A read may use a matching in-memory projection cache. Otherwise it creates a fre
 
 - Event snapshot: `GET /events/{eventKey}/snapshot`
 - Team snapshot: `GET /teams/{teamKey}/snapshot?year={year}`
-- Realtime stream: `/stream` after the initial canonical HTTP snapshot fetch
+- Realtime stream: `/stream` after the initial canonical HTTP snapshot fetch; subsequent revision-only notices trigger a read-only canonical snapshot GET, never browser-side provider acquisition
 - TBA webhook ingress: `POST /webhooks/tba`
 - Remote signaling: `/remote/ws`
 - Discovery, analytics, readiness, and admin interfaces are exposed by the Runtime Worker routes.

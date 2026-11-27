@@ -1,7 +1,7 @@
 # Compatibility Retirement Audit
 
 **Branch:** `fieldview-architecture-migration`  
-**Status:** Compatibility retirement and on-demand state-generation realignment in progress; final source scan and full integration validation remain.
+**Status:** On-demand state-generation realignment is implemented; core CI integration validation passes. Final repository-wide source scan remains.
 
 ## Owner direction
 
@@ -41,6 +41,10 @@ Before merge, verify that no references remain to:
 ## Retained target components
 
 Keep the canonical domain/provider/analytics packages, EventRuntime, TeamRuntime, Multiplexer, RemoteSessionRuntime, Workflows, Worker polling coordinator, D1 repositories, KV projections, direct Worker webhook ingress, SharedWorker canonical transport, and the Vercel-hosted Next.js presentation layer.
+
+## Validation
+
+The latest code commit `901312f3a7ee4e23005b5b8d070133e721a83bf6` passed D1 schema validation, Next.js type generation, administrator asset build, Wrangler dry run, workspace typecheck, all workspace tests, and lint in GitHub Actions run [#46078612151](https://github.com/ThraceAerospace/frc-gameday/actions/runs/46078612151).
 
 ## Deployment boundary
 
