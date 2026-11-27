@@ -366,7 +366,7 @@ export class EventRuntime extends DurableObjectBase {
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
-      (url.pathname === "/snapshot" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
+      (url.pathname === "/snapshot" || url.pathname === "/analytics" || url.pathname === "/statbotics-match");
     const publicSubscriptionRead = request.method === "POST" && url.pathname === "/subscriptions";
     const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
     const adminInspectionRead = request.method === "GET" &&
@@ -710,7 +710,6 @@ export class EventRuntime extends DurableObjectBase {
       return Response.json({ accepted: true, duplicate: !accepted });
     }
 
-    if (request.method === "GET" && url.pathname === "/stream") {
     if (request.method === "GET" && url.pathname === "/analytics") {
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
       if (!publication) return Response.json({ error: "EventAnalytics publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
@@ -1680,13 +1679,11 @@ export class EventRuntime extends DurableObjectBase {
           ? { ...publication.state, analytics: { ...publication.state.analytics, team_comparison: undefined } }
           : publication.state
       : undefined;
-    const data = publication && publishedState &&
-        (teamProjectionOnly || publication.snapshotVersion === publishedVersion)
-      ? {
-          ...(teamProjectionOnly ? {} : { state: publishedState }),
-          ...(patch ?? {}),
-        }
-      : undefined;
+    const data = teamProjectionOnly
+      ? patch
+      : publication && publishedState && publication.snapshotVersion === publishedVersion
+        ? { state: publishedState, ...(patch ?? {}) }
+        : undefined;
     const message = JSON.stringify({
       type: "snapshot.changed",
       protocol: 1,
@@ -1698,11 +1695,6 @@ export class EventRuntime extends DurableObjectBase {
       version: publishedVersion,
       ...(data ? { data, ...(etag ? { etag } : {}) } : {}),
     });
-    for (const socket of this.state.getWebSockets?.() ?? []) {
-      try { socket.send(message); }
-      catch { try { socket.close(1011, "Subscription delivery failed"); } catch { /* already closed */ } }
-    }
-
     if (await this.storage.get<boolean>("multiplexer:shared") !== true || !this.env.MULTIPLEXER) return;
     const multiplexer = this.env.MULTIPLEXER.get(this.env.MULTIPLEXER.idFromName("shared"));
     await multiplexer.fetch(new Request("https://fieldview-multiplexer/internal/notify", {
@@ -1733,9 +1725,5 @@ export class EventRuntime extends DurableObjectBase {
     }
   }
 
-  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
-    if (message === "ping") { try { socket.send("pong"); } catch { /* already closed */ } return; }
-    try { socket.close(1008, "Unsupported subscription message"); } catch { /* already closed */ }
-  }
 
 }
