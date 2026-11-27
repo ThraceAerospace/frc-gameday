@@ -115,7 +115,7 @@ export type CanonicalEventWeekResponse = {
   pending?: boolean;
 };
 
-/** Read EventScheduler's precomputed weekly projection; never fan out to EventRuntime here. */
+/** Read the Worker-owned weekly event projection; never fan out to EventRuntime here. */
 export async function getCanonicalEventThisWeek(
   fetcher: typeof fetch = fetch,
 ): Promise<CanonicalEventWeekResponse | null> {
