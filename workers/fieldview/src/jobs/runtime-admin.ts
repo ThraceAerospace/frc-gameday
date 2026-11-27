@@ -5,7 +5,10 @@ import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 
-type RuntimeAdminEnvironment = RuntimeEnvironment;
+interface RuntimeAdminEnvironment extends RuntimeEnvironment {
+  EVENT_SEASON_READINESS?: Workflow;
+  TEAM_SEASON_READINESS?: Workflow;
+}
 export interface RuntimeAdminParameters {
   operation: "team-seed" | "event-team-seed" | "season-ingest";
   workflowId: string;
@@ -265,180 +268,81 @@ export class RuntimeAdminWorkflow extends WorkflowEntrypoint<RuntimeAdminEnviron
   ): Promise<RuntimeAdminRecord> {
     const events = await read<EventDirectory>(createDiscoveryServiceClient(this.env), "discovery/events/" + p.year + ".json");
     const teams = await read<string[]>(createDiscoveryServiceClient(this.env), "registry/teams/" + p.year + ".json");
-    if (!events || !Array.isArray(events.events) || !Array.isArray(teams) || !teams.length) {
-      throw new Error("Complete event and team discovery before season ingestion");
+    if (!events || events.year !== p.year || !Array.isArray(events.events) || !Array.isArray(teams) || !teams.length) {
+      throw new Error("Complete event and team discovery for " + p.year + " before season readiness");
     }
-    const teamKeys = [...new Set(teams.filter(validTeam))].sort();
-    const eventKeys = [...new Set(events.events.map((item) => item.key).filter(validEvent))].sort();
+    const teamKeys = [...new Set(teams.filter(validTeam))];
+    const eventKeys = [...new Set(events.events.map((item) => item.key).filter(validEvent))];
     if (!teamKeys.length || !eventKeys.length) throw new Error("Discovered season inventory is empty");
-    const batchSize = 100;
-    const counts: Record<string, number> = {
-      teams_queued: 0, teams_complete: 0, teams_partial: 0, events_queued: 0,
-      events_complete: 0, events_partial: 0, analytics_succeeded: 0, analytics_partial: 0, analytics_failed: 0,
+
+    const teamWorkflow = this.env.TEAM_SEASON_READINESS;
+    const eventWorkflow = this.env.EVENT_SEASON_READINESS;
+    if (!teamWorkflow || !eventWorkflow) {
+      throw new Error("Season readiness Workflow bindings are unavailable");
+    }
+
+    const requestedAt = Date.now();
+    const teamWorkflowId = p.workflowId + "-team-readiness";
+    const eventWorkflowId = p.workflowId + "-event-readiness";
+    await update({
+      phase: "dispatching-season-readiness",
+      total: teamKeys.length + eventKeys.length,
+      counts: {
+        teams_discovered: teamKeys.length,
+        events_discovered: eventKeys.length,
+        readiness_workflows_dispatched: 0,
+      },
+    });
+
+    // Season Ingest is a convenience launcher only. The independent,
+    // year-scoped readiness Workflows inspect their own entities and enqueue
+    // refreshes; this Workflow must not poll for TeamState/EventState completion.
+    const outcomes = await step.do("dispatch-independent-season-readiness", async () => {
+      const results = await Promise.allSettled([
+        teamWorkflow.create({
+          id: teamWorkflowId,
+          params: { year: p.year, requestedAt },
+        }),
+        eventWorkflow.create({
+          id: eventWorkflowId,
+          params: { year: p.year, requestedAt },
+        }),
+      ]);
+      return results.map((result, index) => ({
+        kind: index === 0 ? "team" : "event",
+        workflow_id: index === 0 ? teamWorkflowId : eventWorkflowId,
+        ok: result.status === "fulfilled",
+        error: result.status === "rejected"
+          ? (result.reason instanceof Error ? result.reason.message : String(result.reason)).slice(0, 400)
+          : null,
+      }));
+    });
+
+    const errors = outcomes.filter((item) => !item.ok).map((item) => ({
+      key: item.kind,
+      detail: item.error ?? "Unable to dispatch season readiness Workflow",
+      at: Date.now(),
+    }));
+    const counts = {
+      teams_discovered: teamKeys.length,
+      events_discovered: eventKeys.length,
+      readiness_workflows_dispatched: outcomes.filter((item) => item.ok).length,
     };
-    const errors: Array<{ key: string; detail: string; at: number }> = [];
-    await update({ phase: "queueing-team-resources", total: teamKeys.length + eventKeys.length, counts });
-
-    // Dispatch bounded seed commands. Each TeamRuntime owns its provider acquisition
-    // and canonical persistence; the Workflow tracks durable progress only.
-    for (let offset = 0; offset < teamKeys.length; offset += batchSize) {
-      const batch = teamKeys.slice(offset, offset + batchSize);
-      const result = await step.do("queue-season-team-batch-" + offset, async () => Promise.all(batch.map(async (teamKey) => {
-        const response = await dispatch(this.env, "team", teamKey, "seed", {}, p.year);
-        return { key: teamKey, ok: response.ok || response.status === 202, status: response.status };
-      })));
-      for (const item of result) if (item.ok) counts.teams_queued += 1;
-      else errors.push({ key: item.key, detail: "TeamRuntime seed returned HTTP " + item.status, at: Date.now() });
-      await update({ processed: counts.teams_queued, counts, errors: errors.slice(-100) });
-    }
-
-    // One Workflow step checks a bounded batch. A single durable sleep separates
-    // whole passes, keeping the 8k-entity worst case comfortably below the
-    // Workers Free daily Workflow-step budget.
-    const readyTeams = new Set<string>();
-    await update({ phase: "waiting-for-team-resources" });
-    let teamsReady = false;
-    for (let pass = 0; pass < 24 * 30; pass += 1) {
-      for (let offset = 0; offset < teamKeys.length; offset += batchSize) {
-        const batch = teamKeys.slice(offset, offset + batchSize).filter((key) => !readyTeams.has(key));
-        if (!batch.length) continue;
-        const result = await step.do("check-season-team-pass-" + pass + "-batch-" + offset, async () => {
-          const statuses = await Promise.all(batch.map(async (teamKey) => {
-            const response = await dispatch(this.env, "team", teamKey, "state", {}, p.year);
-            if (!response.ok) return { key: teamKey, ready: false, partial: true };
-            const state = await response.json() as {
-              resources?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; expires_at?: number | null }>;
-            };
-            const sources = state.resources ?? [];
-            const ready = sources.length > 0 && sources.every((source) =>
-              source.status === "unavailable" ||
-              (source.status === "available" && source.last_fetched_at != null &&
-                (source.expires_at == null || source.expires_at > Date.now())));
-            const partial = sources.some((item) => item.status === "unavailable" || item.status === "failed" || item.status === "stale");
-            return { key: teamKey, ready, partial };
-          }));
-          const ready = statuses.filter((item) => item.ready);
-          await Promise.all(ready.map(async (item) => {
-            const response = await dispatch(this.env, "team", item.key, "snapshot", {}, p.year);
-            if (!response.ok) throw new Error("TeamRuntime snapshot failed for " + item.key);
-          }));
-          return statuses;
-        });
-        for (const item of result) {
-          if (!item.ready || readyTeams.has(item.key)) continue;
-          readyTeams.add(item.key);
-          if (item.partial) counts.teams_partial += 1;
-          else counts.teams_complete += 1;
-        }
-      }
-      await update({ processed: counts.teams_queued, counts, errors: errors.slice(-100) });
-      teamsReady = readyTeams.size === teamKeys.length;
-      if (teamsReady) break;
-      if (pass === 24 * 30 - 1) break;
-      await step.sleep("wait-season-team-pass-" + pass, "1 hour");
-    }
-    if (!teamsReady) {
-      for (const key of teamKeys) if (!readyTeams.has(key)) errors.push({
-        key, detail: "TeamRuntime resources remain pending after 30 days", at: Date.now(),
-      });
-      const current = await read<RuntimeAdminRecord>(createDiscoveryServiceClient(this.env), recordKey(p.workflowId));
-      const failed: RuntimeAdminRecord = {
-        ...(current ?? initialRecord(p)), status: "completed_with_errors", phase: "team-resources-incomplete",
-        processed: readyTeams.size, counts, errors: errors.slice(-100), updated_at: Date.now(),
-      };
-      await write(createDiscoveryServiceClient(this.env), recordKey(p.workflowId), failed);
-      return failed;
-    }
-
-    await update({ phase: "queueing-event-resources" });
-    for (let offset = 0; offset < eventKeys.length; offset += batchSize) {
-      const batch = eventKeys.slice(offset, offset + batchSize);
-      const result = await step.do("queue-season-event-batch-" + offset, async () => Promise.all(batch.map(async (eventKey) => {
-        const response = await dispatch(this.env, "event", eventKey, "refresh", {}, p.year);
-        return { key: eventKey, ok: response.ok || response.status === 202, status: response.status };
-      })));
-      for (const item of result) if (item.ok) counts.events_queued += 1;
-      else errors.push({ key: item.key, detail: "EventRuntime refresh returned HTTP " + item.status, at: Date.now() });
-      await update({ processed: counts.teams_queued + counts.events_queued, counts, errors: errors.slice(-100) });
-    }
-
-    // Event resources, EventState, and analytics are checked in bounded
-    // passes. A runtime is not marked complete merely because refresh
-    // was accepted; all its required sources and analytics must reach a terminal
-    // state first.
-    const readyEvents = new Set<string>();
-    const analyticsRequested = new Set<string>();
-    await update({ phase: "waiting-for-event-resources-and-analytics" });
-    let eventsReady = false;
-    for (let pass = 0; pass < 6 * 24 * 30; pass += 1) {
-      for (let offset = 0; offset < eventKeys.length; offset += batchSize) {
-        const batch = eventKeys.slice(offset, offset + batchSize).filter((key) => !readyEvents.has(key));
-        if (!batch.length) continue;
-        const result = await step.do("check-season-event-pass-" + pass + "-batch-" + offset, async () => {
-          const outcomes = await Promise.all(batch.map(async (eventKey) => {
-            const response = await dispatch(this.env, "event", eventKey, "state", {}, p.year);
-            if (!response.ok) return { key: eventKey, ready: false, requested: false, analytics: "failed", partial: true };
-            const state = await response.json() as {
-              resources?: Array<{ endpoint?: string; status?: string; last_fetched_at?: number | null; last_webhook_at?: number | null; expires_at?: number | null }>;
-              analytics?: { status?: string };
-            };
-            const sources = state.resources ?? [];
-            const resourcesReady = sources.length > 0 && sources.every((source) =>
-              source.status === "unavailable" ||
-              (source.status === "available" && (source.last_fetched_at != null || source.last_webhook_at != null) &&
-                (source.expires_at == null || source.expires_at > Date.now())));
-            const partial = sources.some((item) =>
-              item.status === "unavailable" || item.status === "failed" || item.status === "stale");
-            if (!resourcesReady) return { key: eventKey, ready: false, requested: false, analytics: "pending", partial };
-            if (!analyticsRequested.has(eventKey)) {
-              const publication = await dispatch(this.env, "event", eventKey, "publish", {}, p.year);
-              if (!publication.ok) throw new Error("EventState publication failed for " + eventKey);
-              const calculation = await dispatch(this.env, "event", eventKey, "recalculate", { allowPartialTeamStates: true }, p.year);
-              if (!calculation.ok && calculation.status !== 202) throw new Error("EventAnalytics request failed for " + eventKey);
-              return { key: eventKey, ready: false, requested: true, analytics: "pending", partial };
-            }
-            const analytics = state.analytics?.status ?? "pending";
-            if (!["succeeded", "partial", "failed"].includes(analytics)) {
-              return { key: eventKey, ready: false, requested: true, analytics, partial };
-            }
-            return { key: eventKey, ready: true, requested: true, analytics, partial };
-          }));
-          return outcomes;
-        });
-        for (const item of result) {
-          if (item.requested) analyticsRequested.add(item.key);
-          if (!item.ready || readyEvents.has(item.key)) continue;
-          readyEvents.add(item.key);
-          if (item.partial || item.analytics === "partial") counts.events_partial += 1;
-          else counts.events_complete += 1;
-          if (item.analytics === "succeeded") counts.analytics_succeeded += 1;
-          else if (item.analytics === "partial") counts.analytics_partial += 1;
-          else {
-            counts.analytics_failed += 1;
-            errors.push({ key: item.key, detail: "EventAnalytics calculation failed", at: Date.now() });
-          }
-        }
-      }
-      await update({ processed: counts.teams_queued + readyEvents.size, counts, errors: errors.slice(-100) });
-      eventsReady = readyEvents.size === eventKeys.length;
-      if (eventsReady) break;
-      if (pass === 6 * 24 * 30 - 1) break;
-      await step.sleep("wait-season-event-pass-" + pass, "10 minutes");
-    }
-
     const current = await read<RuntimeAdminRecord>(createDiscoveryServiceClient(this.env), recordKey(p.workflowId));
-    if (!eventsReady) {
-      for (const key of eventKeys) if (!readyEvents.has(key)) errors.push({
-        key, detail: "EventRuntime resources or analytics remain pending after 30 days", at: Date.now(),
-      });
-    }
-    const hasErrors = errors.length > 0 || counts.teams_partial > 0 || counts.events_partial > 0 || !eventsReady;
     const completed: RuntimeAdminRecord = {
-      ...(current ?? initialRecord(p)), status: hasErrors ? "completed_with_errors" : "completed",
-      phase: eventsReady ? "complete" : "event-resources-incomplete",
-      processed: counts.teams_queued + readyEvents.size, counts, errors: errors.slice(-100), updated_at: Date.now(),
+      ...(current ?? initialRecord(p)),
+      status: errors.length ? "completed_with_errors" : "completed",
+      phase: "readiness-dispatched",
+      processed: counts.readiness_workflows_dispatched,
+      total: 2,
+      counts,
+      errors,
+      updated_at: Date.now(),
     };
-    await write(createDiscoveryServiceClient(this.env), recordKey(p.workflowId), completed);
+    await write(createDiscoveryServiceClient(this.env), recordKey(p.workflowId), {
+      ...completed,
+      readiness_workflows: outcomes,
+    });
     return completed;
   }
 }
