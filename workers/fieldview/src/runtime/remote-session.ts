@@ -1,3 +1,4 @@
+import { DurableObjectBase } from "./durable-object-base.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 type Role = "controller" | "display";
@@ -27,10 +28,11 @@ function validPayload(value: unknown): boolean {
  * Cloudflare removes closed sockets from getWebSockets(), including after
  * hibernation, and attachments survive hibernation.
  */
-export class RemoteSessionRuntime {
+export class RemoteSessionRuntime extends DurableObjectBase {
   private readonly state: DurableObjectStateLike;
   private readonly env: RuntimeEnvironment;
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
+    super(state, env);
     this.state = state;
     this.env = env;
   }
