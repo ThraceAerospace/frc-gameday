@@ -6,6 +6,7 @@ import {
   type FieldViewMatch,
   type FieldViewPlayoffAlliance,
   type FieldViewTeam,
+  sortMatches as sortCanonicalMatches,
 } from "@fieldview/domain";
 import { getCanonicalEventDiscovery, getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import { logIncompleteStateServed } from "@/lib/events/incompleteStateTelemetry";
@@ -85,12 +86,7 @@ export default async function EventPage({
     (a: FieldViewTeam, b: FieldViewTeam) => a.team_number - b.team_number,
   );
 
-  const sortedMatches = [...(matches ?? [])].sort((a: FieldViewMatch, b: FieldViewMatch) => {
-    const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-    return (levelOrder[a.comp_level] ?? 99) - (levelOrder[b.comp_level] ?? 99)
-      || (a.set_number ?? 0) - (b.set_number ?? 0)
-      || (a.match_number ?? 0) - (b.match_number ?? 0);
-  });
+  const sortedMatches = sortCanonicalMatches(matches ?? []);
   const qualificationMatches = sortedMatches.filter((match: FieldViewMatch) => match.comp_level === "qm");
   const playoffMatches = sortedMatches.filter((match: FieldViewMatch) => isEliminationMatch(match.comp_level));
   const playoffMatchesPanel = playoffMatches.length > 0 ? (
