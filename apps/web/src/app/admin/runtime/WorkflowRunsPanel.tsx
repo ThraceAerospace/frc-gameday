@@ -164,7 +164,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
         <div className="min-w-0">
           <h3 className="mb-2 text-sm font-semibold">Execution history ({runs.total})</h3>
-          <div className="max-h-[420px] space-y-2 overflow-y-auto">
+          <div className="space-y-2">
             {runs.runs.length === 0 && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-3 text-sm text-[var(--fv-muted)]">No {label(type).toLowerCase()} runs recorded yet.</p>}
             {runs.runs.map((run) => (
               <button key={run.workflow_id} onClick={() => void loadRun(run.workflow_id).catch((cause) => setError(String(cause)))} className={"block w-full rounded-lg border p-3 text-left " + (selected?.workflow_id === run.workflow_id ? "border-[var(--fv-brand)] bg-[var(--fv-surface)]" : "border-[var(--fv-border)]")}>
@@ -189,7 +189,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
                 {[ [totalLabel, total], ["Valid state", valid], ["Refresh required", required], ["Failed", failed] ].map(([name, value]) => <div key={String(name)} className="rounded-lg bg-[var(--fv-surface)] p-3"><p className="text-xs text-[var(--fv-muted)]">{name}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}
               </div>}
             </div>
-            {selected.results && selected.results.length > 0 && <div className="mt-3 max-h-[440px] overflow-auto rounded-lg border border-[var(--fv-border)]">
+            {selected.results && selected.results.length > 0 && <div className="mt-3 max-w-full overflow-x-auto rounded-lg border border-[var(--fv-border)]">
               <table className="w-full text-left text-xs">
                 <thead className="sticky top-0 bg-[var(--fv-surface)]"><tr><th className="p-2">Entity</th><th className="p-2">State</th><th className="p-2">Refresh required</th><th className="p-2">Details</th></tr></thead>
                 <tbody>{selected.results.map((item) => <tr key={item.key} className="border-t border-[var(--fv-border)]">
