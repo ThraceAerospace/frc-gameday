@@ -76,8 +76,6 @@ export interface FieldViewTeamEventState {
   analytics?: FieldViewTeamEventAnalytics | null;
 }
 
-/** @deprecated Use FieldViewTeamState. */
-export type FieldViewTeamSnapshot = FieldViewTeamState;
 
 /** A team's season-scoped Statbotics record correlated by official TBA team number. */
 export interface FieldViewTeamSeason {
