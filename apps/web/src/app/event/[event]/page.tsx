@@ -54,7 +54,7 @@ export default async function EventPage({
   }
 
   const fallbackYear = Number(eventKey.slice(0, 4));
-  const fallbackEvents = !eventSnapshot && Number.isInteger(fallbackYear) && fallbackYear >= 1992 && fallbackYear <= 2200
+  const fallbackEvents = !eventSnapshot?.event && Number.isInteger(fallbackYear) && fallbackYear >= 1992 && fallbackYear <= 2200
     ? await getCanonicalEventDiscovery(fallbackYear)
     : null;
   const fallbackEvent = fallbackEvents?.find((candidate) => candidate.key === eventKey) ?? null;
@@ -110,7 +110,7 @@ export default async function EventPage({
   ) : null;
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
-  const incompleteReasons = [!eventSnapshot ? "event_state_missing" : null, !teamsAvailable ? "event_teams_missing" : null, !matchesAvailable ? "event_matches_missing" : null].filter((reason): reason is string => reason !== null);
+  const incompleteReasons = [!eventSnapshot ? "event_state_missing" : null, !eventSnapshot?.event ? "event_record_missing" : null, !teamsAvailable ? "event_teams_missing" : null, !matchesAvailable ? "event_matches_missing" : null].filter((reason): reason is string => reason !== null);
   if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "event", entity_key: eventKey, reasons: incompleteReasons }));
 
   return (
