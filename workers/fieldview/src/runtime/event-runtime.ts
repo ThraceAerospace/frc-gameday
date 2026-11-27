@@ -422,7 +422,18 @@ export class EventRuntime extends DurableObjectBase {
             (resource.lastFetchedAt !== null && resource.lastFetchedAt > body.acquired_at) ||
             (resource.lastWebhookAt !== null && resource.lastWebhookAt > body.acquired_at)
           )))) return null;
-        for (const resource of body.resources) await tx.put(endpointStorageKey(resource.endpoint), resource);
+        for (let index = 0; index < body.resources.length; index += 1) {
+          const resource = body.resources[index]!;
+          const previous = existing[index];
+          const hasLastGood = previous && (previous.lastFetchedAt !== null || previous.lastWebhookAt !== null);
+          if ((resource.status === "failed" || resource.status === "unavailable") && hasLastGood) {
+            await tx.put(endpointStorageKey(resource.endpoint), {
+              ...previous, status: "stale", lastAttemptAt: resource.lastAttemptAt,
+            });
+          } else {
+            await tx.put(endpointStorageKey(resource.endpoint), resource);
+          }
+        }
         const snapshotRevision = (await tx.get<number>("snapshot-revision") ?? 0) + 1;
         await tx.put("snapshot-revision", snapshotRevision);
         const status = body.resources.every((resource) => resource.status === "available") ? "complete" as const
@@ -432,7 +443,7 @@ export class EventRuntime extends DurableObjectBase {
         return { ...next, duplicate: false };
       });
       if (!receipt) return Response.json({ error: "Bootstrap is older than runtime data" }, { status: 409 });
-      if (!receipt.duplicate) await this.publishEventState();
+      await this.publishEventState();
       return Response.json({
         bootstrap_id: receipt.bootstrap_id, accepted: true, duplicate: receipt.duplicate,
         kind: "event", key: this.eventKey, year, snapshot_revision: receipt.snapshot_revision,
