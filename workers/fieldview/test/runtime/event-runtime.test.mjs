@@ -134,7 +134,7 @@ test("EventRuntime normalizes legacy publication in memory without writing durin
 
 
 
-test("EventRuntime republishes canonical EventState after a match-score webhook and reuses it on subsequent reads", async () => {
+test("EventRuntime derives EventState after a match-score webhook without persisting the projection", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026publication";
   const matchesEndpoint = TBA_ENDPOINTS.eventMatches(eventKey);
@@ -198,11 +198,12 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.ok(initialEtag);
   const unchangedResponse = await runtime.fetch(snapshotRequest(initialEtag));
   assert.equal(unchangedResponse.status, 304, "matching validators avoid the composed snapshot body");
-  const initialPublication = storage.values.get("event-state:publication");
+  const initialPublication = runtime.hydratedPublication;
   assert.equal(initialPublication.snapshotVersion, 1);
   assert.equal(initialPublication.sourceRevision, 1);
   assert.equal(initialPublication.state.matches[0].alliances.red.score, 10);
-  assert.equal(publicationWrites, 1);
+  assert.equal(publicationWrites, 0);
+  assert.equal(storage.values.has("event-state:publication"), false);
 
   const webhook = {
     message_type: "match_score",
@@ -231,13 +232,12 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(webhookResponse.status, 200);
   assert.deepEqual(await webhookResponse.json(), { accepted: true, duplicate: false });
 
-  // The committed webhook update rebuilds the normalized publication before
-  // broadcasting it, so subscribers receive usable FieldView data.
-  const webhookPublication = storage.values.get("event-state:publication");
+  // The committed webhook update invalidates the in-memory projection.
+  const webhookPublication = runtime.hydratedPublication;
   assert.notEqual(webhookPublication, initialPublication);
   assert.equal(webhookPublication.snapshotVersion, 2);
   assert.equal(webhookPublication.state.matches[0].alliances.red.score, 20);
-  assert.equal(publicationWrites, 2);
+  assert.equal(publicationWrites, 0);
   assert.equal(storage.values.get("snapshot-revision"), 2);
   assert.equal(storage.values.get("endpoint:" + matchesEndpoint).revision, 2);
 
@@ -249,7 +249,7 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   assert.equal(updatedSnapshot.matches[0].alliances.red.score, 20);
   assert.equal(updatedSnapshot.matches[0].actual_time, 123);
 
-  const updatedPublication = storage.values.get("event-state:publication");
+  const updatedPublication = runtime.hydratedPublication;
   assert.equal(updatedPublication, webhookPublication);
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
@@ -259,11 +259,12 @@ test("EventRuntime republishes canonical EventState after a match-score webhook 
   const repeatedResponse = await runtime.fetch(snapshotRequest(updatedResponse.headers.get("ETag")));
   assert.equal(repeatedResponse.status, 304);
   assert.equal(repeatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
-  assert.equal(storage.values.get("event-state:publication"), updatedPublication);
-  assert.equal(publicationWrites, 2, "unchanged reads should reuse the canonical publication");
+  assert.equal(runtime.hydratedPublication, updatedPublication);
+  assert.equal(storage.values.has("event-state:publication"), false);
+  assert.equal(publicationWrites, 0, "unchanged reads must not write a materialized projection");
 });
 
-test("EventRuntime public snapshots return 204 until an explicit refresh publishes canonical state", async () => {
+test("EventRuntime returns incomplete read-time projections before provider acquisition", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026demand";
   let providerCalls = 0, activeRequests = 0, maxConcurrentRequests = 0;
@@ -293,8 +294,15 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
     headers: { "X-FieldView-Event-Key": eventKey },
   });
 
+  let writes = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => { writes += 1; return originalPut(key, value); };
   const firstRead = await runtime.fetch(request());
-  assert.equal(firstRead.status, 404, "an existing EventRuntime without EventState returns not found");
+  assert.equal(firstRead.status, 200, "an EventRuntime can construct an incomplete EventState from an empty resource store");
+  const firstState = await firstRead.json();
+  assert.equal(firstState.event_key, eventKey);
+  assert.deepEqual(firstState.sources, {});
+  assert.equal(writes, 0, "a cache miss must not write a normalized projection");
   const analyticsRead = await runtime.fetch(new Request("https://event-runtime/analytics", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -320,7 +328,8 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   assert.equal(storage.values.get("manual:poll-queue")?.length ?? 0, 0);
   assert.equal("alarmAt" in storage, false, "readiness does not interact with alarm storage");
   assert.equal(providerCalls, 0, "readiness inspects coverage and never fetches providers");
-  assert.equal((await runtime.fetch(request())).status, 404, "an existing EventRuntime without EventState returns not found");
+  assert.equal((await runtime.fetch(request())).status, 200, "repeated reads continue to return the incomplete projection");
+  assert.equal(writes, 0, "repeated reads must remain write-free");
 
   const refresh = await runtime.fetch(new Request("https://event-runtime/refresh", {
     method: "POST",
@@ -330,7 +339,8 @@ test("EventRuntime public snapshots return 204 until an explicit refresh publish
   assert.equal(providerCalls, eventResourceEndpoints(eventKey).length + 1);
   assert.equal(maxConcurrentRequests, 1, "one EventRuntime refresh command executes provider requests sequentially");
   const published = await runtime.fetch(request());
-  assert.equal(published.status, 200, "the canonical EventState becomes readable after refresh publication");
+  assert.equal(published.status, 200, "the normalized EventState is composed from newly acquired endpoint records");
+  assert.equal(writes, storage.values.size - 1, "only explicit provider acquisition writes persistent records");
 });
 
 test("explicit EventState publication composes canonical event-team domain objects with source metadata", async () => {
@@ -836,7 +846,7 @@ test("EventRuntime readiness inspects freshness without queueing provider work",
   assert.equal(statboticsTask, undefined);
 });
 
-test("EventRuntime subscriptions remain unavailable until a canonical EventState is published", async () => {
+test("EventRuntime subscriptions can register before provider resources have been acquired", async () => {
   const storage = new MemoryStorage(), eventKey = "2026firstrequest";
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
@@ -853,10 +863,12 @@ test("EventRuntime subscriptions remain unavailable until a canonical EventState
     },
     body: JSON.stringify({ action: "subscribe" }),
   }));
-  assert.equal(response.status, 204);
-  assert.equal(await response.text(), "", "a missing EventState has no response body");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    registered: true, event_key: eventKey, topic: "event-state",
+  });
   assert.equal(storage.values.has("event-state:publication"), false,
-    "a frontend subscription must not synthesize an empty EventState");
+    "a frontend subscription must not persist an empty EventState");
 });
 
 
@@ -1200,7 +1212,9 @@ test("EventRuntime treats a provider 304 as a strict no-op while retaining the l
 
   assert.equal(refresh.status, 200);
   const result = await refresh.json();
-  assert.deepEqual(result.results, [{ endpoint, success: true }]);
+  assert.deepEqual(result.results, [{
+    endpoint, success: true, status: "stale", http_status: null, last_error: null,
+  }]);
   assert.equal(providerCalls, 1);
   assert.deepEqual(storage.values.get("endpoint:" + endpoint), endpointState,
     "304 must not change freshness metadata, validators, diagnostics, or revisions");
@@ -1256,8 +1270,10 @@ test("EventRuntime recovers its last-good representation after a failed provider
   }));
 
   const failedRefresh = await refresh();
-  assert.equal(failedRefresh.status, 200);
-  assert.deepEqual((await failedRefresh.json()).results, [{ endpoint, success: false }]);
+  assert.equal(failedRefresh.status, 503, "retryable provider failures are surfaced to the caller");
+  assert.deepEqual((await failedRefresh.json()).results, [{
+    endpoint, success: false, status: "stale", http_status: 503, last_error: "Provider returned HTTP 503",
+  }]);
   const afterFailure = storage.values.get("endpoint:" + endpoint);
   assert.equal(afterFailure.status, "stale");
   assert.deepEqual(afterFailure.data, lastGoodData);
@@ -1277,9 +1293,11 @@ test("EventRuntime recovers its last-good representation after a failed provider
   assert.equal(recovered.validatorRevision, 3);
   assert.equal(recovered.lastError, null);
   assert.equal(recovered.lastHttpStatus, 200);
-  const publication = storage.values.get("event-state:publication");
-  assert.equal(publication.state.event.name, "Recovered Event Name",
-    "the canonical EventState publication must advance after successful recovery");
+  const projection = runtime.hydratedPublication;
+  assert.equal(projection.state.event.name, "Recovered Event Name",
+    "the read-time EventState projection must reflect the recovered endpoint data");
+  assert.equal(storage.values.has("event-state:publication"), true,
+    "an older materialized fallback may remain, but recovery does not require replacing it");
 });
 
 

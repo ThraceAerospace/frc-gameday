@@ -63,7 +63,7 @@ function makeEnvironment() {
       CF_ACCESS_AUD: accessAudience,
       RUNTIME_ADMIN_EMAILS: "admin@example.com",
       fetcher: async () => Response.json({ keys: [accessPublicJwk] }, { headers: { "Cache-Control": "public, max-age=300" } }),
-      DISCOVERY_STORE: {
+      DISCOVERY_STORAGE: {
         idFromName(name) { return name; },
         get() {
           return { async fetch(request) {
@@ -173,7 +173,7 @@ test("public event stream route forwards WebSocket upgrade and since revision", 
 test("public event and team reads return 404 without activating unready runtimes", async () => {
   const calls = [];
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() { return { async fetch() { return new Response(null, { status: 404 }); } }; },
     },
@@ -421,7 +421,7 @@ test("public team discovery returns team keys from the published Durable Object 
     ["discovery/team-pages/2026/1234/0.json", ["frc1", "frc4", "frc3461"]],
   ]);
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() {
         return { async fetch(request) {
@@ -454,7 +454,7 @@ test("public team discovery rejects malformed published team-key pages", async (
     ["discovery/team-pages/2026/1234/0.json", ["frc3461", { key: "frc9999" }]],
   ]);
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() {
         return { async fetch(request) {
@@ -494,7 +494,7 @@ test("retired internal lifecycle route is unavailable and never dispatches to a 
 test("public team snapshot route selects the team Durable Object and forwards the season", async () => {
   const calls = [];
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() { return { async fetch() { return Response.json({}); } }; },
     },
@@ -594,7 +594,7 @@ test("public team season analytics forwards to the canonical TeamRuntime endpoin
     events: [],
   };
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() { return { async fetch() { return Response.json({}); } }; },
     },
@@ -641,7 +641,7 @@ test("public current-season route returns 204 until TBA status has been persiste
 
 test("public current-season route returns the persisted TBA current_season value", async () => {
   const env = {
-    DISCOVERY_STORE: {
+    DISCOVERY_STORAGE: {
       idFromName(name) { assert.equal(name, "shared"); return name; },
       get() {
         return { async fetch(request) {
@@ -661,15 +661,16 @@ test("public current-season route returns the persisted TBA current_season value
 
 test("daily team readiness starts its independent Workflow through the local Jobs module", async () => {
   const { env, calls } = makeEnvironment();
-  const response = await worker.fetch(new Request("https://fieldview/internal/admin/daily-team-readiness", {
+  const response = await worker.fetch(new Request("https://fieldview/internal/admin/team-season-readiness", {
     method: "POST",
-    headers: { "Cf-Access-Jwt-Assertion": accessToken },
+    headers: { "Cf-Access-Jwt-Assertion": accessToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ year: 2027 }),
   }), env);
 
   assert.equal(response.status, 202);
   assert.ok(calls.some((call) =>
     call.operation === "jobs" &&
-    call.url === "/internal/admin/daily-team-readiness" &&
+    call.url === "/internal/admin/team-season-readiness" &&
     call.method === "POST"));
 });
 

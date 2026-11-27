@@ -80,7 +80,16 @@ test("EventRuntime accepts and idempotently republishes a workflow bootstrap", a
   const first = await runtime.fetch(request());
   assert.equal(first.status, 200);
   assert.equal((await first.json()).duplicate, false);
-  assert.ok(storage.values.has("event-state:publication"));
+  assert.ok(storage.values.has("endpoint:" + eventEndpoint));
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "bootstrap stores provider resources without materializing EventState");
+  const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
+    headers: { "X-FieldView-Event-Key": key },
+  }));
+  assert.equal(snapshot.status, 200);
+  assert.equal((await snapshot.json()).event.key, key);
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "a read-time projection is not persisted");
   const revision = storage.values.get("snapshot-revision");
 
   const second = await runtime.fetch(request());
@@ -114,7 +123,16 @@ test("TeamRuntime accepts and idempotently republishes a year-scoped bootstrap",
   const first = await runtime.fetch(request());
   assert.equal(first.status, 200);
   assert.equal((await first.json()).duplicate, false);
-  assert.ok(storage.values.has("team-state:" + year + ":publication"));
+  assert.ok(storage.values.has("endpoint:" + endpoints[0]));
+  assert.equal(storage.values.has("team-state:" + year + ":publication"), false,
+    "bootstrap stores provider resources without materializing TeamState");
+  const snapshot = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
+    headers: { "X-FieldView-Team-Key": key },
+  }));
+  assert.equal(snapshot.status, 200);
+  assert.equal((await snapshot.json()).team.team_number, 3461);
+  assert.equal(storage.values.has("team-state:" + year + ":publication"), false,
+    "a read-time projection is not persisted");
   const revision = storage.values.get("snapshot-revision");
 
   const second = await runtime.fetch(request());

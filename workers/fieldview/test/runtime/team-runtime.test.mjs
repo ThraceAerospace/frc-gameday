@@ -144,9 +144,12 @@ test("TeamRuntime hydrates persisted season publications without deleting legacy
   assert.equal(readiness.publications.length, 1);
 });
 
-test("TeamRuntime public snapshots remain read-only until an explicit refresh publishes state", async () => {
+test("TeamRuntime derives snapshots on read without persisting them", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461", year = 2026;
   let activeRequests = 0, maxConcurrentRequests = 0;
+  let writes = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => { writes += 1; return originalPut(key, value); };
   const runtime = new TeamRuntime({ storage }, env(async (url) => {
     calls.push(String(url));
     activeRequests += 1;
@@ -160,7 +163,12 @@ test("TeamRuntime public snapshots remain read-only until an explicit refresh pu
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
   const first = await read();
-  assert.equal(first.status, 404, "an existing TeamRuntime without TeamState returns not found");
+  assert.equal(first.status, 200, "an empty TeamRuntime returns an incomplete normalized TeamState");
+  const emptyState = await first.json();
+  assert.equal(emptyState.team_key, teamKey);
+  assert.equal(emptyState.year, year);
+  assert.deepEqual(emptyState.sources, {});
+  assert.equal(writes, 0, "a missing hot cache must not write TeamState");
   const eventState = await runtime.fetch(new Request("https://team/event-state?event_key=2026demand&year=" + year, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
@@ -182,7 +190,8 @@ test("TeamRuntime public snapshots remain read-only until an explicit refresh pu
   assert.equal(calls.length, 0, "readiness inspects coverage without provider I/O");
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
 
-  assert.equal((await read()).status, 404, "an existing TeamRuntime without TeamState returns not found");
+  assert.equal((await read()).status, 200, "an empty projection remains readable");
+  assert.equal(writes, 0, "readiness and repeated snapshot reads must not write");
   const refresh = await runtime.fetch(new Request("https://team/refresh?year=" + year, {
     method: "POST",
     headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey, "Content-Type": "application/json" },
@@ -193,8 +202,11 @@ test("TeamRuntime public snapshots remain read-only until an explicit refresh pu
   assert.equal((storage.values.get("manual:poll-queue") ?? []).length, 0);
   assert.equal(storage.alarmAt, null);
   assert.equal(maxConcurrentRequests, 1, "one TeamRuntime alarm must never run provider requests concurrently");
+  const writesAfterRefresh = writes;
+  assert.ok(writesAfterRefresh > 0, "explicit provider refresh persists endpoint resources");
   const second = await read();
   assert.equal(second.status, 200);
+  assert.equal(writes, writesAfterRefresh, "snapshot reads after refresh must not add row writes");
   const snapshot = await second.json();
   assert.equal(snapshot.team.team_number, 3461);
   assert.equal(snapshot.sources.tba_team.status, "available");
@@ -693,14 +705,15 @@ test("TeamRuntime readiness inspects freshness without queueing provider work", 
   assert.equal(storage.alarmAt, null);
 });
 
-test("TeamRuntime readiness inspects only; explicit refresh materializes the requested season", async () => {
+test("TeamRuntime readiness inspects provider resources; refresh does not require persisted TeamState", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
   const currentYear = new Date().getUTCFullYear(), historicalYear = currentYear - 1;
   const runtime = new TeamRuntime({ storage }, env(async () => Response.json([])), teamKey);
   const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + historicalYear, {
     headers: { "X-FieldView-Team-Key": teamKey },
   }));
-  assert.equal(response.status, 404, "an existing TeamRuntime without historical TeamState returns not found");
+  assert.equal(response.status, 200, "an existing TeamRuntime returns an incomplete historical TeamState projection");
+  assert.equal((await response.json()).year, historicalYear);
   assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
   assert.equal(storage.values.has("team-state:" + historicalYear + ":publication"), false);
   const readiness = await runtime.fetch(new Request("https://team-runtime/readiness?year=" + historicalYear, {
@@ -717,13 +730,14 @@ test("TeamRuntime readiness inspects only; explicit refresh materializes the req
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
   }));
   assert.equal(historicalRefresh.status, 200);
-  assert.equal(storage.values.get("team-state:" + historicalYear + ":publication")?.state?.year, historicalYear);
+  assert.equal(storage.values.has("team-state:" + historicalYear + ":publication"), false,
+    "explicit refresh stores provider resources, not a required normalized publication");
 
   const currentRefresh = await runtime.fetch(new Request("https://team-runtime/refresh?year=" + currentYear, {
     method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
   }));
   assert.equal(currentRefresh.status, 200);
-  assert.equal(storage.values.get("team-state:" + currentYear + ":publication")?.state?.year, currentYear);
+  assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
   assert.equal(storage.values.has("team-state:" + currentYear), false);
   assert.equal(storage.values.has("team-state:" + historicalYear), false);
 });
@@ -858,9 +872,10 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   const missing = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input?year=" + year, { headers },
   ));
-  assert.equal(missing.status, 404);
+  assert.equal(missing.status, 200);
+  assert.equal((await missing.json()).team_state.team_key, teamKey);
   assert.deepEqual([...storage.values], [...beforeRead],
-    "a missing analytics input GET must not bind, materialize, or publish TeamState");
+    "an analytics input GET derives an incomplete TeamState without persistent writes");
 
   const resource = teamResourceEndpoints(teamKey, year)[0];
   const fetchedAt = Date.now();
@@ -876,8 +891,8 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
     { method: "POST", headers },
   ));
   assert.equal(prepared.status, 200);
-  assert.equal(storage.values.has("team-state:" + year + ":publication"), true,
-    "the explicit preparation command publishes the normalized TeamState input");
+  assert.equal(storage.values.has("team-state:" + year + ":publication"), false,
+    "preparation returns a normalized projection without persisting it");
   assert.equal(providerCalls, 0);
 
   const beforePublishedRead = new Map(storage.values);
@@ -898,11 +913,13 @@ test("TeamRuntime analytics season input GET is read-only and preparation is exp
   const staleRead = await runtime.fetch(new Request(
     "https://team-runtime/analytics-season-input?year=" + year, { headers },
   ));
-  assert.equal(staleRead.status, 409,
-    "a stale publication must not be supplied as if it represented the current source revisions");
+  assert.equal(staleRead.status, 200,
+    "the read-time projection exposes last-good data and current stale source metadata");
   assert.deepEqual([...storage.values], [...beforeStaleRead],
     "a stale analytics input GET must report the conflict without repairing or rewriting storage");
   assert.equal(providerCalls, 0);
+  const staleInput = await staleRead.json();
+  assert.equal(staleInput.team_state.sources.tba_team.status, "failed");
 });
 
 
