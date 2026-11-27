@@ -1,7 +1,7 @@
 # Compatibility Retirement Audit
 
 **Branch:** `fieldview-architecture-migration`  
-**Status:** Retire-first implementation in progress; final source scan and integration validation remain.
+**Status:** Compatibility retirement and frontend contract repair in progress; final source scan and full integration validation remain.
 
 ## Owner direction
 
@@ -15,6 +15,8 @@ This branch is a clean-slate replacement. None of its Cloudflare resources have 
 - Removed the Vercel TBA webhook relay; TBA ingress is the Worker `/webhooks/tba` route directly.
 - Removed the browser-owned `EventState` implementation and its REST polling fallback.
 - Reduced SharedWorker responsibilities to canonical EventRuntime snapshot and analytics subscriptions.
+- Removed the deleted `CanonicalEventSnapshotsProvider` and its remote-display relay mode; remote displays consume their own canonical SharedWorker stream.
+- Replaced obsolete frontend snapshot type imports with the canonical `FieldViewEventState`, `FieldViewTeamState`, provider media, and `FieldViewTeamEventAnalytics` contracts.
 - Removed web-side TBA, Statbotics, and FRC Colors provider clients/caches; provider adapters live in shared provider packages and Worker acquisition.
 - Removed direct Redis, ioredis, `ws`, and Vercel Functions dependencies from the web workspace.
 - Removed the R2-shaped DiscoveryService object wrapper and generic `/get`, `/put`, `/list` HTTP record API; internal callers now use typed D1 JSON-record methods.
