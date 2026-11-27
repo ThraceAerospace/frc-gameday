@@ -57,6 +57,7 @@ type SeasonIngest = {
   team_cursor?: number; team_total?: number; team_resource_cursor?: number; team_resources_per_team?: number;
   event_cursor?: number; event_total?: number; event_resource_cursor?: number; event_resources_per_event?: number; team_snapshot_revision?: number; next_due_at?: number | null;
   counts?: {
+    teams_discovered?: number; events_discovered?: number; readiness_workflows_dispatched?: number;
     teams_complete: number; teams_partial: number; teams_failed: number;
     event_state_complete: number; event_state_partial: number; event_state_missing: number; event_state_failed: number;
     event_analytics_succeeded: number; event_analytics_partial: number; event_analytics_waiting: number; event_analytics_missing: number; event_analytics_failed: number;
@@ -219,7 +220,7 @@ export default function AdminOperationsDashboard() {
         body: JSON.stringify({ kind: "system", action: "season-ingest-preview", year }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Unable to preview season ingestion");
+      if (!response.ok) throw new Error(body.error ?? "Unable to preview season readiness");
       setSeasonPreview(body as SeasonPreview);
       if (body.existing_job) setSeasonIngest(body.existing_job as SeasonIngest);
       setMessage("Season inventory preview loaded. Review the discovered counts before dispatching readiness.");
@@ -239,7 +240,7 @@ export default function AdminOperationsDashboard() {
       if (!response.ok) throw new Error(body.error ?? "Season readiness dispatch failed");
       setSeasonIngest(body as SeasonIngest);
       setMessage("Team and event season readiness workflows were dispatched.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Season readiness dispatch failed"); }
     finally { setBusy(false); }
   }, [authenticated, requestHeaders, year]);
 
