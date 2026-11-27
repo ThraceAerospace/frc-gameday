@@ -8,6 +8,7 @@ import {
   type FieldViewTeam,
 } from "@fieldview/domain";
 import { getCanonicalEventDiscovery, getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
+import { logIncompleteStateServed } from "@/lib/events/incompleteStateTelemetry";
 import MatchRow from "@/components/match/MatchRow";
 import EventAnalyticsSurface from "@/components/insights/EventAnalyticsSurface";
 import PageContainer from "@/components/ui/PageContainer";
@@ -112,7 +113,7 @@ export default async function EventPage({
   const dates = formatEventDateRange(event.start_date, event.end_date);
   // EventState may legitimately publish an empty or absent team/match projection.
   // Only a missing EventState publication is an incomplete-state demand signal.
-  if (!eventSnapshot) console.info("[FV][IncompleteStateServed]", JSON.stringify({ response_state: "partial", entity_kind: "event", entity_key: eventKey, served: true, served_source: "tba_event_discovery", reason_codes: ["event_state_missing"] }));
+  if (!eventSnapshot) logIncompleteStateServed({ entity_kind: "event", entity_key: eventKey, served_source: "tba_event_discovery", reason_codes: ["event_state_missing"], year: event.year });
 
   return (
     <SiteShell>
