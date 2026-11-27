@@ -1,71 +1,119 @@
-# Final Integration Plan
+# Production integration and cutover gate
 
 **Target branch:** `fieldview-architecture-migration`  
-**Status:** Architecture implementation; final integration validation pending  
-**Production state:** No resources from this branch have been deployed and there is no production data to preserve.
+**Purpose:** final integration validation before merge to `main` and production deployment  
+**Resource baseline:** this branch has not been deployed; there is no branch-owned production data or legacy queue state to preserve.
 
 ## Objective
 
-Complete the intended final architecture on this branch, validate it end to end from a clean Cloudflare resource baseline, then merge to `main` for production deployment. Do not maintain adapters for the retired architecture. Do not preserve queue messages, Redis state, Vercel runtime endpoints, old browser acquisition, or legacy publication formats.
+Validate the complete FieldView target architecture from a clean Cloudflare Preview baseline. The release is ready only when the application, runtime ownership boundaries, durable provider records, read projections, orchestration, and realtime data flow operate as one system.
 
-## Non-negotiable contracts
+This document is a release gate, not permission to deploy production. Merge and production deployment remain separate operator-approved actions.
 
-1. EventRuntime and TeamRuntime persist provider endpoint responses and acquisition metadata.
-2. EventState and TeamState are normalized client projections created when a read is requested.
-3. In-memory projections may accelerate repeated reads, but are disposable and must be regenerated after eviction.
-4. No read path writes Durable Object storage or triggers provider acquisition.
-5. Explicit bootstrap, refresh, webhook reconciliation, and Workflow operations own all provider writes.
-6. Cloudflare Workflows and the Worker polling coordinator own scheduling. No queue-based readiness compatibility and no DO alarm polling.
-7. The browser consumes only canonical Worker snapshots, analytics publications, and `/stream` notifications.
-8. TBA webhooks target the Worker directly. Remote signaling is owned by RemoteSessionRuntime.
-9. One environment-neutral Worker and one Wrangler configuration; Preview bindings are isolated from top-level bindings.
-10. No R2 dependency.
+## Governing contracts
 
-## Final integration gates
+1. EventRuntime and TeamRuntime are the canonical owners of provider endpoint records for their respective scopes.
+2. A first-registration initialization Workflow may perform one bounded, idempotent acquisition of the initial provider endpoint resources to reliably hydrate a newly created runtime. It persists provider endpoint records only and is not a recurring provider path.
+3. After initial bootstrap, ongoing provider acquisition is performed by the owning runtime in response to explicit refresh commands. The polling coordinator selects targets and dispatches; it does not fetch providers.
+4. EventState and TeamState are ephemeral normalized read projections derived from stored provider endpoint records. They are not persisted canonical publications.
+5. Snapshot reads are read-only: no provider calls, runtime registration, workflow dispatch, readiness mutation, or Durable Object storage writes.
+6. Workflows own durable multi-step orchestration. The polling coordinator owns lifecycle cadence, prioritization, bounded concurrency, overlap prevention, and refresh dispatch.
+7. Durable Object alarm polling, Cloudflare Queue refresh paths, Redis, R2, and browser IndexedDB normalized-state persistence are not part of the architecture.
+8. Realtime is snapshot-first. The SharedWorker obtains the HTTP snapshot before subscribing to the single Multiplexer-owned `/stream`.
+9. State notifications carry the actual changed EventState snapshot or team-event patch/data, together with identity and ordering/revision metadata. Analytics notifications carry the committed analytics publication. Revision-only invalidations are invalid.
+10. Notifications, sequence gaps, disconnects, and reconnects never trigger hidden HTTP snapshot or analytics refetches. Reconnect restores subscriptions only.
+11. TBA webhooks enter directly through the Worker. Remote display signaling is owned by RemoteSessionRuntime.
+12. One environment-neutral Worker and one Wrangler configuration serve production and branch Previews. Preview bindings must not reach production data or Workflow instances.
 
-### 1. Source and contract audit
-- Confirm there are no Redis/ioredis clients, Vercel WebSocket routes, webhook relays, provider acquisition clients in the web app, legacy EventState polling, queue producers/consumers, or runtime alarm handlers.
-- Confirm no compatibility fallback silently routes requests away from the Worker.
-- Confirm no normalized EventState/TeamState is required during bootstrap.
-- Confirm reads return projections from stored endpoint records and remain storage-write-free.
-- Confirm all stale migration documentation and scripts describe this architecture.
+## Gate 1 — Repository and contract validation
 
-### 2. Clean local validation
-- `npm ci`
-- `npm run typecheck`
-- `npm test`
-- `npm run lint`
-- `npm run build`
-- `npx wrangler deploy --dry-run --config workers/fieldview/wrangler.toml`
+- Review the complete branch diff against `main`; verify that only intended product, runtime, configuration, test, and current documentation changes remain.
+- Confirm there are no Redis/ioredis imports, Vercel WebSocket or webhook relays, browser provider clients, R2 bindings, Queue producers/consumers, or Durable Object alarm handlers/calls.
+- Confirm provider acquisition is not duplicated after first-registration bootstrap.
+- Confirm EventState/TeamState are derived from endpoint records at read time and no persisted normalized-state fallback exists.
+- Confirm all state-change publications contain changed data, not revision-only invalidations.
+- Confirm the SharedWorker does not issue HTTP reads in response to stream notifications, gaps, or reconnects.
+- Confirm documentation and accepted ADRs describe ADR-0020 and the current single-Worker deployment topology.
 
-Resolve all failures before Preview testing.
+## Gate 2 — Local validation
 
-### 3. Cloudflare Preview integration
-Deploy only a branch Preview and apply its D1 migrations to the Preview database. Validate:
-- Worker routes, authentication, assets, and bindings.
-- Season discovery and event/team readiness.
-- Initial provider bootstrap into EventRuntime and TeamRuntime.
-- EventState and TeamState read-time projection, including cold reads after DO eviction.
-- Zero Durable Object writes from snapshot, analytics-input, and discovery reads.
-- Provider refresh intervals, bounded concurrency, retries, and last-good data behavior.
-- Analytics Workflow publication and team acknowledgement.
-- SharedWorker `/snapshot` + `/stream` flow, reconnect, and data-bearing updates.
-- Direct TBA webhook HMAC verification and reconciliation.
-- RemoteSessionRuntime pairing, reconnect, hibernation, and signaling.
-- D1/KV/DO usage against free-tier and operational budgets.
+Run the repository's supported validation scripts:
 
-Do not point TBA production webhooks or public users at Preview. Use controlled test credentials and payloads.
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run lint
+npm run build
+npx wrangler deploy --dry-run --config workers/fieldview/wrangler.toml
+```
 
-### 4. Production readiness
-- Review Preview evidence and Cloudflare resource configuration.
-- Confirm secrets, Access policy, TBA webhook destination, and Vercel frontend runtime URL.
-- Confirm provider rate budgets and Durable Object write counts.
-- Confirm rollback and clean bootstrap behavior.
-- Obtain explicit approval before production deployment.
+Resolve failures before deployed Preview testing. Review warnings separately from gating failures.
 
-### 5. Merge and production deployment
-Only after the Preview gates pass: prepare the migration PR, review the complete diff, merge to `main`, provision/apply the final Cloudflare resources, deploy the Runtime Worker, configure the direct TBA webhook destination, and connect the Vercel frontend. Merge and deployment are separate approval points.
+## Gate 3 — Clean Preview integration
 
-## Explicitly retired
+Use a clean, non-production Preview resource baseline. Preview D1 and KV must remain isolated from production. Do not bind Preview requests to production Workflows; use local execution or a separately provisioned non-production Workflow strategy where Preview Workflow bindings are unavailable.
 
-The target does not include Redis, ioredis, Vercel WebSocket delivery, a Vercel TBA webhook relay, web-side provider clients/caches, browser-owned EventState acquisition or polling, legacy queue consumers/producers, Durable Object alarm polling, R2, or persisted EventState/TeamState as a readiness prerequisite.
+Validate:
+
+### Runtime creation and provider data
+- Season discovery produces complete, validated event/team directories.
+- First-registration workflows register the runtime and perform one bounded initial provider acquisition.
+- Bootstrap is idempotent and persists endpoint payloads, validators, acquisition status, freshness, and revisions to the correct owning runtime.
+- Bootstrap does not construct or persist EventState or TeamState.
+- A retry cannot overwrite newer runtime data or regress revisions.
+- Subsequent refreshes originate from EventRuntime/TeamRuntime, not from Workflow provider clients.
+
+### Reads and storage
+- Cold, warm, and post-eviction event/team snapshot reads derive equivalent normalized projections.
+- Snapshot reads perform zero Durable Object storage writes and zero provider requests.
+- Missing/unavailable/failed resources remain distinguishable from explicit null, zero, stale, and last-good data.
+- Partial provider failures do not erase unrelated valid endpoint records.
+- Analytics reads and discovery reads follow their own read-only contracts.
+
+### Polling and analytics
+- The polling coordinator applies lifecycle policy, provider request spacing, bounded concurrency, and overlap prevention.
+- Refresh dispatch reaches only eligible EventRuntime/TeamRuntime identities.
+- Analytics workflows consume versioned runtime inputs, publish only valid results, and preserve monotonic publication revisions.
+- Team/event cross-runtime dependencies use explicit references and do not duplicate canonical aggregates.
+
+### Realtime
+- The browser obtains the HTTP snapshot before the single shared `/stream` connection.
+- Event snapshot updates carry the changed EventState data.
+- Team-event updates carry the changed patch/data and owning scope.
+- Analytics notifications carry the committed analytics publication.
+- The SharedWorker applies ordered messages and rejects duplicates/out-of-order revisions.
+- No notification, acknowledgement, sequence gap, disconnect, or reconnect causes an HTTP snapshot or analytics refetch.
+- Reconnect restores subscriptions only.
+
+### Other runtime surfaces
+- TBA webhook HMAC verification uses the raw request body and routes changes to the correct EventRuntime.
+- RemoteSessionRuntime pairing, signaling, reconnect, and cleanup work.
+- Admin authentication, operational controls, and Workflow status reflect the actual runtime lifecycle.
+- D1, KV, and Durable Object usage remains within the approved operational budget.
+
+Do not point public users or production TBA webhooks at Preview.
+
+## Gate 4 — Production readiness review
+
+- Review Preview evidence and the final Wrangler configuration.
+- Confirm production D1/KV/DO/Workflow bindings and migration plan.
+- Confirm secrets, Cloudflare Access policy, administrator authorization, and webhook destination.
+- Confirm the Vercel frontend runtime URL and frontend environment configuration.
+- Review provider rate budgets, Durable Object write behavior, Workflow concurrency, and operational monitoring.
+- Confirm clean bootstrap and rollback/recovery procedures.
+- Obtain explicit approval for merge and separately for production deployment.
+
+## Gate 5 — Merge and cutover
+
+After all gates pass:
+
+1. Prepare and review the migration pull request and complete diff.
+2. Merge to `main) only with explicit approval.
+3. Provision/apply production D1 schema and required Cloudflare resources according to the reviewed cutover sequence.
+4. Deploy the single `runtime` Worker using the top-level Wrangler configuration.
+5. Configure direct TBA webhook delivery and production secrets/access.
+6. Configure the Vercel frontend to use the production runtime URL.
+7. Run production smoke checks for discovery, event/team snapshots, realtime updates, analytics, webhooks, and remote sessions.
+
+Do not combine merge approval with deployment approval. Do not preserve retired infrastructure merely for compatibility.
