@@ -14,9 +14,9 @@ import { notFound } from "next/navigation";
 import { getCanonicalCurrentSeason, getCanonicalEventSnapshot, getCanonicalTeamDiscovery, getCanonicalTeamSnapshot } from "@/lib/events/serverSnapshot";
 import { logIncompleteStateServed } from "@/lib/events/incompleteStateTelemetry";
 import type {
-  FieldViewEventSnapshot,
+  FieldViewEventState,
   FieldViewTeam,
-  FieldViewTeamSnapshot,
+  FieldViewTeamState,
 } from "@fieldview/domain";
 import { formatPlayoffLevel } from "@/lib/tba/formatters";
 import { formatEventDateRange } from "@/lib/time";
@@ -26,13 +26,13 @@ function normalizeTeamKey(value: string): string {
   return value.startsWith("frc") ? value : `frc${value}`;
 }
 
-type TeamData = NonNullable<FieldViewTeamSnapshot["team"]>;
-type TeamEventReference = NonNullable<FieldViewTeamSnapshot["events"]>[number];
-type TeamDistrict = NonNullable<FieldViewTeamSnapshot["districts"]>[number];
-type TeamAvatarData = Extract<NonNullable<FieldViewTeamSnapshot["media"]>[number], { type: "avatar" }>;
-type CanonicalEvent = NonNullable<FieldViewEventSnapshot["event"]>;
-type CanonicalMatch = NonNullable<NonNullable<FieldViewEventSnapshot["matches"]>[number]>;
-type CanonicalStatus = NonNullable<NonNullable<FieldViewEventSnapshot["event_teams"]>[number]["tba_status"]>;
+type TeamData = NonNullable<FieldViewTeamState["team"]>;
+type TeamEventReference = NonNullable<FieldViewTeamState["events"]>[number];
+type TeamDistrict = NonNullable<FieldViewTeamState["districts"]>[number];
+type TeamAvatarData = Extract<NonNullable<FieldViewTeamState["media"]>[number], { type: "avatar" }>;
+type CanonicalEvent = NonNullable<FieldViewEventState["event"]>;
+type CanonicalMatch = NonNullable<NonNullable<FieldViewEventState["matches"]>[number]>;
+type CanonicalStatus = NonNullable<NonNullable<FieldViewEventState["event_teams"]>[number]["tba_status"]>;
 
 function sortEvents(a: TeamEventReference, b: TeamEventReference) {
   return a.start_date.localeCompare(b.start_date) ||
@@ -72,12 +72,12 @@ function getTeamResult(match: CanonicalMatch, teamKey: string) {
 
 type TeamEventSection = {
   event: CanonicalEvent;
-  matches: NonNullable<FieldViewEventSnapshot["matches"]> | null;
-  playoffAlliances: NonNullable<FieldViewEventSnapshot["playoff_alliances"]> | null;
+  matches: NonNullable<FieldViewEventState["matches"]> | null;
+  playoffAlliances: NonNullable<FieldViewEventState["playoff_alliances"]> | null;
   status: CanonicalStatus | null;
-  awards: NonNullable<FieldViewEventSnapshot["awards"]> | null;
-  advancementPoints: NonNullable<FieldViewEventSnapshot["advancement_points"]> | null;
-  rankings: NonNullable<FieldViewEventSnapshot["rankings"]> | null;
+  awards: NonNullable<FieldViewEventState["awards"]> | null;
+  advancementPoints: NonNullable<FieldViewEventState["advancement_points"]> | null;
+  rankings: NonNullable<FieldViewEventState["rankings"]> | null;
 };
 
 export default async function TeamPage({
