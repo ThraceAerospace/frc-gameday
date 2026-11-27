@@ -6,7 +6,8 @@ import type { RemotePeerStatus } from "@/lib/remote/webrtc";
 import type { TileSurfaceController } from "@/components/surface/TileSurfaceActions";
 import TileSurfaceSettingsView from "@/components/surface/TileSurfaceSettingsView";
 import RemoteEventCard from "./RemoteEventCard";
-import type { CanonicalEventSnapshotValue } from "@/lib/events/CanonicalEventSnapshotsProvider";
+import type { CanonicalEventSnapshotData } from "@/lib/events/workerRealtime";
+type CanonicalEventSnapshotValue = { version: number; snapshot: CanonicalEventSnapshotData };
 import { useTileSurfaceKeyboard } from "@/components/surface/TileSurfaceController";
 
 type Props = {
