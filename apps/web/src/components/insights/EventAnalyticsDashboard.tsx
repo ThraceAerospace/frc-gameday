@@ -131,8 +131,14 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
     const shouldRefresh = matchAnalysisRefreshKey > lastMatchAnalysisRefreshKey.current;
     if (shouldRefresh) lastMatchAnalysisRefreshKey.current = matchAnalysisRefreshKey;
-    const query = `year=${data.event.year}${shouldRefresh ? "&refresh=1" : ""}`;
-    fetch(`/api/team/${teamA}/matches?${query}`, { cache: "no-store" }).then(async (response) => {
+    const runtimeOrigin = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+    if (!runtimeOrigin) {
+      setMatchAnalysisError("FieldView runtime is not configured");
+      setMatchAnalysisLoading(false);
+      return;
+    }
+    const url = new URL(`/teams/frc${teamA}/season-analytics?year=${data.event.year}`, runtimeOrigin);
+    fetch(url, { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Team season investigation is temporarily unavailable");
       const result = await response.json();
       if (active) setMatchAnalysisA(result as CanonicalTeamAnalysisResponse);
