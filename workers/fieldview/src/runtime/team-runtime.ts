@@ -110,7 +110,7 @@ export class TeamRuntime extends DurableObjectBase {
   private teamKey: string;
   private readonly activation: Promise<void>;
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
-  private readonly publishedSnapshots = new Map<number, {
+  private readonly hotSnapshots = new Map<number, {
     input_signature: string;
     state: ReturnType<typeof normalizeFieldViewTeamState>;
   }>();
@@ -842,12 +842,12 @@ export class TeamRuntime extends DurableObjectBase {
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
           hydrated_scope: ["team_identity", "provider_endpoint_records"],
-          publications: [...this.publishedSnapshots.entries()].map(([year, publication]) => ({
+          publications: [...this.hotSnapshots.entries()].map(([year, publication]) => ({
             year, exists: true, input_signature: publication.input_signature,
             snapshot_revision: snapshotRevision,
           })),
           projection_mode: "read-time",
-          materialized_cache_entries: this.publishedSnapshots.size,
+          materialized_cache_entries: this.hotSnapshots.size,
           polling_owner: "PollingCoordinatorWorkflow",
           local_poll_tasks: 0,
           last_error: [...states.values()].find((state) => state.lastError)?.lastError ?? null,
@@ -1001,7 +1001,7 @@ export class TeamRuntime extends DurableObjectBase {
       revision: await tx.get<number>("snapshot-revision") ?? 0,
     }));
     const signature = inputSignature(inputs.states);
-    const cached = this.publishedSnapshots.get(year);
+    const cached = this.hotSnapshots.get(year);
     const signatureHash = await hashSignature(signature);
     const etag = 'W/"fv-team-snapshot-v1-' + year + '-' + inputs.revision + '-' + signatureHash + '"';
     const responseHeaders = {
@@ -1013,7 +1013,7 @@ export class TeamRuntime extends DurableObjectBase {
       return new Response(null, { status: 304, headers: responseHeaders });
     }
     if (cached?.input_signature === signature) {
-      this.publishedSnapshots.set(year, cached);
+      this.hotSnapshots.set(year, cached);
       const cachedProjectionStale = inputs.states.some((state) => Boolean(state && (
         state.status === "failed" || state.status === "stale" || state.status === "unavailable" ||
         (state.expiresAt !== null && state.expiresAt <= now)
@@ -1060,7 +1060,7 @@ export class TeamRuntime extends DurableObjectBase {
     if (!stillCurrent) return this.snapshot(year, request);
 
 
-    this.publishedSnapshots.set(year, { input_signature: signature, state: snapshot });
+    this.hotSnapshots.set(year, { input_signature: signature, state: snapshot });
     const projectionStale = inputs.states.some((state) => Boolean(state && (
       state.status === "failed" || state.status === "stale" || state.status === "unavailable" ||
       (state.expiresAt !== null && state.expiresAt <= now)
