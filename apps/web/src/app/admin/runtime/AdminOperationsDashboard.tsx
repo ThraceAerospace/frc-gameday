@@ -51,7 +51,9 @@ type Overview = {
 type InventoryPage = { total: number; cursor: number; next_cursor: number | null; keys: string[]; year?: number; discovery_ready?: boolean };
 type SeasonIngest = {
   year: number; status: "not_started" | "running" | "paused" | "completed" | "completed_with_errors" | "cancelled"; history_count?: number;
-  phase?: "teams" | "events" | "complete";
+  phase?: string;
+  readiness_workflows?: Array<{ kind: "team" | "event"; workflow_id: string; ok: boolean; error?: string | null }>;
+  errors?: Array<{ key: string; detail: string; at: number }>;
   team_cursor?: number; team_total?: number; team_resource_cursor?: number; team_resources_per_team?: number;
   event_cursor?: number; event_total?: number; event_resource_cursor?: number; event_resources_per_event?: number; team_snapshot_revision?: number; next_due_at?: number | null;
   counts?: {
@@ -220,23 +222,23 @@ export default function AdminOperationsDashboard() {
       if (!response.ok) throw new Error(body.error ?? "Unable to preview season ingestion");
       setSeasonPreview(body as SeasonPreview);
       if (body.existing_job) setSeasonIngest(body.existing_job as SeasonIngest);
-      setMessage("Season inventory preview loaded. Review the counts before starting.");
+      setMessage("Season inventory preview loaded. Review the discovered counts before dispatching readiness.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season preview failed"); }
     finally { setBusy(false); }
   }, [authenticated, requestHeaders, year]);
 
-  const controlSeasonIngest = useCallback(async (action: "start" | "pause" | "resume" | "cancel") => {
+  const controlSeasonIngest = useCallback(async () => {
     if (!authenticated) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { ...requestHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "system", action: "season-ingest-" + action, year, ...(action === "start" ? { confirm: true } : {}) }),
+        body: JSON.stringify({ kind: "system", action: "season-ingest-start", year, confirm: true }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Season-ingest operation failed");
+      if (!response.ok) throw new Error(body.error ?? "Season readiness dispatch failed");
       setSeasonIngest(body as SeasonIngest);
-      setMessage(action === "start" ? "Season ingestion started and will continue through durable Workflow steps." : "Season ingestion " + action + " requested.");
+      setMessage(action === "start" ? "Team and event season readiness workflows were dispatched." : "Season ingestion " + action + " requested.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Season-ingest operation failed"); }
     finally { setBusy(false); }
   }, [authenticated, requestHeaders, year]);
@@ -492,8 +494,8 @@ export default function AdminOperationsDashboard() {
       <p className="rounded-xl border border-[var(--fv-border)] px-4 py-3 text-xs leading-5 text-[var(--fv-muted)]">Overview reads the published current-season index and runtime inventory metadata only. It does not probe every EventRuntime and TeamRuntime; open an event or team below to inspect its live state and provider resources.</p>
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="font-bold">Full-season canonical ingestion</h2><p className="mt-1 max-w-3xl text-xs text-[var(--fv-muted)]">Prepares every TeamRuntime season snapshot first, then generates EventState and EventAnalytics for every discovered event. Work is sequential, durable, resumable, and separate from the live discovery scheduler. It does not use team seed fan-out.</p></div>
-          <button disabled={busy} onClick={() => void previewSeasonIngest()} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Preview {year} inventory</button>
+          <div><h2 className="font-bold">Season readiness dispatch</h2><p className="mt-1 max-w-3xl text-xs text-[var(--fv-muted)]">Starts the independent team and event readiness workflows for the selected year. Each workflow checks its own runtime state and queues only missing or stale refreshes; neither waits for provider acquisition to finish.</p></div>
+          <button disabled={busy} onClick={() => void previewSeasonIngest()} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Preview {year} readiness inventory</button>
         </div>
         {seasonPreview && <div className="mt-3 rounded-lg border border-[var(--fv-border)] p-3 text-sm">
           <p className="font-semibold">{seasonPreview.ready ? "Ready to start" : seasonPreview.runtime_ready === false ? "Runtime configuration is incomplete" : "Discovery is incomplete"}</p>
@@ -502,32 +504,20 @@ export default function AdminOperationsDashboard() {
           <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.event_resources_per_event} event resources/event · {seasonPreview.team_resources_per_team} team resources/team · {(seasonPreview.planned_resource_requests ?? 0).toLocaleString()} planned resource requests</p>
           <p className="mt-1 text-xs text-[var(--fv-muted)]">Shared provider interval: {seasonPreview.request_interval_ms ?? 1000} ms · Baseline duration: {((seasonPreview.estimated_minimum_duration_ms ?? 0) / 3_600_000).toFixed(1)} hours</p>
           {seasonPreview.estimate_note && <p className="mt-1 text-xs text-[var(--fv-muted)]">{seasonPreview.estimate_note}</p>}
-          {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting confirms that FieldView may make provider requests for this full inventory. One shared lease serializes EventRuntime and TeamRuntime provider calls; cached resources are skipped.</p>}
+          {seasonPreview.ready && <p className="mt-2 text-xs text-[var(--fv-muted)]">Starting dispatches two independent workflows. They register missing runtimes, inspect state, and queue only missing or stale refreshes; they do not wait for provider requests to finish.</p>}
         </div>}
-        {seasonIngest && typeof seasonIngest.status === "string" && seasonIngest.status !== "not_started" && <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"} phase</span><span>Teams {seasonIngest.team_cursor ?? 0}/{seasonIngest.team_total ?? 0} (resource {seasonIngest.team_resource_cursor ?? 0}/{seasonIngest.team_resources_per_team ?? 7}) · Events {seasonIngest.event_cursor ?? 0}/{seasonIngest.event_total ?? 0} (resource {seasonIngest.event_resource_cursor ?? 0}/{seasonIngest.event_resources_per_event ?? 13})</span></div>
-          <p className="text-[10px] text-[var(--fv-muted)]">Season TeamRuntime snapshot revision: {seasonIngest.team_snapshot_revision ?? 0}</p>
-          <div className="h-2 overflow-hidden rounded-full bg-[var(--fv-border)]"><div className="h-full bg-[var(--fv-brand)]" style={{ width: (((seasonIngest.team_cursor ?? 0) * (seasonIngest.team_resources_per_team ?? 7) + (seasonIngest.team_resource_cursor ?? 0) + (seasonIngest.event_cursor ?? 0) * (seasonIngest.event_resources_per_event ?? 13) + (seasonIngest.event_resource_cursor ?? 0)) / Math.max(1, (seasonIngest.team_total ?? 0) * (seasonIngest.team_resources_per_team ?? 7) + (seasonIngest.event_total ?? 0) * (seasonIngest.event_resources_per_event ?? 13))) * 100 + "%" }} /></div>
-          {seasonIngest.counts && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-            {[
-              ["Teams complete", seasonIngest.counts.teams_complete], ["Teams partial", seasonIngest.counts.teams_partial], ["Teams failed", seasonIngest.counts.teams_failed],
-              ["EventState complete", seasonIngest.counts.event_state_complete], ["EventState partial", seasonIngest.counts.event_state_partial], ["EventState failed", seasonIngest.counts.event_state_failed], ["EventState missing", seasonIngest.counts.event_state_missing],
-              ["EventAnalytics succeeded", seasonIngest.counts.event_analytics_succeeded], ["EventAnalytics partial", seasonIngest.counts.event_analytics_partial],
-              ["Waiting for cohort", seasonIngest.counts.event_analytics_waiting], ["EventAnalytics missing", seasonIngest.counts.event_analytics_missing], ["EventAnalytics failed", seasonIngest.counts.event_analytics_failed], ["Cohort complete", seasonIngest.counts.event_cohort_complete], ["Cohort partial", seasonIngest.counts.event_cohort_partial], ["Cohort discovering", seasonIngest.counts.event_cohort_discovering], ["Cohort missing", seasonIngest.counts.event_cohort_missing],
-              ["Requests attempted", seasonIngest.counts.requests_attempted], ["Requests succeeded", seasonIngest.counts.requests_succeeded],
-              ["Requests failed", seasonIngest.counts.requests_failed], ["Requests retried", seasonIngest.counts.requests_retried], ["Requests skipped", seasonIngest.counts.requests_skipped],
-              ["Resources unavailable", seasonIngest.counts.requests_unavailable], ["Requests deferred by gate", seasonIngest.counts.requests_deferred],
-            ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">{label}</p><p className="mt-1 text-lg font-bold tabular-nums">{value}</p></div>)}
-          </div>}
-          {seasonIngest.recent_errors && seasonIngest.recent_errors.length > 0 && <details className="text-xs"><summary className="cursor-pointer font-semibold">Recent ingestion errors ({seasonIngest.recent_errors.length})</summary><ul className="mt-2 space-y-1">{seasonIngest.recent_errors.slice(-10).map((item, index) => <li key={item.kind + item.key + index} className="text-rose-600">{item.kind} {item.key}: {item.detail}</li>)}</ul></details>}
+        {seasonIngest && typeof seasonIngest.status === "string" && seasonIngest.status !== "not_started" && <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold capitalize">{seasonIngest.status.replaceAll("_", " ")} · {seasonIngest.phase ?? "—"}</span><span>Year {seasonIngest.year}</span></div>
+          <div className="grid gap-2 sm:grid-cols-3 text-xs">
+            <div className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">Teams discovered</p><p className="mt-1 text-lg font-bold tabular-nums">{seasonIngest.counts?.teams_discovered ?? "—"}</p></div>
+            <div className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">Events discovered</p><p className="mt-1 text-lg font-bold tabular-nums">{seasonIngest.counts?.events_discovered ?? "—"}</p></div>
+            <div className="rounded-lg border border-[var(--fv-border)] p-2"><p className="text-[var(--fv-muted)]">Readiness workflows dispatched</p><p className="mt-1 text-lg font-bold tabular-nums">{seasonIngest.counts?.readiness_workflows_dispatched ?? 0}/2</p></div>
+          </div>
+          {seasonIngest.readiness_workflows && <div className="space-y-1 text-xs">{seasonIngest.readiness_workflows.map((item) => <p key={item.kind}><strong className="capitalize">{item.kind}</strong>: {item.ok ? "dispatched" : item.error ?? "dispatch failed"} {item.ok ? <span className="text-[var(--fv-muted)]">· {item.workflow_id}</span> : null}</p>)}</div>}
+          {seasonIngest.errors && seasonIngest.errors.length > 0 && <ul className="space-y-1 text-xs text-rose-600">{seasonIngest.errors.map((item, index) => <li key={item.key + index}>{item.key}: {item.detail}</li>)}</ul>}
         </div>}
         <div className="mt-3 flex flex-wrap gap-2">
-          {!seasonIngest || seasonIngest.status === "not_started" || seasonIngest.status === "completed" || seasonIngest.status === "cancelled"
-            ? <button disabled={busy || !seasonPreview?.ready} onClick={() => void controlSeasonIngest("start")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Start full-season ingestion</button>
-            : null}
-          {seasonIngest?.status === "running" && <button disabled={busy} onClick={() => void controlSeasonIngest("pause")} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-xs font-semibold disabled:opacity-40">Pause</button>}
-          {(seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("resume")} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Resume / retry</button>}
-          {(seasonIngest?.status === "running" || seasonIngest?.status === "paused" || seasonIngest?.status === "completed_with_errors") && <button disabled={busy} onClick={() => void controlSeasonIngest("cancel")} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-40">Cancel</button>}
+          <button disabled={busy || !seasonPreview?.ready} onClick={() => void controlSeasonIngest()} className="rounded-lg bg-[var(--fv-brand)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Dispatch team + event readiness</button>
         </div>
       </Panel>
       <Panel>
@@ -602,13 +592,13 @@ export default function AdminOperationsDashboard() {
         </Panel>
         <Panel>
           <h3 className="text-lg font-bold">2. Populate canonical data</h3>
-          <p className="mt-1 text-xs leading-5 text-[var(--fv-muted)]">Directory discovery creates the inventory and registers runtime identities. Full-season ingestion then seeds TeamRuntime snapshots, acquires event resources, publishes EventState, and calculates EventAnalytics.</p>
+          <p className="mt-1 text-xs leading-5 text-[var(--fv-muted)]">Directory discovery creates the inventory and registers runtime identities. Team and event readiness are dispatched separately after discovery. Their refresh queues populate missing or stale state independently.</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-[var(--fv-surface)] p-3"><p className="text-[10px] uppercase tracking-wide text-[var(--fv-muted)]">Events discovered</p><p className="mt-1 text-2xl font-bold">{overview?.current_season?.event_count ?? (seasonPreview?.events ?? "—")}</p></div>
             <div className="rounded-xl bg-[var(--fv-surface)] p-3"><p className="text-[10px] uppercase tracking-wide text-[var(--fv-muted)]">Teams registered</p><p className="mt-1 text-2xl font-bold">{overview?.inventory?.teams ?? "—"}</p></div>
           </div>
           <p className="mt-3 text-xs text-[var(--fv-muted)]">Selected ingestion season: <strong>{year || "not selected"}</strong></p>
-          <button disabled={busy || !year} onClick={() => { setTab("home"); void previewSeasonIngest(); }} className="mt-4 rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold disabled:opacity-40">Preview canonical ingestion</button>
+          <button disabled={busy || !year} onClick={() => { setTab("home"); void previewSeasonIngest(); }} className="mt-4 rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold disabled:opacity-40">Preview season readiness</button>
           {seasonIngest && <p className="mt-3 text-xs text-[var(--fv-muted)]">Ingestion status: <strong>{seasonIngest.status.replaceAll("_", " ")}</strong> · {seasonIngest.phase ?? "—"}</p>}
         </Panel>
       </div>
