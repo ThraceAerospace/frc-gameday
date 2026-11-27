@@ -47,7 +47,7 @@ test("EventRuntime rejects analytics publications that regress team or compariso
   ), false, "matching revisions and timestamps remain publishable");
 });
 
-function seedEventPublication(storage, eventKey) {
+function seedEventIdentity(storage, eventKey) {
   storage.values.set("event-key", eventKey);
 }
 
@@ -291,7 +291,7 @@ test("EventRuntime returns incomplete read-time projections before provider acqu
   assert.equal(writes, writesAfterRefresh, "rebuilding after DO eviction must remain write-free");
 });
 
-test("explicit EventState publication composes canonical event-team domain objects with source metadata", async () => {
+test("EventState read projection composes canonical event-team domain objects with source metadata", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
   const endpoints = eventResourceEndpoints(eventKey);
@@ -429,7 +429,7 @@ test("explicit EventState publication composes canonical event-team domain objec
 test("EventRuntime serves event-scoped Statbotics matches from its durable provider state", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
   const records = [{
     key: "2026test_qm1",
@@ -497,7 +497,7 @@ test("public snapshot and stream reads need no user credential while state inspe
     fetcher: async () => new Response("unused"),
   }, eventKey);
 
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -540,7 +540,7 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
   const storage = new MemoryStorage();
   const deliveries = [];
   const eventKey = "2026test";
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -593,7 +593,7 @@ test("EventRuntime publishes revisions to the shared multiplexer only while regi
 test("EventRuntime tracks analytics multiplexer registration independently", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -627,7 +627,7 @@ test("EventRuntime tracks analytics multiplexer registration independently", asy
 test("EventRuntime ignores out-of-order multiplexer registration generations", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026test";
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -699,7 +699,7 @@ test("EventRuntime directly acquires participant discovery when its owned TBA re
 
 test("EventRuntime readiness inspects freshness without acquiring provider work", async () => {
   const storage = new MemoryStorage(), eventKey = "2027rikin", now = Date.now();
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const endpoints = eventResourceEndpoints(eventKey);
   for (const endpoint of [...endpoints, STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0)]) {
     storage.values.set("endpoint:" + endpoint, {
@@ -811,7 +811,7 @@ test("explicit EventRuntime refresh targets only the requested Statbotics resour
   const eventKey = "2026targeted";
   const endpoint = STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0);
   const calls = [];
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
     TBA_WEBHOOK_SECRET: "test-webhook-secret",
@@ -956,7 +956,7 @@ test("EventRuntime exposes durable analytics due state for coordinator recovery"
   const storage = new MemoryStorage(), eventKey = "2027rikin";
   storage.values.set("event-key", eventKey);
   storage.values.set("snapshot-revision", 4);
-  seedEventPublication(storage, eventKey);
+  seedEventIdentity(storage, eventKey);
   storage.values.set("analytics:due-at", 123456);
   const invalidation = { requested_at: 123000, sources: ["tba-event-matches"], match_keys: ["2027rikin_qm1"] };
   storage.values.set("analytics:invalidation", invalidation);
