@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { CanonicalEventSnapshotData, EventWebSocketStatus } from "./workerRealtime";
 import {
   getCanonicalEventSnapshot,
   subscribeCanonicalEventSnapshot,
   getCanonicalEventAnalytics,
   subscribeCanonicalEventAnalytics,
-  refreshCanonicalEventAnalytics,
   getCanonicalRuntimeStatus,
   subscribeCanonicalRuntimeStatus,
 } from "./sharedWorkerClient";
@@ -42,11 +41,7 @@ export function useCanonicalEventAnalytics(eventKey: string) {
     () => eventKey ? getCanonicalEventAnalytics(eventKey) : undefined,
     [eventKey],
   );
-  const publication = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
-  useEffect(() => {
-    if (eventKey) refreshCanonicalEventAnalytics(eventKey);
-  }, [eventKey]);
-  return publication;
+  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
 }
 
 /** Connection health for the canonical EventRuntime stream. */
