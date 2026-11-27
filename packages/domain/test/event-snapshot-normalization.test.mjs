@@ -30,7 +30,7 @@ test("composes canonical event, team, and event-team objects from independent TB
     dprs: { frc3461: 0, frc7407: 56.7 },
     ccwms: { frc3461: 0, frc7407: 66.7 },
   };
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2026test", tba_event: tbaEvent, tba_teams: tbaTeams,
     tba_team_statuses: statuses, tba_event_oprs: oprs, sources,
   });
@@ -49,13 +49,13 @@ test("composes canonical event, team, and event-team objects from independent TB
 });
 
 test("preserves not-acquired resources separately from explicit null and empty resources", () => {
-  const missing = normalizeFieldViewEventSnapshot({ event_key: "2026test", sources });
+  const missing = normalizeFieldViewEventState({ event_key: "2026test", sources });
   assert.equal("event" in missing, false);
   assert.equal("teams" in missing, false);
   assert.equal("event_teams" in missing, false);
   assert.deepEqual(missing.sources, sources);
 
-  const explicitNull = normalizeFieldViewEventSnapshot({
+  const explicitNull = normalizeFieldViewEventState({
     event_key: "2026test", tba_event: null, tba_teams: null, sources,
   });
   assert.equal(explicitNull.event, null);
@@ -63,7 +63,7 @@ test("preserves not-acquired resources separately from explicit null and empty r
   assert.equal(explicitNull.event_teams, null);
   assert.deepEqual(explicitNull.sources, sources);
 
-  const empty = normalizeFieldViewEventSnapshot({
+  const empty = normalizeFieldViewEventState({
     event_key: "2026test", tba_teams: [], sources,
   });
   assert.deepEqual(empty.teams, []);
@@ -71,7 +71,7 @@ test("preserves not-acquired resources separately from explicit null and empty r
 });
 
 test("EventState survives JSON transport round-trip without losing provenance", () => {
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_event: { key: "2026test", timezone: "America/New_York" },
     tba_teams: [{ key: "frc3461", team_number: 3461 }],
@@ -86,7 +86,7 @@ test("EventState survives JSON transport round-trip without losing provenance", 
 });
 
 test("rejects an event resource that belongs to a different event key", () => {
-  assert.throws(() => normalizeFieldViewEventSnapshot({
+  assert.throws(() => normalizeFieldViewEventState({
     event_key: "2026test", tba_event: { key: "2026other" }, sources,
   }), /does not match/);
 });
@@ -120,7 +120,7 @@ test("composes TBA match predictions, team associations, and playoff alliance pr
     { name: "Red", picks: ["frc1", "frc2", "frc3"] },
     { name: "Blue", picks: ["frc4", "frc5", "frc6"] },
   ];
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_teams: teams,
     tba_team_statuses: statuses,
@@ -146,17 +146,17 @@ test("composes TBA match predictions, team associations, and playoff alliance pr
 });
 
 test("preserves absent and explicit-null match and playoff resources", () => {
-  const absent = normalizeFieldViewEventSnapshot({ event_key: "2026test", sources });
+  const absent = normalizeFieldViewEventState({ event_key: "2026test", sources });
   assert.equal("matches" in absent, false);
   assert.equal("playoff_alliances" in absent, false);
 
-  const explicitNull = normalizeFieldViewEventSnapshot({
+  const explicitNull = normalizeFieldViewEventState({
     event_key: "2026test", tba_matches: null, tba_playoff_alliances: null, sources,
   });
   assert.equal(explicitNull.matches, null);
   assert.equal(explicitNull.playoff_alliances, null);
 
-  const empty = normalizeFieldViewEventSnapshot({
+  const empty = normalizeFieldViewEventState({
     event_key: "2026test", tba_matches: [], tba_playoff_alliances: [], sources,
   });
   assert.deepEqual(empty.matches, []);
@@ -194,7 +194,7 @@ test("preserves event rankings, awards, and advancement points as independent TB
     awards: { tba_event_awards: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
     advancement_points: { tba_event_advancement_points: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
   };
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_event_rankings: rankings,
     tba_event_awards: awards,
@@ -216,12 +216,12 @@ test("preserves event rankings, awards, and advancement points as independent TB
 });
 
 test("keeps event ranking, award, and advancement resources distinct when absent, null, or empty", () => {
-  const absent = normalizeFieldViewEventSnapshot({ event_key: "2026test", sources });
+  const absent = normalizeFieldViewEventState({ event_key: "2026test", sources });
   assert.equal("rankings" in absent, false);
   assert.equal("awards" in absent, false);
   assert.equal("advancement_points" in absent, false);
 
-  const explicitNull = normalizeFieldViewEventSnapshot({
+  const explicitNull = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_event_rankings: null,
     tba_event_awards: null,
@@ -232,7 +232,7 @@ test("keeps event ranking, award, and advancement resources distinct when absent
   assert.equal(explicitNull.awards, null);
   assert.equal(explicitNull.advancement_points, null);
 
-  const empty = normalizeFieldViewEventSnapshot({
+  const empty = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_event_awards: [],
     sources,
@@ -241,7 +241,7 @@ test("keeps event ranking, award, and advancement resources distinct when absent
 });
 
 test("rejects matches that belong to another event", () => {
-  assert.throws(() => normalizeFieldViewEventSnapshot({
+  assert.throws(() => normalizeFieldViewEventState({
     event_key: "2026test",
     tba_matches: [{
       key: "2026other_qm1", event_key: "2026other", comp_level: "qm",
@@ -253,7 +253,7 @@ test("rejects matches that belong to another event", () => {
 
 
 test("event normalization does not materialize TeamEventStates", () => {
-  const state = normalizeFieldViewEventSnapshot({
+  const state = normalizeFieldViewEventState({
     event_key: "2026test",
     tba_teams: [{ key: "frc1", team_number: 1 }],
     tba_matches: [],

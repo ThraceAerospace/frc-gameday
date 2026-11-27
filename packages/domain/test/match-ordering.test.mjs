@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   bestMatchTime,
   compareMatches,
-  normalizeFieldViewEventSnapshot,
+  normalizeFieldViewEventState,
   sortMatches,
   sortMatchesByTime,
 } from "../dist/index.js";
@@ -128,7 +128,7 @@ test("canonical event snapshot sorts matches instead of preserving TBA array ord
     match("2022test_qm2", "qm", 1, 2, { time: 100 }),
   ];
 
-  const snapshot = normalizeFieldViewEventSnapshot({
+  const snapshot = normalizeFieldViewEventState({
     event_key: "2022test",
     tba_matches: inputMatches,
     sources: { event: {}, teams: {}, event_teams: {}, matches: {}, playoff_alliances: {} },
