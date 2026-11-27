@@ -36,8 +36,8 @@ function timestamp(value?: number | null) {
 }
 function label(type: WorkflowType) { return type === "event-readiness" ? "Event readiness" : "Team readiness"; }
 function statusClass(status?: string) {
-  if (status === "completed") return "text-emerald-600";
-  if (status === "completed_with_errors" || status === "failed") return "text-rose-600";
+  if (status === "completed" || status === "complete") return "text-emerald-600";
+  if (status === "completed_with_errors" || status === "failed" || status === "errored" || status === "terminated" || status === "cancelled") return "text-rose-600";
   if (status === "running" || status === "queued") return "text-amber-600";
   return "text-[var(--fv-muted)]";
 }
