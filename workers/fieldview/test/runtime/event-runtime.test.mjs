@@ -1274,3 +1274,56 @@ test("EventRuntime recovers its last-good representation after a failed provider
   assert.equal(publication.state.event.name, "Recovered Event Name",
     "the canonical EventState publication must advance after successful recovery");
 });
+
+
+test("EventRuntime discovery registration is idempotent and never acquires provider data", async () => {
+  const storage = new MemoryStorage();
+  let writes = 0;
+  let providerCalls = 0;
+  const originalPut = storage.put.bind(storage);
+  storage.put = async (key, value) => { writes += 1; return originalPut(key, value); };
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key",
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { providerCalls += 1; return Response.json({}); },
+  });
+  const register = () => runtime.fetch(new Request("https://event-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": "2027rikin",
+    },
+  }));
+
+  const first = await register();
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), { event_key: "2027rikin", registered: true });
+  assert.equal(writes, 1, "first registration persists the canonical event identity once");
+
+  const repeated = await register();
+  assert.equal(repeated.status, 200);
+  assert.deepEqual(await repeated.json(), { event_key: "2027rikin", registered: true });
+  assert.equal(writes, 1, "repeated discovery registration must not write unchanged identity");
+  assert.equal(providerCalls, 0, "registration must not fetch provider resources");
+});
+
+test("EventRuntime discovery registration rejects unauthorized and mismatched identities", async () => {
+  const storage = new MemoryStorage();
+  const runtime = new EventRuntime({ storage }, {
+    RUNTIME_ADMIN_TOKEN: "runtime-token",
+  });
+  const request = (token, eventKey) => runtime.fetch(new Request("https://event-runtime/register", {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+      "X-FieldView-Event-Key": eventKey,
+    },
+  }));
+
+  assert.equal((await request("wrong-token", "2027rikin")).status, 401);
+  assert.equal(storage.values.has("event-key"), false, "unauthorized registration cannot bind identity");
+  assert.equal((await request("runtime-token", "2027rikin")).status, 200);
+  assert.equal((await request("runtime-token", "2027other")).status, 400);
+  assert.equal(storage.values.get("event-key"), "2027rikin",
+    "a mismatched registration cannot rebind an existing EventRuntime");
+});
