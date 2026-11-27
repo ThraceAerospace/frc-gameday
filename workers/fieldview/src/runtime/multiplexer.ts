@@ -1,3 +1,4 @@
+import { DurableObjectBase } from "./durable-object-base.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 
 type Topic = "event-state" | "analytics";
@@ -23,11 +24,12 @@ function sameSubscription(a: Subscription, b: Subscription): boolean {
  * One shared browser WebSocket multiplexer. It owns connection and subscription
  * routing only; EventRuntime and the analytics publisher own canonical data.
  */
-export class Multiplexer {
+export class Multiplexer extends DurableObjectBase {
   private readonly state: DurableObjectStateLike;
   private readonly env: RuntimeEnvironment;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment) {
+    super(state, env);
     this.state = state;
     this.env = env;
   }
