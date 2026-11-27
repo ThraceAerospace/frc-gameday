@@ -355,7 +355,7 @@ test("TeamRuntime records active events for the coordinator without creating pol
 
 
 
-test("TeamRuntime diagnostics do not initialize a missing TeamState publication", async () => {
+test("TeamRuntime diagnostics do not initialize a TeamState projection", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461";
   let providerCalls = 0;
   const runtime = new TeamRuntime({ storage }, env(async () => {
@@ -369,7 +369,7 @@ test("TeamRuntime diagnostics do not initialize a missing TeamState publication"
       "X-FieldView-Team-Key": teamKey,
     },
   }));
-  assert.equal(response.status, 200, "an already-identified runtime can report diagnostics without a TeamState publication");
+  assert.equal(response.status, 200, "an already-identified runtime can report diagnostics without a materialized TeamState projection");
   assert.equal((await response.json()).team_key, teamKey);
   assert.deepEqual([...storage.values], [...beforeRead], "diagnostics must not materialize a TeamState publication");
   assert.equal(storage.values.has("team-state:2026:publication"), false);
@@ -651,10 +651,6 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh caches 
 test("TeamRuntime readiness inspects freshness without acquiring provider work", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = 2027, now = Date.now();
   storage.values.set("team-key", teamKey);
-  storage.values.set("team-state:" + year + ":publication", {
-    input_signature: "seeded-team-state",
-    state: { team_key: teamKey, year, sources: {} },
-  });
   const resources = teamResourceEndpoints(teamKey, year);
   for (const resource of resources) {
     storage.values.set("endpoint:" + resource.endpoint, {
